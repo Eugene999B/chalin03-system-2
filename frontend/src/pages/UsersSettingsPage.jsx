@@ -9,9 +9,20 @@ const emptyUserForm = {
   phone: "",
 };
 
+const emptyResetPasswordForm = {
+  userId: "",
+  fullName: "",
+  username: "",
+  password: "",
+  confirmPassword: "",
+};
+
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState([]);
   const [userForm, setUserForm] = useState(emptyUserForm);
+  const [resetPasswordForm, setResetPasswordForm] = useState(
+    emptyResetPasswordForm
+  );
 
   const [settings, setSettings] = useState({
     business_name: "",
@@ -26,6 +37,7 @@ export default function UsersSettingsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   async function loadUsers() {
     const response = await axiosClient.get("/users");
@@ -68,6 +80,30 @@ export default function UsersSettingsPage() {
     });
   }
 
+  function handleResetPasswordChange(event) {
+    setResetPasswordForm({
+      ...resetPasswordForm,
+      [event.target.name]: event.target.value,
+    });
+  }
+
+  function openResetPassword(user) {
+    setMessage("");
+    setError("");
+
+    setResetPasswordForm({
+      userId: user.id,
+      fullName: user.full_name,
+      username: user.username,
+      password: "",
+      confirmPassword: "",
+    });
+  }
+
+  function closeResetPassword() {
+    setResetPasswordForm(emptyResetPasswordForm);
+  }
+
   async function createUser(event) {
     event.preventDefault();
 
@@ -100,6 +136,65 @@ export default function UsersSettingsPage() {
       setError(
         error.response?.data?.message || "Failed to change user status."
       );
+    }
+  }
+
+  async function resetUserPassword(event) {
+    event.preventDefault();
+
+    setMessage("");
+    setError("");
+
+    if (!resetPasswordForm.userId) {
+      setError("Select a user first.");
+      return;
+    }
+
+    if (!resetPasswordForm.password || !resetPasswordForm.confirmPassword) {
+      setError("New password and confirm password are required.");
+      return;
+    }
+
+    if (resetPasswordForm.password.length < 6) {
+      setError("New password must be at least 6 characters long.");
+      return;
+    }
+
+    if (resetPasswordForm.password !== resetPasswordForm.confirmPassword) {
+      setError("New password and confirm password do not match.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Reset password for ${resetPasswordForm.fullName}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setResettingPassword(true);
+
+    try {
+      const response = await axiosClient.patch(
+        `/users/${resetPasswordForm.userId}/reset-password`,
+        {
+          password: resetPasswordForm.password,
+          confirm_password: resetPasswordForm.confirmPassword,
+        }
+      );
+
+      setMessage(
+        response.data.message ||
+          `Password reset successfully for ${resetPasswordForm.fullName}.`
+      );
+
+      closeResetPassword();
+      loadUsers();
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to reset password.");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -253,6 +348,79 @@ export default function UsersSettingsPage() {
         </form>
       </div>
 
+      {resetPasswordForm.userId && (
+        <div
+          className="section-card"
+          style={{
+            border: "2px solid #2563eb",
+            marginBottom: "20px",
+          }}
+        >
+          <h2>Reset User Password</h2>
+
+          <p>
+            Resetting password for:{" "}
+            <strong>{resetPasswordForm.fullName}</strong> (
+            {resetPasswordForm.username})
+          </p>
+
+          <form onSubmit={resetUserPassword}>
+            <label>New Password</label>
+            <input
+              type="password"
+              name="password"
+              value={resetPasswordForm.password}
+              onChange={handleResetPasswordChange}
+              placeholder="Enter new temporary password"
+            />
+
+            <label>Confirm New Password</label>
+            <input
+              type="password"
+              name="confirmPassword"
+              value={resetPasswordForm.confirmPassword}
+              onChange={handleResetPasswordChange}
+              placeholder="Confirm new temporary password"
+            />
+
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                marginTop: "12px",
+              }}
+            >
+              <button type="submit" disabled={resettingPassword}>
+                {resettingPassword ? "Resetting..." : "Reset Password"}
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeResetPassword}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+
+          <div
+            style={{
+              marginTop: "14px",
+              padding: "12px",
+              borderRadius: "10px",
+              background: "#fff7ed",
+              border: "1px solid #fed7aa",
+              color: "#9a3412",
+            }}
+          >
+            After resetting, give the user this temporary password. Tell the
+            user to login and use <strong>Change Password</strong> immediately.
+          </div>
+        </div>
+      )}
+
       <div className="section-card">
         <h2>Staff Users</h2>
 
@@ -267,7 +435,7 @@ export default function UsersSettingsPage() {
                 <th>Role</th>
                 <th>Phone</th>
                 <th>Status</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
 
@@ -290,15 +458,31 @@ export default function UsersSettingsPage() {
                     </span>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className={
-                        user.is_active ? "small-danger" : "small-success"
-                      }
-                      onClick={() => toggleUserStatus(user.id)}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                      }}
                     >
-                      {user.is_active ? "Disable" : "Activate"}
-                    </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => openResetPassword(user)}
+                      >
+                        Reset Password
+                      </button>
+
+                      <button
+                        type="button"
+                        className={
+                          user.is_active ? "small-danger" : "small-success"
+                        }
+                        onClick={() => toggleUserStatus(user.id)}
+                      >
+                        {user.is_active ? "Disable" : "Activate"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

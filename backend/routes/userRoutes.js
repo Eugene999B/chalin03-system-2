@@ -261,6 +261,84 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
+// PATCH /api/users/:id/reset-password
+router.patch(
+  "/:id/reset-password",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { password, confirm_password } = req.body;
+
+      if (!password || !confirm_password) {
+        return res.status(400).json({
+          status: "error",
+          message: "New password and confirm password are required.",
+        });
+      }
+
+      if (String(password).length < 6) {
+        return res.status(400).json({
+          status: "error",
+          message: "New password must be at least 6 characters long.",
+        });
+      }
+
+      if (password !== confirm_password) {
+        return res.status(400).json({
+          status: "error",
+          message: "New password and confirm password do not match.",
+        });
+      }
+
+      const [users] = await pool.query(
+        `SELECT id, full_name, username, role, is_active
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [id]
+      );
+
+      if (users.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "User not found.",
+        });
+      }
+
+      const user = users[0];
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      await pool.query(
+        `UPDATE users
+         SET password_hash = ?
+         WHERE id = ?`,
+        [passwordHash, id]
+      );
+
+      await logActivity(
+        req.user.id,
+        "RESET_USER_PASSWORD",
+        `Reset password for user "${user.username}" with ID ${user.id}`
+      );
+
+      return res.json({
+        status: "success",
+        message: `Password reset successfully for ${user.full_name}. Tell the user to login and change it immediately.`,
+      });
+    } catch (error) {
+      console.error("Reset user password error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message: "Something went wrong while resetting user password.",
+      });
+    }
+  }
+);
+
 // PATCH /api/users/:id/toggle-status
 router.patch(
   "/:id/toggle-status",

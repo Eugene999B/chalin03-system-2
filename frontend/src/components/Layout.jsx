@@ -54,6 +54,11 @@ export default function Layout() {
     }
   }
 
+  function goToChangePassword() {
+    closeMobileMenu();
+    navigate("/change-password");
+  }
+
   const linkStyle = ({ isActive }) => ({
     display: "block",
     width: "100%",
@@ -245,12 +250,15 @@ export default function Layout() {
             <NavLink to="/" end style={linkStyle} onClick={closeMobileMenu}>
               Dashboard
             </NavLink>
+
             <NavLink to="/products" style={linkStyle} onClick={closeMobileMenu}>
               Products
             </NavLink>
+
             <NavLink to="/new-sale" style={linkStyle} onClick={closeMobileMenu}>
               New Sale
             </NavLink>
+
             <NavLink
               to="/sales-history"
               style={linkStyle}
@@ -258,8 +266,17 @@ export default function Layout() {
             >
               Sales History
             </NavLink>
+
             <NavLink to="/debts" style={linkStyle} onClick={closeMobileMenu}>
               Debts
+            </NavLink>
+
+            <NavLink
+              to="/change-password"
+              style={linkStyle}
+              onClick={closeMobileMenu}
+            >
+              Change Password
             </NavLink>
 
             {canManage && (
@@ -273,6 +290,7 @@ export default function Layout() {
                 >
                   Customer Statement
                 </NavLink>
+
                 <NavLink
                   to="/reports"
                   style={linkStyle}
@@ -280,6 +298,7 @@ export default function Layout() {
                 >
                   Reports
                 </NavLink>
+
                 <NavLink
                   to="/low-stock"
                   style={linkStyle}
@@ -287,6 +306,7 @@ export default function Layout() {
                 >
                   Low Stock / Restock
                 </NavLink>
+
                 <NavLink
                   to="/expenses"
                   style={linkStyle}
@@ -294,6 +314,7 @@ export default function Layout() {
                 >
                   Expenses
                 </NavLink>
+
                 <NavLink
                   to="/purchases"
                   style={linkStyle}
@@ -301,6 +322,7 @@ export default function Layout() {
                 >
                   Purchases
                 </NavLink>
+
                 <NavLink
                   to="/returns"
                   style={linkStyle}
@@ -308,6 +330,7 @@ export default function Layout() {
                 >
                   Returns
                 </NavLink>
+
                 <NavLink
                   to="/daily-closing"
                   style={linkStyle}
@@ -315,6 +338,7 @@ export default function Layout() {
                 >
                   Daily Closing
                 </NavLink>
+
                 <NavLink
                   to="/exports"
                   style={linkStyle}
@@ -336,6 +360,7 @@ export default function Layout() {
                 >
                   Users & Settings
                 </NavLink>
+
                 <NavLink
                   to="/activity-log"
                   style={linkStyle}
@@ -343,6 +368,7 @@ export default function Layout() {
                 >
                   Activity Log
                 </NavLink>
+
                 <NavLink
                   to="/backup"
                   style={linkStyle}
@@ -379,6 +405,24 @@ export default function Layout() {
           >
             {user?.role || "role"}
           </span>
+
+          <button
+            type="button"
+            onClick={goToChangePassword}
+            style={{
+              width: "100%",
+              border: "none",
+              borderRadius: "9px",
+              padding: "11px 12px",
+              background: "#164777",
+              color: "#ffffff",
+              fontWeight: "900",
+              cursor: "pointer",
+              marginBottom: "10px",
+            }}
+          >
+            Change Password
+          </button>
 
           <button
             type="button"
