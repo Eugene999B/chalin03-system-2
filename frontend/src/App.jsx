@@ -20,6 +20,7 @@ import BackupPage from "./pages/BackupPage";
 import DailyClosingPage from "./pages/DailyClosingPage";
 import LowStockPage from "./pages/LowStockPage";
 import CustomerStatementPage from "./pages/CustomerStatementPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="new-sale" element={<NewSalePage />} />
             <Route path="sales-history" element={<SalesHistoryPage />} />
             <Route path="debts" element={<DebtsPage />} />
+            <Route path="change-password" element={<ChangePasswordPage />} />
 
             <Route
               path="customer-statement"
