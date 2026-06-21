@@ -4,7 +4,9 @@ import axiosClient from "../api/axiosClient";
 export default function NewSalePage() {
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
+
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
   const [quantity, setQuantity] = useState(1);
 
   const [customerName, setCustomerName] = useState("");
@@ -58,17 +60,16 @@ export default function NewSalePage() {
     });
   }
 
-
   function formatPaymentMethod(value) {
-  const paymentMethods = {
-    cash: "Cash",
-    momo: "MoMo",
-    bank: "Bank",
-    credit: "Credit",
-    mixed: "Mixed",
-  };
+    const paymentMethods = {
+      cash: "Cash",
+      momo: "MoMo",
+      bank: "Bank",
+      credit: "Credit",
+      mixed: "Mixed",
+    };
 
-  return paymentMethods[String(value || "").toLowerCase()] || value || "-";
+    return paymentMethods[String(value || "").toLowerCase()] || value || "-";
   }
 
   async function loadProducts() {
@@ -86,6 +87,36 @@ export default function NewSalePage() {
     loadProducts();
   }, []);
 
+  const selectedProduct = useMemo(() => {
+    return products.find(
+      (product) => Number(product.id) === Number(selectedProductId)
+    );
+  }, [products, selectedProductId]);
+
+  const filteredProducts = useMemo(() => {
+    const searchText = productSearch.trim().toLowerCase();
+
+    if (!searchText) {
+      return [];
+    }
+
+    return products
+      .filter((product) => {
+        const searchableText = [
+          product.name,
+          product.barcode,
+          product.category,
+          product.size,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(searchText);
+      })
+      .slice(0, 15);
+  }, [products, productSearch]);
+
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
       return sum + Number(item.selling_price) * Number(item.quantity);
@@ -99,6 +130,19 @@ export default function NewSalePage() {
     0
   );
 
+  function selectProductForSale(product) {
+    setError("");
+    setMessage("");
+    setSelectedProductId(String(product.id));
+    setProductSearch(product.name || "");
+  }
+
+  function clearSelectedProduct() {
+    setSelectedProductId("");
+    setProductSearch("");
+    setQuantity(1);
+  }
+
   function addToCart() {
     setError("");
     setMessage("");
@@ -108,7 +152,12 @@ export default function NewSalePage() {
     );
 
     if (!product) {
-      setError("Select a product first.");
+      setError("Search and select a product first.");
+      return;
+    }
+
+    if (Number(product.quantity) <= 0) {
+      setError("This product is out of stock.");
       return;
     }
 
@@ -152,6 +201,7 @@ export default function NewSalePage() {
     }
 
     setSelectedProductId("");
+    setProductSearch("");
     setQuantity(1);
   }
 
@@ -210,6 +260,9 @@ export default function NewSalePage() {
       setMessage("Sale recorded successfully.");
 
       setCart([]);
+      setSelectedProductId("");
+      setProductSearch("");
+      setQuantity(1);
       setCustomerName("");
       setCustomerPhone("");
       setCustomerLocation("");
@@ -439,8 +492,6 @@ export default function NewSalePage() {
 
             <div class="dash"></div>
 
-            
-
             <table>
               <thead>
                 <tr>
@@ -538,20 +589,128 @@ export default function NewSalePage() {
         <div className="section-card">
           <h2>Select Items</h2>
 
-          <label>Product</label>
-          <select
-            value={selectedProductId}
-            onChange={(event) => setSelectedProductId(event.target.value)}
-          >
-            <option value="">Choose product</option>
+          <label>Search Product</label>
+          <input
+            type="text"
+            value={productSearch}
+            onChange={(event) => {
+              setProductSearch(event.target.value);
+              setSelectedProductId("");
+            }}
+            placeholder="Search by name, barcode, category or size"
+          />
 
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name} — GHS {formatMoney(product.selling_price)} —
-                Stock: {product.quantity}
-              </option>
-            ))}
-          </select>
+          {productSearch.trim() && !selectedProduct && (
+            <div
+              style={{
+                marginTop: "10px",
+                marginBottom: "14px",
+                border: "1px solid #d8e0ea",
+                borderRadius: "12px",
+                overflow: "hidden",
+                background: "#ffffff",
+              }}
+            >
+              {filteredProducts.length === 0 ? (
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "12px",
+                    color: "#667085",
+                  }}
+                >
+                  No matching product found.
+                </p>
+              ) : (
+                filteredProducts.map((product) => {
+                  const inStock = Number(product.quantity) > 0;
+
+                  return (
+                    <div
+                      key={product.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto",
+                        gap: "10px",
+                        alignItems: "center",
+                        padding: "12px",
+                        borderBottom: "1px solid #edf1f5",
+                      }}
+                    >
+                      <div>
+                        <strong>{product.name}</strong>
+
+                        <p
+                          style={{
+                            margin: "4px 0 0",
+                            fontSize: "13px",
+                            color: "#667085",
+                          }}
+                        >
+                          GHS {formatMoney(product.selling_price)} | Stock:{" "}
+                          {product.quantity}
+                          {product.barcode ? ` | Barcode: ${product.barcode}` : ""}
+                          {product.size ? ` | Size: ${product.size}` : ""}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => selectProductForSale(product)}
+                        disabled={!inStock}
+                        style={{
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 10px",
+                          fontWeight: "800",
+                          cursor: inStock ? "pointer" : "not-allowed",
+                          background: inStock ? "#2563eb" : "#cbd5e1",
+                          color: "#ffffff",
+                        }}
+                      >
+                        {inStock ? "Select" : "Out"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {selectedProduct && (
+            <div
+              style={{
+                marginTop: "10px",
+                marginBottom: "14px",
+                padding: "12px",
+                borderRadius: "12px",
+                background: "#ecfdf3",
+                border: "1px solid #bbf7d0",
+                color: "#14532d",
+              }}
+            >
+              <strong>Selected Product:</strong> {selectedProduct.name}
+              <br />
+
+              <span>
+                Price: GHS {formatMoney(selectedProduct.selling_price)} | Stock:{" "}
+                {selectedProduct.quantity}
+                {selectedProduct.barcode
+                  ? ` | Barcode: ${selectedProduct.barcode}`
+                  : ""}
+              </span>
+
+              <div style={{ marginTop: "10px" }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={clearSelectedProduct}
+                >
+                  Change Product
+                </button>
+              </div>
+            </div>
+          )}
 
           <label>Quantity</label>
           <input
@@ -719,7 +878,8 @@ export default function NewSalePage() {
               </p>
 
               <p>
-                <strong>Payment Method:</strong> {formatPaymentMethod(receipt.payment_type)}
+                <strong>Payment Method:</strong>{" "}
+                {formatPaymentMethod(receipt.payment_type)}
               </p>
 
               <p>
