@@ -6,6 +6,8 @@ export default function Layout() {
   const navigate = useNavigate();
 
   const role = String(user?.role || "").toLowerCase();
+  const canManage = role === "admin" || role === "manager";
+  const isAdmin = role === "admin";
 
   function handleLogout() {
     logout();
@@ -23,41 +25,51 @@ export default function Layout() {
           </div>
         </div>
 
-        <nav className="nav-menu sidebar-scroll-area">
-          <NavLink to="/" end>
-            Dashboard
-          </NavLink>
+        <div className="sidebar-menu-wrapper">
+          <nav className="nav-menu">
+            <div className="nav-section">
+              <p className="nav-section-title">Main</p>
 
-          <NavLink to="/products">Products</NavLink>
-          <NavLink to="/new-sale">New Sale</NavLink>
-          <NavLink to="/sales-history">Sales History</NavLink>
-          <NavLink to="/debts">Debts</NavLink>
+              <NavLink to="/" end>
+                Dashboard
+              </NavLink>
 
-          {(role === "admin" || role === "manager") && (
-            <>
-              <NavLink to="/customer-statement">Customer Statement</NavLink>
-              <NavLink to="/reports">Reports</NavLink>
-              <NavLink to="/low-stock">Low Stock / Restock</NavLink>
-              <NavLink to="/expenses">Expenses</NavLink>
-              <NavLink to="/purchases">Purchases</NavLink>
-              <NavLink to="/returns">Returns</NavLink>
-              <NavLink to="/daily-closing">Daily Closing</NavLink>
-              <NavLink to="/exports">Exports</NavLink>
-            </>
-          )}
+              <NavLink to="/products">Products</NavLink>
+              <NavLink to="/new-sale">New Sale</NavLink>
+              <NavLink to="/sales-history">Sales History</NavLink>
+              <NavLink to="/debts">Debts</NavLink>
+            </div>
 
-          {role === "admin" && (
-            <>
-              <NavLink to="/users-settings">Users & Settings</NavLink>
-              <NavLink to="/activity-log">Activity Log</NavLink>
-              <NavLink to="/backup">Backup & Restore</NavLink>
-            </>
-          )}
-        </nav>
+            {canManage && (
+              <div className="nav-section">
+                <p className="nav-section-title">Management</p>
+
+                <NavLink to="/customer-statement">Customer Statement</NavLink>
+                <NavLink to="/reports">Reports</NavLink>
+                <NavLink to="/low-stock">Low Stock / Restock</NavLink>
+                <NavLink to="/expenses">Expenses</NavLink>
+                <NavLink to="/purchases">Purchases</NavLink>
+                <NavLink to="/returns">Returns</NavLink>
+                <NavLink to="/daily-closing">Daily Closing</NavLink>
+                <NavLink to="/exports">Exports</NavLink>
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="nav-section">
+                <p className="nav-section-title">Admin</p>
+
+                <NavLink to="/users-settings">Users & Settings</NavLink>
+                <NavLink to="/activity-log">Activity Log</NavLink>
+                <NavLink to="/backup">Backup & Restore</NavLink>
+              </div>
+            )}
+          </nav>
+        </div>
 
         <div className="sidebar-user">
-          <p>{user?.full_name}</p>
-          <span>{user?.role}</span>
+          <p>{user?.full_name || "User"}</p>
+          <span>{user?.role || "role"}</span>
           <button type="button" onClick={handleLogout}>
             Logout
           </button>

@@ -897,15 +897,27 @@ th {
 }
 /* ===== Fixed sidebar with scrollable menu ===== */
 
+/* ===== Strong sidebar layout fix ===== */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
 .app-layout {
+  min-height: 100vh;
   height: 100vh;
-  overflow: hidden;
   display: flex;
+  overflow: hidden;
 }
 
 .sidebar {
+  width: 270px;
   height: 100vh;
   max-height: 100vh;
+  background: #07182c;
+  color: #ffffff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -914,44 +926,105 @@ th {
 
 .brand {
   flex-shrink: 0;
+  padding: 22px;
 }
 
-.sidebar-scroll-area {
+.sidebar-menu-wrapper {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 6px;
+  padding: 0 18px 14px;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.nav-section-title {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.nav-menu a {
+  display: block;
+  padding: 11px 13px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.86);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.nav-menu a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-menu a.active {
+  background: #164777;
+  color: #ffffff;
 }
 
 .sidebar-user {
   flex-shrink: 0;
+  padding: 14px 22px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding-top: 14px;
-  margin-top: 12px;
+  background: #07182c;
+}
+
+.sidebar-user p {
+  margin: 0;
+  font-weight: 800;
+}
+
+.sidebar-user span {
+  display: block;
+  margin-top: 4px;
+  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  text-transform: capitalize;
+  font-size: 13px;
+}
+
+.sidebar-user button {
+  width: 100%;
 }
 
 .main-content {
+  flex: 1;
+  min-width: 0;
   height: 100vh;
   overflow-y: auto;
-  flex: 1;
+  padding: 32px;
 }
 
-/* nicer sidebar scrollbar */
-.sidebar-scroll-area::-webkit-scrollbar {
-  width: 6px;
+/* Sidebar scrollbar */
+.sidebar-menu-wrapper::-webkit-scrollbar {
+  width: 7px;
 }
 
-.sidebar-scroll-area::-webkit-scrollbar-track {
+.sidebar-menu-wrapper::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.sidebar-scroll-area::-webkit-scrollbar-thumb {
+.sidebar-menu-wrapper::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.28);
   border-radius: 999px;
 }
 
-.sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+.sidebar-menu-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.45);
 }
 }
