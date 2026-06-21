@@ -20,18 +20,23 @@ build
 .env.*
 *.env
 !.env.example
+!backend/.env.example
+!frontend/.env.example
 
 # Local files
 *.local
 
 # Database backups and exported data
-*.sql
 *.sqlite
 *.db
 *.bak
 *.backup
 backups/
 exports/
+
+# Ignore SQL dumps by default, but keep the clean schema
+*.sql
+!database/schema.sql
 
 # Uploaded/private files
 uploads/
