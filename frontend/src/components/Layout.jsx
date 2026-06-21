@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -5,13 +6,52 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const [isMobile, setIsMobile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const role = String(user?.role || "").toLowerCase();
   const canManage = role === "admin" || role === "manager";
   const isAdmin = role === "admin";
 
+  useEffect(() => {
+    function checkScreenSize() {
+      const mobile = window.innerWidth <= 900;
+      setIsMobile(mobile);
+
+      if (!mobile) {
+        setMenuOpen(false);
+      }
+    }
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && menuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobile, menuOpen]);
+
   function handleLogout() {
     logout();
     navigate("/login");
+  }
+
+  function closeMobileMenu() {
+    if (isMobile) {
+      setMenuOpen(false);
+    }
   }
 
   const linkStyle = ({ isActive }) => ({
@@ -39,34 +79,103 @@ export default function Layout() {
     color: "rgba(255, 255, 255, 0.5)",
   };
 
+  const sidebarStyle = {
+    width: isMobile ? "100vw" : "270px",
+    height: "100vh",
+    height: "100dvh",
+    background: "#07182c",
+    color: "#ffffff",
+    display: "grid",
+    gridTemplateRows: "auto minmax(0, 1fr) auto",
+    overflow: "hidden",
+    flexShrink: 0,
+    zIndex: 1000,
+    transition: "transform 0.25s ease",
+    ...(isMobile
+      ? {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          transform: menuOpen ? "translateX(0)" : "translateX(-100%)",
+        }
+      : {
+          position: "relative",
+          transform: "translateX(0)",
+        }),
+  };
+
   return (
     <div
       style={{
         width: "100%",
         height: "100vh",
+        height: "100dvh",
         display: "flex",
         overflow: "hidden",
         background: "#f4f7fb",
       }}
     >
-      <aside
-        style={{
-          width: "270px",
-          height: "100vh",
-          background: "#07182c",
-          color: "#ffffff",
-          display: "grid",
-          gridTemplateRows: "auto minmax(0, 1fr) auto",
-          overflow: "hidden",
-          flexShrink: 0,
-        }}
-      >
+      {isMobile && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "60px",
+            background: "#07182c",
+            color: "#ffffff",
+            zIndex: 900,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 14px",
+            boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            style={{
+              border: "none",
+              borderRadius: "8px",
+              background: "#164777",
+              color: "#ffffff",
+              padding: "9px 12px",
+              fontWeight: "900",
+              cursor: "pointer",
+            }}
+          >
+            Menu
+          </button>
+
+          <strong>Chalin 03</strong>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              border: "none",
+              borderRadius: "8px",
+              background: "#c3261d",
+              color: "#ffffff",
+              padding: "9px 12px",
+              fontWeight: "900",
+              cursor: "pointer",
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
+
+      <aside style={sidebarStyle}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "12px",
-            padding: "22px",
+            padding: "18px",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
           }}
         >
@@ -101,6 +210,25 @@ export default function Layout() {
               Sales & Inventory
             </p>
           </div>
+
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                marginLeft: "auto",
+                border: "none",
+                borderRadius: "8px",
+                background: "rgba(255,255,255,0.12)",
+                color: "#ffffff",
+                padding: "9px 12px",
+                fontWeight: "900",
+                cursor: "pointer",
+              }}
+            >
+              Close
+            </button>
+          )}
         </div>
 
         <div
@@ -111,27 +239,26 @@ export default function Layout() {
             padding: "14px 16px",
           }}
         >
-          <nav
-            style={{
-              display: "block",
-              width: "100%",
-            }}
-          >
+          <nav style={{ display: "block", width: "100%" }}>
             <p style={sectionTitleStyle}>Main</p>
 
-            <NavLink to="/" end style={linkStyle}>
+            <NavLink to="/" end style={linkStyle} onClick={closeMobileMenu}>
               Dashboard
             </NavLink>
-            <NavLink to="/products" style={linkStyle}>
+            <NavLink to="/products" style={linkStyle} onClick={closeMobileMenu}>
               Products
             </NavLink>
-            <NavLink to="/new-sale" style={linkStyle}>
+            <NavLink to="/new-sale" style={linkStyle} onClick={closeMobileMenu}>
               New Sale
             </NavLink>
-            <NavLink to="/sales-history" style={linkStyle}>
+            <NavLink
+              to="/sales-history"
+              style={linkStyle}
+              onClick={closeMobileMenu}
+            >
               Sales History
             </NavLink>
-            <NavLink to="/debts" style={linkStyle}>
+            <NavLink to="/debts" style={linkStyle} onClick={closeMobileMenu}>
               Debts
             </NavLink>
 
@@ -139,28 +266,60 @@ export default function Layout() {
               <>
                 <p style={sectionTitleStyle}>Management</p>
 
-                <NavLink to="/customer-statement" style={linkStyle}>
+                <NavLink
+                  to="/customer-statement"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Customer Statement
                 </NavLink>
-                <NavLink to="/reports" style={linkStyle}>
+                <NavLink
+                  to="/reports"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Reports
                 </NavLink>
-                <NavLink to="/low-stock" style={linkStyle}>
+                <NavLink
+                  to="/low-stock"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Low Stock / Restock
                 </NavLink>
-                <NavLink to="/expenses" style={linkStyle}>
+                <NavLink
+                  to="/expenses"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Expenses
                 </NavLink>
-                <NavLink to="/purchases" style={linkStyle}>
+                <NavLink
+                  to="/purchases"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Purchases
                 </NavLink>
-                <NavLink to="/returns" style={linkStyle}>
+                <NavLink
+                  to="/returns"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Returns
                 </NavLink>
-                <NavLink to="/daily-closing" style={linkStyle}>
+                <NavLink
+                  to="/daily-closing"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Daily Closing
                 </NavLink>
-                <NavLink to="/exports" style={linkStyle}>
+                <NavLink
+                  to="/exports"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Exports
                 </NavLink>
               </>
@@ -170,13 +329,25 @@ export default function Layout() {
               <>
                 <p style={sectionTitleStyle}>Admin</p>
 
-                <NavLink to="/users-settings" style={linkStyle}>
+                <NavLink
+                  to="/users-settings"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Users & Settings
                 </NavLink>
-                <NavLink to="/activity-log" style={linkStyle}>
+                <NavLink
+                  to="/activity-log"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Activity Log
                 </NavLink>
-                <NavLink to="/backup" style={linkStyle}>
+                <NavLink
+                  to="/backup"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
                   Backup & Restore
                 </NavLink>
               </>
@@ -232,9 +403,12 @@ export default function Layout() {
         style={{
           flex: 1,
           minWidth: 0,
+          width: "100%",
           height: "100vh",
+          height: "100dvh",
           overflowY: "auto",
-          padding: "32px",
+          overflowX: "auto",
+          padding: isMobile ? "82px 14px 24px" : "32px",
         }}
       >
         <Outlet />
