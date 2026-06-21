@@ -895,42 +895,63 @@ th {
   padding: 8px 12px;
   white-space: nowrap;
 }
+/* ===== Fixed sidebar with scrollable menu ===== */
+
 .app-layout {
   height: 100vh;
   overflow: hidden;
+  display: flex;
 }
 
 .sidebar {
   height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.brand {
+  flex-shrink: 0;
 }
 
 .sidebar-scroll-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
+  overflow-x: hidden;
+  padding-right: 6px;
 }
 
 .sidebar-user {
   flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 14px;
+  margin-top: 12px;
 }
 
 .main-content {
   height: 100vh;
   overflow-y: auto;
+  flex: 1;
 }
 
+/* nicer sidebar scrollbar */
 .sidebar-scroll-area::-webkit-scrollbar {
   width: 6px;
 }
 
+.sidebar-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .sidebar-scroll-area::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
   border-radius: 999px;
 }
 
-.sidebar-scroll-area::-webkit-scrollbar-track {
-  background: transparent;
+.sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
 }
 }
