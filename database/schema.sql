@@ -1,9 +1,12 @@
 -- CHALIN 03 SALES & INVENTORY MANAGEMENT SYSTEM
 -- Database Schema
--- Step 1: Database structure
+-- WARNING:
+-- This file recreates the database from scratch.
+-- It will delete all existing data in chalin03_db.
+-- Since this is still a testing system, you said this is okay.
 
 DROP DATABASE IF EXISTS chalin03_db;
-CREATE DATABASE chalin03_db;
+CREATE DATABASE chalin03_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE chalin03_db;
 
 -- =========================
@@ -18,7 +21,10 @@ CREATE TABLE users (
     phone VARCHAR(30),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_user_role (role),
+    INDEX idx_user_active (is_active)
 );
 
 -- =========================
@@ -41,59 +47,125 @@ CREATE TABLE products (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+
     INDEX idx_product_name (name),
     INDEX idx_product_category (category),
-    INDEX idx_product_barcode (barcode)
+    INDEX idx_product_barcode (barcode),
+    INDEX idx_product_active (is_active),
+    INDEX idx_product_low_stock (quantity, low_stock_threshold)
 );
 
 -- =========================
--- 3. SUPPLIERS TABLE
+-- 3. STOCK ADJUSTMENTS TABLE
+-- =========================
+CREATE TABLE stock_adjustments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    adjustment_type ENUM('increase', 'decrease', 'set') NOT NULL,
+    quantity INT NOT NULL,
+    old_quantity INT NOT NULL,
+    new_quantity INT NOT NULL,
+    reason TEXT NOT NULL,
+    adjusted_by INT,
+    adjusted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (adjusted_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_stock_adjustment_product (product_id),
+    INDEX idx_stock_adjustment_type (adjustment_type),
+    INDEX idx_stock_adjustment_date (adjusted_at),
+    INDEX idx_stock_adjustment_user (adjusted_by)
+);
+
+-- =========================
+-- 4. SUPPLIERS TABLE
 -- =========================
 CREATE TABLE suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
+    contact_person VARCHAR(150),
     phone VARCHAR(30),
-    location VARCHAR(150),
+    email VARCHAR(150),
+    address TEXT,
     notes TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_supplier_name (name),
+    INDEX idx_supplier_phone (phone),
+    INDEX idx_supplier_active (is_active)
 );
 
 -- =========================
--- 4. PURCHASES TABLE
+-- 5. PURCHASES TABLE
 -- =========================
 CREATE TABLE purchases (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supplier_id INT,
-    total_cost DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    invoice_number VARCHAR(100),
     purchase_date DATE NOT NULL,
+    total_cost DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    payment_status ENUM('unpaid', 'partial', 'paid') NOT NULL DEFAULT 'paid',
     notes TEXT,
     created_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_purchase_date (purchase_date)
+
+    INDEX idx_purchase_supplier (supplier_id),
+    INDEX idx_purchase_date (purchase_date),
+    INDEX idx_purchase_invoice (invoice_number),
+    INDEX idx_purchase_payment_status (payment_status)
 );
 
 -- =========================
--- 5. PURCHASE ITEMS TABLE
+-- 6. PURCHASE ITEMS TABLE
 -- =========================
 CREATE TABLE purchase_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     purchase_id INT NOT NULL,
     product_id INT NOT NULL,
+    product_name VARCHAR(150) NOT NULL,
     quantity INT NOT NULL,
-    unit_cost DECIMAL(12,2) NOT NULL,
-    line_total DECIMAL(12,2) NOT NULL,
+    cost_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 
     FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
+
+    INDEX idx_purchase_items_purchase (purchase_id),
+    INDEX idx_purchase_items_product (product_id)
 );
 
 -- =========================
--- 6. CUSTOMERS TABLE
+-- 7. PURCHASE PAYMENTS TABLE
+-- =========================
+CREATE TABLE purchase_payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_id INT NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    payment_method ENUM('cash', 'momo', 'bank', 'mixed', 'other') NOT NULL DEFAULT 'cash',
+    paid_by INT,
+    paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+
+    FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+    FOREIGN KEY (paid_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_purchase_payment_purchase (purchase_id),
+    INDEX idx_purchase_payment_date (paid_at),
+    INDEX idx_purchase_payment_method (payment_method),
+    INDEX idx_purchase_payment_user (paid_by)
+);
+
+-- =========================
+-- 8. CUSTOMERS TABLE
 -- =========================
 CREATE TABLE customers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -108,7 +180,7 @@ CREATE TABLE customers (
 );
 
 -- =========================
--- 7. SALES TABLE
+-- 9. SALES TABLE
 -- =========================
 CREATE TABLE sales (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -117,24 +189,40 @@ CREATE TABLE sales (
     customer_name VARCHAR(150),
     customer_phone VARCHAR(30),
     staff_id INT,
+
     subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
     payment_type ENUM('cash', 'momo', 'bank', 'credit', 'mixed') NOT NULL DEFAULT 'cash',
     amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
     sale_status ENUM('completed', 'returned', 'cancelled') NOT NULL DEFAULT 'completed',
+
+    is_voided TINYINT(1) NOT NULL DEFAULT 0,
+    void_reason TEXT NULL,
+    voided_by INT NULL,
+    voided_at DATETIME NULL,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (voided_by) REFERENCES users(id) ON DELETE SET NULL,
+
     INDEX idx_receipt_number (receipt_number),
+    INDEX idx_sale_customer (customer_id),
+    INDEX idx_sale_staff (staff_id),
     INDEX idx_sale_date (created_at),
-    INDEX idx_payment_type (payment_type)
+    INDEX idx_payment_type (payment_type),
+    INDEX idx_sale_status (sale_status),
+    INDEX idx_sale_voided (is_voided)
 );
 
 -- =========================
--- 8. SALE ITEMS TABLE
+-- 10. SALE ITEMS TABLE
 -- =========================
 CREATE TABLE sale_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -142,18 +230,19 @@ CREATE TABLE sale_items (
     product_id INT NOT NULL,
     product_name VARCHAR(150) NOT NULL,
     quantity INT NOT NULL,
-    unit_price DECIMAL(12,2) NOT NULL,
-    line_total DECIMAL(12,2) NOT NULL,
-
-    -- Very important for profit history
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     cost_price_at_sale DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
+
+    INDEX idx_sale_items_sale (sale_id),
+    INDEX idx_sale_items_product (product_id)
 );
 
 -- =========================
--- 9. DEBTS TABLE
+-- 11. DEBTS TABLE
 -- =========================
 CREATE TABLE debts (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -171,28 +260,37 @@ CREATE TABLE debts (
 
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+
+    INDEX idx_debt_sale (sale_id),
+    INDEX idx_debt_customer (customer_id),
     INDEX idx_debt_status (status),
-    INDEX idx_due_date (due_date)
+    INDEX idx_due_date (due_date),
+    INDEX idx_debt_customer_phone (customer_phone)
 );
 
 -- =========================
--- 10. DEBT PAYMENTS TABLE
+-- 12. DEBT PAYMENTS TABLE
 -- =========================
 CREATE TABLE debt_payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     debt_id INT NOT NULL,
-    amount DECIMAL(12,2) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     payment_method ENUM('cash', 'momo', 'bank') NOT NULL DEFAULT 'cash',
     received_by INT,
     paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     notes TEXT,
 
     FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
-    FOREIGN KEY (received_by) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (received_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_debt_payment_debt (debt_id),
+    INDEX idx_debt_payment_date (paid_at),
+    INDEX idx_debt_payment_method (payment_method),
+    INDEX idx_debt_payment_receiver (received_by)
 );
 
 -- =========================
--- 11. RETURNS TABLE
+-- 13. RETURNS TABLE
 -- =========================
 CREATE TABLE returns (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -205,45 +303,60 @@ CREATE TABLE returns (
 
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
-    FOREIGN KEY (returned_by) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (returned_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_returns_sale (sale_id),
+    INDEX idx_returns_product (product_id),
+    INDEX idx_returns_date (returned_at),
+    INDEX idx_returns_user (returned_by)
 );
 
 -- =========================
--- 12. EXPENSES TABLE
+-- 14. EXPENSES TABLE
 -- =========================
 CREATE TABLE expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
     category VARCHAR(100) NOT NULL,
-    amount DECIMAL(12,2) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     description TEXT,
     expense_date DATE NOT NULL,
     recorded_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL,
+
     INDEX idx_expense_date (expense_date),
-    INDEX idx_expense_category (category)
+    INDEX idx_expense_category (category),
+    INDEX idx_expense_user (recorded_by)
 );
 
 -- =========================
--- 13. SMS LOG TABLE
+-- 15. SMS LOG TABLE
 -- =========================
 CREATE TABLE sms_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     recipient_phone VARCHAR(30) NOT NULL,
     message TEXT NOT NULL,
-    sms_type ENUM('receipt', 'debt_reminder', 'low_stock', 'daily_summary', 'sale_confirmation', 'other') NOT NULL DEFAULT 'other',
+    sms_type ENUM(
+        'receipt',
+        'debt_reminder',
+        'low_stock',
+        'daily_summary',
+        'sale_confirmation',
+        'other'
+    ) NOT NULL DEFAULT 'other',
     status ENUM('pending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
     provider_response TEXT,
     sent_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     INDEX idx_sms_type (sms_type),
-    INDEX idx_sms_status (status)
+    INDEX idx_sms_status (status),
+    INDEX idx_sms_created_at (created_at)
 );
 
 -- =========================
--- 14. ACTIVITY LOG TABLE
+-- 16. ACTIVITY LOG TABLE
 -- =========================
 CREATE TABLE activity_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -254,33 +367,84 @@ CREATE TABLE activity_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+
     INDEX idx_activity_action (action),
-    INDEX idx_activity_date (created_at)
+    INDEX idx_activity_date (created_at),
+    INDEX idx_activity_user (user_id)
 );
 
 -- =========================
--- 15. SETTINGS TABLE
+-- 17. SETTINGS TABLE
 -- =========================
 CREATE TABLE settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     business_name VARCHAR(150) NOT NULL DEFAULT 'Chalin 03 Company Limited',
     business_address VARCHAR(255) DEFAULT 'Dunkwa Police Barrier',
-    business_phone VARCHAR(30),
-    owner_phone VARCHAR(30),
+    business_phone VARCHAR(50) DEFAULT '0249469080 / 0249995510',
+    owner_phone VARCHAR(50) DEFAULT '0543421127',
     tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
     debt_reminder_days INT NOT NULL DEFAULT 7,
     daily_summary_time TIME DEFAULT '18:00:00',
-    receipt_footer VARCHAR(255) DEFAULT 'Thank you for doing business with us.',
+    receipt_footer VARCHAR(255) DEFAULT 'Thank You For Coming',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- =========================
+-- 18. DAILY CLOSINGS TABLE
+-- =========================
+CREATE TABLE daily_closings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    closing_date DATE NOT NULL UNIQUE,
+
+    sales_count INT NOT NULL DEFAULT 0,
+    sales_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    sales_received DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    cash_sales DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    momo_sales DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    bank_sales DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    mixed_sales DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    credit_sales_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    credit_sales_received DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    debt_payment_count INT NOT NULL DEFAULT 0,
+    debt_payments_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    debt_cash DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    debt_momo DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    debt_bank DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    expenses_count INT NOT NULL DEFAULT 0,
+    expenses_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    expected_cash DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    expected_momo DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    expected_bank DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    expected_other DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    expected_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    cash_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    momo_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    bank_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    other_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    total_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    difference_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
+    notes TEXT,
+    closed_by INT,
+    closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_daily_closing_date (closing_date),
+    INDEX idx_daily_closing_user (closed_by)
 );
 
 -- =========================
 -- DEFAULT DATA
 -- =========================
 
--- This is a temporary admin user placeholder.
--- Later, we will create a proper hashed password using bcrypt.
 INSERT INTO users (
     full_name,
     username,
@@ -309,10 +473,10 @@ INSERT INTO settings (
 ) VALUES (
     'Chalin 03 Company Limited',
     'Dunkwa Police Barrier',
-    NULL,
-    NULL,
+    '0249469080 / 0249995510',
+    '0543421127',
     0.00,
     7,
     '18:00:00',
-    'Thank you for doing business with Chalin 03.'
+    'Thank You For Coming'
 );
