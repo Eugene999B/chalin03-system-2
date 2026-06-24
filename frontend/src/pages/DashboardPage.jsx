@@ -24,6 +24,8 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   function formatMoney(value) {
     return Number(value || 0).toLocaleString("en-GH", {
       minimumFractionDigits: 2,
@@ -43,22 +45,6 @@ export default function DashboardPage() {
     }
 
     return `GHS ${formatMoney(number)}`;
-  }
-
-  function formatDate(value) {
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   function formatTime(value) {
@@ -147,6 +133,19 @@ export default function DashboardPage() {
     loadDashboard();
   }, []);
 
+  useEffect(() => {
+    function checkScreenSize() {
+      setIsMobile(window.innerWidth <= 760);
+    }
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
+  }, []);
+
   const dashboardData = useMemo(() => {
     const today = new Date();
 
@@ -178,11 +177,6 @@ export default function DashboardPage() {
       (product) => Number(product.quantity || 0) <= 2
     );
 
-    const totalBeforeDiscount = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.subtotal || 0),
-      0
-    );
-
     const totalDiscountAmount = activeSales.reduce(
       (sum, sale) => sum + Number(sale.discount_amount || 0),
       0
@@ -208,18 +202,8 @@ export default function DashboardPage() {
       0
     );
 
-    const totalAmountPaid = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.amount_paid || 0),
-      0
-    );
-
     const todayAmountPaid = todaySales.reduce(
       (sum, sale) => sum + Number(sale.amount_paid || 0),
-      0
-    );
-
-    const totalSalesBalance = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.balance || 0),
       0
     );
 
@@ -271,7 +255,10 @@ export default function DashboardPage() {
         paymentBreakdown.momo += total;
       } else if (paymentType.includes("bank")) {
         paymentBreakdown.bank += total;
-      } else if (paymentType.includes("credit") || Number(sale.balance || 0) > 0) {
+      } else if (
+        paymentType.includes("credit") ||
+        Number(sale.balance || 0) > 0
+      ) {
         paymentBreakdown.credit += total;
       } else {
         paymentBreakdown.other += total;
@@ -313,13 +300,19 @@ export default function DashboardPage() {
         ? 100
         : Math.max(
             0,
-            Math.round(((products.length - lowStockProducts.length) / products.length) * 100)
+            Math.round(
+              ((products.length - lowStockProducts.length) / products.length) *
+                100
+            )
           );
 
     const debtRisk =
       totalSalesAmount <= 0
         ? 0
-        : Math.min(100, Math.round((Number(outstandingDebts || 0) / totalSalesAmount) * 100));
+        : Math.min(
+            100,
+            Math.round((Number(outstandingDebts || 0) / totalSalesAmount) * 100)
+          );
 
     const targetProgress = Math.min(
       100,
@@ -336,15 +329,12 @@ export default function DashboardPage() {
       urgentLowStockProducts,
       totalProducts: products.length,
       lowStockCount: lowStockProducts.length,
-      totalBeforeDiscount,
       totalDiscountAmount,
       totalSalesAmount,
       todaySalesAmount,
       monthSalesAmount,
       weekSalesAmount,
-      totalAmountPaid,
       todayAmountPaid,
-      totalSalesBalance,
       stockValue,
       costValue,
       estimatedProfit,
@@ -439,27 +429,38 @@ export default function DashboardPage() {
     },
   ];
 
+  const oneColumn = isMobile ? styles.oneColumn : {};
+  const mobileHeroTop = isMobile ? styles.heroTopMobile : {};
+  const mobileBrandCluster = isMobile ? styles.brandClusterMobile : {};
+  const mobileHeroLogo = isMobile ? styles.heroLogoMobile : {};
+  const mobileHeroTitle = isMobile ? styles.heroTitleMobile : {};
+  const mobileQuickActions = isMobile ? styles.quickActionsMobile : {};
+
   return (
     <div style={styles.page}>
-      <div style={styles.hero}>
+      <div style={{ ...styles.hero, ...(isMobile ? styles.heroMobile : {}) }}>
         <div style={styles.heroGlowOne} />
         <div style={styles.heroGlowTwo} />
 
         <div style={styles.heroContent}>
-          <div style={styles.heroTop}>
-            <div style={styles.brandCluster}>
+          <div style={{ ...styles.heroTop, ...mobileHeroTop }}>
+            <div style={{ ...styles.brandCluster, ...mobileBrandCluster }}>
               <img
                 src="/chalin03-logo.png"
                 alt="Chalin 03 Logo"
-                style={styles.heroLogo}
+                style={{ ...styles.heroLogo, ...mobileHeroLogo }}
               />
 
               <div>
                 <p style={styles.eyebrow}>Business Command Center</p>
-                <h1 style={styles.heroTitle}>Welcome back, {displayName}</h1>
+
+                <h1 style={{ ...styles.heroTitle, ...mobileHeroTitle }}>
+                  Welcome back, {displayName}
+                </h1>
+
                 <p style={styles.heroSubtitle}>
-                  Real-time view of sales, stock, debts, cash movement, and urgent
-                  business alerts.
+                  Real-time view of sales, stock, debts, cash movement, and
+                  urgent business alerts.
                 </p>
               </div>
             </div>
@@ -468,32 +469,32 @@ export default function DashboardPage() {
               type="button"
               onClick={loadDashboard}
               disabled={loading}
-              style={styles.refreshButton}
+              style={{
+                ...styles.refreshButton,
+                ...(isMobile ? styles.fullWidthButton : {}),
+              }}
             >
               {loading ? "Refreshing..." : "Refresh Dashboard"}
             </button>
           </div>
 
-          <div style={styles.heroMetrics}>
-            <div style={styles.heroMetric}>
-              <span>Today</span>
-              <strong>GHS {formatMoney(dashboardData.todaySalesAmount)}</strong>
-            </div>
+          <div style={{ ...styles.heroMetrics, ...oneColumn }}>
+            <HeroMetric
+              label="Today"
+              value={`GHS ${formatMoney(dashboardData.todaySalesAmount)}`}
+            />
 
-            <div style={styles.heroMetric}>
-              <span>This Week</span>
-              <strong>GHS {formatMoney(dashboardData.weekSalesAmount)}</strong>
-            </div>
+            <HeroMetric
+              label="This Week"
+              value={`GHS ${formatMoney(dashboardData.weekSalesAmount)}`}
+            />
 
-            <div style={styles.heroMetric}>
-              <span>Stock Health</span>
-              <strong>{dashboardData.stockHealth}%</strong>
-            </div>
+            <HeroMetric label="Stock Health" value={`${dashboardData.stockHealth}%`} />
 
-            <div style={styles.heroMetric}>
-              <span>Daily Target</span>
-              <strong>{dashboardData.targetProgress}%</strong>
-            </div>
+            <HeroMetric
+              label="Daily Target"
+              value={`${dashboardData.targetProgress}%`}
+            />
           </div>
         </div>
       </div>
@@ -501,7 +502,7 @@ export default function DashboardPage() {
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div style={styles.quickActions}>
+      <div style={{ ...styles.quickActions, ...mobileQuickActions }}>
         <button style={styles.actionPrimary} onClick={() => navigate("/new-sale")}>
           <span>＋</span> New Sale
         </button>
@@ -530,7 +531,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <div style={styles.kpiGrid}>
+      <div style={{ ...styles.kpiGrid, ...oneColumn }}>
         {kpiCards.map((card) => (
           <div key={card.label} style={styles.kpiCard}>
             <div style={styles.kpiTop}>
@@ -550,14 +551,12 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div style={styles.bigGrid}>
+      <div style={{ ...styles.bigGrid, ...oneColumn }}>
         <div style={styles.panelLarge}>
           <div style={styles.panelHeader}>
             <div>
               <h2 style={styles.panelTitle}>Sales Performance</h2>
-              <p style={styles.panelSubtitle}>
-                Last 7 days revenue movement
-              </p>
+              <p style={styles.panelSubtitle}>Last 7 days revenue movement</p>
             </div>
 
             <span style={styles.goldBadge}>
@@ -655,6 +654,7 @@ export default function DashboardPage() {
               percent={paymentPercent(dashboardData.paymentBreakdown.cash)}
               formatMoney={formatMoney}
             />
+
             <PaymentLine
               label="MoMo"
               color="#22c55e"
@@ -662,6 +662,7 @@ export default function DashboardPage() {
               percent={paymentPercent(dashboardData.paymentBreakdown.momo)}
               formatMoney={formatMoney}
             />
+
             <PaymentLine
               label="Bank"
               color="#2563eb"
@@ -669,6 +670,7 @@ export default function DashboardPage() {
               percent={paymentPercent(dashboardData.paymentBreakdown.bank)}
               formatMoney={formatMoney}
             />
+
             <PaymentLine
               label="Credit"
               color="#f97316"
@@ -680,12 +682,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div style={styles.midGrid}>
+      <div style={{ ...styles.midGrid, ...oneColumn }}>
         <div style={styles.panel}>
           <div style={styles.panelHeader}>
             <div>
               <h2 style={styles.panelTitle}>Daily Target</h2>
-              <p style={styles.panelSubtitle}>Target: GHS {formatMoney(DAILY_TARGET)}</p>
+              <p style={styles.panelSubtitle}>
+                Target: GHS {formatMoney(DAILY_TARGET)}
+              </p>
             </div>
 
             <span style={styles.goldBadge}>{dashboardData.targetProgress}%</span>
@@ -714,7 +718,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div style={styles.pulseGrid}>
+          <div style={{ ...styles.pulseGrid, ...(isMobile ? oneColumn : {}) }}>
             <PulseItem
               label="Inventory Health"
               value={`${dashboardData.stockHealth}%`}
@@ -747,14 +751,19 @@ export default function DashboardPage() {
           </div>
 
           {dashboardData.lowStockProducts.length === 0 ? (
-            <div style={styles.emptyState}>No low-stock products. Stock looks healthy.</div>
+            <div style={styles.emptyState}>
+              No low-stock products. Stock looks healthy.
+            </div>
           ) : (
             <div style={styles.alertList}>
               {dashboardData.lowStockProducts.slice(0, 5).map((product) => (
                 <div key={product.id} style={styles.alertItem}>
                   <div>
                     <strong>{product.name}</strong>
-                    <span>{product.category || "No category"} • {product.size || "No size"}</span>
+                    <span>
+                      {product.category || "No category"} •{" "}
+                      {product.size || "No size"}
+                    </span>
                   </div>
 
                   <b>{Number(product.quantity || 0)} left</b>
@@ -765,7 +774,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div style={styles.bottomGrid}>
+      <div style={{ ...styles.bottomGrid, ...oneColumn }}>
         <div style={styles.panelLarge}>
           <div style={styles.panelHeader}>
             <div>
@@ -798,7 +807,9 @@ export default function DashboardPage() {
                     return (
                       <tr key={sale.id}>
                         <td>
-                          <strong>{sale.receipt_number || `Sale #${sale.id}`}</strong>
+                          <strong>
+                            {sale.receipt_number || `Sale #${sale.id}`}
+                          </strong>
                         </td>
 
                         <td>{sale.customer_name || "Walk-in Customer"}</td>
@@ -871,7 +882,7 @@ export default function DashboardPage() {
               income. Debt exposure and low stock are monitored live.
             </p>
 
-            <div style={styles.darkMiniGrid}>
+            <div style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}) }}>
               <div>
                 <span>All Sales</span>
                 <strong>GHS {formatMoney(dashboardData.totalSalesAmount)}</strong>
@@ -884,6 +895,15 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HeroMetric({ label, value }) {
+  return (
+    <div style={styles.heroMetric}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -973,6 +993,10 @@ const styles = {
     paddingBottom: "40px",
   },
 
+  oneColumn: {
+    gridTemplateColumns: "1fr",
+  },
+
   hero: {
     position: "relative",
     overflow: "hidden",
@@ -983,6 +1007,11 @@ const styles = {
       "linear-gradient(135deg, #07182c 0%, #0d2f55 46%, #111827 100%)",
     boxShadow: "0 24px 60px rgba(7, 24, 44, 0.28)",
     color: "#ffffff",
+  },
+
+  heroMobile: {
+    padding: "20px 16px",
+    borderRadius: "22px",
   },
 
   heroGlowOne: {
@@ -1020,10 +1049,21 @@ const styles = {
     flexWrap: "wrap",
   },
 
+  heroTopMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
+
   brandCluster: {
     display: "flex",
     alignItems: "center",
     gap: "18px",
+  },
+
+  brandClusterMobile: {
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
   },
 
   heroLogo: {
@@ -1035,6 +1075,12 @@ const styles = {
     boxShadow: "0 14px 30px rgba(0, 0, 0, 0.3)",
     background: "#000",
     flexShrink: 0,
+  },
+
+  heroLogoMobile: {
+    width: "112px",
+    height: "112px",
+    borderRadius: "26px",
   },
 
   eyebrow: {
@@ -1051,6 +1097,11 @@ const styles = {
     fontSize: "clamp(28px, 4vw, 46px)",
     lineHeight: 1.05,
     fontWeight: "950",
+  },
+
+  heroTitleMobile: {
+    fontSize: "27px",
+    textAlign: "center",
   },
 
   heroSubtitle: {
@@ -1071,19 +1122,15 @@ const styles = {
     cursor: "pointer",
   },
 
+  fullWidthButton: {
+    width: "100%",
+  },
+
   heroMetrics: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
     gap: "14px",
     marginTop: "24px",
-  },
-
-  heroMetric: {
-    padding: "16px",
-    borderRadius: "18px",
-    background: "rgba(255,255,255,0.1)",
-    border: "1px solid rgba(255,255,255,0.14)",
-    backdropFilter: "blur(10px)",
   },
 
   heroMetric: {
@@ -1098,6 +1145,11 @@ const styles = {
     gap: "10px",
     flexWrap: "wrap",
     marginBottom: "18px",
+  },
+
+  quickActionsMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
   },
 
   actionPrimary: {
@@ -1237,6 +1289,7 @@ const styles = {
     justifyContent: "space-between",
     gap: "12px",
     marginBottom: "16px",
+    flexWrap: "wrap",
   },
 
   panelTitle: {
@@ -1272,7 +1325,7 @@ const styles = {
 
   svgChart: {
     width: "100%",
-    minWidth: "620px",
+    minWidth: "520px",
     height: "250px",
   },
 
@@ -1315,6 +1368,7 @@ const styles = {
     alignItems: "center",
     fontSize: "13px",
     color: "#64748b",
+    flexWrap: "wrap",
   },
 
   dot: {
@@ -1346,7 +1400,7 @@ const styles = {
 
   pulseGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "12px",
   },
 
@@ -1375,6 +1429,7 @@ const styles = {
     background: "#fff7ed",
     border: "1px solid #fed7aa",
     color: "#9a3412",
+    flexWrap: "wrap",
   },
 
   tableWrap: {
