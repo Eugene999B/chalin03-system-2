@@ -1,25 +1,30 @@
 import { useEffect, useState } from "react";
 
+function isStandaloneApp() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+}
+
 export default function InstallAppButton() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [showIosHelp, setShowIosHelp] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true;
-
-    setIsInstalled(standalone);
+    setIsInstalled(isStandaloneApp());
 
     function handleBeforeInstallPrompt(event) {
       event.preventDefault();
       setInstallPrompt(event);
+      setMessage("");
     }
 
     function handleInstalled() {
       setIsInstalled(true);
       setInstallPrompt(null);
+      setMessage("");
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -31,7 +36,9 @@ export default function InstallAppButton() {
     };
   }, []);
 
-  async function installApp() {
+  async function handleInstallClick() {
+    setMessage("");
+
     if (installPrompt) {
       installPrompt.prompt();
 
@@ -45,7 +52,9 @@ export default function InstallAppButton() {
       return;
     }
 
-    setShowIosHelp((current) => !current);
+    setMessage(
+      "Install prompt is not ready yet. On desktop Chrome/Edge, use the install icon in the address bar or open the browser menu and choose Install app."
+    );
   }
 
   if (isInstalled) {
@@ -56,7 +65,7 @@ export default function InstallAppButton() {
     <div style={{ marginBottom: "10px" }}>
       <button
         type="button"
-        onClick={installApp}
+        onClick={handleInstallClick}
         style={{
           width: "100%",
           border: "none",
@@ -71,7 +80,7 @@ export default function InstallAppButton() {
         Install App
       </button>
 
-      {showIosHelp && (
+      {message && (
         <div
           style={{
             marginTop: "8px",
@@ -83,7 +92,7 @@ export default function InstallAppButton() {
             lineHeight: "1.5",
           }}
         >
-          On iPhone: tap Share, then choose Add to Home Screen.
+          {message}
         </div>
       )}
     </div>

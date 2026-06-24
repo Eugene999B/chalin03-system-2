@@ -1,18 +1,16 @@
-const CACHE_NAME = "chalin03-app-v3";
+const CACHE_NAME = "chalin03-app-v5";
 
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",
-  "/app-icon-192.png",
-  "/app-icon-512.png",
+  "/chalin03-pwa-192.png",
+  "/chalin03-pwa-512.png",
   "/chalin03-logo.png"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(CORE_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
   );
 
   self.skipWaiting();
@@ -20,13 +18,13 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    caches.keys().then((cacheNames) =>
+      Promise.all(
         cacheNames
           .filter((cacheName) => cacheName !== CACHE_NAME)
           .map((cacheName) => caches.delete(cacheName))
-      );
-    })
+      )
+    )
   );
 
   self.clients.claim();
