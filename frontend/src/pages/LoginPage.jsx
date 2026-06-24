@@ -98,58 +98,127 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <form className="login-card" onSubmit={handleLogin} autoComplete="off">
-        <div className="login-logo">C3</div>
-
-        <h1>Chalin 03 System</h1>
-        <p>Login to manage sales, stock, debts and reports.</p>
-
-        {error && <div className="error-box">{error}</div>}
-
-        <label>Username</label>
-        <input
-          name="chalin03_login_username"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          placeholder="Enter username"
-          autoComplete="off"
-        />
-
-        <label>Password</label>
-        <div className="password-row">
-          <input
-            name="chalin03_login_password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Enter password"
-            autoComplete="new-password"
+      <form
+        className="login-card"
+        onSubmit={handleLogin}
+        autoComplete="off"
+        style={{
+          maxWidth: "460px",
+          padding: "34px",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: "160px",
+            height: "160px",
+            margin: "0 auto 18px",
+            borderRadius: "28px",
+            overflow: "hidden",
+            background: "#07182c",
+            boxShadow: "0 18px 45px rgba(7, 24, 44, 0.28)",
+            border: "4px solid #e0ba28",
+          }}
+        >
+          <img
+            src="/chalin03-logo.png"
+            alt="Chalin 03 Company Limited Logo"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
           />
+        </div>
+
+        <h1
+          style={{
+            margin: "0",
+            fontSize: "28px",
+            color: "#07182c",
+            fontWeight: "900",
+          }}
+        >
+          Chalin 03 Company Ltd
+        </h1>
+
+        <p
+          style={{
+            margin: "8px 0 22px",
+            color: "#667085",
+            fontWeight: "700",
+            lineHeight: "1.5",
+          }}
+        >
+          Sales & Inventory Management System
+        </p>
+
+        <div
+          style={{
+            background: "#f8fafc",
+            border: "1px solid #e5e7eb",
+            borderRadius: "14px",
+            padding: "16px",
+            textAlign: "left",
+          }}
+        >
+          {error && <div className="error-box">{error}</div>}
+
+          <label>Username</label>
+          <input
+            name="chalin03_login_username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Enter username"
+            autoComplete="off"
+          />
+
+          <label>Password</label>
+          <div className="password-row">
+            <input
+              name="chalin03_login_password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter password"
+              autoComplete="new-password"
+            />
+
+            <button
+              type="button"
+              className="secondary-button password-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: "100%",
+              background: "#07182c",
+              padding: "12px 14px",
+              fontSize: "16px",
+            }}
+          >
+            {loading ? "Logging in..." : "Login"}
+          </button>
 
           <button
             type="button"
-            className="secondary-button password-toggle"
-            onClick={() => setShowPassword(!showPassword)}
+            className="secondary-button"
+            onClick={openForgotPassword}
+            style={{
+              width: "100%",
+              marginTop: "12px",
+            }}
           >
-            {showPassword ? "Hide" : "Show"}
+            Forgot Password?
           </button>
         </div>
-
-        <button type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
-        </button>
-
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={openForgotPassword}
-          style={{
-            width: "100%",
-            marginTop: "12px",
-          }}
-        >
-          Forgot Password?
-        </button>
 
         {showForgotPassword && (
           <div
@@ -209,6 +278,17 @@ export default function LoginPage() {
             </button>
           </div>
         )}
+
+        <p
+          style={{
+            margin: "18px 0 0",
+            fontSize: "12px",
+            color: "#667085",
+            lineHeight: "1.5",
+          }}
+        >
+          Secure access for authorized Chalin 03 staff only.
+        </p>
       </form>
     </div>
   );
