@@ -277,12 +277,18 @@ export default function Layout() {
               Debts
             </NavLink>
 
+
+
             <NavLink
               to="/change-password"
               style={linkStyle}
               onClick={closeMobileMenu}
             >
               Change Password
+            </NavLink>
+
+            <NavLink to="/help" style={linkStyle} onClick={closeMobileMenu}>
+              Help / User Guide
             </NavLink>
 
             {canManage && (
