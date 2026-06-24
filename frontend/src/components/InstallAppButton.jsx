@@ -7,6 +7,21 @@ function isStandaloneApp() {
   );
 }
 
+function isIosDevice() {
+  const userAgent = window.navigator.userAgent.toLowerCase();
+
+  const normalIos =
+    userAgent.includes("iphone") ||
+    userAgent.includes("ipad") ||
+    userAgent.includes("ipod");
+
+  const ipadDesktopMode =
+    window.navigator.platform === "MacIntel" &&
+    window.navigator.maxTouchPoints > 1;
+
+  return normalIos || ipadDesktopMode;
+}
+
 export default function InstallAppButton() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -49,6 +64,13 @@ export default function InstallAppButton() {
       }
 
       setInstallPrompt(null);
+      return;
+    }
+
+    if (isIosDevice()) {
+      setMessage(
+        "On iPhone/iPad: open this site in Safari, tap Share, then choose Add to Home Screen."
+      );
       return;
     }
 
