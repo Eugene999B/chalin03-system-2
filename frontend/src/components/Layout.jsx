@@ -13,6 +13,11 @@ export default function Layout() {
   const canManage = role === "admin" || role === "manager";
   const isAdmin = role === "admin";
 
+  const isSystemAdministrator =
+    Number(user?.id) === 1 &&
+    String(user?.username || "").toLowerCase() === "admin" &&
+    role === "admin";
+
   useEffect(() => {
     function checkScreenSize() {
       const mobile = window.innerWidth <= 900;
@@ -376,6 +381,16 @@ export default function Layout() {
                 >
                   Backup & Restore
                 </NavLink>
+
+                {isSystemAdministrator && (
+                  <NavLink
+                    to="/maintenance"
+                    style={linkStyle}
+                    onClick={closeMobileMenu}
+                  >
+                    System Maintenance
+                  </NavLink>
+                )}
               </>
             )}
           </nav>

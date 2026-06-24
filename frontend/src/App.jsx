@@ -21,6 +21,7 @@ import DailyClosingPage from "./pages/DailyClosingPage";
 import LowStockPage from "./pages/LowStockPage";
 import CustomerStatementPage from "./pages/CustomerStatementPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import MaintenancePage from "./pages/MaintenancePage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -142,6 +143,15 @@ export default function App() {
               element={
                 <RoleRoute allowedRoles={adminOnlyRoles}>
                   <BackupPage />
+                </RoleRoute>
+              }
+            />
+
+            <Route
+              path="maintenance"
+              element={
+                <RoleRoute allowedRoles={adminOnlyRoles}>
+                  <MaintenancePage />
                 </RoleRoute>
               }
             />
