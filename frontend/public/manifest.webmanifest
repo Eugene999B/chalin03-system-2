@@ -1,0 +1,20 @@
+{
+  "name": "Chalin 03 Sales & Inventory",
+  "short_name": "Chalin 03",
+  "description": "Sales and Inventory Management System for Chalin 03 Company Limited",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7fb",
+  "theme_color": "#07182c",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

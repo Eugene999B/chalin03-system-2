@@ -1,3 +1,4 @@
+import InstallAppButton from "./InstallAppButton";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -420,6 +421,9 @@ export default function Layout() {
           >
             {user?.role || "role"}
           </span>
+
+
+          <InstallAppButton />
 
           <button
             type="button"
