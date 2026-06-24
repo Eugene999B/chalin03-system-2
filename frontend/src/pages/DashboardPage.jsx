@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 const DAILY_TARGET = 5000;
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const displayName =
+    user?.full_name ||
+    user?.fullName ||
+    user?.name ||
+    user?.username ||
+    "User";
 
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -447,7 +456,7 @@ export default function DashboardPage() {
 
               <div>
                 <p style={styles.eyebrow}>Business Command Center</p>
-                <h1 style={styles.heroTitle}>Welcome back, System Administrator</h1>
+                <h1 style={styles.heroTitle}>Welcome back, {displayName}</h1>
                 <p style={styles.heroSubtitle}>
                   Real-time view of sales, stock, debts, cash movement, and urgent
                   business alerts.
