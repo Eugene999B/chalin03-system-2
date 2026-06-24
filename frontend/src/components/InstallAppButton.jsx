@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const INSTALL_STORAGE_KEY = "chalin03_app_installed";
+
 function isStandaloneApp() {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -22,24 +24,39 @@ function isIosDevice() {
   return normalIos || ipadDesktopMode;
 }
 
+function getStoredInstalledStatus() {
+  return localStorage.getItem(INSTALL_STORAGE_KEY) === "yes";
+}
+
+function saveInstalledStatus() {
+  localStorage.setItem(INSTALL_STORAGE_KEY, "yes");
+}
+
 export default function InstallAppButton() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setIsInstalled(isStandaloneApp());
+    const alreadyInstalled = isStandaloneApp() || getStoredInstalledStatus();
+
+    if (alreadyInstalled) {
+      setIsInstalled(true);
+      saveInstalledStatus();
+    }
 
     function handleBeforeInstallPrompt(event) {
       event.preventDefault();
       setInstallPrompt(event);
       setMessage("");
+      setIsInstalled(false);
     }
 
     function handleInstalled() {
+      saveInstalledStatus();
       setIsInstalled(true);
       setInstallPrompt(null);
-      setMessage("");
+      setMessage("✅ Chalin 03 app has been installed successfully.");
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -54,13 +71,24 @@ export default function InstallAppButton() {
   async function handleInstallClick() {
     setMessage("");
 
+    if (isInstalled || getStoredInstalledStatus() || isStandaloneApp()) {
+      setIsInstalled(true);
+      saveInstalledStatus();
+      setMessage("✅ Chalin 03 app is already installed on this device.");
+      return;
+    }
+
     if (installPrompt) {
       installPrompt.prompt();
 
       const result = await installPrompt.userChoice;
 
       if (result.outcome === "accepted") {
+        saveInstalledStatus();
         setIsInstalled(true);
+        setMessage("✅ Chalin 03 app has been installed successfully.");
+      } else {
+        setMessage("Installation was cancelled.");
       }
 
       setInstallPrompt(null);
@@ -69,18 +97,14 @@ export default function InstallAppButton() {
 
     if (isIosDevice()) {
       setMessage(
-        "On iPhone/iPad: open this site in Safari, tap Share, then choose Add to Home Screen."
+        "On iPhone/iPad: open this site in Safari, tap Share, then choose Add to Home Screen. After adding it, open the app from your Home Screen."
       );
       return;
     }
 
     setMessage(
-      "Install prompt is not ready yet. On desktop Chrome/Edge, use the install icon in the address bar or open the browser menu and choose Install app."
+      "If Chalin 03 is already on your desktop, open it from your desktop/start menu. If not, use Chrome/Edge address-bar install icon or browser menu → Install app."
     );
-  }
-
-  if (isInstalled) {
-    return null;
   }
 
   return (
@@ -88,18 +112,19 @@ export default function InstallAppButton() {
       <button
         type="button"
         onClick={handleInstallClick}
+        disabled={isInstalled}
         style={{
           width: "100%",
           border: "none",
           borderRadius: "9px",
           padding: "11px 12px",
-          background: "#e0ba28",
-          color: "#07182c",
+          background: isInstalled ? "#16a34a" : "#e0ba28",
+          color: isInstalled ? "#ffffff" : "#07182c",
           fontWeight: "900",
-          cursor: "pointer",
+          cursor: isInstalled ? "default" : "pointer",
         }}
       >
-        Install App
+        {isInstalled ? "App Installed ✓" : "Install App"}
       </button>
 
       {message && (
@@ -108,8 +133,10 @@ export default function InstallAppButton() {
             marginTop: "8px",
             padding: "10px",
             borderRadius: "9px",
-            background: "rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.85)",
+            background: isInstalled
+              ? "rgba(22, 163, 74, 0.18)"
+              : "rgba(255,255,255,0.08)",
+            color: "rgba(255,255,255,0.9)",
             fontSize: "12px",
             lineHeight: "1.5",
           }}
