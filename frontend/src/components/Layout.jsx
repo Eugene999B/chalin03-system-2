@@ -190,22 +190,18 @@ export default function Layout() {
             borderBottom: "1px solid rgba(255,255,255,0.08)",
           }}
         >
-          <div
+          <img
+            src="/chalin03-logo.png"
+            alt="Chalin 03 Logo"
             style={{
-              width: "52px",
-              height: "52px",
-              borderRadius: "13px",
-              background: "#e0ba28",
-              color: "#06172b",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: "900",
-              fontSize: "22px",
-              flexShrink: 0,
+             width: "56px",
+             height: "56px",
+             borderRadius: "14px",
+             objectFit: "cover",
+             background: "#07182c",
+             flexShrink: 0,
             }}
-          >
-            C3
-          </div>
+          />
 
           <div>
             <h2 style={{ margin: 0, fontSize: "22px", lineHeight: 1.1 }}>
