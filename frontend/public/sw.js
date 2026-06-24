@@ -1,9 +1,11 @@
-const CACHE_NAME = "chalin03-app-v1";
+const CACHE_NAME = "chalin03-app-v3";
 
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",
-  "/app-icon.svg"
+  "/app-icon-192.png",
+  "/app-icon-512.png",
+  "/chalin03-logo.png"
 ];
 
 self.addEventListener("install", (event) => {
