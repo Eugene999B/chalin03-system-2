@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 const emptyUserForm = {
   full_name: "",
@@ -17,7 +18,12 @@ const emptyResetPasswordForm = {
   confirmPassword: "",
 };
 
+const SYSTEM_ADMIN_ID = 1;
+const SYSTEM_ADMIN_USERNAME = "admin";
+
 export default function UsersSettingsPage() {
+  const { user: currentUser } = useAuth();
+
   const [users, setUsers] = useState([]);
   const [userForm, setUserForm] = useState(emptyUserForm);
   const [resetPasswordForm, setResetPasswordForm] = useState(
@@ -38,6 +44,35 @@ export default function UsersSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState("");
+
+  function isOriginalSystemAdministrator(user) {
+    return (
+      Number(user?.id) === SYSTEM_ADMIN_ID &&
+      String(user?.username || "").toLowerCase() === SYSTEM_ADMIN_USERNAME &&
+      String(user?.role || "").toLowerCase() === "admin"
+    );
+  }
+
+  function canCurrentUserDeleteAccounts() {
+    return isOriginalSystemAdministrator(currentUser);
+  }
+
+  function canDeleteThisUser(user) {
+    if (!canCurrentUserDeleteAccounts()) {
+      return false;
+    }
+
+    if (Number(user.id) === Number(currentUser?.id)) {
+      return false;
+    }
+
+    if (isOriginalSystemAdministrator(user)) {
+      return false;
+    }
+
+    return true;
+  }
 
   async function loadUsers() {
     const response = await axiosClient.get("/users");
@@ -139,6 +174,48 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function deleteUserAccount(user) {
+    setMessage("");
+    setError("");
+
+    if (!canDeleteThisUser(user)) {
+      setError(
+        "Only the original System Administrator can delete other user accounts."
+      );
+      return;
+    }
+
+    const firstConfirm = window.confirm(
+      `Are you sure you want to permanently delete this account?\n\nName: ${user.full_name}\nUsername: ${user.username}\nRole: ${user.role}`
+    );
+
+    if (!firstConfirm) {
+      return;
+    }
+
+    const typedConfirm = window.prompt(
+      `Type DELETE ${user.username} to confirm permanent deletion.`
+    );
+
+    if (typedConfirm !== `DELETE ${user.username}`) {
+      setError("Delete cancelled. Confirmation text did not match.");
+      return;
+    }
+
+    setDeletingUserId(user.id);
+
+    try {
+      const response = await axiosClient.delete(`/users/${user.id}`);
+
+      setMessage(response.data.message || "User account deleted permanently.");
+      await loadUsers();
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to delete user.");
+    } finally {
+      setDeletingUserId("");
+    }
+  }
+
   async function resetUserPassword(event) {
     event.preventDefault();
 
@@ -231,6 +308,24 @@ export default function UsersSettingsPage() {
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      {canCurrentUserDeleteAccounts() && (
+        <div
+          style={{
+            marginBottom: "18px",
+            padding: "14px",
+            borderRadius: "14px",
+            background: "#fff7ed",
+            border: "1px solid #fed7aa",
+            color: "#9a3412",
+            fontWeight: "800",
+          }}
+        >
+          Original System Administrator mode is active. You can permanently
+          delete other staff accounts, but you cannot delete your own original
+          admin account.
+        </div>
+      )}
 
       <div className="two-column users-settings-grid">
         <form className="section-card" onSubmit={createUser}>
@@ -427,67 +522,105 @@ export default function UsersSettingsPage() {
         {users.length === 0 ? (
           <p>No users found.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Staff</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Phone</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>
-                    <strong>{user.full_name}</strong>
-                  </td>
-                  <td>{user.username}</td>
-                  <td>{user.role}</td>
-                  <td>{user.phone || "-"}</td>
-                  <td>
-                    <span
-                      className={
-                        user.is_active ? "status-active" : "status-disabled"
-                      }
-                    >
-                      {user.is_active ? "Active" : "Disabled"}
-                    </span>
-                  </td>
-                  <td>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "8px",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => openResetPassword(user)}
-                      >
-                        Reset Password
-                      </button>
-
-                      <button
-                        type="button"
-                        className={
-                          user.is_active ? "small-danger" : "small-success"
-                        }
-                        onClick={() => toggleUserStatus(user.id)}
-                      >
-                        {user.is_active ? "Disable" : "Activate"}
-                      </button>
-                    </div>
-                  </td>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Staff</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <strong>{user.full_name}</strong>
+                    </td>
+                    <td>{user.username}</td>
+                    <td>{user.role}</td>
+                    <td>{user.phone || "-"}</td>
+                    <td>
+                      <span
+                        className={
+                          user.is_active ? "status-active" : "status-disabled"
+                        }
+                      >
+                        {user.is_active ? "Active" : "Disabled"}
+                      </span>
+                    </td>
+                    <td>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => openResetPassword(user)}
+                        >
+                          Reset Password
+                        </button>
+
+                        <button
+                          type="button"
+                          className={
+                            user.is_active ? "small-danger" : "small-success"
+                          }
+                          onClick={() => toggleUserStatus(user.id)}
+                          disabled={isOriginalSystemAdministrator(user)}
+                          title={
+                            isOriginalSystemAdministrator(user)
+                              ? "Original System Administrator cannot be disabled."
+                              : ""
+                          }
+                        >
+                          {user.is_active ? "Disable" : "Activate"}
+                        </button>
+
+                        {canDeleteThisUser(user) && (
+                          <button
+                            type="button"
+                            className="small-danger"
+                            onClick={() => deleteUserAccount(user)}
+                            disabled={Number(deletingUserId) === Number(user.id)}
+                            style={{
+                              background: "#7f1d1d",
+                              color: "#ffffff",
+                            }}
+                          >
+                            {Number(deletingUserId) === Number(user.id)
+                              ? "Deleting..."
+                              : "Delete Account"}
+                          </button>
+                        )}
+                      </div>
+
+                      {isOriginalSystemAdministrator(user) && (
+                        <small
+                          style={{
+                            display: "block",
+                            marginTop: "6px",
+                            color: "#64748b",
+                            fontWeight: "700",
+                          }}
+                        >
+                          Protected original admin account
+                        </small>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

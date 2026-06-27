@@ -27,6 +27,23 @@ export default function NewSalePage() {
   const receiptFooter = "Thank You For Coming";
   const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
 
+  function cleanText(value) {
+    if (value === undefined || value === null) {
+      return "";
+    }
+
+    return String(value).trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   function formatMoney(value) {
     return Number(value || 0).toFixed(2);
   }
@@ -70,6 +87,18 @@ export default function NewSalePage() {
     };
 
     return paymentMethods[String(value || "").toLowerCase()] || value || "-";
+  }
+
+  function getReceiptCustomerName(receiptData) {
+    return (
+      receiptData?.customer?.name ||
+      receiptData?.customer_name ||
+      "Walk-in Customer"
+    );
+  }
+
+  function getReceiptCustomerPhone(receiptData) {
+    return receiptData?.customer?.phone || receiptData?.customer_phone || "-";
   }
 
   async function loadProducts() {
@@ -216,6 +245,10 @@ export default function NewSalePage() {
     setMessage("");
     setReceipt(null);
 
+    const cleanCustomerName = cleanText(customerName);
+    const cleanCustomerPhone = cleanText(customerPhone);
+    const cleanCustomerLocation = cleanText(customerLocation);
+
     if (cart.length === 0) {
       setError("Add at least one item to the sale.");
       return;
@@ -235,8 +268,8 @@ export default function NewSalePage() {
 
     if (
       (paymentType === "credit" || paymentType === "mixed") &&
-      !customerName.trim() &&
-      !customerPhone.trim()
+      !cleanCustomerName &&
+      !cleanCustomerPhone
     ) {
       setError("Customer name or phone is required for credit/mixed sales.");
       return;
@@ -244,9 +277,9 @@ export default function NewSalePage() {
 
     try {
       const response = await axiosClient.post("/sales", {
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_location: customerLocation,
+        customer_name: cleanCustomerName,
+        customer_phone: cleanCustomerPhone,
+        customer_location: cleanCustomerLocation,
         payment_type: paymentType,
         discount_amount: discount,
         amount_paid: Number(amountPaid || 0),
@@ -256,7 +289,21 @@ export default function NewSalePage() {
         })),
       });
 
-      setReceipt(response.data.receipt);
+      const savedReceipt = response.data.receipt || {};
+
+      setReceipt({
+        ...savedReceipt,
+        customer: {
+          ...(savedReceipt.customer || {}),
+          name:
+            savedReceipt.customer?.name ||
+            cleanCustomerName ||
+            "Walk-in Customer",
+          phone: savedReceipt.customer?.phone || cleanCustomerPhone || "",
+          location: savedReceipt.customer?.location || cleanCustomerLocation || "",
+        },
+      });
+
       setMessage("Sale recorded successfully.");
 
       setCart([]);
@@ -323,16 +370,18 @@ export default function NewSalePage() {
     if (!receipt) return;
 
     const receiptDiscount = Number(receipt.discount_amount || 0);
+    const receiptCustomerName = getReceiptCustomerName(receipt);
+    const receiptCustomerPhone = getReceiptCustomerPhone(receipt);
 
     const itemsHtml = receipt.items
       .map(
         (item) => `
           <tr>
-            <td class="item-name">${String(
-              item.product_name || ""
-            ).toUpperCase()}</td>
+            <td class="item-name">${escapeHtml(
+              String(item.product_name || "").toUpperCase()
+            )}</td>
             <td class="right">${formatMoney(item.unit_price)}</td>
-            <td class="right">${item.quantity}</td>
+            <td class="right">${escapeHtml(item.quantity)}</td>
             <td class="right">${formatMoney(item.line_total)}</td>
           </tr>
         `
@@ -343,7 +392,7 @@ export default function NewSalePage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Receipt ${receipt.receipt_number}</title>
+          <title>Receipt ${escapeHtml(receipt.receipt_number)}</title>
 
           <style>
             @page {
@@ -455,39 +504,44 @@ export default function NewSalePage() {
 
         <body>
           <div class="receipt">
-            <h1>${businessName}</h1>
+            <h1>${escapeHtml(businessName)}</h1>
 
             <div class="center">
-              <p>${businessAddress}</p>
-              <p>Tel: ${businessPhone}</p>
-              <p>MOMO #: ${momoNumber}</p>
+              <p>${escapeHtml(businessAddress)}</p>
+              <p>Tel: ${escapeHtml(businessPhone)}</p>
+              <p>MOMO #: ${escapeHtml(momoNumber)}</p>
             </div>
 
             <div class="dash"></div>
 
             <div class="details-row">
               <span>Customer :</span>
-              <span>${receipt.customer?.name || "Walk-in Customer"}</span>
+              <span>${escapeHtml(receiptCustomerName)}</span>
+            </div>
+
+            <div class="details-row">
+              <span>Phone :</span>
+              <span>${escapeHtml(receiptCustomerPhone)}</span>
             </div>
 
             <div class="details-row">
               <span>Date :</span>
-              <span>${formatReceiptDate(receipt.created_at)}</span>
+              <span>${escapeHtml(formatReceiptDate(receipt.created_at))}</span>
             </div>
 
             <div class="details-row">
               <span>Time :</span>
-              <span>${formatReceiptTime(receipt.created_at)}</span>
+              <span>${escapeHtml(formatReceiptTime(receipt.created_at))}</span>
             </div>
 
             <div class="details-row">
               <span>Receipt No.:</span>
-              <span>${receipt.receipt_number}</span>
+              <span>${escapeHtml(receipt.receipt_number)}</span>
             </div>
 
             <div class="details-row">
               <span>Payment :</span>
-              <span>${formatPaymentMethod(receipt.payment_type)}</span>
+              <span>${escapeHtml(formatPaymentMethod(receipt.payment_type))}</span>
             </div>
 
             <div class="dash"></div>
@@ -543,11 +597,13 @@ export default function NewSalePage() {
 
             <div class="dash"></div>
 
-            <p>Served by&nbsp;&nbsp; ${receipt.staff?.full_name || "-"}</p>
+            <p>Served by&nbsp;&nbsp; ${escapeHtml(
+              receipt.staff?.full_name || "-"
+            )}</p>
 
-            <div class="footer">${receiptFooter}</div>
+            <div class="footer">${escapeHtml(receiptFooter)}</div>
 
-            <div class="policy">${policyText}</div>
+            <div class="policy">${escapeHtml(policyText)}</div>
 
             <div class="powered">Powered by Chalin 03 System</div>
           </div>
@@ -563,6 +619,11 @@ export default function NewSalePage() {
     `;
 
     const printWindow = window.open("", "_blank", "width=420,height=700");
+
+    if (!printWindow) {
+      setError("Popup blocked. Please allow popups to print receipt.");
+      return;
+    }
 
     printWindow.document.open();
     printWindow.document.write(receiptHtml);
@@ -649,7 +710,9 @@ export default function NewSalePage() {
                         >
                           GHS {formatMoney(product.selling_price)} | Stock:{" "}
                           {product.quantity}
-                          {product.barcode ? ` | Barcode: ${product.barcode}` : ""}
+                          {product.barcode
+                            ? ` | Barcode: ${product.barcode}`
+                            : ""}
                           {product.size ? ` | Size: ${product.size}` : ""}
                         </p>
                       </div>
@@ -777,18 +840,21 @@ export default function NewSalePage() {
           <input
             value={customerName}
             onChange={(event) => setCustomerName(event.target.value)}
+            placeholder="Enter customer name"
           />
 
           <label>Customer Phone</label>
           <input
             value={customerPhone}
             onChange={(event) => setCustomerPhone(event.target.value)}
+            placeholder="Enter customer phone"
           />
 
           <label>Customer Location</label>
           <input
             value={customerLocation}
             onChange={(event) => setCustomerLocation(event.target.value)}
+            placeholder="Enter customer location"
           />
 
           <label>Payment Type</label>
@@ -861,8 +927,11 @@ export default function NewSalePage() {
 
             <div className="receipt-info-grid">
               <p>
-                <strong>Customer:</strong>{" "}
-                {receipt.customer?.name || "Walk-in Customer"}
+                <strong>Customer:</strong> {getReceiptCustomerName(receipt)}
+              </p>
+
+              <p>
+                <strong>Phone:</strong> {getReceiptCustomerPhone(receipt)}
               </p>
 
               <p>

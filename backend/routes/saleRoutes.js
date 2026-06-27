@@ -25,12 +25,18 @@ function toPositiveInt(value) {
   return number;
 }
 
-function nullIfEmpty(value) {
-  if (value === undefined || value === null || value === "") {
+function cleanText(value) {
+  if (value === undefined || value === null) {
     return null;
   }
 
-  return value;
+  const text = String(value).trim();
+
+  if (!text) {
+    return null;
+  }
+
+  return text;
 }
 
 function generateReceiptNumber() {
@@ -90,16 +96,9 @@ async function findOrCreateCustomer(
   customerPhone,
   customerLocation
 ) {
-  const cleanName =
-    customerName && customerName.trim() !== "" ? customerName.trim() : null;
-
-  const cleanPhone =
-    customerPhone && customerPhone.trim() !== "" ? customerPhone.trim() : null;
-
-  const cleanLocation =
-    customerLocation && customerLocation.trim() !== ""
-      ? customerLocation.trim()
-      : null;
+  const cleanName = cleanText(customerName);
+  const cleanPhone = cleanText(customerPhone);
+  const cleanLocation = cleanText(customerLocation);
 
   if (!cleanName && !cleanPhone) {
     return null;
@@ -115,7 +114,24 @@ async function findOrCreateCustomer(
     );
 
     if (existingCustomers.length > 0) {
-      return existingCustomers[0];
+      const existingCustomer = existingCustomers[0];
+
+      if (cleanName && existingCustomer.name !== cleanName) {
+        await connection.query(
+          `UPDATE customers
+           SET name = ?, location = COALESCE(?, location)
+           WHERE id = ?`,
+          [cleanName, cleanLocation, existingCustomer.id]
+        );
+
+        return {
+          ...existingCustomer,
+          name: cleanName,
+          location: cleanLocation || existingCustomer.location,
+        };
+      }
+
+      return existingCustomer;
     }
   }
 
@@ -149,6 +165,10 @@ router.post("/", requireAuth, async (req, res) => {
       discount_amount,
       items,
     } = req.body;
+
+    const cleanCustomerName = cleanText(customer_name);
+    const cleanCustomerPhone = cleanText(customer_phone);
+    const cleanCustomerLocation = cleanText(customer_location);
 
     const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed"];
 
@@ -184,7 +204,7 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
-    if (payment_type === "credit" && !customer_name && !customer_phone) {
+    if (payment_type === "credit" && !cleanCustomerName && !cleanCustomerPhone) {
       return res.status(400).json({
         status: "error",
         message: "Customer name or phone is required for credit sales.",
@@ -290,15 +310,15 @@ router.post("/", requireAuth, async (req, res) => {
 
     const customer = await findOrCreateCustomer(
       connection,
-      customer_name,
-      customer_phone,
-      customer_location
+      cleanCustomerName,
+      cleanCustomerPhone,
+      cleanCustomerLocation
     );
 
     const finalCustomerName =
-      customer?.name || nullIfEmpty(customer_name) || "Walk-in Customer";
+      cleanCustomerName || customer?.name || "Walk-in Customer";
 
-    const finalCustomerPhone = customer?.phone || nullIfEmpty(customer_phone);
+    const finalCustomerPhone = cleanCustomerPhone || customer?.phone || null;
 
     const [saleResult] = await connection.query(
       `INSERT INTO sales (
@@ -417,7 +437,7 @@ router.post("/", requireAuth, async (req, res) => {
       [
         req.user.id,
         "CREATE_SALE",
-        `Created sale ${receiptNumber} with total GHS ${total} and discount GHS ${discountAmount}`,
+        `Created sale ${receiptNumber} for ${finalCustomerName} with total GHS ${total} and discount GHS ${discountAmount}`,
       ]
     );
 
@@ -440,6 +460,7 @@ router.post("/", requireAuth, async (req, res) => {
           id: customer ? customer.id : null,
           name: finalCustomerName,
           phone: finalCustomerPhone,
+          location: cleanCustomerLocation,
         },
         items: saleItems.map((item) => ({
           product_id: item.product_id,
@@ -659,7 +680,11 @@ router.patch(
 
       const sale = sales[0];
 
-      if (Number(sale.is_voided) === 1 || sale.sale_status === "cancelled") {
+      if (
+        Number(sale.is_voided) === 1 ||
+        sale.sale_status === "cancelled" ||
+        sale.sale_status === "voided"
+      ) {
         await connection.rollback();
 
         return res.status(400).json({

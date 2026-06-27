@@ -37,6 +37,7 @@ function formatReceiptTime(value) {
     hour12: true,
   });
 }
+
 function formatPaymentMethod(value) {
   const paymentMethods = {
     cash: "Cash",
@@ -48,16 +49,27 @@ function formatPaymentMethod(value) {
 
   return paymentMethods[String(value || "").toLowerCase()] || value || "-";
 }
+
 function safeText(value, fallback = "-") {
-  if (value === undefined || value === null || value === "") {
+  if (value === undefined || value === null) {
     return fallback;
   }
 
-  return String(value);
+  const text = String(value).trim();
+
+  if (!text) {
+    return fallback;
+  }
+
+  return text;
 }
 
 function isSaleVoided(sale) {
-  return Number(sale?.is_voided || 0) === 1 || sale?.sale_status === "cancelled";
+  return (
+    Number(sale?.is_voided || 0) === 1 ||
+    sale?.sale_status === "cancelled" ||
+    sale?.sale_status === "voided"
+  );
 }
 
 async function getSettings() {
@@ -170,7 +182,8 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
 
     const businessName =
       settings.business_name || "Chalin 03 Company Limited";
-    const businessAddress = settings.business_address || "Dunkwa Police Barrier";
+    const businessAddress =
+      settings.business_address || "Dunkwa Police Barrier";
     const businessPhone =
       settings.business_phone || "0249469080 / 0249995510";
     const momoNumber = settings.owner_phone || "0543421127";
@@ -257,7 +270,15 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
     addDashedLine(doc, y);
     y += 10;
 
-    addDetailRow(doc, "Customer :", safeText(sale.customer_name, "Walk-in Customer"), y);
+    addDetailRow(
+      doc,
+      "Customer :",
+      safeText(sale.customer_name, "Walk-in Customer"),
+      y
+    );
+    y += 12;
+
+    addDetailRow(doc, "Phone :", safeText(sale.customer_phone, "-"), y);
     y += 12;
 
     addDetailRow(doc, "Date :", formatReceiptDate(sale.created_at), y);
