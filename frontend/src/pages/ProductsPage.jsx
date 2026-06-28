@@ -346,8 +346,13 @@ export default function ProductsPage() {
               required
             />
 
-            <label>Size / Excavator Type</label>
-            <input name="size" value={form.size} onChange={handleChange} />
+            <label>Excavator Type</label>
+            <input
+              name="size"
+              value={form.size}
+              onChange={handleChange}
+              placeholder="Example: CAT 320, CAT 330, Komatsu PC200"
+            />
 
             <label>Category</label>
             <input
@@ -441,7 +446,7 @@ export default function ProductsPage() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search product"
+                placeholder="Search product or excavator type"
               />
 
               <button type="button" onClick={loadProducts}>
@@ -457,6 +462,7 @@ export default function ProductsPage() {
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Excavator Type</th>
                   <th>Category</th>
                   <th>Stock</th>
                   <th>Cost</th>
@@ -478,16 +484,16 @@ export default function ProductsPage() {
                   >
                     <td>
                       <strong>{product.name}</strong>
-                      <br />
-                      <small>{product.size || "-"}</small>
                       {product.barcode && (
                         <>
+
                           <br />
                           <small>Barcode: {product.barcode}</small>
                         </>
                       )}
                     </td>
 
+                    <td>{product.size || "-"}</td>
                     <td>{product.category || "-"}</td>
 
                     <td>
