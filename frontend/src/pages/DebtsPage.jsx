@@ -19,6 +19,9 @@ export default function DebtsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const businessName = "Chalin 03 Company Limited";
+  const momoNumber = "0543421127";
+
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
@@ -61,6 +64,81 @@ export default function DebtsPage() {
     };
 
     return statuses[String(value || "").toLowerCase()] || value || "-";
+  }
+
+  function formatPhoneForWhatsApp(phone) {
+    const rawPhone = String(phone || "").trim();
+
+    if (!rawPhone || rawPhone === "-") {
+      return "";
+    }
+
+    let digits = rawPhone.replace(/\D/g, "");
+
+    // Ghana format: 0240000000 becomes 233240000000
+    if (digits.startsWith("0")) {
+      digits = `233${digits.slice(1)}`;
+    }
+
+    if (digits.startsWith("233")) {
+      return digits;
+    }
+
+    if (digits.length === 9) {
+      return `233${digits}`;
+    }
+
+    return digits;
+  }
+
+  function buildDebtReminderMessage(debt) {
+    return `Hello ${debt.customer_name || "Customer"},
+
+This is a friendly debt reminder from ${businessName}.
+
+DEBT DETAILS
+Receipt No: ${debt.receipt_number || "-"}
+Total Debt: ${formatMoney(debt.amount_owed)}
+Amount Paid: ${formatMoney(debt.amount_paid)}
+Outstanding Balance: ${formatMoney(debt.balance)}
+Status: ${formatDebtStatus(debt.status)}
+Due Date: ${formatDate(debt.due_date)}
+
+Please make payment as soon as possible.
+
+MoMo Number: ${momoNumber}
+
+Thank you.`;
+  }
+
+  function sendDebtReminderWhatsApp(debt) {
+    setMessage("");
+    setError("");
+
+    if (!debt) {
+      setError("Debt information is missing.");
+      return;
+    }
+
+    if (String(debt.status || "").toLowerCase() === "paid") {
+      setError("This debt is already paid. No reminder is needed.");
+      return;
+    }
+
+    const whatsappPhone = formatPhoneForWhatsApp(debt.customer_phone);
+
+    if (!whatsappPhone) {
+      setError("Customer phone number is missing. Add customer phone first.");
+      return;
+    }
+
+    const messageText = buildDebtReminderMessage(debt);
+
+    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+      messageText
+    )}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   }
 
   async function loadDebts() {
@@ -453,9 +531,31 @@ export default function DebtsPage() {
                     <td>{formatDate(debt.due_date)}</td>
 
                     <td>
-                      <button type="button" onClick={() => viewDebt(debt.id)}>
-                        View
-                      </button>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button type="button" onClick={() => viewDebt(debt.id)}>
+                          View
+                        </button>
+
+                        {String(debt.status || "").toLowerCase() !== "paid" && (
+                          <button
+                            type="button"
+                            onClick={() => sendDebtReminderWhatsApp(debt)}
+                            style={{
+                              background: "#16a34a",
+                              color: "#ffffff",
+                              border: "none",
+                            }}
+                          >
+                            WhatsApp Reminder
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -574,6 +674,30 @@ export default function DebtsPage() {
                 </p>
               </div>
 
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                  marginTop: "14px",
+                  marginBottom: "14px",
+                }}
+              >
+                {String(selectedDebt.status || "").toLowerCase() !== "paid" && (
+                  <button
+                    type="button"
+                    onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
+                    style={{
+                      background: "#16a34a",
+                      color: "#ffffff",
+                      border: "none",
+                    }}
+                  >
+                    Send WhatsApp Reminder
+                  </button>
+                )}
+              </div>
+
               <h3>Payment History</h3>
 
               {selectedPayments.length === 0 ? (
@@ -625,6 +749,20 @@ export default function DebtsPage() {
             </div>
 
             <div className="modal-actions">
+              {String(selectedDebt.status || "").toLowerCase() !== "paid" && (
+                <button
+                  type="button"
+                  onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
+                  style={{
+                    background: "#16a34a",
+                    color: "#ffffff",
+                    border: "none",
+                  }}
+                >
+                  Send WhatsApp Reminder
+                </button>
+              )}
+
               <button
                 type="button"
                 className="secondary-button"
