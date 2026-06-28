@@ -101,6 +101,97 @@ export default function NewSalePage() {
     return receiptData?.customer?.phone || receiptData?.customer_phone || "-";
   }
 
+  function formatPhoneForWhatsApp(phone) {
+    const rawPhone = String(phone || "").trim();
+
+    if (!rawPhone || rawPhone === "-") {
+      return "";
+    }
+
+    let digits = rawPhone.replace(/\D/g, "");
+
+    if (digits.startsWith("0")) {
+      digits = `233${digits.slice(1)}`;
+    }
+
+    if (digits.startsWith("233")) {
+      return digits;
+    }
+
+    if (digits.length === 9) {
+      return `233${digits}`;
+    }
+
+    return digits;
+  }
+
+  function buildWhatsAppReceiptMessage(receiptData) {
+    const customer = getReceiptCustomerName(receiptData);
+    const phone = getReceiptCustomerPhone(receiptData);
+
+    const itemsText = (receiptData.items || [])
+      .map((item) => {
+        return `- ${item.product_name} x${item.quantity} = GHS ${formatMoney(
+          item.line_total
+        )}`;
+      })
+      .join("\n");
+
+    return `Hello ${customer},
+
+Thank you for buying from ${businessName}.
+
+RECEIPT DETAILS
+Receipt No: ${receiptData.receipt_number}
+Customer: ${customer}
+Phone: ${phone}
+Payment: ${formatPaymentMethod(receiptData.payment_type)}
+
+ITEMS
+${itemsText}
+
+TOTALS
+Subtotal: GHS ${formatMoney(receiptData.subtotal)}
+Discount: GHS ${formatMoney(receiptData.discount_amount)}
+VAT: GHS ${formatMoney(receiptData.tax_amount)}
+Amount Due: GHS ${formatMoney(receiptData.total)}
+Amount Paid: GHS ${formatMoney(receiptData.amount_paid)}
+Balance: GHS ${formatMoney(receiptData.balance)}
+
+Served by: ${receiptData.staff?.full_name || "-"}
+
+${receiptFooter}
+${policyText}
+
+Note: Your PDF receipt can also be attached manually on WhatsApp.`;
+  }
+
+  function sendReceiptWhatsApp() {
+    setMessage("");
+    setError("");
+
+    if (!receipt) {
+      setError("No receipt available to send.");
+      return;
+    }
+
+    const customerPhone = getReceiptCustomerPhone(receipt);
+    const whatsappPhone = formatPhoneForWhatsApp(customerPhone);
+
+    if (!whatsappPhone) {
+      setError("Customer phone number is missing. Add customer phone first.");
+      return;
+    }
+
+    const messageText = buildWhatsAppReceiptMessage(receipt);
+
+    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+      messageText
+    )}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  }
+
   async function loadProducts() {
     setError("");
 
@@ -1036,6 +1127,35 @@ export default function NewSalePage() {
               >
                 Download PDF
               </button>
+
+              <button
+                type="button"
+                onClick={sendReceiptWhatsApp}
+                style={{
+                  background: "#16a34a",
+                  color: "#ffffff",
+                  border: "none",
+                }}
+              >
+                Send WhatsApp Message
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: "12px",
+                padding: "12px",
+                borderRadius: "12px",
+                background: "#ecfdf3",
+                border: "1px solid #bbf7d0",
+                color: "#14532d",
+                fontWeight: "700",
+              }}
+            >
+              To send the PDF receipt on WhatsApp, first click{" "}
+              <strong>Download PDF</strong>, then click{" "}
+              <strong>Send WhatsApp Message</strong>, and attach the downloaded
+              PDF manually inside WhatsApp before sending.
             </div>
           </div>
         </div>
