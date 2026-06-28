@@ -480,12 +480,12 @@ export default function DashboardPage() {
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
             <HeroMetric
-              label="Today"
+              label="Today : "
               value={`GHS ${formatMoney(dashboardData.todaySalesAmount)}`}
             />
 
             <HeroMetric
-              label="This Week"
+              label="This Week : "
               value={`GHS ${formatMoney(dashboardData.weekSalesAmount)}`}
             />
 
