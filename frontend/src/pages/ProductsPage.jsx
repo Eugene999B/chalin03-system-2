@@ -346,7 +346,7 @@ export default function ProductsPage() {
               required
             />
 
-            <label>Size / Vehicle Type</label>
+            <label>Size / Excavator Type</label>
             <input name="size" value={form.size} onChange={handleChange} />
 
             <label>Category</label>
