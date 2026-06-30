@@ -127,7 +127,10 @@ export default function ExpensesPage() {
       <div className="page-header">
         <div>
           <h1>Expenses</h1>
-          <p>Record business costs such as transport, rent, repairs and salary</p>
+          <p>
+            Record business costs such as fuel, transport, rent, repairs and
+            salary
+          </p>
         </div>
 
         <button onClick={loadExpenses}>Refresh</button>
@@ -159,6 +162,7 @@ export default function ExpensesPage() {
             onChange={handleChange}
           >
             <option value="">Select category</option>
+            <option value="Fuel">Fuel</option>
             <option value="Transport">Transport</option>
             <option value="Rent">Rent</option>
             <option value="Salary">Salary</option>
@@ -194,7 +198,7 @@ export default function ExpensesPage() {
             name="description"
             value={form.description}
             onChange={handleChange}
-            placeholder="Example: Transport to buy spare parts"
+            placeholder="Example: Fuel for delivery or spare parts pickup"
           />
 
           <button type="submit">Save Expense</button>
