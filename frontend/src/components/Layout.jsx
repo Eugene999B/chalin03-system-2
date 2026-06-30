@@ -334,7 +334,7 @@ export default function Layout() {
     background: "#07182c",
     color: "#ffffff",
     display: "grid",
-    gridTemplateRows: "auto minmax(0, 1fr) auto",
+    gridTemplateRows: "auto auto minmax(0, 1fr) auto",
     overflow: "hidden",
     flexShrink: 0,
     zIndex: 1000,
@@ -374,12 +374,12 @@ export default function Layout() {
             background: "#07182c",
             color: "#ffffff",
             zIndex: 900,
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: "auto minmax(0, 1fr) auto",
             alignItems: "center",
-            justifyContent: "space-between",
+            gap: "8px",
             padding: "0 10px",
             boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
-            gap: "8px",
           }}
         >
           <button
@@ -387,12 +387,13 @@ export default function Layout() {
             onClick={() => setMenuOpen(true)}
             style={{
               border: "none",
-              borderRadius: "8px",
+              borderRadius: "9px",
               background: "#164777",
               color: "#ffffff",
               padding: "9px 10px",
               fontWeight: "900",
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
             Menu
@@ -402,21 +403,47 @@ export default function Layout() {
             type="button"
             onClick={openCommandCenter}
             style={{
-              flex: 1,
-              border: "1px solid rgba(224, 186, 40, 0.55)",
-              borderRadius: "10px",
-              background: "rgba(255,255,255,0.08)",
+              minWidth: 0,
+              border: "1px solid rgba(224, 186, 40, 0.5)",
+              borderRadius: "11px",
+              background:
+                "linear-gradient(135deg, rgba(22,71,119,0.9), rgba(7,24,44,0.9))",
               color: "#ffffff",
-              padding: "9px 10px",
+              padding: "8px 9px",
               fontWeight: "900",
               cursor: "pointer",
               textAlign: "left",
               overflow: "hidden",
-              whiteSpace: "nowrap",
-              textOverflow: "ellipsis",
+              boxShadow: "0 6px 14px rgba(0,0,0,0.16)",
             }}
           >
-            🔎 Smart Search
+            <span
+              style={{
+                display: "block",
+                fontSize: "13px",
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              🔎 Smart Search
+            </span>
+
+            <small
+              style={{
+                display: "block",
+                marginTop: "2px",
+                color: "rgba(255,255,255,0.68)",
+                fontSize: "10px",
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              Find pages fast
+            </small>
           </button>
 
           <button
@@ -424,12 +451,13 @@ export default function Layout() {
             onClick={handleLogout}
             style={{
               border: "none",
-              borderRadius: "8px",
+              borderRadius: "9px",
               background: "#c3261d",
               color: "#ffffff",
               padding: "9px 10px",
               fontWeight: "900",
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
             Out
@@ -445,6 +473,7 @@ export default function Layout() {
             gap: "12px",
             padding: "18px",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
+            minWidth: 0,
           }}
         >
           <img
@@ -460,8 +489,17 @@ export default function Layout() {
             }}
           />
 
-          <div>
-            <h2 style={{ margin: 0, fontSize: "22px", lineHeight: 1.1 }}>
+          <div style={{ minWidth: 0 }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: "22px",
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
               Chalin 03
             </h2>
             <p
@@ -469,6 +507,9 @@ export default function Layout() {
                 margin: "4px 0 0",
                 color: "rgba(255,255,255,0.72)",
                 fontSize: "13px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
               Sales & Inventory
@@ -488,6 +529,7 @@ export default function Layout() {
                 padding: "9px 12px",
                 fontWeight: "900",
                 cursor: "pointer",
+                flexShrink: 0,
               }}
             >
               Close
@@ -497,7 +539,7 @@ export default function Layout() {
 
         <div
           style={{
-            padding: "12px 16px 0",
+            padding: "12px 14px",
             borderBottom: "1px solid rgba(255,255,255,0.08)",
           }}
         >
@@ -506,53 +548,90 @@ export default function Layout() {
             onClick={openCommandCenter}
             style={{
               width: "100%",
-              border: "1px solid rgba(224, 186, 40, 0.45)",
-              borderRadius: "13px",
-              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(224, 186, 40, 0.5)",
+              borderRadius: "14px",
+              background:
+                "linear-gradient(135deg, rgba(22,71,119,0.95), rgba(7,24,44,0.95))",
               color: "#ffffff",
               padding: "12px",
               cursor: "pointer",
-              marginBottom: "12px",
               textAlign: "left",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.16)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+              overflow: "hidden",
             }}
           >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
+                display: "grid",
+                gridTemplateColumns: !isMobile ? "34px minmax(0, 1fr) auto" : "34px minmax(0, 1fr)",
                 gap: "10px",
+                alignItems: "center",
+                minWidth: 0,
               }}
             >
-              <strong>🔎 Smart Command Center</strong>
+              <span
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  borderRadius: "11px",
+                  display: "grid",
+                  placeItems: "center",
+                  background: "rgba(224,186,40,0.18)",
+                  flexShrink: 0,
+                  fontSize: "18px",
+                }}
+              >
+                🔎
+              </span>
+
+              <span style={{ minWidth: 0 }}>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: "14px",
+                    lineHeight: 1.2,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  Smart Command
+                </strong>
+
+                <small
+                  style={{
+                    display: "block",
+                    marginTop: "3px",
+                    color: "rgba(255,255,255,0.68)",
+                    fontWeight: "700",
+                    fontSize: "11px",
+                    lineHeight: 1.2,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  Search pages fast
+                </small>
+              </span>
 
               {!isMobile && (
                 <span
                   style={{
                     border: "1px solid rgba(255,255,255,0.22)",
-                    borderRadius: "7px",
-                    padding: "3px 6px",
-                    color: "rgba(255,255,255,0.7)",
-                    fontSize: "11px",
-                    fontWeight: "900",
+                    borderRadius: "8px",
+                    padding: "4px 6px",
+                    color: "rgba(255,255,255,0.8)",
+                    fontSize: "10px",
+                    fontWeight: "950",
+                    flexShrink: 0,
+                    lineHeight: 1,
                   }}
                 >
                   Ctrl K
                 </span>
               )}
             </div>
-
-            <small
-              style={{
-                display: "block",
-                marginTop: "5px",
-                color: "rgba(255,255,255,0.62)",
-                fontWeight: "700",
-              }}
-            >
-              Search pages and jump fast
-            </small>
           </button>
         </div>
 
@@ -835,13 +914,13 @@ export default function Layout() {
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
                   gap: "12px",
-                  alignItems: "flex-start",
+                  alignItems: "start",
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <p
                     style={{
                       margin: 0,
@@ -860,6 +939,7 @@ export default function Layout() {
                       margin: "5px 0 0",
                       fontSize: isMobile ? "22px" : "28px",
                       fontWeight: "950",
+                      lineHeight: 1.1,
                     }}
                   >
                     Smart Command Center
@@ -889,6 +969,7 @@ export default function Layout() {
                     padding: "10px 12px",
                     cursor: "pointer",
                     fontWeight: "950",
+                    flexShrink: 0,
                   }}
                 >
                   ✕
@@ -991,7 +1072,9 @@ export default function Layout() {
                       style={{
                         width: "100%",
                         display: "grid",
-                        gridTemplateColumns: "44px minmax(0, 1fr) auto",
+                        gridTemplateColumns: isMobile
+                          ? "42px minmax(0, 1fr)"
+                          : "44px minmax(0, 1fr) auto",
                         gap: "12px",
                         alignItems: "center",
                         border: "1px solid #e2e8f0",
@@ -1006,8 +1089,8 @@ export default function Layout() {
                     >
                       <span
                         style={{
-                          width: "44px",
-                          height: "44px",
+                          width: isMobile ? "42px" : "44px",
+                          height: isMobile ? "42px" : "44px",
                           borderRadius: "14px",
                           background: "#f1f5f9",
                           display: "grid",
@@ -1024,6 +1107,9 @@ export default function Layout() {
                             display: "block",
                             fontSize: "15px",
                             fontWeight: "950",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
                           }}
                         >
                           {item.title}
