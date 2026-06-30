@@ -23,6 +23,7 @@ import CustomerStatementPage from "./pages/CustomerStatementPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import HelpPage from "./pages/HelpPage";
+import AuditAccountingPage from "./pages/AuditAccountingPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -64,6 +65,15 @@ export default function App() {
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
                   <ReportsPage />
+                </RoleRoute>
+              }
+            />
+
+            <Route
+              path="audit-accounting"
+              element={
+                <RoleRoute allowedRoles={adminManagerRoles}>
+                  <AuditAccountingPage />
                 </RoleRoute>
               }
             />

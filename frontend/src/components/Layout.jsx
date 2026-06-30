@@ -103,6 +103,17 @@ export default function Layout() {
           keywords: "reports analytics sales profit business performance",
           group: "Management",
         },
+
+
+        {
+          title: "Audit & Accounting",
+          description: "Review sales, cash, debts, expenses and audit warnings",
+          path: "/audit-accounting",
+          icon: "🧮",
+          keywords:
+          "audit accounting accountant auditor review cash sales expenses debts fuel discounts warnings",
+          group: "Management",
+      },
         {
           title: "Low Stock / Restock",
           description: "View items that need restocking",
@@ -700,6 +711,15 @@ export default function Layout() {
                   onClick={closeMobileMenu}
                 >
                   Reports
+                </NavLink>
+
+
+                <NavLink
+                  to="/audit-accounting"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
+                  Audit & Accounting
                 </NavLink>
 
                 <NavLink
