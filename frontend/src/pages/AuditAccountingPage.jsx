@@ -13,11 +13,31 @@ export default function AuditAccountingPage() {
 
   const [isMobile, setIsMobile] = useState(false);
 
+  const businessName = "Chalin 03 Company Limited";
+  const reportName = "Audit & Accounting Intelligence Pro Review";
+
+  function cleanText(value) {
+    return String(value ?? "").trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toLocaleString("en-GH", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  }
+
+  function plainMoney(value) {
+    return Number(value || 0).toFixed(2);
   }
 
   function formatDate(value) {
@@ -73,6 +93,26 @@ export default function AuditAccountingPage() {
     );
   }
 
+  function isSameMonth(dateA, dateB) {
+    return (
+      dateA.getFullYear() === dateB.getFullYear() &&
+      dateA.getMonth() === dateB.getMonth()
+    );
+  }
+
+  function isWithinLastDays(date, days) {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(now.getDate() - (days - 1));
+    start.setHours(0, 0, 0, 0);
+
+    return date >= start && date <= now;
+  }
+
+  function getPaymentType(sale) {
+    return String(sale?.payment_type || "cash").toLowerCase();
+  }
+
   async function loadAuditData() {
     setLoading(true);
     setError("");
@@ -92,7 +132,7 @@ export default function AuditAccountingPage() {
       setDebtSummary(debtsResponse.data.summary || debtsResponse.data || null);
       setExpenses(expensesResponse.data.expenses || []);
 
-      setMessage("Audit and accounting review refreshed successfully.");
+      setMessage("Professional audit and accounting review refreshed.");
     } catch (error) {
       setError(
         error.response?.data?.message ||
@@ -131,7 +171,32 @@ export default function AuditAccountingPage() {
       return !Number.isNaN(saleDate.getTime()) && isSameDay(saleDate, today);
     });
 
+    const monthSales = completedSales.filter((sale) => {
+      const saleDate = getSaleDate(sale);
+      return !Number.isNaN(saleDate.getTime()) && isSameMonth(saleDate, today);
+    });
+
+    const weekSales = completedSales.filter((sale) => {
+      const saleDate = getSaleDate(sale);
+      return !Number.isNaN(saleDate.getTime()) && isWithinLastDays(saleDate, 7);
+    });
+
     const totalSales = completedSales.reduce(
+      (sum, sale) => sum + Number(sale.total || 0),
+      0
+    );
+
+    const todaySalesTotal = todaySales.reduce(
+      (sum, sale) => sum + Number(sale.total || 0),
+      0
+    );
+
+    const weekSalesTotal = weekSales.reduce(
+      (sum, sale) => sum + Number(sale.total || 0),
+      0
+    );
+
+    const monthSalesTotal = monthSales.reduce(
       (sum, sale) => sum + Number(sale.total || 0),
       0
     );
@@ -141,18 +206,13 @@ export default function AuditAccountingPage() {
       0
     );
 
-    const totalDiscounts = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.discount_amount || 0),
-      0
-    );
-
     const salesBalances = completedSales.reduce(
       (sum, sale) => sum + Number(sale.balance || 0),
       0
     );
 
-    const todaySalesTotal = todaySales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+    const totalDiscounts = completedSales.reduce(
+      (sum, sale) => sum + Number(sale.discount_amount || 0),
       0
     );
 
@@ -192,12 +252,17 @@ export default function AuditAccountingPage() {
       debtSummary?.count ??
       0;
 
+    const partialDebtCount = debtSummary?.partial_count ?? 0;
     const overdueDebtCount = debtSummary?.overdue_count ?? 0;
 
     const lowStockProducts = products.filter(
       (product) =>
         Number(product.quantity || 0) <=
         Number(product.low_stock_threshold || 0)
+    );
+
+    const zeroStockProducts = products.filter(
+      (product) => Number(product.quantity || 0) <= 0
     );
 
     const stockValue = products.reduce((sum, product) => {
@@ -213,13 +278,47 @@ export default function AuditAccountingPage() {
       );
     }, 0);
 
-    const grossProfitEstimate = Math.max(totalSales - stockCostValue, 0);
+    const stockExpectedProfit = Math.max(stockValue - stockCostValue, 0);
     const netCashPosition = cashCollected - totalExpenses;
-    const auditDifference = Math.max(Number(outstandingDebts || 0) - salesBalances, 0);
+    const operatingResult = totalSales - totalExpenses;
+    const receivablesExposure = Number(outstandingDebts || 0);
+    const possibleDebtDifference = Math.abs(receivablesExposure - salesBalances);
+
+    const paymentBreakdown = {
+      cash: 0,
+      momo: 0,
+      bank: 0,
+      credit: 0,
+      other: 0,
+    };
+
+    completedSales.forEach((sale) => {
+      const paymentType = getPaymentType(sale);
+      const amount = Number(sale.total || 0);
+
+      if (paymentType.includes("cash")) {
+        paymentBreakdown.cash += amount;
+      } else if (
+        paymentType.includes("momo") ||
+        paymentType.includes("mobile")
+      ) {
+        paymentBreakdown.momo += amount;
+      } else if (paymentType.includes("bank")) {
+        paymentBreakdown.bank += amount;
+      } else if (
+        paymentType.includes("credit") ||
+        Number(sale.balance || 0) > 0
+      ) {
+        paymentBreakdown.credit += amount;
+      } else {
+        paymentBreakdown.other += amount;
+      }
+    });
 
     const categoryTotals = expenses.reduce((result, expense) => {
-      const category = expense.category || "Other";
-      result[category] = Number(result[category] || 0) + Number(expense.amount || 0);
+      const category = cleanText(expense.category) || "Other";
+      result[category] =
+        Number(result[category] || 0) + Number(expense.amount || 0);
       return result;
     }, {});
 
@@ -229,207 +328,798 @@ export default function AuditAccountingPage() {
         amount,
       }))
       .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6);
+      .slice(0, 8);
+
+    const salesExceptions = [];
+
+    completedSales.forEach((sale) => {
+      const receiptNumber = sale.receipt_number || `Sale #${sale.id}`;
+      const balance = Number(sale.balance || 0);
+      const total = Number(sale.total || 0);
+      const amountPaid = Number(sale.amount_paid || 0);
+      const discount = Number(sale.discount_amount || 0);
+      const paymentType = getPaymentType(sale);
+
+      if (!sale.receipt_number) {
+        salesExceptions.push({
+          severity: "orange",
+          title: "Missing receipt number",
+          detail: `${receiptNumber} has no receipt number. Confirm the sale record.`,
+        });
+      }
+
+      if (discount > 0) {
+        salesExceptions.push({
+          severity: "blue",
+          title: "Discount recorded",
+          detail: `${receiptNumber} has discount ${formatMoney(
+            discount
+          )}. Confirm approval.`,
+        });
+      }
+
+      if (balance > 0 && !paymentType.includes("credit")) {
+        salesExceptions.push({
+          severity: "orange",
+          title: "Balance on non-credit sale",
+          detail: `${receiptNumber} has balance ${formatMoney(
+            balance
+          )} but payment type is ${sale.payment_type || "cash"}.`,
+        });
+      }
+
+      if (amountPaid > total && total > 0) {
+        salesExceptions.push({
+          severity: "red",
+          title: "Amount paid is higher than total",
+          detail: `${receiptNumber} paid ${formatMoney(
+            amountPaid
+          )} but total is ${formatMoney(total)}.`,
+        });
+      }
+
+      if (total <= 0) {
+        salesExceptions.push({
+          severity: "red",
+          title: "Zero or invalid sale total",
+          detail: `${receiptNumber} has invalid total ${formatMoney(total)}.`,
+        });
+      }
+    });
+
+    const expenseExceptions = [];
+
+    expenses.forEach((expense) => {
+      const description = cleanText(expense.description);
+      const category = cleanText(expense.category) || "Uncategorized";
+      const amount = Number(expense.amount || 0);
+
+      if (amount <= 0) {
+        expenseExceptions.push({
+          severity: "red",
+          title: "Invalid expense amount",
+          detail: `${category} expense has invalid amount ${formatMoney(
+            amount
+          )}.`,
+        });
+      }
+
+      if (!description) {
+        expenseExceptions.push({
+          severity: "orange",
+          title: "Expense missing description",
+          detail: `${category} expense of ${formatMoney(
+            amount
+          )} has no description.`,
+        });
+      }
+
+      if (!expense.expense_date) {
+        expenseExceptions.push({
+          severity: "orange",
+          title: "Expense missing date",
+          detail: `${category} expense of ${formatMoney(amount)} has no date.`,
+        });
+      }
+    });
+
+    const inventoryExceptions = [];
+
+    products.forEach((product) => {
+      const name = product.name || `Product #${product.id}`;
+      const quantity = Number(product.quantity || 0);
+      const cost = Number(product.cost_price || 0);
+      const selling = Number(product.selling_price || 0);
+      const lowStockLevel = Number(product.low_stock_threshold || 0);
+
+      if (quantity <= 0) {
+        inventoryExceptions.push({
+          severity: "red",
+          title: "Out of stock product",
+          detail: `${name} has ${quantity} quantity available.`,
+        });
+      } else if (quantity <= lowStockLevel) {
+        inventoryExceptions.push({
+          severity: "orange",
+          title: "Low stock product",
+          detail: `${name} has ${quantity} left. Low stock level is ${lowStockLevel}.`,
+        });
+      }
+
+      if (selling <= 0) {
+        inventoryExceptions.push({
+          severity: "red",
+          title: "Invalid selling price",
+          detail: `${name} has invalid selling price ${formatMoney(selling)}.`,
+        });
+      }
+
+      if (cost < 0) {
+        inventoryExceptions.push({
+          severity: "red",
+          title: "Invalid cost price",
+          detail: `${name} has invalid cost price ${formatMoney(cost)}.`,
+        });
+      }
+
+      if (selling > 0 && cost > 0 && selling <= cost) {
+        inventoryExceptions.push({
+          severity: "orange",
+          title: "Possible low/no profit product",
+          detail: `${name} selling price ${formatMoney(
+            selling
+          )} is not above cost ${formatMoney(cost)}.`,
+        });
+      }
+
+      if (!cleanText(product.barcode)) {
+        inventoryExceptions.push({
+          severity: "blue",
+          title: "Product without barcode",
+          detail: `${name} has no barcode. This may slow down stock control.`,
+        });
+      }
+    });
 
     const auditFlags = [];
 
-    if (products.length === 0) {
+    function addFlag(severity, title, detail, recommendation) {
       auditFlags.push({
-        tone: "red",
-        title: "No products found",
-        detail:
-          "The system cannot properly calculate stock value until products are added.",
+        severity,
+        title,
+        detail,
+        recommendation,
       });
     }
 
     if (completedSales.length === 0) {
-      auditFlags.push({
-        tone: "orange",
-        title: "No completed sales found",
-        detail:
-          "No completed sales are available for accounting review. Sales records should be entered daily.",
-      });
+      addFlag(
+        "orange",
+        "No completed sales found",
+        "There are no completed sales available for the audit period.",
+        "Confirm whether business activity has started or whether sales were entered correctly."
+      );
     }
 
     if (voidedSales.length > 0) {
-      auditFlags.push({
-        tone: "red",
-        title: "Voided or cancelled sales detected",
-        detail: `${voidedSales.length} voided/cancelled sale(s) should be reviewed by the boss or auditor.`,
-      });
+      addFlag(
+        "red",
+        "Voided or cancelled sales detected",
+        `${voidedSales.length} voided/cancelled sale(s) exist.`,
+        "Auditor or boss should review who voided them, why they were voided, and whether cash was affected."
+      );
     }
 
     if (Number(outstandingDebts || 0) > 0) {
-      auditFlags.push({
-        tone: overdueDebtCount > 0 ? "red" : "orange",
-        title: "Outstanding customer debts",
-        detail: `${formatMoney(
+      addFlag(
+        overdueDebtCount > 0 ? "red" : "orange",
+        "Outstanding customer debts",
+        `${formatMoney(
           outstandingDebts
-        )} is still unpaid. Debt follow-up and reconciliation are needed.`,
-      });
+        )} is still unpaid across customer debt records.`,
+        "Follow up customers, reconcile with sales balances, and send WhatsApp reminders where necessary."
+      );
     }
 
-    if (lowStockProducts.length > 0) {
-      auditFlags.push({
-        tone: "orange",
-        title: "Low stock affects business continuity",
-        detail: `${lowStockProducts.length} product(s) are at or below low stock level.`,
-      });
-    }
-
-    if (totalDiscounts > 0) {
-      auditFlags.push({
-        tone: "blue",
-        title: "Discounts given",
-        detail: `${formatMoney(
-          totalDiscounts
-        )} total discount has been recorded. Auditor should confirm discounts were approved.`,
-      });
+    if (possibleDebtDifference > 1) {
+      addFlag(
+        "orange",
+        "Debt reconciliation difference",
+        `Debt summary differs from sales balances by about ${formatMoney(
+          possibleDebtDifference
+        )}.`,
+        "Compare debt records with sales balances and payment records."
+      );
     }
 
     if (totalExpenses > cashCollected && totalExpenses > 0) {
-      auditFlags.push({
-        tone: "red",
-        title: "Expenses are higher than cash collected",
-        detail:
-          "The system shows expenses greater than cash collected. Review expense entries and daily closing.",
-      });
+      addFlag(
+        "red",
+        "Expenses exceed cash collected",
+        `Total expenses ${formatMoney(
+          totalExpenses
+        )} are higher than cash collected ${formatMoney(cashCollected)}.`,
+        "Review expense records, confirm supporting receipts, and compare with daily closing."
+      );
+    }
+
+    if (totalDiscounts > 0) {
+      addFlag(
+        "blue",
+        "Discount activity detected",
+        `${formatMoney(totalDiscounts)} total discount has been recorded.`,
+        "Confirm discounts were approved by management and not used to hide pricing errors."
+      );
+    }
+
+    if (lowStockProducts.length > 0) {
+      addFlag(
+        "orange",
+        "Low stock risk",
+        `${lowStockProducts.length} product(s) are at or below low stock level.`,
+        "Prepare restocking plan to prevent lost sales."
+      );
+    }
+
+    if (zeroStockProducts.length > 0) {
+      addFlag(
+        "red",
+        "Out of stock products",
+        `${zeroStockProducts.length} product(s) have zero or negative quantity.`,
+        "Review urgent restock needs and check whether stock entries are correct."
+      );
     }
 
     if (fuelExpenses > 0) {
-      auditFlags.push({
-        tone: "blue",
-        title: "Fuel expenses recorded",
-        detail: `${formatMoney(
-          fuelExpenses
-        )} fuel cost recorded. This can be reviewed separately from other expenses.`,
-      });
+      addFlag(
+        "blue",
+        "Fuel expense category active",
+        `${formatMoney(fuelExpenses)} has been recorded as fuel expense.`,
+        "Fuel expenses should be reviewed separately and supported with receipts where possible."
+      );
     }
 
+    salesExceptions.slice(0, 8).forEach((item) => {
+      addFlag(
+        item.severity,
+        item.title,
+        item.detail,
+        "Review the sale record and correct it if necessary."
+      );
+    });
+
+    expenseExceptions.slice(0, 8).forEach((item) => {
+      addFlag(
+        item.severity,
+        item.title,
+        item.detail,
+        "Add missing details or correct the expense record."
+      );
+    });
+
+    inventoryExceptions.slice(0, 8).forEach((item) => {
+      addFlag(
+        item.severity,
+        item.title,
+        item.detail,
+        "Review product setup, stock count and pricing."
+      );
+    });
+
     if (auditFlags.length === 0) {
-      auditFlags.push({
-        tone: "green",
-        title: "No major audit issue detected",
-        detail:
-          "The system currently shows no major warning from sales, debts, stock and expenses.",
-      });
+      addFlag(
+        "green",
+        "No major audit issue detected",
+        "The system currently shows no major warning from sales, debts, expenses and stock.",
+        "Continue daily closing, backup and regular stock checking."
+      );
     }
 
     const accountingChecklist = [
       {
-        title: "Sales checked",
+        title: "Sales completeness",
         status: completedSales.length > 0,
         note: `${completedSales.length} completed sale(s) found.`,
       },
       {
-        title: "Cash collected checked",
+        title: "Cash collection review",
         status: cashCollected >= 0,
         note: `${formatMoney(cashCollected)} recorded as amount paid.`,
       },
       {
-        title: "Debts checked",
-        status: Number(outstandingDebts || 0) <= 0,
+        title: "Debt reconciliation",
+        status: Number(outstandingDebts || 0) <= 0 && salesBalances <= 0,
         note:
-          Number(outstandingDebts || 0) > 0
-            ? `${formatMoney(outstandingDebts)} still outstanding.`
+          Number(outstandingDebts || 0) > 0 || salesBalances > 0
+            ? `${formatMoney(
+                outstandingDebts
+              )} outstanding debt and ${formatMoney(
+                salesBalances
+              )} sales balance detected.`
             : "No outstanding debt detected.",
       },
       {
-        title: "Expenses checked",
-        status: expenses.length > 0,
+        title: "Expense documentation",
+        status: expenseExceptions.length === 0,
         note:
-          expenses.length > 0
-            ? `${expenses.length} expense record(s) found.`
-            : "No expenses recorded yet.",
+          expenseExceptions.length > 0
+            ? `${expenseExceptions.length} expense issue(s) need attention.`
+            : "No expense documentation issue detected.",
       },
       {
-        title: "Stock checked",
-        status: lowStockProducts.length === 0,
+        title: "Inventory pricing review",
+        status: inventoryExceptions.filter((item) => item.severity === "red")
+          .length === 0,
         note:
-          lowStockProducts.length > 0
-            ? `${lowStockProducts.length} low-stock product(s) found.`
-            : "Stock level looks healthy.",
+          inventoryExceptions.length > 0
+            ? `${inventoryExceptions.length} inventory issue(s) detected.`
+            : "No inventory warning detected.",
       },
       {
-        title: "Voided sales checked",
+        title: "Voided sales review",
         status: voidedSales.length === 0,
         note:
           voidedSales.length > 0
             ? `${voidedSales.length} voided/cancelled sale(s) need review.`
             : "No voided/cancelled sales detected.",
       },
+      {
+        title: "Discount approval review",
+        status: totalDiscounts <= 0,
+        note:
+          totalDiscounts > 0
+            ? `${formatMoney(totalDiscounts)} discounts should be approved.`
+            : "No discount recorded.",
+      },
+      {
+        title: "Daily operation continuity",
+        status: lowStockProducts.length === 0,
+        note:
+          lowStockProducts.length > 0
+            ? `${lowStockProducts.length} low-stock product(s) found.`
+            : "Stock level looks healthy.",
+      },
     ];
 
-    const riskScore = Math.min(
-      100,
-      Math.round(
-        auditFlags.filter((flag) => flag.tone === "red").length * 25 +
-          auditFlags.filter((flag) => flag.tone === "orange").length * 15 +
-          auditFlags.filter((flag) => flag.tone === "blue").length * 5
-      )
-    );
+    const redFlags = auditFlags.filter((flag) => flag.severity === "red").length;
+    const orangeFlags = auditFlags.filter(
+      (flag) => flag.severity === "orange"
+    ).length;
+    const blueFlags = auditFlags.filter(
+      (flag) => flag.severity === "blue"
+    ).length;
 
+    const riskScore = Math.min(100, redFlags * 20 + orangeFlags * 10 + blueFlags * 4);
     const auditScore = Math.max(0, 100 - riskScore);
 
     let auditStatus = "Needs Review";
+    let auditTone = "red";
 
     if (auditScore >= 85) {
       auditStatus = "Clean";
-    } else if (auditScore >= 65) {
+      auditTone = "green";
+    } else if (auditScore >= 70) {
       auditStatus = "Acceptable";
-    } else if (auditScore >= 45) {
+      auditTone = "blue";
+    } else if (auditScore >= 50) {
       auditStatus = "Watch Closely";
+      auditTone = "orange";
     }
+
+    const managementLetterPoints = auditFlags
+      .filter((flag) => flag.severity !== "green")
+      .slice(0, 10)
+      .map((flag, index) => ({
+        number: index + 1,
+        finding: flag.title,
+        implication: flag.detail,
+        recommendation: flag.recommendation,
+      }));
+
+    if (managementLetterPoints.length === 0) {
+      managementLetterPoints.push({
+        number: 1,
+        finding: "No major weakness detected",
+        implication:
+          "The reviewed information did not produce a major audit warning.",
+        recommendation:
+          "Continue using daily closing, backups, debt follow-up and stock checks.",
+      });
+    }
+
+    const accountantSummary = [
+      {
+        label: "Total Sales Revenue",
+        value: totalSales,
+        meaning: "Completed sales value recorded by the system.",
+      },
+      {
+        label: "Cash Collected",
+        value: cashCollected,
+        meaning: "Amount recorded as paid by customers.",
+      },
+      {
+        label: "Customer Receivables",
+        value: outstandingDebts,
+        meaning: "Unpaid customer debts requiring follow-up.",
+      },
+      {
+        label: "Total Expenses",
+        value: totalExpenses,
+        meaning: "Business costs recorded in the Expenses module.",
+      },
+      {
+        label: "Operating Result",
+        value: operatingResult,
+        meaning: "Sales minus expenses. This is not final tax profit.",
+      },
+      {
+        label: "Inventory Selling Value",
+        value: stockValue,
+        meaning: "Estimated selling value of stock on hand.",
+      },
+      {
+        label: "Inventory Cost Value",
+        value: stockCostValue,
+        meaning: "Estimated cost value of stock on hand.",
+      },
+      {
+        label: "Expected Stock Margin",
+        value: stockExpectedProfit,
+        meaning: "Estimated stock selling value minus cost value.",
+      },
+    ];
+
+    const accessSalesRows = completedSales.map((sale) => ({
+      sale_id: sale.id,
+      receipt_number: sale.receipt_number || "",
+      customer_name: sale.customer_name || "Walk-in Customer",
+      payment_type: sale.payment_type || "",
+      subtotal: plainMoney(sale.subtotal),
+      discount_amount: plainMoney(sale.discount_amount),
+      tax_amount: plainMoney(sale.tax_amount),
+      total: plainMoney(sale.total),
+      amount_paid: plainMoney(sale.amount_paid),
+      balance: plainMoney(sale.balance),
+      sale_status: sale.sale_status || "completed",
+      created_at: formatDateTime(sale.created_at),
+    }));
+
+    const accessExpenseRows = expenses.map((expense) => ({
+      expense_id: expense.id,
+      category: expense.category || "",
+      description: expense.description || "",
+      amount: plainMoney(expense.amount),
+      expense_date: formatDate(expense.expense_date),
+      recorded_by: expense.recorded_by_name || "",
+    }));
+
+    const accessProductRows = products.map((product) => ({
+      product_id: product.id,
+      name: product.name || "",
+      excavator_type: product.size || "",
+      category: product.category || "",
+      quantity: product.quantity || 0,
+      low_stock_threshold: product.low_stock_threshold || 0,
+      cost_price: plainMoney(product.cost_price),
+      selling_price: plainMoney(product.selling_price),
+      barcode: product.barcode || "",
+      stock_value: plainMoney(
+        Number(product.quantity || 0) * Number(product.selling_price || 0)
+      ),
+    }));
 
     return {
       completedSales,
       voidedSales,
       todaySales,
+      monthSales,
+      weekSales,
       totalSales,
-      cashCollected,
-      totalDiscounts,
-      salesBalances,
       todaySalesTotal,
+      weekSalesTotal,
+      monthSalesTotal,
+      cashCollected,
+      salesBalances,
+      totalDiscounts,
       totalExpenses,
       fuelExpenses,
       transportExpenses,
       salaryExpenses,
       outstandingDebts,
       unpaidDebtCount,
+      partialDebtCount,
       overdueDebtCount,
       lowStockProducts,
+      zeroStockProducts,
       stockValue,
       stockCostValue,
-      grossProfitEstimate,
+      stockExpectedProfit,
       netCashPosition,
-      auditDifference,
+      operatingResult,
+      receivablesExposure,
+      possibleDebtDifference,
+      paymentBreakdown,
       topExpenseCategories,
+      salesExceptions,
+      expenseExceptions,
+      inventoryExceptions,
       auditFlags,
       accountingChecklist,
+      redFlags,
+      orangeFlags,
+      blueFlags,
       auditScore,
       auditStatus,
+      auditTone,
+      managementLetterPoints,
+      accountantSummary,
+      accessSalesRows,
+      accessExpenseRows,
+      accessProductRows,
     };
   }, [products, sales, expenses, debtSummary]);
 
+  function makeCsv(rows) {
+    if (!rows || rows.length === 0) {
+      return "";
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    const escapeCsv = (value) => {
+      const text = String(value ?? "");
+      const escaped = text.replaceAll('"', '""');
+      return `"${escaped}"`;
+    };
+
+    const lines = [
+      headers.map(escapeCsv).join(","),
+      ...rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(",")),
+    ];
+
+    return lines.join("\n");
+  }
+
+  function downloadTextFile(filename, content, type = "text/plain") {
+    const blob = new Blob([content], {
+      type,
+    });
+
+    const fileUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = filename;
+    link.style.display = "none";
+
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(fileUrl);
+    }, 150);
+  }
+
+  function downloadCsv(filename, rows) {
+    const csv = makeCsv(rows);
+
+    if (!csv) {
+      setError("No data available for this export.");
+      return;
+    }
+
+    downloadTextFile(filename, csv, "text/csv;charset=utf-8");
+    setMessage(`${filename} downloaded successfully.`);
+  }
+
+  function downloadAuditSummaryCsv() {
+    const rows = auditData.accountantSummary.map((item) => ({
+      item: item.label,
+      amount: plainMoney(item.value),
+      meaning: item.meaning,
+    }));
+
+    rows.push(
+      {
+        item: "Audit Score",
+        amount: `${auditData.auditScore}%`,
+        meaning: auditData.auditStatus,
+      },
+      {
+        item: "Red Flags",
+        amount: auditData.redFlags,
+        meaning: "High risk audit warnings.",
+      },
+      {
+        item: "Orange Flags",
+        amount: auditData.orangeFlags,
+        meaning: "Medium risk audit warnings.",
+      },
+      {
+        item: "Blue Flags",
+        amount: auditData.blueFlags,
+        meaning: "Information or review notes.",
+      }
+    );
+
+    downloadCsv("chalin03_audit_accounting_summary.csv", rows);
+  }
+
+  function downloadAuditWarningsCsv() {
+    const rows = auditData.auditFlags.map((flag, index) => ({
+      number: index + 1,
+      severity: flag.severity,
+      title: flag.title,
+      detail: flag.detail,
+      recommendation: flag.recommendation,
+    }));
+
+    downloadCsv("chalin03_audit_warnings.csv", rows);
+  }
+
+  function downloadManagementLetterCsv() {
+    const rows = auditData.managementLetterPoints.map((point) => ({
+      number: point.number,
+      finding: point.finding,
+      implication: point.implication,
+      recommendation: point.recommendation,
+    }));
+
+    downloadCsv("chalin03_management_letter_points.csv", rows);
+  }
+
+  function downloadExcelWorkbookCsv() {
+    const rows = [
+      ...auditData.accountantSummary.map((item) => ({
+        section: "Accounting Summary",
+        item: item.label,
+        amount: plainMoney(item.value),
+        note: item.meaning,
+      })),
+      ...auditData.auditFlags.map((flag) => ({
+        section: "Audit Warning",
+        item: flag.title,
+        amount: "",
+        note: `${flag.detail} Recommendation: ${flag.recommendation}`,
+      })),
+      ...auditData.topExpenseCategories.map((expense) => ({
+        section: "Expense Category",
+        item: expense.category,
+        amount: plainMoney(expense.amount),
+        note: "Expense category total",
+      })),
+    ];
+
+    downloadCsv("chalin03_excel_accounting_workbook.csv", rows);
+  }
+
+  function downloadAccessImportFiles() {
+    downloadCsv("access_import_sales.csv", auditData.accessSalesRows);
+
+    setTimeout(() => {
+      downloadCsv("access_import_expenses.csv", auditData.accessExpenseRows);
+    }, 300);
+
+    setTimeout(() => {
+      downloadCsv("access_import_products.csv", auditData.accessProductRows);
+    }, 600);
+
+    setMessage(
+      "Access import CSV files are downloading. Import them into Microsoft Access as tables."
+    );
+  }
+
+  function buildPowerPointOutline() {
+    const lines = [
+      "CHALIN 03 COMPANY LIMITED",
+      "AUDIT & ACCOUNTING POWERPOINT BRIEFING OUTLINE",
+      "",
+      "Slide 1: Title",
+      `${businessName} - Audit & Accounting Review`,
+      `Generated: ${formatDateTime(new Date())}`,
+      "",
+      "Slide 2: Audit Health Score",
+      `Audit Score: ${auditData.auditScore}%`,
+      `Status: ${auditData.auditStatus}`,
+      `Red Flags: ${auditData.redFlags}`,
+      `Orange Flags: ${auditData.orangeFlags}`,
+      `Blue Flags: ${auditData.blueFlags}`,
+      "",
+      "Slide 3: Accounting Summary",
+      ...auditData.accountantSummary.map(
+        (item) => `- ${item.label}: ${formatMoney(item.value)}`
+      ),
+      "",
+      "Slide 4: Cash & Debt Reconciliation",
+      `Cash Collected: ${formatMoney(auditData.cashCollected)}`,
+      `Outstanding Debts: ${formatMoney(auditData.outstandingDebts)}`,
+      `Sales Balances: ${formatMoney(auditData.salesBalances)}`,
+      `Possible Difference: ${formatMoney(auditData.possibleDebtDifference)}`,
+      "",
+      "Slide 5: Expense Analysis",
+      `Total Expenses: ${formatMoney(auditData.totalExpenses)}`,
+      `Fuel Expenses: ${formatMoney(auditData.fuelExpenses)}`,
+      `Transport Expenses: ${formatMoney(auditData.transportExpenses)}`,
+      `Salary Expenses: ${formatMoney(auditData.salaryExpenses)}`,
+      "",
+      "Slide 6: Inventory Audit",
+      `Stock Value: ${formatMoney(auditData.stockValue)}`,
+      `Stock Cost Value: ${formatMoney(auditData.stockCostValue)}`,
+      `Low Stock Products: ${auditData.lowStockProducts.length}`,
+      `Out of Stock Products: ${auditData.zeroStockProducts.length}`,
+      "",
+      "Slide 7: Main Audit Warnings",
+      ...auditData.auditFlags
+        .slice(0, 8)
+        .map((flag) => `- ${flag.title}: ${flag.detail}`),
+      "",
+      "Slide 8: Management Recommendations",
+      ...auditData.managementLetterPoints
+        .slice(0, 8)
+        .map((point) => `- ${point.recommendation}`),
+      "",
+      "Note: This is a PowerPoint-ready outline. Copy it into PowerPoint slides.",
+    ];
+
+    return lines.join("\n");
+  }
+
+  function downloadPowerPointBriefing() {
+    downloadTextFile(
+      "chalin03_powerpoint_audit_briefing_outline.txt",
+      buildPowerPointOutline(),
+      "text/plain;charset=utf-8"
+    );
+  }
+
   function buildPrintableReport() {
-    const flagsHtml = auditData.auditFlags
+    const summaryRows = auditData.accountantSummary
       .map(
-        (flag) => `
-          <li>
-            <strong>${flag.title}</strong><br />
-            ${flag.detail}
-          </li>
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.label)}</td>
+            <td>${escapeHtml(formatMoney(item.value))}</td>
+            <td>${escapeHtml(item.meaning)}</td>
+          </tr>
         `
       )
       .join("");
 
-    const checklistHtml = auditData.accountingChecklist
+    const flagsRows = auditData.auditFlags
+      .map(
+        (flag, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(flag.severity.toUpperCase())}</td>
+            <td>${escapeHtml(flag.title)}</td>
+            <td>${escapeHtml(flag.detail)}</td>
+            <td>${escapeHtml(flag.recommendation)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const checklistRows = auditData.accountingChecklist
       .map(
         (item) => `
           <tr>
-            <td>${item.title}</td>
+            <td>${escapeHtml(item.title)}</td>
             <td>${item.status ? "Passed" : "Needs Review"}</td>
-            <td>${item.note}</td>
+            <td>${escapeHtml(item.note)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const managementRows = auditData.managementLetterPoints
+      .map(
+        (point) => `
+          <tr>
+            <td>${point.number}</td>
+            <td>${escapeHtml(point.finding)}</td>
+            <td>${escapeHtml(point.implication)}</td>
+            <td>${escapeHtml(point.recommendation)}</td>
           </tr>
         `
       )
@@ -439,80 +1129,207 @@ export default function AuditAccountingPage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Audit & Accounting Review</title>
+          <title>${escapeHtml(reportName)}</title>
           <style>
+            @page {
+              size: A4;
+              margin: 14mm;
+            }
+
             body {
               font-family: Arial, sans-serif;
               color: #111827;
-              padding: 24px;
-              line-height: 1.5;
+              line-height: 1.45;
+              font-size: 12px;
             }
 
             h1 {
-              margin-bottom: 4px;
+              margin: 0;
               color: #07182c;
+              font-size: 24px;
+            }
+
+            h2 {
+              margin-top: 24px;
+              color: #07182c;
+              border-bottom: 2px solid #e0ba28;
+              padding-bottom: 6px;
             }
 
             .muted {
               color: #64748b;
             }
 
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              border-bottom: 3px solid #07182c;
+              padding-bottom: 12px;
+              margin-bottom: 16px;
+            }
+
+            .score {
+              border: 2px solid #e0ba28;
+              border-radius: 12px;
+              padding: 10px;
+              min-width: 150px;
+              text-align: center;
+            }
+
+            .score strong {
+              display: block;
+              font-size: 24px;
+              color: #07182c;
+            }
+
             .grid {
               display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 12px;
-              margin: 18px 0;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 8px;
+              margin: 14px 0;
             }
 
             .box {
               border: 1px solid #dbe3ef;
-              border-radius: 12px;
-              padding: 12px;
+              border-radius: 10px;
+              padding: 8px;
+              background: #f8fafc;
+            }
+
+            .box span {
+              display: block;
+              color: #64748b;
+              font-size: 11px;
+            }
+
+            .box strong {
+              display: block;
+              margin-top: 4px;
+              color: #07182c;
             }
 
             table {
               width: 100%;
               border-collapse: collapse;
-              margin-top: 12px;
+              margin-top: 10px;
+              page-break-inside: auto;
             }
 
-            th, td {
+            th,
+            td {
               border: 1px solid #dbe3ef;
-              padding: 8px;
+              padding: 7px;
               text-align: left;
-              font-size: 13px;
+              vertical-align: top;
+              font-size: 11px;
             }
 
             th {
-              background: #f1f5f9;
+              background: #07182c;
+              color: #ffffff;
             }
 
-            li {
-              margin-bottom: 10px;
+            tr {
+              page-break-inside: avoid;
+            }
+
+            .notice {
+              background: #fff7ed;
+              border: 1px solid #fed7aa;
+              border-radius: 10px;
+              padding: 10px;
+              margin-top: 14px;
+              color: #9a3412;
+            }
+
+            .footer {
+              margin-top: 28px;
+              color: #64748b;
+              font-size: 10px;
+              border-top: 1px solid #dbe3ef;
+              padding-top: 8px;
             }
           </style>
         </head>
 
         <body>
-          <h1>Chalin 03 Company Limited</h1>
-          <p class="muted">Audit & Accounting Intelligence Review</p>
-          <p><strong>Generated:</strong> ${formatDateTime(new Date())}</p>
+          <div class="header">
+            <div>
+              <h1>${escapeHtml(businessName)}</h1>
+              <p class="muted">${escapeHtml(reportName)}</p>
+              <p><strong>Generated:</strong> ${escapeHtml(
+                formatDateTime(new Date())
+              )}</p>
+            </div>
 
-          <div class="grid">
-            <div class="box"><strong>Audit Score:</strong><br />${auditData.auditScore}% - ${auditData.auditStatus}</div>
-            <div class="box"><strong>Total Sales:</strong><br />${formatMoney(auditData.totalSales)}</div>
-            <div class="box"><strong>Cash Collected:</strong><br />${formatMoney(auditData.cashCollected)}</div>
-            <div class="box"><strong>Outstanding Debts:</strong><br />${formatMoney(auditData.outstandingDebts)}</div>
-            <div class="box"><strong>Total Expenses:</strong><br />${formatMoney(auditData.totalExpenses)}</div>
-            <div class="box"><strong>Fuel Expenses:</strong><br />${formatMoney(auditData.fuelExpenses)}</div>
-            <div class="box"><strong>Discounts:</strong><br />${formatMoney(auditData.totalDiscounts)}</div>
-            <div class="box"><strong>Stock Value:</strong><br />${formatMoney(auditData.stockValue)}</div>
+            <div class="score">
+              <span>Audit Score</span>
+              <strong>${auditData.auditScore}%</strong>
+              <span>${escapeHtml(auditData.auditStatus)}</span>
+            </div>
           </div>
 
-          <h2>Audit Warnings</h2>
-          <ul>${flagsHtml}</ul>
+          <div class="grid">
+            <div class="box"><span>Total Sales</span><strong>${formatMoney(
+              auditData.totalSales
+            )}</strong></div>
+            <div class="box"><span>Cash Collected</span><strong>${formatMoney(
+              auditData.cashCollected
+            )}</strong></div>
+            <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
+              auditData.outstandingDebts
+            )}</strong></div>
+            <div class="box"><span>Total Expenses</span><strong>${formatMoney(
+              auditData.totalExpenses
+            )}</strong></div>
+            <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(
+              auditData.fuelExpenses
+            )}</strong></div>
+            <div class="box"><span>Discounts</span><strong>${formatMoney(
+              auditData.totalDiscounts
+            )}</strong></div>
+            <div class="box"><span>Stock Value</span><strong>${formatMoney(
+              auditData.stockValue
+            )}</strong></div>
+            <div class="box"><span>Operating Result</span><strong>${formatMoney(
+              auditData.operatingResult
+            )}</strong></div>
+          </div>
 
-          <h2>Accounting Checklist</h2>
+          <div class="notice">
+            This report is a system-generated internal review. It supports management,
+            accounting and audit preparation, but it does not replace a licensed
+            accountant or external auditor.
+          </div>
+
+          <h2>1. Accounting Summary</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Amount</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>${summaryRows}</tbody>
+          </table>
+
+          <h2>2. Audit Risk Register</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Risk</th>
+                <th>Finding</th>
+                <th>Details</th>
+                <th>Recommendation</th>
+              </tr>
+            </thead>
+            <tbody>${flagsRows}</tbody>
+          </table>
+
+          <h2>3. Accountant Checklist</h2>
           <table>
             <thead>
               <tr>
@@ -521,18 +1338,32 @@ export default function AuditAccountingPage() {
                 <th>Note</th>
               </tr>
             </thead>
-
-            <tbody>
-              ${checklistHtml}
-            </tbody>
+            <tbody>${checklistRows}</tbody>
           </table>
+
+          <h2>4. Management Letter Points</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Finding</th>
+                <th>Implication</th>
+                <th>Recommendation</th>
+              </tr>
+            </thead>
+            <tbody>${managementRows}</tbody>
+          </table>
+
+          <div class="footer">
+            Powered by Chalin 03 Sales & Inventory Management System.
+          </div>
         </body>
       </html>
     `;
   }
 
   function printAuditReport() {
-    const printWindow = window.open("", "_blank", "width=900,height=700");
+    const printWindow = window.open("", "_blank", "width=1000,height=800");
 
     if (!printWindow) {
       setError("Popup blocked. Please allow popups and try again.");
@@ -546,48 +1377,77 @@ export default function AuditAccountingPage() {
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
-    }, 300);
+    }, 350);
+  }
+
+  function downloadHtmlAuditReport() {
+    downloadTextFile(
+      "chalin03_professional_audit_report.html",
+      buildPrintableReport(),
+      "text/html;charset=utf-8"
+    );
   }
 
   async function copyAuditSummary() {
-    const summary = `CHALIN 03 AUDIT & ACCOUNTING SUMMARY
+    const summary = `${businessName.toUpperCase()}
+PROFESSIONAL AUDIT & ACCOUNTING SUMMARY
 
 Generated: ${formatDateTime(new Date())}
 
+AUDIT RESULT
 Audit Score: ${auditData.auditScore}% - ${auditData.auditStatus}
+Red Flags: ${auditData.redFlags}
+Orange Flags: ${auditData.orangeFlags}
+Blue Flags: ${auditData.blueFlags}
+
+ACCOUNTING SUMMARY
 Total Sales: ${formatMoney(auditData.totalSales)}
+Today’s Sales: ${formatMoney(auditData.todaySalesTotal)}
+This Week Sales: ${formatMoney(auditData.weekSalesTotal)}
+This Month Sales: ${formatMoney(auditData.monthSalesTotal)}
 Cash Collected: ${formatMoney(auditData.cashCollected)}
 Outstanding Debts: ${formatMoney(auditData.outstandingDebts)}
+Sales Balances: ${formatMoney(auditData.salesBalances)}
 Total Expenses: ${formatMoney(auditData.totalExpenses)}
 Fuel Expenses: ${formatMoney(auditData.fuelExpenses)}
+Transport Expenses: ${formatMoney(auditData.transportExpenses)}
+Salary Expenses: ${formatMoney(auditData.salaryExpenses)}
 Discounts Given: ${formatMoney(auditData.totalDiscounts)}
-Stock Value: ${formatMoney(auditData.stockValue)}
-Voided Sales: ${auditData.voidedSales.length}
-Low Stock Products: ${auditData.lowStockProducts.length}
+Stock Selling Value: ${formatMoney(auditData.stockValue)}
+Stock Cost Value: ${formatMoney(auditData.stockCostValue)}
+Operating Result: ${formatMoney(auditData.operatingResult)}
 
-Main Audit Notes:
-${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n")}`;
+MAIN AUDIT WARNINGS
+${auditData.auditFlags
+  .map(
+    (flag, index) =>
+      `${index + 1}. [${flag.severity.toUpperCase()}] ${flag.title}: ${
+        flag.detail
+      } Recommendation: ${flag.recommendation}`
+  )
+  .join("\n")}`;
 
     try {
       await navigator.clipboard.writeText(summary);
-      setMessage("Audit summary copied successfully.");
+      setMessage("Professional audit summary copied successfully.");
     } catch {
       setError("Could not copy summary. Your browser may have blocked it.");
     }
   }
 
   const oneColumn = isMobile ? styles.oneColumn : {};
-  const mobilePage = isMobile ? styles.pageMobile : {};
+  const mobileStack = isMobile ? styles.mobileStack : {};
 
   return (
-    <div style={{ ...styles.page, ...mobilePage }}>
-      <div style={styles.hero}>
+    <div style={styles.page}>
+      <div style={{ ...styles.hero, ...mobileStack }}>
         <div>
-          <p style={styles.eyebrow}>Audit Intelligence</p>
-          <h1 style={styles.title}>Audit & Accounting Center</h1>
+          <p style={styles.eyebrow}>Professional Audit Intelligence</p>
+          <h1 style={styles.title}>Audit & Accounting Intelligence Pro</h1>
           <p style={styles.subtitle}>
             Built-in business review for sales, cash, debts, expenses, fuel,
-            stock, discounts and audit warnings.
+            stock, pricing, discounts, audit risks, accountant checks and
+            management letter points.
           </p>
         </div>
 
@@ -596,11 +1456,19 @@ ${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n
             {loading ? "Refreshing..." : "Refresh Review"}
           </button>
 
-          <button type="button" className="secondary-button" onClick={printAuditReport}>
-            Print Audit Report
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={printAuditReport}
+          >
+            Print / Save PDF
           </button>
 
-          <button type="button" className="secondary-button" onClick={copyAuditSummary}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={copyAuditSummary}
+          >
             Copy Summary
           </button>
         </div>
@@ -626,46 +1494,175 @@ ${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n
           </div>
 
           <div>
-            <h2>Audit Health Score</h2>
+            <h2>Professional Audit Score</h2>
             <p>
-              This score is based on red flags from sales, debt, stock, expenses,
-              discounts and voided sales.
+              The score is based on risk flags from sales, debts, expenses,
+              discounts, inventory pricing, stock levels and voided sales.
             </p>
+
+            <div style={styles.flagMiniGrid}>
+              <span style={styles.redPill}>{auditData.redFlags} Red</span>
+              <span style={styles.orangePill}>{auditData.orangeFlags} Orange</span>
+              <span style={styles.bluePill}>{auditData.blueFlags} Blue</span>
+            </div>
           </div>
         </div>
 
-        <div style={styles.accountingCard}>
-          <h2>Accounting Snapshot</h2>
+        <div style={styles.exportPanel}>
+          <h2>Export Center</h2>
+          <p>
+            Free exports for accountant/auditor review. CSV files open in Excel
+            and can be imported into Microsoft Access.
+          </p>
 
-          <div style={styles.accountingRows}>
-            <AccountingRow label="Sales Revenue" value={formatMoney(auditData.totalSales)} />
-            <AccountingRow label="Cash Collected" value={formatMoney(auditData.cashCollected)} />
-            <AccountingRow label="Outstanding Debts" value={formatMoney(auditData.outstandingDebts)} />
-            <AccountingRow label="Total Expenses" value={formatMoney(auditData.totalExpenses)} />
-            <AccountingRow label="Net Cash Position" value={formatMoney(auditData.netCashPosition)} />
+          <div style={styles.exportGrid}>
+            <button type="button" onClick={downloadAuditSummaryCsv}>
+              Excel Summary CSV
+            </button>
+
+            <button type="button" onClick={downloadAuditWarningsCsv}>
+              Audit Warnings CSV
+            </button>
+
+            <button type="button" onClick={downloadManagementLetterCsv}>
+              Management Letter CSV
+            </button>
+
+            <button type="button" onClick={downloadExcelWorkbookCsv}>
+              Excel Workbook CSV
+            </button>
+
+            <button type="button" onClick={downloadAccessImportFiles}>
+              Access Import CSVs
+            </button>
+
+            <button type="button" onClick={downloadPowerPointBriefing}>
+              PowerPoint Outline
+            </button>
+
+            <button type="button" onClick={downloadHtmlAuditReport}>
+              HTML Audit Report
+            </button>
           </div>
         </div>
       </div>
 
       <div style={{ ...styles.cardsGrid, ...oneColumn }}>
-        <MetricCard title="Today’s Sales" value={formatMoney(auditData.todaySalesTotal)} note={`${auditData.todaySales.length} sale(s) today`} icon="⚡" />
-        <MetricCard title="Total Sales" value={formatMoney(auditData.totalSales)} note={`${auditData.completedSales.length} completed sale(s)`} icon="📈" />
-        <MetricCard title="Cash Collected" value={formatMoney(auditData.cashCollected)} note="Amount paid by customers" icon="💰" />
-        <MetricCard title="Outstanding Debts" value={formatMoney(auditData.outstandingDebts)} note={`${auditData.unpaidDebtCount} active debt record(s)`} icon="📞" />
-        <MetricCard title="Total Expenses" value={formatMoney(auditData.totalExpenses)} note={`${expenses.length} expense record(s)`} icon="📉" />
-        <MetricCard title="Fuel Expenses" value={formatMoney(auditData.fuelExpenses)} note="Fuel category total" icon="⛽" />
-        <MetricCard title="Discounts Given" value={formatMoney(auditData.totalDiscounts)} note="Needs approval review" icon="🏷️" />
-        <MetricCard title="Stock Value" value={formatMoney(auditData.stockValue)} note={`${products.length} product(s)`} icon="📦" />
+        <MetricCard
+          title="Today’s Sales"
+          value={formatMoney(auditData.todaySalesTotal)}
+          note={`${auditData.todaySales.length} sale(s) today`}
+          icon="⚡"
+        />
+
+        <MetricCard
+          title="Month Sales"
+          value={formatMoney(auditData.monthSalesTotal)}
+          note={`${auditData.monthSales.length} completed sale(s) this month`}
+          icon="📈"
+        />
+
+        <MetricCard
+          title="Cash Collected"
+          value={formatMoney(auditData.cashCollected)}
+          note="Amount paid by customers"
+          icon="💰"
+        />
+
+        <MetricCard
+          title="Outstanding Debts"
+          value={formatMoney(auditData.outstandingDebts)}
+          note={`${auditData.unpaidDebtCount} unpaid, ${auditData.partialDebtCount} partial`}
+          icon="📞"
+        />
+
+        <MetricCard
+          title="Total Expenses"
+          value={formatMoney(auditData.totalExpenses)}
+          note={`${expenses.length} expense record(s)`}
+          icon="📉"
+        />
+
+        <MetricCard
+          title="Fuel Expenses"
+          value={formatMoney(auditData.fuelExpenses)}
+          note="Fuel category total"
+          icon="⛽"
+        />
+
+        <MetricCard
+          title="Discounts Given"
+          value={formatMoney(auditData.totalDiscounts)}
+          note="Needs approval review"
+          icon="🏷️"
+        />
+
+        <MetricCard
+          title="Stock Value"
+          value={formatMoney(auditData.stockValue)}
+          note={`${products.length} product(s) in inventory`}
+          icon="📦"
+        />
       </div>
 
       <div style={{ ...styles.twoColumn, ...oneColumn }}>
         <div style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <div>
-              <h2>Audit Warnings</h2>
-              <p>Important issues auditors or bosses should review.</p>
-            </div>
+          <h2>Accounting Summary</h2>
+          <p style={styles.panelText}>
+            This shows the accountant the main business figures in one place.
+          </p>
+
+          <div style={styles.accountingRows}>
+            {auditData.accountantSummary.map((item) => (
+              <div key={item.label} style={styles.accountingRow}>
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.meaning}</span>
+                </div>
+
+                <b>{formatMoney(item.value)}</b>
+              </div>
+            ))}
           </div>
+        </div>
+
+        <div style={styles.panel}>
+          <h2>Cash & Debt Reconciliation</h2>
+          <p style={styles.panelText}>
+            This helps compare cash received, balances and customer receivables.
+          </p>
+
+          <div style={styles.reconciliationBox}>
+            <AccountingRow
+              label="Cash Collected"
+              value={formatMoney(auditData.cashCollected)}
+            />
+            <AccountingRow
+              label="Sales Balances"
+              value={formatMoney(auditData.salesBalances)}
+            />
+            <AccountingRow
+              label="Debt Summary Balance"
+              value={formatMoney(auditData.outstandingDebts)}
+            />
+            <AccountingRow
+              label="Possible Difference"
+              value={formatMoney(auditData.possibleDebtDifference)}
+            />
+            <AccountingRow
+              label="Net Cash Position"
+              value={formatMoney(auditData.netCashPosition)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...styles.twoColumn, ...oneColumn }}>
+        <div style={styles.panel}>
+          <h2>Audit Risk Register</h2>
+          <p style={styles.panelText}>
+            Issues below should be reviewed by the boss, accountant or auditor.
+          </p>
 
           <div style={styles.warningList}>
             {auditData.auditFlags.map((flag, index) => (
@@ -673,23 +1670,26 @@ ${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n
                 key={`${flag.title}-${index}`}
                 style={{
                   ...styles.warningItem,
-                  ...warningTones[flag.tone],
+                  ...warningTones[flag.severity],
                 }}
               >
-                <strong>{flag.title}</strong>
-                <span>{flag.detail}</span>
+                <div style={styles.warningHeader}>
+                  <strong>{flag.title}</strong>
+                  <span>{flag.severity.toUpperCase()}</span>
+                </div>
+
+                <p>{flag.detail}</p>
+                <small>Recommendation: {flag.recommendation}</small>
               </div>
             ))}
           </div>
         </div>
 
         <div style={styles.panel}>
-          <div style={styles.panelHeader}>
-            <div>
-              <h2>Accounting Checklist</h2>
-              <p>Quick checklist before presenting records.</p>
-            </div>
-          </div>
+          <h2>Accountant Checklist</h2>
+          <p style={styles.panelText}>
+            Quick checklist before presenting records for review.
+          </p>
 
           <div style={styles.checkList}>
             {auditData.accountingChecklist.map((item) => (
@@ -716,6 +1716,28 @@ ${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n
 
       <div style={{ ...styles.twoColumn, ...oneColumn }}>
         <div style={styles.panel}>
+          <h2>Management Letter Points</h2>
+          <p style={styles.panelText}>
+            These are professional-style points an auditor/accountant can discuss
+            with management.
+          </p>
+
+          <div style={styles.managementList}>
+            {auditData.managementLetterPoints.map((point) => (
+              <div key={point.number} style={styles.managementItem}>
+                <span>{point.number}</span>
+
+                <div>
+                  <strong>{point.finding}</strong>
+                  <p>{point.implication}</p>
+                  <small>Recommendation: {point.recommendation}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={styles.panel}>
           <h2>Top Expense Categories</h2>
           <p style={styles.panelText}>
             This helps the accountant see where money is going.
@@ -734,37 +1756,74 @@ ${auditData.auditFlags.map((flag) => `- ${flag.title}: ${flag.detail}`).join("\n
             </div>
           )}
         </div>
+      </div>
 
+      <div style={{ ...styles.threeColumn, ...oneColumn }}>
         <div style={styles.panelDark}>
-          <h2>Auditor / Accountant Note</h2>
-          <p>
-            This page does not replace a professional accountant, but it makes
-            review easier by showing totals, warnings, debt exposure, expense
-            pressure, stock risk and discount activity in one place.
-          </p>
-
+          <h2>Sales Integrity</h2>
           <div style={styles.darkRows}>
+            <div>
+              <span>Completed Sales</span>
+              <strong>{auditData.completedSales.length}</strong>
+            </div>
+
             <div>
               <span>Voided Sales</span>
               <strong>{auditData.voidedSales.length}</strong>
             </div>
 
             <div>
-              <span>Low Stock Items</span>
+              <span>Sales Exceptions</span>
+              <strong>{auditData.salesExceptions.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.panelDark}>
+          <h2>Expense Control</h2>
+          <div style={styles.darkRows}>
+            <div>
+              <span>Total Expenses</span>
+              <strong>{formatMoney(auditData.totalExpenses)}</strong>
+            </div>
+
+            <div>
+              <span>Fuel</span>
+              <strong>{formatMoney(auditData.fuelExpenses)}</strong>
+            </div>
+
+            <div>
+              <span>Expense Issues</span>
+              <strong>{auditData.expenseExceptions.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.panelDark}>
+          <h2>Inventory Audit</h2>
+          <div style={styles.darkRows}>
+            <div>
+              <span>Low Stock</span>
               <strong>{auditData.lowStockProducts.length}</strong>
             </div>
 
             <div>
-              <span>Transport Expenses</span>
-              <strong>{formatMoney(auditData.transportExpenses)}</strong>
+              <span>Out of Stock</span>
+              <strong>{auditData.zeroStockProducts.length}</strong>
             </div>
 
             <div>
-              <span>Salary Expenses</span>
-              <strong>{formatMoney(auditData.salaryExpenses)}</strong>
+              <span>Inventory Issues</span>
+              <strong>{auditData.inventoryExceptions.length}</strong>
             </div>
           </div>
         </div>
+      </div>
+
+      <div style={styles.disclaimer}>
+        This page is a business audit and accounting assistant. It organizes
+        records and highlights risk areas, but it does not replace a licensed
+        accountant, tax consultant or external auditor.
       </div>
     </div>
   );
@@ -786,7 +1845,7 @@ function MetricCard({ title, value, note, icon }) {
 
 function AccountingRow({ label, value }) {
   return (
-    <div style={styles.accountingRow}>
+    <div style={styles.simpleRow}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -824,11 +1883,12 @@ const styles = {
     paddingBottom: "40px",
   },
 
-  pageMobile: {
-    paddingBottom: "28px",
+  oneColumn: {
+    gridTemplateColumns: "1fr",
   },
 
-  oneColumn: {
+  mobileStack: {
+    display: "grid",
     gridTemplateColumns: "1fr",
   },
 
@@ -866,7 +1926,7 @@ const styles = {
   subtitle: {
     margin: "10px 0 0",
     color: "rgba(255,255,255,0.76)",
-    maxWidth: "760px",
+    maxWidth: "850px",
     lineHeight: 1.6,
   },
 
@@ -878,7 +1938,7 @@ const styles = {
 
   scoreGrid: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 0.9fr)",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(360px, 0.9fr)",
     gap: "18px",
     marginBottom: "18px",
   },
@@ -894,6 +1954,7 @@ const styles = {
       "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,235,0.96))",
     border: "1px solid rgba(224, 186, 40, 0.38)",
     boxShadow: "0 18px 45px rgba(15, 23, 42, 0.09)",
+    minWidth: 0,
   },
 
   scoreRing: {
@@ -915,7 +1976,41 @@ const styles = {
     boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
   },
 
-  accountingCard: {
+  flagMiniGrid: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginTop: "12px",
+  },
+
+  redPill: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  orangePill: {
+    background: "#ffedd5",
+    color: "#9a3412",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  bluePill: {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  exportPanel: {
     padding: "20px",
     borderRadius: "24px",
     background: "#ffffff",
@@ -923,21 +2018,11 @@ const styles = {
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
   },
 
-  accountingRows: {
+  exportGrid: {
     display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "10px",
-    marginTop: "12px",
-  },
-
-  accountingRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    padding: "12px",
-    borderRadius: "14px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    flexWrap: "wrap",
+    marginTop: "14px",
   },
 
   cardsGrid: {
@@ -972,6 +2057,13 @@ const styles = {
     marginBottom: "18px",
   },
 
+  threeColumn: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+
   panel: {
     background: "#ffffff",
     borderRadius: "22px",
@@ -981,13 +2073,43 @@ const styles = {
     minWidth: 0,
   },
 
-  panelHeader: {
-    marginBottom: "14px",
-  },
-
   panelText: {
     color: "#64748b",
     lineHeight: 1.6,
+  },
+
+  accountingRows: {
+    display: "grid",
+    gap: "10px",
+    marginTop: "12px",
+  },
+
+  accountingRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    flexWrap: "wrap",
+  },
+
+  simpleRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    flexWrap: "wrap",
+  },
+
+  reconciliationBox: {
+    display: "grid",
+    gap: "10px",
+    marginTop: "12px",
   },
 
   warningList: {
@@ -997,10 +2119,17 @@ const styles = {
 
   warningItem: {
     display: "grid",
-    gap: "5px",
+    gap: "6px",
     padding: "13px",
     borderRadius: "16px",
     border: "1px solid",
+  },
+
+  warningHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    flexWrap: "wrap",
   },
 
   checkList: {
@@ -1026,6 +2155,21 @@ const styles = {
     placeItems: "center",
     fontWeight: "950",
     flexShrink: 0,
+  },
+
+  managementList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  managementItem: {
+    display: "grid",
+    gridTemplateColumns: "34px minmax(0, 1fr)",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
   },
 
   expenseList: {
@@ -1055,7 +2199,6 @@ const styles = {
 
   darkRows: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "10px",
     marginTop: "14px",
   },
@@ -1068,5 +2211,15 @@ const styles = {
     border: "1px dashed #cbd5e1",
     textAlign: "center",
     fontWeight: "800",
+  },
+
+  disclaimer: {
+    padding: "14px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    border: "1px dashed #cbd5e1",
+    color: "#64748b",
+    fontWeight: "800",
+    lineHeight: 1.5,
   },
 };
