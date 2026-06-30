@@ -60,6 +60,21 @@ export default function DashboardPage() {
     });
   }
 
+  function formatDate(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
   function getSaleDate(sale) {
     return new Date(sale?.created_at || sale?.sale_date || sale?.date);
   }
@@ -223,6 +238,7 @@ export default function DashboardPage() {
     const estimatedProfit = Math.max(stockValue - costValue, 0);
 
     const outstandingDebts =
+      debtSummary?.outstanding_balance ??
       debtSummary?.outstanding_debts ??
       debtSummary?.total_outstanding_balance ??
       debtSummary?.total_balance ??
@@ -231,8 +247,11 @@ export default function DashboardPage() {
     const activeDebtCount =
       debtSummary?.active_debt_count ??
       debtSummary?.unpaid_count ??
+      debtSummary?.partial_count ??
       debtSummary?.count ??
       0;
+
+    const overdueDebtCount = debtSummary?.overdue_count ?? 0;
 
     const paymentBreakdown = {
       cash: 0,
@@ -295,6 +314,14 @@ export default function DashboardPage() {
       .sort((a, b) => b.stockValue - a.stockValue)
       .slice(0, 6);
 
+    const restockWatch = [...lowStockProducts]
+      .sort((a, b) => {
+        const aQty = Number(a.quantity || 0);
+        const bQty = Number(b.quantity || 0);
+        return aQty - bQty;
+      })
+      .slice(0, 6);
+
     const stockHealth =
       products.length === 0
         ? 100
@@ -319,6 +346,180 @@ export default function DashboardPage() {
       Math.round((todaySalesAmount / DAILY_TARGET) * 100)
     );
 
+    const salesScore =
+      targetProgress >= 100 ? 30 : Math.round((targetProgress / 100) * 30);
+
+    const stockScore = Math.round((stockHealth / 100) * 30);
+    const debtScore = Math.max(0, Math.round(((100 - debtRisk) / 100) * 25));
+    const auditScore = voidedSales.length === 0 ? 15 : 8;
+
+    const businessScore = Math.min(
+      100,
+      Math.max(0, salesScore + stockScore + debtScore + auditScore)
+    );
+
+    let businessScoreLabel = "Needs Attention";
+    let businessScoreTone = "red";
+
+    if (businessScore >= 80) {
+      businessScoreLabel = "Strong";
+      businessScoreTone = "green";
+    } else if (businessScore >= 60) {
+      businessScoreLabel = "Stable";
+      businessScoreTone = "blue";
+    } else if (businessScore >= 40) {
+      businessScoreLabel = "Watch Closely";
+      businessScoreTone = "orange";
+    }
+
+    const smartAlerts = [];
+
+    if (products.length === 0) {
+      smartAlerts.push({
+        id: "no-products",
+        icon: "📦",
+        title: "No products recorded yet",
+        description:
+          "Add products before starting full business operations. Stock value and alerts will become active after products are added.",
+        action: "Add Products",
+        path: "/products",
+        tone: "blue",
+      });
+    }
+
+    if (lowStockProducts.length > 0) {
+      smartAlerts.push({
+        id: "low-stock",
+        icon: urgentLowStockProducts.length > 0 ? "🚨" : "⚠️",
+        title: `${lowStockProducts.length} product(s) need restocking`,
+        description:
+          urgentLowStockProducts.length > 0
+            ? `${urgentLowStockProducts.length} item(s) are critically low. Restock quickly to avoid losing sales.`
+            : "Some products are near or below their low stock level. Review stock before busy sales hours.",
+        action: "Review Stock",
+        path: "/products",
+        tone: urgentLowStockProducts.length > 0 ? "red" : "orange",
+      });
+    }
+
+    if (Number(outstandingDebts || 0) > 0) {
+      smartAlerts.push({
+        id: "debt-follow-up",
+        icon: "📞",
+        title: "Customer debt follow-up needed",
+        description: `${formatCompactMoney(
+          outstandingDebts
+        )} is still outstanding from ${activeDebtCount} active debt record(s). Use WhatsApp reminders to follow up.`,
+        action: "Open Debts",
+        path: "/debts",
+        tone: overdueDebtCount > 0 ? "red" : "orange",
+      });
+    }
+
+    if (todaySalesAmount <= 0) {
+      smartAlerts.push({
+        id: "no-sales-today",
+        icon: "🕘",
+        title: "No sales recorded today",
+        description:
+          "Today has no completed sales yet. Start recording sales when business begins.",
+        action: "Start New Sale",
+        path: "/new-sale",
+        tone: "blue",
+      });
+    } else if (targetProgress < 50) {
+      smartAlerts.push({
+        id: "target-low",
+        icon: "🎯",
+        title: "Daily sales target is still low",
+        description: `Today’s sales are at ${targetProgress}% of the daily target. Push more sales before closing.`,
+        action: "New Sale",
+        path: "/new-sale",
+        tone: "orange",
+      });
+    } else if (targetProgress >= 100) {
+      smartAlerts.push({
+        id: "target-hit",
+        icon: "🏆",
+        title: "Daily target achieved",
+        description:
+          "Today’s sales have reached or passed the target. Keep monitoring stock and cash before closing.",
+        action: "Daily Closing",
+        path: "/daily-closing",
+        tone: "green",
+      });
+    }
+
+    if (voidedSales.length > 0) {
+      smartAlerts.push({
+        id: "voided-sales",
+        icon: "🛡️",
+        title: "Voided sales detected",
+        description: `${voidedSales.length} voided/cancelled sale(s) exist. Boss should review them during audit or daily closing.`,
+        action: "View Reports",
+        path: "/reports",
+        tone: "red",
+      });
+    }
+
+    if (smartAlerts.length === 0) {
+      smartAlerts.push({
+        id: "healthy-business",
+        icon: "✅",
+        title: "Business looks healthy",
+        description:
+          "No urgent issues detected. Sales, stock and debt indicators currently look stable.",
+        action: "View Reports",
+        path: "/reports",
+        tone: "green",
+      });
+    }
+
+    const actionPlan = [];
+
+    if (lowStockProducts.length > 0) {
+      actionPlan.push({
+        id: "restock",
+        title: "Restock priority items",
+        note: `${lowStockProducts.length} product(s) are at or below low stock level.`,
+        path: "/products",
+      });
+    }
+
+    if (Number(outstandingDebts || 0) > 0) {
+      actionPlan.push({
+        id: "collect-debt",
+        title: "Follow up customer debts",
+        note: `${formatCompactMoney(outstandingDebts)} is still outstanding.`,
+        path: "/debts",
+      });
+    }
+
+    if (todaySalesAmount > 0) {
+      actionPlan.push({
+        id: "close-day",
+        title: "Prepare daily closing",
+        note: `Today’s sales are ${formatCompactMoney(todaySalesAmount)} so far.`,
+        path: "/daily-closing",
+      });
+    }
+
+    if (actionPlan.length === 0) {
+      actionPlan.push({
+        id: "start-business",
+        title: "Start business activity",
+        note: "Record products, sales and payments to activate stronger insights.",
+        path: "/new-sale",
+      });
+    }
+
+    const bossBrief = [
+      `Today: ${formatCompactMoney(todaySalesAmount)} from ${todaySales.length} sale(s).`,
+      `This week: ${formatCompactMoney(weekSalesAmount)} in completed sales.`,
+      `Stock health is ${stockHealth}%, with ${lowStockProducts.length} low-stock item(s).`,
+      `Outstanding debts stand at ${formatCompactMoney(outstandingDebts)}.`,
+    ];
+
     return {
       activeSales,
       voidedSales,
@@ -340,12 +541,20 @@ export default function DashboardPage() {
       estimatedProfit,
       outstandingDebts,
       activeDebtCount,
+      overdueDebtCount,
       paymentBreakdown,
       lastSevenDays,
       topStockProducts,
+      restockWatch,
       stockHealth,
       debtRisk,
       targetProgress,
+      businessScore,
+      businessScoreLabel,
+      businessScoreTone,
+      smartAlerts,
+      actionPlan,
+      bossBrief,
     };
   }, [products, sales, debtSummary]);
 
@@ -435,9 +644,11 @@ export default function DashboardPage() {
   const mobileHeroLogo = isMobile ? styles.heroLogoMobile : {};
   const mobileHeroTitle = isMobile ? styles.heroTitleMobile : {};
   const mobileQuickActions = isMobile ? styles.quickActionsMobile : {};
+  const mobileSmartCard = isMobile ? styles.smartCardMobile : {};
+  const mobilePage = isMobile ? styles.pageMobile : {};
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, ...mobilePage }}>
       <div style={{ ...styles.hero, ...(isMobile ? styles.heroMobile : {}) }}>
         <div style={styles.heroGlowOne} />
         <div style={styles.heroGlowTwo} />
@@ -459,8 +670,8 @@ export default function DashboardPage() {
                 </h1>
 
                 <p style={styles.heroSubtitle}>
-                  Real-time view of sales, stock, debts, cash movement, and
-                  urgent business alerts.
+                  Real-time view of sales, stock, debts, cash movement, urgent
+                  alerts and boss-level business intelligence.
                 </p>
               </div>
             </div>
@@ -489,11 +700,14 @@ export default function DashboardPage() {
               value={`GHS ${formatMoney(dashboardData.weekSalesAmount)}`}
             />
 
-            <HeroMetric label="Stock Health" value={`${dashboardData.stockHealth}%`} />
+            <HeroMetric
+              label="Stock Health"
+              value={`${dashboardData.stockHealth}%`}
+            />
 
             <HeroMetric
-              label="Daily Target"
-              value={`${dashboardData.targetProgress}%`}
+              label="Business Score"
+              value={`${dashboardData.businessScore}%`}
             />
           </div>
         </div>
@@ -529,6 +743,129 @@ export default function DashboardPage() {
         >
           Daily Closing
         </button>
+      </div>
+
+      <div style={{ ...styles.executiveGrid, ...oneColumn }}>
+        <div style={styles.scorePanel}>
+          <div style={styles.scoreHeader}>
+            <div>
+              <p style={styles.eyebrowDark}>Executive Intelligence</p>
+              <h2 style={styles.scoreTitle}>Business Health Score</h2>
+              <p style={styles.scoreSubtitle}>
+                A quick boss-level score based on sales target, stock health,
+                debt risk and audit safety.
+              </p>
+            </div>
+
+            <span
+              style={{
+                ...styles.scoreStatus,
+                ...smartToneStyles[dashboardData.businessScoreTone],
+              }}
+            >
+              {dashboardData.businessScoreLabel}
+            </span>
+          </div>
+
+          <div style={styles.scoreBody}>
+            <div
+              style={{
+                ...styles.scoreRing,
+                background: `conic-gradient(#e0ba28 0deg ${
+                  dashboardData.businessScore * 3.6
+                }deg, #e2e8f0 ${
+                  dashboardData.businessScore * 3.6
+                }deg 360deg)`,
+              }}
+            >
+              <div style={styles.scoreInner}>
+                <strong>{dashboardData.businessScore}%</strong>
+                <span>Score</span>
+              </div>
+            </div>
+
+            <div style={styles.bossBrief}>
+              <h3>Boss Daily Brief</h3>
+
+              {dashboardData.bossBrief.map((brief) => (
+                <p key={brief}>• {brief}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.actionPlanPanel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <h2 style={styles.panelTitle}>Today’s Action Plan</h2>
+              <p style={styles.panelSubtitle}>
+                The most important things to check before closing.
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.actionPlanList}>
+            {dashboardData.actionPlan.map((action, index) => (
+              <button
+                type="button"
+                key={action.id}
+                style={styles.actionPlanItem}
+                onClick={() => navigate(action.path)}
+              >
+                <span>{index + 1}</span>
+
+                <div>
+                  <strong>{action.title}</strong>
+                  <small>{action.note}</small>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.smartCenter}>
+        <div style={styles.smartCenterHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>System Intelligence</p>
+            <h2 style={styles.smartTitle}>Smart Business Alerts Center</h2>
+            <p style={styles.smartSubtitle}>
+              Automatic business warnings and action suggestions for the boss.
+            </p>
+          </div>
+
+          <span style={styles.smartBadge}>
+            {dashboardData.smartAlerts.length} active insight(s)
+          </span>
+        </div>
+
+        <div style={{ ...styles.smartGrid, ...(isMobile ? oneColumn : {}) }}>
+          {dashboardData.smartAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              style={{
+                ...styles.smartCard,
+                ...mobileSmartCard,
+                ...smartToneStyles[alert.tone],
+              }}
+            >
+              <div style={styles.smartIcon}>{alert.icon}</div>
+
+              <div style={styles.smartBody}>
+                <strong>{alert.title}</strong>
+                <p>{alert.description}</p>
+
+                <button
+                  type="button"
+                  style={styles.smartActionButton}
+                  onClick={() => navigate(alert.path)}
+                >
+                  {alert.action}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={{ ...styles.kpiGrid, ...oneColumn }}>
@@ -640,7 +977,9 @@ export default function DashboardPage() {
               }}
             >
               <div style={styles.donutInner}>
-                <strong>{paymentPercent(dashboardData.paymentBreakdown.cash)}%</strong>
+                <strong>
+                  {paymentPercent(dashboardData.paymentBreakdown.cash)}%
+                </strong>
                 <span>Cash</span>
               </div>
             </div>
@@ -745,24 +1084,26 @@ export default function DashboardPage() {
         <div style={styles.panel}>
           <div style={styles.panelHeader}>
             <div>
-              <h2 style={styles.panelTitle}>Urgent Alerts</h2>
-              <p style={styles.panelSubtitle}>Items that need attention</p>
+              <h2 style={styles.panelTitle}>Restock Watch</h2>
+              <p style={styles.panelSubtitle}>
+                Items that may stop sales if ignored
+              </p>
             </div>
           </div>
 
-          {dashboardData.lowStockProducts.length === 0 ? (
+          {dashboardData.restockWatch.length === 0 ? (
             <div style={styles.emptyState}>
               No low-stock products. Stock looks healthy.
             </div>
           ) : (
             <div style={styles.alertList}>
-              {dashboardData.lowStockProducts.slice(0, 5).map((product) => (
+              {dashboardData.restockWatch.map((product) => (
                 <div key={product.id} style={styles.alertItem}>
                   <div>
                     <strong>{product.name}</strong>
                     <span>
                       {product.category || "No category"} •{" "}
-                      {product.size || "No size"}
+                      {product.size || "No excavator type"}
                     </span>
                   </div>
 
@@ -879,10 +1220,13 @@ export default function DashboardPage() {
             <h2 style={styles.darkTitle}>Boss View</h2>
             <p style={styles.darkText}>
               Valid sales are counted. Voided/cancelled sales are excluded from
-              income. Debt exposure and low stock are monitored live.
+              income. Debt exposure, low stock, cash movement and business score
+              are monitored live.
             </p>
 
-            <div style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}) }}>
+            <div
+              style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}) }}
+            >
               <div>
                 <span>All Sales</span>
                 <strong>GHS {formatMoney(dashboardData.totalSalesAmount)}</strong>
@@ -890,6 +1234,14 @@ export default function DashboardPage() {
               <div>
                 <span>Profit View</span>
                 <strong>GHS {formatMoney(dashboardData.estimatedProfit)}</strong>
+              </div>
+              <div>
+                <span>Report Date</span>
+                <strong>{formatDate(new Date())}</strong>
+              </div>
+              <div>
+                <span>Status</span>
+                <strong>{dashboardData.businessScoreLabel}</strong>
               </div>
             </div>
           </div>
@@ -985,12 +1337,39 @@ const tonePills = {
   navy: { background: "#e2e8f0", color: "#0f172a" },
 };
 
+const smartToneStyles = {
+  green: {
+    background: "linear-gradient(135deg, #ecfdf3, #ffffff)",
+    borderColor: "#bbf7d0",
+    color: "#14532d",
+  },
+  blue: {
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    borderColor: "#bfdbfe",
+    color: "#1e3a8a",
+  },
+  orange: {
+    background: "linear-gradient(135deg, #fff7ed, #ffffff)",
+    borderColor: "#fed7aa",
+    color: "#9a3412",
+  },
+  red: {
+    background: "linear-gradient(135deg, #fef2f2, #ffffff)",
+    borderColor: "#fecaca",
+    color: "#991b1b",
+  },
+};
+
 const styles = {
   page: {
     width: "100%",
     maxWidth: "1680px",
     margin: "0 auto",
     paddingBottom: "40px",
+  },
+
+  pageMobile: {
+    paddingBottom: "28px",
   },
 
   oneColumn: {
@@ -1092,6 +1471,15 @@ const styles = {
     fontSize: "12px",
   },
 
+  eyebrowDark: {
+    margin: 0,
+    color: "#b45309",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+
   heroTitle: {
     margin: "6px 0 0",
     fontSize: "clamp(28px, 4vw, 46px)",
@@ -1172,6 +1560,214 @@ const styles = {
     fontWeight: "900",
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+  },
+
+  executiveGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
+    gap: "18px",
+    marginBottom: "18px",
+    alignItems: "stretch",
+  },
+
+  scorePanel: {
+    background:
+      "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,235,0.95))",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(224, 186, 40, 0.38)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.09)",
+    minWidth: 0,
+  },
+
+  scoreHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "14px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  scoreTitle: {
+    margin: "4px 0 0",
+    color: "#07182c",
+    fontSize: "24px",
+    fontWeight: "950",
+  },
+
+  scoreSubtitle: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.6,
+    maxWidth: "760px",
+  },
+
+  scoreStatus: {
+    display: "inline-flex",
+    alignItems: "center",
+    border: "1px solid",
+    borderRadius: "999px",
+    padding: "8px 12px",
+    fontSize: "12px",
+    fontWeight: "950",
+    whiteSpace: "nowrap",
+  },
+
+  scoreBody: {
+    display: "grid",
+    gridTemplateColumns: "180px minmax(0, 1fr)",
+    gap: "18px",
+    alignItems: "center",
+  },
+
+  scoreRing: {
+    width: "170px",
+    height: "170px",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    boxShadow: "inset 0 0 0 1px rgba(15,23,42,0.08)",
+  },
+
+  scoreInner: {
+    width: "112px",
+    height: "112px",
+    borderRadius: "50%",
+    background: "#ffffff",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
+  },
+
+  bossBrief: {
+    padding: "16px",
+    borderRadius: "18px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+
+  actionPlanPanel: {
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  actionPlanList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  actionPlanItem: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    width: "100%",
+    textAlign: "left",
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    borderRadius: "16px",
+    padding: "12px",
+    cursor: "pointer",
+    color: "#0f172a",
+  },
+
+  smartCenter: {
+    background:
+      "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,235,0.96))",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(224, 186, 40, 0.38)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.09)",
+    marginBottom: "18px",
+  },
+
+  smartCenterHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "14px",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  smartTitle: {
+    margin: "4px 0 0",
+    color: "#07182c",
+    fontSize: "24px",
+    fontWeight: "950",
+  },
+
+  smartSubtitle: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.6,
+  },
+
+  smartBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    padding: "8px 12px",
+    background: "#07182c",
+    color: "#e0ba28",
+    fontWeight: "950",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  },
+
+  smartGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: "14px",
+  },
+
+  smartCard: {
+    display: "flex",
+    gap: "14px",
+    alignItems: "flex-start",
+    padding: "16px",
+    borderRadius: "18px",
+    border: "1px solid",
+    minHeight: "150px",
+  },
+
+  smartCardMobile: {
+    minHeight: "unset",
+  },
+
+  smartIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "14px",
+    background: "rgba(255,255,255,0.82)",
+    display: "grid",
+    placeItems: "center",
+    fontSize: "24px",
+    flexShrink: 0,
+    boxShadow: "0 8px 20px rgba(15,23,42,0.08)",
+  },
+
+  smartBody: {
+    display: "grid",
+    gap: "8px",
+  },
+
+  smartActionButton: {
+    justifySelf: "start",
+    border: "none",
+    background: "#07182c",
+    color: "#ffffff",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "900",
+    cursor: "pointer",
   },
 
   kpiGrid: {
