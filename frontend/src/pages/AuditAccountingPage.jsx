@@ -13,6 +13,10 @@ export default function AuditAccountingPage() {
 
   const [isMobile, setIsMobile] = useState(false);
 
+  const [periodType, setPeriodType] = useState("month");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   const businessName = "Chalin 03 Company Limited";
   const reportName = "Audit & Accounting Intelligence Pro Review";
 
@@ -68,8 +72,140 @@ export default function AuditAccountingPage() {
     return date.toLocaleString("en-GB");
   }
 
+  function dateToInputValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function getStartOfDay(date) {
+    const newDate = new Date(date);
+    newDate.setHours(0, 0, 0, 0);
+    return newDate;
+  }
+
+  function getEndOfDay(date) {
+    const newDate = new Date(date);
+    newDate.setHours(23, 59, 59, 999);
+    return newDate;
+  }
+
+  function getStartOfWeek(date) {
+    const newDate = getStartOfDay(date);
+    const day = newDate.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    newDate.setDate(newDate.getDate() + mondayOffset);
+    return newDate;
+  }
+
+  function getPeriodRange() {
+    const today = new Date();
+
+    if (periodType === "all") {
+      return {
+        start: null,
+        end: null,
+        label: "All Records",
+        shortLabel: "all-records",
+      };
+    }
+
+    if (periodType === "today") {
+      return {
+        start: getStartOfDay(today),
+        end: getEndOfDay(today),
+        label: "Today",
+        shortLabel: "today",
+      };
+    }
+
+    if (periodType === "week") {
+      const start = getStartOfWeek(today);
+
+      return {
+        start,
+        end: getEndOfDay(today),
+        label: `This Week (${formatDate(start)} - ${formatDate(today)})`,
+        shortLabel: "this-week",
+      };
+    }
+
+    if (periodType === "month") {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      return {
+        start: getStartOfDay(start),
+        end: getEndOfDay(today),
+        label: `This Month (${formatDate(start)} - ${formatDate(today)})`,
+        shortLabel: "this-month",
+      };
+    }
+
+    if (periodType === "year") {
+      const start = new Date(today.getFullYear(), 0, 1);
+
+      return {
+        start: getStartOfDay(start),
+        end: getEndOfDay(today),
+        label: `This Year (${formatDate(start)} - ${formatDate(today)})`,
+        shortLabel: "this-year",
+      };
+    }
+
+    if (periodType === "custom") {
+      const start = customStartDate ? new Date(customStartDate) : null;
+      const end = customEndDate ? new Date(customEndDate) : null;
+
+      return {
+        start: start ? getStartOfDay(start) : null,
+        end: end ? getEndOfDay(end) : null,
+        label:
+          start && end
+            ? `Custom Period (${formatDate(start)} - ${formatDate(end)})`
+            : "Custom Period",
+        shortLabel:
+          start && end
+            ? `${dateToInputValue(start)}-to-${dateToInputValue(end)}`
+            : "custom-period",
+      };
+    }
+
+    return {
+      start: null,
+      end: null,
+      label: "All Records",
+      shortLabel: "all-records",
+    };
+  }
+
+  function isDateInsidePeriod(date, period) {
+    if (!date || Number.isNaN(date.getTime())) {
+      return false;
+    }
+
+    if (!period.start && !period.end) {
+      return true;
+    }
+
+    if (period.start && date < period.start) {
+      return false;
+    }
+
+    if (period.end && date > period.end) {
+      return false;
+    }
+
+    return true;
+  }
+
   function getSaleDate(sale) {
     return new Date(sale?.created_at || sale?.sale_date || sale?.date);
+  }
+
+  function getExpenseDate(expense) {
+    return new Date(expense?.expense_date || expense?.created_at || expense?.date);
   }
 
   function isSaleVoided(sale) {
@@ -85,32 +221,21 @@ export default function AuditAccountingPage() {
     return !isSaleVoided(sale) && status === "completed";
   }
 
-  function isSameDay(dateA, dateB) {
-    return (
-      dateA.getFullYear() === dateB.getFullYear() &&
-      dateA.getMonth() === dateB.getMonth() &&
-      dateA.getDate() === dateB.getDate()
-    );
-  }
-
-  function isSameMonth(dateA, dateB) {
-    return (
-      dateA.getFullYear() === dateB.getFullYear() &&
-      dateA.getMonth() === dateB.getMonth()
-    );
-  }
-
-  function isWithinLastDays(date, days) {
-    const now = new Date();
-    const start = new Date(now);
-    start.setDate(now.getDate() - (days - 1));
-    start.setHours(0, 0, 0, 0);
-
-    return date >= start && date <= now;
-  }
-
   function getPaymentType(sale) {
     return String(sale?.payment_type || "cash").toLowerCase();
+  }
+
+  function makeFilePrefix(name) {
+    return String(name || "audit-report")
+      .toLowerCase()
+      .replaceAll(" ", "-")
+      .replaceAll("/", "-")
+      .replaceAll("(", "")
+      .replaceAll(")", "")
+      .replaceAll(",", "")
+      .replaceAll(":", "")
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-");
   }
 
   async function loadAuditData() {
@@ -161,42 +286,24 @@ export default function AuditAccountingPage() {
   }, []);
 
   const auditData = useMemo(() => {
-    const today = new Date();
+    const period = getPeriodRange();
 
-    const completedSales = sales.filter(isCompletedSale);
-    const voidedSales = sales.filter(isSaleVoided);
+    const allCompletedSales = sales.filter(isCompletedSale);
+    const allVoidedSales = sales.filter(isSaleVoided);
 
-    const todaySales = completedSales.filter((sale) => {
-      const saleDate = getSaleDate(sale);
-      return !Number.isNaN(saleDate.getTime()) && isSameDay(saleDate, today);
-    });
+    const completedSales = allCompletedSales.filter((sale) =>
+      isDateInsidePeriod(getSaleDate(sale), period)
+    );
 
-    const monthSales = completedSales.filter((sale) => {
-      const saleDate = getSaleDate(sale);
-      return !Number.isNaN(saleDate.getTime()) && isSameMonth(saleDate, today);
-    });
+    const voidedSales = allVoidedSales.filter((sale) =>
+      isDateInsidePeriod(getSaleDate(sale), period)
+    );
 
-    const weekSales = completedSales.filter((sale) => {
-      const saleDate = getSaleDate(sale);
-      return !Number.isNaN(saleDate.getTime()) && isWithinLastDays(saleDate, 7);
-    });
+    const periodExpenses = expenses.filter((expense) =>
+      isDateInsidePeriod(getExpenseDate(expense), period)
+    );
 
     const totalSales = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
-      0
-    );
-
-    const todaySalesTotal = todaySales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
-      0
-    );
-
-    const weekSalesTotal = weekSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
-      0
-    );
-
-    const monthSalesTotal = monthSales.reduce(
       (sum, sale) => sum + Number(sale.total || 0),
       0
     );
@@ -216,24 +323,24 @@ export default function AuditAccountingPage() {
       0
     );
 
-    const totalExpenses = expenses.reduce(
+    const totalExpenses = periodExpenses.reduce(
       (sum, expense) => sum + Number(expense.amount || 0),
       0
     );
 
-    const fuelExpenses = expenses
+    const fuelExpenses = periodExpenses
       .filter((expense) =>
         String(expense.category || "").toLowerCase().includes("fuel")
       )
       .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
-    const transportExpenses = expenses
+    const transportExpenses = periodExpenses
       .filter((expense) =>
         String(expense.category || "").toLowerCase().includes("transport")
       )
       .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
-    const salaryExpenses = expenses
+    const salaryExpenses = periodExpenses
       .filter((expense) =>
         String(expense.category || "").toLowerCase().includes("salary")
       )
@@ -315,7 +422,7 @@ export default function AuditAccountingPage() {
       }
     });
 
-    const categoryTotals = expenses.reduce((result, expense) => {
+    const categoryTotals = periodExpenses.reduce((result, expense) => {
       const category = cleanText(expense.category) || "Other";
       result[category] =
         Number(result[category] || 0) + Number(expense.amount || 0);
@@ -389,7 +496,7 @@ export default function AuditAccountingPage() {
 
     const expenseExceptions = [];
 
-    expenses.forEach((expense) => {
+    periodExpenses.forEach((expense) => {
       const description = cleanText(expense.description);
       const category = cleanText(expense.category) || "Uncategorized";
       const amount = Number(expense.amount || 0);
@@ -414,7 +521,7 @@ export default function AuditAccountingPage() {
         });
       }
 
-      if (!expense.expense_date) {
+      if (!expense.expense_date && !expense.created_at) {
         expenseExceptions.push({
           severity: "orange",
           title: "Expense missing date",
@@ -495,9 +602,9 @@ export default function AuditAccountingPage() {
     if (completedSales.length === 0) {
       addFlag(
         "orange",
-        "No completed sales found",
-        "There are no completed sales available for the audit period.",
-        "Confirm whether business activity has started or whether sales were entered correctly."
+        "No completed sales found for selected period",
+        `There are no completed sales in ${period.label}.`,
+        "Confirm whether business activity happened in this period or whether sales were entered correctly."
       );
     }
 
@@ -505,7 +612,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "red",
         "Voided or cancelled sales detected",
-        `${voidedSales.length} voided/cancelled sale(s) exist.`,
+        `${voidedSales.length} voided/cancelled sale(s) exist in the selected period.`,
         "Auditor or boss should review who voided them, why they were voided, and whether cash was affected."
       );
     }
@@ -516,7 +623,7 @@ export default function AuditAccountingPage() {
         "Outstanding customer debts",
         `${formatMoney(
           outstandingDebts
-        )} is still unpaid across customer debt records.`,
+        )} is currently unpaid across customer debt records.`,
         "Follow up customers, reconcile with sales balances, and send WhatsApp reminders where necessary."
       );
     }
@@ -525,7 +632,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "orange",
         "Debt reconciliation difference",
-        `Debt summary differs from sales balances by about ${formatMoney(
+        `Debt summary differs from period sales balances by about ${formatMoney(
           possibleDebtDifference
         )}.`,
         "Compare debt records with sales balances and payment records."
@@ -535,8 +642,8 @@ export default function AuditAccountingPage() {
     if (totalExpenses > cashCollected && totalExpenses > 0) {
       addFlag(
         "red",
-        "Expenses exceed cash collected",
-        `Total expenses ${formatMoney(
+        "Period expenses exceed cash collected",
+        `Selected period expenses ${formatMoney(
           totalExpenses
         )} are higher than cash collected ${formatMoney(cashCollected)}.`,
         "Review expense records, confirm supporting receipts, and compare with daily closing."
@@ -547,7 +654,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "blue",
         "Discount activity detected",
-        `${formatMoney(totalDiscounts)} total discount has been recorded.`,
+        `${formatMoney(totalDiscounts)} total discount was recorded in the selected period.`,
         "Confirm discounts were approved by management and not used to hide pricing errors."
       );
     }
@@ -556,7 +663,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "orange",
         "Low stock risk",
-        `${lowStockProducts.length} product(s) are at or below low stock level.`,
+        `${lowStockProducts.length} product(s) are currently at or below low stock level.`,
         "Prepare restocking plan to prevent lost sales."
       );
     }
@@ -565,7 +672,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "red",
         "Out of stock products",
-        `${zeroStockProducts.length} product(s) have zero or negative quantity.`,
+        `${zeroStockProducts.length} product(s) currently have zero or negative quantity.`,
         "Review urgent restock needs and check whether stock entries are correct."
       );
     }
@@ -574,7 +681,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "blue",
         "Fuel expense category active",
-        `${formatMoney(fuelExpenses)} has been recorded as fuel expense.`,
+        `${formatMoney(fuelExpenses)} has been recorded as fuel expense in the selected period.`,
         "Fuel expenses should be reviewed separately and supported with receipts where possible."
       );
     }
@@ -610,21 +717,26 @@ export default function AuditAccountingPage() {
       addFlag(
         "green",
         "No major audit issue detected",
-        "The system currently shows no major warning from sales, debts, expenses and stock.",
+        `The system currently shows no major warning for ${period.label}.`,
         "Continue daily closing, backup and regular stock checking."
       );
     }
 
     const accountingChecklist = [
       {
+        title: "Period selected",
+        status: Boolean(period.label),
+        note: `Review period: ${period.label}.`,
+      },
+      {
         title: "Sales completeness",
         status: completedSales.length > 0,
-        note: `${completedSales.length} completed sale(s) found.`,
+        note: `${completedSales.length} completed sale(s) found in the selected period.`,
       },
       {
         title: "Cash collection review",
         status: cashCollected >= 0,
-        note: `${formatMoney(cashCollected)} recorded as amount paid.`,
+        note: `${formatMoney(cashCollected)} recorded as amount paid in the selected period.`,
       },
       {
         title: "Debt reconciliation",
@@ -633,9 +745,9 @@ export default function AuditAccountingPage() {
           Number(outstandingDebts || 0) > 0 || salesBalances > 0
             ? `${formatMoney(
                 outstandingDebts
-              )} outstanding debt and ${formatMoney(
+              )} current outstanding debt and ${formatMoney(
                 salesBalances
-              )} sales balance detected.`
+              )} period sales balance detected.`
             : "No outstanding debt detected.",
       },
       {
@@ -643,8 +755,8 @@ export default function AuditAccountingPage() {
         status: expenseExceptions.length === 0,
         note:
           expenseExceptions.length > 0
-            ? `${expenseExceptions.length} expense issue(s) need attention.`
-            : "No expense documentation issue detected.",
+            ? `${expenseExceptions.length} expense issue(s) need attention in the selected period.`
+            : "No expense documentation issue detected in the selected period.",
       },
       {
         title: "Inventory pricing review",
@@ -662,7 +774,7 @@ export default function AuditAccountingPage() {
         note:
           voidedSales.length > 0
             ? `${voidedSales.length} voided/cancelled sale(s) need review.`
-            : "No voided/cancelled sales detected.",
+            : "No voided/cancelled sales detected in the selected period.",
       },
       {
         title: "Discount approval review",
@@ -670,15 +782,7 @@ export default function AuditAccountingPage() {
         note:
           totalDiscounts > 0
             ? `${formatMoney(totalDiscounts)} discounts should be approved.`
-            : "No discount recorded.",
-      },
-      {
-        title: "Daily operation continuity",
-        status: lowStockProducts.length === 0,
-        note:
-          lowStockProducts.length > 0
-            ? `${lowStockProducts.length} low-stock product(s) found.`
-            : "Stock level looks healthy.",
+            : "No discount recorded in the selected period.",
       },
     ];
 
@@ -734,44 +838,50 @@ export default function AuditAccountingPage() {
 
     const accountantSummary = [
       {
+        label: "Selected Period",
+        value: period.label,
+        meaning: "Accounting/audit period currently being reviewed.",
+        isText: true,
+      },
+      {
         label: "Total Sales Revenue",
         value: totalSales,
-        meaning: "Completed sales value recorded by the system.",
+        meaning: "Completed sales value recorded within the selected period.",
       },
       {
         label: "Cash Collected",
         value: cashCollected,
-        meaning: "Amount recorded as paid by customers.",
+        meaning: "Amount recorded as paid by customers within the selected period.",
       },
       {
         label: "Customer Receivables",
         value: outstandingDebts,
-        meaning: "Unpaid customer debts requiring follow-up.",
+        meaning: "Current unpaid customer debts requiring follow-up.",
       },
       {
         label: "Total Expenses",
         value: totalExpenses,
-        meaning: "Business costs recorded in the Expenses module.",
+        meaning: "Business costs recorded within the selected period.",
       },
       {
         label: "Operating Result",
         value: operatingResult,
-        meaning: "Sales minus expenses. This is not final tax profit.",
+        meaning: "Period sales minus period expenses. This is not final tax profit.",
       },
       {
         label: "Inventory Selling Value",
         value: stockValue,
-        meaning: "Estimated selling value of stock on hand.",
+        meaning: "Current estimated selling value of stock on hand.",
       },
       {
         label: "Inventory Cost Value",
         value: stockCostValue,
-        meaning: "Estimated cost value of stock on hand.",
+        meaning: "Current estimated cost value of stock on hand.",
       },
       {
         label: "Expected Stock Margin",
         value: stockExpectedProfit,
-        meaning: "Estimated stock selling value minus cost value.",
+        meaning: "Current estimated stock selling value minus cost value.",
       },
     ];
 
@@ -790,12 +900,12 @@ export default function AuditAccountingPage() {
       created_at: formatDateTime(sale.created_at),
     }));
 
-    const accessExpenseRows = expenses.map((expense) => ({
+    const accessExpenseRows = periodExpenses.map((expense) => ({
       expense_id: expense.id,
       category: expense.category || "",
       description: expense.description || "",
       amount: plainMoney(expense.amount),
-      expense_date: formatDate(expense.expense_date),
+      expense_date: formatDate(expense.expense_date || expense.created_at),
       recorded_by: expense.recorded_by_name || "",
     }));
 
@@ -815,15 +925,11 @@ export default function AuditAccountingPage() {
     }));
 
     return {
+      period,
       completedSales,
       voidedSales,
-      todaySales,
-      monthSales,
-      weekSales,
+      periodExpenses,
       totalSales,
-      todaySalesTotal,
-      weekSalesTotal,
-      monthSalesTotal,
       cashCollected,
       salesBalances,
       totalDiscounts,
@@ -863,7 +969,15 @@ export default function AuditAccountingPage() {
       accessExpenseRows,
       accessProductRows,
     };
-  }, [products, sales, expenses, debtSummary]);
+  }, [
+    products,
+    sales,
+    expenses,
+    debtSummary,
+    periodType,
+    customStartDate,
+    customEndDate,
+  ]);
 
   function makeCsv(rows) {
     if (!rows || rows.length === 0) {
@@ -966,10 +1080,15 @@ export default function AuditAccountingPage() {
     );
   }
 
+  function fileName(base, extension) {
+    const period = makeFilePrefix(auditData.period.shortLabel);
+    return `${base}_${period}.${extension}`;
+  }
+
   function downloadAuditSummaryCsv() {
     const rows = auditData.accountantSummary.map((item) => ({
       item: item.label,
-      amount: plainMoney(item.value),
+      amount: item.isText ? item.value : plainMoney(item.value),
       meaning: item.meaning,
     }));
 
@@ -996,47 +1115,52 @@ export default function AuditAccountingPage() {
       }
     );
 
-    downloadCsv("chalin03_accounting_summary_excel.csv", rows);
+    downloadCsv(fileName("chalin03_accounting_summary_excel", "csv"), rows);
   }
 
   function downloadAuditWarningsCsv() {
     const rows = auditData.auditFlags.map((flag, index) => ({
       number: index + 1,
+      period: auditData.period.label,
       severity: flag.severity,
       title: flag.title,
       detail: flag.detail,
       recommendation: flag.recommendation,
     }));
 
-    downloadCsv("chalin03_audit_warnings_excel.csv", rows);
+    downloadCsv(fileName("chalin03_audit_warnings_excel", "csv"), rows);
   }
 
   function downloadManagementLetterCsv() {
     const rows = auditData.managementLetterPoints.map((point) => ({
       number: point.number,
+      period: auditData.period.label,
       finding: point.finding,
       implication: point.implication,
       recommendation: point.recommendation,
     }));
 
-    downloadCsv("chalin03_management_letter_excel.csv", rows);
+    downloadCsv(fileName("chalin03_management_letter_excel", "csv"), rows);
   }
 
   function downloadExcelWorkbookCsv() {
     const rows = [
       ...auditData.accountantSummary.map((item) => ({
+        period: auditData.period.label,
         section: "Accounting Summary",
         item: item.label,
-        amount: plainMoney(item.value),
+        amount: item.isText ? item.value : plainMoney(item.value),
         note: item.meaning,
       })),
       ...auditData.auditFlags.map((flag) => ({
+        period: auditData.period.label,
         section: "Audit Warning",
         item: flag.title,
         amount: "",
         note: `${flag.detail} Recommendation: ${flag.recommendation}`,
       })),
       ...auditData.topExpenseCategories.map((expense) => ({
+        period: auditData.period.label,
         section: "Expense Category",
         item: expense.category,
         amount: plainMoney(expense.amount),
@@ -1044,22 +1168,22 @@ export default function AuditAccountingPage() {
       })),
     ];
 
-    downloadCsv("chalin03_accounting_workbook_excel.csv", rows);
+    downloadCsv(fileName("chalin03_accounting_workbook_excel", "csv"), rows);
   }
 
   function downloadAccessImportFiles() {
-    downloadCsv("access_import_sales_table.csv", auditData.accessSalesRows);
+    downloadCsv(fileName("access_import_sales_table", "csv"), auditData.accessSalesRows);
 
     setTimeout(() => {
       downloadCsv(
-        "access_import_expenses_table.csv",
+        fileName("access_import_expenses_table", "csv"),
         auditData.accessExpenseRows
       );
     }, 300);
 
     setTimeout(() => {
       downloadCsv(
-        "access_import_products_table.csv",
+        fileName("access_import_products_table", "csv"),
         auditData.accessProductRows
       );
     }, 600);
@@ -1080,6 +1204,7 @@ export default function AuditAccountingPage() {
       "",
       "Slide 1: Title",
       `${businessName} - Audit & Accounting Review`,
+      `Period: ${auditData.period.label}`,
       `Generated: ${formatDateTime(new Date())}`,
       "",
       "Slide 2: Audit Health Score",
@@ -1090,8 +1215,10 @@ export default function AuditAccountingPage() {
       `Blue Flags: ${auditData.blueFlags}`,
       "",
       "Slide 3: Accounting Summary",
-      ...auditData.accountantSummary.map(
-        (item) => `- ${item.label}: ${formatMoney(item.value)}`
+      ...auditData.accountantSummary.map((item) =>
+        item.isText
+          ? `- ${item.label}: ${item.value}`
+          : `- ${item.label}: ${formatMoney(item.value)}`
       ),
       "",
       "Slide 4: Cash & Debt Reconciliation",
@@ -1130,7 +1257,7 @@ export default function AuditAccountingPage() {
 
   function downloadPowerPointOutlineText() {
     downloadTextFile(
-      "chalin03_powerpoint_audit_briefing_outline.txt",
+      fileName("chalin03_powerpoint_audit_briefing_outline", "txt"),
       buildPowerPointOutline(),
       "text/plain;charset=utf-8"
     );
@@ -1235,6 +1362,7 @@ export default function AuditAccountingPage() {
       <div class="slide cover">
         <h1>${escapeHtml(businessName)}</h1>
         <h2>Audit & Accounting Briefing</h2>
+        <p>Period: ${escapeHtml(auditData.period.label)}</p>
         <p>Generated: ${escapeHtml(formatDateTime(new Date()))}</p>
         <p>Audit Score: ${auditData.auditScore}% - ${escapeHtml(
           auditData.auditStatus
@@ -1244,25 +1372,19 @@ export default function AuditAccountingPage() {
       <div class="slide">
         <h1>Audit Health Score</h1>
         <div class="grid">
-          <div class="box"><span>Audit Score</span><strong>${
-            auditData.auditScore
-          }%</strong></div>
+          <div class="box"><span>Audit Score</span><strong>${auditData.auditScore}%</strong></div>
           <div class="box"><span>Status</span><strong>${escapeHtml(
             auditData.auditStatus
           )}</strong></div>
-          <div class="box"><span>Red Flags</span><strong>${
-            auditData.redFlags
-          }</strong></div>
-          <div class="box"><span>Orange Flags</span><strong>${
-            auditData.orangeFlags
-          }</strong></div>
+          <div class="box"><span>Red Flags</span><strong>${auditData.redFlags}</strong></div>
+          <div class="box"><span>Orange Flags</span><strong>${auditData.orangeFlags}</strong></div>
         </div>
       </div>
 
       <div class="slide">
         <h1>Accounting Summary</h1>
         <div class="grid">
-          <div class="box"><span>Total Sales</span><strong>${formatMoney(
+          <div class="box"><span>Period Sales</span><strong>${formatMoney(
             auditData.totalSales
           )}</strong></div>
           <div class="box"><span>Cash Collected</span><strong>${formatMoney(
@@ -1271,7 +1393,7 @@ export default function AuditAccountingPage() {
           <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
             auditData.outstandingDebts
           )}</strong></div>
-          <div class="box"><span>Total Expenses</span><strong>${formatMoney(
+          <div class="box"><span>Period Expenses</span><strong>${formatMoney(
             auditData.totalExpenses
           )}</strong></div>
         </div>
@@ -1309,7 +1431,7 @@ export default function AuditAccountingPage() {
 
   function downloadPowerPointPresentation() {
     downloadPowerPointFile(
-      "chalin03_audit_accounting_briefing.ppt",
+      fileName("chalin03_audit_accounting_briefing", "ppt"),
       buildPowerPointDocument()
     );
 
@@ -1324,7 +1446,7 @@ export default function AuditAccountingPage() {
         (item) => `
           <tr>
             <td>${escapeHtml(item.label)}</td>
-            <td>${escapeHtml(formatMoney(item.value))}</td>
+            <td>${escapeHtml(item.isText ? item.value : formatMoney(item.value))}</td>
             <td>${escapeHtml(item.meaning)}</td>
           </tr>
         `
@@ -1504,6 +1626,7 @@ export default function AuditAccountingPage() {
             <div>
               <h1>${escapeHtml(businessName)}</h1>
               <p class="muted">${escapeHtml(reportName)}</p>
+              <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
               <p><strong>Generated:</strong> ${escapeHtml(
                 formatDateTime(new Date())
               )}</p>
@@ -1517,7 +1640,7 @@ export default function AuditAccountingPage() {
           </div>
 
           <div class="grid">
-            <div class="box"><span>Total Sales</span><strong>${formatMoney(
+            <div class="box"><span>Period Sales</span><strong>${formatMoney(
               auditData.totalSales
             )}</strong></div>
             <div class="box"><span>Cash Collected</span><strong>${formatMoney(
@@ -1526,7 +1649,7 @@ export default function AuditAccountingPage() {
             <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
               auditData.outstandingDebts
             )}</strong></div>
-            <div class="box"><span>Total Expenses</span><strong>${formatMoney(
+            <div class="box"><span>Period Expenses</span><strong>${formatMoney(
               auditData.totalExpenses
             )}</strong></div>
             <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(
@@ -1554,7 +1677,7 @@ export default function AuditAccountingPage() {
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Amount</th>
+                <th>Amount / Detail</th>
                 <th>Meaning</th>
               </tr>
             </thead>
@@ -1628,7 +1751,7 @@ export default function AuditAccountingPage() {
 
   function downloadHtmlAuditReport() {
     downloadTextFile(
-      "chalin03_professional_audit_report.html",
+      fileName("chalin03_professional_audit_report", "html"),
       buildPrintableReport(),
       "text/html;charset=utf-8"
     );
@@ -1638,7 +1761,7 @@ export default function AuditAccountingPage() {
 
   function downloadAuditReportWord() {
     downloadWordFile(
-      "chalin03_professional_audit_report.doc",
+      fileName("chalin03_professional_audit_report", "doc"),
       buildPrintableReport()
     );
 
@@ -1741,6 +1864,7 @@ export default function AuditAccountingPage() {
 
       <h1>${escapeHtml(businessName)}</h1>
       <p class="muted">Management Letter - Audit & Accounting Review</p>
+      <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
       <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
 
       <div class="box">
@@ -1755,15 +1879,9 @@ export default function AuditAccountingPage() {
       <h2>Introduction</h2>
       <p>
         This management letter summarizes key observations generated from the
-        Chalin 03 Sales & Inventory Management System. It highlights issues
-        relating to sales, cash collection, customer debts, expenses, stock,
-        discounts, inventory pricing and operational controls.
-      </p>
-
-      <p>
-        The purpose is to help management, accountants and auditors quickly
-        identify records that need attention before formal accounting or audit
-        review.
+        Chalin 03 Sales & Inventory Management System for the selected accounting
+        period. It highlights issues relating to sales, cash collection, customer
+        debts, expenses, stock, discounts, inventory pricing and operational controls.
       </p>
 
       <h2>Main Management Letter Points</h2>
@@ -1795,7 +1913,10 @@ export default function AuditAccountingPage() {
         </thead>
 
         <tbody>
-          ${warningRows || `<tr><td colspan="5">No major audit warning detected.</td></tr>`}
+          ${
+            warningRows ||
+            `<tr><td colspan="5">No major audit warning detected.</td></tr>`
+          }
         </tbody>
       </table>
 
@@ -1823,7 +1944,7 @@ export default function AuditAccountingPage() {
 
   function downloadManagementLetterWord() {
     downloadWordFile(
-      "chalin03_management_letter.doc",
+      fileName("chalin03_management_letter", "doc"),
       buildManagementLetterDocument()
     );
 
@@ -1863,14 +1984,15 @@ export default function AuditAccountingPage() {
 
       <h1>${escapeHtml(businessName)}</h1>
       <p>Microsoft Access Import Guide</p>
+      <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
       <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
 
       <div class="box">
         <strong>Files Generated:</strong>
         <ul>
-          <li>access_import_sales_table.csv</li>
-          <li>access_import_expenses_table.csv</li>
-          <li>access_import_products_table.csv</li>
+          <li>access_import_sales_table CSV</li>
+          <li>access_import_expenses_table CSV</li>
+          <li>access_import_products_table CSV</li>
         </ul>
       </div>
 
@@ -1896,8 +2018,46 @@ export default function AuditAccountingPage() {
 
   function downloadAccessGuideWord() {
     downloadWordFile(
-      "chalin03_access_import_guide.doc",
+      fileName("chalin03_access_import_guide", "doc"),
       buildAccessGuideDocument()
+    );
+  }
+
+  function downloadMonthEndAuditPack() {
+    if (periodType !== "month" && periodType !== "custom") {
+      setMessage(
+        "Month-End Pack is best for This Month or Custom Period. Downloads will still be generated for the selected period."
+      );
+    }
+
+    downloadAuditReportWord();
+
+    setTimeout(() => {
+      downloadManagementLetterWord();
+    }, 300);
+
+    setTimeout(() => {
+      downloadAuditSummaryCsv();
+    }, 600);
+
+    setTimeout(() => {
+      downloadAuditWarningsCsv();
+    }, 900);
+
+    setTimeout(() => {
+      downloadExcelWorkbookCsv();
+    }, 1200);
+
+    setTimeout(() => {
+      downloadPowerPointOutlineText();
+    }, 1500);
+
+    setTimeout(() => {
+      downloadAccessGuideWord();
+    }, 1800);
+
+    setMessage(
+      "Month-End Audit Pack is downloading: Word report, management letter, CSV files, PowerPoint outline and Access guide."
     );
   }
 
@@ -1905,6 +2065,7 @@ export default function AuditAccountingPage() {
     const summary = `${businessName.toUpperCase()}
 PROFESSIONAL AUDIT & ACCOUNTING SUMMARY
 
+Period: ${auditData.period.label}
 Generated: ${formatDateTime(new Date())}
 
 AUDIT RESULT
@@ -1914,14 +2075,11 @@ Orange Flags: ${auditData.orangeFlags}
 Blue Flags: ${auditData.blueFlags}
 
 ACCOUNTING SUMMARY
-Total Sales: ${formatMoney(auditData.totalSales)}
-Today’s Sales: ${formatMoney(auditData.todaySalesTotal)}
-This Week Sales: ${formatMoney(auditData.weekSalesTotal)}
-This Month Sales: ${formatMoney(auditData.monthSalesTotal)}
+Period Sales: ${formatMoney(auditData.totalSales)}
 Cash Collected: ${formatMoney(auditData.cashCollected)}
 Outstanding Debts: ${formatMoney(auditData.outstandingDebts)}
 Sales Balances: ${formatMoney(auditData.salesBalances)}
-Total Expenses: ${formatMoney(auditData.totalExpenses)}
+Period Expenses: ${formatMoney(auditData.totalExpenses)}
 Fuel Expenses: ${formatMoney(auditData.fuelExpenses)}
 Transport Expenses: ${formatMoney(auditData.transportExpenses)}
 Salary Expenses: ${formatMoney(auditData.salaryExpenses)}
@@ -1948,6 +2106,19 @@ ${auditData.auditFlags
     }
   }
 
+  function applyCurrentMonth() {
+    setPeriodType("month");
+  }
+
+  function applyCustomThisMonthDates() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    setCustomStartDate(dateToInputValue(start));
+    setCustomEndDate(dateToInputValue(now));
+    setPeriodType("custom");
+  }
+
   const oneColumn = isMobile ? styles.oneColumn : {};
   const mobileStack = isMobile ? styles.mobileStack : {};
   const scoreCardMobile = isMobile ? styles.scoreCardMobile : {};
@@ -1960,9 +2131,9 @@ ${auditData.auditFlags
           <p style={styles.eyebrow}>Professional Audit Intelligence</p>
           <h1 style={styles.title}>Audit & Accounting Intelligence Pro</h1>
           <p style={styles.subtitle}>
-            Built-in business review for sales, cash, debts, expenses, fuel,
-            stock, pricing, discounts, audit risks, accountant checks and
-            management letter points.
+            Built-in business review for accounting periods, sales, cash,
+            debts, expenses, fuel, stock, pricing, discounts, audit risks,
+            accountant checks and month-end audit packs.
           </p>
         </div>
 
@@ -1992,6 +2163,70 @@ ${auditData.auditFlags
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
+      <div style={styles.periodPanel}>
+        <div>
+          <p style={styles.eyebrowDark}>Accounting Period Control</p>
+          <h2 style={{ margin: "5px 0" }}>{auditData.period.label}</h2>
+          <p style={styles.panelText}>
+            Accountants and auditors normally review by period. Choose the
+            period before printing or exporting reports.
+          </p>
+        </div>
+
+        <div style={styles.periodButtons}>
+          {[
+            ["all", "All"],
+            ["today", "Today"],
+            ["week", "This Week"],
+            ["month", "This Month"],
+            ["year", "This Year"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setPeriodType(value)}
+              style={
+                periodType === value
+                  ? styles.activePeriodButton
+                  : styles.periodButton
+              }
+            >
+              {label}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={applyCustomThisMonthDates}
+            style={periodType === "custom" ? styles.activePeriodButton : styles.periodButton}
+          >
+            Custom
+          </button>
+        </div>
+
+        {periodType === "custom" && (
+          <div style={styles.dateGrid}>
+            <label>
+              Start Date
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(event) => setCustomStartDate(event.target.value)}
+              />
+            </label>
+
+            <label>
+              End Date
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(event) => setCustomEndDate(event.target.value)}
+              />
+            </label>
+          </div>
+        )}
+      </div>
+
       <div style={{ ...styles.scoreGrid, ...oneColumn }}>
         <div style={{ ...styles.scoreCard, ...scoreCardMobile }}>
           <div
@@ -2012,8 +2247,9 @@ ${auditData.auditFlags
           <div>
             <h2>Professional Audit Score</h2>
             <p>
-              The score is based on risk flags from sales, debts, expenses,
-              discounts, inventory pricing, stock levels and voided sales.
+              The score is based on risk flags from selected-period sales,
+              selected-period expenses, debts, discounts, stock levels,
+              inventory pricing and voided sales.
             </p>
 
             <div style={styles.flagMiniGrid}>
@@ -2029,10 +2265,22 @@ ${auditData.auditFlags
         <div style={styles.exportPanel}>
           <h2>Export Center</h2>
           <p style={styles.panelText}>
-            The exports are grouped properly. Word documents open in Microsoft
-            Word, CSV files open in Excel, and Access files must be imported
-            inside Microsoft Access.
+            All exports use the selected accounting period. Word documents open
+            in Microsoft Word, CSV files open in Excel, and Access files must be
+            imported inside Microsoft Access.
           </p>
+
+          <div style={styles.monthPack}>
+            <h3>Month-End Audit Pack</h3>
+            <p>
+              One-click pack for accountants: Audit Word Report, Management
+              Letter, Excel CSVs, PowerPoint outline and Access guide.
+            </p>
+
+            <button type="button" onClick={downloadMonthEndAuditPack}>
+              Generate Month-End Audit Pack
+            </button>
+          </div>
 
           <div style={styles.exportSection}>
             <h3 style={styles.exportSectionTitle}>Professional Documents</h3>
@@ -2114,16 +2362,9 @@ ${auditData.auditFlags
 
       <div style={{ ...styles.cardsGrid, ...oneColumn }}>
         <MetricCard
-          title="Today’s Sales"
-          value={formatMoney(auditData.todaySalesTotal)}
-          note={`${auditData.todaySales.length} sale(s) today`}
-          icon="⚡"
-        />
-
-        <MetricCard
-          title="Month Sales"
-          value={formatMoney(auditData.monthSalesTotal)}
-          note={`${auditData.monthSales.length} completed sale(s) this month`}
+          title="Period Sales"
+          value={formatMoney(auditData.totalSales)}
+          note={`${auditData.completedSales.length} completed sale(s)`}
           icon="📈"
         />
 
@@ -2142,9 +2383,9 @@ ${auditData.auditFlags
         />
 
         <MetricCard
-          title="Total Expenses"
+          title="Period Expenses"
           value={formatMoney(auditData.totalExpenses)}
-          note={`${expenses.length} expense record(s)`}
+          note={`${auditData.periodExpenses.length} expense record(s)`}
           icon="📉"
         />
 
@@ -2168,13 +2409,21 @@ ${auditData.auditFlags
           note={`${products.length} product(s) in inventory`}
           icon="📦"
         />
+
+        <MetricCard
+          title="Operating Result"
+          value={formatMoney(auditData.operatingResult)}
+          note="Period sales minus period expenses"
+          icon="🧮"
+        />
       </div>
 
       <div style={{ ...styles.twoColumn, ...oneColumn }}>
         <div style={styles.panel}>
           <h2>Accounting Summary</h2>
           <p style={styles.panelText}>
-            This shows the accountant the main business figures in one place.
+            This shows the accountant the main business figures for the selected
+            period.
           </p>
 
           <div style={styles.accountingRows}>
@@ -2185,7 +2434,7 @@ ${auditData.auditFlags
                   <span>{item.meaning}</span>
                 </div>
 
-                <b>{formatMoney(item.value)}</b>
+                <b>{item.isText ? item.value : formatMoney(item.value)}</b>
               </div>
             ))}
           </div>
@@ -2305,11 +2554,14 @@ ${auditData.auditFlags
         <div style={styles.panel}>
           <h2>Top Expense Categories</h2>
           <p style={styles.panelText}>
-            This helps the accountant see where money is going.
+            This helps the accountant see where money is going in the selected
+            period.
           </p>
 
           {auditData.topExpenseCategories.length === 0 ? (
-            <div style={styles.emptyState}>No expenses recorded yet.</div>
+            <div style={styles.emptyState}>
+              No expenses recorded for this period.
+            </div>
           ) : (
             <div style={styles.expenseList}>
               {auditData.topExpenseCategories.map((item) => (
@@ -2348,7 +2600,7 @@ ${auditData.auditFlags
           <h2>Expense Control</h2>
           <div style={styles.darkRows}>
             <div>
-              <span>Total Expenses</span>
+              <span>Period Expenses</span>
               <strong>{formatMoney(auditData.totalExpenses)}</strong>
             </div>
 
@@ -2481,6 +2733,15 @@ const styles = {
     textTransform: "uppercase",
   },
 
+  eyebrowDark: {
+    margin: 0,
+    color: "#164777",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+
   title: {
     margin: "6px 0 0",
     fontSize: "clamp(28px, 4vw, 44px)",
@@ -2499,6 +2760,49 @@ const styles = {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
+  },
+
+  periodPanel: {
+    display: "grid",
+    gap: "16px",
+    padding: "20px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
+  },
+
+  periodButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+  },
+
+  periodButton: {
+    border: "1px solid #dbe3ef",
+    borderRadius: "999px",
+    padding: "10px 14px",
+    background: "#f8fafc",
+    color: "#07182c",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  activePeriodButton: {
+    border: "1px solid #e0ba28",
+    borderRadius: "999px",
+    padding: "10px 14px",
+    background: "#07182c",
+    color: "#ffffff",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  dateGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
   },
 
   scoreGrid: {
@@ -2593,6 +2897,15 @@ const styles = {
     background: "#ffffff",
     border: "1px solid #e2e8f0",
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+  },
+
+  monthPack: {
+    marginTop: "14px",
+    padding: "14px",
+    borderRadius: "18px",
+    background:
+      "linear-gradient(135deg, rgba(224,186,40,0.18), rgba(255,255,255,0.96))",
+    border: "1px solid rgba(224,186,40,0.45)",
   },
 
   exportGrid: {
