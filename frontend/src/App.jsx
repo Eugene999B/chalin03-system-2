@@ -24,6 +24,7 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import HelpPage from "./pages/HelpPage";
 import AuditAccountingPage from "./pages/AuditAccountingPage";
+import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -74,6 +75,15 @@ export default function App() {
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
                   <AuditAccountingPage />
+                </RoleRoute>
+              }
+            />
+
+            <Route
+              path="audit-signoffs"
+              element={
+                <RoleRoute allowedRoles={adminManagerRoles}>
+                  <AuditSignoffHistoryPage />
                 </RoleRoute>
               }
             />

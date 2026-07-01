@@ -103,17 +103,24 @@ export default function Layout() {
           keywords: "reports analytics sales profit business performance",
           group: "Management",
         },
-
-
         {
           title: "Audit & Accounting",
           description: "Review sales, cash, debts, expenses and audit warnings",
           path: "/audit-accounting",
           icon: "🧮",
           keywords:
-          "audit accounting accountant auditor review cash sales expenses debts fuel discounts warnings",
+            "audit accounting accountant auditor review cash sales expenses debts fuel discounts warnings",
           group: "Management",
-      },
+        },
+        {
+          title: "Audit Sign-Off History",
+          description: "View approved periods and saved audit sign-off records",
+          path: "/audit-signoffs",
+          icon: "✅",
+          keywords:
+            "audit signoff sign-off approval history approved period accountant auditor certificate prepared reviewed approved boss management",
+          group: "Management",
+        },
         {
           title: "Low Stock / Restock",
           description: "View items that need restocking",
@@ -574,7 +581,9 @@ export default function Layout() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: !isMobile ? "34px minmax(0, 1fr) auto" : "34px minmax(0, 1fr)",
+                gridTemplateColumns: !isMobile
+                  ? "34px minmax(0, 1fr) auto"
+                  : "34px minmax(0, 1fr)",
                 gap: "10px",
                 alignItems: "center",
                 minWidth: 0,
@@ -713,13 +722,20 @@ export default function Layout() {
                   Reports
                 </NavLink>
 
-
                 <NavLink
                   to="/audit-accounting"
                   style={linkStyle}
                   onClick={closeMobileMenu}
                 >
                   Audit & Accounting
+                </NavLink>
+
+                <NavLink
+                  to="/audit-signoffs"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
+                  Audit Sign-Off History
                 </NavLink>
 
                 <NavLink
@@ -1008,7 +1024,7 @@ export default function Layout() {
                 autoFocus
                 value={commandQuery}
                 onChange={(event) => setCommandQuery(event.target.value)}
-                placeholder="Type sale, product, debt, expense, report..."
+                placeholder="Type sale, product, debt, expense, audit, report..."
                 style={{
                   width: "100%",
                   boxSizing: "border-box",
@@ -1031,7 +1047,7 @@ export default function Layout() {
                   marginTop: "10px",
                 }}
               >
-                {["sale", "product", "debt", "expense", "report"].map(
+                {["sale", "product", "debt", "expense", "audit", "report"].map(
                   (sample) => (
                     <button
                       key={sample}
