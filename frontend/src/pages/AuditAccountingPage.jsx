@@ -1,6 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 
+const SIGN_OFF_CHECKLIST_ITEMS = [
+  {
+    key: "salesChecked",
+    label: "Sales records checked",
+    note: "Sales totals, receipts, voided sales and discounts have been reviewed.",
+  },
+  {
+    key: "cashChecked",
+    label: "Cash collection checked",
+    note: "Cash collected and amount paid have been reviewed against records.",
+  },
+  {
+    key: "debtsChecked",
+    label: "Customer debts checked",
+    note: "Outstanding debts and sales balances have been reviewed.",
+  },
+  {
+    key: "expensesChecked",
+    label: "Expenses checked",
+    note: "Expense categories, dates, descriptions and amounts have been reviewed.",
+  },
+  {
+    key: "stockChecked",
+    label: "Stock and pricing checked",
+    note: "Low stock, out-of-stock items and pricing warnings have been reviewed.",
+  },
+  {
+    key: "warningsChecked",
+    label: "Audit warnings reviewed",
+    note: "Red, orange and blue audit warnings have been read and considered.",
+  },
+  {
+    key: "backupChecked",
+    label: "Backup/export pack prepared",
+    note: "Audit pack exports or backup documents have been prepared for records.",
+  },
+];
+
 export default function AuditAccountingPage() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -16,6 +54,25 @@ export default function AuditAccountingPage() {
   const [periodType, setPeriodType] = useState("month");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+
+  const [signOff, setSignOff] = useState({
+    preparedBy: "",
+    reviewedBy: "",
+    approvedBy: "",
+    reviewDate: new Date().toISOString().slice(0, 10),
+    accountingStatus: "draft",
+    accountantNotes: "",
+    bossNotes: "",
+    checklist: {
+      salesChecked: false,
+      cashChecked: false,
+      debtsChecked: false,
+      expensesChecked: false,
+      stockChecked: false,
+      warningsChecked: false,
+      backupChecked: false,
+    },
+  });
 
   const businessName = "Chalin 03 Company Limited";
   const reportName = "Audit & Accounting Intelligence Pro Review";
@@ -284,6 +341,35 @@ export default function AuditAccountingPage() {
       window.removeEventListener("resize", checkScreenSize);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const period = getPeriodRange();
+      const key = `chalin03_audit_signoff_${makeFilePrefix(period.shortLabel)}`;
+      const saved = window.localStorage.getItem(key);
+
+      if (!saved) {
+        setSignOff((current) => ({
+          ...current,
+          reviewDate: new Date().toISOString().slice(0, 10),
+        }));
+        return;
+      }
+
+      const parsed = JSON.parse(saved);
+
+      setSignOff((current) => ({
+        ...current,
+        ...parsed,
+        checklist: {
+          ...current.checklist,
+          ...(parsed.checklist || {}),
+        },
+      }));
+    } catch {
+      setError("Saved sign-off details could not be loaded for this period.");
+    }
+  }, [periodType, customStartDate, customEndDate]);
 
   const auditData = useMemo(() => {
     const period = getPeriodRange();
@@ -1085,6 +1171,114 @@ export default function AuditAccountingPage() {
     return `${base}_${period}.${extension}`;
   }
 
+  function getSignOffStorageKey() {
+    return `chalin03_audit_signoff_${makeFilePrefix(auditData.period.shortLabel)}`;
+  }
+
+  function updateSignOffField(field, value) {
+    setSignOff((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateSignOffChecklist(field, value) {
+    setSignOff((current) => ({
+      ...current,
+      checklist: {
+        ...current.checklist,
+        [field]: value,
+      },
+    }));
+  }
+
+  function saveSignOffDetails() {
+    try {
+      const payload = {
+        ...signOff,
+        periodLabel: auditData.period.label,
+        periodShortLabel: auditData.period.shortLabel,
+        auditScore: auditData.auditScore,
+        auditStatus: auditData.auditStatus,
+        savedAt: new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(getSignOffStorageKey(), JSON.stringify(payload));
+      setMessage("Audit sign-off details saved for the selected period.");
+    } catch {
+      setError("Could not save audit sign-off details on this browser.");
+    }
+  }
+
+  function clearSignOffDetails() {
+    const confirmed = window.confirm(
+      "Clear the sign-off details for this selected period?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      window.localStorage.removeItem(getSignOffStorageKey());
+      setSignOff({
+        preparedBy: "",
+        reviewedBy: "",
+        approvedBy: "",
+        reviewDate: new Date().toISOString().slice(0, 10),
+        accountingStatus: "draft",
+        accountantNotes: "",
+        bossNotes: "",
+        checklist: {
+          salesChecked: false,
+          cashChecked: false,
+          debtsChecked: false,
+          expensesChecked: false,
+          stockChecked: false,
+          warningsChecked: false,
+          backupChecked: false,
+        },
+      });
+      setMessage("Audit sign-off details cleared for this period.");
+    } catch {
+      setError("Could not clear sign-off details.");
+    }
+  }
+
+  function getSignOffStatusLabel(status) {
+    if (status === "reviewed") return "Reviewed by Accountant";
+    if (status === "approved") return "Approved by Management";
+    if (status === "locked") return "Final / Locked for Filing";
+    return "Draft / Not Yet Approved";
+  }
+
+  function getSignOffCompletion() {
+    const checkedCount = SIGN_OFF_CHECKLIST_ITEMS.filter(
+      (item) => signOff.checklist?.[item.key]
+    ).length;
+
+    const requiredNames = [signOff.preparedBy, signOff.reviewedBy, signOff.approvedBy].filter(
+      (value) => cleanText(value)
+    ).length;
+
+    const totalItems = SIGN_OFF_CHECKLIST_ITEMS.length + 3;
+    const completedItems = checkedCount + requiredNames;
+    const percent = Math.round((completedItems / totalItems) * 100);
+
+    return {
+      checkedCount,
+      totalChecks: SIGN_OFF_CHECKLIST_ITEMS.length,
+      requiredNames,
+      completedItems,
+      totalItems,
+      percent,
+      ready:
+        checkedCount === SIGN_OFF_CHECKLIST_ITEMS.length &&
+        requiredNames === 3 &&
+        cleanText(signOff.reviewDate),
+    };
+  }
+
   function downloadAuditSummaryCsv() {
     const rows = auditData.accountantSummary.map((item) => ({
       item: item.label,
@@ -1492,6 +1686,16 @@ export default function AuditAccountingPage() {
       )
       .join("");
 
+    const signOffRows = SIGN_OFF_CHECKLIST_ITEMS.map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.label)}</td>
+          <td>${signOff.checklist?.[item.key] ? "Checked" : "Pending"}</td>
+          <td>${escapeHtml(item.note)}</td>
+        </tr>
+      `
+    ).join("");
+
     return `
       <!DOCTYPE html>
       <html>
@@ -1722,6 +1926,43 @@ export default function AuditAccountingPage() {
             </thead>
             <tbody>${managementRows}</tbody>
           </table>
+
+          <h2>5. Audit Sign-Off & Approval</h2>
+          <div class="grid">
+            <div class="box"><span>Prepared By</span><strong>${escapeHtml(
+              signOff.preparedBy || "Not provided"
+            )}</strong></div>
+            <div class="box"><span>Reviewed By</span><strong>${escapeHtml(
+              signOff.reviewedBy || "Not provided"
+            )}</strong></div>
+            <div class="box"><span>Approved By</span><strong>${escapeHtml(
+              signOff.approvedBy || "Not provided"
+            )}</strong></div>
+            <div class="box"><span>Status</span><strong>${escapeHtml(
+              getSignOffStatusLabel(signOff.accountingStatus)
+            )}</strong></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Sign-Off Check</th>
+                <th>Status</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>${signOffRows}</tbody>
+          </table>
+
+          <p><strong>Review Date:</strong> ${escapeHtml(
+            formatDate(signOff.reviewDate)
+          )}</p>
+          <p><strong>Accountant Notes:</strong> ${escapeHtml(
+            signOff.accountantNotes || "-"
+          )}</p>
+          <p><strong>Boss Approval Notes:</strong> ${escapeHtml(
+            signOff.bossNotes || "-"
+          )}</p>
 
           <div class="footer">
             Powered by Chalin 03 Sales & Inventory Management System.
@@ -2023,6 +2264,194 @@ export default function AuditAccountingPage() {
     );
   }
 
+  function buildSignOffCertificateDocument() {
+    const completion = getSignOffCompletion();
+
+    const checklistRows = SIGN_OFF_CHECKLIST_ITEMS.map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.label)}</td>
+          <td>${signOff.checklist?.[item.key] ? "Checked" : "Pending"}</td>
+          <td>${escapeHtml(item.note)}</td>
+        </tr>
+      `
+    ).join("");
+
+    return `
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          color: #111827;
+          line-height: 1.6;
+          font-size: 13px;
+        }
+
+        h1 {
+          color: #07182c;
+          text-align: center;
+          margin-bottom: 4px;
+        }
+
+        h2 {
+          color: #07182c;
+          margin-top: 22px;
+          border-bottom: 2px solid #e0ba28;
+          padding-bottom: 6px;
+        }
+
+        .certificate {
+          border: 4px solid #07182c;
+          padding: 26px;
+        }
+
+        .muted {
+          color: #64748b;
+          text-align: center;
+        }
+
+        .status {
+          background: #fef3c7;
+          border: 1px solid #e0ba28;
+          padding: 14px;
+          border-radius: 10px;
+          text-align: center;
+          margin: 18px 0;
+          font-weight: bold;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          margin: 16px 0;
+        }
+
+        .box {
+          border: 1px solid #dbe3ef;
+          background: #f8fafc;
+          padding: 12px;
+          border-radius: 10px;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 12px;
+        }
+
+        th,
+        td {
+          border: 1px solid #dbe3ef;
+          padding: 8px;
+          text-align: left;
+          vertical-align: top;
+          font-size: 12px;
+        }
+
+        th {
+          background: #07182c;
+          color: #ffffff;
+        }
+
+        .signature-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 20px;
+          margin-top: 46px;
+        }
+
+        .signature-line {
+          border-top: 1px solid #111827;
+          padding-top: 8px;
+          text-align: center;
+        }
+      </style>
+
+      <div class="certificate">
+        <h1>${escapeHtml(businessName)}</h1>
+        <p class="muted">Audit Sign-Off & Accounting Approval Certificate</p>
+
+        <div class="status">
+          ${escapeHtml(getSignOffStatusLabel(signOff.accountingStatus))}<br />
+          Completion: ${completion.percent}%
+        </div>
+
+        <div class="grid">
+          <div class="box"><strong>Accounting Period:</strong><br />${escapeHtml(
+            auditData.period.label
+          )}</div>
+          <div class="box"><strong>Review Date:</strong><br />${escapeHtml(
+            formatDate(signOff.reviewDate)
+          )}</div>
+          <div class="box"><strong>Audit Score:</strong><br />${auditData.auditScore}% - ${escapeHtml(
+            auditData.auditStatus
+          )}</div>
+          <div class="box"><strong>Generated:</strong><br />${escapeHtml(
+            formatDateTime(new Date())
+          )}</div>
+        </div>
+
+        <h2>Approval Names</h2>
+        <div class="grid">
+          <div class="box"><strong>Prepared By:</strong><br />${escapeHtml(
+            signOff.preparedBy || "Not provided"
+          )}</div>
+          <div class="box"><strong>Reviewed By:</strong><br />${escapeHtml(
+            signOff.reviewedBy || "Not provided"
+          )}</div>
+          <div class="box"><strong>Approved By:</strong><br />${escapeHtml(
+            signOff.approvedBy || "Not provided"
+          )}</div>
+          <div class="box"><strong>Status:</strong><br />${escapeHtml(
+            getSignOffStatusLabel(signOff.accountingStatus)
+          )}</div>
+        </div>
+
+        <h2>Month-End Approval Checklist</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Checklist Item</th>
+              <th>Status</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>${checklistRows}</tbody>
+        </table>
+
+        <h2>Notes</h2>
+        <p><strong>Accountant / Auditor Notes:</strong> ${escapeHtml(
+          signOff.accountantNotes || "-"
+        )}</p>
+        <p><strong>Boss / Management Notes:</strong> ${escapeHtml(
+          signOff.bossNotes || "-"
+        )}</p>
+
+        <p>
+          This certificate confirms that the selected accounting period has been
+          reviewed internally using the Chalin 03 Sales & Inventory Management
+          System. It supports accounting and audit preparation but does not replace
+          a licensed accountant, tax consultant or external auditor.
+        </p>
+
+        <div class="signature-grid">
+          <div class="signature-line">Prepared By</div>
+          <div class="signature-line">Reviewed By</div>
+          <div class="signature-line">Approved By</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function downloadSignOffCertificateWord() {
+    downloadWordFile(
+      fileName("chalin03_audit_signoff_certificate", "doc"),
+      buildSignOffCertificateDocument()
+    );
+
+    setMessage("Audit Sign-Off Certificate Word document downloaded successfully.");
+  }
+
   function downloadMonthEndAuditPack() {
     if (periodType !== "month" && periodType !== "custom") {
       setMessage(
@@ -2056,8 +2485,12 @@ export default function AuditAccountingPage() {
       downloadAccessGuideWord();
     }, 1800);
 
+    setTimeout(() => {
+      downloadSignOffCertificateWord();
+    }, 2100);
+
     setMessage(
-      "Month-End Audit Pack is downloading: Word report, management letter, CSV files, PowerPoint outline and Access guide."
+      "Month-End Audit Pack is downloading: Word report, management letter, sign-off certificate, CSV files, PowerPoint outline and Access guide."
     );
   }
 
@@ -2106,9 +2539,6 @@ ${auditData.auditFlags
     }
   }
 
-  function applyCurrentMonth() {
-    setPeriodType("month");
-  }
 
   function applyCustomThisMonthDates() {
     const now = new Date();
@@ -2123,6 +2553,7 @@ ${auditData.auditFlags
   const mobileStack = isMobile ? styles.mobileStack : {};
   const scoreCardMobile = isMobile ? styles.scoreCardMobile : {};
   const scoreRingMobile = isMobile ? styles.scoreRingMobile : {};
+  const signOffCompletion = getSignOffCompletion();
 
   return (
     <div style={styles.page}>
@@ -2227,6 +2658,148 @@ ${auditData.auditFlags
         )}
       </div>
 
+      <div style={styles.approvalPanel}>
+        <div style={{ ...styles.approvalHeader, ...mobileStack }}>
+          <div>
+            <p style={styles.eyebrowDark}>Audit Sign-Off & Accounting Approval</p>
+            <h2 style={{ margin: "5px 0" }}>Period Approval Center</h2>
+            <p style={styles.panelText}>
+              Fill this after the accountant, auditor or boss reviews the period.
+              It creates a professional sign-off certificate for the selected period.
+            </p>
+          </div>
+
+          <div style={styles.approvalStatusCard}>
+            <strong>{signOffCompletion.percent}%</strong>
+            <span>{signOffCompletion.ready ? "Ready for filing" : "Needs completion"}</span>
+            <small>{getSignOffStatusLabel(signOff.accountingStatus)}</small>
+          </div>
+        </div>
+
+        <div style={{ ...styles.formGrid, ...oneColumn }}>
+          <label>
+            Prepared By
+            <input
+              type="text"
+              value={signOff.preparedBy}
+              onChange={(event) => updateSignOffField("preparedBy", event.target.value)}
+              placeholder="Example: Cashier / Accounts Assistant"
+            />
+          </label>
+
+          <label>
+            Reviewed By
+            <input
+              type="text"
+              value={signOff.reviewedBy}
+              onChange={(event) => updateSignOffField("reviewedBy", event.target.value)}
+              placeholder="Example: Accountant / Auditor"
+            />
+          </label>
+
+          <label>
+            Approved By
+            <input
+              type="text"
+              value={signOff.approvedBy}
+              onChange={(event) => updateSignOffField("approvedBy", event.target.value)}
+              placeholder="Example: Boss / Manager"
+            />
+          </label>
+
+          <label>
+            Review Date
+            <input
+              type="date"
+              value={signOff.reviewDate}
+              onChange={(event) => updateSignOffField("reviewDate", event.target.value)}
+            />
+          </label>
+
+          <label>
+            Period Status
+            <select
+              value={signOff.accountingStatus}
+              onChange={(event) => updateSignOffField("accountingStatus", event.target.value)}
+            >
+              <option value="draft">Draft / Not Yet Approved</option>
+              <option value="reviewed">Reviewed by Accountant</option>
+              <option value="approved">Approved by Management</option>
+              <option value="locked">Final / Locked for Filing</option>
+            </select>
+          </label>
+        </div>
+
+        <div style={styles.signOffChecklistGrid}>
+          {SIGN_OFF_CHECKLIST_ITEMS.map((item) => {
+            const checked = Boolean(signOff.checklist?.[item.key]);
+
+            return (
+              <label
+                key={item.key}
+                style={checked ? styles.signOffItemChecked : styles.signOffItem}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) =>
+                    updateSignOffChecklist(item.key, event.target.checked)
+                  }
+                />
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.note}</small>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        <div style={{ ...styles.formGrid, ...oneColumn }}>
+          <label>
+            Accountant / Auditor Notes
+            <textarea
+              value={signOff.accountantNotes}
+              onChange={(event) => updateSignOffField("accountantNotes", event.target.value)}
+              placeholder="Write notes from accounting or audit review..."
+              rows="4"
+            />
+          </label>
+
+          <label>
+            Boss / Management Approval Notes
+            <textarea
+              value={signOff.bossNotes}
+              onChange={(event) => updateSignOffField("bossNotes", event.target.value)}
+              placeholder="Write boss approval notes or management comments..."
+              rows="4"
+            />
+          </label>
+        </div>
+
+        <div style={styles.approvalActions}>
+          <button type="button" onClick={saveSignOffDetails}>
+            Save Sign-Off
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={downloadSignOffCertificateWord}
+          >
+            Download Sign-Off Certificate
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={clearSignOffDetails}
+          >
+            Clear Sign-Off
+          </button>
+        </div>
+      </div>
+
       <div style={{ ...styles.scoreGrid, ...oneColumn }}>
         <div style={{ ...styles.scoreCard, ...scoreCardMobile }}>
           <div
@@ -2300,6 +2873,10 @@ ${auditData.auditFlags
 
               <button type="button" onClick={downloadManagementLetterWord}>
                 Management Letter Word
+              </button>
+
+              <button type="button" onClick={downloadSignOffCertificateWord}>
+                Sign-Off Certificate
               </button>
 
               <button type="button" onClick={downloadPowerPointPresentation}>
@@ -3121,6 +3698,77 @@ const styles = {
     border: "1px dashed #cbd5e1",
     textAlign: "center",
     fontWeight: "800",
+  },
+
+  approvalPanel: {
+    display: "grid",
+    gap: "16px",
+    padding: "20px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
+  },
+
+  approvalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "flex-start",
+  },
+
+  approvalStatusCard: {
+    minWidth: "180px",
+    padding: "16px",
+    borderRadius: "18px",
+    background:
+      "linear-gradient(135deg, rgba(7,24,44,0.96), rgba(13,47,85,0.96))",
+    color: "#ffffff",
+    display: "grid",
+    gap: "4px",
+    textAlign: "center",
+    boxShadow: "0 16px 35px rgba(7,24,44,0.18)",
+  },
+
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gap: "12px",
+  },
+
+  signOffChecklistGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: "10px",
+  },
+
+  signOffItem: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "flex-start",
+    padding: "12px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    cursor: "pointer",
+  },
+
+  signOffItemChecked: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "flex-start",
+    padding: "12px",
+    borderRadius: "16px",
+    background: "#ecfdf3",
+    border: "1px solid #bbf7d0",
+    cursor: "pointer",
+  },
+
+  approvalActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
   },
 
   disclaimer: {
