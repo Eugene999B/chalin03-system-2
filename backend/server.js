@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const { testDatabaseConnection } = require("./config/db");
+
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
 const saleRoutes = require("./routes/saleRoutes");
@@ -20,6 +21,7 @@ const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
+const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
 
 const app = express();
 
@@ -86,6 +88,7 @@ app.use("/api/backups", backupRoutes);
 app.use("/api/daily-closing", dailyClosingRoutes);
 app.use("/api/customer-statements", customerStatementRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/audit-signoffs", auditSignoffRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
