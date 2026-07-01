@@ -3,7 +3,7 @@
 -- WARNING:
 -- This file recreates the database from scratch.
 -- It will delete all existing data in chalin03_db.
--- Since this is still a testing system, you said this is okay.
+-- Only run the full file when you intentionally want to reset the database.
 
 DROP DATABASE IF EXISTS chalin03_db;
 CREATE DATABASE chalin03_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -439,6 +439,54 @@ CREATE TABLE daily_closings (
 
     INDEX idx_daily_closing_date (closing_date),
     INDEX idx_daily_closing_user (closed_by)
+);
+
+-- =========================
+-- 19. AUDIT SIGN-OFFS TABLE
+-- =========================
+CREATE TABLE audit_signoffs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+
+    period_type ENUM('all', 'today', 'week', 'month', 'year', 'custom') NOT NULL DEFAULT 'month',
+    period_label VARCHAR(255) NOT NULL,
+    period_start DATE NULL,
+    period_end DATE NULL,
+
+    audit_score INT NOT NULL DEFAULT 0,
+    audit_status VARCHAR(50) NOT NULL DEFAULT 'Needs Review',
+
+    prepared_by_name VARCHAR(150),
+    reviewed_by_name VARCHAR(150),
+    approved_by_name VARCHAR(150),
+
+    review_date DATE NULL,
+    period_status ENUM('draft', 'reviewed', 'approved', 'rejected') NOT NULL DEFAULT 'draft',
+
+    sales_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    expenses_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    debts_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    stock_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    warnings_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    reports_checked BOOLEAN NOT NULL DEFAULT FALSE,
+
+    accountant_notes TEXT,
+    management_notes TEXT,
+
+    created_by INT,
+    approved_by INT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_audit_signoff_period_type (period_type),
+    INDEX idx_audit_signoff_period_dates (period_start, period_end),
+    INDEX idx_audit_signoff_status (period_status),
+    INDEX idx_audit_signoff_created_by (created_by),
+    INDEX idx_audit_signoff_approved_by (approved_by),
+    INDEX idx_audit_signoff_created_at (created_at)
 );
 
 -- =========================
