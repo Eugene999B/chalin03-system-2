@@ -74,6 +74,11 @@ export default function AuditAccountingPage() {
     },
   });
 
+  const [savedSignOffId, setSavedSignOffId] = useState(null);
+  const [signOffSaving, setSignOffSaving] = useState(false);
+  const [signOffLoading, setSignOffLoading] = useState(false);
+  const [signOffHistory, setSignOffHistory] = useState([]);
+
   const businessName = "Chalin 03 Company Limited";
   const reportName = "Audit & Accounting Intelligence Pro Review";
 
@@ -135,6 +140,20 @@ export default function AuditAccountingPage() {
     const day = String(date.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
+  }
+
+  function apiDate(value) {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return dateToInputValue(date);
   }
 
   function getStartOfDay(date) {
@@ -343,32 +362,8 @@ export default function AuditAccountingPage() {
   }, []);
 
   useEffect(() => {
-    try {
-      const period = getPeriodRange();
-      const key = `chalin03_audit_signoff_${makeFilePrefix(period.shortLabel)}`;
-      const saved = window.localStorage.getItem(key);
-
-      if (!saved) {
-        setSignOff((current) => ({
-          ...current,
-          reviewDate: new Date().toISOString().slice(0, 10),
-        }));
-        return;
-      }
-
-      const parsed = JSON.parse(saved);
-
-      setSignOff((current) => ({
-        ...current,
-        ...parsed,
-        checklist: {
-          ...current.checklist,
-          ...(parsed.checklist || {}),
-        },
-      }));
-    } catch {
-      setError("Saved sign-off details could not be loaded for this period.");
-    }
+    loadLatestSignOffFromDatabase();
+    loadSignOffHistory();
   }, [periodType, customStartDate, customEndDate]);
 
   const auditData = useMemo(() => {
@@ -1171,8 +1166,112 @@ export default function AuditAccountingPage() {
     return `${base}_${period}.${extension}`;
   }
 
-  function getSignOffStorageKey() {
-    return `chalin03_audit_signoff_${makeFilePrefix(auditData.period.shortLabel)}`;
+  function getBackendPeriodStatus(status) {
+    if (status === "reviewed") return "reviewed";
+    if (status === "approved") return "approved";
+    if (status === "locked") return "approved";
+    if (status === "rejected") return "rejected";
+    return "draft";
+  }
+
+  function mapDatabaseSignOff(row) {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      preparedBy: row.prepared_by_name || "",
+      reviewedBy: row.reviewed_by_name || "",
+      approvedBy: row.approved_by_name || "",
+      reviewDate: row.review_date
+        ? apiDate(row.review_date)
+        : new Date().toISOString().slice(0, 10),
+      accountingStatus: row.period_status || "draft",
+      accountantNotes: row.accountant_notes || "",
+      bossNotes: row.management_notes || "",
+      checklist: {
+        salesChecked: Boolean(row.sales_checked),
+        cashChecked: Boolean(row.sales_checked),
+        debtsChecked: Boolean(row.debts_checked),
+        expensesChecked: Boolean(row.expenses_checked),
+        stockChecked: Boolean(row.stock_checked),
+        warningsChecked: Boolean(row.warnings_checked),
+        backupChecked: Boolean(row.reports_checked),
+      },
+    };
+  }
+
+  function resetSignOffForm() {
+    setSavedSignOffId(null);
+    setSignOff({
+      preparedBy: "",
+      reviewedBy: "",
+      approvedBy: "",
+      reviewDate: new Date().toISOString().slice(0, 10),
+      accountingStatus: "draft",
+      accountantNotes: "",
+      bossNotes: "",
+      checklist: {
+        salesChecked: false,
+        cashChecked: false,
+        debtsChecked: false,
+        expensesChecked: false,
+        stockChecked: false,
+        warningsChecked: false,
+        backupChecked: false,
+      },
+    });
+  }
+
+  async function loadLatestSignOffFromDatabase() {
+    setSignOffLoading(true);
+    setError("");
+
+    try {
+      const period = getPeriodRange();
+
+      const response = await axiosClient.get("/audit-signoffs/latest", {
+        params: {
+          period_type: periodType,
+          period_label: period.label,
+          period_start: apiDate(period.start),
+          period_end: apiDate(period.end),
+        },
+      });
+
+      const savedSignOff = response.data.signoff;
+
+      if (!savedSignOff) {
+        resetSignOffForm();
+        return;
+      }
+
+      setSavedSignOffId(savedSignOff.id);
+      setSignOff((current) => ({
+        ...current,
+        ...mapDatabaseSignOff(savedSignOff),
+        checklist: {
+          ...current.checklist,
+          ...mapDatabaseSignOff(savedSignOff).checklist,
+        },
+      }));
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Could not load saved audit sign-off from database."
+      );
+    } finally {
+      setSignOffLoading(false);
+    }
+  }
+
+  async function loadSignOffHistory() {
+    try {
+      const response = await axiosClient.get("/audit-signoffs");
+      setSignOffHistory(response.data.signoffs || []);
+    } catch {
+      setSignOffHistory([]);
+    }
   }
 
   function updateSignOffField(field, value) {
@@ -1192,91 +1291,74 @@ export default function AuditAccountingPage() {
     }));
   }
 
-  function saveSignOffDetails() {
-    try {
-      const payload = {
-        ...signOff,
-        periodLabel: auditData.period.label,
-        periodShortLabel: auditData.period.shortLabel,
-        auditScore: auditData.auditScore,
-        auditStatus: auditData.auditStatus,
-        savedAt: new Date().toISOString(),
-      };
+  function buildSignOffPayload() {
+    return {
+      period_type: periodType,
+      period_label: auditData.period.label,
+      period_start: apiDate(auditData.period.start),
+      period_end: apiDate(auditData.period.end),
+      audit_score: auditData.auditScore,
+      audit_status: auditData.auditStatus,
+      prepared_by_name: signOff.preparedBy,
+      reviewed_by_name: signOff.reviewedBy,
+      approved_by_name: signOff.approvedBy,
+      review_date: signOff.reviewDate || new Date().toISOString().slice(0, 10),
+      period_status: getBackendPeriodStatus(signOff.accountingStatus),
+      sales_checked: Boolean(signOff.checklist.salesChecked),
+      expenses_checked: Boolean(signOff.checklist.expensesChecked),
+      debts_checked: Boolean(signOff.checklist.debtsChecked),
+      stock_checked: Boolean(signOff.checklist.stockChecked),
+      warnings_checked: Boolean(signOff.checklist.warningsChecked),
+      reports_checked: Boolean(signOff.checklist.backupChecked),
+      accountant_notes: signOff.accountantNotes,
+      management_notes: signOff.bossNotes,
+    };
+  }
 
-      window.localStorage.setItem(getSignOffStorageKey(), JSON.stringify(payload));
-      setMessage("Audit sign-off details saved for the selected period.");
-    } catch {
-      setError("Could not save audit sign-off details on this browser.");
+  async function saveSignOffDetails() {
+    setSignOffSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await axiosClient.post("/audit-signoffs", buildSignOffPayload());
+      const savedSignOff = response.data.signoff;
+
+      if (savedSignOff) {
+        setSavedSignOffId(savedSignOff.id);
+        setSignOff((current) => ({
+          ...current,
+          ...mapDatabaseSignOff(savedSignOff),
+          checklist: {
+            ...current.checklist,
+            ...mapDatabaseSignOff(savedSignOff).checklist,
+          },
+        }));
+      }
+
+      await loadSignOffHistory();
+      setMessage(response.data.message || "Audit sign-off saved into MySQL successfully.");
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Could not save audit sign-off into the database."
+      );
+    } finally {
+      setSignOffSaving(false);
     }
   }
 
   function clearSignOffDetails() {
     const confirmed = window.confirm(
-      "Clear the sign-off details for this selected period?"
+      "Clear the sign-off form for this selected period? This will not delete saved MySQL records."
     );
 
     if (!confirmed) {
       return;
     }
 
-    try {
-      window.localStorage.removeItem(getSignOffStorageKey());
-      setSignOff({
-        preparedBy: "",
-        reviewedBy: "",
-        approvedBy: "",
-        reviewDate: new Date().toISOString().slice(0, 10),
-        accountingStatus: "draft",
-        accountantNotes: "",
-        bossNotes: "",
-        checklist: {
-          salesChecked: false,
-          cashChecked: false,
-          debtsChecked: false,
-          expensesChecked: false,
-          stockChecked: false,
-          warningsChecked: false,
-          backupChecked: false,
-        },
-      });
-      setMessage("Audit sign-off details cleared for this period.");
-    } catch {
-      setError("Could not clear sign-off details.");
-    }
-  }
-
-  function getSignOffStatusLabel(status) {
-    if (status === "reviewed") return "Reviewed by Accountant";
-    if (status === "approved") return "Approved by Management";
-    if (status === "locked") return "Final / Locked for Filing";
-    return "Draft / Not Yet Approved";
-  }
-
-  function getSignOffCompletion() {
-    const checkedCount = SIGN_OFF_CHECKLIST_ITEMS.filter(
-      (item) => signOff.checklist?.[item.key]
-    ).length;
-
-    const requiredNames = [signOff.preparedBy, signOff.reviewedBy, signOff.approvedBy].filter(
-      (value) => cleanText(value)
-    ).length;
-
-    const totalItems = SIGN_OFF_CHECKLIST_ITEMS.length + 3;
-    const completedItems = checkedCount + requiredNames;
-    const percent = Math.round((completedItems / totalItems) * 100);
-
-    return {
-      checkedCount,
-      totalChecks: SIGN_OFF_CHECKLIST_ITEMS.length,
-      requiredNames,
-      completedItems,
-      totalItems,
-      percent,
-      ready:
-        checkedCount === SIGN_OFF_CHECKLIST_ITEMS.length &&
-        requiredNames === 3 &&
-        cleanText(signOff.reviewDate),
-    };
+    resetSignOffForm();
+    setMessage("Audit sign-off form cleared. Saved database records were not deleted.");
   }
 
   function downloadAuditSummaryCsv() {
@@ -2665,7 +2747,7 @@ ${auditData.auditFlags
             <h2 style={{ margin: "5px 0" }}>Period Approval Center</h2>
             <p style={styles.panelText}>
               Fill this after the accountant, auditor or boss reviews the period.
-              It creates a professional sign-off certificate for the selected period.
+              It saves into MySQL and creates a professional sign-off certificate for the selected period.
             </p>
           </div>
 
@@ -2673,6 +2755,7 @@ ${auditData.auditFlags
             <strong>{signOffCompletion.percent}%</strong>
             <span>{signOffCompletion.ready ? "Ready for filing" : "Needs completion"}</span>
             <small>{getSignOffStatusLabel(signOff.accountingStatus)}</small>
+            <small>{signOffLoading ? "Loading saved record..." : savedSignOffId ? `Saved ID #${savedSignOffId}` : "Not saved in database yet"}</small>
           </div>
         </div>
 
@@ -2725,7 +2808,7 @@ ${auditData.auditFlags
               <option value="draft">Draft / Not Yet Approved</option>
               <option value="reviewed">Reviewed by Accountant</option>
               <option value="approved">Approved by Management</option>
-              <option value="locked">Final / Locked for Filing</option>
+              <option value="rejected">Rejected / Needs Correction</option>
             </select>
           </label>
         </div>
@@ -2778,8 +2861,8 @@ ${auditData.auditFlags
         </div>
 
         <div style={styles.approvalActions}>
-          <button type="button" onClick={saveSignOffDetails}>
-            Save Sign-Off
+          <button type="button" onClick={saveSignOffDetails} disabled={signOffSaving}>
+            {signOffSaving ? "Saving to MySQL..." : "Save Sign-Off to MySQL"}
           </button>
 
           <button
@@ -2795,9 +2878,40 @@ ${auditData.auditFlags
             className="secondary-button"
             onClick={clearSignOffDetails}
           >
-            Clear Sign-Off
+            Clear Form
           </button>
         </div>
+      </div>
+
+      <div style={styles.historyPanel}>
+        <div>
+          <p style={styles.eyebrowDark}>Saved Sign-Off History</p>
+          <h2 style={{ margin: "5px 0" }}>Recent Database Records</h2>
+          <p style={styles.panelText}>
+            These records are saved in MySQL through the backend audit sign-off route.
+          </p>
+        </div>
+
+        {signOffHistory.length === 0 ? (
+          <div style={styles.emptyState}>No saved audit sign-off record found yet.</div>
+        ) : (
+          <div style={styles.historyList}>
+            {signOffHistory.slice(0, 6).map((item) => (
+              <div key={item.id} style={styles.historyItem}>
+                <div>
+                  <strong>{item.period_label}</strong>
+                  <span>
+                    {getSignOffStatusLabel(item.period_status)} • Score {item.audit_score}%
+                  </span>
+                </div>
+
+                <small>
+                  Prepared: {item.prepared_by_name || "-"} | Approved: {item.approved_by_name || "-"}
+                </small>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ ...styles.scoreGrid, ...oneColumn }}>
@@ -3769,6 +3883,33 @@ const styles = {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
+  },
+
+  historyPanel: {
+    display: "grid",
+    gap: "14px",
+    padding: "20px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
+  },
+
+  historyList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  historyItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    flexWrap: "wrap",
   },
 
   disclaimer: {
