@@ -1,43 +1,349 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 
+const BUSINESS_NAME = "Chalin 03 Company Limited";
+
 const SIGN_OFF_CHECKLIST_ITEMS = [
   {
     key: "salesChecked",
     label: "Sales records checked",
+    backendKey: "sales_checked",
     note: "Sales totals, receipts, voided sales and discounts have been reviewed.",
-  },
-  {
-    key: "cashChecked",
-    label: "Cash collection checked",
-    note: "Cash collected and amount paid have been reviewed against records.",
-  },
-  {
-    key: "debtsChecked",
-    label: "Customer debts checked",
-    note: "Outstanding debts and sales balances have been reviewed.",
   },
   {
     key: "expensesChecked",
     label: "Expenses checked",
+    backendKey: "expenses_checked",
     note: "Expense categories, dates, descriptions and amounts have been reviewed.",
+  },
+  {
+    key: "debtsChecked",
+    label: "Customer debts checked",
+    backendKey: "debts_checked",
+    note: "Outstanding debts and sales balances have been reviewed.",
   },
   {
     key: "stockChecked",
     label: "Stock and pricing checked",
+    backendKey: "stock_checked",
     note: "Low stock, out-of-stock items and pricing warnings have been reviewed.",
   },
   {
     key: "warningsChecked",
     label: "Audit warnings reviewed",
+    backendKey: "warnings_checked",
     note: "Red, orange and blue audit warnings have been read and considered.",
   },
   {
-    key: "backupChecked",
-    label: "Backup/export pack prepared",
-    note: "Audit pack exports or backup documents have been prepared for records.",
+    key: "reportsChecked",
+    label: "Reports / exports prepared",
+    backendKey: "reports_checked",
+    note: "Audit documents, CSV files, Word reports or print reports have been prepared.",
   },
 ];
+
+const EMPTY_SIGN_OFF = {
+  preparedBy: "",
+  reviewedBy: "",
+  approvedBy: "",
+  reviewDate: getTodayInputDate(),
+  periodStatus: "draft",
+  accountantNotes: "",
+  managementNotes: "",
+  checklist: {
+    salesChecked: false,
+    expensesChecked: false,
+    debtsChecked: false,
+    stockChecked: false,
+    warningsChecked: false,
+    reportsChecked: false,
+  },
+};
+
+function getTodayInputDate() {
+  const today = new Date();
+  return dateToInputValue(today);
+}
+
+function cloneEmptySignOff() {
+  return {
+    ...EMPTY_SIGN_OFF,
+    reviewDate: getTodayInputDate(),
+    checklist: { ...EMPTY_SIGN_OFF.checklist },
+  };
+}
+
+function cleanText(value) {
+  return String(value ?? "").trim();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatMoney(value) {
+  return `GHS ${Number(value || 0).toLocaleString("en-GH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function plainMoney(value) {
+  return Number(value || 0).toFixed(2);
+}
+
+function dateToInputValue(date) {
+  const safeDate = new Date(date);
+
+  if (Number.isNaN(safeDate.getTime())) {
+    return "";
+  }
+
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function apiDate(value) {
+  if (!value) return null;
+  return dateToInputValue(value) || null;
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-GB");
+}
+
+function getStartOfDay(date) {
+  const newDate = new Date(date);
+  newDate.setHours(0, 0, 0, 0);
+  return newDate;
+}
+
+function getEndOfDay(date) {
+  const newDate = new Date(date);
+  newDate.setHours(23, 59, 59, 999);
+  return newDate;
+}
+
+function getStartOfWeek(date) {
+  const newDate = getStartOfDay(date);
+  const day = newDate.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  newDate.setDate(newDate.getDate() + mondayOffset);
+  return newDate;
+}
+
+function getPeriodRange(periodType, customStartDate, customEndDate) {
+  const today = new Date();
+
+  if (periodType === "today") {
+    return {
+      start: getStartOfDay(today),
+      end: getEndOfDay(today),
+      label: "Today",
+      shortLabel: "today",
+    };
+  }
+
+  if (periodType === "week") {
+    const start = getStartOfWeek(today);
+    return {
+      start,
+      end: getEndOfDay(today),
+      label: `This Week (${formatDate(start)} - ${formatDate(today)})`,
+      shortLabel: "this-week",
+    };
+  }
+
+  if (periodType === "month") {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    return {
+      start: getStartOfDay(start),
+      end: getEndOfDay(today),
+      label: `This Month (${formatDate(start)} - ${formatDate(today)})`,
+      shortLabel: "this-month",
+    };
+  }
+
+  if (periodType === "year") {
+    const start = new Date(today.getFullYear(), 0, 1);
+    return {
+      start: getStartOfDay(start),
+      end: getEndOfDay(today),
+      label: `This Year (${formatDate(start)} - ${formatDate(today)})`,
+      shortLabel: "this-year",
+    };
+  }
+
+  if (periodType === "custom") {
+    const start = customStartDate ? new Date(`${customStartDate}T00:00:00`) : null;
+    const end = customEndDate ? new Date(`${customEndDate}T23:59:59`) : null;
+
+    return {
+      start: start ? getStartOfDay(start) : null,
+      end: end ? getEndOfDay(end) : null,
+      label:
+        start && end
+          ? `Custom Period (${formatDate(start)} - ${formatDate(end)})`
+          : "Custom Period",
+      shortLabel:
+        start && end
+          ? `${dateToInputValue(start)}-to-${dateToInputValue(end)}`
+          : "custom-period",
+    };
+  }
+
+  return {
+    start: null,
+    end: null,
+    label: "All Records",
+    shortLabel: "all-records",
+  };
+}
+
+function isDateInsidePeriod(date, period) {
+  if (!date || Number.isNaN(date.getTime())) return false;
+  if (!period.start && !period.end) return true;
+  if (period.start && date < period.start) return false;
+  if (period.end && date > period.end) return false;
+  return true;
+}
+
+function getSaleDate(sale) {
+  return new Date(sale?.created_at || sale?.sale_date || sale?.date);
+}
+
+function getExpenseDate(expense) {
+  return new Date(expense?.expense_date || expense?.created_at || expense?.date);
+}
+
+function isSaleVoided(sale) {
+  const status = String(sale?.sale_status || "").toLowerCase();
+  return Number(sale?.is_voided || 0) === 1 || status === "cancelled" || status === "voided";
+}
+
+function isCompletedSale(sale) {
+  const status = String(sale?.sale_status || "completed").toLowerCase();
+  return !isSaleVoided(sale) && status === "completed";
+}
+
+function getPaymentType(sale) {
+  return String(sale?.payment_type || "cash").toLowerCase();
+}
+
+function makeFilePrefix(name) {
+  return String(name || "audit-report")
+    .toLowerCase()
+    .replaceAll(" ", "-")
+    .replaceAll("/", "-")
+    .replaceAll("(", "")
+    .replaceAll(")", "")
+    .replaceAll(",", "")
+    .replaceAll(":", "")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-");
+}
+
+function getSignOffStatusLabel(status) {
+  if (status === "approved") return "Approved by Management";
+  if (status === "reviewed") return "Reviewed by Accountant";
+  if (status === "rejected") return "Rejected / Needs Correction";
+  return "Draft / Not Approved";
+}
+
+function getStatusStyle(status) {
+  if (status === "approved") return { background: "#dcfce7", color: "#166534" };
+  if (status === "reviewed") return { background: "#dbeafe", color: "#1d4ed8" };
+  if (status === "rejected") return { background: "#fee2e2", color: "#991b1b" };
+  return { background: "#f8fafc", color: "#475569" };
+}
+
+function mapDatabaseSignOff(row) {
+  if (!row) return null;
+
+  return {
+    preparedBy: row.prepared_by_name || "",
+    reviewedBy: row.reviewed_by_name || "",
+    approvedBy: row.approved_by_name || "",
+    reviewDate: row.review_date ? apiDate(row.review_date) : getTodayInputDate(),
+    periodStatus: row.period_status || "draft",
+    accountantNotes: row.accountant_notes || "",
+    managementNotes: row.management_notes || "",
+    checklist: {
+      salesChecked: Boolean(row.sales_checked),
+      expensesChecked: Boolean(row.expenses_checked),
+      debtsChecked: Boolean(row.debts_checked),
+      stockChecked: Boolean(row.stock_checked),
+      warningsChecked: Boolean(row.warnings_checked),
+      reportsChecked: Boolean(row.reports_checked),
+    },
+  };
+}
+
+function makeCsv(rows) {
+  if (!rows || rows.length === 0) return "";
+
+  const headers = Object.keys(rows[0]);
+  const escapeCsv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+
+  return `\uFEFF${[
+    headers.map(escapeCsv).join(","),
+    ...rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(",")),
+  ].join("\n")}`;
+}
+
+function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const fileUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = fileUrl;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+
+  setTimeout(() => {
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(fileUrl);
+  }, 150);
+}
+
+function downloadWordFile(filename, htmlContent) {
+  const wordDocument = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:w="urn:schemas-microsoft-com:office:word"
+          xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="ProgId" content="Word.Document" />
+        <meta name="Generator" content="Chalin 03 System" />
+      </head>
+      <body>${htmlContent}</body>
+    </html>
+  `;
+
+  downloadTextFile(filename, wordDocument, "application/msword;charset=utf-8");
+}
 
 export default function AuditAccountingPage() {
   const [products, setProducts] = useState([]);
@@ -49,334 +355,27 @@ export default function AuditAccountingPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const [isMobile, setIsMobile] = useState(false);
-
   const [periodType, setPeriodType] = useState("month");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
-  const [signOff, setSignOff] = useState({
-    preparedBy: "",
-    reviewedBy: "",
-    approvedBy: "",
-    reviewDate: new Date().toISOString().slice(0, 10),
-    accountingStatus: "draft",
-    accountantNotes: "",
-    bossNotes: "",
-    checklist: {
-      salesChecked: false,
-      cashChecked: false,
-      debtsChecked: false,
-      expensesChecked: false,
-      stockChecked: false,
-      warningsChecked: false,
-      backupChecked: false,
-    },
-  });
-
+  const [signOff, setSignOff] = useState(cloneEmptySignOff);
   const [savedSignOffId, setSavedSignOffId] = useState(null);
   const [signOffSaving, setSignOffSaving] = useState(false);
   const [signOffLoading, setSignOffLoading] = useState(false);
   const [signOffHistory, setSignOffHistory] = useState([]);
 
-  const businessName = "Chalin 03 Company Limited";
-  const reportName = "Audit & Accounting Intelligence Pro Review";
-
-  function cleanText(value) {
-    return String(value ?? "").trim();
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  function formatMoney(value) {
-    return `GHS ${Number(value || 0).toLocaleString("en-GH", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  }
-
-  function plainMoney(value) {
-    return Number(value || 0).toFixed(2);
-  }
-
-  function formatDate(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  function formatDateTime(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleString("en-GB");
-  }
-
-  function dateToInputValue(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-  }
-
-  function apiDate(value) {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return dateToInputValue(date);
-  }
-
-  function getStartOfDay(date) {
-    const newDate = new Date(date);
-    newDate.setHours(0, 0, 0, 0);
-    return newDate;
-  }
-
-  function getEndOfDay(date) {
-    const newDate = new Date(date);
-    newDate.setHours(23, 59, 59, 999);
-    return newDate;
-  }
-
-  function getStartOfWeek(date) {
-    const newDate = getStartOfDay(date);
-    const day = newDate.getDay();
-    const mondayOffset = day === 0 ? -6 : 1 - day;
-    newDate.setDate(newDate.getDate() + mondayOffset);
-    return newDate;
-  }
-
-  function getPeriodRange() {
-    const today = new Date();
-
-    if (periodType === "all") {
-      return {
-        start: null,
-        end: null,
-        label: "All Records",
-        shortLabel: "all-records",
-      };
-    }
-
-    if (periodType === "today") {
-      return {
-        start: getStartOfDay(today),
-        end: getEndOfDay(today),
-        label: "Today",
-        shortLabel: "today",
-      };
-    }
-
-    if (periodType === "week") {
-      const start = getStartOfWeek(today);
-
-      return {
-        start,
-        end: getEndOfDay(today),
-        label: `This Week (${formatDate(start)} - ${formatDate(today)})`,
-        shortLabel: "this-week",
-      };
-    }
-
-    if (periodType === "month") {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1);
-
-      return {
-        start: getStartOfDay(start),
-        end: getEndOfDay(today),
-        label: `This Month (${formatDate(start)} - ${formatDate(today)})`,
-        shortLabel: "this-month",
-      };
-    }
-
-    if (periodType === "year") {
-      const start = new Date(today.getFullYear(), 0, 1);
-
-      return {
-        start: getStartOfDay(start),
-        end: getEndOfDay(today),
-        label: `This Year (${formatDate(start)} - ${formatDate(today)})`,
-        shortLabel: "this-year",
-      };
-    }
-
-    if (periodType === "custom") {
-      const start = customStartDate ? new Date(customStartDate) : null;
-      const end = customEndDate ? new Date(customEndDate) : null;
-
-      return {
-        start: start ? getStartOfDay(start) : null,
-        end: end ? getEndOfDay(end) : null,
-        label:
-          start && end
-            ? `Custom Period (${formatDate(start)} - ${formatDate(end)})`
-            : "Custom Period",
-        shortLabel:
-          start && end
-            ? `${dateToInputValue(start)}-to-${dateToInputValue(end)}`
-            : "custom-period",
-      };
-    }
-
-    return {
-      start: null,
-      end: null,
-      label: "All Records",
-      shortLabel: "all-records",
-    };
-  }
-
-  function isDateInsidePeriod(date, period) {
-    if (!date || Number.isNaN(date.getTime())) {
-      return false;
-    }
-
-    if (!period.start && !period.end) {
-      return true;
-    }
-
-    if (period.start && date < period.start) {
-      return false;
-    }
-
-    if (period.end && date > period.end) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function getSaleDate(sale) {
-    return new Date(sale?.created_at || sale?.sale_date || sale?.date);
-  }
-
-  function getExpenseDate(expense) {
-    return new Date(expense?.expense_date || expense?.created_at || expense?.date);
-  }
-
-  function isSaleVoided(sale) {
-    return (
-      Number(sale?.is_voided || 0) === 1 ||
-      String(sale?.sale_status || "").toLowerCase() === "cancelled" ||
-      String(sale?.sale_status || "").toLowerCase() === "voided"
-    );
-  }
-
-  function isCompletedSale(sale) {
-    const status = String(sale?.sale_status || "completed").toLowerCase();
-    return !isSaleVoided(sale) && status === "completed";
-  }
-
-  function getPaymentType(sale) {
-    return String(sale?.payment_type || "cash").toLowerCase();
-  }
-
-  function makeFilePrefix(name) {
-    return String(name || "audit-report")
-      .toLowerCase()
-      .replaceAll(" ", "-")
-      .replaceAll("/", "-")
-      .replaceAll("(", "")
-      .replaceAll(")", "")
-      .replaceAll(",", "")
-      .replaceAll(":", "")
-      .replace(/[^a-z0-9-]/g, "-")
-      .replace(/-+/g, "-");
-  }
-
-  async function loadAuditData() {
-    setLoading(true);
-    setError("");
-    setMessage("");
-
-    try {
-      const [productsResponse, salesResponse, debtsResponse, expensesResponse] =
-        await Promise.all([
-          axiosClient.get("/products"),
-          axiosClient.get("/sales"),
-          axiosClient.get("/debts/summary"),
-          axiosClient.get("/expenses"),
-        ]);
-
-      setProducts(productsResponse.data.products || []);
-      setSales(salesResponse.data.sales || []);
-      setDebtSummary(debtsResponse.data.summary || debtsResponse.data || null);
-      setExpenses(expensesResponse.data.expenses || []);
-
-      setMessage("Professional audit and accounting review refreshed.");
-    } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Failed to load audit and accounting data."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadAuditData();
-  }, []);
-
-  useEffect(() => {
-    function checkScreenSize() {
-      setIsMobile(window.innerWidth <= 760);
-    }
-
-    checkScreenSize();
-    window.addEventListener("resize", checkScreenSize);
-
-    return () => {
-      window.removeEventListener("resize", checkScreenSize);
-    };
-  }, []);
-
-  useEffect(() => {
-    loadLatestSignOffFromDatabase();
-    loadSignOffHistory();
-  }, [periodType, customStartDate, customEndDate]);
+  const period = useMemo(
+    () => getPeriodRange(periodType, customStartDate, customEndDate),
+    [periodType, customStartDate, customEndDate]
+  );
 
   const auditData = useMemo(() => {
-    const period = getPeriodRange();
-
-    const allCompletedSales = sales.filter(isCompletedSale);
-    const allVoidedSales = sales.filter(isSaleVoided);
-
-    const completedSales = allCompletedSales.filter((sale) =>
+    const completedSales = sales.filter(isCompletedSale).filter((sale) =>
       isDateInsidePeriod(getSaleDate(sale), period)
     );
 
-    const voidedSales = allVoidedSales.filter((sale) =>
+    const voidedSales = sales.filter(isSaleVoided).filter((sale) =>
       isDateInsidePeriod(getSaleDate(sale), period)
     );
 
@@ -384,47 +383,22 @@ export default function AuditAccountingPage() {
       isDateInsidePeriod(getExpenseDate(expense), period)
     );
 
-    const totalSales = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
-      0
-    );
-
-    const cashCollected = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.amount_paid || 0),
-      0
-    );
-
-    const salesBalances = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.balance || 0),
-      0
-    );
-
-    const totalDiscounts = completedSales.reduce(
-      (sum, sale) => sum + Number(sale.discount_amount || 0),
-      0
-    );
-
-    const totalExpenses = periodExpenses.reduce(
-      (sum, expense) => sum + Number(expense.amount || 0),
-      0
-    );
+    const totalSales = completedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+    const cashCollected = completedSales.reduce((sum, sale) => sum + Number(sale.amount_paid || 0), 0);
+    const salesBalances = completedSales.reduce((sum, sale) => sum + Number(sale.balance || 0), 0);
+    const totalDiscounts = completedSales.reduce((sum, sale) => sum + Number(sale.discount_amount || 0), 0);
+    const totalExpenses = periodExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
     const fuelExpenses = periodExpenses
-      .filter((expense) =>
-        String(expense.category || "").toLowerCase().includes("fuel")
-      )
+      .filter((expense) => String(expense.category || "").toLowerCase().includes("fuel"))
       .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
     const transportExpenses = periodExpenses
-      .filter((expense) =>
-        String(expense.category || "").toLowerCase().includes("transport")
-      )
+      .filter((expense) => String(expense.category || "").toLowerCase().includes("transport"))
       .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
     const salaryExpenses = periodExpenses
-      .filter((expense) =>
-        String(expense.category || "").toLowerCase().includes("salary")
-      )
+      .filter((expense) => String(expense.category || "").toLowerCase().includes("salary"))
       .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
     const outstandingDebts =
@@ -434,251 +408,56 @@ export default function AuditAccountingPage() {
       debtSummary?.total_balance ??
       0;
 
-    const unpaidDebtCount =
-      debtSummary?.unpaid_count ??
-      debtSummary?.active_debt_count ??
-      debtSummary?.count ??
-      0;
-
+    const unpaidDebtCount = debtSummary?.unpaid_count ?? debtSummary?.active_debt_count ?? debtSummary?.count ?? 0;
     const partialDebtCount = debtSummary?.partial_count ?? 0;
     const overdueDebtCount = debtSummary?.overdue_count ?? 0;
 
     const lowStockProducts = products.filter(
-      (product) =>
-        Number(product.quantity || 0) <=
-        Number(product.low_stock_threshold || 0)
+      (product) => Number(product.quantity || 0) <= Number(product.low_stock_threshold || 0)
+    );
+    const zeroStockProducts = products.filter((product) => Number(product.quantity || 0) <= 0);
+
+    const stockValue = products.reduce(
+      (sum, product) => sum + Number(product.quantity || 0) * Number(product.selling_price || 0),
+      0
     );
 
-    const zeroStockProducts = products.filter(
-      (product) => Number(product.quantity || 0) <= 0
+    const stockCostValue = products.reduce(
+      (sum, product) => sum + Number(product.quantity || 0) * Number(product.cost_price || 0),
+      0
     );
-
-    const stockValue = products.reduce((sum, product) => {
-      return (
-        sum +
-        Number(product.quantity || 0) * Number(product.selling_price || 0)
-      );
-    }, 0);
-
-    const stockCostValue = products.reduce((sum, product) => {
-      return (
-        sum + Number(product.quantity || 0) * Number(product.cost_price || 0)
-      );
-    }, 0);
 
     const stockExpectedProfit = Math.max(stockValue - stockCostValue, 0);
-    const netCashPosition = cashCollected - totalExpenses;
     const operatingResult = totalSales - totalExpenses;
-    const receivablesExposure = Number(outstandingDebts || 0);
-    const possibleDebtDifference = Math.abs(receivablesExposure - salesBalances);
+    const possibleDebtDifference = Math.abs(Number(outstandingDebts || 0) - salesBalances);
 
-    const paymentBreakdown = {
-      cash: 0,
-      momo: 0,
-      bank: 0,
-      credit: 0,
-      other: 0,
-    };
-
+    const paymentBreakdown = { cash: 0, momo: 0, bank: 0, credit: 0, other: 0 };
     completedSales.forEach((sale) => {
       const paymentType = getPaymentType(sale);
       const amount = Number(sale.total || 0);
 
-      if (paymentType.includes("cash")) {
-        paymentBreakdown.cash += amount;
-      } else if (
-        paymentType.includes("momo") ||
-        paymentType.includes("mobile")
-      ) {
-        paymentBreakdown.momo += amount;
-      } else if (paymentType.includes("bank")) {
-        paymentBreakdown.bank += amount;
-      } else if (
-        paymentType.includes("credit") ||
-        Number(sale.balance || 0) > 0
-      ) {
-        paymentBreakdown.credit += amount;
-      } else {
-        paymentBreakdown.other += amount;
-      }
+      if (paymentType.includes("cash")) paymentBreakdown.cash += amount;
+      else if (paymentType.includes("momo") || paymentType.includes("mobile")) paymentBreakdown.momo += amount;
+      else if (paymentType.includes("bank")) paymentBreakdown.bank += amount;
+      else if (paymentType.includes("credit") || Number(sale.balance || 0) > 0) paymentBreakdown.credit += amount;
+      else paymentBreakdown.other += amount;
     });
 
     const categoryTotals = periodExpenses.reduce((result, expense) => {
       const category = cleanText(expense.category) || "Other";
-      result[category] =
-        Number(result[category] || 0) + Number(expense.amount || 0);
+      result[category] = Number(result[category] || 0) + Number(expense.amount || 0);
       return result;
     }, {});
 
     const topExpenseCategories = Object.entries(categoryTotals)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-      }))
+      .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 8);
 
-    const salesExceptions = [];
-
-    completedSales.forEach((sale) => {
-      const receiptNumber = sale.receipt_number || `Sale #${sale.id}`;
-      const balance = Number(sale.balance || 0);
-      const total = Number(sale.total || 0);
-      const amountPaid = Number(sale.amount_paid || 0);
-      const discount = Number(sale.discount_amount || 0);
-      const paymentType = getPaymentType(sale);
-
-      if (!sale.receipt_number) {
-        salesExceptions.push({
-          severity: "orange",
-          title: "Missing receipt number",
-          detail: `${receiptNumber} has no receipt number. Confirm the sale record.`,
-        });
-      }
-
-      if (discount > 0) {
-        salesExceptions.push({
-          severity: "blue",
-          title: "Discount recorded",
-          detail: `${receiptNumber} has discount ${formatMoney(
-            discount
-          )}. Confirm approval.`,
-        });
-      }
-
-      if (balance > 0 && !paymentType.includes("credit")) {
-        salesExceptions.push({
-          severity: "orange",
-          title: "Balance on non-credit sale",
-          detail: `${receiptNumber} has balance ${formatMoney(
-            balance
-          )} but payment type is ${sale.payment_type || "cash"}.`,
-        });
-      }
-
-      if (amountPaid > total && total > 0) {
-        salesExceptions.push({
-          severity: "red",
-          title: "Amount paid is higher than total",
-          detail: `${receiptNumber} paid ${formatMoney(
-            amountPaid
-          )} but total is ${formatMoney(total)}.`,
-        });
-      }
-
-      if (total <= 0) {
-        salesExceptions.push({
-          severity: "red",
-          title: "Zero or invalid sale total",
-          detail: `${receiptNumber} has invalid total ${formatMoney(total)}.`,
-        });
-      }
-    });
-
-    const expenseExceptions = [];
-
-    periodExpenses.forEach((expense) => {
-      const description = cleanText(expense.description);
-      const category = cleanText(expense.category) || "Uncategorized";
-      const amount = Number(expense.amount || 0);
-
-      if (amount <= 0) {
-        expenseExceptions.push({
-          severity: "red",
-          title: "Invalid expense amount",
-          detail: `${category} expense has invalid amount ${formatMoney(
-            amount
-          )}.`,
-        });
-      }
-
-      if (!description) {
-        expenseExceptions.push({
-          severity: "orange",
-          title: "Expense missing description",
-          detail: `${category} expense of ${formatMoney(
-            amount
-          )} has no description.`,
-        });
-      }
-
-      if (!expense.expense_date && !expense.created_at) {
-        expenseExceptions.push({
-          severity: "orange",
-          title: "Expense missing date",
-          detail: `${category} expense of ${formatMoney(amount)} has no date.`,
-        });
-      }
-    });
-
-    const inventoryExceptions = [];
-
-    products.forEach((product) => {
-      const name = product.name || `Product #${product.id}`;
-      const quantity = Number(product.quantity || 0);
-      const cost = Number(product.cost_price || 0);
-      const selling = Number(product.selling_price || 0);
-      const lowStockLevel = Number(product.low_stock_threshold || 0);
-
-      if (quantity <= 0) {
-        inventoryExceptions.push({
-          severity: "red",
-          title: "Out of stock product",
-          detail: `${name} has ${quantity} quantity available.`,
-        });
-      } else if (quantity <= lowStockLevel) {
-        inventoryExceptions.push({
-          severity: "orange",
-          title: "Low stock product",
-          detail: `${name} has ${quantity} left. Low stock level is ${lowStockLevel}.`,
-        });
-      }
-
-      if (selling <= 0) {
-        inventoryExceptions.push({
-          severity: "red",
-          title: "Invalid selling price",
-          detail: `${name} has invalid selling price ${formatMoney(selling)}.`,
-        });
-      }
-
-      if (cost < 0) {
-        inventoryExceptions.push({
-          severity: "red",
-          title: "Invalid cost price",
-          detail: `${name} has invalid cost price ${formatMoney(cost)}.`,
-        });
-      }
-
-      if (selling > 0 && cost > 0 && selling <= cost) {
-        inventoryExceptions.push({
-          severity: "orange",
-          title: "Possible low/no profit product",
-          detail: `${name} selling price ${formatMoney(
-            selling
-          )} is not above cost ${formatMoney(cost)}.`,
-        });
-      }
-
-      if (!cleanText(product.barcode)) {
-        inventoryExceptions.push({
-          severity: "blue",
-          title: "Product without barcode",
-          detail: `${name} has no barcode. This may slow down stock control.`,
-        });
-      }
-    });
-
     const auditFlags = [];
-
-    function addFlag(severity, title, detail, recommendation) {
-      auditFlags.push({
-        severity,
-        title,
-        detail,
-        recommendation,
-      });
-    }
+    const addFlag = (severity, title, detail, recommendation) => {
+      auditFlags.push({ severity, title, detail, recommendation });
+    };
 
     if (completedSales.length === 0) {
       addFlag(
@@ -694,7 +473,7 @@ export default function AuditAccountingPage() {
         "red",
         "Voided or cancelled sales detected",
         `${voidedSales.length} voided/cancelled sale(s) exist in the selected period.`,
-        "Auditor or boss should review who voided them, why they were voided, and whether cash was affected."
+        "Review who voided them, why they were voided, and whether cash was affected."
       );
     }
 
@@ -702,10 +481,8 @@ export default function AuditAccountingPage() {
       addFlag(
         overdueDebtCount > 0 ? "red" : "orange",
         "Outstanding customer debts",
-        `${formatMoney(
-          outstandingDebts
-        )} is currently unpaid across customer debt records.`,
-        "Follow up customers, reconcile with sales balances, and send WhatsApp reminders where necessary."
+        `${formatMoney(outstandingDebts)} is currently unpaid across customer debt records.`,
+        "Follow up customers, reconcile debts and send WhatsApp reminders where necessary."
       );
     }
 
@@ -713,9 +490,7 @@ export default function AuditAccountingPage() {
       addFlag(
         "orange",
         "Debt reconciliation difference",
-        `Debt summary differs from period sales balances by about ${formatMoney(
-          possibleDebtDifference
-        )}.`,
+        `Debt summary differs from period sales balances by about ${formatMoney(possibleDebtDifference)}.`,
         "Compare debt records with sales balances and payment records."
       );
     }
@@ -724,10 +499,8 @@ export default function AuditAccountingPage() {
       addFlag(
         "red",
         "Period expenses exceed cash collected",
-        `Selected period expenses ${formatMoney(
-          totalExpenses
-        )} are higher than cash collected ${formatMoney(cashCollected)}.`,
-        "Review expense records, confirm supporting receipts, and compare with daily closing."
+        `Selected period expenses ${formatMoney(totalExpenses)} are higher than cash collected ${formatMoney(cashCollected)}.`,
+        "Review expense records, supporting receipts and daily closing records."
       );
     }
 
@@ -736,7 +509,7 @@ export default function AuditAccountingPage() {
         "blue",
         "Discount activity detected",
         `${formatMoney(totalDiscounts)} total discount was recorded in the selected period.`,
-        "Confirm discounts were approved by management and not used to hide pricing errors."
+        "Confirm discounts were approved by management."
       );
     }
 
@@ -754,7 +527,7 @@ export default function AuditAccountingPage() {
         "red",
         "Out of stock products",
         `${zeroStockProducts.length} product(s) currently have zero or negative quantity.`,
-        "Review urgent restock needs and check whether stock entries are correct."
+        "Review urgent restock needs and confirm stock entries."
       );
     }
 
@@ -763,138 +536,98 @@ export default function AuditAccountingPage() {
         "blue",
         "Fuel expense category active",
         `${formatMoney(fuelExpenses)} has been recorded as fuel expense in the selected period.`,
-        "Fuel expenses should be reviewed separately and supported with receipts where possible."
+        "Fuel expenses should be supported with receipts where possible."
       );
     }
 
-    salesExceptions.slice(0, 8).forEach((item) => {
-      addFlag(
-        item.severity,
-        item.title,
-        item.detail,
-        "Review the sale record and correct it if necessary."
-      );
+    completedSales.slice(0, 40).forEach((sale) => {
+      const receiptNumber = sale.receipt_number || `Sale #${sale.id}`;
+      const balance = Number(sale.balance || 0);
+      const total = Number(sale.total || 0);
+      const amountPaid = Number(sale.amount_paid || 0);
+      const paymentType = getPaymentType(sale);
+
+      if (!sale.receipt_number) {
+        addFlag("orange", "Missing receipt number", `${receiptNumber} has no receipt number.`, "Review the sale record.");
+      }
+
+      if (balance > 0 && !paymentType.includes("credit")) {
+        addFlag(
+          "orange",
+          "Balance on non-credit sale",
+          `${receiptNumber} has balance ${formatMoney(balance)} but payment type is ${sale.payment_type || "cash"}.`,
+          "Review the payment type and debt record."
+        );
+      }
+
+      if (amountPaid > total && total > 0) {
+        addFlag(
+          "red",
+          "Amount paid is higher than total",
+          `${receiptNumber} paid ${formatMoney(amountPaid)} but total is ${formatMoney(total)}.`,
+          "Correct the sale record if necessary."
+        );
+      }
     });
 
-    expenseExceptions.slice(0, 8).forEach((item) => {
-      addFlag(
-        item.severity,
-        item.title,
-        item.detail,
-        "Add missing details or correct the expense record."
-      );
+    periodExpenses.slice(0, 40).forEach((expense) => {
+      const category = cleanText(expense.category) || "Uncategorized";
+      const amount = Number(expense.amount || 0);
+
+      if (amount <= 0) {
+        addFlag("red", "Invalid expense amount", `${category} expense has invalid amount ${formatMoney(amount)}.`, "Correct the expense record.");
+      }
+
+      if (!cleanText(expense.description)) {
+        addFlag("orange", "Expense missing description", `${category} expense of ${formatMoney(amount)} has no description.`, "Add a clear expense description.");
+      }
     });
 
-    inventoryExceptions.slice(0, 8).forEach((item) => {
-      addFlag(
-        item.severity,
-        item.title,
-        item.detail,
-        "Review product setup, stock count and pricing."
-      );
+    products.slice(0, 80).forEach((product) => {
+      const name = product.name || `Product #${product.id}`;
+      const quantity = Number(product.quantity || 0);
+      const cost = Number(product.cost_price || 0);
+      const selling = Number(product.selling_price || 0);
+      const lowStockLevel = Number(product.low_stock_threshold || 0);
+
+      if (quantity <= 0) {
+        addFlag("red", "Out of stock product", `${name} has ${quantity} quantity available.`, "Review restocking and stock entries.");
+      } else if (quantity <= lowStockLevel) {
+        addFlag("orange", "Low stock product", `${name} has ${quantity} left. Low stock level is ${lowStockLevel}.`, "Prepare restock plan.");
+      }
+
+      if (selling > 0 && cost > 0 && selling <= cost) {
+        addFlag("orange", "Possible low/no profit product", `${name} selling price ${formatMoney(selling)} is not above cost ${formatMoney(cost)}.`, "Review product pricing.");
+      }
     });
 
     if (auditFlags.length === 0) {
-      addFlag(
-        "green",
-        "No major audit issue detected",
-        `The system currently shows no major warning for ${period.label}.`,
-        "Continue daily closing, backup and regular stock checking."
-      );
+      addFlag("green", "No major audit issue detected", `No major warning was detected for ${period.label}.`, "Continue daily closing and regular checking.");
     }
 
-    const accountingChecklist = [
-      {
-        title: "Period selected",
-        status: Boolean(period.label),
-        note: `Review period: ${period.label}.`,
-      },
-      {
-        title: "Sales completeness",
-        status: completedSales.length > 0,
-        note: `${completedSales.length} completed sale(s) found in the selected period.`,
-      },
-      {
-        title: "Cash collection review",
-        status: cashCollected >= 0,
-        note: `${formatMoney(cashCollected)} recorded as amount paid in the selected period.`,
-      },
-      {
-        title: "Debt reconciliation",
-        status: Number(outstandingDebts || 0) <= 0 && salesBalances <= 0,
-        note:
-          Number(outstandingDebts || 0) > 0 || salesBalances > 0
-            ? `${formatMoney(
-                outstandingDebts
-              )} current outstanding debt and ${formatMoney(
-                salesBalances
-              )} period sales balance detected.`
-            : "No outstanding debt detected.",
-      },
-      {
-        title: "Expense documentation",
-        status: expenseExceptions.length === 0,
-        note:
-          expenseExceptions.length > 0
-            ? `${expenseExceptions.length} expense issue(s) need attention in the selected period.`
-            : "No expense documentation issue detected in the selected period.",
-      },
-      {
-        title: "Inventory pricing review",
-        status:
-          inventoryExceptions.filter((item) => item.severity === "red")
-            .length === 0,
-        note:
-          inventoryExceptions.length > 0
-            ? `${inventoryExceptions.length} inventory issue(s) detected.`
-            : "No inventory warning detected.",
-      },
-      {
-        title: "Voided sales review",
-        status: voidedSales.length === 0,
-        note:
-          voidedSales.length > 0
-            ? `${voidedSales.length} voided/cancelled sale(s) need review.`
-            : "No voided/cancelled sales detected in the selected period.",
-      },
-      {
-        title: "Discount approval review",
-        status: totalDiscounts <= 0,
-        note:
-          totalDiscounts > 0
-            ? `${formatMoney(totalDiscounts)} discounts should be approved.`
-            : "No discount recorded in the selected period.",
-      },
-    ];
-
     const redFlags = auditFlags.filter((flag) => flag.severity === "red").length;
-    const orangeFlags = auditFlags.filter(
-      (flag) => flag.severity === "orange"
-    ).length;
-    const blueFlags = auditFlags.filter(
-      (flag) => flag.severity === "blue"
-    ).length;
-
-    const riskScore = Math.min(
-      100,
-      redFlags * 20 + orangeFlags * 10 + blueFlags * 4
-    );
-
+    const orangeFlags = auditFlags.filter((flag) => flag.severity === "orange").length;
+    const blueFlags = auditFlags.filter((flag) => flag.severity === "blue").length;
+    const riskScore = Math.min(100, redFlags * 20 + orangeFlags * 10 + blueFlags * 4);
     const auditScore = Math.max(0, 100 - riskScore);
 
     let auditStatus = "Needs Review";
-    let auditTone = "red";
+    if (auditScore >= 85) auditStatus = "Clean";
+    else if (auditScore >= 70) auditStatus = "Acceptable";
+    else if (auditScore >= 50) auditStatus = "Watch Closely";
 
-    if (auditScore >= 85) {
-      auditStatus = "Clean";
-      auditTone = "green";
-    } else if (auditScore >= 70) {
-      auditStatus = "Acceptable";
-      auditTone = "blue";
-    } else if (auditScore >= 50) {
-      auditStatus = "Watch Closely";
-      auditTone = "orange";
-    }
+    const accountingChecklist = [
+      { title: "Period selected", status: Boolean(period.label), note: `Review period: ${period.label}.` },
+      { title: "Sales completeness", status: completedSales.length > 0, note: `${completedSales.length} completed sale(s) found.` },
+      { title: "Cash collection review", status: cashCollected >= 0, note: `${formatMoney(cashCollected)} recorded as amount paid.` },
+      {
+        title: "Debt reconciliation",
+        status: Number(outstandingDebts || 0) <= 0 && salesBalances <= 0,
+        note: Number(outstandingDebts || 0) > 0 || salesBalances > 0 ? `${formatMoney(outstandingDebts)} outstanding debts and ${formatMoney(salesBalances)} sales balances detected.` : "No outstanding debt detected.",
+      },
+      { title: "Voided sales review", status: voidedSales.length === 0, note: voidedSales.length > 0 ? `${voidedSales.length} voided/cancelled sale(s) need review.` : "No voided/cancelled sales detected." },
+      { title: "Discount approval review", status: totalDiscounts <= 0, note: totalDiscounts > 0 ? `${formatMoney(totalDiscounts)} discounts should be approved.` : "No discount recorded." },
+    ];
 
     const managementLetterPoints = auditFlags
       .filter((flag) => flag.severity !== "green")
@@ -910,60 +643,21 @@ export default function AuditAccountingPage() {
       managementLetterPoints.push({
         number: 1,
         finding: "No major weakness detected",
-        implication:
-          "The reviewed information did not produce a major audit warning.",
-        recommendation:
-          "Continue using daily closing, backups, debt follow-up and stock checks.",
+        implication: "The reviewed information did not produce a major audit warning.",
+        recommendation: "Continue using daily closing, backups, debt follow-up and stock checks.",
       });
     }
 
     const accountantSummary = [
-      {
-        label: "Selected Period",
-        value: period.label,
-        meaning: "Accounting/audit period currently being reviewed.",
-        isText: true,
-      },
-      {
-        label: "Total Sales Revenue",
-        value: totalSales,
-        meaning: "Completed sales value recorded within the selected period.",
-      },
-      {
-        label: "Cash Collected",
-        value: cashCollected,
-        meaning: "Amount recorded as paid by customers within the selected period.",
-      },
-      {
-        label: "Customer Receivables",
-        value: outstandingDebts,
-        meaning: "Current unpaid customer debts requiring follow-up.",
-      },
-      {
-        label: "Total Expenses",
-        value: totalExpenses,
-        meaning: "Business costs recorded within the selected period.",
-      },
-      {
-        label: "Operating Result",
-        value: operatingResult,
-        meaning: "Period sales minus period expenses. This is not final tax profit.",
-      },
-      {
-        label: "Inventory Selling Value",
-        value: stockValue,
-        meaning: "Current estimated selling value of stock on hand.",
-      },
-      {
-        label: "Inventory Cost Value",
-        value: stockCostValue,
-        meaning: "Current estimated cost value of stock on hand.",
-      },
-      {
-        label: "Expected Stock Margin",
-        value: stockExpectedProfit,
-        meaning: "Current estimated stock selling value minus cost value.",
-      },
+      { label: "Selected Period", value: period.label, meaning: "Accounting/audit period currently being reviewed.", isText: true },
+      { label: "Total Sales Revenue", value: totalSales, meaning: "Completed sales value recorded within the selected period." },
+      { label: "Cash Collected", value: cashCollected, meaning: "Amount recorded as paid by customers within the selected period." },
+      { label: "Customer Receivables", value: outstandingDebts, meaning: "Current unpaid customer debts requiring follow-up." },
+      { label: "Total Expenses", value: totalExpenses, meaning: "Business costs recorded within the selected period." },
+      { label: "Operating Result", value: operatingResult, meaning: "Period sales minus period expenses. This is not final tax profit." },
+      { label: "Inventory Selling Value", value: stockValue, meaning: "Estimated selling value of stock on hand." },
+      { label: "Inventory Cost Value", value: stockCostValue, meaning: "Estimated cost value of stock on hand." },
+      { label: "Expected Stock Margin", value: stockExpectedProfit, meaning: "Estimated stock selling value minus cost value." },
     ];
 
     const accessSalesRows = completedSales.map((sale) => ({
@@ -1000,13 +694,10 @@ export default function AuditAccountingPage() {
       cost_price: plainMoney(product.cost_price),
       selling_price: plainMoney(product.selling_price),
       barcode: product.barcode || "",
-      stock_value: plainMoney(
-        Number(product.quantity || 0) * Number(product.selling_price || 0)
-      ),
+      stock_value: plainMoney(Number(product.quantity || 0) * Number(product.selling_price || 0)),
     }));
 
     return {
-      period,
       completedSales,
       voidedSales,
       periodExpenses,
@@ -1027,15 +718,10 @@ export default function AuditAccountingPage() {
       stockValue,
       stockCostValue,
       stockExpectedProfit,
-      netCashPosition,
       operatingResult,
-      receivablesExposure,
       possibleDebtDifference,
       paymentBreakdown,
       topExpenseCategories,
-      salesExceptions,
-      expenseExceptions,
-      inventoryExceptions,
       auditFlags,
       accountingChecklist,
       redFlags,
@@ -1043,193 +729,65 @@ export default function AuditAccountingPage() {
       blueFlags,
       auditScore,
       auditStatus,
-      auditTone,
       managementLetterPoints,
       accountantSummary,
       accessSalesRows,
       accessExpenseRows,
       accessProductRows,
     };
-  }, [
-    products,
-    sales,
-    expenses,
-    debtSummary,
-    periodType,
-    customStartDate,
-    customEndDate,
-  ]);
+  }, [products, sales, expenses, debtSummary, period]);
 
-  function makeCsv(rows) {
-    if (!rows || rows.length === 0) {
-      return "";
-    }
-
-    const headers = Object.keys(rows[0]);
-
-    const escapeCsv = (value) => {
-      const text = String(value ?? "");
-      const escaped = text.replaceAll('"', '""');
-      return `"${escaped}"`;
-    };
-
-    const lines = [
-      headers.map(escapeCsv).join(","),
-      ...rows.map((row) =>
-        headers.map((header) => escapeCsv(row[header])).join(",")
-      ),
-    ];
-
-    return `\uFEFF${lines.join("\n")}`;
-  }
-
-  function downloadTextFile(filename, content, type = "text/plain") {
-    const blob = new Blob([content], {
-      type,
-    });
-
-    const fileUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = fileUrl;
-    link.download = filename;
-    link.style.display = "none";
-
-    document.body.appendChild(link);
-    link.click();
-
-    setTimeout(() => {
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(fileUrl);
-    }, 150);
-  }
-
-  function downloadCsv(filename, rows) {
-    const csv = makeCsv(rows);
-
-    if (!csv) {
-      setError("No data available for this export.");
-      return;
-    }
-
-    downloadTextFile(filename, csv, "text/csv;charset=utf-8");
-    setMessage(`${filename} downloaded successfully.`);
-  }
-
-  function downloadWordFile(filename, htmlContent) {
-    const wordDocument = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office"
-            xmlns:w="urn:schemas-microsoft-com:office:word"
-            xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="ProgId" content="Word.Document" />
-          <meta name="Generator" content="Chalin 03 System" />
-        </head>
-        <body>
-          ${htmlContent}
-        </body>
-      </html>
-    `;
-
-    downloadTextFile(
-      filename,
-      wordDocument,
-      "application/msword;charset=utf-8"
-    );
-  }
-
-  function downloadPowerPointFile(filename, htmlContent) {
-    const pptDocument = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office"
-            xmlns:p="urn:schemas-microsoft-com:office:powerpoint"
-            xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="ProgId" content="PowerPoint.Show" />
-          <meta name="Generator" content="Chalin 03 System" />
-        </head>
-        <body>
-          ${htmlContent}
-        </body>
-      </html>
-    `;
-
-    downloadTextFile(
-      filename,
-      pptDocument,
-      "application/vnd.ms-powerpoint;charset=utf-8"
-    );
-  }
-
-  function fileName(base, extension) {
-    const period = makeFilePrefix(auditData.period.shortLabel);
-    return `${base}_${period}.${extension}`;
-  }
-
-  function getBackendPeriodStatus(status) {
-    if (status === "reviewed") return "reviewed";
-    if (status === "approved") return "approved";
-    if (status === "locked") return "approved";
-    if (status === "rejected") return "rejected";
-    return "draft";
-  }
-
-  function mapDatabaseSignOff(row) {
-    if (!row) {
-      return null;
-    }
-
+  const signOffCompletion = useMemo(() => {
+    const total = SIGN_OFF_CHECKLIST_ITEMS.length;
+    const checked = SIGN_OFF_CHECKLIST_ITEMS.filter((item) => Boolean(signOff.checklist?.[item.key])).length;
     return {
-      preparedBy: row.prepared_by_name || "",
-      reviewedBy: row.reviewed_by_name || "",
-      approvedBy: row.approved_by_name || "",
-      reviewDate: row.review_date
-        ? apiDate(row.review_date)
-        : new Date().toISOString().slice(0, 10),
-      accountingStatus: row.period_status || "draft",
-      accountantNotes: row.accountant_notes || "",
-      bossNotes: row.management_notes || "",
-      checklist: {
-        salesChecked: Boolean(row.sales_checked),
-        cashChecked: Boolean(row.sales_checked),
-        debtsChecked: Boolean(row.debts_checked),
-        expensesChecked: Boolean(row.expenses_checked),
-        stockChecked: Boolean(row.stock_checked),
-        warningsChecked: Boolean(row.warnings_checked),
-        backupChecked: Boolean(row.reports_checked),
-      },
+      total,
+      checked,
+      percent: total > 0 ? Math.round((checked / total) * 100) : 0,
     };
-  }
+  }, [signOff.checklist]);
 
-  function resetSignOffForm() {
-    setSavedSignOffId(null);
-    setSignOff({
-      preparedBy: "",
-      reviewedBy: "",
-      approvedBy: "",
-      reviewDate: new Date().toISOString().slice(0, 10),
-      accountingStatus: "draft",
-      accountantNotes: "",
-      bossNotes: "",
-      checklist: {
-        salesChecked: false,
-        cashChecked: false,
-        debtsChecked: false,
-        expensesChecked: false,
-        stockChecked: false,
-        warningsChecked: false,
-        backupChecked: false,
-      },
-    });
-  }
+  useEffect(() => {
+    loadAuditData();
+  }, []);
 
-  async function loadLatestSignOffFromDatabase() {
-    setSignOffLoading(true);
+  useEffect(() => {
+    loadLatestSignOff();
+    loadSignOffHistory();
+  }, [periodType, customStartDate, customEndDate]);
+
+  async function loadAuditData() {
+    setLoading(true);
     setError("");
 
-    try {
-      const period = getPeriodRange();
+    const requests = await Promise.allSettled([
+      axiosClient.get("/products"),
+      axiosClient.get("/sales"),
+      axiosClient.get("/debts/summary"),
+      axiosClient.get("/expenses"),
+    ]);
 
+    const [productsResult, salesResult, debtsResult, expensesResult] = requests;
+
+    if (productsResult.status === "fulfilled") setProducts(productsResult.value.data.products || []);
+    if (salesResult.status === "fulfilled") setSales(salesResult.value.data.sales || []);
+    if (debtsResult.status === "fulfilled") setDebtSummary(debtsResult.value.data.summary || debtsResult.value.data || null);
+    if (expensesResult.status === "fulfilled") setExpenses(expensesResult.value.data.expenses || []);
+
+    const failed = requests.filter((item) => item.status === "rejected");
+    if (failed.length > 0) {
+      setError("Some audit data could not load. The page is still open so you can see what is available.");
+    } else {
+      setMessage("Audit and accounting review refreshed.");
+    }
+
+    setLoading(false);
+  }
+
+  async function loadLatestSignOff() {
+    setSignOffLoading(true);
+
+    try {
       const response = await axiosClient.get("/audit-signoffs/latest", {
         params: {
           period_type: periodType,
@@ -1239,27 +797,19 @@ export default function AuditAccountingPage() {
         },
       });
 
-      const savedSignOff = response.data.signoff;
+      const saved = response.data.signoff;
 
-      if (!savedSignOff) {
-        resetSignOffForm();
+      if (!saved) {
+        setSavedSignOffId(null);
+        setSignOff(cloneEmptySignOff());
         return;
       }
 
-      setSavedSignOffId(savedSignOff.id);
-      setSignOff((current) => ({
-        ...current,
-        ...mapDatabaseSignOff(savedSignOff),
-        checklist: {
-          ...current.checklist,
-          ...mapDatabaseSignOff(savedSignOff).checklist,
-        },
-      }));
-    } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Could not load saved audit sign-off from database."
-      );
+      const mapped = mapDatabaseSignOff(saved);
+      setSavedSignOffId(saved.id);
+      setSignOff(mapped || cloneEmptySignOff());
+    } catch (requestError) {
+      setSavedSignOffId(null);
     } finally {
       setSignOffLoading(false);
     }
@@ -1275,13 +825,10 @@ export default function AuditAccountingPage() {
   }
 
   function updateSignOffField(field, value) {
-    setSignOff((current) => ({
-      ...current,
-      [field]: value,
-    }));
+    setSignOff((current) => ({ ...current, [field]: value }));
   }
 
-  function updateSignOffChecklist(field, value) {
+  function updateChecklist(field, value) {
     setSignOff((current) => ({
       ...current,
       checklist: {
@@ -1294,149 +841,118 @@ export default function AuditAccountingPage() {
   function buildSignOffPayload() {
     return {
       period_type: periodType,
-      period_label: auditData.period.label,
-      period_start: apiDate(auditData.period.start),
-      period_end: apiDate(auditData.period.end),
+      period_label: period.label,
+      period_start: apiDate(period.start),
+      period_end: apiDate(period.end),
       audit_score: auditData.auditScore,
       audit_status: auditData.auditStatus,
       prepared_by_name: signOff.preparedBy,
       reviewed_by_name: signOff.reviewedBy,
       approved_by_name: signOff.approvedBy,
-      review_date: signOff.reviewDate || new Date().toISOString().slice(0, 10),
-      period_status: getBackendPeriodStatus(signOff.accountingStatus),
+      review_date: signOff.reviewDate || getTodayInputDate(),
+      period_status: signOff.periodStatus,
       sales_checked: Boolean(signOff.checklist.salesChecked),
       expenses_checked: Boolean(signOff.checklist.expensesChecked),
       debts_checked: Boolean(signOff.checklist.debtsChecked),
       stock_checked: Boolean(signOff.checklist.stockChecked),
       warnings_checked: Boolean(signOff.checklist.warningsChecked),
-      reports_checked: Boolean(signOff.checklist.backupChecked),
+      reports_checked: Boolean(signOff.checklist.reportsChecked),
       accountant_notes: signOff.accountantNotes,
-      management_notes: signOff.bossNotes,
+      management_notes: signOff.managementNotes,
     };
   }
 
-  async function saveSignOffDetails() {
+  async function saveSignOff() {
     setSignOffSaving(true);
     setError("");
     setMessage("");
 
     try {
       const response = await axiosClient.post("/audit-signoffs", buildSignOffPayload());
-      const savedSignOff = response.data.signoff;
+      const saved = response.data.signoff;
 
-      if (savedSignOff) {
-        setSavedSignOffId(savedSignOff.id);
-        setSignOff((current) => ({
-          ...current,
-          ...mapDatabaseSignOff(savedSignOff),
-          checklist: {
-            ...current.checklist,
-            ...mapDatabaseSignOff(savedSignOff).checklist,
-          },
-        }));
+      if (saved) {
+        setSavedSignOffId(saved.id);
+        const mapped = mapDatabaseSignOff(saved);
+        setSignOff(mapped || signOff);
       }
 
       await loadSignOffHistory();
       setMessage(response.data.message || "Audit sign-off saved into MySQL successfully.");
-    } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Could not save audit sign-off into the database."
-      );
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not save audit sign-off. Check backend route and database table.");
     } finally {
       setSignOffSaving(false);
     }
   }
 
-  function clearSignOffDetails() {
-    const confirmed = window.confirm(
-      "Clear the sign-off form for this selected period? This will not delete saved MySQL records."
-    );
+  function clearSignOffForm() {
+    setSavedSignOffId(null);
+    setSignOff(cloneEmptySignOff());
+    setMessage("Sign-off form cleared. Existing database records were not deleted.");
+  }
 
-    if (!confirmed) {
+  function fileName(base, extension) {
+    return `${base}_${makeFilePrefix(period.shortLabel)}.${extension}`;
+  }
+
+  function downloadCsv(filename, rows) {
+    const csv = makeCsv(rows);
+    if (!csv) {
+      setError("No data available for this export.");
       return;
     }
-
-    resetSignOffForm();
-    setMessage("Audit sign-off form cleared. Saved database records were not deleted.");
+    downloadTextFile(filename, csv, "text/csv;charset=utf-8");
+    setMessage(`${filename} downloaded successfully.`);
   }
 
   function downloadAuditSummaryCsv() {
-    const rows = auditData.accountantSummary.map((item) => ({
-      item: item.label,
-      amount: item.isText ? item.value : plainMoney(item.value),
-      meaning: item.meaning,
-    }));
+    const rows = [
+      ...auditData.accountantSummary.map((item) => ({
+        item: item.label,
+        amount: item.isText ? item.value : plainMoney(item.value),
+        meaning: item.meaning,
+      })),
+      { item: "Audit Score", amount: `${auditData.auditScore}%`, meaning: auditData.auditStatus },
+      { item: "Red Flags", amount: auditData.redFlags, meaning: "High risk warnings." },
+      { item: "Orange Flags", amount: auditData.orangeFlags, meaning: "Medium risk warnings." },
+      { item: "Blue Flags", amount: auditData.blueFlags, meaning: "Information notes." },
+    ];
 
-    rows.push(
-      {
-        item: "Audit Score",
-        amount: `${auditData.auditScore}%`,
-        meaning: auditData.auditStatus,
-      },
-      {
-        item: "Red Flags",
-        amount: auditData.redFlags,
-        meaning: "High risk audit warnings.",
-      },
-      {
-        item: "Orange Flags",
-        amount: auditData.orangeFlags,
-        meaning: "Medium risk audit warnings.",
-      },
-      {
-        item: "Blue Flags",
-        amount: auditData.blueFlags,
-        meaning: "Information or review notes.",
-      }
-    );
-
-    downloadCsv(fileName("chalin03_accounting_summary_excel", "csv"), rows);
+    downloadCsv(fileName("chalin03_accounting_summary", "csv"), rows);
   }
 
   function downloadAuditWarningsCsv() {
     const rows = auditData.auditFlags.map((flag, index) => ({
       number: index + 1,
-      period: auditData.period.label,
+      period: period.label,
       severity: flag.severity,
       title: flag.title,
       detail: flag.detail,
       recommendation: flag.recommendation,
     }));
 
-    downloadCsv(fileName("chalin03_audit_warnings_excel", "csv"), rows);
+    downloadCsv(fileName("chalin03_audit_warnings", "csv"), rows);
   }
 
-  function downloadManagementLetterCsv() {
-    const rows = auditData.managementLetterPoints.map((point) => ({
-      number: point.number,
-      period: auditData.period.label,
-      finding: point.finding,
-      implication: point.implication,
-      recommendation: point.recommendation,
-    }));
-
-    downloadCsv(fileName("chalin03_management_letter_excel", "csv"), rows);
-  }
-
-  function downloadExcelWorkbookCsv() {
+  function downloadAccountingWorkbookCsv() {
     const rows = [
       ...auditData.accountantSummary.map((item) => ({
-        period: auditData.period.label,
+        period: period.label,
         section: "Accounting Summary",
         item: item.label,
         amount: item.isText ? item.value : plainMoney(item.value),
         note: item.meaning,
       })),
       ...auditData.auditFlags.map((flag) => ({
-        period: auditData.period.label,
+        period: period.label,
         section: "Audit Warning",
         item: flag.title,
         amount: "",
         note: `${flag.detail} Recommendation: ${flag.recommendation}`,
       })),
       ...auditData.topExpenseCategories.map((expense) => ({
-        period: auditData.period.label,
+        period: period.label,
         section: "Expense Category",
         item: expense.category,
         amount: plainMoney(expense.amount),
@@ -1444,276 +960,14 @@ export default function AuditAccountingPage() {
       })),
     ];
 
-    downloadCsv(fileName("chalin03_accounting_workbook_excel", "csv"), rows);
+    downloadCsv(fileName("chalin03_accounting_workbook", "csv"), rows);
   }
 
-  function downloadAccessImportFiles() {
+  function downloadAccessImportPack() {
     downloadCsv(fileName("access_import_sales_table", "csv"), auditData.accessSalesRows);
-
-    setTimeout(() => {
-      downloadCsv(
-        fileName("access_import_expenses_table", "csv"),
-        auditData.accessExpenseRows
-      );
-    }, 300);
-
-    setTimeout(() => {
-      downloadCsv(
-        fileName("access_import_products_table", "csv"),
-        auditData.accessProductRows
-      );
-    }, 600);
-
-    setTimeout(() => {
-      downloadAccessGuideWord();
-    }, 900);
-
-    setMessage(
-      "Access import files are downloading. Import the CSV files into Microsoft Access as tables."
-    );
-  }
-
-  function buildPowerPointOutline() {
-    const lines = [
-      "CHALIN 03 COMPANY LIMITED",
-      "AUDIT & ACCOUNTING POWERPOINT BRIEFING OUTLINE",
-      "",
-      "Slide 1: Title",
-      `${businessName} - Audit & Accounting Review`,
-      `Period: ${auditData.period.label}`,
-      `Generated: ${formatDateTime(new Date())}`,
-      "",
-      "Slide 2: Audit Health Score",
-      `Audit Score: ${auditData.auditScore}%`,
-      `Status: ${auditData.auditStatus}`,
-      `Red Flags: ${auditData.redFlags}`,
-      `Orange Flags: ${auditData.orangeFlags}`,
-      `Blue Flags: ${auditData.blueFlags}`,
-      "",
-      "Slide 3: Accounting Summary",
-      ...auditData.accountantSummary.map((item) =>
-        item.isText
-          ? `- ${item.label}: ${item.value}`
-          : `- ${item.label}: ${formatMoney(item.value)}`
-      ),
-      "",
-      "Slide 4: Cash & Debt Reconciliation",
-      `Cash Collected: ${formatMoney(auditData.cashCollected)}`,
-      `Outstanding Debts: ${formatMoney(auditData.outstandingDebts)}`,
-      `Sales Balances: ${formatMoney(auditData.salesBalances)}`,
-      `Possible Difference: ${formatMoney(auditData.possibleDebtDifference)}`,
-      "",
-      "Slide 5: Expense Analysis",
-      `Total Expenses: ${formatMoney(auditData.totalExpenses)}`,
-      `Fuel Expenses: ${formatMoney(auditData.fuelExpenses)}`,
-      `Transport Expenses: ${formatMoney(auditData.transportExpenses)}`,
-      `Salary Expenses: ${formatMoney(auditData.salaryExpenses)}`,
-      "",
-      "Slide 6: Inventory Audit",
-      `Stock Value: ${formatMoney(auditData.stockValue)}`,
-      `Stock Cost Value: ${formatMoney(auditData.stockCostValue)}`,
-      `Low Stock Products: ${auditData.lowStockProducts.length}`,
-      `Out of Stock Products: ${auditData.zeroStockProducts.length}`,
-      "",
-      "Slide 7: Main Audit Warnings",
-      ...auditData.auditFlags
-        .slice(0, 8)
-        .map((flag) => `- ${flag.title}: ${flag.detail}`),
-      "",
-      "Slide 8: Management Recommendations",
-      ...auditData.managementLetterPoints
-        .slice(0, 8)
-        .map((point) => `- ${point.recommendation}`),
-      "",
-      "Note: This is a PowerPoint-ready outline. Copy it into PowerPoint slides.",
-    ];
-
-    return lines.join("\n");
-  }
-
-  function downloadPowerPointOutlineText() {
-    downloadTextFile(
-      fileName("chalin03_powerpoint_audit_briefing_outline", "txt"),
-      buildPowerPointOutline(),
-      "text/plain;charset=utf-8"
-    );
-
-    setMessage("PowerPoint outline text file downloaded successfully.");
-  }
-
-  function buildPowerPointDocument() {
-    const warnings = auditData.auditFlags
-      .slice(0, 7)
-      .map(
-        (flag) =>
-          `<li><strong>${escapeHtml(flag.title)}:</strong> ${escapeHtml(
-            flag.detail
-          )}</li>`
-      )
-      .join("");
-
-    const recommendations = auditData.managementLetterPoints
-      .slice(0, 7)
-      .map((point) => `<li>${escapeHtml(point.recommendation)}</li>`)
-      .join("");
-
-    return `
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          background: #f1f5f9;
-          color: #111827;
-        }
-
-        .slide {
-          width: 960px;
-          min-height: 540px;
-          background: #ffffff;
-          margin: 20px auto;
-          padding: 46px;
-          border-radius: 18px;
-          box-sizing: border-box;
-          page-break-after: always;
-          border: 1px solid #dbe3ef;
-        }
-
-        .cover {
-          background: #07182c;
-          color: #ffffff;
-        }
-
-        h1 {
-          color: #07182c;
-          font-size: 42px;
-          margin: 0 0 16px;
-        }
-
-        .cover h1 {
-          color: #ffffff;
-        }
-
-        h2 {
-          color: #07182c;
-          font-size: 34px;
-          margin: 0 0 20px;
-        }
-
-        .cover h2 {
-          color: #e0ba28;
-        }
-
-        p,
-        li {
-          font-size: 22px;
-          line-height: 1.4;
-        }
-
-        .grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 18px;
-        }
-
-        .box {
-          border: 1px solid #dbe3ef;
-          border-radius: 14px;
-          padding: 18px;
-          background: #f8fafc;
-        }
-
-        .box span {
-          display: block;
-          color: #64748b;
-          font-size: 18px;
-        }
-
-        .box strong {
-          display: block;
-          margin-top: 8px;
-          font-size: 28px;
-          color: #07182c;
-        }
-      </style>
-
-      <div class="slide cover">
-        <h1>${escapeHtml(businessName)}</h1>
-        <h2>Audit & Accounting Briefing</h2>
-        <p>Period: ${escapeHtml(auditData.period.label)}</p>
-        <p>Generated: ${escapeHtml(formatDateTime(new Date()))}</p>
-        <p>Audit Score: ${auditData.auditScore}% - ${escapeHtml(
-          auditData.auditStatus
-        )}</p>
-      </div>
-
-      <div class="slide">
-        <h1>Audit Health Score</h1>
-        <div class="grid">
-          <div class="box"><span>Audit Score</span><strong>${auditData.auditScore}%</strong></div>
-          <div class="box"><span>Status</span><strong>${escapeHtml(
-            auditData.auditStatus
-          )}</strong></div>
-          <div class="box"><span>Red Flags</span><strong>${auditData.redFlags}</strong></div>
-          <div class="box"><span>Orange Flags</span><strong>${auditData.orangeFlags}</strong></div>
-        </div>
-      </div>
-
-      <div class="slide">
-        <h1>Accounting Summary</h1>
-        <div class="grid">
-          <div class="box"><span>Period Sales</span><strong>${formatMoney(
-            auditData.totalSales
-          )}</strong></div>
-          <div class="box"><span>Cash Collected</span><strong>${formatMoney(
-            auditData.cashCollected
-          )}</strong></div>
-          <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
-            auditData.outstandingDebts
-          )}</strong></div>
-          <div class="box"><span>Period Expenses</span><strong>${formatMoney(
-            auditData.totalExpenses
-          )}</strong></div>
-        </div>
-      </div>
-
-      <div class="slide">
-        <h1>Expense & Stock Review</h1>
-        <div class="grid">
-          <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(
-            auditData.fuelExpenses
-          )}</strong></div>
-          <div class="box"><span>Stock Value</span><strong>${formatMoney(
-            auditData.stockValue
-          )}</strong></div>
-          <div class="box"><span>Low Stock Items</span><strong>${
-            auditData.lowStockProducts.length
-          }</strong></div>
-          <div class="box"><span>Out of Stock Items</span><strong>${
-            auditData.zeroStockProducts.length
-          }</strong></div>
-        </div>
-      </div>
-
-      <div class="slide">
-        <h1>Main Audit Warnings</h1>
-        <ul>${warnings || "<li>No major audit warning detected.</li>"}</ul>
-      </div>
-
-      <div class="slide">
-        <h1>Management Recommendations</h1>
-        <ul>${recommendations}</ul>
-      </div>
-    `;
-  }
-
-  function downloadPowerPointPresentation() {
-    downloadPowerPointFile(
-      fileName("chalin03_audit_accounting_briefing", "ppt"),
-      buildPowerPointDocument()
-    );
-
-    setMessage(
-      "PowerPoint briefing downloaded. Microsoft PowerPoint may show a file format warning; choose Yes/Open."
-    );
+    setTimeout(() => downloadCsv(fileName("access_import_expenses_table", "csv"), auditData.accessExpenseRows), 300);
+    setTimeout(() => downloadCsv(fileName("access_import_products_table", "csv"), auditData.accessProductRows), 600);
+    setMessage("Access CSV files are downloading. Import them from inside Microsoft Access.");
   }
 
   function buildPrintableReport() {
@@ -1743,36 +997,11 @@ export default function AuditAccountingPage() {
       )
       .join("");
 
-    const checklistRows = auditData.accountingChecklist
-      .map(
-        (item) => `
-          <tr>
-            <td>${escapeHtml(item.title)}</td>
-            <td>${item.status ? "Passed" : "Needs Review"}</td>
-            <td>${escapeHtml(item.note)}</td>
-          </tr>
-        `
-      )
-      .join("");
-
-    const managementRows = auditData.managementLetterPoints
-      .map(
-        (point) => `
-          <tr>
-            <td>${point.number}</td>
-            <td>${escapeHtml(point.finding)}</td>
-            <td>${escapeHtml(point.implication)}</td>
-            <td>${escapeHtml(point.recommendation)}</td>
-          </tr>
-        `
-      )
-      .join("");
-
-    const signOffRows = SIGN_OFF_CHECKLIST_ITEMS.map(
+    const checklistRows = SIGN_OFF_CHECKLIST_ITEMS.map(
       (item) => `
         <tr>
           <td>${escapeHtml(item.label)}</td>
-          <td>${signOff.checklist?.[item.key] ? "Checked" : "Pending"}</td>
+          <td>${signOff.checklist[item.key] ? "Checked" : "Pending"}</td>
           <td>${escapeHtml(item.note)}</td>
         </tr>
       `
@@ -1783,141 +1012,33 @@ export default function AuditAccountingPage() {
       <html>
         <head>
           <meta charset="UTF-8" />
-          <title>${escapeHtml(reportName)}</title>
+          <title>${escapeHtml(BUSINESS_NAME)} Audit Report</title>
           <style>
-            @page {
-              size: A4;
-              margin: 14mm;
-            }
-
-            body {
-              font-family: Arial, sans-serif;
-              color: #111827;
-              line-height: 1.45;
-              font-size: 12px;
-            }
-
-            h1 {
-              margin: 0;
-              color: #07182c;
-              font-size: 24px;
-            }
-
-            h2 {
-              margin-top: 24px;
-              color: #07182c;
-              border-bottom: 2px solid #e0ba28;
-              padding-bottom: 6px;
-            }
-
-            .muted {
-              color: #64748b;
-            }
-
-            .header {
-              display: flex;
-              justify-content: space-between;
-              gap: 20px;
-              border-bottom: 3px solid #07182c;
-              padding-bottom: 12px;
-              margin-bottom: 16px;
-            }
-
-            .score {
-              border: 2px solid #e0ba28;
-              border-radius: 12px;
-              padding: 10px;
-              min-width: 150px;
-              text-align: center;
-            }
-
-            .score strong {
-              display: block;
-              font-size: 24px;
-              color: #07182c;
-            }
-
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 8px;
-              margin: 14px 0;
-            }
-
-            .box {
-              border: 1px solid #dbe3ef;
-              border-radius: 10px;
-              padding: 8px;
-              background: #f8fafc;
-            }
-
-            .box span {
-              display: block;
-              color: #64748b;
-              font-size: 11px;
-            }
-
-            .box strong {
-              display: block;
-              margin-top: 4px;
-              color: #07182c;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-              page-break-inside: auto;
-            }
-
-            th,
-            td {
-              border: 1px solid #dbe3ef;
-              padding: 7px;
-              text-align: left;
-              vertical-align: top;
-              font-size: 11px;
-            }
-
-            th {
-              background: #07182c;
-              color: #ffffff;
-            }
-
-            tr {
-              page-break-inside: avoid;
-            }
-
-            .notice {
-              background: #fff7ed;
-              border: 1px solid #fed7aa;
-              border-radius: 10px;
-              padding: 10px;
-              margin-top: 14px;
-              color: #9a3412;
-            }
-
-            .footer {
-              margin-top: 28px;
-              color: #64748b;
-              font-size: 10px;
-              border-top: 1px solid #dbe3ef;
-              padding-top: 8px;
-            }
+            @page { size: A4; margin: 14mm; }
+            body { font-family: Arial, sans-serif; color: #111827; font-size: 12px; line-height: 1.45; }
+            h1 { color: #07182c; margin: 0; }
+            h2 { color: #07182c; border-bottom: 2px solid #e0ba28; padding-bottom: 6px; margin-top: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #dbe3ef; padding: 7px; text-align: left; vertical-align: top; }
+            th { background: #07182c; color: #ffffff; }
+            .header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 3px solid #07182c; padding-bottom: 12px; }
+            .score { border: 2px solid #e0ba28; border-radius: 12px; padding: 10px; min-width: 150px; text-align: center; }
+            .score strong { display: block; font-size: 24px; color: #07182c; }
+            .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
+            .box { border: 1px solid #dbe3ef; border-radius: 10px; padding: 8px; background: #f8fafc; }
+            .box span { display: block; color: #64748b; font-size: 11px; }
+            .box strong { display: block; color: #07182c; margin-top: 4px; }
+            .notice { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px; margin-top: 14px; color: #9a3412; }
           </style>
         </head>
-
         <body>
           <div class="header">
             <div>
-              <h1>${escapeHtml(businessName)}</h1>
-              <p class="muted">${escapeHtml(reportName)}</p>
-              <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
-              <p><strong>Generated:</strong> ${escapeHtml(
-                formatDateTime(new Date())
-              )}</p>
+              <h1>${escapeHtml(BUSINESS_NAME)}</h1>
+              <p>Audit & Accounting Intelligence Pro Review</p>
+              <p><strong>Period:</strong> ${escapeHtml(period.label)}</p>
+              <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
             </div>
-
             <div class="score">
               <span>Audit Score</span>
               <strong>${auditData.auditScore}%</strong>
@@ -1926,129 +1047,48 @@ export default function AuditAccountingPage() {
           </div>
 
           <div class="grid">
-            <div class="box"><span>Period Sales</span><strong>${formatMoney(
-              auditData.totalSales
-            )}</strong></div>
-            <div class="box"><span>Cash Collected</span><strong>${formatMoney(
-              auditData.cashCollected
-            )}</strong></div>
-            <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
-              auditData.outstandingDebts
-            )}</strong></div>
-            <div class="box"><span>Period Expenses</span><strong>${formatMoney(
-              auditData.totalExpenses
-            )}</strong></div>
-            <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(
-              auditData.fuelExpenses
-            )}</strong></div>
-            <div class="box"><span>Discounts</span><strong>${formatMoney(
-              auditData.totalDiscounts
-            )}</strong></div>
-            <div class="box"><span>Stock Value</span><strong>${formatMoney(
-              auditData.stockValue
-            )}</strong></div>
-            <div class="box"><span>Operating Result</span><strong>${formatMoney(
-              auditData.operatingResult
-            )}</strong></div>
+            <div class="box"><span>Period Sales</span><strong>${formatMoney(auditData.totalSales)}</strong></div>
+            <div class="box"><span>Cash Collected</span><strong>${formatMoney(auditData.cashCollected)}</strong></div>
+            <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(auditData.outstandingDebts)}</strong></div>
+            <div class="box"><span>Period Expenses</span><strong>${formatMoney(auditData.totalExpenses)}</strong></div>
+            <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(auditData.fuelExpenses)}</strong></div>
+            <div class="box"><span>Discounts</span><strong>${formatMoney(auditData.totalDiscounts)}</strong></div>
+            <div class="box"><span>Stock Value</span><strong>${formatMoney(auditData.stockValue)}</strong></div>
+            <div class="box"><span>Operating Result</span><strong>${formatMoney(auditData.operatingResult)}</strong></div>
           </div>
 
-          <div class="notice">
-            This report is a system-generated internal review. It supports management,
-            accounting and audit preparation, but it does not replace a licensed
-            accountant or external auditor.
-          </div>
+          <div class="notice">This report supports internal management review and does not replace a licensed accountant or external auditor.</div>
 
           <h2>1. Accounting Summary</h2>
           <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Amount / Detail</th>
-                <th>Meaning</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Item</th><th>Amount / Detail</th><th>Meaning</th></tr></thead>
             <tbody>${summaryRows}</tbody>
           </table>
 
           <h2>2. Audit Risk Register</h2>
           <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Risk</th>
-                <th>Finding</th>
-                <th>Details</th>
-                <th>Recommendation</th>
-              </tr>
-            </thead>
+            <thead><tr><th>#</th><th>Risk</th><th>Finding</th><th>Details</th><th>Recommendation</th></tr></thead>
             <tbody>${flagsRows}</tbody>
           </table>
 
-          <h2>3. Accountant Checklist</h2>
+          <h2>3. Sign-Off Details</h2>
           <table>
-            <thead>
-              <tr>
-                <th>Check</th>
-                <th>Status</th>
-                <th>Note</th>
-              </tr>
-            </thead>
+            <tbody>
+              <tr><td><strong>Prepared By</strong></td><td>${escapeHtml(signOff.preparedBy || "-")}</td></tr>
+              <tr><td><strong>Reviewed By</strong></td><td>${escapeHtml(signOff.reviewedBy || "-")}</td></tr>
+              <tr><td><strong>Approved By</strong></td><td>${escapeHtml(signOff.approvedBy || "-")}</td></tr>
+              <tr><td><strong>Status</strong></td><td>${escapeHtml(getSignOffStatusLabel(signOff.periodStatus))}</td></tr>
+              <tr><td><strong>Review Date</strong></td><td>${escapeHtml(formatDate(signOff.reviewDate))}</td></tr>
+              <tr><td><strong>Accountant Notes</strong></td><td>${escapeHtml(signOff.accountantNotes || "-")}</td></tr>
+              <tr><td><strong>Management Notes</strong></td><td>${escapeHtml(signOff.managementNotes || "-")}</td></tr>
+            </tbody>
+          </table>
+
+          <h2>4. Sign-Off Checklist</h2>
+          <table>
+            <thead><tr><th>Check</th><th>Status</th><th>Note</th></tr></thead>
             <tbody>${checklistRows}</tbody>
           </table>
-
-          <h2>4. Management Letter Points</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Finding</th>
-                <th>Implication</th>
-                <th>Recommendation</th>
-              </tr>
-            </thead>
-            <tbody>${managementRows}</tbody>
-          </table>
-
-          <h2>5. Audit Sign-Off & Approval</h2>
-          <div class="grid">
-            <div class="box"><span>Prepared By</span><strong>${escapeHtml(
-              signOff.preparedBy || "Not provided"
-            )}</strong></div>
-            <div class="box"><span>Reviewed By</span><strong>${escapeHtml(
-              signOff.reviewedBy || "Not provided"
-            )}</strong></div>
-            <div class="box"><span>Approved By</span><strong>${escapeHtml(
-              signOff.approvedBy || "Not provided"
-            )}</strong></div>
-            <div class="box"><span>Status</span><strong>${escapeHtml(
-              getSignOffStatusLabel(signOff.accountingStatus)
-            )}</strong></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Sign-Off Check</th>
-                <th>Status</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>${signOffRows}</tbody>
-          </table>
-
-          <p><strong>Review Date:</strong> ${escapeHtml(
-            formatDate(signOff.reviewDate)
-          )}</p>
-          <p><strong>Accountant Notes:</strong> ${escapeHtml(
-            signOff.accountantNotes || "-"
-          )}</p>
-          <p><strong>Boss Approval Notes:</strong> ${escapeHtml(
-            signOff.bossNotes || "-"
-          )}</p>
-
-          <div class="footer">
-            Powered by Chalin 03 Sales & Inventory Management System.
-          </div>
         </body>
       </html>
     `;
@@ -2056,597 +1096,86 @@ export default function AuditAccountingPage() {
 
   function printAuditReport() {
     const printWindow = window.open("", "_blank", "width=1000,height=800");
-
     if (!printWindow) {
       setError("Popup blocked. Please allow popups and try again.");
       return;
     }
-
     printWindow.document.open();
     printWindow.document.write(buildPrintableReport());
     printWindow.document.close();
-
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
     }, 350);
   }
 
-  function downloadHtmlAuditReport() {
-    downloadTextFile(
-      fileName("chalin03_professional_audit_report", "html"),
-      buildPrintableReport(),
-      "text/html;charset=utf-8"
-    );
-
-    setMessage("HTML audit report downloaded successfully.");
-  }
-
   function downloadAuditReportWord() {
-    downloadWordFile(
-      fileName("chalin03_professional_audit_report", "doc"),
-      buildPrintableReport()
-    );
-
+    downloadWordFile(fileName("chalin03_professional_audit_report", "doc"), buildPrintableReport());
     setMessage("Audit Report Word document downloaded successfully.");
   }
 
-  function buildManagementLetterDocument() {
-    const managementRows = auditData.managementLetterPoints
-      .map(
-        (point) => `
-          <tr>
-            <td>${point.number}</td>
-            <td>${escapeHtml(point.finding)}</td>
-            <td>${escapeHtml(point.implication)}</td>
-            <td>${escapeHtml(point.recommendation)}</td>
-          </tr>
-        `
-      )
-      .join("");
+  function downloadPowerPointOutlineText() {
+    const lines = [
+      "CHALIN 03 COMPANY LIMITED",
+      "AUDIT & ACCOUNTING POWERPOINT BRIEFING OUTLINE",
+      "",
+      `Period: ${period.label}`,
+      `Generated: ${formatDateTime(new Date())}`,
+      `Audit Score: ${auditData.auditScore}% - ${auditData.auditStatus}`,
+      "",
+      "Accounting Summary",
+      ...auditData.accountantSummary.map((item) =>
+        item.isText ? `- ${item.label}: ${item.value}` : `- ${item.label}: ${formatMoney(item.value)}`
+      ),
+      "",
+      "Main Audit Warnings",
+      ...auditData.auditFlags.slice(0, 10).map((flag) => `- ${flag.title}: ${flag.detail}`),
+      "",
+      "Recommendations",
+      ...auditData.managementLetterPoints.slice(0, 10).map((point) => `- ${point.recommendation}`),
+    ];
 
-    const warningRows = auditData.auditFlags
-      .filter((flag) => flag.severity !== "green")
-      .map(
-        (flag, index) => `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(flag.severity.toUpperCase())}</td>
-            <td>${escapeHtml(flag.title)}</td>
-            <td>${escapeHtml(flag.detail)}</td>
-            <td>${escapeHtml(flag.recommendation)}</td>
-          </tr>
-        `
-      )
-      .join("");
-
-    return `
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          color: #111827;
-          line-height: 1.55;
-          font-size: 13px;
-        }
-
-        h1 {
-          color: #07182c;
-          margin-bottom: 4px;
-        }
-
-        h2 {
-          color: #07182c;
-          margin-top: 24px;
-          border-bottom: 2px solid #e0ba28;
-          padding-bottom: 6px;
-        }
-
-        .muted {
-          color: #64748b;
-        }
-
-        .box {
-          border: 1px solid #dbe3ef;
-          background: #f8fafc;
-          padding: 14px;
-          border-radius: 10px;
-          margin: 16px 0;
-        }
-
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 12px;
-        }
-
-        th,
-        td {
-          border: 1px solid #dbe3ef;
-          padding: 8px;
-          text-align: left;
-          vertical-align: top;
-          font-size: 12px;
-        }
-
-        th {
-          background: #07182c;
-          color: #ffffff;
-        }
-
-        .signature {
-          margin-top: 40px;
-        }
-
-        .line {
-          margin-top: 36px;
-          border-top: 1px solid #111827;
-          width: 280px;
-          padding-top: 6px;
-        }
-      </style>
-
-      <h1>${escapeHtml(businessName)}</h1>
-      <p class="muted">Management Letter - Audit & Accounting Review</p>
-      <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
-      <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
-
-      <div class="box">
-        <strong>Audit Score:</strong> ${auditData.auditScore}% - ${escapeHtml(
-          auditData.auditStatus
-        )}<br />
-        <strong>Red Flags:</strong> ${auditData.redFlags}<br />
-        <strong>Orange Flags:</strong> ${auditData.orangeFlags}<br />
-        <strong>Blue Flags:</strong> ${auditData.blueFlags}
-      </div>
-
-      <h2>Introduction</h2>
-      <p>
-        This management letter summarizes key observations generated from the
-        Chalin 03 Sales & Inventory Management System for the selected accounting
-        period. It highlights issues relating to sales, cash collection, customer
-        debts, expenses, stock, discounts, inventory pricing and operational controls.
-      </p>
-
-      <h2>Main Management Letter Points</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Finding</th>
-            <th>Implication</th>
-            <th>Recommendation</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          ${managementRows}
-        </tbody>
-      </table>
-
-      <h2>Detailed Audit Warnings</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Risk Level</th>
-            <th>Finding</th>
-            <th>Details</th>
-            <th>Recommendation</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          ${
-            warningRows ||
-            `<tr><td colspan="5">No major audit warning detected.</td></tr>`
-          }
-        </tbody>
-      </table>
-
-      <h2>Management Responsibility</h2>
-      <p>
-        Management should review the issues above, correct wrong entries where
-        necessary, support expenses with receipts, reconcile customer debts,
-        review stock levels and confirm that discounts and voided sales were
-        properly approved.
-      </p>
-
-      <h2>Important Note</h2>
-      <p>
-        This document is generated by the system to support internal review.
-        It does not replace a licensed accountant, tax consultant or external
-        auditor.
-      </p>
-
-      <div class="signature">
-        <div class="line">Prepared / Reviewed By</div>
-        <div class="line">Management Approval</div>
-      </div>
-    `;
-  }
-
-  function downloadManagementLetterWord() {
-    downloadWordFile(
-      fileName("chalin03_management_letter", "doc"),
-      buildManagementLetterDocument()
-    );
-
-    setMessage("Management Letter Word document downloaded successfully.");
-  }
-
-  function buildAccessGuideDocument() {
-    return `
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          color: #111827;
-          line-height: 1.6;
-          font-size: 13px;
-        }
-
-        h1 {
-          color: #07182c;
-        }
-
-        h2 {
-          color: #07182c;
-          margin-top: 22px;
-        }
-
-        li {
-          margin-bottom: 8px;
-        }
-
-        .box {
-          background: #f8fafc;
-          border: 1px solid #dbe3ef;
-          padding: 14px;
-          border-radius: 10px;
-        }
-      </style>
-
-      <h1>${escapeHtml(businessName)}</h1>
-      <p>Microsoft Access Import Guide</p>
-      <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
-      <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
-
-      <div class="box">
-        <strong>Files Generated:</strong>
-        <ul>
-          <li>access_import_sales_table CSV</li>
-          <li>access_import_expenses_table CSV</li>
-          <li>access_import_products_table CSV</li>
-        </ul>
-      </div>
-
-      <h2>How To Use In Microsoft Access</h2>
-      <ol>
-        <li>Open Microsoft Access.</li>
-        <li>Create a blank database.</li>
-        <li>Go to External Data.</li>
-        <li>Choose New Data Source or Text File.</li>
-        <li>Select one CSV file at a time.</li>
-        <li>Import each CSV as a new table.</li>
-        <li>Name the tables Sales, Expenses and Products.</li>
-      </ol>
-
-      <h2>Important Note</h2>
-      <p>
-        CSV files may open in Excel when double-clicked on Windows. That is normal.
-        For Access, do not just double-click the file. Import the CSV files from
-        inside Microsoft Access.
-      </p>
-    `;
-  }
-
-  function downloadAccessGuideWord() {
-    downloadWordFile(
-      fileName("chalin03_access_import_guide", "doc"),
-      buildAccessGuideDocument()
-    );
-  }
-
-  function buildSignOffCertificateDocument() {
-    const completion = getSignOffCompletion();
-
-    const checklistRows = SIGN_OFF_CHECKLIST_ITEMS.map(
-      (item) => `
-        <tr>
-          <td>${escapeHtml(item.label)}</td>
-          <td>${signOff.checklist?.[item.key] ? "Checked" : "Pending"}</td>
-          <td>${escapeHtml(item.note)}</td>
-        </tr>
-      `
-    ).join("");
-
-    return `
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          color: #111827;
-          line-height: 1.6;
-          font-size: 13px;
-        }
-
-        h1 {
-          color: #07182c;
-          text-align: center;
-          margin-bottom: 4px;
-        }
-
-        h2 {
-          color: #07182c;
-          margin-top: 22px;
-          border-bottom: 2px solid #e0ba28;
-          padding-bottom: 6px;
-        }
-
-        .certificate {
-          border: 4px solid #07182c;
-          padding: 26px;
-        }
-
-        .muted {
-          color: #64748b;
-          text-align: center;
-        }
-
-        .status {
-          background: #fef3c7;
-          border: 1px solid #e0ba28;
-          padding: 14px;
-          border-radius: 10px;
-          text-align: center;
-          margin: 18px 0;
-          font-weight: bold;
-        }
-
-        .grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          margin: 16px 0;
-        }
-
-        .box {
-          border: 1px solid #dbe3ef;
-          background: #f8fafc;
-          padding: 12px;
-          border-radius: 10px;
-        }
-
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 12px;
-        }
-
-        th,
-        td {
-          border: 1px solid #dbe3ef;
-          padding: 8px;
-          text-align: left;
-          vertical-align: top;
-          font-size: 12px;
-        }
-
-        th {
-          background: #07182c;
-          color: #ffffff;
-        }
-
-        .signature-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
-          margin-top: 46px;
-        }
-
-        .signature-line {
-          border-top: 1px solid #111827;
-          padding-top: 8px;
-          text-align: center;
-        }
-      </style>
-
-      <div class="certificate">
-        <h1>${escapeHtml(businessName)}</h1>
-        <p class="muted">Audit Sign-Off & Accounting Approval Certificate</p>
-
-        <div class="status">
-          ${escapeHtml(getSignOffStatusLabel(signOff.accountingStatus))}<br />
-          Completion: ${completion.percent}%
-        </div>
-
-        <div class="grid">
-          <div class="box"><strong>Accounting Period:</strong><br />${escapeHtml(
-            auditData.period.label
-          )}</div>
-          <div class="box"><strong>Review Date:</strong><br />${escapeHtml(
-            formatDate(signOff.reviewDate)
-          )}</div>
-          <div class="box"><strong>Audit Score:</strong><br />${auditData.auditScore}% - ${escapeHtml(
-            auditData.auditStatus
-          )}</div>
-          <div class="box"><strong>Generated:</strong><br />${escapeHtml(
-            formatDateTime(new Date())
-          )}</div>
-        </div>
-
-        <h2>Approval Names</h2>
-        <div class="grid">
-          <div class="box"><strong>Prepared By:</strong><br />${escapeHtml(
-            signOff.preparedBy || "Not provided"
-          )}</div>
-          <div class="box"><strong>Reviewed By:</strong><br />${escapeHtml(
-            signOff.reviewedBy || "Not provided"
-          )}</div>
-          <div class="box"><strong>Approved By:</strong><br />${escapeHtml(
-            signOff.approvedBy || "Not provided"
-          )}</div>
-          <div class="box"><strong>Status:</strong><br />${escapeHtml(
-            getSignOffStatusLabel(signOff.accountingStatus)
-          )}</div>
-        </div>
-
-        <h2>Month-End Approval Checklist</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Checklist Item</th>
-              <th>Status</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>${checklistRows}</tbody>
-        </table>
-
-        <h2>Notes</h2>
-        <p><strong>Accountant / Auditor Notes:</strong> ${escapeHtml(
-          signOff.accountantNotes || "-"
-        )}</p>
-        <p><strong>Boss / Management Notes:</strong> ${escapeHtml(
-          signOff.bossNotes || "-"
-        )}</p>
-
-        <p>
-          This certificate confirms that the selected accounting period has been
-          reviewed internally using the Chalin 03 Sales & Inventory Management
-          System. It supports accounting and audit preparation but does not replace
-          a licensed accountant, tax consultant or external auditor.
-        </p>
-
-        <div class="signature-grid">
-          <div class="signature-line">Prepared By</div>
-          <div class="signature-line">Reviewed By</div>
-          <div class="signature-line">Approved By</div>
-        </div>
-      </div>
-    `;
-  }
-
-  function downloadSignOffCertificateWord() {
-    downloadWordFile(
-      fileName("chalin03_audit_signoff_certificate", "doc"),
-      buildSignOffCertificateDocument()
-    );
-
-    setMessage("Audit Sign-Off Certificate Word document downloaded successfully.");
+    downloadTextFile(fileName("chalin03_powerpoint_audit_outline", "txt"), lines.join("\n"));
+    setMessage("PowerPoint outline text downloaded successfully.");
   }
 
   function downloadMonthEndAuditPack() {
-    if (periodType !== "month" && periodType !== "custom") {
-      setMessage(
-        "Month-End Pack is best for This Month or Custom Period. Downloads will still be generated for the selected period."
-      );
-    }
-
     downloadAuditReportWord();
-
-    setTimeout(() => {
-      downloadManagementLetterWord();
-    }, 300);
-
-    setTimeout(() => {
-      downloadAuditSummaryCsv();
-    }, 600);
-
-    setTimeout(() => {
-      downloadAuditWarningsCsv();
-    }, 900);
-
-    setTimeout(() => {
-      downloadExcelWorkbookCsv();
-    }, 1200);
-
-    setTimeout(() => {
-      downloadPowerPointOutlineText();
-    }, 1500);
-
-    setTimeout(() => {
-      downloadAccessGuideWord();
-    }, 1800);
-
-    setTimeout(() => {
-      downloadSignOffCertificateWord();
-    }, 2100);
-
-    setMessage(
-      "Month-End Audit Pack is downloading: Word report, management letter, sign-off certificate, CSV files, PowerPoint outline and Access guide."
-    );
+    setTimeout(downloadAuditSummaryCsv, 300);
+    setTimeout(downloadAuditWarningsCsv, 600);
+    setTimeout(downloadAccountingWorkbookCsv, 900);
+    setTimeout(downloadPowerPointOutlineText, 1200);
+    setMessage("Month-End Audit Pack is downloading.");
   }
 
   async function copyAuditSummary() {
-    const summary = `${businessName.toUpperCase()}
-PROFESSIONAL AUDIT & ACCOUNTING SUMMARY
-
-Period: ${auditData.period.label}
-Generated: ${formatDateTime(new Date())}
-
-AUDIT RESULT
-Audit Score: ${auditData.auditScore}% - ${auditData.auditStatus}
-Red Flags: ${auditData.redFlags}
-Orange Flags: ${auditData.orangeFlags}
-Blue Flags: ${auditData.blueFlags}
-
-ACCOUNTING SUMMARY
-Period Sales: ${formatMoney(auditData.totalSales)}
-Cash Collected: ${formatMoney(auditData.cashCollected)}
-Outstanding Debts: ${formatMoney(auditData.outstandingDebts)}
-Sales Balances: ${formatMoney(auditData.salesBalances)}
-Period Expenses: ${formatMoney(auditData.totalExpenses)}
-Fuel Expenses: ${formatMoney(auditData.fuelExpenses)}
-Transport Expenses: ${formatMoney(auditData.transportExpenses)}
-Salary Expenses: ${formatMoney(auditData.salaryExpenses)}
-Discounts Given: ${formatMoney(auditData.totalDiscounts)}
-Stock Selling Value: ${formatMoney(auditData.stockValue)}
-Stock Cost Value: ${formatMoney(auditData.stockCostValue)}
-Operating Result: ${formatMoney(auditData.operatingResult)}
-
-MAIN AUDIT WARNINGS
-${auditData.auditFlags
-  .map(
-    (flag, index) =>
-      `${index + 1}. [${flag.severity.toUpperCase()}] ${flag.title}: ${
-        flag.detail
-      } Recommendation: ${flag.recommendation}`
-  )
-  .join("\n")}`;
+    const summary = `${BUSINESS_NAME.toUpperCase()}\nAUDIT & ACCOUNTING SUMMARY\n\nPeriod: ${period.label}\nGenerated: ${formatDateTime(new Date())}\n\nAudit Score: ${auditData.auditScore}% - ${auditData.auditStatus}\nRed Flags: ${auditData.redFlags}\nOrange Flags: ${auditData.orangeFlags}\nBlue Flags: ${auditData.blueFlags}\n\nPeriod Sales: ${formatMoney(auditData.totalSales)}\nCash Collected: ${formatMoney(auditData.cashCollected)}\nOutstanding Debts: ${formatMoney(auditData.outstandingDebts)}\nPeriod Expenses: ${formatMoney(auditData.totalExpenses)}\nOperating Result: ${formatMoney(auditData.operatingResult)}`;
 
     try {
       await navigator.clipboard.writeText(summary);
-      setMessage("Professional audit summary copied successfully.");
+      setMessage("Audit summary copied successfully.");
     } catch {
-      setError("Could not copy summary. Your browser may have blocked it.");
+      setError("Could not copy summary. Browser may have blocked clipboard access.");
     }
   }
-
 
   function applyCustomThisMonthDates() {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-
     setCustomStartDate(dateToInputValue(start));
     setCustomEndDate(dateToInputValue(now));
     setPeriodType("custom");
   }
 
-  const oneColumn = isMobile ? styles.oneColumn : {};
-  const mobileStack = isMobile ? styles.mobileStack : {};
-  const scoreCardMobile = isMobile ? styles.scoreCardMobile : {};
-  const scoreRingMobile = isMobile ? styles.scoreRingMobile : {};
-  const signOffCompletion = getSignOffCompletion();
-
   return (
     <div style={styles.page}>
-      <div style={{ ...styles.hero, ...mobileStack }}>
+      <div style={styles.hero}>
         <div>
           <p style={styles.eyebrow}>Professional Audit Intelligence</p>
           <h1 style={styles.title}>Audit & Accounting Intelligence Pro</h1>
           <p style={styles.subtitle}>
-            Built-in business review for accounting periods, sales, cash,
-            debts, expenses, fuel, stock, pricing, discounts, audit risks,
-            accountant checks and month-end audit packs.
+            Stable audit page for sales, cash, debts, expenses, stock, period review,
+            exports and MySQL audit sign-off approval.
           </p>
         </div>
 
@@ -2654,20 +1183,10 @@ ${auditData.auditFlags
           <button type="button" onClick={loadAuditData} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh Review"}
           </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={printAuditReport}
-          >
+          <button type="button" className="secondary-button" onClick={printAuditReport}>
             Print / Save PDF
           </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={copyAuditSummary}
-          >
+          <button type="button" className="secondary-button" onClick={copyAuditSummary}>
             Copy Summary
           </button>
         </div>
@@ -2679,11 +1198,8 @@ ${auditData.auditFlags
       <div style={styles.periodPanel}>
         <div>
           <p style={styles.eyebrowDark}>Accounting Period Control</p>
-          <h2 style={{ margin: "5px 0" }}>{auditData.period.label}</h2>
-          <p style={styles.panelText}>
-            Accountants and auditors normally review by period. Choose the
-            period before printing or exporting reports.
-          </p>
+          <h2 style={{ margin: "5px 0" }}>{period.label}</h2>
+          <p style={styles.panelText}>Choose the accounting period before saving or exporting reports.</p>
         </div>
 
         <div style={styles.periodButtons}>
@@ -2698,11 +1214,7 @@ ${auditData.auditFlags
               key={value}
               type="button"
               onClick={() => setPeriodType(value)}
-              style={
-                periodType === value
-                  ? styles.activePeriodButton
-                  : styles.periodButton
-              }
+              style={periodType === value ? styles.activePeriodButton : styles.periodButton}
             >
               {label}
             </button>
@@ -2721,229 +1233,28 @@ ${auditData.auditFlags
           <div style={styles.dateGrid}>
             <label>
               Start Date
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(event) => setCustomStartDate(event.target.value)}
-              />
+              <input type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} />
             </label>
-
             <label>
               End Date
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(event) => setCustomEndDate(event.target.value)}
-              />
+              <input type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} />
             </label>
           </div>
         )}
       </div>
 
-      <div style={styles.approvalPanel}>
-        <div style={{ ...styles.approvalHeader, ...mobileStack }}>
-          <div>
-            <p style={styles.eyebrowDark}>Audit Sign-Off & Accounting Approval</p>
-            <h2 style={{ margin: "5px 0" }}>Period Approval Center</h2>
-            <p style={styles.panelText}>
-              Fill this after the accountant, auditor or boss reviews the period.
-              It saves into MySQL and creates a professional sign-off certificate for the selected period.
-            </p>
+      <div style={styles.topGrid}>
+        <div style={styles.scoreCard}>
+          <div style={styles.scoreCircle}>
+            <strong>{auditData.auditScore}%</strong>
+            <span>{auditData.auditStatus}</span>
           </div>
-
-          <div style={styles.approvalStatusCard}>
-            <strong>{signOffCompletion.percent}%</strong>
-            <span>{signOffCompletion.ready ? "Ready for filing" : "Needs completion"}</span>
-            <small>{getSignOffStatusLabel(signOff.accountingStatus)}</small>
-            <small>{signOffLoading ? "Loading saved record..." : savedSignOffId ? `Saved ID #${savedSignOffId}` : "Not saved in database yet"}</small>
-          </div>
-        </div>
-
-        <div style={{ ...styles.formGrid, ...oneColumn }}>
-          <label>
-            Prepared By
-            <input
-              type="text"
-              value={signOff.preparedBy}
-              onChange={(event) => updateSignOffField("preparedBy", event.target.value)}
-              placeholder="Example: Cashier / Accounts Assistant"
-            />
-          </label>
-
-          <label>
-            Reviewed By
-            <input
-              type="text"
-              value={signOff.reviewedBy}
-              onChange={(event) => updateSignOffField("reviewedBy", event.target.value)}
-              placeholder="Example: Accountant / Auditor"
-            />
-          </label>
-
-          <label>
-            Approved By
-            <input
-              type="text"
-              value={signOff.approvedBy}
-              onChange={(event) => updateSignOffField("approvedBy", event.target.value)}
-              placeholder="Example: Boss / Manager"
-            />
-          </label>
-
-          <label>
-            Review Date
-            <input
-              type="date"
-              value={signOff.reviewDate}
-              onChange={(event) => updateSignOffField("reviewDate", event.target.value)}
-            />
-          </label>
-
-          <label>
-            Period Status
-            <select
-              value={signOff.accountingStatus}
-              onChange={(event) => updateSignOffField("accountingStatus", event.target.value)}
-            >
-              <option value="draft">Draft / Not Yet Approved</option>
-              <option value="reviewed">Reviewed by Accountant</option>
-              <option value="approved">Approved by Management</option>
-              <option value="rejected">Rejected / Needs Correction</option>
-            </select>
-          </label>
-        </div>
-
-        <div style={styles.signOffChecklistGrid}>
-          {SIGN_OFF_CHECKLIST_ITEMS.map((item) => {
-            const checked = Boolean(signOff.checklist?.[item.key]);
-
-            return (
-              <label
-                key={item.key}
-                style={checked ? styles.signOffItemChecked : styles.signOffItem}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(event) =>
-                    updateSignOffChecklist(item.key, event.target.checked)
-                  }
-                />
-                <span>
-                  <strong>{item.label}</strong>
-                  <small>{item.note}</small>
-                </span>
-              </label>
-            );
-          })}
-        </div>
-
-        <div style={{ ...styles.formGrid, ...oneColumn }}>
-          <label>
-            Accountant / Auditor Notes
-            <textarea
-              value={signOff.accountantNotes}
-              onChange={(event) => updateSignOffField("accountantNotes", event.target.value)}
-              placeholder="Write notes from accounting or audit review..."
-              rows="4"
-            />
-          </label>
-
-          <label>
-            Boss / Management Approval Notes
-            <textarea
-              value={signOff.bossNotes}
-              onChange={(event) => updateSignOffField("bossNotes", event.target.value)}
-              placeholder="Write boss approval notes or management comments..."
-              rows="4"
-            />
-          </label>
-        </div>
-
-        <div style={styles.approvalActions}>
-          <button type="button" onClick={saveSignOffDetails} disabled={signOffSaving}>
-            {signOffSaving ? "Saving to MySQL..." : "Save Sign-Off to MySQL"}
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={downloadSignOffCertificateWord}
-          >
-            Download Sign-Off Certificate
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={clearSignOffDetails}
-          >
-            Clear Form
-          </button>
-        </div>
-      </div>
-
-      <div style={styles.historyPanel}>
-        <div>
-          <p style={styles.eyebrowDark}>Saved Sign-Off History</p>
-          <h2 style={{ margin: "5px 0" }}>Recent Database Records</h2>
-          <p style={styles.panelText}>
-            These records are saved in MySQL through the backend audit sign-off route.
-          </p>
-        </div>
-
-        {signOffHistory.length === 0 ? (
-          <div style={styles.emptyState}>No saved audit sign-off record found yet.</div>
-        ) : (
-          <div style={styles.historyList}>
-            {signOffHistory.slice(0, 6).map((item) => (
-              <div key={item.id} style={styles.historyItem}>
-                <div>
-                  <strong>{item.period_label}</strong>
-                  <span>
-                    {getSignOffStatusLabel(item.period_status)} • Score {item.audit_score}%
-                  </span>
-                </div>
-
-                <small>
-                  Prepared: {item.prepared_by_name || "-"} | Approved: {item.approved_by_name || "-"}
-                </small>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={{ ...styles.scoreGrid, ...oneColumn }}>
-        <div style={{ ...styles.scoreCard, ...scoreCardMobile }}>
-          <div
-            style={{
-              ...styles.scoreRing,
-              ...scoreRingMobile,
-              background: `conic-gradient(#e0ba28 0deg ${
-                auditData.auditScore * 3.6
-              }deg, #e2e8f0 ${auditData.auditScore * 3.6}deg 360deg)`,
-            }}
-          >
-            <div style={styles.scoreInner}>
-              <strong>{auditData.auditScore}%</strong>
-              <span>{auditData.auditStatus}</span>
-            </div>
-          </div>
-
           <div>
             <h2>Professional Audit Score</h2>
-            <p>
-              The score is based on risk flags from selected-period sales,
-              selected-period expenses, debts, discounts, stock levels,
-              inventory pricing and voided sales.
-            </p>
-
-            <div style={styles.flagMiniGrid}>
+            <p style={styles.panelText}>Score is calculated from sales, debts, expenses, stock, discounts and warnings.</p>
+            <div style={styles.pillRow}>
               <span style={styles.redPill}>{auditData.redFlags} Red</span>
-              <span style={styles.orangePill}>
-                {auditData.orangeFlags} Orange
-              </span>
+              <span style={styles.orangePill}>{auditData.orangeFlags} Orange</span>
               <span style={styles.bluePill}>{auditData.blueFlags} Blue</span>
             </div>
           </div>
@@ -2951,172 +1262,33 @@ ${auditData.auditFlags
 
         <div style={styles.exportPanel}>
           <h2>Export Center</h2>
-          <p style={styles.panelText}>
-            All exports use the selected accounting period. Word documents open
-            in Microsoft Word, CSV files open in Excel, and Access files must be
-            imported inside Microsoft Access.
-          </p>
-
-          <div style={styles.monthPack}>
-            <h3>Month-End Audit Pack</h3>
-            <p>
-              One-click pack for accountants: Audit Word Report, Management
-              Letter, Excel CSVs, PowerPoint outline and Access guide.
-            </p>
-
-            <button type="button" onClick={downloadMonthEndAuditPack}>
-              Generate Month-End Audit Pack
-            </button>
-          </div>
-
-          <div style={styles.exportSection}>
-            <h3 style={styles.exportSectionTitle}>Professional Documents</h3>
-            <p style={styles.exportHelp}>
-              These are document-style files for auditors, accountants, bosses
-              and management review.
-            </p>
-
-            <div style={styles.exportGrid}>
-              <button type="button" onClick={printAuditReport}>
-                PDF Report
-              </button>
-
-              <button type="button" onClick={downloadAuditReportWord}>
-                Audit Report Word
-              </button>
-
-              <button type="button" onClick={downloadManagementLetterWord}>
-                Management Letter Word
-              </button>
-
-              <button type="button" onClick={downloadSignOffCertificateWord}>
-                Sign-Off Certificate
-              </button>
-
-              <button type="button" onClick={downloadPowerPointPresentation}>
-                PowerPoint Briefing
-              </button>
-
-              <button type="button" onClick={downloadPowerPointOutlineText}>
-                PowerPoint Outline Text
-              </button>
-
-              <button type="button" onClick={downloadHtmlAuditReport}>
-                HTML Audit Report
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.exportSection}>
-            <h3 style={styles.exportSectionTitle}>
-              Excel / Spreadsheet Files
-            </h3>
-            <p style={styles.exportHelp}>
-              These CSV files open in Excel. They are good for sorting,
-              filtering and calculations.
-            </p>
-
-            <div style={styles.exportGrid}>
-              <button type="button" onClick={downloadAuditSummaryCsv}>
-                Accounting Summary CSV
-              </button>
-
-              <button type="button" onClick={downloadAuditWarningsCsv}>
-                Audit Warnings CSV
-              </button>
-
-              <button type="button" onClick={downloadManagementLetterCsv}>
-                Management Letter CSV
-              </button>
-
-              <button type="button" onClick={downloadExcelWorkbookCsv}>
-                Accounting Workbook CSV
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.exportSection}>
-            <h3 style={styles.exportSectionTitle}>Microsoft Access Import</h3>
-            <p style={styles.exportHelp}>
-              These CSV files may open in Excel when double-clicked. For Access,
-              import them from inside Microsoft Access.
-            </p>
-
-            <div style={styles.exportGrid}>
-              <button type="button" onClick={downloadAccessImportFiles}>
-                Download Access Import Pack
-              </button>
-            </div>
+          <p style={styles.panelText}>Exports use the selected accounting period.</p>
+          <div style={styles.buttonGrid}>
+            <button type="button" onClick={downloadMonthEndAuditPack}>Month-End Audit Pack</button>
+            <button type="button" onClick={downloadAuditReportWord}>Audit Report Word</button>
+            <button type="button" onClick={downloadAuditSummaryCsv}>Accounting Summary CSV</button>
+            <button type="button" onClick={downloadAuditWarningsCsv}>Audit Warnings CSV</button>
+            <button type="button" onClick={downloadAccountingWorkbookCsv}>Accounting Workbook CSV</button>
+            <button type="button" onClick={downloadPowerPointOutlineText}>PowerPoint Outline</button>
+            <button type="button" onClick={downloadAccessImportPack}>Access Import Pack</button>
           </div>
         </div>
       </div>
 
-      <div style={{ ...styles.cardsGrid, ...oneColumn }}>
-        <MetricCard
-          title="Period Sales"
-          value={formatMoney(auditData.totalSales)}
-          note={`${auditData.completedSales.length} completed sale(s)`}
-          icon="📈"
-        />
-
-        <MetricCard
-          title="Cash Collected"
-          value={formatMoney(auditData.cashCollected)}
-          note="Amount paid by customers"
-          icon="💰"
-        />
-
-        <MetricCard
-          title="Outstanding Debts"
-          value={formatMoney(auditData.outstandingDebts)}
-          note={`${auditData.unpaidDebtCount} unpaid, ${auditData.partialDebtCount} partial`}
-          icon="📞"
-        />
-
-        <MetricCard
-          title="Period Expenses"
-          value={formatMoney(auditData.totalExpenses)}
-          note={`${auditData.periodExpenses.length} expense record(s)`}
-          icon="📉"
-        />
-
-        <MetricCard
-          title="Fuel Expenses"
-          value={formatMoney(auditData.fuelExpenses)}
-          note="Fuel category total"
-          icon="⛽"
-        />
-
-        <MetricCard
-          title="Discounts Given"
-          value={formatMoney(auditData.totalDiscounts)}
-          note="Needs approval review"
-          icon="🏷️"
-        />
-
-        <MetricCard
-          title="Stock Value"
-          value={formatMoney(auditData.stockValue)}
-          note={`${products.length} product(s) in inventory`}
-          icon="📦"
-        />
-
-        <MetricCard
-          title="Operating Result"
-          value={formatMoney(auditData.operatingResult)}
-          note="Period sales minus period expenses"
-          icon="🧮"
-        />
+      <div style={styles.cardsGrid}>
+        <MetricCard title="Period Sales" value={formatMoney(auditData.totalSales)} note={`${auditData.completedSales.length} completed sale(s)`} />
+        <MetricCard title="Cash Collected" value={formatMoney(auditData.cashCollected)} note="Amount paid by customers" />
+        <MetricCard title="Outstanding Debts" value={formatMoney(auditData.outstandingDebts)} note={`${auditData.unpaidDebtCount} unpaid, ${auditData.partialDebtCount} partial`} />
+        <MetricCard title="Period Expenses" value={formatMoney(auditData.totalExpenses)} note={`${auditData.periodExpenses.length} expense record(s)`} />
+        <MetricCard title="Fuel Expenses" value={formatMoney(auditData.fuelExpenses)} note="Fuel category total" />
+        <MetricCard title="Discounts Given" value={formatMoney(auditData.totalDiscounts)} note="Needs approval review" />
+        <MetricCard title="Stock Value" value={formatMoney(auditData.stockValue)} note={`${products.length} product(s) in inventory`} />
+        <MetricCard title="Operating Result" value={formatMoney(auditData.operatingResult)} note="Period sales minus expenses" />
       </div>
 
-      <div style={{ ...styles.twoColumn, ...oneColumn }}>
+      <div style={styles.twoColumn}>
         <div style={styles.panel}>
           <h2>Accounting Summary</h2>
-          <p style={styles.panelText}>
-            This shows the accountant the main business figures for the selected
-            period.
-          </p>
-
           <div style={styles.accountingRows}>
             {auditData.accountantSummary.map((item) => (
               <div key={item.label} style={styles.accountingRow}>
@@ -3124,7 +1296,6 @@ ${auditData.auditFlags
                   <strong>{item.label}</strong>
                   <span>{item.meaning}</span>
                 </div>
-
                 <b>{item.isText ? item.value : formatMoney(item.value)}</b>
               </div>
             ))}
@@ -3133,109 +1304,24 @@ ${auditData.auditFlags
 
         <div style={styles.panel}>
           <h2>Cash & Debt Reconciliation</h2>
-          <p style={styles.panelText}>
-            This helps compare cash received, balances and customer receivables.
-          </p>
-
-          <div style={styles.reconciliationBox}>
-            <AccountingRow
-              label="Cash Collected"
-              value={formatMoney(auditData.cashCollected)}
-            />
-            <AccountingRow
-              label="Sales Balances"
-              value={formatMoney(auditData.salesBalances)}
-            />
-            <AccountingRow
-              label="Debt Summary Balance"
-              value={formatMoney(auditData.outstandingDebts)}
-            />
-            <AccountingRow
-              label="Possible Difference"
-              value={formatMoney(auditData.possibleDebtDifference)}
-            />
-            <AccountingRow
-              label="Net Cash Position"
-              value={formatMoney(auditData.netCashPosition)}
-            />
-          </div>
+          <AccountingLine label="Cash Collected" value={formatMoney(auditData.cashCollected)} />
+          <AccountingLine label="Sales Balances" value={formatMoney(auditData.salesBalances)} />
+          <AccountingLine label="Outstanding Debts" value={formatMoney(auditData.outstandingDebts)} />
+          <AccountingLine label="Possible Difference" value={formatMoney(auditData.possibleDebtDifference)} />
         </div>
       </div>
 
-      <div style={{ ...styles.twoColumn, ...oneColumn }}>
+      <div style={styles.twoColumn}>
         <div style={styles.panel}>
           <h2>Audit Risk Register</h2>
-          <p style={styles.panelText}>
-            Issues below should be reviewed by the boss, accountant or auditor.
-          </p>
-
-          <div style={styles.warningList}>
-            {auditData.auditFlags.map((flag, index) => (
-              <div
-                key={`${flag.title}-${index}`}
-                style={{
-                  ...styles.warningItem,
-                  ...warningTones[flag.severity],
-                }}
-              >
-                <div style={styles.warningHeader}>
+          <div style={styles.listStack}>
+            {auditData.auditFlags.slice(0, 20).map((flag, index) => (
+              <div key={`${flag.title}-${index}`} style={styles.flagItem}>
+                <span style={getFlagPillStyle(flag.severity)}>{flag.severity.toUpperCase()}</span>
+                <div>
                   <strong>{flag.title}</strong>
-                  <span>{flag.severity.toUpperCase()}</span>
-                </div>
-
-                <p>{flag.detail}</p>
-                <small>Recommendation: {flag.recommendation}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={styles.panel}>
-          <h2>Accountant Checklist</h2>
-          <p style={styles.panelText}>
-            Quick checklist before presenting records for review.
-          </p>
-
-          <div style={styles.checkList}>
-            {auditData.accountingChecklist.map((item) => (
-              <div key={item.title} style={styles.checkItem}>
-                <span
-                  style={{
-                    ...styles.checkIcon,
-                    background: item.status ? "#dcfce7" : "#ffedd5",
-                    color: item.status ? "#166534" : "#9a3412",
-                  }}
-                >
-                  {item.status ? "✓" : "!"}
-                </span>
-
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.note}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ ...styles.twoColumn, ...oneColumn }}>
-        <div style={styles.panel}>
-          <h2>Management Letter Points</h2>
-          <p style={styles.panelText}>
-            These are professional-style points an auditor/accountant can
-            discuss with management.
-          </p>
-
-          <div style={styles.managementList}>
-            {auditData.managementLetterPoints.map((point) => (
-              <div key={point.number} style={styles.managementItem}>
-                <span>{point.number}</span>
-
-                <div>
-                  <strong>{point.finding}</strong>
-                  <p>{point.implication}</p>
-                  <small>Recommendation: {point.recommendation}</small>
+                  <p>{flag.detail}</p>
+                  <small>{flag.recommendation}</small>
                 </div>
               </div>
             ))}
@@ -3244,144 +1330,169 @@ ${auditData.auditFlags
 
         <div style={styles.panel}>
           <h2>Top Expense Categories</h2>
-          <p style={styles.panelText}>
-            This helps the accountant see where money is going in the selected
-            period.
-          </p>
-
           {auditData.topExpenseCategories.length === 0 ? (
-            <div style={styles.emptyState}>
-              No expenses recorded for this period.
-            </div>
+            <div style={styles.emptyBox}>No expense category found for this period.</div>
           ) : (
-            <div style={styles.expenseList}>
-              {auditData.topExpenseCategories.map((item) => (
-                <div key={item.category} style={styles.expenseItem}>
-                  <strong>{item.category}</strong>
-                  <span>{formatMoney(item.amount)}</span>
-                </div>
+            <div style={styles.listStack}>
+              {auditData.topExpenseCategories.map((expense) => (
+                <AccountingLine key={expense.category} label={expense.category} value={formatMoney(expense.amount)} />
               ))}
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ ...styles.threeColumn, ...oneColumn }}>
-        <div style={styles.panelDark}>
-          <h2>Sales Integrity</h2>
-          <div style={styles.darkRows}>
-            <div>
-              <span>Completed Sales</span>
-              <strong>{auditData.completedSales.length}</strong>
-            </div>
-
-            <div>
-              <span>Voided Sales</span>
-              <strong>{auditData.voidedSales.length}</strong>
-            </div>
-
-            <div>
-              <span>Sales Exceptions</span>
-              <strong>{auditData.salesExceptions.length}</strong>
-            </div>
+      <div style={styles.panel}>
+        <div style={styles.signoffHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>Audit Approval</p>
+            <h2>Audit Sign-Off & Accounting Approval Center</h2>
+            <p style={styles.panelText}>Save the selected period approval into MySQL for future proof.</p>
+          </div>
+          <div style={styles.signoffBadge}>
+            <strong>{signOffCompletion.percent}%</strong>
+            <span>{signOffCompletion.checked} / {signOffCompletion.total} checks</span>
           </div>
         </div>
 
-        <div style={styles.panelDark}>
-          <h2>Expense Control</h2>
-          <div style={styles.darkRows}>
-            <div>
-              <span>Period Expenses</span>
-              <strong>{formatMoney(auditData.totalExpenses)}</strong>
-            </div>
-
-            <div>
-              <span>Fuel</span>
-              <strong>{formatMoney(auditData.fuelExpenses)}</strong>
-            </div>
-
-            <div>
-              <span>Expense Issues</span>
-              <strong>{auditData.expenseExceptions.length}</strong>
-            </div>
-          </div>
+        <div style={styles.signoffStatusRow}>
+          <span style={{ ...styles.statusBadge, ...getStatusStyle(signOff.periodStatus) }}>
+            {getSignOffStatusLabel(signOff.periodStatus)}
+          </span>
+          {savedSignOffId ? <span style={styles.savedId}>Saved MySQL ID: #{savedSignOffId}</span> : <span style={styles.savedId}>Not saved for this period yet</span>}
+          {signOffLoading && <span style={styles.savedId}>Loading saved sign-off...</span>}
         </div>
 
-        <div style={styles.panelDark}>
-          <h2>Inventory Audit</h2>
-          <div style={styles.darkRows}>
-            <div>
-              <span>Low Stock</span>
-              <strong>{auditData.lowStockProducts.length}</strong>
-            </div>
+        <div style={styles.formGrid}>
+          <label>
+            Prepared By
+            <input value={signOff.preparedBy} onChange={(event) => updateSignOffField("preparedBy", event.target.value)} placeholder="Name of person preparing" />
+          </label>
+          <label>
+            Reviewed By
+            <input value={signOff.reviewedBy} onChange={(event) => updateSignOffField("reviewedBy", event.target.value)} placeholder="Name of accountant/reviewer" />
+          </label>
+          <label>
+            Approved By
+            <input value={signOff.approvedBy} onChange={(event) => updateSignOffField("approvedBy", event.target.value)} placeholder="Boss/manager name" />
+          </label>
+          <label>
+            Review Date
+            <input type="date" value={signOff.reviewDate} onChange={(event) => updateSignOffField("reviewDate", event.target.value)} />
+          </label>
+          <label>
+            Period Status
+            <select value={signOff.periodStatus} onChange={(event) => updateSignOffField("periodStatus", event.target.value)}>
+              <option value="draft">Draft / Not Approved</option>
+              <option value="reviewed">Reviewed by Accountant</option>
+              <option value="approved">Approved by Management</option>
+              <option value="rejected">Rejected / Needs Correction</option>
+            </select>
+          </label>
+        </div>
 
-            <div>
-              <span>Out of Stock</span>
-              <strong>{auditData.zeroStockProducts.length}</strong>
-            </div>
+        <div style={styles.checklistGrid}>
+          {SIGN_OFF_CHECKLIST_ITEMS.map((item) => (
+            <label key={item.key} style={styles.checkItem}>
+              <input type="checkbox" checked={Boolean(signOff.checklist[item.key])} onChange={(event) => updateChecklist(item.key, event.target.checked)} />
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.note}</small>
+              </span>
+            </label>
+          ))}
+        </div>
 
-            <div>
-              <span>Inventory Issues</span>
-              <strong>{auditData.inventoryExceptions.length}</strong>
-            </div>
-          </div>
+        <div style={styles.notesGrid}>
+          <label>
+            Accountant / Auditor Notes
+            <textarea value={signOff.accountantNotes} onChange={(event) => updateSignOffField("accountantNotes", event.target.value)} rows={5} placeholder="Write accountant notes here" />
+          </label>
+          <label>
+            Boss / Management Notes
+            <textarea value={signOff.managementNotes} onChange={(event) => updateSignOffField("managementNotes", event.target.value)} rows={5} placeholder="Write boss approval notes here" />
+          </label>
+        </div>
+
+        <div style={styles.heroActions}>
+          <button type="button" onClick={saveSignOff} disabled={signOffSaving}>
+            {signOffSaving ? "Saving..." : "Save Sign-Off to MySQL"}
+          </button>
+          <button type="button" className="secondary-button" onClick={clearSignOffForm}>
+            Clear Form
+          </button>
+          <button type="button" className="secondary-button" onClick={downloadAuditReportWord}>
+            Download Signed Report Word
+          </button>
         </div>
       </div>
 
-      <div style={styles.disclaimer}>
-        This page is a business audit and accounting assistant. It organizes
-        records and highlights risk areas, but it does not replace a licensed
-        accountant, tax consultant or external auditor.
+      <div style={styles.panel}>
+        <h2>Recent Saved Sign-Offs</h2>
+        {signOffHistory.length === 0 ? (
+          <div style={styles.emptyBox}>No saved sign-off history found yet.</div>
+        ) : (
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Period</th>
+                  <th>Score</th>
+                  <th>Status</th>
+                  <th>Prepared</th>
+                  <th>Reviewed</th>
+                  <th>Approved</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signOffHistory.slice(0, 8).map((item) => (
+                  <tr key={item.id}>
+                    <td>#{item.id}</td>
+                    <td>{item.period_label}</td>
+                    <td>{Number(item.audit_score || 0)}%</td>
+                    <td>{getSignOffStatusLabel(item.period_status)}</td>
+                    <td>{item.prepared_by_name || "-"}</td>
+                    <td>{item.reviewed_by_name || "-"}</td>
+                    <td>{item.approved_by_name || "-"}</td>
+                    <td>{formatDateTime(item.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function MetricCard({ title, value, note, icon }) {
+function MetricCard({ title, value, note }) {
   return (
     <div style={styles.metricCard}>
-      <div style={styles.metricTop}>
-        <span>{icon}</span>
-      </div>
-
       <p>{title}</p>
       <strong>{value}</strong>
-      <small>{note}</small>
+      <span>{note}</span>
     </div>
   );
 }
 
-function AccountingRow({ label, value }) {
+function AccountingLine({ label, value }) {
   return (
-    <div style={styles.simpleRow}>
+    <div style={styles.accountingLine}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
 }
 
-const warningTones = {
-  green: {
-    background: "#ecfdf3",
-    borderColor: "#bbf7d0",
-    color: "#14532d",
-  },
-  blue: {
-    background: "#eff6ff",
-    borderColor: "#bfdbfe",
-    color: "#1e3a8a",
-  },
-  orange: {
-    background: "#fff7ed",
-    borderColor: "#fed7aa",
-    color: "#9a3412",
-  },
-  red: {
-    background: "#fef2f2",
-    borderColor: "#fecaca",
-    color: "#991b1b",
-  },
-};
+function getFlagPillStyle(severity) {
+  if (severity === "red") return styles.redPill;
+  if (severity === "orange") return styles.orangePill;
+  if (severity === "blue") return styles.bluePill;
+  return styles.greenPill;
+}
 
 const styles = {
   page: {
@@ -3390,16 +1501,6 @@ const styles = {
     margin: "0 auto",
     paddingBottom: "40px",
   },
-
-  oneColumn: {
-    gridTemplateColumns: "1fr",
-  },
-
-  mobileStack: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-  },
-
   hero: {
     display: "flex",
     justifyContent: "space-between",
@@ -3409,12 +1510,10 @@ const styles = {
     marginBottom: "18px",
     padding: "24px",
     borderRadius: "26px",
-    background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 55%, #111827 100%)",
+    background: "linear-gradient(135deg, #07182c 0%, #0d2f55 55%, #111827 100%)",
     color: "#ffffff",
     boxShadow: "0 22px 55px rgba(7, 24, 44, 0.24)",
   },
-
   eyebrow: {
     margin: 0,
     color: "#e0ba28",
@@ -3423,7 +1522,6 @@ const styles = {
     letterSpacing: "0.08em",
     textTransform: "uppercase",
   },
-
   eyebrowDark: {
     margin: 0,
     color: "#164777",
@@ -3432,493 +1530,287 @@ const styles = {
     letterSpacing: "0.08em",
     textTransform: "uppercase",
   },
-
   title: {
     margin: "6px 0 0",
     fontSize: "clamp(28px, 4vw, 44px)",
     fontWeight: "950",
     lineHeight: 1.05,
   },
-
   subtitle: {
     margin: "10px 0 0",
     color: "rgba(255,255,255,0.76)",
     maxWidth: "850px",
     lineHeight: 1.6,
   },
-
   heroActions: {
     display: "flex",
     flexWrap: "wrap",
     gap: "10px",
   },
-
   periodPanel: {
     display: "grid",
+    gridTemplateColumns: "minmax(260px, 1fr) minmax(260px, auto)",
     gap: "16px",
-    padding: "20px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-    marginBottom: "18px",
-  },
-
-  periodButtons: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-  },
-
-  periodButton: {
-    border: "1px solid #dbe3ef",
-    borderRadius: "999px",
-    padding: "10px 14px",
-    background: "#f8fafc",
-    color: "#07182c",
-    fontWeight: "900",
-    cursor: "pointer",
-  },
-
-  activePeriodButton: {
-    border: "1px solid #e0ba28",
-    borderRadius: "999px",
-    padding: "10px 14px",
-    background: "#07182c",
-    color: "#ffffff",
-    fontWeight: "900",
-    cursor: "pointer",
-  },
-
-  dateGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "12px",
-  },
-
-  scoreGrid: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(360px, 0.9fr)",
-    gap: "18px",
-    marginBottom: "18px",
-  },
-
-  scoreCard: {
-    display: "grid",
-    gridTemplateColumns: "180px minmax(0, 1fr)",
-    gap: "18px",
-    alignItems: "center",
-    padding: "20px",
-    borderRadius: "24px",
-    background:
-      "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,235,0.96))",
-    border: "1px solid rgba(224, 186, 40, 0.38)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.09)",
-    minWidth: 0,
-  },
-
-  scoreCardMobile: {
-    gridTemplateColumns: "1fr",
-    justifyItems: "center",
-    textAlign: "center",
-  },
-
-  scoreRing: {
-    width: "170px",
-    height: "170px",
-    borderRadius: "50%",
-    display: "grid",
-    placeItems: "center",
-  },
-
-  scoreRingMobile: {
-    width: "150px",
-    height: "150px",
-  },
-
-  scoreInner: {
-    width: "112px",
-    height: "112px",
-    borderRadius: "50%",
-    background: "#ffffff",
-    display: "grid",
-    placeItems: "center",
-    textAlign: "center",
-    boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
-  },
-
-  flagMiniGrid: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-    marginTop: "12px",
-    justifyContent: "center",
-  },
-
-  redPill: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    borderRadius: "999px",
-    padding: "6px 10px",
-    fontWeight: "950",
-    fontSize: "12px",
-  },
-
-  orangePill: {
-    background: "#ffedd5",
-    color: "#9a3412",
-    borderRadius: "999px",
-    padding: "6px 10px",
-    fontWeight: "950",
-    fontSize: "12px",
-  },
-
-  bluePill: {
-    background: "#dbeafe",
-    color: "#1d4ed8",
-    borderRadius: "999px",
-    padding: "6px 10px",
-    fontWeight: "950",
-    fontSize: "12px",
-  },
-
-  exportPanel: {
-    padding: "20px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-  },
-
-  monthPack: {
-    marginTop: "14px",
-    padding: "14px",
-    borderRadius: "18px",
-    background:
-      "linear-gradient(135deg, rgba(224,186,40,0.18), rgba(255,255,255,0.96))",
-    border: "1px solid rgba(224,186,40,0.45)",
-  },
-
-  exportGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-    gap: "10px",
-    marginTop: "10px",
-  },
-
-  exportSection: {
-    marginTop: "16px",
-    paddingTop: "14px",
-    borderTop: "1px solid #e2e8f0",
-  },
-
-  exportSectionTitle: {
-    margin: "0 0 5px",
-    color: "#07182c",
-    fontSize: "15px",
-    fontWeight: "950",
-  },
-
-  exportHelp: {
-    margin: "0 0 10px",
-    color: "#64748b",
-    fontSize: "13px",
-    lineHeight: 1.5,
-  },
-
-  cardsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "16px",
-    marginBottom: "18px",
-  },
-
-  metricCard: {
     padding: "18px",
     borderRadius: "22px",
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    boxShadow: "0 16px 36px rgba(15,23,42,0.07)",
-  },
-
-  metricTop: {
-    width: "44px",
-    height: "44px",
-    borderRadius: "14px",
-    background: "#fef3c7",
-    display: "grid",
-    placeItems: "center",
-    fontSize: "23px",
-  },
-
-  twoColumn: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 1fr)",
-    gap: "18px",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
     marginBottom: "18px",
   },
-
-  threeColumn: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: "18px",
-    marginBottom: "18px",
+  periodButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+    alignItems: "center",
   },
-
-  panel: {
+  periodButton: {
+    border: "1px solid #dbe3ef",
     background: "#ffffff",
-    borderRadius: "22px",
-    padding: "20px",
+    color: "#164777",
+    borderRadius: "999px",
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontWeight: "900",
+  },
+  activePeriodButton: {
+    border: "1px solid #07182c",
+    background: "#07182c",
+    color: "#ffffff",
+    borderRadius: "999px",
+    padding: "8px 12px",
+    cursor: "pointer",
+    fontWeight: "900",
+  },
+  dateGrid: {
+    gridColumn: "1 / -1",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+  },
+  topGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1fr)",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+  scoreCard: {
+    display: "grid",
+    gridTemplateColumns: "140px minmax(0, 1fr)",
+    gap: "18px",
+    alignItems: "center",
+    padding: "22px",
+    borderRadius: "24px",
+    background: "#ffffff",
     border: "1px solid #e2e8f0",
     boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-    minWidth: 0,
   },
-
+  scoreCircle: {
+    width: "130px",
+    height: "130px",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    background: "#fef3c7",
+    border: "8px solid #e0ba28",
+    color: "#07182c",
+  },
+  exportPanel: {
+    padding: "22px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+  },
+  buttonGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "10px",
+  },
+  cardsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+  metricCard: {
+    padding: "16px",
+    borderRadius: "20px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 30px rgba(15,23,42,0.07)",
+  },
+  twoColumn: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+  panel: {
+    padding: "22px",
+    borderRadius: "24px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
+  },
   panelText: {
     color: "#64748b",
     lineHeight: 1.6,
   },
-
   accountingRows: {
     display: "grid",
     gap: "10px",
-    marginTop: "12px",
   },
-
   accountingRow: {
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     gap: "12px",
     padding: "12px",
     borderRadius: "14px",
-    background: "#f8fafc",
     border: "1px solid #e2e8f0",
-    flexWrap: "wrap",
+    background: "#f8fafc",
   },
-
-  simpleRow: {
+  accountingLine: {
     display: "flex",
     justifyContent: "space-between",
     gap: "12px",
+    padding: "11px 0",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  listStack: {
+    display: "grid",
+    gap: "10px",
+  },
+  flagItem: {
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
+    gap: "12px",
     padding: "12px",
     borderRadius: "14px",
-    background: "#f8fafc",
     border: "1px solid #e2e8f0",
-    flexWrap: "wrap",
-  },
-
-  reconciliationBox: {
-    display: "grid",
-    gap: "10px",
-    marginTop: "12px",
-  },
-
-  warningList: {
-    display: "grid",
-    gap: "10px",
-  },
-
-  warningItem: {
-    display: "grid",
-    gap: "6px",
-    padding: "13px",
-    borderRadius: "16px",
-    border: "1px solid",
-  },
-
-  warningHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "10px",
-    flexWrap: "wrap",
-  },
-
-  checkList: {
-    display: "grid",
-    gap: "11px",
-  },
-
-  checkItem: {
-    display: "flex",
-    gap: "11px",
-    alignItems: "flex-start",
-    padding: "12px",
-    borderRadius: "16px",
     background: "#f8fafc",
-    border: "1px solid #e2e8f0",
   },
-
-  checkIcon: {
-    width: "28px",
-    height: "28px",
-    borderRadius: "50%",
-    display: "grid",
-    placeItems: "center",
+  redPill: {
+    display: "inline-flex",
+    alignSelf: "start",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "#fee2e2",
+    color: "#991b1b",
     fontWeight: "950",
-    flexShrink: 0,
+    fontSize: "12px",
   },
-
-  managementList: {
-    display: "grid",
-    gap: "10px",
+  orangePill: {
+    display: "inline-flex",
+    alignSelf: "start",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "#ffedd5",
+    color: "#9a3412",
+    fontWeight: "950",
+    fontSize: "12px",
   },
-
-  managementItem: {
-    display: "grid",
-    gridTemplateColumns: "34px minmax(0, 1fr)",
-    gap: "12px",
-    padding: "12px",
-    borderRadius: "16px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
+  bluePill: {
+    display: "inline-flex",
+    alignSelf: "start",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    fontWeight: "950",
+    fontSize: "12px",
   },
-
-  expenseList: {
-    display: "grid",
-    gap: "10px",
+  greenPill: {
+    display: "inline-flex",
+    alignSelf: "start",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "#dcfce7",
+    color: "#166534",
+    fontWeight: "950",
+    fontSize: "12px",
   },
-
-  expenseItem: {
+  pillRow: {
     display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    padding: "12px",
-    borderRadius: "14px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
     flexWrap: "wrap",
+    gap: "8px",
   },
-
-  panelDark: {
-    borderRadius: "22px",
-    padding: "20px",
-    background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 60%, #111827 100%)",
-    color: "#ffffff",
-    boxShadow: "0 18px 40px rgba(7, 24, 44, 0.22)",
-  },
-
-  darkRows: {
-    display: "grid",
-    gap: "10px",
-    marginTop: "14px",
-  },
-
-  emptyState: {
-    padding: "18px",
+  emptyBox: {
+    padding: "16px",
     borderRadius: "16px",
     background: "#f8fafc",
-    color: "#64748b",
     border: "1px dashed #cbd5e1",
-    textAlign: "center",
+    color: "#64748b",
     fontWeight: "800",
   },
-
-  approvalPanel: {
-    display: "grid",
-    gap: "16px",
-    padding: "20px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-    marginBottom: "18px",
-  },
-
-  approvalHeader: {
+  signoffHeader: {
     display: "flex",
     justifyContent: "space-between",
     gap: "16px",
-    alignItems: "flex-start",
+    flexWrap: "wrap",
   },
-
-  approvalStatusCard: {
-    minWidth: "180px",
-    padding: "16px",
+  signoffBadge: {
+    minWidth: "140px",
     borderRadius: "18px",
-    background:
-      "linear-gradient(135deg, rgba(7,24,44,0.96), rgba(13,47,85,0.96))",
-    color: "#ffffff",
-    display: "grid",
-    gap: "4px",
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    padding: "14px",
     textAlign: "center",
-    boxShadow: "0 16px 35px rgba(7,24,44,0.18)",
   },
-
+  signoffStatusRow: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    alignItems: "center",
+    margin: "12px 0",
+  },
+  statusBadge: {
+    display: "inline-flex",
+    padding: "7px 11px",
+    borderRadius: "999px",
+    fontWeight: "950",
+  },
+  savedId: {
+    color: "#64748b",
+    fontWeight: "850",
+  },
   formGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "12px",
+    marginTop: "14px",
   },
-
-  signOffChecklistGrid: {
+  checklistGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
     gap: "10px",
+    marginTop: "14px",
   },
-
-  signOffItem: {
-    display: "flex",
+  checkItem: {
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
     gap: "10px",
-    alignItems: "flex-start",
+    alignItems: "start",
     padding: "12px",
-    borderRadius: "16px",
+    border: "1px solid #e2e8f0",
+    borderRadius: "14px",
     background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    cursor: "pointer",
   },
-
-  signOffItemChecked: {
-    display: "flex",
-    gap: "10px",
-    alignItems: "flex-start",
-    padding: "12px",
-    borderRadius: "16px",
-    background: "#ecfdf3",
-    border: "1px solid #bbf7d0",
-    cursor: "pointer",
-  },
-
-  approvalActions: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-  },
-
-  historyPanel: {
+  notesGrid: {
     display: "grid",
-    gap: "14px",
-    padding: "20px",
-    borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-    marginBottom: "18px",
-  },
-
-  historyList: {
-    display: "grid",
-    gap: "10px",
-  },
-
-  historyItem: {
-    display: "flex",
-    justifyContent: "space-between",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
     gap: "12px",
-    padding: "12px",
-    borderRadius: "16px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    flexWrap: "wrap",
+    margin: "14px 0",
   },
-
-  disclaimer: {
-    padding: "14px",
-    borderRadius: "16px",
-    background: "#f8fafc",
-    border: "1px dashed #cbd5e1",
-    color: "#64748b",
-    fontWeight: "800",
-    lineHeight: 1.5,
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+  table: {
+    width: "100%",
+    minWidth: "900px",
+    borderCollapse: "collapse",
   },
 };

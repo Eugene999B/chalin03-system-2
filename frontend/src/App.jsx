@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import Layout from "./components/Layout";
+import PageErrorBoundary from "./components/PageErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -29,6 +30,10 @@ import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
 
+function SafePage({ children }) {
+  return <PageErrorBoundary>{children}</PageErrorBoundary>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -44,19 +49,19 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardPage />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="new-sale" element={<NewSalePage />} />
-            <Route path="sales-history" element={<SalesHistoryPage />} />
-            <Route path="debts" element={<DebtsPage />} />
-            <Route path="change-password" element={<ChangePasswordPage />} />
-            <Route path="help" element={<HelpPage />} />
+            <Route index element={<SafePage><DashboardPage /></SafePage>} />
+            <Route path="products" element={<SafePage><ProductsPage /></SafePage>} />
+            <Route path="new-sale" element={<SafePage><NewSalePage /></SafePage>} />
+            <Route path="sales-history" element={<SafePage><SalesHistoryPage /></SafePage>} />
+            <Route path="debts" element={<SafePage><DebtsPage /></SafePage>} />
+            <Route path="change-password" element={<SafePage><ChangePasswordPage /></SafePage>} />
+            <Route path="help" element={<SafePage><HelpPage /></SafePage>} />
 
             <Route
               path="customer-statement"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <CustomerStatementPage />
+                  <SafePage><CustomerStatementPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -65,7 +70,7 @@ export default function App() {
               path="reports"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <ReportsPage />
+                  <SafePage><ReportsPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -74,7 +79,7 @@ export default function App() {
               path="audit-accounting"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <AuditAccountingPage />
+                  <SafePage><AuditAccountingPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -83,7 +88,7 @@ export default function App() {
               path="audit-signoffs"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <AuditSignoffHistoryPage />
+                  <SafePage><AuditSignoffHistoryPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -92,7 +97,7 @@ export default function App() {
               path="low-stock"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <LowStockPage />
+                  <SafePage><LowStockPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -101,7 +106,7 @@ export default function App() {
               path="expenses"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <ExpensesPage />
+                  <SafePage><ExpensesPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -110,7 +115,7 @@ export default function App() {
               path="purchases"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <PurchasesPage />
+                  <SafePage><PurchasesPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -119,7 +124,7 @@ export default function App() {
               path="returns"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <ReturnsPage />
+                  <SafePage><ReturnsPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -128,7 +133,7 @@ export default function App() {
               path="daily-closing"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <DailyClosingPage />
+                  <SafePage><DailyClosingPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -137,7 +142,7 @@ export default function App() {
               path="exports"
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
-                  <ExportsPage />
+                  <SafePage><ExportsPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -146,7 +151,7 @@ export default function App() {
               path="users-settings"
               element={
                 <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <UsersSettingsPage />
+                  <SafePage><UsersSettingsPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -155,7 +160,7 @@ export default function App() {
               path="activity-log"
               element={
                 <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <ActivityLogPage />
+                  <SafePage><ActivityLogPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -164,7 +169,7 @@ export default function App() {
               path="backup"
               element={
                 <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <BackupPage />
+                  <SafePage><BackupPage /></SafePage>
                 </RoleRoute>
               }
             />
@@ -173,7 +178,7 @@ export default function App() {
               path="maintenance"
               element={
                 <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <MaintenancePage />
+                  <SafePage><MaintenancePage /></SafePage>
                 </RoleRoute>
               }
             />
