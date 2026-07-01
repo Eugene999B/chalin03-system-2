@@ -648,8 +648,9 @@ export default function AuditAccountingPage() {
       },
       {
         title: "Inventory pricing review",
-        status: inventoryExceptions.filter((item) => item.severity === "red")
-          .length === 0,
+        status:
+          inventoryExceptions.filter((item) => item.severity === "red")
+            .length === 0,
         note:
           inventoryExceptions.length > 0
             ? `${inventoryExceptions.length} inventory issue(s) detected.`
@@ -689,7 +690,11 @@ export default function AuditAccountingPage() {
       (flag) => flag.severity === "blue"
     ).length;
 
-    const riskScore = Math.min(100, redFlags * 20 + orangeFlags * 10 + blueFlags * 4);
+    const riskScore = Math.min(
+      100,
+      redFlags * 20 + orangeFlags * 10 + blueFlags * 4
+    );
+
     const auditScore = Math.max(0, 100 - riskScore);
 
     let auditStatus = "Needs Review";
@@ -875,10 +880,12 @@ export default function AuditAccountingPage() {
 
     const lines = [
       headers.map(escapeCsv).join(","),
-      ...rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(",")),
+      ...rows.map((row) =>
+        headers.map((header) => escapeCsv(row[header])).join(",")
+      ),
     ];
 
-    return lines.join("\n");
+    return `\uFEFF${lines.join("\n")}`;
   }
 
   function downloadTextFile(filename, content, type = "text/plain") {
@@ -913,6 +920,52 @@ export default function AuditAccountingPage() {
     setMessage(`${filename} downloaded successfully.`);
   }
 
+  function downloadWordFile(filename, htmlContent) {
+    const wordDocument = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:w="urn:schemas-microsoft-com:office:word"
+            xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="ProgId" content="Word.Document" />
+          <meta name="Generator" content="Chalin 03 System" />
+        </head>
+        <body>
+          ${htmlContent}
+        </body>
+      </html>
+    `;
+
+    downloadTextFile(
+      filename,
+      wordDocument,
+      "application/msword;charset=utf-8"
+    );
+  }
+
+  function downloadPowerPointFile(filename, htmlContent) {
+    const pptDocument = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:p="urn:schemas-microsoft-com:office:powerpoint"
+            xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="ProgId" content="PowerPoint.Show" />
+          <meta name="Generator" content="Chalin 03 System" />
+        </head>
+        <body>
+          ${htmlContent}
+        </body>
+      </html>
+    `;
+
+    downloadTextFile(
+      filename,
+      pptDocument,
+      "application/vnd.ms-powerpoint;charset=utf-8"
+    );
+  }
+
   function downloadAuditSummaryCsv() {
     const rows = auditData.accountantSummary.map((item) => ({
       item: item.label,
@@ -943,7 +996,7 @@ export default function AuditAccountingPage() {
       }
     );
 
-    downloadCsv("chalin03_audit_accounting_summary.csv", rows);
+    downloadCsv("chalin03_accounting_summary_excel.csv", rows);
   }
 
   function downloadAuditWarningsCsv() {
@@ -955,7 +1008,7 @@ export default function AuditAccountingPage() {
       recommendation: flag.recommendation,
     }));
 
-    downloadCsv("chalin03_audit_warnings.csv", rows);
+    downloadCsv("chalin03_audit_warnings_excel.csv", rows);
   }
 
   function downloadManagementLetterCsv() {
@@ -966,7 +1019,7 @@ export default function AuditAccountingPage() {
       recommendation: point.recommendation,
     }));
 
-    downloadCsv("chalin03_management_letter_points.csv", rows);
+    downloadCsv("chalin03_management_letter_excel.csv", rows);
   }
 
   function downloadExcelWorkbookCsv() {
@@ -991,22 +1044,32 @@ export default function AuditAccountingPage() {
       })),
     ];
 
-    downloadCsv("chalin03_excel_accounting_workbook.csv", rows);
+    downloadCsv("chalin03_accounting_workbook_excel.csv", rows);
   }
 
   function downloadAccessImportFiles() {
-    downloadCsv("access_import_sales.csv", auditData.accessSalesRows);
+    downloadCsv("access_import_sales_table.csv", auditData.accessSalesRows);
 
     setTimeout(() => {
-      downloadCsv("access_import_expenses.csv", auditData.accessExpenseRows);
+      downloadCsv(
+        "access_import_expenses_table.csv",
+        auditData.accessExpenseRows
+      );
     }, 300);
 
     setTimeout(() => {
-      downloadCsv("access_import_products.csv", auditData.accessProductRows);
+      downloadCsv(
+        "access_import_products_table.csv",
+        auditData.accessProductRows
+      );
     }, 600);
 
+    setTimeout(() => {
+      downloadAccessGuideWord();
+    }, 900);
+
     setMessage(
-      "Access import CSV files are downloading. Import them into Microsoft Access as tables."
+      "Access import files are downloading. Import the CSV files into Microsoft Access as tables."
     );
   }
 
@@ -1065,11 +1128,193 @@ export default function AuditAccountingPage() {
     return lines.join("\n");
   }
 
-  function downloadPowerPointBriefing() {
+  function downloadPowerPointOutlineText() {
     downloadTextFile(
       "chalin03_powerpoint_audit_briefing_outline.txt",
       buildPowerPointOutline(),
       "text/plain;charset=utf-8"
+    );
+
+    setMessage("PowerPoint outline text file downloaded successfully.");
+  }
+
+  function buildPowerPointDocument() {
+    const warnings = auditData.auditFlags
+      .slice(0, 7)
+      .map(
+        (flag) =>
+          `<li><strong>${escapeHtml(flag.title)}:</strong> ${escapeHtml(
+            flag.detail
+          )}</li>`
+      )
+      .join("");
+
+    const recommendations = auditData.managementLetterPoints
+      .slice(0, 7)
+      .map((point) => `<li>${escapeHtml(point.recommendation)}</li>`)
+      .join("");
+
+    return `
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          background: #f1f5f9;
+          color: #111827;
+        }
+
+        .slide {
+          width: 960px;
+          min-height: 540px;
+          background: #ffffff;
+          margin: 20px auto;
+          padding: 46px;
+          border-radius: 18px;
+          box-sizing: border-box;
+          page-break-after: always;
+          border: 1px solid #dbe3ef;
+        }
+
+        .cover {
+          background: #07182c;
+          color: #ffffff;
+        }
+
+        h1 {
+          color: #07182c;
+          font-size: 42px;
+          margin: 0 0 16px;
+        }
+
+        .cover h1 {
+          color: #ffffff;
+        }
+
+        h2 {
+          color: #07182c;
+          font-size: 34px;
+          margin: 0 0 20px;
+        }
+
+        .cover h2 {
+          color: #e0ba28;
+        }
+
+        p,
+        li {
+          font-size: 22px;
+          line-height: 1.4;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 18px;
+        }
+
+        .box {
+          border: 1px solid #dbe3ef;
+          border-radius: 14px;
+          padding: 18px;
+          background: #f8fafc;
+        }
+
+        .box span {
+          display: block;
+          color: #64748b;
+          font-size: 18px;
+        }
+
+        .box strong {
+          display: block;
+          margin-top: 8px;
+          font-size: 28px;
+          color: #07182c;
+        }
+      </style>
+
+      <div class="slide cover">
+        <h1>${escapeHtml(businessName)}</h1>
+        <h2>Audit & Accounting Briefing</h2>
+        <p>Generated: ${escapeHtml(formatDateTime(new Date()))}</p>
+        <p>Audit Score: ${auditData.auditScore}% - ${escapeHtml(
+          auditData.auditStatus
+        )}</p>
+      </div>
+
+      <div class="slide">
+        <h1>Audit Health Score</h1>
+        <div class="grid">
+          <div class="box"><span>Audit Score</span><strong>${
+            auditData.auditScore
+          }%</strong></div>
+          <div class="box"><span>Status</span><strong>${escapeHtml(
+            auditData.auditStatus
+          )}</strong></div>
+          <div class="box"><span>Red Flags</span><strong>${
+            auditData.redFlags
+          }</strong></div>
+          <div class="box"><span>Orange Flags</span><strong>${
+            auditData.orangeFlags
+          }</strong></div>
+        </div>
+      </div>
+
+      <div class="slide">
+        <h1>Accounting Summary</h1>
+        <div class="grid">
+          <div class="box"><span>Total Sales</span><strong>${formatMoney(
+            auditData.totalSales
+          )}</strong></div>
+          <div class="box"><span>Cash Collected</span><strong>${formatMoney(
+            auditData.cashCollected
+          )}</strong></div>
+          <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(
+            auditData.outstandingDebts
+          )}</strong></div>
+          <div class="box"><span>Total Expenses</span><strong>${formatMoney(
+            auditData.totalExpenses
+          )}</strong></div>
+        </div>
+      </div>
+
+      <div class="slide">
+        <h1>Expense & Stock Review</h1>
+        <div class="grid">
+          <div class="box"><span>Fuel Expenses</span><strong>${formatMoney(
+            auditData.fuelExpenses
+          )}</strong></div>
+          <div class="box"><span>Stock Value</span><strong>${formatMoney(
+            auditData.stockValue
+          )}</strong></div>
+          <div class="box"><span>Low Stock Items</span><strong>${
+            auditData.lowStockProducts.length
+          }</strong></div>
+          <div class="box"><span>Out of Stock Items</span><strong>${
+            auditData.zeroStockProducts.length
+          }</strong></div>
+        </div>
+      </div>
+
+      <div class="slide">
+        <h1>Main Audit Warnings</h1>
+        <ul>${warnings || "<li>No major audit warning detected.</li>"}</ul>
+      </div>
+
+      <div class="slide">
+        <h1>Management Recommendations</h1>
+        <ul>${recommendations}</ul>
+      </div>
+    `;
+  }
+
+  function downloadPowerPointPresentation() {
+    downloadPowerPointFile(
+      "chalin03_audit_accounting_briefing.ppt",
+      buildPowerPointDocument()
+    );
+
+    setMessage(
+      "PowerPoint briefing downloaded. Microsoft PowerPoint may show a file format warning; choose Yes/Open."
     );
   }
 
@@ -1129,6 +1374,7 @@ export default function AuditAccountingPage() {
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="UTF-8" />
           <title>${escapeHtml(reportName)}</title>
           <style>
             @page {
@@ -1386,6 +1632,273 @@ export default function AuditAccountingPage() {
       buildPrintableReport(),
       "text/html;charset=utf-8"
     );
+
+    setMessage("HTML audit report downloaded successfully.");
+  }
+
+  function downloadAuditReportWord() {
+    downloadWordFile(
+      "chalin03_professional_audit_report.doc",
+      buildPrintableReport()
+    );
+
+    setMessage("Audit Report Word document downloaded successfully.");
+  }
+
+  function buildManagementLetterDocument() {
+    const managementRows = auditData.managementLetterPoints
+      .map(
+        (point) => `
+          <tr>
+            <td>${point.number}</td>
+            <td>${escapeHtml(point.finding)}</td>
+            <td>${escapeHtml(point.implication)}</td>
+            <td>${escapeHtml(point.recommendation)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const warningRows = auditData.auditFlags
+      .filter((flag) => flag.severity !== "green")
+      .map(
+        (flag, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(flag.severity.toUpperCase())}</td>
+            <td>${escapeHtml(flag.title)}</td>
+            <td>${escapeHtml(flag.detail)}</td>
+            <td>${escapeHtml(flag.recommendation)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    return `
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          color: #111827;
+          line-height: 1.55;
+          font-size: 13px;
+        }
+
+        h1 {
+          color: #07182c;
+          margin-bottom: 4px;
+        }
+
+        h2 {
+          color: #07182c;
+          margin-top: 24px;
+          border-bottom: 2px solid #e0ba28;
+          padding-bottom: 6px;
+        }
+
+        .muted {
+          color: #64748b;
+        }
+
+        .box {
+          border: 1px solid #dbe3ef;
+          background: #f8fafc;
+          padding: 14px;
+          border-radius: 10px;
+          margin: 16px 0;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 12px;
+        }
+
+        th,
+        td {
+          border: 1px solid #dbe3ef;
+          padding: 8px;
+          text-align: left;
+          vertical-align: top;
+          font-size: 12px;
+        }
+
+        th {
+          background: #07182c;
+          color: #ffffff;
+        }
+
+        .signature {
+          margin-top: 40px;
+        }
+
+        .line {
+          margin-top: 36px;
+          border-top: 1px solid #111827;
+          width: 280px;
+          padding-top: 6px;
+        }
+      </style>
+
+      <h1>${escapeHtml(businessName)}</h1>
+      <p class="muted">Management Letter - Audit & Accounting Review</p>
+      <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
+
+      <div class="box">
+        <strong>Audit Score:</strong> ${auditData.auditScore}% - ${escapeHtml(
+          auditData.auditStatus
+        )}<br />
+        <strong>Red Flags:</strong> ${auditData.redFlags}<br />
+        <strong>Orange Flags:</strong> ${auditData.orangeFlags}<br />
+        <strong>Blue Flags:</strong> ${auditData.blueFlags}
+      </div>
+
+      <h2>Introduction</h2>
+      <p>
+        This management letter summarizes key observations generated from the
+        Chalin 03 Sales & Inventory Management System. It highlights issues
+        relating to sales, cash collection, customer debts, expenses, stock,
+        discounts, inventory pricing and operational controls.
+      </p>
+
+      <p>
+        The purpose is to help management, accountants and auditors quickly
+        identify records that need attention before formal accounting or audit
+        review.
+      </p>
+
+      <h2>Main Management Letter Points</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Finding</th>
+            <th>Implication</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${managementRows}
+        </tbody>
+      </table>
+
+      <h2>Detailed Audit Warnings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Risk Level</th>
+            <th>Finding</th>
+            <th>Details</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${warningRows || `<tr><td colspan="5">No major audit warning detected.</td></tr>`}
+        </tbody>
+      </table>
+
+      <h2>Management Responsibility</h2>
+      <p>
+        Management should review the issues above, correct wrong entries where
+        necessary, support expenses with receipts, reconcile customer debts,
+        review stock levels and confirm that discounts and voided sales were
+        properly approved.
+      </p>
+
+      <h2>Important Note</h2>
+      <p>
+        This document is generated by the system to support internal review.
+        It does not replace a licensed accountant, tax consultant or external
+        auditor.
+      </p>
+
+      <div class="signature">
+        <div class="line">Prepared / Reviewed By</div>
+        <div class="line">Management Approval</div>
+      </div>
+    `;
+  }
+
+  function downloadManagementLetterWord() {
+    downloadWordFile(
+      "chalin03_management_letter.doc",
+      buildManagementLetterDocument()
+    );
+
+    setMessage("Management Letter Word document downloaded successfully.");
+  }
+
+  function buildAccessGuideDocument() {
+    return `
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          color: #111827;
+          line-height: 1.6;
+          font-size: 13px;
+        }
+
+        h1 {
+          color: #07182c;
+        }
+
+        h2 {
+          color: #07182c;
+          margin-top: 22px;
+        }
+
+        li {
+          margin-bottom: 8px;
+        }
+
+        .box {
+          background: #f8fafc;
+          border: 1px solid #dbe3ef;
+          padding: 14px;
+          border-radius: 10px;
+        }
+      </style>
+
+      <h1>${escapeHtml(businessName)}</h1>
+      <p>Microsoft Access Import Guide</p>
+      <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
+
+      <div class="box">
+        <strong>Files Generated:</strong>
+        <ul>
+          <li>access_import_sales_table.csv</li>
+          <li>access_import_expenses_table.csv</li>
+          <li>access_import_products_table.csv</li>
+        </ul>
+      </div>
+
+      <h2>How To Use In Microsoft Access</h2>
+      <ol>
+        <li>Open Microsoft Access.</li>
+        <li>Create a blank database.</li>
+        <li>Go to External Data.</li>
+        <li>Choose New Data Source or Text File.</li>
+        <li>Select one CSV file at a time.</li>
+        <li>Import each CSV as a new table.</li>
+        <li>Name the tables Sales, Expenses and Products.</li>
+      </ol>
+
+      <h2>Important Note</h2>
+      <p>
+        CSV files may open in Excel when double-clicked on Windows. That is normal.
+        For Access, do not just double-click the file. Import the CSV files from
+        inside Microsoft Access.
+      </p>
+    `;
+  }
+
+  function downloadAccessGuideWord() {
+    downloadWordFile(
+      "chalin03_access_import_guide.doc",
+      buildAccessGuideDocument()
+    );
   }
 
   async function copyAuditSummary() {
@@ -1437,6 +1950,8 @@ ${auditData.auditFlags
 
   const oneColumn = isMobile ? styles.oneColumn : {};
   const mobileStack = isMobile ? styles.mobileStack : {};
+  const scoreCardMobile = isMobile ? styles.scoreCardMobile : {};
+  const scoreRingMobile = isMobile ? styles.scoreRingMobile : {};
 
   return (
     <div style={styles.page}>
@@ -1478,10 +1993,11 @@ ${auditData.auditFlags
       {error && <div className="error-box">{error}</div>}
 
       <div style={{ ...styles.scoreGrid, ...oneColumn }}>
-        <div style={styles.scoreCard}>
+        <div style={{ ...styles.scoreCard, ...scoreCardMobile }}>
           <div
             style={{
               ...styles.scoreRing,
+              ...scoreRingMobile,
               background: `conic-gradient(#e0ba28 0deg ${
                 auditData.auditScore * 3.6
               }deg, #e2e8f0 ${auditData.auditScore * 3.6}deg 360deg)`,
@@ -1502,7 +2018,9 @@ ${auditData.auditFlags
 
             <div style={styles.flagMiniGrid}>
               <span style={styles.redPill}>{auditData.redFlags} Red</span>
-              <span style={styles.orangePill}>{auditData.orangeFlags} Orange</span>
+              <span style={styles.orangePill}>
+                {auditData.orangeFlags} Orange
+              </span>
               <span style={styles.bluePill}>{auditData.blueFlags} Blue</span>
             </div>
           </div>
@@ -1510,39 +2028,86 @@ ${auditData.auditFlags
 
         <div style={styles.exportPanel}>
           <h2>Export Center</h2>
-          <p>
-            Free exports for accountant/auditor review. CSV files open in Excel
-            and can be imported into Microsoft Access.
+          <p style={styles.panelText}>
+            The exports are grouped properly. Word documents open in Microsoft
+            Word, CSV files open in Excel, and Access files must be imported
+            inside Microsoft Access.
           </p>
 
-          <div style={styles.exportGrid}>
-            <button type="button" onClick={downloadAuditSummaryCsv}>
-              Excel Summary CSV
-            </button>
+          <div style={styles.exportSection}>
+            <h3 style={styles.exportSectionTitle}>Professional Documents</h3>
+            <p style={styles.exportHelp}>
+              These are document-style files for auditors, accountants, bosses
+              and management review.
+            </p>
 
-            <button type="button" onClick={downloadAuditWarningsCsv}>
-              Audit Warnings CSV
-            </button>
+            <div style={styles.exportGrid}>
+              <button type="button" onClick={printAuditReport}>
+                PDF Report
+              </button>
 
-            <button type="button" onClick={downloadManagementLetterCsv}>
-              Management Letter CSV
-            </button>
+              <button type="button" onClick={downloadAuditReportWord}>
+                Audit Report Word
+              </button>
 
-            <button type="button" onClick={downloadExcelWorkbookCsv}>
-              Excel Workbook CSV
-            </button>
+              <button type="button" onClick={downloadManagementLetterWord}>
+                Management Letter Word
+              </button>
 
-            <button type="button" onClick={downloadAccessImportFiles}>
-              Access Import CSVs
-            </button>
+              <button type="button" onClick={downloadPowerPointPresentation}>
+                PowerPoint Briefing
+              </button>
 
-            <button type="button" onClick={downloadPowerPointBriefing}>
-              PowerPoint Outline
-            </button>
+              <button type="button" onClick={downloadPowerPointOutlineText}>
+                PowerPoint Outline Text
+              </button>
 
-            <button type="button" onClick={downloadHtmlAuditReport}>
-              HTML Audit Report
-            </button>
+              <button type="button" onClick={downloadHtmlAuditReport}>
+                HTML Audit Report
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.exportSection}>
+            <h3 style={styles.exportSectionTitle}>
+              Excel / Spreadsheet Files
+            </h3>
+            <p style={styles.exportHelp}>
+              These CSV files open in Excel. They are good for sorting,
+              filtering and calculations.
+            </p>
+
+            <div style={styles.exportGrid}>
+              <button type="button" onClick={downloadAuditSummaryCsv}>
+                Accounting Summary CSV
+              </button>
+
+              <button type="button" onClick={downloadAuditWarningsCsv}>
+                Audit Warnings CSV
+              </button>
+
+              <button type="button" onClick={downloadManagementLetterCsv}>
+                Management Letter CSV
+              </button>
+
+              <button type="button" onClick={downloadExcelWorkbookCsv}>
+                Accounting Workbook CSV
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.exportSection}>
+            <h3 style={styles.exportSectionTitle}>Microsoft Access Import</h3>
+            <p style={styles.exportHelp}>
+              These CSV files may open in Excel when double-clicked. For Access,
+              import them from inside Microsoft Access.
+            </p>
+
+            <div style={styles.exportGrid}>
+              <button type="button" onClick={downloadAccessImportFiles}>
+                Download Access Import Pack
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1718,8 +2283,8 @@ ${auditData.auditFlags
         <div style={styles.panel}>
           <h2>Management Letter Points</h2>
           <p style={styles.panelText}>
-            These are professional-style points an auditor/accountant can discuss
-            with management.
+            These are professional-style points an auditor/accountant can
+            discuss with management.
           </p>
 
           <div style={styles.managementList}>
@@ -1957,12 +2522,23 @@ const styles = {
     minWidth: 0,
   },
 
+  scoreCardMobile: {
+    gridTemplateColumns: "1fr",
+    justifyItems: "center",
+    textAlign: "center",
+  },
+
   scoreRing: {
     width: "170px",
     height: "170px",
     borderRadius: "50%",
     display: "grid",
     placeItems: "center",
+  },
+
+  scoreRingMobile: {
+    width: "150px",
+    height: "150px",
   },
 
   scoreInner: {
@@ -1981,6 +2557,7 @@ const styles = {
     gap: "8px",
     flexWrap: "wrap",
     marginTop: "12px",
+    justifyContent: "center",
   },
 
   redPill: {
@@ -2022,7 +2599,27 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "10px",
-    marginTop: "14px",
+    marginTop: "10px",
+  },
+
+  exportSection: {
+    marginTop: "16px",
+    paddingTop: "14px",
+    borderTop: "1px solid #e2e8f0",
+  },
+
+  exportSectionTitle: {
+    margin: "0 0 5px",
+    color: "#07182c",
+    fontSize: "15px",
+    fontWeight: "950",
+  },
+
+  exportHelp: {
+    margin: "0 0 10px",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
 
   cardsGrid: {
