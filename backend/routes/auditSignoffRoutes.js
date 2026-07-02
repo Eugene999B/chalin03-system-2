@@ -8,6 +8,7 @@ const allowedPeriodTypes = ["all", "today", "week", "month", "year", "custom"];
 const allowedPeriodStatuses = ["draft", "reviewed", "approved", "rejected"];
 
 let tableReadyPromise = null;
+let reapprovalTableReadyPromise = null;
 
 function cleanText(value) {
   if (value === undefined || value === null) return null;
@@ -51,6 +52,15 @@ function getUserId(req) {
 
 function getUserRole(req) {
   return String(req.user?.role || "").toLowerCase();
+}
+
+function getUserDisplayName(req) {
+  return (
+    cleanText(req.user?.full_name) ||
+    cleanText(req.user?.username) ||
+    cleanText(req.user?.email) ||
+    null
+  );
 }
 
 function requireAdminOrManager(req, res, next) {
@@ -132,6 +142,52 @@ async function ensureAuditSignoffsTable() {
   await tableReadyPromise;
 }
 
+
+
+async function ensureAuditReapprovalLogTable() {
+  if (!reapprovalTableReadyPromise) {
+    reapprovalTableReadyPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS audit_reapproval_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+
+        audit_signoff_id INT NULL,
+        unlock_request_id INT NULL,
+
+        period_label VARCHAR(255) NOT NULL,
+        period_start DATE NULL,
+        period_end DATE NULL,
+
+        previous_status VARCHAR(50) NULL,
+        new_status VARCHAR(50) NOT NULL DEFAULT 'approved',
+
+        audit_score INT NOT NULL DEFAULT 0,
+        audit_status VARCHAR(50) NULL,
+
+        reapproved_by INT NULL,
+        reapproved_by_name VARCHAR(150) NULL,
+        reapproved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        reapproval_notes TEXT,
+        accountant_notes TEXT,
+        management_notes TEXT,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        INDEX idx_reapproval_signoff (audit_signoff_id),
+        INDEX idx_reapproval_unlock_request (unlock_request_id),
+        INDEX idx_reapproval_period_dates (period_start, period_end),
+        INDEX idx_reapproval_user (reapproved_by),
+        INDEX idx_reapproval_date (reapproved_at)
+      )
+    `).catch((error) => {
+      reapprovalTableReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await reapprovalTableReadyPromise;
+}
+
 async function safeLogActivity(connection, userId, action, details, ipAddress) {
   try {
     await connection.query(
@@ -142,6 +198,128 @@ async function safeLogActivity(connection, userId, action, details, ipAddress) {
   } catch (error) {
     console.warn("Could not write audit signoff activity log:", error.message);
   }
+}
+
+
+
+async function findLatestApprovedUnlockRequest(connection, signoffId) {
+  if (!signoffId) return null;
+
+  try {
+    const [rows] = await connection.query(
+      `
+      SELECT
+        id,
+        audit_signoff_id,
+        reason,
+        review_notes,
+        reviewed_by,
+        reviewed_at,
+        created_at
+      FROM audit_unlock_requests
+      WHERE audit_signoff_id = ?
+      AND status = 'approved'
+      ORDER BY reviewed_at DESC, updated_at DESC, id DESC
+      LIMIT 1
+      `,
+      [signoffId]
+    );
+
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    console.warn(
+      "Could not check latest approved audit unlock request:",
+      error.message
+    );
+
+    return null;
+  }
+}
+
+async function createReapprovalLogIfNeeded({
+  connection,
+  signoffId,
+  latestApprovedUnlockRequest,
+  previousStatus,
+  periodStatus,
+  periodLabel,
+  periodStart,
+  periodEnd,
+  auditScore,
+  auditStatus,
+  reapprovedBy,
+  reapprovedByName,
+  reapprovalNotes,
+  accountantNotes,
+  managementNotes,
+}) {
+  if (!signoffId) return false;
+  if (!latestApprovedUnlockRequest?.id) return false;
+  if (previousStatus === "approved") return false;
+  if (periodStatus !== "approved") return false;
+
+  await ensureAuditReapprovalLogTable();
+
+  const [existingLogRows] = await connection.query(
+    `
+    SELECT id
+    FROM audit_reapproval_log
+    WHERE audit_signoff_id = ?
+    AND unlock_request_id = ?
+    LIMIT 1
+    `,
+    [signoffId, latestApprovedUnlockRequest.id]
+  );
+
+  if (existingLogRows.length > 0) {
+    return false;
+  }
+
+  const finalReapprovalNotes =
+    reapprovalNotes ||
+    managementNotes ||
+    latestApprovedUnlockRequest.review_notes ||
+    latestApprovedUnlockRequest.reason ||
+    `Period re-approved after unlock request #${latestApprovedUnlockRequest.id}.`;
+
+  await connection.query(
+    `
+    INSERT INTO audit_reapproval_log (
+      audit_signoff_id,
+      unlock_request_id,
+      period_label,
+      period_start,
+      period_end,
+      previous_status,
+      new_status,
+      audit_score,
+      audit_status,
+      reapproved_by,
+      reapproved_by_name,
+      reapproval_notes,
+      accountant_notes,
+      management_notes
+    )
+    VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      signoffId,
+      latestApprovedUnlockRequest.id,
+      periodLabel,
+      periodStart,
+      periodEnd,
+      previousStatus || null,
+      auditScore,
+      auditStatus,
+      reapprovedBy || null,
+      reapprovedByName || null,
+      finalReapprovalNotes,
+      accountantNotes || null,
+      managementNotes || null,
+    ]
+  );
+
+  return true;
 }
 
 function normalizeSignoff(row) {
@@ -174,6 +352,34 @@ function normalizeSignoff(row) {
     approved_by_user_name: row.approved_by_user_name,
     created_at: row.created_at,
     updated_at: row.updated_at,
+  };
+}
+
+
+
+function normalizeReapprovalLog(row) {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    audit_signoff_id: row.audit_signoff_id,
+    unlock_request_id: row.unlock_request_id,
+    period_label: row.period_label,
+    period_start: row.period_start,
+    period_end: row.period_end,
+    previous_status: row.previous_status,
+    new_status: row.new_status,
+    audit_score: Number(row.audit_score || 0),
+    audit_status: row.audit_status,
+    reapproved_by: row.reapproved_by,
+    reapproved_by_name: row.reapproved_by_name,
+    reapproved_at: row.reapproved_at,
+    reapproval_notes: row.reapproval_notes,
+    accountant_notes: row.accountant_notes,
+    management_notes: row.management_notes,
+    unlock_reason: row.unlock_reason,
+    unlock_review_notes: row.unlock_review_notes,
+    created_at: row.created_at,
   };
 }
 
@@ -286,6 +492,100 @@ router.get("/latest", requireAuth, requireAdminOrManager, async (req, res) => {
   }
 });
 
+
+router.get("/reapproval-log", requireAuth, requireAdminOrManager, async (req, res) => {
+  try {
+    await ensureAuditReapprovalLogTable();
+
+    const signoffId = Number(req.query.audit_signoff_id || 0);
+    const search = cleanText(req.query.search);
+    const from = cleanDate(req.query.from);
+    const to = cleanDate(req.query.to);
+
+    let sql = `
+      SELECT
+        arl.*,
+        aur.reason AS unlock_reason,
+        aur.review_notes AS unlock_review_notes
+      FROM audit_reapproval_log arl
+      LEFT JOIN audit_unlock_requests aur ON arl.unlock_request_id = aur.id
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    if (Number.isInteger(signoffId) && signoffId > 0) {
+      sql += " AND arl.audit_signoff_id = ?";
+      params.push(signoffId);
+    }
+
+    if (from) {
+      sql += " AND DATE(arl.reapproved_at) >= ?";
+      params.push(from);
+    }
+
+    if (to) {
+      sql += " AND DATE(arl.reapproved_at) <= ?";
+      params.push(to);
+    }
+
+    if (search) {
+      sql += `
+        AND (
+          arl.period_label LIKE ?
+          OR arl.reapproved_by_name LIKE ?
+          OR arl.reapproval_notes LIKE ?
+          OR arl.accountant_notes LIKE ?
+          OR arl.management_notes LIKE ?
+          OR aur.reason LIKE ?
+          OR aur.review_notes LIKE ?
+        )
+      `;
+
+      const searchValue = `%${search}%`;
+
+      params.push(
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue
+      );
+    }
+
+    sql += " ORDER BY arl.reapproved_at DESC, arl.id DESC LIMIT 300";
+
+    const [rows] = await pool.query(sql, params);
+
+    const [summaryRows] = await pool.query(
+      `
+      SELECT
+        COUNT(*) AS total_reapprovals,
+        MAX(reapproved_at) AS latest_reapproval_at
+      FROM audit_reapproval_log
+      `
+    );
+
+    return res.json({
+      status: "success",
+      count: rows.length,
+      summary: summaryRows[0] || {
+        total_reapprovals: 0,
+        latest_reapproval_at: null,
+      },
+      logs: rows.map(normalizeReapprovalLog),
+    });
+  } catch (error) {
+    console.error("Get audit reapproval log error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Something went wrong while fetching audit re-approval log.",
+    });
+  }
+});
+
 router.get("/:id", requireAuth, requireAdminOrManager, async (req, res) => {
   try {
     await ensureAuditSignoffsTable();
@@ -329,6 +629,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
 
   try {
     await ensureAuditSignoffsTable();
+    await ensureAuditReapprovalLogTable();
 
     const userId = getUserId(req);
     const ipAddress = getClientIp(req);
@@ -344,6 +645,9 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
     const approvedByName = cleanText(req.body.approved_by_name);
     const reviewDate = cleanDate(req.body.review_date);
     const periodStatus = cleanPeriodStatus(req.body.period_status);
+    const accountantNotes = cleanText(req.body.accountant_notes);
+    const managementNotes = cleanText(req.body.management_notes);
+    const reapprovalNotes = cleanText(req.body.reapproval_notes);
     const approvedBy = periodStatus === "approved" ? userId : null;
 
     if (!periodLabel) {
@@ -358,7 +662,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
 
     const [existingRows] = await connection.query(
       `
-      SELECT id
+      SELECT id, period_status
       FROM audit_signoffs
       WHERE period_type = ?
       AND (
@@ -372,6 +676,8 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
     );
 
     let signoffId;
+    let previousStatus = null;
+    let reapprovalLogged = false;
 
     const values = [
       periodLabel,
@@ -390,13 +696,18 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       cleanBoolean(req.body.stock_checked),
       cleanBoolean(req.body.warnings_checked),
       cleanBoolean(req.body.reports_checked),
-      cleanText(req.body.accountant_notes),
-      cleanText(req.body.management_notes),
+      accountantNotes,
+      managementNotes,
       approvedBy,
     ];
 
     if (existingRows.length > 0) {
       signoffId = existingRows[0].id;
+      previousStatus = existingRows[0].period_status || null;
+
+      const latestApprovedUnlockRequest =
+        await findLatestApprovedUnlockRequest(connection, signoffId);
+
       await connection.query(
         `
         UPDATE audit_signoffs
@@ -425,11 +736,31 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
         [...values, signoffId]
       );
 
+      reapprovalLogged = await createReapprovalLogIfNeeded({
+        connection,
+        signoffId,
+        latestApprovedUnlockRequest,
+        previousStatus,
+        periodStatus,
+        periodLabel,
+        periodStart,
+        periodEnd,
+        auditScore,
+        auditStatus,
+        reapprovedBy: userId,
+        reapprovedByName: approvedByName || getUserDisplayName(req),
+        reapprovalNotes,
+        accountantNotes,
+        managementNotes,
+      });
+
       await safeLogActivity(
         connection,
         userId,
-        "UPDATE_AUDIT_SIGNOFF",
-        `Updated audit sign-off for ${periodLabel} with status ${periodStatus}.`,
+        reapprovalLogged ? "REAPPROVE_AUDIT_SIGNOFF" : "UPDATE_AUDIT_SIGNOFF",
+        reapprovalLogged
+          ? `Re-approved audit sign-off for ${periodLabel} after unlock request.`
+          : `Updated audit sign-off for ${periodLabel} with status ${periodStatus}.`,
         ipAddress
       );
     } else {
@@ -493,7 +824,13 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
 
     return res.status(existingRows.length > 0 ? 200 : 201).json({
       status: "success",
-      message: existingRows.length > 0 ? "Audit sign-off updated successfully." : "Audit sign-off saved successfully.",
+      message: reapprovalLogged
+        ? "Audit period re-approved and re-approval log saved successfully."
+        : existingRows.length > 0
+        ? "Audit sign-off updated successfully."
+        : "Audit sign-off saved successfully.",
+      reapproval_logged: reapprovalLogged,
+      previous_status: previousStatus,
       signoff: normalizeSignoff(savedRows[0]),
     });
   } catch (error) {
