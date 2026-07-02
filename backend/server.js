@@ -22,6 +22,7 @@ const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
+const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
 
 const app = express();
 
@@ -89,6 +90,7 @@ app.use("/api/daily-closing", dailyClosingRoutes);
 app.use("/api/customer-statements", customerStatementRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/audit-signoffs", auditSignoffRoutes);
+app.use("/api/audit-unlock-requests", auditUnlockRequestRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

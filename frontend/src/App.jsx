@@ -26,6 +26,7 @@ import MaintenancePage from "./pages/MaintenancePage";
 import HelpPage from "./pages/HelpPage";
 import AuditAccountingPage from "./pages/AuditAccountingPage";
 import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
+import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -62,6 +63,14 @@ export default function App() {
               element={
                 <RoleRoute allowedRoles={adminManagerRoles}>
                   <SafePage><CustomerStatementPage /></SafePage>
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="audit-unlock-requests"
+              element={
+                <RoleRoute allowedRoles={adminManagerRoles}>
+                  <SafePage><AuditUnlockRequestsPage /></SafePage>
                 </RoleRoute>
               }
             />

@@ -122,6 +122,14 @@ export default function Layout() {
           group: "Management",
         },
         {
+          title: "Audit Unlock Requests",
+          description: "View and manage audit unlock requests",
+          path: "/audit-unlock-requests",
+          icon: "🔓",
+          keywords: "audit unlock requests approval management",
+          group: "Management",
+        },
+        {
           title: "Low Stock / Restock",
           description: "View items that need restocking",
           path: "/low-stock",
@@ -711,6 +719,7 @@ export default function Layout() {
                   style={linkStyle}
                   onClick={closeMobileMenu}
                 >
+
                   Customer Statement
                 </NavLink>
 
@@ -784,6 +793,14 @@ export default function Layout() {
                   onClick={closeMobileMenu}
                 >
                   Exports
+                </NavLink>
+
+                <NavLink
+                  to="/audit-unlock-requests"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
+                  Audit Unlock Requests
                 </NavLink>
               </>
             )}
