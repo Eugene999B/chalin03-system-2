@@ -1513,6 +1513,46 @@ export default function AuditAccountingPage() {
 
     setMessage("PowerPoint outline text file downloaded successfully.");
   }
+  function getSignOffCompletion() {
+  const checklist = signOff?.checklist || {};
+  const totalItems = SIGN_OFF_CHECKLIST_ITEMS.length;
+
+  const checkedItems = SIGN_OFF_CHECKLIST_ITEMS.filter(
+    (item) => checklist[item.key]
+  ).length;
+
+  const percent =
+    totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0;
+
+  return {
+    checkedItems,
+    totalItems,
+    percent,
+    isComplete: totalItems > 0 && checkedItems === totalItems,
+  };
+}
+
+function getSignOffStatusLabel(status) {
+  const cleanStatus = String(status || "draft").toLowerCase();
+
+  if (cleanStatus === "approved") {
+    return "Approved by Management";
+  }
+
+  if (cleanStatus === "reviewed") {
+    return "Reviewed by Accountant";
+  }
+
+  if (cleanStatus === "locked") {
+    return "Locked / Final Approved";
+  }
+
+  if (cleanStatus === "rejected") {
+    return "Rejected / Needs Correction";
+  }
+
+  return "Draft / In Progress";
+}
 
   function buildSignOffCertificateDocument() {
     const completion = getSignOffCompletion();
