@@ -66,6 +66,30 @@ export default function DebtsPage() {
     return statuses[String(value || "").toLowerCase()] || value || "-";
   }
 
+  function getFriendlyApiError(error, fallbackMessage) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      const lockedPeriod = responseData.locked_period || {};
+      const periodLabel =
+        lockedPeriod.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriod.approved_by_name || "management";
+      const reviewDate = lockedPeriod.review_date || "";
+
+      return [
+        "This debt payment cannot be recorded because the accounting period is locked.",
+        `Locked Period: ${periodLabel}.`,
+        `Reason: This period has already been approved by ${approvedBy}.`,
+        reviewDate ? `Approval Date: ${reviewDate}.` : "",
+        "Ask the admin or manager to review the audit sign-off before recording debt payments inside this period.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    return responseData?.message || fallbackMessage;
+  }
+
   function formatPhoneForWhatsApp(phone) {
     const rawPhone = String(phone || "").trim();
 
@@ -75,7 +99,6 @@ export default function DebtsPage() {
 
     let digits = rawPhone.replace(/\D/g, "");
 
-    // Ghana format: 0240000000 becomes 233240000000
     if (digits.startsWith("0")) {
       digits = `233${digits.slice(1)}`;
     }
@@ -153,7 +176,7 @@ Thank you.`;
       setDebts(debtsResponse.data.debts || []);
       setSummary(summaryResponse.data.summary || null);
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to load debts.");
+      setError(getFriendlyApiError(error, "Failed to load debts."));
     }
   }
 
@@ -172,7 +195,7 @@ Thank you.`;
       setSelectedDebt(response.data.debt);
       setSelectedPayments(response.data.payments || []);
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to load debt details.");
+      setError(getFriendlyApiError(error, "Failed to load debt details."));
     } finally {
       setDetailsLoading(false);
     }
@@ -400,11 +423,14 @@ Thank you.`;
     }
 
     try {
-      const response = await axiosClient.post(`/debts/${selectedDebtId}/payments`, {
-        amount: cleanAmount,
-        payment_method: paymentMethod,
-        notes,
-      });
+      const response = await axiosClient.post(
+        `/debts/${selectedDebtId}/payments`,
+        {
+          amount: cleanAmount,
+          payment_method: paymentMethod,
+          notes,
+        }
+      );
 
       setMessage("Debt payment recorded successfully.");
       setLatestReceipt(response.data.receipt || null);
@@ -416,9 +442,7 @@ Thank you.`;
 
       await loadDebts();
     } catch (error) {
-      setError(
-        error.response?.data?.message || "Failed to record debt payment."
-      );
+      setError(getFriendlyApiError(error, "Failed to record debt payment."));
     }
   }
 

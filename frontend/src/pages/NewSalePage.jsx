@@ -89,6 +89,29 @@ export default function NewSalePage() {
     return paymentMethods[String(value || "").toLowerCase()] || value || "-";
   }
 
+  function getFriendlyApiError(error, fallbackMessage) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      const lockedPeriod = responseData.locked_period || {};
+      const periodLabel = lockedPeriod.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriod.approved_by_name || "management";
+      const reviewDate = lockedPeriod.review_date || "";
+
+      return [
+        "This sale cannot be recorded because the accounting period is locked.",
+        `Locked Period: ${periodLabel}.`,
+        `Reason: This period has already been approved by ${approvedBy}.`,
+        reviewDate ? `Approval Date: ${reviewDate}.` : "",
+        "Ask the admin or manager to review the audit sign-off before making changes inside this period.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    return responseData?.message || fallbackMessage;
+  }
+
   function getReceiptCustomerName(receiptData) {
     return (
       receiptData?.customer?.name ||
@@ -199,7 +222,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       const response = await axiosClient.get("/products");
       setProducts(response.data.products || []);
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to load products.");
+      setError(getFriendlyApiError(error, "Failed to load products."));
     }
   }
 
@@ -391,7 +414,8 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
             cleanCustomerName ||
             "Walk-in Customer",
           phone: savedReceipt.customer?.phone || cleanCustomerPhone || "",
-          location: savedReceipt.customer?.location || cleanCustomerLocation || "",
+          location:
+            savedReceipt.customer?.location || cleanCustomerLocation || "",
         },
       });
 
@@ -410,7 +434,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       await loadProducts();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to record sale.");
+      setError(getFriendlyApiError(error, "Failed to record sale."));
     }
   }
 
@@ -453,7 +477,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       setMessage("Receipt PDF downloaded successfully.");
     } catch (error) {
       console.error("PDF download frontend error:", error);
-      setError("Failed to download receipt PDF.");
+      setError(getFriendlyApiError(error, "Failed to download receipt PDF."));
     }
   }
 

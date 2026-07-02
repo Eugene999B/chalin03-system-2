@@ -33,6 +33,30 @@ export default function ExpensesPage() {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
 
+  function getFriendlyApiError(error, fallbackMessage) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      const lockedPeriod = responseData.locked_period || {};
+      const periodLabel =
+        lockedPeriod.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriod.approved_by_name || "management";
+      const reviewDate = lockedPeriod.review_date || "";
+
+      return [
+        "This expense cannot be changed because the accounting period is locked.",
+        `Locked Period: ${periodLabel}.`,
+        `Reason: This period has already been approved by ${approvedBy}.`,
+        reviewDate ? `Approval Date: ${reviewDate}.` : "",
+        "Ask the admin or manager to review the audit sign-off before recording or deleting expenses inside this period.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    return responseData?.message || fallbackMessage;
+  }
+
   async function loadExpenses() {
     setError("");
 
@@ -49,8 +73,10 @@ export default function ExpensesPage() {
       setSummary(response.data.summary || {});
     } catch (error) {
       setError(
-        error.response?.data?.message ||
+        getFriendlyApiError(
+          error,
           "Failed to load expenses. Make sure you are admin or manager."
+        )
       );
     }
   }
@@ -78,11 +104,11 @@ export default function ExpensesPage() {
         amount: Number(form.amount || 0),
       });
 
-      setMessage(response.data.message);
+      setMessage(response.data.message || "Expense recorded successfully.");
       setForm(emptyExpenseForm);
       loadExpenses();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to record expense.");
+      setError(getFriendlyApiError(error, "Failed to record expense."));
     }
   }
 
@@ -98,10 +124,10 @@ export default function ExpensesPage() {
 
     try {
       const response = await axiosClient.delete(`/expenses/${expenseId}`);
-      setMessage(response.data.message);
+      setMessage(response.data.message || "Expense deleted successfully.");
       loadExpenses();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to delete expense.");
+      setError(getFriendlyApiError(error, "Failed to delete expense."));
     }
   }
 
