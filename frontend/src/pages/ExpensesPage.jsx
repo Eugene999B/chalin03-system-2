@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -26,6 +27,11 @@ export default function ExpensesPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const [lockedPeriod, setLockedPeriod] = useState(null);
+  const [unlockRequestAction, setUnlockRequestAction] = useState(
+    "Record expense inside locked period"
+  );
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -33,22 +39,32 @@ export default function ExpensesPage() {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
 
+  function getLockedPeriodFromError(error) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      return responseData.locked_period || null;
+    }
+
+    return null;
+  }
+
   function getFriendlyApiError(error, fallbackMessage) {
     const responseData = error?.response?.data;
 
     if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
-      const lockedPeriod = responseData.locked_period || {};
+      const lockedPeriodData = responseData.locked_period || {};
       const periodLabel =
-        lockedPeriod.period_label || "Approved accounting period";
-      const approvedBy = lockedPeriod.approved_by_name || "management";
-      const reviewDate = lockedPeriod.review_date || "";
+        lockedPeriodData.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriodData.approved_by_name || "management";
+      const reviewDate = lockedPeriodData.review_date || "";
 
       return [
         "This expense cannot be changed because the accounting period is locked.",
         `Locked Period: ${periodLabel}.`,
         `Reason: This period has already been approved by ${approvedBy}.`,
         reviewDate ? `Approval Date: ${reviewDate}.` : "",
-        "Ask the admin or manager to review the audit sign-off before recording or deleting expenses inside this period.",
+        "Use the unlock request form below if a correction is needed.",
       ]
         .filter(Boolean)
         .join(" ");
@@ -97,6 +113,8 @@ export default function ExpensesPage() {
 
     setMessage("");
     setError("");
+    setLockedPeriod(null);
+    setUnlockRequestAction("Record expense inside locked period");
 
     try {
       const response = await axiosClient.post("/expenses", {
@@ -108,6 +126,13 @@ export default function ExpensesPage() {
       setForm(emptyExpenseForm);
       loadExpenses();
     } catch (error) {
+      const period = getLockedPeriodFromError(error);
+
+      if (period) {
+        setLockedPeriod(period);
+        setUnlockRequestAction("Record expense inside locked period");
+      }
+
       setError(getFriendlyApiError(error, "Failed to record expense."));
     }
   }
@@ -121,12 +146,21 @@ export default function ExpensesPage() {
 
     setMessage("");
     setError("");
+    setLockedPeriod(null);
+    setUnlockRequestAction("Delete expense inside locked period");
 
     try {
       const response = await axiosClient.delete(`/expenses/${expenseId}`);
       setMessage(response.data.message || "Expense deleted successfully.");
       loadExpenses();
     } catch (error) {
+      const period = getLockedPeriodFromError(error);
+
+      if (period) {
+        setLockedPeriod(period);
+        setUnlockRequestAction("Delete expense inside locked period");
+      }
+
       setError(getFriendlyApiError(error, "Failed to delete expense."));
     }
   }
@@ -164,6 +198,17 @@ export default function ExpensesPage() {
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      <AuditUnlockRequestBox
+        lockedPeriod={lockedPeriod}
+        requestArea="expense"
+        requestedAction={unlockRequestAction}
+        onRequestSent={() => {
+          setMessage(
+            "Unlock request sent successfully. Admin or manager must review it."
+          );
+        }}
+      />
 
       <div className="cards-grid expense-summary-grid">
         <div className="stat-card">

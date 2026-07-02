@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 export default function DebtsPage() {
   const [debts, setDebts] = useState([]);
@@ -15,6 +16,11 @@ export default function DebtsPage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   const [latestReceipt, setLatestReceipt] = useState(null);
+
+  const [lockedPeriod, setLockedPeriod] = useState(null);
+  const [unlockRequestAction, setUnlockRequestAction] = useState(
+    "Record debt payment inside locked period"
+  );
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -66,22 +72,32 @@ export default function DebtsPage() {
     return statuses[String(value || "").toLowerCase()] || value || "-";
   }
 
+  function getLockedPeriodFromError(error) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      return responseData.locked_period || null;
+    }
+
+    return null;
+  }
+
   function getFriendlyApiError(error, fallbackMessage) {
     const responseData = error?.response?.data;
 
     if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
-      const lockedPeriod = responseData.locked_period || {};
+      const lockedPeriodData = responseData.locked_period || {};
       const periodLabel =
-        lockedPeriod.period_label || "Approved accounting period";
-      const approvedBy = lockedPeriod.approved_by_name || "management";
-      const reviewDate = lockedPeriod.review_date || "";
+        lockedPeriodData.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriodData.approved_by_name || "management";
+      const reviewDate = lockedPeriodData.review_date || "";
 
       return [
         "This debt payment cannot be recorded because the accounting period is locked.",
         `Locked Period: ${periodLabel}.`,
         `Reason: This period has already been approved by ${approvedBy}.`,
         reviewDate ? `Approval Date: ${reviewDate}.` : "",
-        "Ask the admin or manager to review the audit sign-off before recording debt payments inside this period.",
+        "Use the unlock request form below if a correction is needed.",
       ]
         .filter(Boolean)
         .join(" ");
@@ -409,6 +425,8 @@ Thank you.`;
     setMessage("");
     setError("");
     setLatestReceipt(null);
+    setLockedPeriod(null);
+    setUnlockRequestAction("Record debt payment inside locked period");
 
     if (!selectedDebtId) {
       setError("Select a debt first.");
@@ -442,6 +460,13 @@ Thank you.`;
 
       await loadDebts();
     } catch (error) {
+      const period = getLockedPeriodFromError(error);
+
+      if (period) {
+        setLockedPeriod(period);
+        setUnlockRequestAction("Record debt payment inside locked period");
+      }
+
       setError(getFriendlyApiError(error, "Failed to record debt payment."));
     }
   }
@@ -461,6 +486,17 @@ Thank you.`;
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      <AuditUnlockRequestBox
+        lockedPeriod={lockedPeriod}
+        requestArea="debt_payment"
+        requestedAction={unlockRequestAction}
+        onRequestSent={() => {
+          setMessage(
+            "Unlock request sent successfully. Admin or manager must review it."
+          );
+        }}
+      />
 
       {summary && (
         <div className="cards-grid">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 export default function NewSalePage() {
   const [products, setProducts] = useState([]);
@@ -19,6 +20,7 @@ export default function NewSalePage() {
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [lockedPeriod, setLockedPeriod] = useState(null);
 
   const businessName = "CHALIN 03 COMPANY LIMITED";
   const businessAddress = "Dunkwa Police Barrier";
@@ -110,6 +112,17 @@ export default function NewSalePage() {
     }
 
     return responseData?.message || fallbackMessage;
+  }
+
+  function rememberLockedPeriodFromError(error) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      setLockedPeriod(responseData.locked_period || null);
+      return;
+    }
+
+    setLockedPeriod(null);
   }
 
   function getReceiptCustomerName(receiptData) {
@@ -358,6 +371,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setError("");
     setMessage("");
     setReceipt(null);
+    setLockedPeriod(null);
 
     const cleanCustomerName = cleanText(customerName);
     const cleanCustomerPhone = cleanText(customerPhone);
@@ -420,6 +434,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       });
 
       setMessage("Sale recorded successfully.");
+      setLockedPeriod(null);
 
       setCart([]);
       setSelectedProductId("");
@@ -434,6 +449,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       await loadProducts();
     } catch (error) {
+      rememberLockedPeriodFromError(error);
       setError(getFriendlyApiError(error, "Failed to record sale."));
     }
   }
@@ -760,6 +776,19 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      {lockedPeriod && (
+        <AuditUnlockRequestBox
+          lockedPeriod={lockedPeriod}
+          requestArea="sale"
+          requestedAction="Record sale inside locked accounting period"
+          onRequestSent={() => {
+            setMessage(
+              "Unlock request sent successfully. Wait for admin or manager review."
+            );
+          }}
+        />
+      )}
 
       <div className="two-column">
         <div className="section-card">
