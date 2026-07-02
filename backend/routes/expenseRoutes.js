@@ -14,6 +14,90 @@ async function logActivity(userId, action, details) {
   );
 }
 
+function toDateOnly(value) {
+  const date = value ? new Date(value) : new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+async function findApprovedAuditLockForDate(dateValue) {
+  const dateOnly = toDateOnly(dateValue);
+
+  try {
+    const [locks] = await pool.query(
+      `SELECT
+        id,
+        period_type,
+        period_label,
+        period_start,
+        period_end,
+        audit_score,
+        audit_status,
+        period_status,
+        approved_by_name,
+        review_date,
+        updated_at
+       FROM audit_signoffs
+       WHERE period_status = 'approved'
+       AND (
+        period_type = 'all'
+        OR (
+          period_start IS NOT NULL
+          AND period_end IS NOT NULL
+          AND ? BETWEEN period_start AND period_end
+        )
+        OR (
+          period_start IS NOT NULL
+          AND period_end IS NULL
+          AND ? >= period_start
+        )
+        OR (
+          period_start IS NULL
+          AND period_end IS NOT NULL
+          AND ? <= period_end
+        )
+       )
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [dateOnly, dateOnly, dateOnly]
+    );
+
+    return locks.length > 0 ? locks[0] : null;
+  } catch (error) {
+    if (
+      error.code === "ER_NO_SUCH_TABLE" ||
+      error.code === "ER_BAD_TABLE_ERROR"
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function sendAuditLockedResponse(res, lock, actionText) {
+  return res.status(423).json({
+    status: "error",
+    code: "AUDIT_PERIOD_LOCKED",
+    message: `This accounting period is already approved and locked. You cannot ${actionText} inside this period.`,
+    locked_period: {
+      id: lock.id,
+      period_type: lock.period_type,
+      period_label: lock.period_label,
+      period_start: lock.period_start,
+      period_end: lock.period_end,
+      audit_score: lock.audit_score,
+      audit_status: lock.audit_status,
+      approved_by_name: lock.approved_by_name,
+      review_date: lock.review_date,
+    },
+  });
+}
+
 // GET /api/expenses
 router.get(
   "/",
@@ -119,6 +203,16 @@ router.post(
         });
       }
 
+      const lockedPeriod = await findApprovedAuditLockForDate(expense_date);
+
+      if (lockedPeriod) {
+        return sendAuditLockedResponse(
+          res,
+          lockedPeriod,
+          "record an expense"
+        );
+      }
+
       const [result] = await pool.query(
         `INSERT INTO expenses (
           category,
@@ -186,7 +280,7 @@ router.delete(
       const { id } = req.params;
 
       const [expenses] = await pool.query(
-        `SELECT id, category, amount
+        `SELECT id, category, amount, expense_date
          FROM expenses
          WHERE id = ?
          LIMIT 1`,
@@ -201,6 +295,18 @@ router.delete(
       }
 
       const expense = expenses[0];
+
+      const lockedPeriod = await findApprovedAuditLockForDate(
+        expense.expense_date
+      );
+
+      if (lockedPeriod) {
+        return sendAuditLockedResponse(
+          res,
+          lockedPeriod,
+          "delete an expense"
+        );
+      }
 
       await pool.query(`DELETE FROM expenses WHERE id = ?`, [id]);
 
