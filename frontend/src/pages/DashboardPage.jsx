@@ -701,12 +701,12 @@ export default function DashboardPage() {
             />
 
             <HeroMetric
-              label="Stock Health"
+              label="Stock Health :"
               value={`${dashboardData.stockHealth}%`}
             />
 
             <HeroMetric
-              label="Business Score"
+              label="Business Score : "
               value={`${dashboardData.businessScore}%`}
             />
           </div>
