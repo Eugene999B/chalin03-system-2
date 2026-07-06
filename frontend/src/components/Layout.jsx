@@ -144,6 +144,15 @@ export default function Layout() {
           group: "Management",
         },
         {
+          title: "SMS Center",
+          description: "Send custom SMS messages to customers",
+          path: "/sms",
+          icon: "📩",
+          keywords:
+            "sms text message customers customer phone bulk selected all reminder notice",
+          group: "Management",
+},
+        {
           title: "Reports",
           description: "View business reports and performance",
           path: "/reports",
@@ -824,6 +833,14 @@ export default function Layout() {
                   onClick={closeMobileMenu}
                 >
                   Customer Statement
+                </NavLink>
+
+                <NavLink
+                  to="/sms"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
+                  SMS Center
                 </NavLink>
 
                 <NavLink

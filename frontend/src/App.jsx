@@ -29,6 +29,7 @@ import HelpPage from "./pages/HelpPage";
 import AuditAccountingPage from "./pages/AuditAccountingPage";
 import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
+import SmsPage from "./pages/SmsPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -129,6 +130,14 @@ export default function App() {
               path="activity-log"
               element={adminOnlyPage(<ActivityLogPage />)}
             />
+            <Route
+              path="/sms"
+              element={
+               <ProtectedRoute>
+                <SmsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="backup" element={adminOnlyPage(<BackupPage />)} />
             <Route
               path="backup-restore"
@@ -138,6 +147,7 @@ export default function App() {
               path="maintenance"
               element={adminOnlyPage(<MaintenancePage />)}
             />
+            
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

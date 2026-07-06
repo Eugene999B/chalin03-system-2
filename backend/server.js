@@ -24,7 +24,7 @@ const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
 const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
-const branchRoutes = require("./routes/branchRoutes");
+const branchRoutes = require("./routes/branchRoutes");const smsRoutes = require("./routes/smsRoutes");
 
 const app = express();
 
@@ -136,6 +136,7 @@ app.use("/api/customer-statements", customerStatementRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/audit-signoffs", auditSignoffRoutes);
 app.use("/api/audit-unlock-requests", auditUnlockRequestRoutes);
+app.use("/api/sms", smsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
