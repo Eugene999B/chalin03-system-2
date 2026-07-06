@@ -54,14 +54,61 @@ export default function SmsPage() {
 
   const selectedCount = selectedCustomerIds.length;
 
+  const statusStyle = useMemo(() => {
+    const safetyLevel = smsStatus?.safety_level || "safe";
+
+    if (safetyLevel === "live") {
+      return {
+        background: "#fef2f2",
+        border: "1px solid #fecaca",
+        color: "#991b1b",
+      };
+    }
+
+    if (safetyLevel === "warning") {
+      return {
+        background: "#fffbeb",
+        border: "1px solid #fde68a",
+        color: "#92400e",
+      };
+    }
+
+    if (safetyLevel === "danger") {
+      return {
+        background: "#fee2e2",
+        border: "1px solid #fca5a5",
+        color: "#7f1d1d",
+      };
+    }
+
+    if (safetyLevel === "disabled") {
+      return {
+        background: "#f3f4f6",
+        border: "1px solid #d1d5db",
+        color: "#374151",
+      };
+    }
+
+    return {
+      background: "#eff6ff",
+      border: "1px solid #bfdbfe",
+      color: "#1e3a8a",
+    };
+  }, [smsStatus]);
+
   function getFriendlyError(error, fallback) {
     return error?.response?.data?.message || error?.message || fallback;
   }
 
-  async function loadSmsPageData() {
+  async function loadSmsPageData(options = {}) {
+    const silent = Boolean(options.silent);
+
     setLoading(true);
-    setError("");
-    setNotice("");
+
+    if (!silent) {
+      setError("");
+      setNotice("");
+    }
 
     try {
       const [statusResponse, customersResponse, logsResponse] =
@@ -115,15 +162,11 @@ export default function SmsPage() {
     try {
       const response = await axiosClient.post("/sms/daily-summary");
 
-      setNotice(
-        response.data.message || "Daily summary SMS sent successfully."
-      );
+      setNotice(response.data.message || "Daily summary SMS sent successfully.");
 
-      await loadSmsPageData();
+      await loadSmsPageData({ silent: true });
     } catch (error) {
-      setError(
-        getFriendlyError(error, "Failed to send daily summary SMS.")
-      );
+      setError(getFriendlyError(error, "Failed to send daily summary SMS."));
     } finally {
       setSendingDailySummary(false);
     }
@@ -150,7 +193,7 @@ export default function SmsPage() {
       setMessage("");
       setSelectedCustomerIds([]);
 
-      await loadSmsPageData();
+      await loadSmsPageData({ silent: true });
     } catch (error) {
       setError(getFriendlyError(error, "Failed to send SMS."));
     } finally {
@@ -190,7 +233,7 @@ export default function SmsPage() {
             flexWrap: "wrap",
           }}
         >
-          <button type="button" onClick={loadSmsPageData}>
+          <button type="button" onClick={() => loadSmsPageData()}>
             Refresh
           </button>
 
@@ -213,21 +256,35 @@ export default function SmsPage() {
       <div
         style={{
           marginBottom: "18px",
-          padding: "14px",
+          padding: "16px",
           borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
           fontWeight: "800",
+          ...statusStyle,
         }}
       >
-        SMS Mode: {smsStatus?.provider || "unknown"} | Sender ID:{" "}
-        {smsStatus?.sender_id || "-"}
-        <br />
-        <small>
-          {smsStatus?.mode ||
-            "Mock mode means no real SMS credit is used while testing."}
-        </small>
+        <div style={{ fontSize: "16px", marginBottom: "6px" }}>
+          {smsStatus?.mode_title || "SMS MODE: CHECKING..."}
+        </div>
+
+        <div style={{ fontSize: "14px", marginBottom: "8px" }}>
+          {smsStatus?.mode_message ||
+            "Checking SMS provider mode. Mock mode means no real SMS credit is used while testing."}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            fontSize: "13px",
+            fontWeight: "700",
+          }}
+        >
+          <span>Provider: {smsStatus?.provider_label || "Unknown"}</span>
+          <span>Sender ID: {smsStatus?.sender_id || "-"}</span>
+          <span>SMS Enabled: {smsStatus?.enabled ? "Yes" : "No"}</span>
+          <span>Real SMS: {smsStatus?.live_sending ? "YES" : "NO"}</span>
+        </div>
       </div>
 
       {loading ? (
@@ -389,8 +446,8 @@ export default function SmsPage() {
             </p>
 
             <div className="warning-box">
-              Start in mock mode first. After testing, we will switch the
-              backend to Hubtel live mode.
+              Start in mock mode first. After testing, switch the backend to
+              Arkesel live mode only when the boss approves SMS spending.
             </div>
 
             <h3>Boss Daily Summary</h3>
