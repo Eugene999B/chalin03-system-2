@@ -65,6 +65,9 @@ export default function SmsPage() {
   const [liveBulkConfirmed, setLiveBulkConfirmed] = useState(false);
   const [liveBulkConfirmText, setLiveBulkConfirmText] = useState("");
 
+  const [logStatusFilter, setLogStatusFilter] = useState("all");
+  const [logTypeFilter, setLogTypeFilter] = useState("all");
+
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
@@ -88,6 +91,20 @@ export default function SmsPage() {
       return text.includes(searchText);
     });
   }, [customers, customerSearch]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      const status = String(log.status || "").toLowerCase();
+      const type = String(log.sms_type || "").toLowerCase();
+
+      const statusMatches =
+        logStatusFilter === "all" || status === logStatusFilter;
+
+      const typeMatches = logTypeFilter === "all" || type === logTypeFilter;
+
+      return statusMatches && typeMatches;
+    });
+  }, [logs, logStatusFilter, logTypeFilter]);
 
   const selectedCount = selectedCustomerIds.length;
 
@@ -207,6 +224,11 @@ export default function SmsPage() {
   function resetLiveBulkConfirmation() {
     setLiveBulkConfirmed(false);
     setLiveBulkConfirmText("");
+  }
+
+  function resetLogFilters() {
+    setLogStatusFilter("all");
+    setLogTypeFilter("all");
   }
 
   function useTemplate(templateMessage) {
@@ -690,8 +712,63 @@ export default function SmsPage() {
       <div className="section-card">
         <h2>Recent SMS History</h2>
 
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: "12px",
+            marginBottom: "14px",
+          }}
+        >
+          <div>
+            <label>Status Filter</label>
+            <select
+              value={logStatusFilter}
+              onChange={(event) => setLogStatusFilter(event.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="sent">Sent</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Type Filter</label>
+            <select
+              value={logTypeFilter}
+              onChange={(event) => setLogTypeFilter(event.target.value)}
+            >
+              <option value="all">All types</option>
+              <option value="other">Other / Custom</option>
+              <option value="receipt">Receipt</option>
+              <option value="debt_reminder">Debt Reminder</option>
+              <option value="low_stock">Low Stock</option>
+              <option value="daily_summary">Daily Summary</option>
+              <option value="security_alert">Security Alert</option>
+            </select>
+          </div>
+
+          <div>
+            <label>&nbsp;</label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={resetLogFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+
+        <p>
+          Showing <strong>{filteredLogs.length}</strong> of{" "}
+          <strong>{logs.length}</strong> SMS records.
+        </p>
+
         {logs.length === 0 ? (
           <p>No SMS records yet.</p>
+        ) : filteredLogs.length === 0 ? (
+          <p>No SMS records match the selected filters.</p>
         ) : (
           <table>
             <thead>
@@ -706,7 +783,7 @@ export default function SmsPage() {
             </thead>
 
             <tbody>
-              {logs.map((log) => (
+              {filteredLogs.map((log) => (
                 <tr key={log.id}>
                   <td>{formatDateTime(log.created_at)}</td>
                   <td>{log.recipient_phone}</td>
