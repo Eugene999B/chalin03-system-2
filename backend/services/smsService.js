@@ -1,4 +1,5 @@
 const DEFAULT_HUBTEL_BASE_URL = "https://smsc.hubtel.com/v1/messages/send";
+const DEFAULT_ARKESEL_BASE_URL = "https://sms.arkesel.com/api/v2/sms/send";
 const DEFAULT_SMS_TIMEOUT_MS = 15000;
 
 function getSmsConfig() {
@@ -6,11 +7,20 @@ function getSmsConfig() {
     enabled: String(process.env.SMS_ENABLED || "false").toLowerCase() === "true",
     provider: String(process.env.SMS_PROVIDER || "mock").toLowerCase().trim(),
     senderId: String(process.env.SMS_SENDER_ID || "CHALIN03").trim(),
+
+    // Arkesel
+    arkeselApiKey: String(process.env.SMS_ARKESEL_API_KEY || "").trim(),
+    arkeselBaseUrl: String(
+      process.env.SMS_ARKESEL_BASE_URL || DEFAULT_ARKESEL_BASE_URL
+    ).trim(),
+
+    // Hubtel kept as optional backup
     hubtelClientId: String(process.env.SMS_HUBTEL_CLIENT_ID || "").trim(),
     hubtelClientSecret: String(process.env.SMS_HUBTEL_CLIENT_SECRET || "").trim(),
     hubtelBaseUrl: String(
       process.env.SMS_HUBTEL_BASE_URL || DEFAULT_HUBTEL_BASE_URL
     ).trim(),
+
     timeoutMs: Number(process.env.SMS_TIMEOUT_MS || DEFAULT_SMS_TIMEOUT_MS),
   };
 }
@@ -47,7 +57,7 @@ function normalizeGhanaPhone(phone) {
     digits = `233${digits.slice(4)}`;
   }
 
-  // Ghana normal SMS format should now be 233 + 9 digits = 12 digits.
+  // Ghana SMS format: 233 + 9 digits = 12 digits
   if (!digits.startsWith("233")) {
     return "";
   }
@@ -114,6 +124,42 @@ async function readResponseBody(response) {
   }
 }
 
+function getTimeoutMs(config) {
+  if (Number.isFinite(config.timeoutMs) && config.timeoutMs > 0) {
+    return config.timeoutMs;
+  }
+
+  return DEFAULT_SMS_TIMEOUT_MS;
+}
+
+function ensureFetchAvailable() {
+  if (typeof fetch !== "function") {
+    throw new Error(
+      "This backend needs Node.js 18 or newer for live SMS sending."
+    );
+  }
+}
+
+function validateArkeselConfig(config) {
+  if (!config.arkeselApiKey) {
+    throw new Error(
+      "Arkesel API Key is required. Add SMS_ARKESEL_API_KEY to backend .env."
+    );
+  }
+
+  if (!config.senderId) {
+    throw new Error("SMS sender ID is required. Add SMS_SENDER_ID to backend .env.");
+  }
+
+  if (!config.arkeselBaseUrl) {
+    throw new Error(
+      "Arkesel base URL is required. Add SMS_ARKESEL_BASE_URL to backend .env."
+    );
+  }
+
+  ensureFetchAvailable();
+}
+
 function validateHubtelConfig(config) {
   if (!config.hubtelClientId || !config.hubtelClientSecret) {
     throw new Error(
@@ -126,14 +172,91 @@ function validateHubtelConfig(config) {
   }
 
   if (!config.hubtelBaseUrl) {
-    throw new Error("Hubtel base URL is required. Add SMS_HUBTEL_BASE_URL to backend .env.");
-  }
-
-  if (typeof fetch !== "function") {
     throw new Error(
-      "This backend needs Node.js 18 or newer for live SMS sending."
+      "Hubtel base URL is required. Add SMS_HUBTEL_BASE_URL to backend .env."
     );
   }
+
+  ensureFetchAvailable();
+}
+
+async function sendArkeselSms({ config, to, message }) {
+  validateArkeselConfig(config);
+
+  const payload = {
+    sender: config.senderId,
+    message,
+    recipients: [to],
+  };
+
+  const controller = new AbortController();
+  const timeoutMs = getTimeoutMs(config);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+
+  try {
+    response = await fetch(config.arkeselBaseUrl, {
+      method: "POST",
+      headers: {
+        "api-key": config.arkeselApiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw createSmsError("Arkesel SMS request timed out.", {
+        provider: "arkesel",
+        statusCode: 408,
+        providerResponse: {
+          message: `Request timed out after ${timeoutMs}ms.`,
+        },
+      });
+    }
+
+    throw createSmsError(`Arkesel SMS network error: ${error.message}`, {
+      provider: "arkesel",
+      providerResponse: {
+        message: error.message,
+      },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const responseBody = await readResponseBody(response);
+
+  if (!response.ok) {
+    throw createSmsError("Arkesel SMS request failed.", {
+      provider: "arkesel",
+      statusCode: response.status,
+      providerResponse: responseBody.parsed,
+    });
+  }
+
+  if (
+    responseBody.parsed &&
+    typeof responseBody.parsed === "object" &&
+    responseBody.parsed.status &&
+    String(responseBody.parsed.status).toLowerCase() !== "success"
+  ) {
+    throw createSmsError("Arkesel SMS was not accepted.", {
+      provider: "arkesel",
+      statusCode: response.status,
+      providerResponse: responseBody.parsed,
+    });
+  }
+
+  return {
+    success: true,
+    provider: "arkesel",
+    to,
+    status: "sent",
+    providerResponse: responseBody.parsed,
+  };
 }
 
 async function sendHubtelSms({ config, to, message }) {
@@ -150,11 +273,7 @@ async function sendHubtelSms({ config, to, message }) {
   };
 
   const controller = new AbortController();
-  const timeoutMs =
-    Number.isFinite(config.timeoutMs) && config.timeoutMs > 0
-      ? config.timeoutMs
-      : DEFAULT_SMS_TIMEOUT_MS;
-
+  const timeoutMs = getTimeoutMs(config);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
@@ -232,9 +351,17 @@ async function sendSms({ to, message }) {
       status: "sent",
       providerResponse: {
         message:
-          "Mock SMS sent successfully. No real SMS credit was used. Switch SMS_PROVIDER to hubtel for live SMS.",
+          "Mock SMS sent successfully. No real SMS credit was used. Switch SMS_PROVIDER to arkesel or hubtel for live SMS.",
       },
     };
+  }
+
+  if (config.provider === "arkesel") {
+    return sendArkeselSms({
+      config,
+      to: normalizedTo,
+      message: cleanMessage,
+    });
   }
 
   if (config.provider === "hubtel") {
