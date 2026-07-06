@@ -31,6 +31,7 @@ export default function SmsPage() {
 
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingDailySummary, setSendingDailySummary] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -106,6 +107,28 @@ export default function SmsPage() {
     setSelectedCustomerIds([]);
   }
 
+  async function sendDailySummarySms() {
+    setSendingDailySummary(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post("/sms/daily-summary");
+
+      setNotice(
+        response.data.message || "Daily summary SMS sent successfully."
+      );
+
+      await loadSmsPageData();
+    } catch (error) {
+      setError(
+        getFriendlyError(error, "Failed to send daily summary SMS.")
+      );
+    } finally {
+      setSendingDailySummary(false);
+    }
+  }
+
   async function sendCustomSms(event) {
     event.preventDefault();
 
@@ -160,9 +183,28 @@ export default function SmsPage() {
           </p>
         </div>
 
-        <button type="button" onClick={loadSmsPageData}>
-          Refresh
-        </button>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          <button type="button" onClick={loadSmsPageData}>
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={sendDailySummarySms}
+            disabled={sendingDailySummary}
+          >
+            {sendingDailySummary
+              ? "Sending Summary..."
+              : "Send Today's Summary SMS"}
+          </button>
+        </div>
       </div>
 
       {notice && <div className="success-box">{notice}</div>}
@@ -342,13 +384,32 @@ export default function SmsPage() {
 
             <p>
               Use this page for customer notices, payment reminders, product
-              availability messages, and shop announcements.
+              availability messages, shop announcements, and daily business
+              summaries.
             </p>
 
             <div className="warning-box">
               Start in mock mode first. After testing, we will switch the
               backend to Hubtel live mode.
             </div>
+
+            <h3>Boss Daily Summary</h3>
+            <p>
+              Click the button below to send today&apos;s sales, debts,
+              expenses, and low-stock summary to the owner or manager phone
+              number saved in settings.
+            </p>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={sendDailySummarySms}
+              disabled={sendingDailySummary}
+            >
+              {sendingDailySummary
+                ? "Sending Summary..."
+                : "Send Today's Daily Summary SMS"}
+            </button>
 
             <h3>Good example</h3>
             <p>

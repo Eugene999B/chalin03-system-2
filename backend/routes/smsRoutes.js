@@ -199,6 +199,55 @@ function firstValidGhanaPhone(...values) {
   return "";
 }
 
+function getTodayDateText() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addOneDay(dateText) {
+  const [year, month, day] = String(dateText || "")
+    .split("-")
+    .map((part) => Number(part));
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + 1);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getDateRange(value) {
+  const requestedDate = String(value || "").trim();
+  const dateText = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+    ? requestedDate
+    : getTodayDateText();
+
+  const nextDateText = addOneDay(dateText);
+
+  return {
+    dateText,
+    nextDateText,
+    startDateTime: `${dateText} 00:00:00`,
+    endDateTime: `${nextDateText} 00:00:00`,
+  };
+}
+
+async function getTableColumns(tableName) {
+  const allowedTableNames = new Set([
+    "sales",
+    "expenses",
+    "debts",
+    "debt_payments",
+    "products",
+  ]);
+
+  if (!allowedTableNames.has(tableName)) {
+    throw new Error(`Unsupported table name: ${tableName}`);
+  }
+
+  const [columns] = await runQuery(`SHOW COLUMNS FROM \`${tableName}\``);
+
+  return columns.map((column) => column.Field);
+}
+
 async function writeSmsLog({
   branchId,
   phone,
@@ -913,6 +962,281 @@ router.post(
       branch_id: branchId,
       count: lowStockProducts.length,
       products: lowStockProducts,
+    });
+  })
+);
+
+router.post(
+  "/daily-summary",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+
+    const { dateText, nextDateText, startDateTime, endDateTime } = getDateRange(
+      req.body.date || req.query.date
+    );
+
+    const [branchSettings] = await runQuery(
+      `
+        SELECT
+          b.id AS branch_id,
+          b.branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location,
+
+          st.business_name,
+          st.business_phone,
+          st.owner_phone
+        FROM branches b
+        LEFT JOIN settings st ON b.id = st.branch_id
+        WHERE b.id = ?
+        LIMIT 1
+      `,
+      [branchId]
+    );
+
+    const settings = branchSettings[0] || {};
+
+    const alertPhone = firstValidGhanaPhone(
+      req.body.phone,
+      settings.owner_phone,
+      settings.business_phone
+    );
+
+    if (!alertPhone) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "No valid phone number found for daily summary. Add owner phone in settings or provide phone in the request.",
+      });
+    }
+
+    const salesColumns = await getTableColumns("sales");
+    const saleStatusFilter = salesColumns.includes("sale_status")
+      ? "AND (s.sale_status IS NULL OR LOWER(s.sale_status) NOT IN ('voided', 'cancelled', 'canceled'))"
+      : "";
+
+    const [salesRows] = await runQuery(
+      `
+        SELECT
+          COUNT(*) AS transaction_count,
+          COALESCE(SUM(s.total), 0) AS total_sales,
+          COALESCE(SUM(s.amount_paid), 0) AS total_paid,
+          COALESCE(SUM(s.balance), 0) AS total_balance,
+
+          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'cash' THEN s.total ELSE 0 END), 0) AS cash_total,
+          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'momo' THEN s.total ELSE 0 END), 0) AS momo_total,
+          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'bank' THEN s.total ELSE 0 END), 0) AS bank_total,
+          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'credit' THEN s.total ELSE 0 END), 0) AS credit_total,
+          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'mixed' THEN s.total ELSE 0 END), 0) AS mixed_total
+        FROM sales s
+        WHERE s.branch_id = ?
+          AND s.created_at >= ?
+          AND s.created_at < ?
+          ${saleStatusFilter}
+      `,
+      [branchId, startDateTime, endDateTime]
+    );
+
+    const salesSummary = salesRows[0] || {};
+
+    let expenseSummary = {
+      expense_count: 0,
+      total_expenses: 0,
+    };
+
+    try {
+      const expenseColumns = await getTableColumns("expenses");
+      const expenseDateColumn = ["expense_date", "date", "created_at"].find(
+        (column) => expenseColumns.includes(column)
+      );
+
+      if (expenseColumns.includes("amount") && expenseDateColumn) {
+        const dateParams =
+          expenseDateColumn === "created_at"
+            ? [startDateTime, endDateTime]
+            : [dateText, nextDateText];
+
+        const [expenseRows] = await runQuery(
+          `
+            SELECT
+              COUNT(*) AS expense_count,
+              COALESCE(SUM(amount), 0) AS total_expenses
+            FROM expenses
+            WHERE branch_id = ?
+              AND \`${expenseDateColumn}\` >= ?
+              AND \`${expenseDateColumn}\` < ?
+          `,
+          [branchId, ...dateParams]
+        );
+
+        expenseSummary = expenseRows[0] || expenseSummary;
+      }
+    } catch (error) {
+      console.warn("Daily summary expense calculation skipped:", error.message);
+    }
+
+    let debtSummary = {
+      debt_count: 0,
+      total_new_debt: 0,
+      total_debt_balance: 0,
+    };
+
+    try {
+      const debtColumns = await getTableColumns("debts");
+
+      if (
+        debtColumns.includes("created_at") &&
+        debtColumns.includes("amount_owed") &&
+        debtColumns.includes("balance")
+      ) {
+        const [debtRows] = await runQuery(
+          `
+            SELECT
+              COUNT(*) AS debt_count,
+              COALESCE(SUM(amount_owed), 0) AS total_new_debt,
+              COALESCE(SUM(balance), 0) AS total_debt_balance
+            FROM debts
+            WHERE branch_id = ?
+              AND created_at >= ?
+              AND created_at < ?
+          `,
+          [branchId, startDateTime, endDateTime]
+        );
+
+        debtSummary = debtRows[0] || debtSummary;
+      }
+    } catch (error) {
+      console.warn("Daily summary debt calculation skipped:", error.message);
+    }
+
+    let debtPaymentSummary = {
+      debt_payment_count: 0,
+      total_debt_payments: 0,
+    };
+
+    try {
+      const debtPaymentColumns = await getTableColumns("debt_payments");
+      const debtPaymentDateColumn = ["paid_at", "created_at"].find((column) =>
+        debtPaymentColumns.includes(column)
+      );
+
+      if (
+        debtPaymentColumns.includes("amount") &&
+        debtPaymentColumns.includes("debt_id") &&
+        debtPaymentDateColumn
+      ) {
+        const [debtPaymentRows] = await runQuery(
+          `
+            SELECT
+              COUNT(*) AS debt_payment_count,
+              COALESCE(SUM(dp.amount), 0) AS total_debt_payments
+            FROM debt_payments dp
+            INNER JOIN debts d ON dp.debt_id = d.id
+            WHERE d.branch_id = ?
+              AND dp.\`${debtPaymentDateColumn}\` >= ?
+              AND dp.\`${debtPaymentDateColumn}\` < ?
+          `,
+          [branchId, startDateTime, endDateTime]
+        );
+
+        debtPaymentSummary = debtPaymentRows[0] || debtPaymentSummary;
+      }
+    } catch (error) {
+      console.warn(
+        "Daily summary debt payment calculation skipped:",
+        error.message
+      );
+    }
+
+    const [lowStockRows] = await runQuery(
+      `
+        SELECT COUNT(*) AS low_stock_count
+        FROM products
+        WHERE branch_id = ?
+          AND low_stock_threshold IS NOT NULL
+          AND quantity <= low_stock_threshold
+      `,
+      [branchId]
+    );
+
+    const lowStockSummary = lowStockRows[0] || {
+      low_stock_count: 0,
+    };
+
+    const businessName = settings.business_name || "Chalin 03 Company Limited";
+    const branchCode = settings.branch_code || "MAIN";
+    const branchName = settings.branch_name || "Chalin 03";
+
+    const cashTotal = Number(salesSummary.cash_total || 0);
+    const momoTotal = Number(salesSummary.momo_total || 0);
+    const bankTotal = Number(salesSummary.bank_total || 0);
+    const creditMixedTotal =
+      Number(salesSummary.credit_total || 0) +
+      Number(salesSummary.mixed_total || 0);
+
+    const dailySummaryMessage = `${businessName}: Daily Summary ${branchName} (${branchCode}) ${dateText}. Sales: GHS ${formatMoney(
+      salesSummary.total_sales
+    )}. Transactions: ${
+      salesSummary.transaction_count || 0
+    }. Paid: GHS ${formatMoney(salesSummary.total_paid)}. Cash: GHS ${formatMoney(
+      cashTotal
+    )}. MoMo: GHS ${formatMoney(momoTotal)}. Bank: GHS ${formatMoney(
+      bankTotal
+    )}. Credit/Mixed: GHS ${formatMoney(creditMixedTotal)}. New Debt: GHS ${formatMoney(
+      debtSummary.total_new_debt
+    )}. Debt Collected: GHS ${formatMoney(
+      debtPaymentSummary.total_debt_payments
+    )}. Expenses: GHS ${formatMoney(
+      expenseSummary.total_expenses
+    )}. Low Stock: ${lowStockSummary.low_stock_count || 0}.`;
+
+    const finalMessage = truncateMessage(dailySummaryMessage, 480);
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: alertPhone,
+      message: finalMessage,
+      smsType: "daily_summary",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "Daily summary SMS sent successfully."
+          : result.message || "Daily summary SMS failed.",
+      result,
+      sms_message: finalMessage,
+      summary: {
+        date: dateText,
+        branch_id: branchId,
+        branch_code: branchCode,
+        branch_name: branchName,
+        transaction_count: Number(salesSummary.transaction_count || 0),
+        total_sales: Number(salesSummary.total_sales || 0),
+        total_paid: Number(salesSummary.total_paid || 0),
+        total_balance: Number(salesSummary.total_balance || 0),
+        cash_total: cashTotal,
+        momo_total: momoTotal,
+        bank_total: bankTotal,
+        credit_mixed_total: creditMixedTotal,
+        debt_count: Number(debtSummary.debt_count || 0),
+        total_new_debt: Number(debtSummary.total_new_debt || 0),
+        total_debt_balance: Number(debtSummary.total_debt_balance || 0),
+        debt_payment_count: Number(debtPaymentSummary.debt_payment_count || 0),
+        total_debt_payments: Number(
+          debtPaymentSummary.total_debt_payments || 0
+        ),
+        expense_count: Number(expenseSummary.expense_count || 0),
+        total_expenses: Number(expenseSummary.total_expenses || 0),
+        low_stock_count: Number(lowStockSummary.low_stock_count || 0),
+      },
     });
   })
 );
