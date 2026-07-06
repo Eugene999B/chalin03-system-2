@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { normalizeGhanaPhone, sendSms } = require("../services/smsService");
 
 const router = express.Router();
 
@@ -65,6 +66,65 @@ function boolValue(value) {
   return value === true || Number(value || 0) === 1;
 }
 
+function safeJson(value) {
+  try {
+    return JSON.stringify(value || {});
+  } catch {
+    return String(value || "");
+  }
+}
+
+function truncateMessage(message, maxLength = 480) {
+  const cleanSmsMessage = String(message || "").trim();
+
+  if (cleanSmsMessage.length <= maxLength) {
+    return cleanSmsMessage;
+  }
+
+  return `${cleanSmsMessage.slice(0, maxLength - 3)}...`;
+}
+
+function firstValidGhanaPhone(...values) {
+  for (const value of values) {
+    const rawValue = String(value || "").trim();
+
+    if (!rawValue) {
+      continue;
+    }
+
+    const possiblePhones = rawValue
+      .split(/[\/,;|]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    for (const possiblePhone of possiblePhones) {
+      const normalizedPhone = normalizeGhanaPhone(possiblePhone);
+
+      if (normalizedPhone) {
+        return normalizedPhone;
+      }
+    }
+
+    const normalizedFullValue = normalizeGhanaPhone(rawValue);
+
+    if (normalizedFullValue) {
+      return normalizedFullValue;
+    }
+  }
+
+  return "";
+}
+
+function formatSecurityDateTime() {
+  return new Date().toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function createToken(user, branch) {
   const branchCode = branch?.branch_code || branch?.code || null;
   const branchName = branch?.name || branch?.branch_name || null;
@@ -99,7 +159,9 @@ async function buildUserSelectByWhere(whereSql, params) {
   const allBranchesSql = userColumns.has("can_access_all_branches")
     ? "can_access_all_branches"
     : "0 AS can_access_all_branches";
-  const activeSql = userColumns.has("is_active") ? "is_active" : "1 AS is_active";
+  const activeSql = userColumns.has("is_active")
+    ? "is_active"
+    : "1 AS is_active";
   const createdAtSql = userColumns.has("created_at")
     ? "created_at"
     : "NULL AS created_at";
@@ -164,8 +226,12 @@ async function getBranchById(branchId) {
     ? "is_head_office"
     : "0 AS is_head_office";
 
-  const activeSql = branchColumns.has("is_active") ? "is_active" : "1 AS is_active";
-  const activeWhere = branchColumns.has("is_active") ? "AND is_active = TRUE" : "";
+  const activeSql = branchColumns.has("is_active")
+    ? "is_active"
+    : "1 AS is_active";
+  const activeWhere = branchColumns.has("is_active")
+    ? "AND is_active = TRUE"
+    : "";
 
   const [branches] = await pool.query(
     `SELECT
@@ -324,6 +390,163 @@ async function writeActivityLog(branchId, userId, action, details) {
   );
 }
 
+async function getSmsSettingsForBranch(branchId) {
+  const settingsColumns = await getTableColumns("settings");
+
+  if (settingsColumns.size === 0) {
+    return {};
+  }
+
+  const businessNameSql = settingsColumns.has("business_name")
+    ? "business_name"
+    : "'Chalin 03 Company Limited' AS business_name";
+
+  const businessPhoneSql = settingsColumns.has("business_phone")
+    ? "business_phone"
+    : "NULL AS business_phone";
+
+  const ownerPhoneSql = settingsColumns.has("owner_phone")
+    ? "owner_phone"
+    : "NULL AS owner_phone";
+
+  const whereSql = settingsColumns.has("branch_id") ? "WHERE branch_id = ?" : "";
+  const params = settingsColumns.has("branch_id") ? [branchId || 1] : [];
+
+  const [settingsRows] = await pool.query(
+    `SELECT
+      ${businessNameSql},
+      ${businessPhoneSql},
+      ${ownerPhoneSql}
+     FROM settings
+     ${whereSql}
+     LIMIT 1`,
+    params
+  );
+
+  return settingsRows[0] || {};
+}
+
+async function writeSmsLogSafe({
+  branchId,
+  phone,
+  message,
+  smsType,
+  status,
+  providerResponse,
+  sentBy,
+}) {
+  try {
+    const smsLogColumns = await getTableColumns("sms_log");
+
+    if (smsLogColumns.size === 0) {
+      return;
+    }
+
+    const sentAt = status === "sent" ? new Date() : null;
+
+    const fieldValues = {
+      branch_id: branchId || null,
+      recipient_phone: phone,
+      message,
+      sms_type: smsType || "other",
+      status,
+      provider_response: safeJson(providerResponse).slice(0, 6000),
+      sent_by: sentBy || null,
+      sent_at: sentAt,
+    };
+
+    const insertColumns = Object.keys(fieldValues).filter((column) =>
+      smsLogColumns.has(column)
+    );
+
+    if (
+      !insertColumns.includes("recipient_phone") ||
+      !insertColumns.includes("message") ||
+      !insertColumns.includes("status")
+    ) {
+      return;
+    }
+
+    const placeholders = insertColumns.map(() => "?").join(", ");
+    const escapedColumns = insertColumns
+      .map((column) => `\`${column}\``)
+      .join(", ");
+    const values = insertColumns.map((column) => fieldValues[column]);
+
+    await pool.query(
+      `INSERT INTO sms_log (${escapedColumns}) VALUES (${placeholders})`,
+      values
+    );
+  } catch (error) {
+    console.warn("Security SMS log skipped:", error.message);
+  }
+}
+
+async function sendPasswordChangedSecuritySmsAlert({ user, branch }) {
+  try {
+    const branchId = branch?.id || user?.default_branch_id || null;
+    const settings = await getSmsSettingsForBranch(branchId);
+
+    const alertPhone = firstValidGhanaPhone(
+      settings.owner_phone,
+      settings.business_phone
+    );
+
+    if (!alertPhone) {
+      console.warn(
+        "Password change SMS alert skipped: no valid owner/admin phone found."
+      );
+      return;
+    }
+
+    const businessName = settings.business_name || "Chalin 03 Company Limited";
+    const branchCode = branch?.branch_code || branch?.code || "STORE";
+    const branchName = branch?.name || branch?.branch_name || "Selected Store";
+
+    const alertMessage = truncateMessage(
+      `${businessName}: Security alert. Password changed for user ${
+        user.full_name || user.username
+      } (${user.username}) at ${branchName} (${branchCode}) on ${formatSecurityDateTime()}. If this was not expected, review the account immediately.`,
+      480
+    );
+
+    try {
+      const result = await sendSms({
+        to: alertPhone,
+        message: alertMessage,
+      });
+
+      await writeSmsLogSafe({
+        branchId,
+        phone: alertPhone,
+        message: alertMessage,
+        smsType: "other",
+        status: "sent",
+        providerResponse: result.providerResponse,
+        sentBy: user.id,
+      });
+    } catch (error) {
+      await writeSmsLogSafe({
+        branchId,
+        phone: alertPhone,
+        message: alertMessage,
+        smsType: "other",
+        status: "failed",
+        providerResponse: {
+          error: error.message,
+          statusCode: error.statusCode || null,
+          providerResponse: error.providerResponse || null,
+        },
+        sentBy: user.id,
+      });
+
+      console.warn("Password change SMS alert failed:", error.message);
+    }
+  } catch (error) {
+    console.warn("Password change SMS alert skipped:", error.message);
+  }
+}
+
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
@@ -345,10 +568,9 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const users = await buildUserSelectByWhere(
-      `WHERE username = ?`,
-      [username]
-    );
+    const users = await buildUserSelectByWhere(`WHERE username = ?`, [
+      username,
+    ]);
 
     if (users.length === 0) {
       return res.status(401).json({
@@ -413,10 +635,7 @@ router.post("/login", async (req, res) => {
 // GET /api/auth/me
 router.get("/me", requireAuth, async (req, res) => {
   try {
-    const users = await buildUserSelectByWhere(
-      `WHERE id = ?`,
-      [req.user.id]
-    );
+    const users = await buildUserSelectByWhere(`WHERE id = ?`, [req.user.id]);
 
     if (users.length === 0) {
       return res.status(404).json({
@@ -478,10 +697,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
       });
     }
 
-    const users = await buildUserSelectByWhere(
-      `WHERE id = ?`,
-      [req.user.id]
-    );
+    const users = await buildUserSelectByWhere(`WHERE id = ?`, [req.user.id]);
 
     if (users.length === 0) {
       return res.status(404).json({
@@ -543,6 +759,11 @@ router.post("/change-password", requireAuth, async (req, res) => {
       `${user.username} changed account password`
     );
 
+    await sendPasswordChangedSecuritySmsAlert({
+      user,
+      branch: selectedBranch,
+    });
+
     const token = createToken(user, selectedBranch);
 
     return res.json({
@@ -567,10 +788,9 @@ router.post("/forgot-password", async (req, res) => {
     const username = cleanText(req.body.username);
 
     if (username) {
-      const users = await buildUserSelectByWhere(
-        `WHERE username = ?`,
-        [username]
-      );
+      const users = await buildUserSelectByWhere(`WHERE username = ?`, [
+        username,
+      ]);
 
       if (users.length > 0) {
         await writeActivityLog(
