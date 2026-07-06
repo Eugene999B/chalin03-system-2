@@ -6,6 +6,24 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
 function buildDateFilter(alias, from, to, params) {
   let filter = "";
 
@@ -22,16 +40,16 @@ function buildDateFilter(alias, from, to, params) {
   return filter;
 }
 
-function buildExpenseDateFilter(from, to, params) {
+function buildExpenseDateFilter(alias, from, to, params) {
   let filter = "";
 
   if (from) {
-    filter += ` AND expense_date >= ?`;
+    filter += ` AND ${alias}.expense_date >= ?`;
     params.push(from);
   }
 
   if (to) {
-    filter += ` AND expense_date <= ?`;
+    filter += ` AND ${alias}.expense_date <= ?`;
     params.push(to);
   }
 
@@ -52,13 +70,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const salesParams = [];
+      const salesParams = [branchId];
       const salesDateFilter = buildDateFilter("s", from, to, salesParams);
-
-      const expenseParams = [];
-      const expenseDateFilter = buildExpenseDateFilter(from, to, expenseParams);
 
       const [salesSummaryRows] = await pool.query(
         `SELECT
@@ -70,10 +87,14 @@ router.get(
           COALESCE(SUM(s.amount_paid), 0) AS total_amount_paid,
           COALESCE(SUM(s.balance), 0) AS total_sales_balance
          FROM sales s
-         WHERE ${activeCompletedSalesFilter("s")}
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
          ${salesDateFilter}`,
         salesParams
       );
+
+      const profitParams = [branchId];
+      const profitDateFilter = buildDateFilter("s", from, to, profitParams);
 
       const [profitRows] = await pool.query(
         `SELECT
@@ -93,21 +114,30 @@ router.get(
           FROM sale_items
           GROUP BY sale_id
          ) sale_costs ON sale_costs.sale_id = s.id
-         WHERE ${activeCompletedSalesFilter("s")}
-         ${salesDateFilter}`,
-        salesParams
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
+         ${profitDateFilter}`,
+        profitParams
+      );
+
+      const expenseParams = [branchId];
+      const expenseDateFilter = buildExpenseDateFilter(
+        "e",
+        from,
+        to,
+        expenseParams
       );
 
       const [expenseRows] = await pool.query(
         `SELECT
-          COALESCE(SUM(amount), 0) AS total_expenses
-         FROM expenses
-         WHERE 1 = 1
+          COALESCE(SUM(e.amount), 0) AS total_expenses
+         FROM expenses e
+         WHERE e.branch_id = ?
          ${expenseDateFilter}`,
         expenseParams
       );
 
-      const debtParams = [];
+      const debtParams = [branchId, branchId];
       const debtDateFilter = buildDateFilter("s", from, to, debtParams);
 
       const [debtRows] = await pool.query(
@@ -116,7 +146,9 @@ router.get(
           COUNT(*) AS active_debt_count
          FROM debts d
          INNER JOIN sales s ON d.sale_id = s.id
-         WHERE d.status != 'paid'
+         WHERE d.branch_id = ?
+         AND s.branch_id = ?
+         AND d.status != 'paid'
          AND ${activeCompletedSalesFilter("s")}
          ${debtDateFilter}`,
         debtParams
@@ -125,11 +157,13 @@ router.get(
       const [lowStockRows] = await pool.query(
         `SELECT COUNT(*) AS low_stock_count
          FROM products
-         WHERE is_active = TRUE
-         AND quantity <= low_stock_threshold`
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         AND quantity <= low_stock_threshold`,
+        [branchId]
       );
 
-      const topProductsParams = [];
+      const topProductsParams = [branchId];
       const topProductsDateFilter = buildDateFilter(
         "s",
         from,
@@ -145,7 +179,8 @@ router.get(
           SUM(si.line_total) AS revenue
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
-         WHERE ${activeCompletedSalesFilter("s")}
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
          ${topProductsDateFilter}
          GROUP BY si.product_id, si.product_name
          ORDER BY quantity_sold DESC, revenue DESC
@@ -153,7 +188,7 @@ router.get(
         topProductsParams
       );
 
-      const paymentParams = [];
+      const paymentParams = [branchId];
       const paymentDateFilter = buildDateFilter("s", from, to, paymentParams);
 
       const [paymentBreakdown] = await pool.query(
@@ -162,16 +197,19 @@ router.get(
           COUNT(*) AS count,
           COALESCE(SUM(s.total), 0) AS total
          FROM sales s
-         WHERE ${activeCompletedSalesFilter("s")}
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
          ${paymentDateFilter}
          GROUP BY s.payment_type
          ORDER BY total DESC`,
         paymentParams
       );
 
-      const salesSummary = salesSummaryRows[0];
-      const profitSummary = profitRows[0];
-      const expenseSummary = expenseRows[0];
+      const salesSummary = salesSummaryRows[0] || {};
+      const profitSummary = profitRows[0] || {};
+      const expenseSummary = expenseRows[0] || {};
+      const debtSummary = debtRows[0] || {};
+      const lowStockSummary = lowStockRows[0] || {};
 
       const grossProfit = Number(profitSummary.gross_profit || 0);
       const totalExpenses = Number(expenseSummary.total_expenses || 0);
@@ -179,7 +217,9 @@ router.get(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         filters: {
+          branch_id: branchId,
           from: from || null,
           to: to || null,
         },
@@ -209,9 +249,9 @@ router.get(
           total_expenses: totalExpenses,
           net_profit: netProfit,
 
-          outstanding_debts: Number(debtRows[0].outstanding_debts || 0),
-          active_debt_count: Number(debtRows[0].active_debt_count || 0),
-          low_stock_count: Number(lowStockRows[0].low_stock_count || 0),
+          outstanding_debts: Number(debtSummary.outstanding_debts || 0),
+          active_debt_count: Number(debtSummary.active_debt_count || 0),
+          low_stock_count: Number(lowStockSummary.low_stock_count || 0),
         },
         top_products: topProducts,
         payment_breakdown: paymentBreakdown,
@@ -235,9 +275,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [products] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           size,
           category,
@@ -245,13 +288,16 @@ router.get(
           low_stock_threshold,
           selling_price
          FROM products
-         WHERE is_active = TRUE
+         WHERE branch_id = ?
+         AND is_active = TRUE
          AND quantity <= low_stock_threshold
-         ORDER BY quantity ASC, name ASC`
+         ORDER BY quantity ASC, name ASC`,
+        [branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: products.length,
         products,
       });

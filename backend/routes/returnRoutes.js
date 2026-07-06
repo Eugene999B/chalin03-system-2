@@ -6,11 +6,29 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-async function logActivity(userId, action, details) {
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+async function logActivity(userId, branchId, action, details) {
   await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
   );
 }
 
@@ -21,35 +39,51 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { search } = req.query;
+      const branchId = getBranchId(req);
+      const search = cleanText(req.query.search);
 
-      const params = [];
-      let whereClause = "WHERE s.sale_status = 'completed'";
+      const params = [branchId];
+      let whereClause = `
+        WHERE s.branch_id = ?
+        AND s.sale_status = 'completed'
+        AND COALESCE(s.is_voided, 0) = 0
+      `;
 
       if (search) {
         whereClause += ` AND (
           s.receipt_number LIKE ?
+          OR s.customer_name LIKE ?
+          OR s.customer_phone LIKE ?
           OR c.name LIKE ?
           OR c.phone LIKE ?
         )`;
 
         const searchValue = `%${search}%`;
-        params.push(searchValue, searchValue, searchValue);
+        params.push(
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue
+        );
       }
 
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.total,
           s.payment_type,
           s.amount_paid,
           s.balance,
           s.created_at,
-          c.name AS customer_name,
-          c.phone AS customer_phone
+          COALESCE(s.customer_name, c.name) AS customer_name,
+          COALESCE(s.customer_phone, c.phone) AS customer_phone
          FROM sales s
-         LEFT JOIN customers c ON s.customer_id = c.id
+         LEFT JOIN customers c
+          ON s.customer_id = c.id
+          AND c.branch_id = s.branch_id
          ${whereClause}
          ORDER BY s.created_at DESC
          LIMIT 50`,
@@ -58,6 +92,7 @@ router.get(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: sales.length,
         sales,
       });
@@ -79,28 +114,33 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { saleId } = req.params;
 
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.total,
           s.payment_type,
           s.created_at,
-          c.name AS customer_name,
-          c.phone AS customer_phone
+          COALESCE(s.customer_name, c.name) AS customer_name,
+          COALESCE(s.customer_phone, c.phone) AS customer_phone
          FROM sales s
-         LEFT JOIN customers c ON s.customer_id = c.id
+         LEFT JOIN customers c
+          ON s.customer_id = c.id
+          AND c.branch_id = s.branch_id
          WHERE s.id = ?
+         AND s.branch_id = ?
          LIMIT 1`,
-        [saleId]
+        [saleId, branchId]
       );
 
       if (sales.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Sale not found.",
+          message: "Sale not found in the selected store.",
         });
       }
 
@@ -114,14 +154,17 @@ router.get(
           COALESCE((
             SELECT SUM(r.quantity)
             FROM returns r
-            WHERE r.sale_id = si.sale_id
+            WHERE r.branch_id = ?
+            AND r.sale_id = si.sale_id
             AND r.product_id = si.product_id
           ), 0) AS returned_quantity
          FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
          WHERE si.sale_id = ?
+         AND s.branch_id = ?
          GROUP BY si.sale_id, si.product_id, si.product_name
          ORDER BY si.product_name ASC`,
-        [saleId]
+        [branchId, saleId, branchId]
       );
 
       const cleanItems = items.map((item) => {
@@ -141,6 +184,7 @@ router.get(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         sale: sales[0],
         items: cleanItems,
       });
@@ -162,14 +206,19 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { search, from, to } = req.query;
+      const branchId = getBranchId(req);
+      const search = cleanText(req.query.search);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
-      let whereClause = "WHERE 1 = 1";
+      const params = [branchId];
+      let whereClause = "WHERE r.branch_id = ?";
 
       if (search) {
         whereClause += ` AND (
           s.receipt_number LIKE ?
+          OR s.customer_name LIKE ?
+          OR s.customer_phone LIKE ?
           OR c.name LIKE ?
           OR c.phone LIKE ?
           OR p.name LIKE ?
@@ -178,6 +227,8 @@ router.get(
 
         const searchValue = `%${search}%`;
         params.push(
+          searchValue,
+          searchValue,
           searchValue,
           searchValue,
           searchValue,
@@ -199,19 +250,29 @@ router.get(
       const [returns] = await pool.query(
         `SELECT
           r.id,
+          r.branch_id,
           r.sale_id,
           r.product_id,
           r.quantity,
           r.reason,
           r.returned_at,
           s.receipt_number,
-          c.name AS customer_name,
-          c.phone AS customer_phone,
-          p.name AS product_name
+          COALESCE(s.customer_name, c.name) AS customer_name,
+          COALESCE(s.customer_phone, c.phone) AS customer_phone,
+          p.name AS product_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM returns r
-         LEFT JOIN sales s ON r.sale_id = s.id
-         LEFT JOIN customers c ON s.customer_id = c.id
-         LEFT JOIN products p ON r.product_id = p.id
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         LEFT JOIN customers c
+          ON s.customer_id = c.id
+          AND c.branch_id = r.branch_id
+         LEFT JOIN products p
+          ON r.product_id = p.id
+          AND p.branch_id = r.branch_id
+         LEFT JOIN branches b ON r.branch_id = b.id
          ${whereClause}
          ORDER BY r.returned_at DESC, r.id DESC`,
         params
@@ -222,15 +283,22 @@ router.get(
           COUNT(*) AS return_count,
           COALESCE(SUM(r.quantity), 0) AS total_quantity_returned
          FROM returns r
-         LEFT JOIN sales s ON r.sale_id = s.id
-         LEFT JOIN customers c ON s.customer_id = c.id
-         LEFT JOIN products p ON r.product_id = p.id
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         LEFT JOIN customers c
+          ON s.customer_id = c.id
+          AND c.branch_id = r.branch_id
+         LEFT JOIN products p
+          ON r.product_id = p.id
+          AND p.branch_id = r.branch_id
          ${whereClause}`,
         params
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: returns.length,
         summary: {
           return_count: Number(summaryRows[0].return_count || 0),
@@ -260,9 +328,10 @@ router.post(
     const connection = await pool.getConnection();
 
     try {
+      const branchId = getBranchId(req);
       const { sale_id, product_id, quantity, reason } = req.body;
 
-      if (!sale_id || !product_id || !quantity || !reason) {
+      if (!sale_id || !product_id || !quantity || !cleanText(reason)) {
         return res.status(400).json({
           status: "error",
           message: "Sale, product, quantity and reason are required.",
@@ -272,6 +341,7 @@ router.post(
       const cleanSaleId = Number(sale_id);
       const cleanProductId = Number(product_id);
       const cleanQuantity = Number(quantity);
+      const cleanReason = cleanText(reason);
 
       if (
         !cleanSaleId ||
@@ -290,12 +360,16 @@ router.post(
       const [sales] = await connection.query(
         `SELECT
           id,
+          branch_id,
           receipt_number,
-          sale_status
+          sale_status,
+          is_voided
          FROM sales
          WHERE id = ?
-         LIMIT 1`,
-        [cleanSaleId]
+         AND branch_id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [cleanSaleId, branchId]
       );
 
       if (sales.length === 0) {
@@ -303,31 +377,36 @@ router.post(
 
         return res.status(404).json({
           status: "error",
-          message: "Sale not found.",
+          message: "Sale not found in the selected store.",
         });
       }
 
-      if (sales[0].sale_status !== "completed") {
+      if (
+        sales[0].sale_status !== "completed" ||
+        Number(sales[0].is_voided || 0) === 1
+      ) {
         await connection.rollback();
 
         return res.status(400).json({
           status: "error",
-          message: "Only completed sales can be returned.",
+          message: "Only active completed sales can be returned.",
         });
       }
 
       const [saleItems] = await connection.query(
         `SELECT
-          product_id,
-          product_name,
-          SUM(quantity) AS quantity_sold,
-          MAX(unit_price) AS unit_price
-         FROM sale_items
-         WHERE sale_id = ?
-         AND product_id = ?
-         GROUP BY product_id, product_name
+          si.product_id,
+          si.product_name,
+          SUM(si.quantity) AS quantity_sold,
+          MAX(si.unit_price) AS unit_price
+         FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
+         WHERE si.sale_id = ?
+         AND s.branch_id = ?
+         AND si.product_id = ?
+         GROUP BY si.product_id, si.product_name
          LIMIT 1`,
-        [cleanSaleId, cleanProductId]
+        [cleanSaleId, branchId, cleanProductId]
       );
 
       if (saleItems.length === 0) {
@@ -339,14 +418,35 @@ router.post(
         });
       }
 
+      const [products] = await connection.query(
+        `SELECT id, branch_id, name
+         FROM products
+         WHERE id = ?
+         AND branch_id = ?
+         AND is_active = TRUE
+         LIMIT 1
+         FOR UPDATE`,
+        [cleanProductId, branchId]
+      );
+
+      if (products.length === 0) {
+        await connection.rollback();
+
+        return res.status(404).json({
+          status: "error",
+          message: "Product not found in the selected store.",
+        });
+      }
+
       const saleItem = saleItems[0];
 
       const [previousReturns] = await connection.query(
         `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity
          FROM returns
-         WHERE sale_id = ?
+         WHERE branch_id = ?
+         AND sale_id = ?
          AND product_id = ?`,
-        [cleanSaleId, cleanProductId]
+        [branchId, cleanSaleId, cleanProductId]
       );
 
       const quantitySold = Number(saleItem.quantity_sold || 0);
@@ -366,29 +466,40 @@ router.post(
 
       await connection.query(
         `INSERT INTO returns (
+          branch_id,
           sale_id,
           product_id,
           quantity,
           reason,
+          returned_by,
           returned_at
         )
-        VALUES (?, ?, ?, ?, NOW())`,
-        [cleanSaleId, cleanProductId, cleanQuantity, reason]
+        VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          branchId,
+          cleanSaleId,
+          cleanProductId,
+          cleanQuantity,
+          cleanReason,
+          req.user.id,
+        ]
       );
 
       await connection.query(
         `UPDATE products
          SET quantity = quantity + ?
-         WHERE id = ?`,
-        [cleanQuantity, cleanProductId]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [cleanQuantity, cleanProductId, branchId]
       );
 
       const returnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
 
       await connection.query(
-        `INSERT INTO activity_log (user_id, action, details)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
         [
+          branchId,
           req.user.id,
           "CREATE_RETURN",
           `Returned ${cleanQuantity} x ${saleItem.product_name} from receipt ${sales[0].receipt_number}`,
@@ -401,11 +512,12 @@ router.post(
         status: "success",
         message: "Return recorded successfully. Stock has been increased.",
         return_record: {
+          branch_id: branchId,
           sale_id: cleanSaleId,
           product_id: cleanProductId,
           product_name: saleItem.product_name,
           quantity: cleanQuantity,
-          reason,
+          reason: cleanReason,
           estimated_return_amount: returnAmount,
         },
       });

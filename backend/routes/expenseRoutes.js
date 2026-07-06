@@ -6,12 +6,22 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-async function logActivity(userId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
-  );
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
 }
 
 function toDateOnly(value) {
@@ -24,13 +34,22 @@ function toDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
-async function findApprovedAuditLockForDate(dateValue) {
+async function logActivity(userId, branchId, action, details) {
+  await pool.query(
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
+  );
+}
+
+async function findApprovedAuditLockForDate(dateValue, branchId) {
   const dateOnly = toDateOnly(dateValue);
 
   try {
     const [locks] = await pool.query(
       `SELECT
         id,
+        branch_id,
         period_type,
         period_label,
         period_start,
@@ -42,7 +61,8 @@ async function findApprovedAuditLockForDate(dateValue) {
         review_date,
         updated_at
        FROM audit_signoffs
-       WHERE period_status = 'approved'
+       WHERE branch_id = ?
+       AND period_status = 'approved'
        AND (
         period_type = 'all'
         OR (
@@ -63,7 +83,7 @@ async function findApprovedAuditLockForDate(dateValue) {
        )
        ORDER BY updated_at DESC, id DESC
        LIMIT 1`,
-      [dateOnly, dateOnly, dateOnly]
+      [branchId, dateOnly, dateOnly, dateOnly]
     );
 
     return locks.length > 0 ? locks[0] : null;
@@ -86,6 +106,7 @@ function sendAuditLockedResponse(res, lock, actionText) {
     message: `This accounting period is already approved and locked. You cannot ${actionText} inside this period.`,
     locked_period: {
       id: lock.id,
+      branch_id: lock.branch_id,
       period_type: lock.period_type,
       period_label: lock.period_label,
       period_start: lock.period_start,
@@ -105,10 +126,13 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { search, from, to } = req.query;
+      const branchId = getBranchId(req);
+      const search = cleanText(req.query.search);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
-      let whereClause = "WHERE 1 = 1";
+      const params = [branchId];
+      let whereClause = "WHERE e.branch_id = ?";
 
       if (search) {
         whereClause += ` AND (
@@ -134,15 +158,19 @@ router.get(
       const [expenses] = await pool.query(
         `SELECT
           e.id,
+          e.branch_id,
           e.category,
           e.description,
           e.amount,
           e.expense_date,
           e.recorded_by,
           e.created_at,
-          u.full_name AS recorded_by_name
+          u.full_name AS recorded_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM expenses e
          LEFT JOIN users u ON e.recorded_by = u.id
+         LEFT JOIN branches b ON e.branch_id = b.id
          ${whereClause}
          ORDER BY e.expense_date DESC, e.created_at DESC`,
         params
@@ -160,6 +188,7 @@ router.get(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: expenses.length,
         summary: {
           total_expenses: Number(summaryRows[0].total_expenses || 0),
@@ -185,16 +214,19 @@ router.post(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { category, description, amount, expense_date } = req.body;
+      const branchId = getBranchId(req);
 
-      if (!category || !amount || !expense_date) {
+      const category = cleanText(req.body.category);
+      const description = cleanText(req.body.description);
+      const expenseDate = cleanText(req.body.expense_date);
+      const cleanAmount = Number(req.body.amount);
+
+      if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {
         return res.status(400).json({
           status: "error",
           message: "Category, amount and expense date are required.",
         });
       }
-
-      const cleanAmount = Number(amount);
 
       if (Number.isNaN(cleanAmount) || cleanAmount <= 0) {
         return res.status(400).json({
@@ -203,7 +235,10 @@ router.post(
         });
       }
 
-      const lockedPeriod = await findApprovedAuditLockForDate(expense_date);
+      const lockedPeriod = await findApprovedAuditLockForDate(
+        expenseDate,
+        branchId
+      );
 
       if (lockedPeriod) {
         return sendAuditLockedResponse(
@@ -215,24 +250,27 @@ router.post(
 
       const [result] = await pool.query(
         `INSERT INTO expenses (
+          branch_id,
           category,
           description,
           amount,
           expense_date,
           recorded_by
         )
-        VALUES (?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           category,
           description || null,
           cleanAmount,
-          expense_date,
+          expenseDate,
           req.user.id,
         ]
       );
 
       await logActivity(
         req.user.id,
+        branchId,
         "CREATE_EXPENSE",
         `Recorded expense "${category}" worth GHS ${cleanAmount.toFixed(2)}`
       );
@@ -240,18 +278,23 @@ router.post(
       const [expenses] = await pool.query(
         `SELECT
           e.id,
+          e.branch_id,
           e.category,
           e.description,
           e.amount,
           e.expense_date,
           e.recorded_by,
           e.created_at,
-          u.full_name AS recorded_by_name
+          u.full_name AS recorded_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM expenses e
          LEFT JOIN users u ON e.recorded_by = u.id
+         LEFT JOIN branches b ON e.branch_id = b.id
          WHERE e.id = ?
+         AND e.branch_id = ?
          LIMIT 1`,
-        [result.insertId]
+        [result.insertId, branchId]
       );
 
       return res.status(201).json({
@@ -277,27 +320,30 @@ router.delete(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
 
       const [expenses] = await pool.query(
-        `SELECT id, category, amount, expense_date
+        `SELECT id, branch_id, category, amount, expense_date
          FROM expenses
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1`,
-        [id]
+        [id, branchId]
       );
 
       if (expenses.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Expense not found.",
+          message: "Expense not found in the selected store.",
         });
       }
 
       const expense = expenses[0];
 
       const lockedPeriod = await findApprovedAuditLockForDate(
-        expense.expense_date
+        expense.expense_date,
+        branchId
       );
 
       if (lockedPeriod) {
@@ -308,10 +354,16 @@ router.delete(
         );
       }
 
-      await pool.query(`DELETE FROM expenses WHERE id = ?`, [id]);
+      await pool.query(
+        `DELETE FROM expenses
+         WHERE id = ?
+         AND branch_id = ?`,
+        [id, branchId]
+      );
 
       await logActivity(
         req.user.id,
+        branchId,
         "DELETE_EXPENSE",
         `Deleted expense "${expense.category}" worth GHS ${Number(
           expense.amount

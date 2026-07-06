@@ -11,12 +11,32 @@ const CONFIRMATION_TEXT = "CLEAR CHALIN03 TEST DATA";
 const SYSTEM_ADMIN_USER_ID = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
 const SYSTEM_ADMIN_USERNAME = process.env.SYSTEM_ADMIN_USERNAME || "admin";
 
+/*
+  IMPORTANT:
+  This maintenance route is intentionally SYSTEM-WIDE.
+
+  It is for clearing test/business data before real operation starts.
+  It clears records for all stores, not only the selected store.
+
+  Protected tables are kept:
+  - branches
+  - users
+  - user_branch_access
+  - settings
+*/
+
 const TABLES_TO_CLEAR = [
   "sms_log",
   "activity_log",
 
+  "audit_reapproval_log",
+  "audit_unlock_requests",
+  "audit_signoffs",
+
   "debt_payments",
   "debts",
+
+  "returns",
 
   "sale_items",
   "sales",
@@ -25,7 +45,6 @@ const TABLES_TO_CLEAR = [
   "purchase_items",
   "purchases",
 
-  "returns",
   "expenses",
   "daily_closings",
 
@@ -36,6 +55,18 @@ const TABLES_TO_CLEAR = [
   "products",
 ];
 
+const PROTECTED_TABLES = ["branches", "users", "user_branch_access", "settings"];
+
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
 function isClearEnabled() {
   if (process.env.NODE_ENV !== "production") {
     return true;
@@ -44,17 +75,22 @@ function isClearEnabled() {
   return process.env.ALLOW_CLEAR_BUSINESS_DATA === "true";
 }
 
-async function getExistingTables() {
-  const [rows] = await pool.query("SHOW TABLES");
+async function getExistingTables(connection = pool) {
+  const [rows] = await connection.query("SHOW TABLES");
 
   return rows.map((row) => Object.values(row)[0]);
 }
 
-async function getTableCounts(tableNames) {
+async function getTableColumns(connection, tableName) {
+  const [columns] = await connection.query(`SHOW COLUMNS FROM \`${tableName}\``);
+  return columns.map((column) => column.Field);
+}
+
+async function getTableCounts(tableNames, connection = pool) {
   const counts = {};
 
   for (const tableName of tableNames) {
-    const [rows] = await pool.query(
+    const [rows] = await connection.query(
       `SELECT COUNT(*) AS total_count FROM \`${tableName}\``
     );
 
@@ -124,6 +160,46 @@ async function requireSystemAdministrator(req, res, next) {
   }
 }
 
+async function insertClearActivityLog(connection, req) {
+  try {
+    const existingTables = await getExistingTables(connection);
+
+    if (!existingTables.includes("activity_log")) {
+      return;
+    }
+
+    const columns = await getTableColumns(connection, "activity_log");
+    const columnSet = new Set(columns);
+
+    if (columnSet.has("branch_id")) {
+      await connection.query(
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
+        [
+          getBranchId(req),
+          req.systemAdmin.id,
+          "CLEAR_BUSINESS_DATA",
+          `${req.systemAdmin.username} cleared test/business data for the whole multi-store system before real operation`,
+        ]
+      );
+
+      return;
+    }
+
+    await connection.query(
+      `INSERT INTO activity_log (user_id, action, details)
+       VALUES (?, ?, ?)`,
+      [
+        req.systemAdmin.id,
+        "CLEAR_BUSINESS_DATA",
+        `${req.systemAdmin.username} cleared test/business data for the whole system before real operation`,
+      ]
+    );
+  } catch (error) {
+    console.warn("Could not write clear business data activity log:", error.message);
+  }
+}
+
 // GET /api/maintenance/business-data-summary
 router.get(
   "/business-data-summary",
@@ -137,12 +213,18 @@ router.get(
         existingTables.includes(tableName)
       );
 
+      const protectedTables = PROTECTED_TABLES.filter((tableName) =>
+        existingTables.includes(tableName)
+      );
+
       const counts = await getTableCounts(availableTables);
 
       return res.json({
         status: "success",
         message: "Business/test data summary loaded.",
-        protected_tables: ["users", "settings"],
+        selected_branch_id: getBranchId(req),
+        clear_scope: "full_system_all_stores",
+        protected_tables: protectedTables,
         tables_to_clear: availableTables,
         counts,
         confirmation_required: CONFIRMATION_TEXT,
@@ -205,13 +287,19 @@ router.delete(
         });
       }
 
-      const existingTables = await getExistingTables();
+      const existingTables = await getExistingTables(connection);
 
       const availableTables = TABLES_TO_CLEAR.filter((tableName) =>
         existingTables.includes(tableName)
       );
 
-      const beforeCounts = await getTableCounts(availableTables);
+      const protectedTables = PROTECTED_TABLES.filter((tableName) =>
+        existingTables.includes(tableName)
+      );
+
+      const beforeCounts = await getTableCounts(availableTables, connection);
+
+      await connection.beginTransaction();
 
       await connection.query("SET FOREIGN_KEY_CHECKS = 0");
 
@@ -221,30 +309,25 @@ router.delete(
 
       await connection.query("SET FOREIGN_KEY_CHECKS = 1");
 
-      if (existingTables.includes("activity_log")) {
-        await pool.query(
-          `INSERT INTO activity_log (user_id, action, details)
-           VALUES (?, ?, ?)`,
-          [
-            req.systemAdmin.id,
-            "CLEAR_BUSINESS_DATA",
-            `${req.systemAdmin.username} cleared test/business data before real operation`,
-          ]
-        );
-      }
+      await insertClearActivityLog(connection, req);
 
-      const afterCounts = await getTableCounts(availableTables);
+      const afterCounts = await getTableCounts(availableTables, connection);
+
+      await connection.commit();
 
       return res.json({
         status: "success",
         message:
-          "Business/test data cleared successfully. Users and settings were kept.",
-        protected_tables: ["users", "settings"],
+          "Business/test data cleared successfully for the whole multi-store system. Users, branches, store access, and settings were kept.",
+        clear_scope: "full_system_all_stores",
+        protected_tables: protectedTables,
         cleared_tables: availableTables,
         before_counts: beforeCounts,
         after_counts: afterCounts,
       });
     } catch (error) {
+      await connection.rollback();
+
       try {
         await connection.query("SET FOREIGN_KEY_CHECKS = 1");
       } catch (resetError) {
@@ -255,7 +338,8 @@ router.delete(
 
       return res.status(500).json({
         status: "error",
-        message: "Something went wrong while clearing business/test data.",
+        message:
+          error.message || "Something went wrong while clearing business/test data.",
       });
     } finally {
       connection.release();

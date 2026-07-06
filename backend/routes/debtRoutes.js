@@ -5,6 +5,16 @@ const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || 0);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
 function toPositiveMoney(value) {
   const number = Number(value);
 
@@ -26,6 +36,16 @@ function cleanPaymentMethod(value) {
   return "cash";
 }
 
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = String(value).trim();
+
+  return text || null;
+}
+
 function getDebtStatus(balance) {
   if (balance <= 0) {
     return "paid";
@@ -34,11 +54,11 @@ function getDebtStatus(balance) {
   return "partial";
 }
 
-async function logActivity(connection, userId, action, details) {
+async function logActivity(connection, branchId, userId, action, details) {
   await connection.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
   );
 }
 
@@ -52,13 +72,14 @@ function toDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
-async function findApprovedAuditLockForDate(connection, dateValue) {
+async function findApprovedAuditLockForDate(connection, branchId, dateValue) {
   const dateOnly = toDateOnly(dateValue);
 
   try {
     const [locks] = await connection.query(
       `SELECT
         id,
+        branch_id,
         period_type,
         period_label,
         period_start,
@@ -70,7 +91,8 @@ async function findApprovedAuditLockForDate(connection, dateValue) {
         review_date,
         updated_at
        FROM audit_signoffs
-       WHERE period_status = 'approved'
+       WHERE branch_id = ?
+       AND period_status = 'approved'
        AND (
         period_type = 'all'
         OR (
@@ -91,7 +113,7 @@ async function findApprovedAuditLockForDate(connection, dateValue) {
        )
        ORDER BY updated_at DESC, id DESC
        LIMIT 1`,
-      [dateOnly, dateOnly, dateOnly]
+      [branchId, dateOnly, dateOnly, dateOnly]
     );
 
     return locks.length > 0 ? locks[0] : null;
@@ -114,6 +136,7 @@ function sendAuditLockedResponse(res, lock, actionText) {
     message: `This accounting period is already approved and locked. You cannot ${actionText} inside this period.`,
     locked_period: {
       id: lock.id,
+      branch_id: lock.branch_id,
       period_type: lock.period_type,
       period_label: lock.period_label,
       period_start: lock.period_start,
@@ -129,11 +152,15 @@ function sendAuditLockedResponse(res, lock, actionText) {
 // GET /api/debts
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
     const { status, search, overdue } = req.query;
 
     let sql = `
       SELECT
         d.id,
+        d.branch_id,
+        b.name AS branch_name,
+        b.branch_code,
         d.sale_id,
         s.receipt_number,
         d.customer_id,
@@ -148,11 +175,12 @@ router.get("/", requireAuth, async (req, res) => {
         d.updated_at,
         DATEDIFF(CURDATE(), d.due_date) AS overdue_days
       FROM debts d
-      LEFT JOIN sales s ON d.sale_id = s.id
-      WHERE 1 = 1
+      LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
+      LEFT JOIN branches b ON d.branch_id = b.id
+      WHERE d.branch_id = ?
     `;
 
-    const params = [];
+    const params = [branchId];
 
     if (status) {
       sql += ` AND d.status = ?`;
@@ -186,6 +214,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: debts.length,
       debts,
     });
@@ -202,6 +231,8 @@ router.get("/", requireAuth, async (req, res) => {
 // GET /api/debts/summary
 router.get("/summary", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
+
     const [rows] = await pool.query(
       `SELECT
         COUNT(*) AS total_debt_records,
@@ -217,11 +248,14 @@ router.get("/summary", requireAuth, async (req, res) => {
             THEN 1
           END
         ) AS overdue_count
-       FROM debts`
+       FROM debts
+       WHERE branch_id = ?`,
+      [branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       summary: rows[0],
     });
   } catch (error) {
@@ -237,32 +271,38 @@ router.get("/summary", requireAuth, async (req, res) => {
 // GET /api/debts/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
     const { id } = req.params;
 
     const [debts] = await pool.query(
       `SELECT
         d.*,
+        b.name AS branch_name,
+        b.branch_code,
         s.receipt_number,
         s.total AS sale_total,
         s.payment_type,
         s.created_at AS sale_date
        FROM debts d
-       LEFT JOIN sales s ON d.sale_id = s.id
+       LEFT JOIN branches b ON d.branch_id = b.id
+       LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
        WHERE d.id = ?
+       AND d.branch_id = ?
        LIMIT 1`,
-      [id]
+      [id, branchId]
     );
 
     if (debts.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Debt not found.",
+        message: "Debt not found in the selected store.",
       });
     }
 
     const [payments] = await pool.query(
       `SELECT
         dp.id,
+        dp.branch_id,
         dp.debt_id,
         dp.amount,
         dp.payment_method,
@@ -272,12 +312,14 @@ router.get("/:id", requireAuth, async (req, res) => {
        FROM debt_payments dp
        LEFT JOIN users u ON dp.received_by = u.id
        WHERE dp.debt_id = ?
+       AND dp.branch_id = ?
        ORDER BY dp.paid_at DESC, dp.id DESC`,
-      [id]
+      [id, branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       debt: debts[0],
       payments,
     });
@@ -296,11 +338,13 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
+    const branchId = getBranchId(req);
     const { id } = req.params;
     const { amount, payment_method, notes } = req.body;
 
     const paymentAmount = toPositiveMoney(amount);
     const cleanMethod = cleanPaymentMethod(payment_method);
+    const cleanNotes = cleanText(notes);
 
     if (paymentAmount === null) {
       return res.status(400).json({
@@ -313,6 +357,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
     const lockedPeriod = await findApprovedAuditLockForDate(
       connection,
+      branchId,
       new Date()
     );
 
@@ -332,11 +377,12 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
         s.receipt_number,
         s.created_at AS sale_date
        FROM debts d
-       LEFT JOIN sales s ON d.sale_id = s.id
+       LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
        WHERE d.id = ?
+       AND d.branch_id = ?
        LIMIT 1
        FOR UPDATE`,
-      [id]
+      [id, branchId]
     );
 
     if (debts.length === 0) {
@@ -344,7 +390,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
       return res.status(404).json({
         status: "error",
-        message: "Debt not found.",
+        message: "Debt not found in the selected store.",
       });
     }
 
@@ -384,14 +430,15 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
     const [paymentResult] = await connection.query(
       `INSERT INTO debt_payments (
+        branch_id,
         debt_id,
         amount,
         payment_method,
         received_by,
         notes
       )
-      VALUES (?, ?, ?, ?, ?)`,
-      [id, paymentAmount, cleanMethod, req.user.id, notes || null]
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [branchId, id, paymentAmount, cleanMethod, req.user.id, cleanNotes]
     );
 
     await connection.query(
@@ -399,20 +446,23 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
        SET amount_paid = ?,
            balance = ?,
            status = ?
-       WHERE id = ?`,
-      [newAmountPaid, newBalance, newStatus, id]
+       WHERE id = ?
+       AND branch_id = ?`,
+      [newAmountPaid, newBalance, newStatus, id, branchId]
     );
 
     await connection.query(
       `UPDATE sales
        SET amount_paid = amount_paid + ?,
            balance = GREATEST(balance - ?, 0)
-       WHERE id = ?`,
-      [paymentAmount, paymentAmount, debt.sale_id]
+       WHERE id = ?
+       AND branch_id = ?`,
+      [paymentAmount, paymentAmount, debt.sale_id, branchId]
     );
 
     await logActivity(
       connection,
+      branchId,
       req.user.id,
       "DEBT_PAYMENT",
       `Received GHS ${paymentAmount.toFixed(2)} by ${cleanMethod} from ${
@@ -425,6 +475,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
     const [createdPayments] = await pool.query(
       `SELECT
         dp.id,
+        dp.branch_id,
         dp.debt_id,
         dp.amount,
         dp.payment_method,
@@ -434,8 +485,9 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
        FROM debt_payments dp
        LEFT JOIN users u ON dp.received_by = u.id
        WHERE dp.id = ?
+       AND dp.branch_id = ?
        LIMIT 1`,
-      [paymentResult.insertId]
+      [paymentResult.insertId, branchId]
     );
 
     const createdPayment = createdPayments[0];
@@ -443,10 +495,12 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
     return res.status(201).json({
       status: "success",
       message: "Debt payment recorded successfully.",
+      branch_id: branchId,
       receipt: {
         payment: createdPayment,
         debt: {
           id: debt.id,
+          branch_id: branchId,
           sale_id: debt.sale_id,
           receipt_number: debt.receipt_number,
           customer_name: debt.customer_name,
@@ -462,6 +516,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
       payment: createdPayment,
       debt: {
         id: debt.id,
+        branch_id: branchId,
         customer_name: debt.customer_name,
         customer_phone: debt.customer_phone,
         amount_owed: Number(debt.amount_owed || 0),

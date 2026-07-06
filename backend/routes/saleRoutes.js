@@ -1,4 +1,5 @@
 const express = require("express");
+
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
@@ -40,13 +41,22 @@ function cleanText(value) {
 }
 
 function getBranchId(req) {
-  const branchId = Number(req.user?.branch_id);
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 0);
 
   if (!Number.isInteger(branchId) || branchId <= 0) {
     return null;
   }
 
   return branchId;
+}
+
+function getBranchInfo(req) {
+  return {
+    id: getBranchId(req),
+    branch_code: req.user?.branch_code || null,
+    name: req.user?.branch_name || null,
+    location: req.user?.branch_location || null,
+  };
 }
 
 function requireSelectedBranch(req, res) {
@@ -111,13 +121,13 @@ async function getSettings(connection, branchId) {
       s.owner_phone,
       s.branch_name,
       s.receipt_prefix,
-      b.branch_code,
+      b.code AS branch_code,
       b.name AS branch_table_name,
-      b.location AS branch_location,
-      b.phone AS branch_phone
+      b.location AS branch_location
      FROM settings s
      LEFT JOIN branches b ON s.branch_id = b.id
      WHERE s.branch_id = ?
+     ORDER BY s.id DESC
      LIMIT 1`,
     [branchId]
   );
@@ -126,10 +136,9 @@ async function getSettings(connection, branchId) {
     const [fallbackRows] = await connection.query(
       `SELECT
         id,
-        branch_code,
+        code AS branch_code,
         name,
-        location,
-        phone
+        location
        FROM branches
        WHERE id = ?
        LIMIT 1`,
@@ -142,16 +151,14 @@ async function getSettings(connection, branchId) {
       tax_rate: 0,
       debt_reminder_days: 7,
       business_name: "Chalin 03 Company Limited",
-      business_address:
-        fallbackBranch.location || "",
-      business_phone: fallbackBranch.phone || "0249469080 / 0249995510",
+      business_address: fallbackBranch.location || "",
+      business_phone: "0249469080 / 0249995510",
       owner_phone: "0543421127",
       branch_name: fallbackBranch.name || "Selected Store",
       receipt_prefix: cleanReceiptPrefix(null, fallbackBranch.branch_code),
       branch_code: fallbackBranch.branch_code || "STORE",
       branch_table_name: fallbackBranch.name || "Selected Store",
       branch_location: fallbackBranch.location || "",
-      branch_phone: fallbackBranch.phone || "",
     };
   }
 
@@ -302,6 +309,21 @@ async function findOrCreateCustomer(
           ...existingCustomer,
           name: cleanName,
           location: cleanLocation || existingCustomer.location,
+        };
+      }
+
+      if (cleanLocation && existingCustomer.location !== cleanLocation) {
+        await connection.query(
+          `UPDATE customers
+           SET location = ?
+           WHERE id = ?
+           AND branch_id = ?`,
+          [cleanLocation, existingCustomer.id, branchId]
+        );
+
+        return {
+          ...existingCustomer,
+          location: cleanLocation,
         };
       }
 
@@ -677,8 +699,7 @@ router.post("/", requireAuth, async (req, res) => {
           settings.branch_location ||
           req.user.branch_location ||
           "",
-        business_phone:
-          settings.business_phone || settings.branch_phone || null,
+        business_phone: settings.business_phone || null,
         owner_phone: settings.owner_phone || null,
         staff: {
           id: req.user.id,
@@ -740,7 +761,7 @@ router.get("/", requireAuth, async (req, res) => {
       SELECT
         s.id,
         s.branch_id,
-        b.branch_code,
+        b.code AS branch_code,
         b.name AS branch_name,
         b.location AS branch_location,
         s.receipt_number,
@@ -799,6 +820,7 @@ router.get("/", requireAuth, async (req, res) => {
     return res.json({
       status: "success",
       branch_id: branchId,
+      branch: getBranchInfo(req),
       count: sales.length,
       sales,
     });
@@ -826,7 +848,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     const [sales] = await pool.query(
       `SELECT
         s.*,
-        b.branch_code,
+        b.code AS branch_code,
         b.name AS branch_name,
         b.location AS branch_location,
         u.full_name AS staff_name,
@@ -850,17 +872,19 @@ router.get("/:id", requireAuth, async (req, res) => {
 
     const [items] = await pool.query(
       `SELECT
-        id,
-        product_id,
-        product_name,
-        quantity,
-        unit_price,
-        line_total,
-        cost_price_at_sale
-       FROM sale_items
-       WHERE sale_id = ?
-       ORDER BY id ASC`,
-      [id]
+        si.id,
+        si.product_id,
+        si.product_name,
+        si.quantity,
+        si.unit_price,
+        si.line_total,
+        si.cost_price_at_sale
+       FROM sale_items si
+       INNER JOIN sales s ON si.sale_id = s.id
+       WHERE si.sale_id = ?
+       AND s.branch_id = ?
+       ORDER BY si.id ASC`,
+      [id, branchId]
     );
 
     const [debts] = await pool.query(

@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+
 require("dotenv").config();
 
 const { testDatabaseConnection } = require("./config/db");
@@ -23,6 +24,7 @@ const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
 const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
+const branchRoutes = require("./routes/branchRoutes");
 
 const app = express();
 
@@ -31,10 +33,16 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
+
+  "https://chalin03.com",
+  "https://www.chalin03.com",
+
   process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_ALT,
 ]
   .filter(Boolean)
-  .map((origin) => origin.trim());
+  .map((origin) => String(origin).trim())
+  .filter((origin, index, array) => array.indexOf(origin) === index);
 
 app.use(
   cors({
@@ -47,7 +55,7 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error("Not allowed by CORS"));
+      return callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
   })
@@ -60,6 +68,8 @@ app.get("/", (req, res) => {
   res.json({
     status: "success",
     message: "Chalin 03 backend is running",
+    environment: process.env.NODE_ENV || "development",
+    time: new Date().toISOString(),
   });
 });
 
@@ -71,6 +81,41 @@ app.get("/api/health", (req, res) => {
     time: new Date().toISOString(),
   });
 });
+
+app.get("/api", (req, res) => {
+  res.json({
+    status: "success",
+    message: "Chalin 03 API root is working",
+    routes: [
+      "/api/auth",
+      "/api/branches",
+      "/api/products",
+      "/api/sales",
+      "/api/debts",
+      "/api/reports",
+      "/api/users",
+      "/api/settings",
+      "/api/expenses",
+      "/api/purchases",
+      "/api/returns",
+      "/api/exports",
+      "/api/activity-log",
+      "/api/receipts",
+      "/api/backups",
+      "/api/daily-closing",
+      "/api/customer-statements",
+      "/api/maintenance",
+      "/api/audit-signoffs",
+      "/api/audit-unlock-requests",
+    ],
+  });
+});
+
+/*
+  Branch routes are registered before auth and user routes because login needs
+  to load the store list before the user has a token.
+*/
+app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
@@ -103,7 +148,15 @@ app.use((req, res) => {
 app.use((error, req, res, next) => {
   console.error("Unhandled server error:", error);
 
-  res.status(500).json({
+  if (error.message && error.message.startsWith("Not allowed by CORS")) {
+    return res.status(403).json({
+      status: "error",
+      message: error.message,
+      allowed_origins: allowedOrigins,
+    });
+  }
+
+  return res.status(500).json({
     status: "error",
     message: error.message || "Something went wrong on the server.",
   });
@@ -118,6 +171,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`🔐 Allowed frontend origins: ${allowedOrigins.join(", ")}`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);

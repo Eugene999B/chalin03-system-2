@@ -10,6 +10,16 @@ const allowedPeriodStatuses = ["draft", "reviewed", "approved", "rejected"];
 let tableReadyPromise = null;
 let reapprovalTableReadyPromise = null;
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
 function cleanText(value) {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -98,42 +108,79 @@ function getClientIp(req) {
   );
 }
 
+async function ensureColumn(tableName, columnName, columnDefinition) {
+  const [columns] = await pool.query(`SHOW COLUMNS FROM ${tableName} LIKE ?`, [
+    columnName,
+  ]);
+
+  if (columns.length === 0) {
+    await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+  }
+}
+
+async function ensureIndex(tableName, indexName, indexDefinition) {
+  const [indexes] = await pool.query(
+    `SHOW INDEX FROM ${tableName} WHERE Key_name = ?`,
+    [indexName]
+  );
+
+  if (indexes.length === 0) {
+    await pool.query(`ALTER TABLE ${tableName} ADD INDEX ${indexDefinition}`);
+  }
+}
+
 async function ensureAuditSignoffsTable() {
   if (!tableReadyPromise) {
-    tableReadyPromise = pool.query(`
-      CREATE TABLE IF NOT EXISTS audit_signoffs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        period_type ENUM('all', 'today', 'week', 'month', 'year', 'custom') NOT NULL DEFAULT 'month',
-        period_label VARCHAR(255) NOT NULL,
-        period_start DATE NULL,
-        period_end DATE NULL,
-        audit_score INT NOT NULL DEFAULT 0,
-        audit_status VARCHAR(50) NOT NULL DEFAULT 'Needs Review',
-        prepared_by_name VARCHAR(150),
-        reviewed_by_name VARCHAR(150),
-        approved_by_name VARCHAR(150),
-        review_date DATE NULL,
-        period_status ENUM('draft', 'reviewed', 'approved', 'rejected') NOT NULL DEFAULT 'draft',
-        sales_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        expenses_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        debts_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        stock_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        warnings_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        reports_checked BOOLEAN NOT NULL DEFAULT FALSE,
-        accountant_notes TEXT,
-        management_notes TEXT,
-        created_by INT,
-        approved_by INT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_audit_signoff_period_type (period_type),
-        INDEX idx_audit_signoff_period_dates (period_start, period_end),
-        INDEX idx_audit_signoff_status (period_status),
-        INDEX idx_audit_signoff_created_by (created_by),
-        INDEX idx_audit_signoff_approved_by (approved_by),
-        INDEX idx_audit_signoff_created_at (created_at)
-      )
-    `).catch((error) => {
+    tableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS audit_signoffs (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          branch_id INT NOT NULL DEFAULT 1,
+          period_type ENUM('all', 'today', 'week', 'month', 'year', 'custom') NOT NULL DEFAULT 'month',
+          period_label VARCHAR(255) NOT NULL,
+          period_start DATE NULL,
+          period_end DATE NULL,
+          audit_score INT NOT NULL DEFAULT 0,
+          audit_status VARCHAR(50) NOT NULL DEFAULT 'Needs Review',
+          prepared_by_name VARCHAR(150),
+          reviewed_by_name VARCHAR(150),
+          approved_by_name VARCHAR(150),
+          review_date DATE NULL,
+          period_status ENUM('draft', 'reviewed', 'approved', 'rejected') NOT NULL DEFAULT 'draft',
+          sales_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          expenses_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          debts_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          stock_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          warnings_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          reports_checked BOOLEAN NOT NULL DEFAULT FALSE,
+          accountant_notes TEXT,
+          management_notes TEXT,
+          created_by INT,
+          approved_by INT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_audit_signoff_branch (branch_id),
+          INDEX idx_audit_signoff_period_type (period_type),
+          INDEX idx_audit_signoff_period_dates (period_start, period_end),
+          INDEX idx_audit_signoff_status (period_status),
+          INDEX idx_audit_signoff_created_by (created_by),
+          INDEX idx_audit_signoff_approved_by (approved_by),
+          INDEX idx_audit_signoff_created_at (created_at)
+        )
+      `);
+
+      await ensureColumn(
+        "audit_signoffs",
+        "branch_id",
+        "branch_id INT NOT NULL DEFAULT 1 AFTER id"
+      );
+
+      await ensureIndex(
+        "audit_signoffs",
+        "idx_audit_signoff_branch",
+        "idx_audit_signoff_branch (branch_id)"
+      );
+    })().catch((error) => {
       tableReadyPromise = null;
       throw error;
     });
@@ -142,44 +189,58 @@ async function ensureAuditSignoffsTable() {
   await tableReadyPromise;
 }
 
-
-
 async function ensureAuditReapprovalLogTable() {
   if (!reapprovalTableReadyPromise) {
-    reapprovalTableReadyPromise = pool.query(`
-      CREATE TABLE IF NOT EXISTS audit_reapproval_log (
-        id INT AUTO_INCREMENT PRIMARY KEY,
+    reapprovalTableReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS audit_reapproval_log (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          branch_id INT NOT NULL DEFAULT 1,
 
-        audit_signoff_id INT NULL,
-        unlock_request_id INT NULL,
+          audit_signoff_id INT NULL,
+          unlock_request_id INT NULL,
 
-        period_label VARCHAR(255) NOT NULL,
-        period_start DATE NULL,
-        period_end DATE NULL,
+          period_label VARCHAR(255) NOT NULL,
+          period_start DATE NULL,
+          period_end DATE NULL,
 
-        previous_status VARCHAR(50) NULL,
-        new_status VARCHAR(50) NOT NULL DEFAULT 'approved',
+          previous_status VARCHAR(50) NULL,
+          new_status VARCHAR(50) NOT NULL DEFAULT 'approved',
 
-        audit_score INT NOT NULL DEFAULT 0,
-        audit_status VARCHAR(50) NULL,
+          audit_score INT NOT NULL DEFAULT 0,
+          audit_status VARCHAR(50) NULL,
 
-        reapproved_by INT NULL,
-        reapproved_by_name VARCHAR(150) NULL,
-        reapproved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          reapproved_by INT NULL,
+          reapproved_by_name VARCHAR(150) NULL,
+          reapproved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-        reapproval_notes TEXT,
-        accountant_notes TEXT,
-        management_notes TEXT,
+          reapproval_notes TEXT,
+          accountant_notes TEXT,
+          management_notes TEXT,
 
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-        INDEX idx_reapproval_signoff (audit_signoff_id),
-        INDEX idx_reapproval_unlock_request (unlock_request_id),
-        INDEX idx_reapproval_period_dates (period_start, period_end),
-        INDEX idx_reapproval_user (reapproved_by),
-        INDEX idx_reapproval_date (reapproved_at)
-      )
-    `).catch((error) => {
+          INDEX idx_reapproval_branch (branch_id),
+          INDEX idx_reapproval_signoff (audit_signoff_id),
+          INDEX idx_reapproval_unlock_request (unlock_request_id),
+          INDEX idx_reapproval_period_dates (period_start, period_end),
+          INDEX idx_reapproval_user (reapproved_by),
+          INDEX idx_reapproval_date (reapproved_at)
+        )
+      `);
+
+      await ensureColumn(
+        "audit_reapproval_log",
+        "branch_id",
+        "branch_id INT NOT NULL DEFAULT 1 AFTER id"
+      );
+
+      await ensureIndex(
+        "audit_reapproval_log",
+        "idx_reapproval_branch",
+        "idx_reapproval_branch (branch_id)"
+      );
+    })().catch((error) => {
       reapprovalTableReadyPromise = null;
       throw error;
     });
@@ -188,21 +249,26 @@ async function ensureAuditReapprovalLogTable() {
   await reapprovalTableReadyPromise;
 }
 
-async function safeLogActivity(connection, userId, action, details, ipAddress) {
+async function safeLogActivity(
+  connection,
+  userId,
+  branchId,
+  action,
+  details,
+  ipAddress
+) {
   try {
     await connection.query(
-      `INSERT INTO activity_log (user_id, action, details, ip_address)
-       VALUES (?, ?, ?, ?)`,
-      [userId || null, action, details || null, ipAddress || null]
+      `INSERT INTO activity_log (branch_id, user_id, action, details, ip_address)
+       VALUES (?, ?, ?, ?, ?)`,
+      [branchId || null, userId || null, action, details || null, ipAddress || null]
     );
   } catch (error) {
     console.warn("Could not write audit signoff activity log:", error.message);
   }
 }
 
-
-
-async function findLatestApprovedUnlockRequest(connection, signoffId) {
+async function findLatestApprovedUnlockRequest(connection, signoffId, branchId) {
   if (!signoffId) return null;
 
   try {
@@ -210,6 +276,7 @@ async function findLatestApprovedUnlockRequest(connection, signoffId) {
       `
       SELECT
         id,
+        branch_id,
         audit_signoff_id,
         reason,
         review_notes,
@@ -217,12 +284,13 @@ async function findLatestApprovedUnlockRequest(connection, signoffId) {
         reviewed_at,
         created_at
       FROM audit_unlock_requests
-      WHERE audit_signoff_id = ?
+      WHERE branch_id = ?
+      AND audit_signoff_id = ?
       AND status = 'approved'
       ORDER BY reviewed_at DESC, updated_at DESC, id DESC
       LIMIT 1
       `,
-      [signoffId]
+      [branchId, signoffId]
     );
 
     return rows.length > 0 ? rows[0] : null;
@@ -238,6 +306,7 @@ async function findLatestApprovedUnlockRequest(connection, signoffId) {
 
 async function createReapprovalLogIfNeeded({
   connection,
+  branchId,
   signoffId,
   latestApprovedUnlockRequest,
   previousStatus,
@@ -253,6 +322,7 @@ async function createReapprovalLogIfNeeded({
   accountantNotes,
   managementNotes,
 }) {
+  if (!branchId) return false;
   if (!signoffId) return false;
   if (!latestApprovedUnlockRequest?.id) return false;
   if (previousStatus === "approved") return false;
@@ -264,11 +334,12 @@ async function createReapprovalLogIfNeeded({
     `
     SELECT id
     FROM audit_reapproval_log
-    WHERE audit_signoff_id = ?
+    WHERE branch_id = ?
+    AND audit_signoff_id = ?
     AND unlock_request_id = ?
     LIMIT 1
     `,
-    [signoffId, latestApprovedUnlockRequest.id]
+    [branchId, signoffId, latestApprovedUnlockRequest.id]
   );
 
   if (existingLogRows.length > 0) {
@@ -285,6 +356,7 @@ async function createReapprovalLogIfNeeded({
   await connection.query(
     `
     INSERT INTO audit_reapproval_log (
+      branch_id,
       audit_signoff_id,
       unlock_request_id,
       period_label,
@@ -300,9 +372,10 @@ async function createReapprovalLogIfNeeded({
       accountant_notes,
       management_notes
     )
-    VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?)
     `,
     [
+      branchId,
       signoffId,
       latestApprovedUnlockRequest.id,
       periodLabel,
@@ -327,6 +400,9 @@ function normalizeSignoff(row) {
 
   return {
     id: row.id,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name,
+    branch_location: row.branch_location,
     period_type: row.period_type,
     period_label: row.period_label,
     period_start: row.period_start,
@@ -355,13 +431,14 @@ function normalizeSignoff(row) {
   };
 }
 
-
-
 function normalizeReapprovalLog(row) {
   if (!row) return null;
 
   return {
     id: row.id,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name,
+    branch_location: row.branch_location,
     audit_signoff_id: row.audit_signoff_id,
     unlock_request_id: row.unlock_request_id,
     period_label: row.period_label,
@@ -387,6 +464,7 @@ router.get("/", requireAuth, requireAdminOrManager, async (req, res) => {
   try {
     await ensureAuditSignoffsTable();
 
+    const branchId = getBranchId(req);
     const periodType = cleanText(req.query.period_type);
     const periodStatus = cleanText(req.query.period_status);
     const search = cleanText(req.query.search);
@@ -395,14 +473,17 @@ router.get("/", requireAuth, requireAdminOrManager, async (req, res) => {
       SELECT
         a.*,
         creator.full_name AS created_by_name,
-        approver.full_name AS approved_by_user_name
+        approver.full_name AS approved_by_user_name,
+        b.name AS branch_name,
+        b.location AS branch_location
       FROM audit_signoffs a
       LEFT JOIN users creator ON a.created_by = creator.id
       LEFT JOIN users approver ON a.approved_by = approver.id
-      WHERE 1 = 1
+      LEFT JOIN branches b ON a.branch_id = b.id
+      WHERE a.branch_id = ?
     `;
 
-    const params = [];
+    const params = [branchId];
 
     if (periodType && allowedPeriodTypes.includes(periodType)) {
       sql += " AND a.period_type = ?";
@@ -433,6 +514,7 @@ router.get("/", requireAuth, requireAdminOrManager, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: rows.length,
       signoffs: rows.map(normalizeSignoff),
     });
@@ -449,6 +531,7 @@ router.get("/latest", requireAuth, requireAdminOrManager, async (req, res) => {
   try {
     await ensureAuditSignoffsTable();
 
+    const branchId = getBranchId(req);
     const periodType = cleanPeriodType(req.query.period_type);
     const periodLabel = cleanText(req.query.period_label);
     const periodStart = cleanDate(req.query.period_start);
@@ -458,14 +541,18 @@ router.get("/latest", requireAuth, requireAdminOrManager, async (req, res) => {
       SELECT
         a.*,
         creator.full_name AS created_by_name,
-        approver.full_name AS approved_by_user_name
+        approver.full_name AS approved_by_user_name,
+        b.name AS branch_name,
+        b.location AS branch_location
       FROM audit_signoffs a
       LEFT JOIN users creator ON a.created_by = creator.id
       LEFT JOIN users approver ON a.approved_by = approver.id
-      WHERE a.period_type = ?
+      LEFT JOIN branches b ON a.branch_id = b.id
+      WHERE a.branch_id = ?
+      AND a.period_type = ?
     `;
 
-    const params = [periodType];
+    const params = [branchId, periodType];
 
     if (periodStart || periodEnd) {
       sql += " AND a.period_start <=> ? AND a.period_end <=> ?";
@@ -481,6 +568,7 @@ router.get("/latest", requireAuth, requireAdminOrManager, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       signoff: rows.length > 0 ? normalizeSignoff(rows[0]) : null,
     });
   } catch (error) {
@@ -492,107 +580,124 @@ router.get("/latest", requireAuth, requireAdminOrManager, async (req, res) => {
   }
 });
 
+router.get(
+  "/reapproval-log",
+  requireAuth,
+  requireAdminOrManager,
+  async (req, res) => {
+    try {
+      await ensureAuditReapprovalLogTable();
 
-router.get("/reapproval-log", requireAuth, requireAdminOrManager, async (req, res) => {
-  try {
-    await ensureAuditReapprovalLogTable();
+      const branchId = getBranchId(req);
+      const signoffId = Number(req.query.audit_signoff_id || 0);
+      const search = cleanText(req.query.search);
+      const from = cleanDate(req.query.from);
+      const to = cleanDate(req.query.to);
 
-    const signoffId = Number(req.query.audit_signoff_id || 0);
-    const search = cleanText(req.query.search);
-    const from = cleanDate(req.query.from);
-    const to = cleanDate(req.query.to);
-
-    let sql = `
-      SELECT
-        arl.*,
-        aur.reason AS unlock_reason,
-        aur.review_notes AS unlock_review_notes
-      FROM audit_reapproval_log arl
-      LEFT JOIN audit_unlock_requests aur ON arl.unlock_request_id = aur.id
-      WHERE 1 = 1
-    `;
-
-    const params = [];
-
-    if (Number.isInteger(signoffId) && signoffId > 0) {
-      sql += " AND arl.audit_signoff_id = ?";
-      params.push(signoffId);
-    }
-
-    if (from) {
-      sql += " AND DATE(arl.reapproved_at) >= ?";
-      params.push(from);
-    }
-
-    if (to) {
-      sql += " AND DATE(arl.reapproved_at) <= ?";
-      params.push(to);
-    }
-
-    if (search) {
-      sql += `
-        AND (
-          arl.period_label LIKE ?
-          OR arl.reapproved_by_name LIKE ?
-          OR arl.reapproval_notes LIKE ?
-          OR arl.accountant_notes LIKE ?
-          OR arl.management_notes LIKE ?
-          OR aur.reason LIKE ?
-          OR aur.review_notes LIKE ?
-        )
+      let sql = `
+        SELECT
+          arl.*,
+          aur.reason AS unlock_reason,
+          aur.review_notes AS unlock_review_notes,
+          b.name AS branch_name,
+          b.location AS branch_location
+        FROM audit_reapproval_log arl
+        LEFT JOIN audit_unlock_requests aur
+          ON arl.unlock_request_id = aur.id
+          AND aur.branch_id = arl.branch_id
+        LEFT JOIN branches b ON arl.branch_id = b.id
+        WHERE arl.branch_id = ?
       `;
 
-      const searchValue = `%${search}%`;
+      const params = [branchId];
 
-      params.push(
-        searchValue,
-        searchValue,
-        searchValue,
-        searchValue,
-        searchValue,
-        searchValue,
-        searchValue
+      if (Number.isInteger(signoffId) && signoffId > 0) {
+        sql += " AND arl.audit_signoff_id = ?";
+        params.push(signoffId);
+      }
+
+      if (from) {
+        sql += " AND DATE(arl.reapproved_at) >= ?";
+        params.push(from);
+      }
+
+      if (to) {
+        sql += " AND DATE(arl.reapproved_at) <= ?";
+        params.push(to);
+      }
+
+      if (search) {
+        sql += `
+          AND (
+            arl.period_label LIKE ?
+            OR arl.reapproved_by_name LIKE ?
+            OR arl.reapproval_notes LIKE ?
+            OR arl.accountant_notes LIKE ?
+            OR arl.management_notes LIKE ?
+            OR aur.reason LIKE ?
+            OR aur.review_notes LIKE ?
+          )
+        `;
+
+        const searchValue = `%${search}%`;
+
+        params.push(
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue,
+          searchValue
+        );
+      }
+
+      sql += " ORDER BY arl.reapproved_at DESC, arl.id DESC LIMIT 300";
+
+      const [rows] = await pool.query(sql, params);
+
+      const [summaryRows] = await pool.query(
+        `
+        SELECT
+          COUNT(*) AS total_reapprovals,
+          MAX(reapproved_at) AS latest_reapproval_at
+        FROM audit_reapproval_log
+        WHERE branch_id = ?
+        `,
+        [branchId]
       );
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        count: rows.length,
+        summary: summaryRows[0] || {
+          total_reapprovals: 0,
+          latest_reapproval_at: null,
+        },
+        logs: rows.map(normalizeReapprovalLog),
+      });
+    } catch (error) {
+      console.error("Get audit reapproval log error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Something went wrong while fetching audit re-approval log.",
+      });
     }
-
-    sql += " ORDER BY arl.reapproved_at DESC, arl.id DESC LIMIT 300";
-
-    const [rows] = await pool.query(sql, params);
-
-    const [summaryRows] = await pool.query(
-      `
-      SELECT
-        COUNT(*) AS total_reapprovals,
-        MAX(reapproved_at) AS latest_reapproval_at
-      FROM audit_reapproval_log
-      `
-    );
-
-    return res.json({
-      status: "success",
-      count: rows.length,
-      summary: summaryRows[0] || {
-        total_reapprovals: 0,
-        latest_reapproval_at: null,
-      },
-      logs: rows.map(normalizeReapprovalLog),
-    });
-  } catch (error) {
-    console.error("Get audit reapproval log error:", error);
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while fetching audit re-approval log.",
-    });
   }
-});
+);
 
 router.get("/:id", requireAuth, requireAdminOrManager, async (req, res) => {
   try {
     await ensureAuditSignoffsTable();
 
+    const branchId = getBranchId(req);
     const id = Number(req.params.id);
+
     if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ status: "error", message: "Invalid sign-off ID." });
+      return res
+        .status(400)
+        .json({ status: "error", message: "Invalid sign-off ID." });
     }
 
     const [rows] = await pool.query(
@@ -600,21 +705,32 @@ router.get("/:id", requireAuth, requireAdminOrManager, async (req, res) => {
       SELECT
         a.*,
         creator.full_name AS created_by_name,
-        approver.full_name AS approved_by_user_name
+        approver.full_name AS approved_by_user_name,
+        b.name AS branch_name,
+        b.location AS branch_location
       FROM audit_signoffs a
       LEFT JOIN users creator ON a.created_by = creator.id
       LEFT JOIN users approver ON a.approved_by = approver.id
+      LEFT JOIN branches b ON a.branch_id = b.id
       WHERE a.id = ?
+      AND a.branch_id = ?
       LIMIT 1
       `,
-      [id]
+      [id, branchId]
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ status: "error", message: "Audit sign-off not found." });
+      return res.status(404).json({
+        status: "error",
+        message: "Audit sign-off not found in the selected store.",
+      });
     }
 
-    return res.json({ status: "success", signoff: normalizeSignoff(rows[0]) });
+    return res.json({
+      status: "success",
+      branch_id: branchId,
+      signoff: normalizeSignoff(rows[0]),
+    });
   } catch (error) {
     console.error("Get audit signoff error:", error);
     return res.status(500).json({
@@ -631,6 +747,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
     await ensureAuditSignoffsTable();
     await ensureAuditReapprovalLogTable();
 
+    const branchId = getBranchId(req);
     const userId = getUserId(req);
     const ipAddress = getClientIp(req);
 
@@ -651,11 +768,16 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
     const approvedBy = periodStatus === "approved" ? userId : null;
 
     if (!periodLabel) {
-      return res.status(400).json({ status: "error", message: "Period label is required." });
+      return res
+        .status(400)
+        .json({ status: "error", message: "Period label is required." });
     }
 
     if (auditScore < 0 || auditScore > 100) {
-      return res.status(400).json({ status: "error", message: "Audit score must be between 0 and 100." });
+      return res.status(400).json({
+        status: "error",
+        message: "Audit score must be between 0 and 100.",
+      });
     }
 
     await connection.beginTransaction();
@@ -664,7 +786,8 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       `
       SELECT id, period_status
       FROM audit_signoffs
-      WHERE period_type = ?
+      WHERE branch_id = ?
+      AND period_type = ?
       AND (
         (period_start <=> ? AND period_end <=> ?)
         OR period_label = ?
@@ -672,7 +795,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       ORDER BY updated_at DESC, created_at DESC
       LIMIT 1
       `,
-      [periodType, periodStart, periodEnd, periodLabel]
+      [branchId, periodType, periodStart, periodEnd, periodLabel]
     );
 
     let signoffId;
@@ -706,7 +829,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       previousStatus = existingRows[0].period_status || null;
 
       const latestApprovedUnlockRequest =
-        await findLatestApprovedUnlockRequest(connection, signoffId);
+        await findLatestApprovedUnlockRequest(connection, signoffId, branchId);
 
       await connection.query(
         `
@@ -732,12 +855,14 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
           management_notes = ?,
           approved_by = ?
         WHERE id = ?
+        AND branch_id = ?
         `,
-        [...values, signoffId]
+        [...values, signoffId, branchId]
       );
 
       reapprovalLogged = await createReapprovalLogIfNeeded({
         connection,
+        branchId,
         signoffId,
         latestApprovedUnlockRequest,
         previousStatus,
@@ -757,6 +882,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       await safeLogActivity(
         connection,
         userId,
+        branchId,
         reapprovalLogged ? "REAPPROVE_AUDIT_SIGNOFF" : "UPDATE_AUDIT_SIGNOFF",
         reapprovalLogged
           ? `Re-approved audit sign-off for ${periodLabel} after unlock request.`
@@ -767,6 +893,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       const [insertResult] = await connection.query(
         `
         INSERT INTO audit_signoffs (
+          branch_id,
           period_type,
           period_label,
           period_start,
@@ -789,9 +916,9 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
           created_by,
           approved_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [periodType, ...values.slice(0, 18), userId, approvedBy]
+        [branchId, periodType, ...values.slice(0, 18), userId, approvedBy]
       );
 
       signoffId = insertResult.insertId;
@@ -799,6 +926,7 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       await safeLogActivity(
         connection,
         userId,
+        branchId,
         "CREATE_AUDIT_SIGNOFF",
         `Created audit sign-off for ${periodLabel} with status ${periodStatus}.`,
         ipAddress
@@ -810,20 +938,25 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
       SELECT
         a.*,
         creator.full_name AS created_by_name,
-        approver.full_name AS approved_by_user_name
+        approver.full_name AS approved_by_user_name,
+        b.name AS branch_name,
+        b.location AS branch_location
       FROM audit_signoffs a
       LEFT JOIN users creator ON a.created_by = creator.id
       LEFT JOIN users approver ON a.approved_by = approver.id
+      LEFT JOIN branches b ON a.branch_id = b.id
       WHERE a.id = ?
+      AND a.branch_id = ?
       LIMIT 1
       `,
-      [signoffId]
+      [signoffId, branchId]
     );
 
     await connection.commit();
 
     return res.status(existingRows.length > 0 ? 200 : 201).json({
       status: "success",
+      branch_id: branchId,
       message: reapprovalLogged
         ? "Audit period re-approved and re-approval log saved successfully."
         : existingRows.length > 0
@@ -851,28 +984,46 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     await ensureAuditSignoffsTable();
 
+    const branchId = getBranchId(req);
     const id = Number(req.params.id);
+
     if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ status: "error", message: "Invalid sign-off ID." });
+      return res
+        .status(400)
+        .json({ status: "error", message: "Invalid sign-off ID." });
     }
 
     await connection.beginTransaction();
 
     const [rows] = await connection.query(
-      "SELECT id, period_label FROM audit_signoffs WHERE id = ? LIMIT 1",
-      [id]
+      `SELECT id, period_label
+       FROM audit_signoffs
+       WHERE id = ?
+       AND branch_id = ?
+       LIMIT 1`,
+      [id, branchId]
     );
 
     if (rows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({ status: "error", message: "Audit sign-off not found." });
+
+      return res.status(404).json({
+        status: "error",
+        message: "Audit sign-off not found in the selected store.",
+      });
     }
 
-    await connection.query("DELETE FROM audit_signoffs WHERE id = ?", [id]);
+    await connection.query(
+      `DELETE FROM audit_signoffs
+       WHERE id = ?
+       AND branch_id = ?`,
+      [id, branchId]
+    );
 
     await safeLogActivity(
       connection,
       getUserId(req),
+      branchId,
       "DELETE_AUDIT_SIGNOFF",
       `Deleted audit sign-off for ${rows[0].period_label}.`,
       getClientIp(req)
@@ -880,7 +1031,11 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
 
     await connection.commit();
 
-    return res.json({ status: "success", message: "Audit sign-off deleted successfully." });
+    return res.json({
+      status: "success",
+      branch_id: branchId,
+      message: "Audit sign-off deleted successfully.",
+    });
   } catch (error) {
     await connection.rollback();
     console.error("Delete audit signoff error:", error);

@@ -7,6 +7,24 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
 function formatDateTime(value) {
   if (!value) return "";
 
@@ -36,7 +54,19 @@ function buildDateFilter(alias, dateColumn, from, to, params) {
 }
 
 function isVoidedSale(sale) {
-  return Number(sale.is_voided || 0) === 1 || sale.sale_status === "cancelled";
+  return (
+    Number(sale.is_voided || 0) === 1 ||
+    sale.sale_status === "cancelled" ||
+    sale.sale_status === "voided"
+  );
+}
+
+function safeFilenamePart(value) {
+  return String(value || "store")
+    .replace(/[^a-z0-9]/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
 }
 
 function styleWorksheet(worksheet) {
@@ -70,6 +100,22 @@ function styleWorksheet(worksheet) {
   });
 }
 
+async function getBranchLabel(branchId) {
+  const [branches] = await pool.query(
+    `SELECT code, name
+     FROM branches
+     WHERE id = ?
+     LIMIT 1`,
+    [branchId]
+  );
+
+  if (branches.length === 0) {
+    return `branch-${branchId}`;
+  }
+
+  return branches[0].code || branches[0].name || `branch-${branchId}`;
+}
+
 async function sendWorkbook(res, workbook, filename) {
   res.setHeader(
     "Content-Type",
@@ -82,6 +128,17 @@ async function sendWorkbook(res, workbook, filename) {
   res.end();
 }
 
+async function sendStoreWorkbook(req, res, workbook, baseName) {
+  const branchId = getBranchId(req);
+  const branchLabel = await getBranchLabel(branchId);
+
+  return sendWorkbook(
+    res,
+    workbook,
+    `chalin03-${baseName}-${safeFilenamePart(branchLabel)}.xlsx`
+  );
+}
+
 // GET /api/exports/products
 router.get(
   "/products",
@@ -89,9 +146,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [products] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           size,
           category,
@@ -103,7 +163,9 @@ router.get(
           is_active,
           created_at
          FROM products
-         ORDER BY name ASC`
+         WHERE branch_id = ?
+         ORDER BY name ASC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -114,6 +176,7 @@ router.get(
 
       worksheet.columns = [
         { header: "ID", key: "id" },
+        { header: "Store ID", key: "branch_id" },
         { header: "Product Name", key: "name" },
         { header: "Size", key: "size" },
         { header: "Category", key: "category" },
@@ -129,6 +192,7 @@ router.get(
       products.forEach((product) => {
         worksheet.addRow({
           id: product.id,
+          branch_id: product.branch_id,
           name: product.name,
           size: product.size || "",
           category: product.category || "",
@@ -144,7 +208,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-products.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "products");
     } catch (error) {
       console.error("Export products error:", error);
 
@@ -164,9 +228,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [products] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           size,
           category,
@@ -183,9 +250,11 @@ router.get(
           GREATEST((low_stock_threshold * 2) - quantity, 0) AS suggested_restock_quantity,
           GREATEST((low_stock_threshold * 2) - quantity, 0) * cost_price AS estimated_restock_cost
          FROM products
-         WHERE is_active = TRUE
+         WHERE branch_id = ?
+         AND is_active = TRUE
          AND quantity <= low_stock_threshold
-         ORDER BY quantity ASC, name ASC`
+         ORDER BY quantity ASC, name ASC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -285,7 +354,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-low-stock-restock.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "low-stock-restock");
     } catch (error) {
       console.error("Export low stock error:", error);
 
@@ -306,14 +375,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("sa", "adjusted_at", from, to, params);
 
       const [adjustments] = await pool.query(
         `SELECT
           sa.id,
+          sa.branch_id,
           sa.adjustment_type,
           sa.quantity,
           sa.old_quantity,
@@ -325,9 +397,11 @@ router.get(
           p.size AS product_size,
           u.full_name AS adjusted_by_name
          FROM stock_adjustments sa
-         INNER JOIN products p ON sa.product_id = p.id
+         INNER JOIN products p
+          ON sa.product_id = p.id
+          AND p.branch_id = sa.branch_id
          LEFT JOIN users u ON sa.adjusted_by = u.id
-         WHERE 1 = 1
+         WHERE sa.branch_id = ?
          ${dateFilter}
          ORDER BY sa.adjusted_at DESC, sa.id DESC`,
         params
@@ -429,7 +503,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-stock-adjustments.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "stock-adjustments");
     } catch (error) {
       console.error("Export stock adjustments error:", error);
 
@@ -450,14 +524,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("dp", "paid_at", from, to, params);
 
       const [payments] = await pool.query(
         `SELECT
           dp.id,
+          dp.branch_id,
           dp.debt_id,
           dp.amount,
           dp.payment_method,
@@ -472,10 +549,14 @@ router.get(
           s.receipt_number,
           u.full_name AS received_by_name
          FROM debt_payments dp
-         INNER JOIN debts d ON dp.debt_id = d.id
-         LEFT JOIN sales s ON d.sale_id = s.id
+         INNER JOIN debts d
+          ON dp.debt_id = d.id
+          AND d.branch_id = dp.branch_id
+         LEFT JOIN sales s
+          ON d.sale_id = s.id
+          AND s.branch_id = d.branch_id
          LEFT JOIN users u ON dp.received_by = u.id
-         WHERE 1 = 1
+         WHERE dp.branch_id = ?
          ${dateFilter}
          ORDER BY dp.paid_at DESC, dp.id DESC`,
         params
@@ -575,7 +656,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-debt-payments.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "debt-payments");
     } catch (error) {
       console.error("Export debt payments error:", error);
 
@@ -588,8 +669,6 @@ router.get(
   }
 );
 
-
-
 // GET /api/exports/daily-closings
 router.get(
   "/daily-closings",
@@ -597,9 +676,11 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("dc", "closing_date", from, to, params);
 
       const [closings] = await pool.query(
@@ -608,7 +689,7 @@ router.get(
           u.full_name AS closed_by_name
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
-         WHERE 1 = 1
+         WHERE dc.branch_id = ?
          ${dateFilter}
          ORDER BY dc.closing_date DESC`,
         params
@@ -777,7 +858,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-daily-closings.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "daily-closings");
     } catch (error) {
       console.error("Export daily closings error:", error);
 
@@ -797,8 +878,9 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const phone = String(req.query.phone || "").trim();
-      const name = String(req.query.name || "").trim();
+      const branchId = getBranchId(req);
+      const phone = cleanText(req.query.phone);
+      const name = cleanText(req.query.name);
 
       if (!phone && !name) {
         return res.status(400).json({
@@ -808,7 +890,7 @@ router.get(
       }
 
       const conditions = [];
-      const params = [];
+      const params = [branchId];
 
       if (phone) {
         conditions.push("s.customer_phone = ?");
@@ -825,6 +907,7 @@ router.get(
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.customer_name,
           s.customer_phone,
@@ -841,7 +924,8 @@ router.get(
           u.full_name AS staff_name
          FROM sales s
          LEFT JOIN users u ON s.staff_id = u.id
-         WHERE ${whereCustomer}
+         WHERE s.branch_id = ?
+         AND (${whereCustomer})
          ORDER BY s.created_at DESC`,
         params
       );
@@ -868,10 +952,13 @@ router.get(
             d.created_at,
             s.receipt_number
            FROM debts d
-           INNER JOIN sales s ON d.sale_id = s.id
-           WHERE d.sale_id IN (${salePlaceholders})
+           INNER JOIN sales s
+            ON d.sale_id = s.id
+            AND s.branch_id = d.branch_id
+           WHERE d.branch_id = ?
+           AND d.sale_id IN (${salePlaceholders})
            ORDER BY d.created_at DESC`,
-          saleIds
+          [branchId, ...saleIds]
         );
 
         debts = debtRows;
@@ -894,12 +981,17 @@ router.get(
               s.receipt_number,
               u.full_name AS received_by_name
              FROM debt_payments dp
-             INNER JOIN debts d ON dp.debt_id = d.id
-             INNER JOIN sales s ON d.sale_id = s.id
+             INNER JOIN debts d
+              ON dp.debt_id = d.id
+              AND d.branch_id = dp.branch_id
+             INNER JOIN sales s
+              ON d.sale_id = s.id
+              AND s.branch_id = d.branch_id
              LEFT JOIN users u ON dp.received_by = u.id
-             WHERE dp.debt_id IN (${debtPlaceholders})
+             WHERE dp.branch_id = ?
+             AND dp.debt_id IN (${debtPlaceholders})
              ORDER BY dp.paid_at DESC, dp.id DESC`,
-            debtIds
+            [branchId, ...debtIds]
           );
 
           debtPayments = paymentRows;
@@ -931,7 +1023,8 @@ router.get(
         0
       );
 
-      const customerName = sales[0]?.customer_name || debts[0]?.customer_name || name;
+      const customerName =
+        sales[0]?.customer_name || debts[0]?.customer_name || name;
       const customerPhone =
         sales[0]?.customer_phone || debts[0]?.customer_phone || phone;
 
@@ -1101,15 +1194,9 @@ router.get(
       styleWorksheet(debtsWorksheet);
       styleWorksheet(paymentsWorksheet);
 
-      const safeName = String(customerName || "customer")
-        .replace(/[^a-z0-9]/gi, "-")
-        .toLowerCase();
+      const safeName = safeFilenamePart(customerName || "customer");
 
-      return sendWorkbook(
-        res,
-        workbook,
-        `chalin03-customer-statement-${safeName}.xlsx`
-      );
+      return sendStoreWorkbook(req, res, workbook, `customer-statement-${safeName}`);
     } catch (error) {
       console.error("Export customer statement error:", error);
 
@@ -1130,14 +1217,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("s", "created_at", from, to, params);
 
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.subtotal,
           s.discount_amount,
@@ -1158,7 +1248,7 @@ router.get(
          FROM sales s
          LEFT JOIN users u ON s.staff_id = u.id
          LEFT JOIN users vu ON s.voided_by = vu.id
-         WHERE 1 = 1
+         WHERE s.branch_id = ?
          ${dateFilter}
          ORDER BY s.created_at DESC`,
         params
@@ -1310,7 +1400,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-sales.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "sales");
     } catch (error) {
       console.error("Export sales error:", error);
 
@@ -1329,9 +1419,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [debts] = await pool.query(
         `SELECT
           d.id,
+          d.branch_id,
           d.amount_owed,
           d.amount_paid,
           d.balance,
@@ -1344,10 +1437,14 @@ router.get(
           s.sale_status,
           s.is_voided
          FROM debts d
-         INNER JOIN sales s ON d.sale_id = s.id
-         WHERE COALESCE(s.is_voided, 0) = 0
+         INNER JOIN sales s
+          ON d.sale_id = s.id
+          AND s.branch_id = d.branch_id
+         WHERE d.branch_id = ?
+         AND COALESCE(s.is_voided, 0) = 0
          AND s.sale_status != 'cancelled'
-         ORDER BY d.created_at DESC`
+         ORDER BY d.created_at DESC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -1384,7 +1481,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-debts.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "debts");
     } catch (error) {
       console.error("Export debts error:", error);
 
@@ -1403,14 +1500,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("e", "expense_date", from, to, params);
 
       const [expenses] = await pool.query(
         `SELECT
           e.id,
+          e.branch_id,
           e.category,
           e.description,
           e.amount,
@@ -1419,7 +1519,7 @@ router.get(
           u.full_name AS recorded_by_name
          FROM expenses e
          LEFT JOIN users u ON e.recorded_by = u.id
-         WHERE 1 = 1
+         WHERE e.branch_id = ?
          ${dateFilter}
          ORDER BY e.expense_date DESC, e.created_at DESC`,
         params
@@ -1453,7 +1553,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-expenses.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "expenses");
     } catch (error) {
       console.error("Export expenses error:", error);
 
@@ -1473,14 +1573,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("p", "purchase_date", from, to, params);
 
       const [purchases] = await pool.query(
         `SELECT
           p.id,
+          p.branch_id,
           p.supplier_id,
           p.invoice_number,
           p.purchase_date,
@@ -1494,9 +1597,11 @@ router.get(
           s.name AS supplier_name,
           u.full_name AS created_by_name
          FROM purchases p
-         LEFT JOIN suppliers s ON p.supplier_id = s.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
          LEFT JOIN users u ON p.created_by = u.id
-         WHERE 1 = 1
+         WHERE p.branch_id = ?
          ${dateFilter}
          ORDER BY p.purchase_date DESC, p.created_at DESC`,
         params
@@ -1524,10 +1629,13 @@ router.get(
             s.name AS supplier_name
            FROM purchase_items pi
            INNER JOIN purchases p ON pi.purchase_id = p.id
-           LEFT JOIN suppliers s ON p.supplier_id = s.id
-           WHERE pi.purchase_id IN (${placeholders})
+           LEFT JOIN suppliers s
+            ON p.supplier_id = s.id
+            AND s.branch_id = p.branch_id
+           WHERE p.branch_id = ?
+           AND pi.purchase_id IN (${placeholders})
            ORDER BY p.purchase_date DESC, pi.id ASC`,
-          purchaseIds
+          [branchId, ...purchaseIds]
         );
 
         purchaseItems = items;
@@ -1535,6 +1643,7 @@ router.get(
         const [payments] = await pool.query(
           `SELECT
             pp.id,
+            pp.branch_id,
             pp.purchase_id,
             pp.amount,
             pp.payment_method,
@@ -1545,12 +1654,17 @@ router.get(
             s.name AS supplier_name,
             u.full_name AS paid_by_name
            FROM purchase_payments pp
-           INNER JOIN purchases p ON pp.purchase_id = p.id
-           LEFT JOIN suppliers s ON p.supplier_id = s.id
+           INNER JOIN purchases p
+            ON pp.purchase_id = p.id
+            AND p.branch_id = pp.branch_id
+           LEFT JOIN suppliers s
+            ON p.supplier_id = s.id
+            AND s.branch_id = p.branch_id
            LEFT JOIN users u ON pp.paid_by = u.id
-           WHERE pp.purchase_id IN (${placeholders})
+           WHERE pp.branch_id = ?
+           AND pp.purchase_id IN (${placeholders})
            ORDER BY p.purchase_date DESC, pp.paid_at ASC, pp.id ASC`,
-          purchaseIds
+          [branchId, ...purchaseIds]
         );
 
         purchasePayments = payments;
@@ -1699,7 +1813,7 @@ router.get(
       styleWorksheet(paymentsWorksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-purchases.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "purchases");
     } catch (error) {
       console.error("Export purchases error:", error);
 
@@ -1719,14 +1833,17 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("r", "returned_at", from, to, params);
 
       const [returns] = await pool.query(
         `SELECT
           r.id,
+          r.branch_id,
           r.quantity,
           r.reason,
           r.returned_at,
@@ -1735,9 +1852,13 @@ router.get(
           s.customer_phone,
           p.name AS product_name
          FROM returns r
-         LEFT JOIN sales s ON r.sale_id = s.id
-         LEFT JOIN products p ON r.product_id = p.id
-         WHERE 1 = 1
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         LEFT JOIN products p
+          ON r.product_id = p.id
+          AND p.branch_id = r.branch_id
+         WHERE r.branch_id = ?
          ${dateFilter}
          ORDER BY r.returned_at DESC, r.id DESC`,
         params
@@ -1773,7 +1894,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-returns.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "returns");
     } catch (error) {
       console.error("Export returns error:", error);
 

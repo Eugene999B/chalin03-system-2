@@ -12,11 +12,21 @@ const SYSTEM_ADMIN_USERNAME = String(
   process.env.SYSTEM_ADMIN_USERNAME || "admin"
 ).toLowerCase();
 
-async function logActivity(userId, action, details) {
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+async function logActivity(userId, branchId, action, details) {
   await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
   );
 }
 
@@ -28,6 +38,10 @@ function cleanText(value) {
   return String(value).trim();
 }
 
+function cleanBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
 function isOriginalSystemAdministrator(user) {
   return (
     Number(user?.id) === SYSTEM_ADMIN_ID &&
@@ -36,24 +50,17 @@ function isOriginalSystemAdministrator(user) {
   );
 }
 
-async function getUserById(userId) {
-  const [users] = await pool.query(
-    `SELECT
-      id,
-      full_name,
-      username,
-      role,
-      phone,
-      is_active,
-      created_at,
-      updated_at
-     FROM users
-     WHERE id = ?
+async function tableExists(connection, tableName) {
+  const [rows] = await connection.query(
+    `SELECT TABLE_NAME
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND TABLE_NAME = ?
      LIMIT 1`,
-    [userId]
+    [tableName]
   );
 
-  return users.length > 0 ? users[0] : null;
+  return rows.length > 0;
 }
 
 async function columnExists(connection, tableName, columnName) {
@@ -71,6 +78,172 @@ async function columnExists(connection, tableName, columnName) {
 
     throw error;
   }
+}
+
+async function ensureColumn(connection, tableName, columnName, columnDefinition) {
+  const exists = await columnExists(connection, tableName, columnName);
+
+  if (!exists) {
+    await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN ${columnDefinition}`);
+  }
+}
+
+async function ensureUserBranchSetup(connection = pool) {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS user_branch_access (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      branch_id INT NOT NULL,
+      can_access BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_user_branch_access (user_id, branch_id),
+      INDEX idx_user_branch_access_user (user_id),
+      INDEX idx_user_branch_access_branch (branch_id),
+      INDEX idx_user_branch_access_active (can_access)
+    )
+  `);
+
+  await ensureColumn(
+    connection,
+    "users",
+    "default_branch_id",
+    "default_branch_id INT NULL AFTER role"
+  );
+
+  await ensureColumn(
+    connection,
+    "users",
+    "can_access_all_branches",
+    "can_access_all_branches BOOLEAN NOT NULL DEFAULT FALSE AFTER default_branch_id"
+  );
+}
+
+async function getAllBranchIds(connection = pool) {
+  if (!(await tableExists(connection, "branches"))) {
+    return [1];
+  }
+
+  const [branches] = await connection.query(
+    `SELECT id
+     FROM branches
+     WHERE is_active = TRUE
+     ORDER BY id ASC`
+  );
+
+  if (branches.length === 0) {
+    return [1];
+  }
+
+  return branches.map((branch) => Number(branch.id));
+}
+
+function normalizeBranchIds(rawBranchIds, fallbackBranchId) {
+  const source = Array.isArray(rawBranchIds) ? rawBranchIds : [];
+
+  const branchIds = source
+    .map((branchId) => Number(branchId))
+    .filter((branchId) => Number.isInteger(branchId) && branchId > 0);
+
+  const uniqueBranchIds = [...new Set(branchIds)];
+
+  if (uniqueBranchIds.length > 0) {
+    return uniqueBranchIds;
+  }
+
+  return [fallbackBranchId];
+}
+
+async function setUserBranchAccess(
+  connection,
+  userId,
+  branchIds,
+  canAccessAllBranches
+) {
+  await ensureUserBranchSetup(connection);
+
+  const finalBranchIds = canAccessAllBranches
+    ? await getAllBranchIds(connection)
+    : branchIds;
+
+  await connection.query(
+    `DELETE FROM user_branch_access
+     WHERE user_id = ?`,
+    [userId]
+  );
+
+  for (const branchId of finalBranchIds) {
+    await connection.query(
+      `INSERT INTO user_branch_access (user_id, branch_id, can_access)
+       VALUES (?, ?, TRUE)
+       ON DUPLICATE KEY UPDATE
+        can_access = TRUE,
+        updated_at = CURRENT_TIMESTAMP`,
+      [userId, branchId]
+    );
+  }
+
+  const defaultBranchId = finalBranchIds[0] || null;
+
+  await connection.query(
+    `UPDATE users
+     SET default_branch_id = ?,
+         can_access_all_branches = ?
+     WHERE id = ?`,
+    [defaultBranchId, canAccessAllBranches ? 1 : 0, userId]
+  );
+}
+
+async function getUserBranches(userId) {
+  await ensureUserBranchSetup(pool);
+
+  const [branches] = await pool.query(
+    `SELECT
+      uba.branch_id,
+      uba.can_access,
+      b.code,
+      b.name,
+      b.location
+     FROM user_branch_access uba
+     LEFT JOIN branches b ON uba.branch_id = b.id
+     WHERE uba.user_id = ?
+     AND uba.can_access = TRUE
+     ORDER BY b.name ASC, uba.branch_id ASC`,
+    [userId]
+  );
+
+  return branches;
+}
+
+async function getUserById(userId) {
+  await ensureUserBranchSetup(pool);
+
+  const [users] = await pool.query(
+    `SELECT
+      id,
+      full_name,
+      username,
+      role,
+      default_branch_id,
+      can_access_all_branches,
+      phone,
+      is_active,
+      created_at,
+      updated_at
+     FROM users
+     WHERE id = ?
+     LIMIT 1`,
+    [userId]
+  );
+
+  if (users.length === 0) {
+    return null;
+  }
+
+  const user = users[0];
+  user.branches = await getUserBranches(user.id);
+
+  return user;
 }
 
 async function setUserReferenceToNull(connection, tableName, columnName, userId) {
@@ -94,11 +267,14 @@ async function clearUserReferencesBeforeDelete(connection, userId) {
     { table: "returns", columns: ["returned_by"] },
     { table: "expenses", columns: ["recorded_by"] },
     { table: "debt_payments", columns: ["received_by"] },
-    { table: "purchase_payments", columns: ["received_by"] },
+    { table: "purchase_payments", columns: ["paid_by", "received_by"] },
     { table: "purchases", columns: ["created_by"] },
     { table: "daily_closings", columns: ["closed_by"] },
     { table: "stock_adjustments", columns: ["adjusted_by", "approved_by"] },
     { table: "sms_log", columns: ["sent_by"] },
+    { table: "audit_signoffs", columns: ["created_by", "approved_by"] },
+    { table: "audit_unlock_requests", columns: ["requested_by", "reviewed_by"] },
+    { table: "audit_reapproval_log", columns: ["reapproved_by"] },
     { table: "activity_log", columns: ["user_id"] },
   ];
 
@@ -112,17 +288,45 @@ async function clearUserReferencesBeforeDelete(connection, userId) {
       );
     }
   }
+
+  if (await tableExists(connection, "user_branch_access")) {
+    await connection.query(
+      `DELETE FROM user_branch_access
+       WHERE user_id = ?`,
+      [userId]
+    );
+  }
+}
+
+function normalizeUserRow(user) {
+  return {
+    id: user.id,
+    full_name: user.full_name,
+    username: user.username,
+    role: user.role,
+    default_branch_id: user.default_branch_id,
+    can_access_all_branches: Boolean(user.can_access_all_branches),
+    phone: user.phone,
+    is_active: Boolean(user.is_active),
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+    branches: user.branches || [],
+  };
 }
 
 // GET /api/users
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    await ensureUserBranchSetup(pool);
+
     const [users] = await pool.query(
       `SELECT
         id,
         full_name,
         username,
         role,
+        default_branch_id,
+        can_access_all_branches,
         phone,
         is_active,
         created_at,
@@ -131,10 +335,54 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
        ORDER BY created_at DESC`
     );
 
+    const userIds = users.map((user) => user.id);
+    const branchesByUserId = new Map();
+
+    if (userIds.length > 0) {
+      const placeholders = userIds.map(() => "?").join(",");
+
+      const [branchRows] = await pool.query(
+        `SELECT
+          uba.user_id,
+          uba.branch_id,
+          uba.can_access,
+          b.code,
+          b.name,
+          b.location
+         FROM user_branch_access uba
+         LEFT JOIN branches b ON uba.branch_id = b.id
+         WHERE uba.user_id IN (${placeholders})
+         AND uba.can_access = TRUE
+         ORDER BY b.name ASC, uba.branch_id ASC`,
+        userIds
+      );
+
+      for (const branch of branchRows) {
+        if (!branchesByUserId.has(branch.user_id)) {
+          branchesByUserId.set(branch.user_id, []);
+        }
+
+        branchesByUserId.get(branch.user_id).push({
+          branch_id: branch.branch_id,
+          can_access: Boolean(branch.can_access),
+          code: branch.code,
+          name: branch.name,
+          location: branch.location,
+        });
+      }
+    }
+
+    const usersWithBranches = users.map((user) =>
+      normalizeUserRow({
+        ...user,
+        branches: branchesByUserId.get(user.id) || [],
+      })
+    );
+
     return res.json({
       status: "success",
-      count: users.length,
-      users,
+      count: usersWithBranches.length,
+      users: usersWithBranches,
     });
   } catch (error) {
     console.error("Get users error:", error);
@@ -148,23 +396,40 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
 
 // POST /api/users
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
-    const { full_name, username, password, role, phone } = req.body;
+    await ensureUserBranchSetup(connection);
+
+    const branchId = getBranchId(req);
+
+    const {
+      full_name,
+      username,
+      password,
+      role,
+      phone,
+      branch_ids,
+      can_access_all_branches,
+    } = req.body;
 
     const allowedRoles = ["admin", "manager", "cashier"];
 
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
     const cleanPhone = cleanText(phone);
+    const cleanRole = cleanText(role).toLowerCase();
+    const accessAllBranches =
+      cleanBoolean(can_access_all_branches) || cleanRole === "admin";
 
-    if (!cleanFullName || !cleanUsername || !password || !role) {
+    if (!cleanFullName || !cleanUsername || !password || !cleanRole) {
       return res.status(400).json({
         status: "error",
         message: "Full name, username, password and role are required.",
       });
     }
 
-    if (!allowedRoles.includes(role)) {
+    if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         status: "error",
         message: "Role must be admin, manager, or cashier.",
@@ -178,35 +443,64 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const [result] = await pool.query(
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
       `INSERT INTO users (
         full_name,
         username,
         password_hash,
         role,
+        default_branch_id,
+        can_access_all_branches,
         phone,
         is_active
       )
-      VALUES (?, ?, ?, ?, ?, TRUE)`,
-      [cleanFullName, cleanUsername, passwordHash, role, cleanPhone || null]
+      VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [
+        cleanFullName,
+        cleanUsername,
+        passwordHash,
+        cleanRole,
+        selectedBranchIds[0],
+        accessAllBranches ? 1 : 0,
+        cleanPhone || null,
+      ]
     );
 
-    await logActivity(
-      req.user.id,
-      "CREATE_USER",
-      `Created user "${cleanUsername}" with role "${role}"`
+    await setUserBranchAccess(
+      connection,
+      result.insertId,
+      selectedBranchIds,
+      accessAllBranches
     );
+
+    await connection.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [
+        branchId,
+        req.user.id,
+        "CREATE_USER",
+        `Created user "${cleanUsername}" with role "${cleanRole}"`
+      ]
+    );
+
+    await connection.commit();
 
     const createdUser = await getUserById(result.insertId);
 
     return res.status(201).json({
       status: "success",
       message: "User created successfully.",
-      user: createdUser,
+      user: normalizeUserRow(createdUser),
     });
   } catch (error) {
+    await connection.rollback();
+
     console.error("Create user error:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
@@ -220,29 +514,47 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       status: "error",
       message: "Something went wrong while creating user.",
     });
+  } finally {
+    connection.release();
   }
 });
 
 // PUT /api/users/:id
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
+    await ensureUserBranchSetup(connection);
+
+    const branchId = getBranchId(req);
     const { id } = req.params;
-    const { full_name, username, role, phone, is_active, password } = req.body;
+
+    const {
+      full_name,
+      username,
+      role,
+      phone,
+      is_active,
+      password,
+      branch_ids,
+      can_access_all_branches,
+    } = req.body;
 
     const allowedRoles = ["admin", "manager", "cashier"];
 
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
     const cleanPhone = cleanText(phone);
+    const cleanRole = cleanText(role).toLowerCase();
 
-    if (!cleanFullName || !cleanUsername || !role) {
+    if (!cleanFullName || !cleanUsername || !cleanRole) {
       return res.status(400).json({
         status: "error",
         message: "Full name, username and role are required.",
       });
     }
 
-    if (!allowedRoles.includes(role)) {
+    if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         status: "error",
         message: "Role must be admin, manager, or cashier.",
@@ -270,8 +582,19 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       }
     }
 
+    const accessAllBranches =
+      cleanBoolean(can_access_all_branches) ||
+      cleanRole === "admin" ||
+      isOriginalSystemAdministrator(existingUser);
+
+    const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
+
+    await connection.beginTransaction();
+
     if (password && password.trim() !== "") {
       if (password.length < 6) {
+        await connection.rollback();
+
         return res.status(400).json({
           status: "error",
           message: "Password must be at least 6 characters.",
@@ -280,11 +603,13 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
       const passwordHash = await bcrypt.hash(password, 10);
 
-      await pool.query(
+      await connection.query(
         `UPDATE users
          SET full_name = ?,
              username = ?,
              role = ?,
+             default_branch_id = ?,
+             can_access_all_branches = ?,
              phone = ?,
              is_active = ?,
              password_hash = ?
@@ -292,7 +617,9 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
         [
           cleanFullName,
           cleanUsername,
-          role,
+          cleanRole,
+          selectedBranchIds[0],
+          accessAllBranches ? 1 : 0,
           cleanPhone || null,
           is_active === false ? false : true,
           passwordHash,
@@ -300,18 +627,22 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
         ]
       );
     } else {
-      await pool.query(
+      await connection.query(
         `UPDATE users
          SET full_name = ?,
              username = ?,
              role = ?,
+             default_branch_id = ?,
+             can_access_all_branches = ?,
              phone = ?,
              is_active = ?
          WHERE id = ?`,
         [
           cleanFullName,
           cleanUsername,
-          role,
+          cleanRole,
+          selectedBranchIds[0],
+          accessAllBranches ? 1 : 0,
           cleanPhone || null,
           is_active === false ? false : true,
           id,
@@ -319,20 +650,36 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       );
     }
 
-    await logActivity(
-      req.user.id,
-      "UPDATE_USER",
-      `Updated user "${cleanUsername}" with ID ${id}`
+    await setUserBranchAccess(
+      connection,
+      Number(id),
+      selectedBranchIds,
+      accessAllBranches
     );
+
+    await connection.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [
+        branchId,
+        req.user.id,
+        "UPDATE_USER",
+        `Updated user "${cleanUsername}" with ID ${id}`
+      ]
+    );
+
+    await connection.commit();
 
     const updatedUser = await getUserById(id);
 
     return res.json({
       status: "success",
       message: "User updated successfully.",
-      user: updatedUser,
+      user: normalizeUserRow(updatedUser),
     });
   } catch (error) {
+    await connection.rollback();
+
     console.error("Update user error:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
@@ -346,6 +693,8 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       status: "error",
       message: "Something went wrong while updating user.",
     });
+  } finally {
+    connection.release();
   }
 });
 
@@ -356,6 +705,7 @@ router.patch(
   requireRole("admin"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
       const { password, confirm_password } = req.body;
 
@@ -412,6 +762,7 @@ router.patch(
 
       await logActivity(
         req.user.id,
+        branchId,
         "RESET_USER_PASSWORD",
         `Reset password for user "${user.username}" with ID ${user.id}`
       );
@@ -438,6 +789,7 @@ router.patch(
   requireRole("admin"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
 
       if (Number(id) === Number(req.user.id)) {
@@ -472,6 +824,7 @@ router.patch(
 
       await logActivity(
         req.user.id,
+        branchId,
         "TOGGLE_USER_STATUS",
         `${newStatus ? "Activated" : "Disabled"} user "${user.username}"`
       );
@@ -499,6 +852,7 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
+    const branchId = getBranchId(req);
     const { id } = req.params;
     const targetUserId = Number(id);
 
@@ -549,9 +903,10 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     await connection.query(`DELETE FROM users WHERE id = ?`, [targetUserId]);
 
     await connection.query(
-      `INSERT INTO activity_log (user_id, action, details)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
       [
+        branchId,
         req.user.id,
         "DELETE_USER",
         `Permanently deleted user "${targetUser.username}" with role "${targetUser.role}" and ID ${targetUser.id}`,

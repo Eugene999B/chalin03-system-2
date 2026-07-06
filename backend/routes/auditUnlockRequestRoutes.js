@@ -5,6 +5,16 @@ const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
 function cleanText(value) {
   if (value === undefined || value === null) {
     return "";
@@ -37,12 +47,33 @@ function requireAdminOrManager(req, res, next) {
   });
 }
 
-async function safeLogActivity(connection, userId, action, details) {
+async function ensureColumn(connection, tableName, columnName, columnDefinition) {
+  const [columns] = await connection.query(`SHOW COLUMNS FROM ${tableName} LIKE ?`, [
+    columnName,
+  ]);
+
+  if (columns.length === 0) {
+    await connection.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+  }
+}
+
+async function ensureIndex(connection, tableName, indexName, indexDefinition) {
+  const [indexes] = await connection.query(
+    `SHOW INDEX FROM ${tableName} WHERE Key_name = ?`,
+    [indexName]
+  );
+
+  if (indexes.length === 0) {
+    await connection.query(`ALTER TABLE ${tableName} ADD INDEX ${indexDefinition}`);
+  }
+}
+
+async function safeLogActivity(connection, userId, branchId, action, details) {
   try {
     await connection.query(
-      `INSERT INTO activity_log (user_id, action, details)
-       VALUES (?, ?, ?)`,
-      [userId || null, action, details]
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [branchId || null, userId || null, action, details]
     );
   } catch (error) {
     console.error("Activity log error:", error.message);
@@ -54,6 +85,7 @@ async function ensureAuditUnlockRequestTable(connection = pool) {
     CREATE TABLE IF NOT EXISTS audit_unlock_requests (
       id INT AUTO_INCREMENT PRIMARY KEY,
 
+      branch_id INT NOT NULL DEFAULT 1,
       audit_signoff_id INT NULL,
 
       period_label VARCHAR(255) NOT NULL,
@@ -84,6 +116,7 @@ async function ensureAuditUnlockRequestTable(connection = pool) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+      INDEX idx_unlock_request_branch (branch_id),
       INDEX idx_unlock_request_signoff (audit_signoff_id),
       INDEX idx_unlock_request_status (status),
       INDEX idx_unlock_request_area (request_area),
@@ -92,6 +125,20 @@ async function ensureAuditUnlockRequestTable(connection = pool) {
       INDEX idx_unlock_request_created_at (created_at)
     )
   `);
+
+  await ensureColumn(
+    connection,
+    "audit_unlock_requests",
+    "branch_id",
+    "branch_id INT NOT NULL DEFAULT 1 AFTER id"
+  );
+
+  await ensureIndex(
+    connection,
+    "audit_unlock_requests",
+    "idx_unlock_request_branch",
+    "idx_unlock_request_branch (branch_id)"
+  );
 }
 
 function normalizeRequestArea(value) {
@@ -114,7 +161,7 @@ function normalizeRequestArea(value) {
   return "other";
 }
 
-async function findAuditSignoffById(connection, auditSignoffId) {
+async function findAuditSignoffById(connection, auditSignoffId, branchId) {
   if (!auditSignoffId) {
     return null;
   }
@@ -122,6 +169,7 @@ async function findAuditSignoffById(connection, auditSignoffId) {
   const [rows] = await connection.query(
     `SELECT
       id,
+      branch_id,
       period_type,
       period_label,
       period_start,
@@ -133,8 +181,9 @@ async function findAuditSignoffById(connection, auditSignoffId) {
       review_date
      FROM audit_signoffs
      WHERE id = ?
+     AND branch_id = ?
      LIMIT 1`,
-    [auditSignoffId]
+    [auditSignoffId, branchId]
   );
 
   return rows.length > 0 ? rows[0] : null;
@@ -147,6 +196,7 @@ router.post("/", requireAuth, async (req, res) => {
   try {
     await ensureAuditUnlockRequestTable(connection);
 
+    const branchId = getBranchId(req);
     const userId = getUserId(req);
 
     const {
@@ -171,10 +221,25 @@ router.post("/", requireAuth, async (req, res) => {
     await connection.beginTransaction();
 
     const auditSignoffId = audit_signoff_id ? Number(audit_signoff_id) : null;
-    const signoff = await findAuditSignoffById(connection, auditSignoffId);
+    const signoff = await findAuditSignoffById(
+      connection,
+      auditSignoffId,
+      branchId
+    );
+
+    if (auditSignoffId && !signoff) {
+      await connection.rollback();
+
+      return res.status(404).json({
+        status: "error",
+        message: "Audit sign-off not found in the selected store.",
+      });
+    }
 
     const finalPeriodLabel =
-      signoff?.period_label || cleanText(period_label) || "Locked accounting period";
+      signoff?.period_label ||
+      cleanText(period_label) ||
+      "Locked accounting period";
 
     const finalPeriodStart = signoff?.period_start || period_start || null;
     const finalPeriodEnd = signoff?.period_end || period_end || null;
@@ -185,6 +250,7 @@ router.post("/", requireAuth, async (req, res) => {
 
     const [result] = await connection.query(
       `INSERT INTO audit_unlock_requests (
+        branch_id,
         audit_signoff_id,
         period_label,
         period_start,
@@ -195,9 +261,10 @@ router.post("/", requireAuth, async (req, res) => {
         status,
         requested_by
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       [
-        signoff ? signoff.id : auditSignoffId,
+        branchId,
+        signoff ? signoff.id : null,
         finalPeriodLabel,
         finalPeriodStart,
         finalPeriodEnd,
@@ -211,6 +278,7 @@ router.post("/", requireAuth, async (req, res) => {
     await safeLogActivity(
       connection,
       userId,
+      branchId,
       "CREATE_AUDIT_UNLOCK_REQUEST",
       `Requested unlock for ${finalPeriodLabel}. Area: ${finalRequestArea}. Reason: ${cleanReason}`
     );
@@ -219,11 +287,13 @@ router.post("/", requireAuth, async (req, res) => {
 
     return res.status(201).json({
       status: "success",
+      branch_id: branchId,
       message:
         "Unlock request sent successfully. An admin or manager must review it.",
       request: {
         id: result.insertId,
-        audit_signoff_id: signoff ? signoff.id : auditSignoffId,
+        branch_id: branchId,
+        audit_signoff_id: signoff ? signoff.id : null,
         period_label: finalPeriodLabel,
         period_start: finalPeriodStart,
         period_end: finalPeriodEnd,
@@ -257,10 +327,12 @@ router.get(
     try {
       await ensureAuditUnlockRequestTable(pool);
 
-      const { status, search } = req.query;
+      const branchId = getBranchId(req);
+      const status = cleanText(req.query.status);
+      const search = cleanText(req.query.search);
 
-      const params = [];
-      let whereClause = "WHERE 1 = 1";
+      const params = [branchId];
+      let whereClause = "WHERE aur.branch_id = ?";
 
       if (status) {
         whereClause += " AND aur.status = ?";
@@ -276,12 +348,16 @@ router.get(
             OR aur.reason LIKE ?
             OR requester.full_name LIKE ?
             OR reviewer.full_name LIKE ?
+            OR b.name LIKE ?
+            OR b.location LIKE ?
           )
         `;
 
         const searchValue = `%${search}%`;
 
         params.push(
+          searchValue,
+          searchValue,
           searchValue,
           searchValue,
           searchValue,
@@ -294,6 +370,7 @@ router.get(
       const [requests] = await pool.query(
         `SELECT
           aur.id,
+          aur.branch_id,
           aur.audit_signoff_id,
           aur.period_label,
           aur.period_start,
@@ -314,11 +391,16 @@ router.get(
           aur.updated_at,
           aso.period_status AS current_period_status,
           aso.audit_score,
-          aso.audit_status
+          aso.audit_status,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM audit_unlock_requests aur
          LEFT JOIN users requester ON aur.requested_by = requester.id
          LEFT JOIN users reviewer ON aur.reviewed_by = reviewer.id
-         LEFT JOIN audit_signoffs aso ON aur.audit_signoff_id = aso.id
+         LEFT JOIN audit_signoffs aso
+          ON aur.audit_signoff_id = aso.id
+          AND aso.branch_id = aur.branch_id
+         LEFT JOIN branches b ON aur.branch_id = b.id
          ${whereClause}
          ORDER BY
           CASE aur.status
@@ -338,11 +420,14 @@ router.get(
           COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count,
           COUNT(CASE WHEN status = 'approved' THEN 1 END) AS approved_count,
           COUNT(CASE WHEN status = 'rejected' THEN 1 END) AS rejected_count
-         FROM audit_unlock_requests`
+         FROM audit_unlock_requests
+         WHERE branch_id = ?`,
+        [branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: requests.length,
         summary: summaryRows[0],
         requests,
@@ -363,11 +448,13 @@ router.get("/mine", requireAuth, async (req, res) => {
   try {
     await ensureAuditUnlockRequestTable(pool);
 
+    const branchId = getBranchId(req);
     const userId = getUserId(req);
 
     const [requests] = await pool.query(
       `SELECT
         id,
+        branch_id,
         audit_signoff_id,
         period_label,
         period_start,
@@ -381,14 +468,16 @@ router.get("/mine", requireAuth, async (req, res) => {
         created_at,
         updated_at
        FROM audit_unlock_requests
-       WHERE requested_by = ?
+       WHERE branch_id = ?
+       AND requested_by = ?
        ORDER BY created_at DESC
        LIMIT 100`,
-      [userId]
+      [branchId, userId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: requests.length,
       requests,
     });
@@ -413,6 +502,7 @@ router.patch(
     try {
       await ensureAuditUnlockRequestTable(connection);
 
+      const branchId = getBranchId(req);
       const { id } = req.params;
       const { status, review_notes, unlock_period } = req.body;
 
@@ -437,9 +527,10 @@ router.patch(
         `SELECT *
          FROM audit_unlock_requests
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1
          FOR UPDATE`,
-        [id]
+        [id, branchId]
       );
 
       if (requests.length === 0) {
@@ -447,7 +538,7 @@ router.patch(
 
         return res.status(404).json({
           status: "error",
-          message: "Unlock request not found.",
+          message: "Unlock request not found in the selected store.",
         });
       }
 
@@ -469,8 +560,9 @@ router.patch(
           reviewed_by = ?,
           reviewed_at = NOW(),
           review_notes = ?
-         WHERE id = ?`,
-        [cleanStatus, reviewerId || null, cleanReviewNotes || null, id]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [cleanStatus, reviewerId || null, cleanReviewNotes || null, id, branchId]
       );
 
       let periodUnlocked = false;
@@ -485,12 +577,14 @@ router.patch(
               ?,
               ?
             )
-           WHERE id = ?`,
+           WHERE id = ?
+           AND branch_id = ?`,
           [
             "\n\nUNLOCK APPROVED: ",
             cleanReviewNotes ||
               `Unlock request #${id} approved. Period reopened for correction.`,
             request.audit_signoff_id,
+            branchId,
           ]
         );
 
@@ -500,6 +594,7 @@ router.patch(
       await safeLogActivity(
         connection,
         reviewerId,
+        branchId,
         cleanStatus === "approved"
           ? "APPROVE_AUDIT_UNLOCK_REQUEST"
           : "REJECT_AUDIT_UNLOCK_REQUEST",
@@ -512,6 +607,7 @@ router.patch(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         message:
           cleanStatus === "approved"
             ? periodUnlocked

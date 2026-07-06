@@ -6,6 +6,29 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function nullableText(value) {
+  const text = cleanText(value);
+  return text || null;
+}
+
 function toNonNegativeNumber(value) {
   const number = Number(value);
 
@@ -26,34 +49,119 @@ function toPositiveInt(value) {
   return number;
 }
 
-async function logActivity(userId, action, details) {
+async function logActivity(userId, branchId, action, details) {
   await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
   );
+}
+
+async function getBranch(branchId) {
+  const [branches] = await pool.query(
+    `SELECT id, code, name, location
+     FROM branches
+     WHERE id = ?
+     LIMIT 1`,
+    [branchId]
+  );
+
+  return branches[0] || null;
+}
+
+async function createDefaultSettingsForBranch(branchId) {
+  const branch = await getBranch(branchId);
+
+  const branchName = branch?.name || "Chalin 03 Store";
+  const branchLocation = branch?.location || "Dunkwa Police Barrier";
+  const branchCode = branch?.code || "CHL";
+
+  const [result] = await pool.query(
+    `INSERT INTO settings (
+      branch_id,
+      branch_name,
+      business_name,
+      business_address,
+      business_phone,
+      owner_phone,
+      tax_rate,
+      debt_reminder_days,
+      daily_summary_time,
+      receipt_footer,
+      receipt_prefix
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      branchId,
+      branchName,
+      "Chalin 03 Company Limited",
+      branchLocation,
+      "0249469080 / 0249995510",
+      "0543421127",
+      0,
+      7,
+      "18:00:00",
+      "Thank You For Coming",
+      branchCode,
+    ]
+  );
+
+  return result.insertId;
+}
+
+async function getSettingsForBranch(branchId) {
+  let [settingsRows] = await pool.query(
+    `SELECT
+      s.*,
+      b.code AS branch_code,
+      b.name AS store_name,
+      b.location AS store_location
+     FROM settings s
+     LEFT JOIN branches b ON s.branch_id = b.id
+     WHERE s.branch_id = ?
+     ORDER BY s.id DESC
+     LIMIT 1`,
+    [branchId]
+  );
+
+  if (settingsRows.length === 0) {
+    await createDefaultSettingsForBranch(branchId);
+
+    [settingsRows] = await pool.query(
+      `SELECT
+        s.*,
+        b.code AS branch_code,
+        b.name AS store_name,
+        b.location AS store_location
+       FROM settings s
+       LEFT JOIN branches b ON s.branch_id = b.id
+       WHERE s.branch_id = ?
+       ORDER BY s.id DESC
+       LIMIT 1`,
+      [branchId]
+    );
+  }
+
+  return settingsRows[0] || null;
 }
 
 // GET /api/settings
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const [settingsRows] = await pool.query(
-      `SELECT *
-       FROM settings
-       ORDER BY id ASC
-       LIMIT 1`
-    );
+    const branchId = getBranchId(req);
+    const settings = await getSettingsForBranch(branchId);
 
-    if (settingsRows.length === 0) {
+    if (!settings) {
       return res.status(404).json({
         status: "error",
-        message: "Settings record not found.",
+        message: "Settings record not found for the selected store.",
       });
     }
 
     return res.json({
       status: "success",
-      settings: settingsRows[0],
+      branch_id: branchId,
+      settings,
     });
   } catch (error) {
     console.error("Get settings error:", error);
@@ -68,7 +176,10 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
 // PUT /api/settings
 router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const branchId = getBranchId(req);
+
     const {
+      branch_name,
       business_name,
       business_address,
       business_phone,
@@ -77,9 +188,13 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
       debt_reminder_days,
       daily_summary_time,
       receipt_footer,
+      receipt_prefix,
     } = req.body;
 
-    if (!business_name) {
+    const cleanBusinessName = cleanText(business_name);
+    const cleanBranchName = cleanText(branch_name);
+
+    if (!cleanBusinessName) {
       return res.status(400).json({
         status: "error",
         message: "Business name is required.",
@@ -103,77 +218,92 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    const [settingsRows] = await pool.query(
-      `SELECT id FROM settings ORDER BY id ASC LIMIT 1`
+    let [settingsRows] = await pool.query(
+      `SELECT id
+       FROM settings
+       WHERE branch_id = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [branchId]
     );
 
     if (settingsRows.length === 0) {
-      await pool.query(
-        `INSERT INTO settings (
-          business_name,
-          business_address,
-          business_phone,
-          owner_phone,
-          tax_rate,
-          debt_reminder_days,
-          daily_summary_time,
-          receipt_footer
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          business_name,
-          business_address || null,
-          business_phone || null,
-          owner_phone || null,
-          taxRate,
-          reminderDays,
-          daily_summary_time || "18:00:00",
-          receipt_footer || null,
-        ]
+      await createDefaultSettingsForBranch(branchId);
+
+      [settingsRows] = await pool.query(
+        `SELECT id
+         FROM settings
+         WHERE branch_id = ?
+         ORDER BY id DESC
+         LIMIT 1`,
+        [branchId]
       );
-    } else {
+    }
+
+    const settingsId = settingsRows[0].id;
+
+    await pool.query(
+      `UPDATE settings
+       SET branch_name = ?,
+           business_name = ?,
+           business_address = ?,
+           business_phone = ?,
+           owner_phone = ?,
+           tax_rate = ?,
+           debt_reminder_days = ?,
+           daily_summary_time = ?,
+           receipt_footer = ?,
+           receipt_prefix = ?
+       WHERE id = ?
+       AND branch_id = ?`,
+      [
+        cleanBranchName || null,
+        cleanBusinessName,
+        nullableText(business_address),
+        nullableText(business_phone),
+        nullableText(owner_phone),
+        taxRate,
+        reminderDays,
+        daily_summary_time || "18:00:00",
+        nullableText(receipt_footer),
+        nullableText(receipt_prefix),
+        settingsId,
+        branchId,
+      ]
+    );
+
+    /*
+      Keep the store name/address in the branches table close to the settings.
+      This helps the login store selector and receipt header stay consistent.
+    */
+    if (cleanBranchName || cleanText(business_address)) {
       await pool.query(
-        `UPDATE settings
-         SET business_name = ?,
-             business_address = ?,
-             business_phone = ?,
-             owner_phone = ?,
-             tax_rate = ?,
-             debt_reminder_days = ?,
-             daily_summary_time = ?,
-             receipt_footer = ?
+        `UPDATE branches
+         SET name = COALESCE(?, name),
+             location = COALESCE(?, location)
          WHERE id = ?`,
         [
-          business_name,
-          business_address || null,
-          business_phone || null,
-          owner_phone || null,
-          taxRate,
-          reminderDays,
-          daily_summary_time || "18:00:00",
-          receipt_footer || null,
-          settingsRows[0].id,
+          cleanBranchName || null,
+          nullableText(business_address),
+          branchId,
         ]
       );
     }
 
     await logActivity(
       req.user.id,
+      branchId,
       "UPDATE_SETTINGS",
-      "Updated system settings"
+      "Updated selected store settings"
     );
 
-    const [updatedSettings] = await pool.query(
-      `SELECT *
-       FROM settings
-       ORDER BY id ASC
-       LIMIT 1`
-    );
+    const updatedSettings = await getSettingsForBranch(branchId);
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       message: "Settings updated successfully.",
-      settings: updatedSettings[0],
+      settings: updatedSettings,
     });
   } catch (error) {
     console.error("Update settings error:", error);

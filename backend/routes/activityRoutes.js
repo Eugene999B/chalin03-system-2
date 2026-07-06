@@ -6,13 +6,36 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
 // GET /api/activity-log
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const { search, action, from, to } = req.query;
+    const branchId = getBranchId(req);
 
-    const params = [];
-    let whereClause = "WHERE 1 = 1";
+    const search = cleanText(req.query.search);
+    const action = cleanText(req.query.action);
+    const from = cleanText(req.query.from);
+    const to = cleanText(req.query.to);
+
+    const params = [branchId];
+    let whereClause = "WHERE al.branch_id = ?";
 
     if (search) {
       whereClause += ` AND (
@@ -20,10 +43,19 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         OR al.details LIKE ?
         OR u.full_name LIKE ?
         OR u.username LIKE ?
+        OR b.name LIKE ?
+        OR b.location LIKE ?
       )`;
 
       const searchValue = `%${search}%`;
-      params.push(searchValue, searchValue, searchValue, searchValue);
+      params.push(
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue
+      );
     }
 
     if (action) {
@@ -44,15 +76,19 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
     const [logs] = await pool.query(
       `SELECT
         al.id,
+        al.branch_id,
         al.user_id,
         al.action,
         al.details,
         al.created_at,
         u.full_name,
         u.username,
-        u.role
+        u.role,
+        b.name AS branch_name,
+        b.location AS branch_location
        FROM activity_log al
        LEFT JOIN users u ON al.user_id = u.id
+       LEFT JOIN branches b ON al.branch_id = b.id
        ${whereClause}
        ORDER BY al.created_at DESC
        LIMIT 300`,
@@ -62,9 +98,10 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
     const [summaryRows] = await pool.query(
       `SELECT
         COUNT(*) AS total_logs,
-        COUNT(DISTINCT user_id) AS active_users
+        COUNT(DISTINCT al.user_id) AS active_users
        FROM activity_log al
        LEFT JOIN users u ON al.user_id = u.id
+       LEFT JOIN branches b ON al.branch_id = b.id
        ${whereClause}`,
       params
     );
@@ -74,12 +111,15 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         action,
         COUNT(*) AS count
        FROM activity_log
+       WHERE branch_id = ?
        GROUP BY action
-       ORDER BY action ASC`
+       ORDER BY action ASC`,
+      [branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: logs.length,
       summary: {
         total_logs: Number(summaryRows[0].total_logs || 0),

@@ -16,6 +16,33 @@ function toNumber(value) {
   return Number(value || 0);
 }
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 0);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return null;
+  }
+
+  return branchId;
+}
+
+function getBranchInfo(req) {
+  return {
+    id: getBranchId(req),
+    branch_code: req.user?.branch_code || null,
+    name: req.user?.branch_name || null,
+    location: req.user?.branch_location || null,
+  };
+}
+
+function sendMissingBranchResponse(res) {
+  return res.status(400).json({
+    status: "error",
+    message:
+      "No store was selected for this session. Please logout, choose a store, and login again.",
+  });
+}
+
 // GET /api/customer-statements/search?query=ama
 router.get(
   "/search",
@@ -23,11 +50,18 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
+      if (!branchId) {
+        return sendMissingBranchResponse(res);
+      }
+
       const query = cleanSearch(req.query.query);
 
       if (!query) {
         return res.json({
           status: "success",
+          branch: getBranchInfo(req),
           count: 0,
           customers: [],
         });
@@ -53,16 +87,20 @@ router.get(
             ELSE 0
           END) AS sales_balance
          FROM sales
-         WHERE customer_name LIKE ?
-         OR customer_phone LIKE ?
+         WHERE branch_id = ?
+         AND (
+          customer_name LIKE ?
+          OR customer_phone LIKE ?
+         )
          GROUP BY customer_name, customer_phone
          ORDER BY customer_name ASC
          LIMIT 30`,
-        [searchValue, searchValue]
+        [branchId, searchValue, searchValue]
       );
 
       return res.json({
         status: "success",
+        branch: getBranchInfo(req),
         count: customers.length,
         customers,
       });
@@ -84,6 +122,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
+      if (!branchId) {
+        return sendMissingBranchResponse(res);
+      }
+
       const phone = cleanSearch(req.query.phone);
       const name = cleanSearch(req.query.name);
 
@@ -95,7 +139,7 @@ router.get(
       }
 
       const conditions = [];
-      const params = [];
+      const params = [branchId];
 
       if (phone) {
         conditions.push("s.customer_phone = ?");
@@ -112,6 +156,7 @@ router.get(
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.customer_name,
           s.customer_phone,
@@ -128,7 +173,8 @@ router.get(
           u.full_name AS staff_name
          FROM sales s
          LEFT JOIN users u ON s.staff_id = u.id
-         WHERE ${whereCustomer}
+         WHERE s.branch_id = ?
+         AND (${whereCustomer})
          ORDER BY s.created_at DESC`,
         params
       );
@@ -144,6 +190,7 @@ router.get(
         const [debtRows] = await pool.query(
           `SELECT
             d.id,
+            d.branch_id,
             d.sale_id,
             d.customer_name,
             d.customer_phone,
@@ -155,10 +202,13 @@ router.get(
             d.created_at,
             s.receipt_number
            FROM debts d
-           INNER JOIN sales s ON d.sale_id = s.id
-           WHERE d.sale_id IN (${placeholders})
+           INNER JOIN sales s
+            ON d.sale_id = s.id
+            AND s.branch_id = d.branch_id
+           WHERE d.branch_id = ?
+           AND d.sale_id IN (${placeholders})
            ORDER BY d.created_at DESC`,
-          saleIds
+          [branchId, ...saleIds]
         );
 
         debts = debtRows;
@@ -171,6 +221,7 @@ router.get(
           const [paymentRows] = await pool.query(
             `SELECT
               dp.id,
+              dp.branch_id,
               dp.debt_id,
               dp.amount,
               dp.payment_method,
@@ -181,12 +232,17 @@ router.get(
               s.receipt_number,
               u.full_name AS received_by_name
              FROM debt_payments dp
-             INNER JOIN debts d ON dp.debt_id = d.id
-             INNER JOIN sales s ON d.sale_id = s.id
+             INNER JOIN debts d
+              ON dp.debt_id = d.id
+              AND d.branch_id = dp.branch_id
+             INNER JOIN sales s
+              ON d.sale_id = s.id
+              AND s.branch_id = d.branch_id
              LEFT JOIN users u ON dp.received_by = u.id
-             WHERE dp.debt_id IN (${debtPlaceholders})
+             WHERE dp.branch_id = ?
+             AND dp.debt_id IN (${debtPlaceholders})
              ORDER BY dp.paid_at DESC, dp.id DESC`,
-            debtIds
+            [branchId, ...debtIds]
           );
 
           debtPayments = paymentRows;
@@ -226,6 +282,7 @@ router.get(
 
       return res.json({
         status: "success",
+        branch: getBranchInfo(req),
         customer: {
           name: customerName,
           phone: customerPhone,
