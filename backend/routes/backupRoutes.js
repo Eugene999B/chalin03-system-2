@@ -3,6 +3,11 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  buildOwnerAlertContext,
+  formatSecurityDateTime,
+  sendOwnerSmsAlert,
+} = require("../services/smsAlertService");
 
 const router = express.Router();
 
@@ -157,7 +162,10 @@ async function getExistingTables(connection) {
 }
 
 async function getTableColumns(connection, tableName) {
-  const [columns] = await connection.query(`SHOW COLUMNS FROM ${safeTableName(tableName)}`);
+  const [columns] = await connection.query(
+    `SHOW COLUMNS FROM ${safeTableName(tableName)}`
+  );
+
   return columns.map((column) => column.Field);
 }
 
@@ -236,6 +244,72 @@ async function safeInsertRestoreActivity(connection, branchId, backupCreatedAt) 
   }
 }
 
+async function safeInsertBackupActivity({
+  connection,
+  branchId,
+  userId,
+  backupCreatedAt,
+  tableCount,
+  skippedTableCount,
+}) {
+  try {
+    if (!(await tableExists(connection, "activity_log"))) {
+      return;
+    }
+
+    const columns = await getTableColumns(connection, "activity_log");
+    const columnSet = new Set(columns);
+
+    const details = `Created full system backup at ${backupCreatedAt}. Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}.`;
+
+    if (columnSet.has("branch_id")) {
+      await connection.query(
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
+        [branchId || 1, userId || null, "CREATE_BACKUP", details]
+      );
+
+      return;
+    }
+
+    await connection.query(
+      `INSERT INTO activity_log (user_id, action, details)
+       VALUES (?, ?, ?)`,
+      [userId || null, "CREATE_BACKUP", details]
+    );
+  } catch (error) {
+    console.warn("Could not write backup activity log:", error.message);
+  }
+}
+
+async function sendBackupCreatedSecuritySmsAlert({
+  branchId,
+  createdByUser,
+  backupCreatedAt,
+  tableCount,
+  skippedTableCount,
+}) {
+  try {
+    const { businessName, branch } = await buildOwnerAlertContext(branchId);
+
+    const createdBy =
+      createdByUser?.full_name || createdByUser?.username || "Admin";
+
+    const message = `${businessName}: Security alert. Full system backup created/downloaded for ${branch.name} (${branch.code}). Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}. Created by ${createdBy} on ${formatSecurityDateTime(
+      backupCreatedAt
+    )}. Keep backup file private.`;
+
+    await sendOwnerSmsAlert({
+      branchId,
+      message,
+      smsType: "security_alert",
+      sentBy: createdByUser?.id || null,
+    });
+  } catch (error) {
+    console.warn("Backup created SMS alert skipped:", error.message);
+  }
+}
+
 // GET /api/backups/download
 router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
@@ -243,23 +317,45 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     const branchId = getBranchId(req);
     const existingTables = await getExistingTables(connection);
+    const skippedTables = TABLES.filter(
+      (tableName) => !existingTables.includes(tableName)
+    );
+    const backupCreatedAt = new Date().toISOString();
+
+    await safeInsertBackupActivity({
+      connection,
+      branchId,
+      userId: req.user?.id || null,
+      backupCreatedAt,
+      tableCount: existingTables.length,
+      skippedTableCount: skippedTables.length,
+    });
+
+    await sendBackupCreatedSecuritySmsAlert({
+      branchId,
+      createdByUser: req.user,
+      backupCreatedAt,
+      tableCount: existingTables.length,
+      skippedTableCount: skippedTables.length,
+    });
 
     const backup = {
       app: "Chalin 03 Sales & Inventory Management System",
       version: "multi-store",
       backup_type: "full_system_backup",
       selected_branch_id_when_created: branchId,
-      created_at: new Date().toISOString(),
+      created_at: backupCreatedAt,
       warning:
         "This backup contains all stores, business records, users, access records, and password hashes. Keep it private.",
       tables: {},
-      skipped_tables: TABLES.filter((tableName) => !existingTables.includes(tableName)),
+      skipped_tables: skippedTables,
     };
 
     for (const tableName of existingTables) {
       const [rows] = await connection.query(
         `SELECT * FROM ${safeTableName(tableName)}`
       );
+
       backup.tables[tableName] = rows;
     }
 
