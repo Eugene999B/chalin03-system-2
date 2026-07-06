@@ -9,6 +9,8 @@ const {
 
 const router = express.Router();
 
+const LIVE_BULK_CONFIRMATION_TEXT = "SEND LIVE BULK SMS";
+
 /**
  * This project database config may expose execute(), query(), pool.execute(),
  * pool.query(), connection.execute(), or promise().execute().
@@ -424,6 +426,7 @@ router.get(
         arkesel_ready: arkeselReady,
         hubtel_ready: hubtelReady,
         supported_providers: ["mock", "arkesel", "hubtel"],
+        live_bulk_confirmation_text: LIVE_BULK_CONFIRMATION_TEXT,
       },
     });
   })
@@ -1306,6 +1309,19 @@ router.post(
     const customerIds = cleanCustomerIds(req.body.customer_ids);
     const manualPhone = String(req.body.phone || "").trim();
 
+    const config = getSmsConfig();
+    const isLiveSmsMode =
+      Boolean(config.enabled) &&
+      String(config.provider || "mock").toLowerCase() !== "mock";
+
+    const confirmLiveBulk =
+      req.body.confirm_live_bulk === true ||
+      String(req.body.confirm_live_bulk || "").toLowerCase() === "true";
+
+    const confirmText = String(req.body.confirm_text || "")
+      .trim()
+      .toUpperCase();
+
     if (!message) {
       return res.status(400).json({
         status: "error",
@@ -1318,6 +1334,17 @@ router.post(
         status: "error",
         message: "SMS message is too long. Keep it under 480 characters.",
       });
+    }
+
+    if (targetType === "all" && isLiveSmsMode) {
+      if (!confirmLiveBulk || confirmText !== LIVE_BULK_CONFIRMATION_TEXT) {
+        return res.status(400).json({
+          status: "error",
+          message: `Live bulk SMS is locked for safety. Tick the confirmation box and type ${LIVE_BULK_CONFIRMATION_TEXT} before sending to all customers.`,
+          requires_confirmation: true,
+          confirmation_text: LIVE_BULK_CONFIRMATION_TEXT,
+        });
+      }
     }
 
     let recipients = [];

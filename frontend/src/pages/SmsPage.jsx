@@ -34,6 +34,9 @@ export default function SmsPage() {
     "CHALIN03 test SMS. Your SMS setup is working."
   );
 
+  const [liveBulkConfirmed, setLiveBulkConfirmed] = useState(false);
+  const [liveBulkConfirmText, setLiveBulkConfirmText] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
@@ -59,6 +62,18 @@ export default function SmsPage() {
   }, [customers, customerSearch]);
 
   const selectedCount = selectedCustomerIds.length;
+
+  const liveBulkConfirmationText = String(
+    smsStatus?.live_bulk_confirmation_text || "SEND LIVE BULK SMS"
+  ).toUpperCase();
+
+  const isLiveBulkSms =
+    targetType === "all" && Boolean(smsStatus?.live_sending);
+
+  const liveBulkSendLocked =
+    isLiveBulkSms &&
+    (!liveBulkConfirmed ||
+      liveBulkConfirmText.trim().toUpperCase() !== liveBulkConfirmationText);
 
   const statusStyle = useMemo(() => {
     const safetyLevel = smsStatus?.safety_level || "safe";
@@ -161,6 +176,11 @@ export default function SmsPage() {
     setSelectedCustomerIds([]);
   }
 
+  function resetLiveBulkConfirmation() {
+    setLiveBulkConfirmed(false);
+    setLiveBulkConfirmText("");
+  }
+
   async function sendTestSms() {
     setSendingTest(true);
     setError("");
@@ -218,12 +238,15 @@ export default function SmsPage() {
         customer_ids: selectedCustomerIds,
         message,
         sms_type: "other",
+        confirm_live_bulk: liveBulkConfirmed,
+        confirm_text: liveBulkConfirmText,
       });
 
       setNotice(response.data.message || "SMS sending completed.");
       setManualPhone("");
       setMessage("");
       setSelectedCustomerIds([]);
+      resetLiveBulkConfirmation();
 
       await loadSmsPageData({ silent: true });
     } catch (error) {
@@ -335,6 +358,7 @@ export default function SmsPage() {
                 setTargetType(event.target.value);
                 setError("");
                 setNotice("");
+                resetLiveBulkConfirmation();
               }}
             >
               <option value="single">One phone number</option>
@@ -450,6 +474,61 @@ export default function SmsPage() {
               </div>
             )}
 
+            {isLiveBulkSms && (
+              <div
+                style={{
+                  marginTop: "12px",
+                  marginBottom: "12px",
+                  padding: "14px",
+                  borderRadius: "12px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  color: "#991b1b",
+                  fontWeight: "800",
+                }}
+              >
+                <p style={{ marginTop: 0 }}>
+                  Live bulk SMS safety lock is active. This will spend real SMS
+                  credit.
+                </p>
+
+                <label
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr",
+                    gap: "10px",
+                    alignItems: "start",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={liveBulkConfirmed}
+                    onChange={(event) =>
+                      setLiveBulkConfirmed(event.target.checked)
+                    }
+                  />
+                  <span>
+                    I understand this will send a real SMS to all customers in
+                    this store.
+                  </span>
+                </label>
+
+                <label>Type this confirmation text:</label>
+                <p>
+                  <strong>{liveBulkConfirmationText}</strong>
+                </p>
+
+                <input
+                  value={liveBulkConfirmText}
+                  onChange={(event) =>
+                    setLiveBulkConfirmText(event.target.value)
+                  }
+                  placeholder={liveBulkConfirmationText}
+                />
+              </div>
+            )}
+
             <label>Message</label>
             <textarea
               value={message}
@@ -463,8 +542,12 @@ export default function SmsPage() {
               Characters: <strong>{message.length}</strong> / 480
             </p>
 
-            <button type="submit" disabled={sending}>
-              {sending ? "Sending..." : "Send SMS"}
+            <button type="submit" disabled={sending || liveBulkSendLocked}>
+              {sending
+                ? "Sending..."
+                : liveBulkSendLocked
+                ? "Confirm Live Bulk SMS First"
+                : "Send SMS"}
             </button>
           </form>
 
