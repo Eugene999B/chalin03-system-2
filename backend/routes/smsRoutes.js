@@ -1488,4 +1488,90 @@ router.post(
   })
 );
 
+router.post(
+  "/retry/:logId",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+    const logId = Number(req.params.logId);
+
+    if (!Number.isInteger(logId) || logId <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid SMS log ID.",
+      });
+    }
+
+    const [logs] = await runQuery(
+      `
+        SELECT
+          id,
+          branch_id,
+          recipient_phone,
+          message,
+          sms_type,
+          status,
+          created_at
+        FROM sms_log
+        WHERE id = ?
+          AND branch_id = ?
+        LIMIT 1
+      `,
+      [logId, branchId]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "SMS log not found in the selected branch.",
+      });
+    }
+
+    const originalLog = logs[0];
+
+    if (String(originalLog.status || "").toLowerCase() !== "failed") {
+      return res.status(400).json({
+        status: "error",
+        message: "Only failed SMS messages can be retried.",
+      });
+    }
+
+    if (!originalLog.recipient_phone) {
+      return res.status(400).json({
+        status: "error",
+        message: "This SMS log has no phone number to retry.",
+      });
+    }
+
+    if (!originalLog.message) {
+      return res.status(400).json({
+        status: "error",
+        message: "This SMS log has no message to retry.",
+      });
+    }
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: originalLog.recipient_phone,
+      message: originalLog.message,
+      smsType: originalLog.sms_type || "other",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "SMS retry sent successfully."
+          : result.message || "SMS retry failed.",
+      original_log_id: originalLog.id,
+      result,
+    });
+  })
+);
+
 module.exports = router;

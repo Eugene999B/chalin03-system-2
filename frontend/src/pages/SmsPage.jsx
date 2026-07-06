@@ -72,6 +72,7 @@ export default function SmsPage() {
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [sendingDailySummary, setSendingDailySummary] = useState(false);
+  const [retryingLogId, setRetryingLogId] = useState(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -293,6 +294,32 @@ export default function SmsPage() {
     setMessage(templateMessage);
     setError("");
     setNotice("");
+  }
+
+  async function retrySmsLog(logId) {
+    const cleanLogId = Number(logId);
+
+    if (!Number.isInteger(cleanLogId) || cleanLogId <= 0) {
+      setError("Invalid SMS log selected for retry.");
+      setNotice("");
+      return;
+    }
+
+    setRetryingLogId(cleanLogId);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post(`/sms/retry/${cleanLogId}`);
+
+      setNotice(response.data.message || "SMS retry sent successfully.");
+
+      await loadSmsPageData({ silent: true });
+    } catch (error) {
+      setError(getFriendlyError(error, "Failed to retry SMS."));
+    } finally {
+      setRetryingLogId(null);
+    }
   }
 
   async function sendTestSms() {
@@ -848,22 +875,44 @@ export default function SmsPage() {
                 <th>Status</th>
                 <th>Message</th>
                 <th>Sent By</th>
+                <th>Action</th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredLogs.map((log) => (
-                <tr key={log.id}>
-                  <td>{formatDateTime(log.created_at)}</td>
-                  <td>{log.recipient_phone}</td>
-                  <td>{log.sms_type}</td>
-                  <td>
-                    <strong>{log.status}</strong>
-                  </td>
-                  <td>{log.message}</td>
-                  <td>{log.sent_by_name || log.sent_by_username || "-"}</td>
-                </tr>
-              ))}
+              {filteredLogs.map((log) => {
+                const isFailedSms =
+                  String(log.status || "").toLowerCase() === "failed";
+
+                return (
+                  <tr key={log.id}>
+                    <td>{formatDateTime(log.created_at)}</td>
+                    <td>{log.recipient_phone}</td>
+                    <td>{log.sms_type}</td>
+                    <td>
+                      <strong>{log.status}</strong>
+                    </td>
+                    <td>{log.message}</td>
+                    <td>{log.sent_by_name || log.sent_by_username || "-"}</td>
+                    <td>
+                      {isFailedSms ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => retrySmsLog(log.id)}
+                          disabled={retryingLogId === Number(log.id)}
+                        >
+                          {retryingLogId === Number(log.id)
+                            ? "Retrying..."
+                            : "Retry"}
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
