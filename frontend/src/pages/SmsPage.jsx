@@ -166,6 +166,64 @@ export default function SmsPage() {
     return error?.response?.data?.message || error?.message || fallback;
   }
 
+  function escapeCsvValue(value) {
+    const cleanValue = String(value ?? "").replace(/\r?\n|\r/g, " ");
+    return `"${cleanValue.replace(/"/g, '""')}"`;
+  }
+
+  function downloadSmsCsv() {
+    if (filteredLogs.length === 0) {
+      setError("No SMS records available to export with the selected filters.");
+      setNotice("");
+      return;
+    }
+
+    const headers = [
+      "Date",
+      "Branch Code",
+      "Branch Name",
+      "Phone",
+      "Type",
+      "Status",
+      "Message",
+      "Sent By",
+    ];
+
+    const rows = filteredLogs.map((log) => [
+      formatDateTime(log.created_at),
+      log.branch_code || currentBranchCode,
+      log.branch_name || currentBranchName,
+      log.recipient_phone || "",
+      log.sms_type || "",
+      log.status || "",
+      log.message || "",
+      log.sent_by_name || log.sent_by_username || "",
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const today = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = `chalin03-sms-history-${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+
+    setNotice("SMS history CSV exported successfully.");
+    setError("");
+  }
+
   async function loadSmsPageData(options = {}) {
     const silent = Boolean(options.silent);
 
@@ -756,6 +814,17 @@ export default function SmsPage() {
               onClick={resetLogFilters}
             >
               Clear Filters
+            </button>
+          </div>
+
+          <div>
+            <label>&nbsp;</label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={downloadSmsCsv}
+            >
+              Export CSV
             </button>
           </div>
         </div>
