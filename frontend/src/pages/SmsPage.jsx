@@ -29,8 +29,14 @@ export default function SmsPage() {
   const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
   const [message, setMessage] = useState("");
 
+  const [testPhone, setTestPhone] = useState("");
+  const [testMessage, setTestMessage] = useState(
+    "CHALIN03 test SMS. Your SMS setup is working."
+  );
+
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
   const [sendingDailySummary, setSendingDailySummary] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -103,9 +109,8 @@ export default function SmsPage() {
   async function loadSmsPageData(options = {}) {
     const silent = Boolean(options.silent);
 
-    setLoading(true);
-
     if (!silent) {
+      setLoading(true);
       setError("");
       setNotice("");
     }
@@ -124,7 +129,9 @@ export default function SmsPage() {
     } catch (error) {
       setError(getFriendlyError(error, "Failed to load SMS page."));
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
 
@@ -152,6 +159,31 @@ export default function SmsPage() {
 
   function clearSelectedCustomers() {
     setSelectedCustomerIds([]);
+  }
+
+  async function sendTestSms() {
+    setSendingTest(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post("/sms/test", {
+        phone: testPhone,
+        message: testMessage,
+      });
+
+      setNotice(
+        response.data?.result?.message ||
+          response.data?.message ||
+          "Test SMS sent successfully."
+      );
+
+      await loadSmsPageData({ silent: true });
+    } catch (error) {
+      setError(getFriendlyError(error, "Failed to send test SMS."));
+    } finally {
+      setSendingTest(false);
+    }
   }
 
   async function sendDailySummarySms() {
@@ -449,6 +481,40 @@ export default function SmsPage() {
               Start in mock mode first. After testing, switch the backend to
               Arkesel live mode only when the boss approves SMS spending.
             </div>
+
+            <h3>Test SMS Provider</h3>
+            <p>
+              Use this first before sending SMS to customers. In mock mode, no
+              real SMS credit is used.
+            </p>
+
+            <label>Test Phone Number</label>
+            <input
+              value={testPhone}
+              onChange={(event) => setTestPhone(event.target.value)}
+              placeholder="Example: 0240000000"
+            />
+
+            <label>Test Message</label>
+            <textarea
+              value={testMessage}
+              onChange={(event) => setTestMessage(event.target.value)}
+              rows="4"
+              maxLength="480"
+            />
+
+            <p>
+              Characters: <strong>{testMessage.length}</strong> / 480
+            </p>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={sendTestSms}
+              disabled={sendingTest}
+            >
+              {sendingTest ? "Sending Test..." : "Send Test SMS"}
+            </button>
 
             <h3>Boss Daily Summary</h3>
             <p>
