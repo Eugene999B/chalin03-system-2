@@ -1,16 +1,45 @@
 -- CHALIN 03 SALES & INVENTORY MANAGEMENT SYSTEM
--- Database Schema
+-- Version 2 Multi-Store Database Schema
+-- Prepared for: Chalin 03 Company Limited
+-- Store 1: Chalin 03 Main Store - Dunkwa Police Barrier
+-- Store 2: Chalin 03 Store - Ajakaa Manso
+--
 -- WARNING:
 -- This file recreates the database from scratch.
 -- It will delete all existing data in chalin03_db.
 -- Only run the full file when you intentionally want to reset the database.
+--
+-- Default login after fresh import:
+-- Username: admin
+-- Password: admin123
+-- Change this password immediately after first login.
 
 DROP DATABASE IF EXISTS chalin03_db;
 CREATE DATABASE chalin03_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE chalin03_db;
 
 -- =========================
--- 1. USERS TABLE
+-- 1. BRANCHES / STORES TABLE
+-- =========================
+CREATE TABLE branches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_code VARCHAR(30) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    location VARCHAR(255),
+    phone VARCHAR(50),
+    manager_name VARCHAR(150),
+    is_head_office BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_branch_code (branch_code),
+    INDEX idx_branch_name (name),
+    INDEX idx_branch_active (is_active)
+);
+
+-- =========================
+-- 2. USERS TABLE
 -- =========================
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -19,19 +48,45 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin', 'manager', 'cashier') NOT NULL DEFAULT 'cashier',
     phone VARCHAR(30),
+    default_branch_id INT NULL,
+    can_access_all_branches BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (default_branch_id) REFERENCES branches(id) ON DELETE SET NULL,
+
     INDEX idx_user_role (role),
-    INDEX idx_user_active (is_active)
+    INDEX idx_user_active (is_active),
+    INDEX idx_user_default_branch (default_branch_id),
+    INDEX idx_user_all_branches (can_access_all_branches)
 );
 
 -- =========================
--- 2. PRODUCTS TABLE
+-- 3. USER BRANCH ACCESS TABLE
+-- =========================
+CREATE TABLE user_branch_access (
+    user_id INT NOT NULL,
+    branch_id INT NOT NULL,
+    access_role ENUM('admin', 'manager', 'cashier') NULL,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (user_id, branch_id),
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+
+    INDEX idx_user_branch_access_branch (branch_id),
+    INDEX idx_user_branch_access_primary (is_primary)
+);
+
+-- =========================
+-- 4. PRODUCTS TABLE
 -- =========================
 CREATE TABLE products (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     name VARCHAR(150) NOT NULL,
     size VARCHAR(80),
     category VARCHAR(100),
@@ -39,15 +94,18 @@ CREATE TABLE products (
     selling_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     quantity INT NOT NULL DEFAULT 0,
     low_stock_threshold INT NOT NULL DEFAULT 5,
-    barcode VARCHAR(100) UNIQUE,
+    barcode VARCHAR(100),
     image_url TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    UNIQUE KEY unique_product_branch_barcode (branch_id, barcode),
+    INDEX idx_product_branch (branch_id),
     INDEX idx_product_name (name),
     INDEX idx_product_category (category),
     INDEX idx_product_barcode (barcode),
@@ -56,10 +114,11 @@ CREATE TABLE products (
 );
 
 -- =========================
--- 3. STOCK ADJUSTMENTS TABLE
+-- 5. STOCK ADJUSTMENTS TABLE
 -- =========================
 CREATE TABLE stock_adjustments (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     product_id INT NOT NULL,
     adjustment_type ENUM('increase', 'decrease', 'set') NOT NULL,
     quantity INT NOT NULL,
@@ -69,9 +128,11 @@ CREATE TABLE stock_adjustments (
     adjusted_by INT,
     adjusted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     FOREIGN KEY (adjusted_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_stock_adjustment_branch (branch_id),
     INDEX idx_stock_adjustment_product (product_id),
     INDEX idx_stock_adjustment_type (adjustment_type),
     INDEX idx_stock_adjustment_date (adjusted_at),
@@ -79,10 +140,11 @@ CREATE TABLE stock_adjustments (
 );
 
 -- =========================
--- 4. SUPPLIERS TABLE
+-- 6. SUPPLIERS TABLE
 -- =========================
 CREATE TABLE suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     name VARCHAR(150) NOT NULL,
     contact_person VARCHAR(150),
     phone VARCHAR(30),
@@ -93,16 +155,20 @@ CREATE TABLE suppliers (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+
+    INDEX idx_supplier_branch (branch_id),
     INDEX idx_supplier_name (name),
     INDEX idx_supplier_phone (phone),
     INDEX idx_supplier_active (is_active)
 );
 
 -- =========================
--- 5. PURCHASES TABLE
+-- 7. PURCHASES TABLE
 -- =========================
 CREATE TABLE purchases (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     supplier_id INT,
     invoice_number VARCHAR(100),
     purchase_date DATE NOT NULL,
@@ -115,9 +181,11 @@ CREATE TABLE purchases (
     created_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_purchase_branch (branch_id),
     INDEX idx_purchase_supplier (supplier_id),
     INDEX idx_purchase_date (purchase_date),
     INDEX idx_purchase_invoice (invoice_number),
@@ -125,7 +193,7 @@ CREATE TABLE purchases (
 );
 
 -- =========================
--- 6. PURCHASE ITEMS TABLE
+-- 8. PURCHASE ITEMS TABLE
 -- =========================
 CREATE TABLE purchase_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -144,10 +212,11 @@ CREATE TABLE purchase_items (
 );
 
 -- =========================
--- 7. PURCHASE PAYMENTS TABLE
+-- 9. PURCHASE PAYMENTS TABLE
 -- =========================
 CREATE TABLE purchase_payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     purchase_id INT NOT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     payment_method ENUM('cash', 'momo', 'bank', 'mixed', 'other') NOT NULL DEFAULT 'cash',
@@ -155,9 +224,11 @@ CREATE TABLE purchase_payments (
     paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     notes TEXT,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
     FOREIGN KEY (paid_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_purchase_payment_branch (branch_id),
     INDEX idx_purchase_payment_purchase (purchase_id),
     INDEX idx_purchase_payment_date (paid_at),
     INDEX idx_purchase_payment_method (payment_method),
@@ -165,25 +236,30 @@ CREATE TABLE purchase_payments (
 );
 
 -- =========================
--- 8. CUSTOMERS TABLE
+-- 10. CUSTOMERS TABLE
 -- =========================
 CREATE TABLE customers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     name VARCHAR(150) NOT NULL,
     phone VARCHAR(30),
     location VARCHAR(150),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+
+    INDEX idx_customer_branch (branch_id),
     INDEX idx_customer_name (name),
     INDEX idx_customer_phone (phone)
 );
 
 -- =========================
--- 9. SALES TABLE
+-- 11. SALES TABLE
 -- =========================
 CREATE TABLE sales (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     receipt_number VARCHAR(50) NOT NULL UNIQUE,
     customer_id INT,
     customer_name VARCHAR(150),
@@ -208,10 +284,12 @@ CREATE TABLE sales (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (voided_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_sale_branch (branch_id),
     INDEX idx_receipt_number (receipt_number),
     INDEX idx_sale_customer (customer_id),
     INDEX idx_sale_staff (staff_id),
@@ -222,7 +300,7 @@ CREATE TABLE sales (
 );
 
 -- =========================
--- 10. SALE ITEMS TABLE
+-- 12. SALE ITEMS TABLE
 -- =========================
 CREATE TABLE sale_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -242,10 +320,11 @@ CREATE TABLE sale_items (
 );
 
 -- =========================
--- 11. DEBTS TABLE
+-- 13. DEBTS TABLE
 -- =========================
 CREATE TABLE debts (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     sale_id INT NOT NULL,
     customer_id INT,
     customer_name VARCHAR(150) NOT NULL,
@@ -258,9 +337,11 @@ CREATE TABLE debts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
 
+    INDEX idx_debt_branch (branch_id),
     INDEX idx_debt_sale (sale_id),
     INDEX idx_debt_customer (customer_id),
     INDEX idx_debt_status (status),
@@ -269,10 +350,11 @@ CREATE TABLE debts (
 );
 
 -- =========================
--- 12. DEBT PAYMENTS TABLE
+-- 14. DEBT PAYMENTS TABLE
 -- =========================
 CREATE TABLE debt_payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     debt_id INT NOT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     payment_method ENUM('cash', 'momo', 'bank') NOT NULL DEFAULT 'cash',
@@ -280,9 +362,11 @@ CREATE TABLE debt_payments (
     paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     notes TEXT,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
     FOREIGN KEY (received_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_debt_payment_branch (branch_id),
     INDEX idx_debt_payment_debt (debt_id),
     INDEX idx_debt_payment_date (paid_at),
     INDEX idx_debt_payment_method (payment_method),
@@ -290,10 +374,11 @@ CREATE TABLE debt_payments (
 );
 
 -- =========================
--- 13. RETURNS TABLE
+-- 15. RETURNS TABLE
 -- =========================
 CREATE TABLE returns (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     sale_id INT NOT NULL,
     product_id INT NOT NULL,
     quantity INT NOT NULL,
@@ -301,10 +386,12 @@ CREATE TABLE returns (
     returned_by INT,
     returned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
     FOREIGN KEY (returned_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_returns_branch (branch_id),
     INDEX idx_returns_sale (sale_id),
     INDEX idx_returns_product (product_id),
     INDEX idx_returns_date (returned_at),
@@ -312,10 +399,11 @@ CREATE TABLE returns (
 );
 
 -- =========================
--- 14. EXPENSES TABLE
+-- 16. EXPENSES TABLE
 -- =========================
 CREATE TABLE expenses (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     category VARCHAR(100) NOT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     description TEXT,
@@ -323,18 +411,21 @@ CREATE TABLE expenses (
     recorded_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_expense_branch (branch_id),
     INDEX idx_expense_date (expense_date),
     INDEX idx_expense_category (category),
     INDEX idx_expense_user (recorded_by)
 );
 
 -- =========================
--- 15. SMS LOG TABLE
+-- 17. SMS LOG TABLE
 -- =========================
 CREATE TABLE sms_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NULL,
     recipient_phone VARCHAR(30) NOT NULL,
     message TEXT NOT NULL,
     sms_type ENUM(
@@ -347,55 +438,73 @@ CREATE TABLE sms_log (
     ) NOT NULL DEFAULT 'other',
     status ENUM('pending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
     provider_response TEXT,
+    sent_by INT NULL,
     sent_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
+    FOREIGN KEY (sent_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_sms_branch (branch_id),
     INDEX idx_sms_type (sms_type),
     INDEX idx_sms_status (status),
+    INDEX idx_sms_sent_by (sent_by),
     INDEX idx_sms_created_at (created_at)
 );
 
 -- =========================
--- 16. ACTIVITY LOG TABLE
+-- 18. ACTIVITY LOG TABLE
 -- =========================
 CREATE TABLE activity_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NULL,
     user_id INT,
     action VARCHAR(150) NOT NULL,
     details TEXT,
     ip_address VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_activity_branch (branch_id),
     INDEX idx_activity_action (action),
     INDEX idx_activity_date (created_at),
     INDEX idx_activity_user (user_id)
 );
 
 -- =========================
--- 17. SETTINGS TABLE
+-- 19. SETTINGS TABLE
 -- =========================
 CREATE TABLE settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
     business_name VARCHAR(150) NOT NULL DEFAULT 'Chalin 03 Company Limited',
+    branch_name VARCHAR(150) NOT NULL DEFAULT 'Chalin 03 Main Store',
     business_address VARCHAR(255) DEFAULT 'Dunkwa Police Barrier',
     business_phone VARCHAR(50) DEFAULT '0249469080 / 0249995510',
     owner_phone VARCHAR(50) DEFAULT '0543421127',
+    receipt_prefix VARCHAR(20) DEFAULT 'CHL-MAIN',
     tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
     debt_reminder_days INT NOT NULL DEFAULT 7,
     daily_summary_time TIME DEFAULT '18:00:00',
     receipt_footer VARCHAR(255) DEFAULT 'Thank You For Coming',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+
+    UNIQUE KEY unique_settings_branch (branch_id),
+    INDEX idx_settings_branch (branch_id)
 );
 
 -- =========================
--- 18. DAILY CLOSINGS TABLE
+-- 20. DAILY CLOSINGS TABLE
 -- =========================
 CREATE TABLE daily_closings (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    closing_date DATE NOT NULL UNIQUE,
+    branch_id INT NOT NULL DEFAULT 1,
+    closing_date DATE NOT NULL,
 
     sales_count INT NOT NULL DEFAULT 0,
     sales_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -435,17 +544,21 @@ CREATE TABLE daily_closings (
     closed_by INT,
     closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    UNIQUE KEY unique_daily_closing_branch_date (branch_id, closing_date),
+    INDEX idx_daily_closing_branch (branch_id),
     INDEX idx_daily_closing_date (closing_date),
     INDEX idx_daily_closing_user (closed_by)
 );
 
 -- =========================
--- 19. AUDIT SIGN-OFFS TABLE
+-- 21. AUDIT SIGN-OFFS TABLE
 -- =========================
 CREATE TABLE audit_signoffs (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
 
     period_type ENUM('all', 'today', 'week', 'month', 'year', 'custom') NOT NULL DEFAULT 'month',
     period_label VARCHAR(255) NOT NULL,
@@ -478,9 +591,11 @@ CREATE TABLE audit_signoffs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
 
+    INDEX idx_audit_signoff_branch (branch_id),
     INDEX idx_audit_signoff_period_type (period_type),
     INDEX idx_audit_signoff_period_dates (period_start, period_end),
     INDEX idx_audit_signoff_status (period_status),
@@ -489,12 +604,12 @@ CREATE TABLE audit_signoffs (
     INDEX idx_audit_signoff_created_at (created_at)
 );
 
-
 -- =========================
--- 20. AUDIT UNLOCK REQUESTS TABLE
+-- 22. AUDIT UNLOCK REQUESTS TABLE
 -- =========================
 CREATE TABLE audit_unlock_requests (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
 
     audit_signoff_id INT NULL,
 
@@ -526,6 +641,10 @@ CREATE TABLE audit_unlock_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    CONSTRAINT fk_audit_unlock_branch
+        FOREIGN KEY (branch_id) REFERENCES branches(id)
+        ON DELETE CASCADE,
+
     CONSTRAINT fk_audit_unlock_signoff
         FOREIGN KEY (audit_signoff_id) REFERENCES audit_signoffs(id)
         ON DELETE SET NULL,
@@ -538,6 +657,7 @@ CREATE TABLE audit_unlock_requests (
         FOREIGN KEY (reviewed_by) REFERENCES users(id)
         ON DELETE SET NULL,
 
+    INDEX idx_unlock_request_branch (branch_id),
     INDEX idx_unlock_request_signoff (audit_signoff_id),
     INDEX idx_unlock_request_status (status),
     INDEX idx_unlock_request_area (request_area),
@@ -547,10 +667,11 @@ CREATE TABLE audit_unlock_requests (
 );
 
 -- =========================
--- 21. AUDIT RE-APPROVAL LOG TABLE
+-- 23. AUDIT RE-APPROVAL LOG TABLE
 -- =========================
 CREATE TABLE audit_reapproval_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL DEFAULT 1,
 
     audit_signoff_id INT NULL,
     unlock_request_id INT NULL,
@@ -575,6 +696,10 @@ CREATE TABLE audit_reapproval_log (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    CONSTRAINT fk_reapproval_branch
+        FOREIGN KEY (branch_id) REFERENCES branches(id)
+        ON DELETE CASCADE,
+
     CONSTRAINT fk_reapproval_signoff
         FOREIGN KEY (audit_signoff_id) REFERENCES audit_signoffs(id)
         ON DELETE SET NULL,
@@ -587,6 +712,7 @@ CREATE TABLE audit_reapproval_log (
         FOREIGN KEY (reapproved_by) REFERENCES users(id)
         ON DELETE SET NULL,
 
+    INDEX idx_reapproval_branch (branch_id),
     INDEX idx_reapproval_signoff (audit_signoff_id),
     INDEX idx_reapproval_unlock_request (unlock_request_id),
     INDEX idx_reapproval_period_dates (period_start, period_end),
@@ -598,38 +724,135 @@ CREATE TABLE audit_reapproval_log (
 -- DEFAULT DATA
 -- =========================
 
+INSERT INTO branches (
+    id,
+    branch_code,
+    name,
+    location,
+    phone,
+    manager_name,
+    is_head_office,
+    is_active
+) VALUES
+(
+    1,
+    'MAIN',
+    'Chalin 03 Main Store',
+    'Dunkwa Police Barrier',
+    '0249469080 / 0249995510',
+    NULL,
+    TRUE,
+    TRUE
+),
+(
+    2,
+    'AJAKAA',
+    'Chalin 03 Store',
+    'Ajakaa Manso',
+    '0249469080 / 0249995510',
+    NULL,
+    FALSE,
+    TRUE
+);
+
 INSERT INTO users (
+    id,
     full_name,
     username,
     password_hash,
     role,
     phone,
+    default_branch_id,
+    can_access_all_branches,
     is_active
 ) VALUES (
+    1,
     'System Administrator',
     'admin',
-    'TEMP_PASSWORD_HASH_CHANGE_LATER',
+    '$2b$10$5KI9kuJtv1w6CzEDy7m/3OlEIHMftt5.BMLa/duLZZ.sro6VOEHBy',
     'admin',
     NULL,
+    1,
+    TRUE,
     TRUE
 );
 
+INSERT INTO user_branch_access (
+    user_id,
+    branch_id,
+    access_role,
+    is_primary
+) VALUES
+(1, 1, 'admin', TRUE),
+(1, 2, 'admin', FALSE);
+
 INSERT INTO settings (
+    branch_id,
     business_name,
+    branch_name,
     business_address,
     business_phone,
     owner_phone,
+    receipt_prefix,
     tax_rate,
     debt_reminder_days,
     daily_summary_time,
     receipt_footer
-) VALUES (
+) VALUES
+(
+    1,
     'Chalin 03 Company Limited',
+    'Chalin 03 Main Store',
     'Dunkwa Police Barrier',
     '0249469080 / 0249995510',
     '0543421127',
+    'CHL-MAIN',
     0.00,
     7,
     '18:00:00',
     'Thank You For Coming'
-)
+),
+(
+    2,
+    'Chalin 03 Company Limited',
+    'Chalin 03 Store',
+    'Ajakaa Manso',
+    '0249469080 / 0249995510',
+    '0543421127',
+    'CHL-AJM',
+    0.00,
+    7,
+    '18:00:00',
+    'Thank You For Coming'
+);
+
+-- =========================
+-- MULTI-STORE QUICK CHECKS
+-- =========================
+SELECT id, branch_code, name, location, is_active
+FROM branches
+ORDER BY id;
+
+SELECT
+    u.id,
+    u.full_name,
+    u.username,
+    u.role,
+    u.default_branch_id,
+    u.can_access_all_branches,
+    b.name AS default_branch_name
+FROM users u
+LEFT JOIN branches b ON u.default_branch_id = b.id
+ORDER BY u.id;
+
+SELECT
+    s.id,
+    s.branch_id,
+    b.name AS branch_name,
+    s.business_name,
+    s.branch_name,
+    s.business_address,
+    s.receipt_prefix
+FROM settings s
+JOIN branches b ON s.branch_id = b.id
+ORDER BY s.branch_id;
