@@ -1,5 +1,5 @@
 -- CHALIN 03 SALES & INVENTORY MANAGEMENT SYSTEM
--- Version 2 Multi-Store Database Schema
+-- Version 2 Multi-Store Database Schema - Railway/Local Reset Fixed
 -- Prepared for: Chalin 03 Company Limited
 -- Store 1: Chalin 03 Main Store - Dunkwa Police Barrier
 -- Store 2: Chalin 03 Store - Ajakaa Manso
@@ -14,9 +14,116 @@
 -- Password: admin123
 -- Change this password immediately after first login.
 
-DROP DATABASE IF EXISTS chalin03_db;
-CREATE DATABASE chalin03_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE chalin03_db;
+-- ============================================================
+-- IMPORTANT FOR RAILWAY / PRODUCTION
+-- ============================================================
+-- This reset version DOES NOT create chalin03_db.
+-- It rebuilds the tables inside the database your backend already uses.
+-- On Railway your database is often named railway, not chalin03_db.
+-- If you create chalin03_db while the backend is connected to railway,
+-- the website will still show 500 errors because the backend will not see the new tables.
+--
+-- Local MySQL only: uncomment the next 2 lines if you are resetting locally.
+-- CREATE DATABASE IF NOT EXISTS chalin03_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE chalin03_db;
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ------------------------------------------------------------
+-- CLEAN OLD COMPATIBILITY OBJECTS SAFELY
+-- ------------------------------------------------------------
+-- IMPORTANT:
+-- MySQL gives Error Code 1347 when you try DROP VIEW on a TABLE
+-- or DROP TABLE on a VIEW.
+-- These dynamic drops check whether each object is a VIEW or TABLE first.
+-- This fixes errors like:
+-- Error Code: 1347. 'railway.stores' is not VIEW
+
+SET @drop_sql := (
+    SELECT CASE
+        WHEN TABLE_TYPE = 'VIEW' THEN 'DROP VIEW IF EXISTS `stores`'
+        WHEN TABLE_TYPE IS NOT NULL THEN 'DROP TABLE IF EXISTS `stores`'
+        ELSE 'SELECT "old stores object not found"'
+    END
+    FROM (
+        SELECT TABLE_TYPE
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'stores'
+        LIMIT 1
+    ) AS found
+    RIGHT JOIN (SELECT 1 AS keep_row) AS keep_row ON TRUE
+);
+SET @drop_sql := IFNULL(@drop_sql, 'SELECT "old stores object not found"');
+PREPARE stmt FROM @drop_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @drop_sql := (
+    SELECT CASE
+        WHEN TABLE_TYPE = 'VIEW' THEN 'DROP VIEW IF EXISTS `user_store_access`'
+        WHEN TABLE_TYPE IS NOT NULL THEN 'DROP TABLE IF EXISTS `user_store_access`'
+        ELSE 'SELECT "old user_store_access object not found"'
+    END
+    FROM (
+        SELECT TABLE_TYPE
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'user_store_access'
+        LIMIT 1
+    ) AS found
+    RIGHT JOIN (SELECT 1 AS keep_row) AS keep_row ON TRUE
+);
+SET @drop_sql := IFNULL(@drop_sql, 'SELECT "old user_store_access object not found"');
+PREPARE stmt FROM @drop_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @drop_sql := (
+    SELECT CASE
+        WHEN TABLE_TYPE = 'VIEW' THEN 'DROP VIEW IF EXISTS `activity_logs`'
+        WHEN TABLE_TYPE IS NOT NULL THEN 'DROP TABLE IF EXISTS `activity_logs`'
+        ELSE 'SELECT "old activity_logs object not found"'
+    END
+    FROM (
+        SELECT TABLE_TYPE
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'activity_logs'
+        LIMIT 1
+    ) AS found
+    RIGHT JOIN (SELECT 1 AS keep_row) AS keep_row ON TRUE
+);
+SET @drop_sql := IFNULL(@drop_sql, 'SELECT "old activity_logs object not found"');
+PREPARE stmt FROM @drop_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+DROP TABLE IF EXISTS audit_reapproval_log;
+DROP TABLE IF EXISTS audit_unlock_requests;
+DROP TABLE IF EXISTS audit_signoffs;
+DROP TABLE IF EXISTS daily_closings;
+DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS activity_log;
+DROP TABLE IF EXISTS sms_log;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS returns;
+DROP TABLE IF EXISTS debt_payments;
+DROP TABLE IF EXISTS debts;
+DROP TABLE IF EXISTS sale_items;
+DROP TABLE IF EXISTS sales;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS purchase_payments;
+DROP TABLE IF EXISTS purchase_items;
+DROP TABLE IF EXISTS purchases;
+DROP TABLE IF EXISTS suppliers;
+DROP TABLE IF EXISTS stock_adjustments;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS user_branch_access;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS branches;
+
+SET FOREIGN_KEY_CHECKS = 1;
 
 -- =========================
 -- 1. BRANCHES / STORES TABLE
@@ -826,11 +933,60 @@ INSERT INTO settings (
     'Thank You For Coming'
 );
 
+
+-- =========================
+-- 24. SAFE NAMING COMPATIBILITY VIEWS
+-- =========================
+-- Backend code currently uses branches/branch_id.
+-- The UI says Store, so these views allow simple SELECTs that use stores/user_store_access names.
+-- Main data tables still use branch_id because the current backend routes use branch_id.
+
+CREATE OR REPLACE VIEW stores AS
+SELECT
+    id,
+    branch_code,
+    branch_code AS store_code,
+    name,
+    location,
+    phone,
+    manager_name,
+    is_head_office,
+    is_active,
+    created_at,
+    updated_at
+FROM branches;
+
+CREATE OR REPLACE VIEW user_store_access AS
+SELECT
+    user_id,
+    branch_id,
+    branch_id AS store_id,
+    access_role,
+    is_primary,
+    created_at
+FROM user_branch_access;
+
+CREATE OR REPLACE VIEW activity_logs AS
+SELECT
+    id,
+    branch_id,
+    branch_id AS store_id,
+    user_id,
+    action,
+    details,
+    ip_address,
+    created_at
+FROM activity_log;
+
 -- =========================
 -- MULTI-STORE QUICK CHECKS
 -- =========================
 SELECT id, branch_code, name, location, is_active
 FROM branches
+ORDER BY id;
+
+SELECT id, branch_code, store_code, name, location, is_active
+FROM stores
 ORDER BY id;
 
 SELECT

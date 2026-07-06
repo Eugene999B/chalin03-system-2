@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
+import { useAuth } from "./context/AuthContext";
 
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";

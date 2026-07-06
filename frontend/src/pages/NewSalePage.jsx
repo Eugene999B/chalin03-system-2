@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import { useAuth } from "../context/AuthContext";
 
 export default function NewSalePage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
