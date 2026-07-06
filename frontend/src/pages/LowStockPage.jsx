@@ -35,6 +35,10 @@ export default function LowStockPage() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [sendingAllSms, setSendingAllSms] = useState(false);
+  const [sendingProductSmsId, setSendingProductSmsId] = useState(null);
+
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   function formatMoney(value) {
@@ -49,6 +53,10 @@ export default function LowStockPage() {
 
   function getProductStoreCode(product) {
     return product?.branch_code || product?.store_code || currentStoreCode;
+  }
+
+  function getFriendlyApiError(error, fallbackMessage) {
+    return error?.response?.data?.message || fallbackMessage;
   }
 
   async function loadLowStockProducts() {
@@ -67,10 +75,64 @@ export default function LowStockPage() {
       });
     } catch (error) {
       setError(
-        error.response?.data?.message || "Failed to load low stock products."
+        getFriendlyApiError(error, "Failed to load low stock products.")
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendProductLowStockSms(product) {
+    setMessage("");
+    setError("");
+
+    if (!product?.id) {
+      setError("Product information is missing.");
+      return;
+    }
+
+    setSendingProductSmsId(product.id);
+
+    try {
+      const response = await axiosClient.post(
+        `/sms/low-stock/product/${product.id}`
+      );
+
+      setMessage(
+        response.data.message || "Low stock SMS alert sent successfully."
+      );
+    } catch (error) {
+      setError(
+        getFriendlyApiError(error, "Failed to send low stock SMS alert.")
+      );
+    } finally {
+      setSendingProductSmsId(null);
+    }
+  }
+
+  async function sendAllLowStockSms() {
+    setMessage("");
+    setError("");
+
+    if (products.length === 0) {
+      setError("No low stock products found to send SMS alert.");
+      return;
+    }
+
+    setSendingAllSms(true);
+
+    try {
+      const response = await axiosClient.post("/sms/low-stock/all");
+
+      setMessage(
+        response.data.message || "All low stock SMS alert sent successfully."
+      );
+    } catch (error) {
+      setError(
+        getFriendlyApiError(error, "Failed to send all low stock SMS alerts.")
+      );
+    } finally {
+      setSendingAllSms(false);
     }
   }
 
@@ -93,9 +155,26 @@ export default function LowStockPage() {
           </p>
         </div>
 
-        <button type="button" onClick={loadLowStockProducts}>
-          Refresh
-        </button>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          <button type="button" onClick={loadLowStockProducts}>
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={sendAllLowStockSms}
+            disabled={sendingAllSms || products.length === 0}
+          >
+            {sendingAllSms ? "Sending SMS..." : "Send All SMS Alerts"}
+          </button>
+        </div>
       </div>
 
       <div
@@ -113,11 +192,12 @@ export default function LowStockPage() {
         {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
         <br />
         <small>
-          Low-stock products, out-of-stock products and estimated restock cost
-          are filtered to this selected store only.
+          Low-stock products, out-of-stock products, estimated restock cost and
+          SMS alerts are filtered to this selected store only.
         </small>
       </div>
 
+      {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid">
@@ -143,7 +223,27 @@ export default function LowStockPage() {
       </div>
 
       <div className="section-card">
-        <h2>Restock List - {currentStoreCode}</h2>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+            alignItems: "center",
+            flexWrap: "wrap",
+            marginBottom: "12px",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Restock List - {currentStoreCode}</h2>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={sendAllLowStockSms}
+            disabled={sendingAllSms || products.length === 0}
+          >
+            {sendingAllSms ? "Sending SMS..." : "Send All SMS Alerts"}
+          </button>
+        </div>
 
         {loading ? (
           <p>Loading low stock products for {currentStoreCode}...</p>
@@ -162,6 +262,7 @@ export default function LowStockPage() {
                 <th>Suggested Buy Qty</th>
                 <th>Cost Price</th>
                 <th>Estimated Cost</th>
+                <th></th>
               </tr>
             </thead>
 
@@ -186,6 +287,19 @@ export default function LowStockPage() {
                   <td>{Number(product.suggested_restock_quantity || 0)}</td>
                   <td>{formatMoney(product.cost_price)}</td>
                   <td>{formatMoney(product.estimated_restock_cost)}</td>
+
+                  <td>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => sendProductLowStockSms(product)}
+                      disabled={sendingProductSmsId === product.id}
+                    >
+                      {sendingProductSmsId === product.id
+                        ? "Sending..."
+                        : "Send SMS Alert"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -168,6 +168,37 @@ function truncateMessage(message, maxLength = 480) {
   return `${cleanSmsMessage.slice(0, maxLength - 3)}...`;
 }
 
+function firstValidGhanaPhone(...values) {
+  for (const value of values) {
+    const rawValue = String(value || "").trim();
+
+    if (!rawValue) {
+      continue;
+    }
+
+    const possiblePhones = rawValue
+      .split(/[\/,;|]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    for (const possiblePhone of possiblePhones) {
+      const normalizedPhone = normalizeGhanaPhone(possiblePhone);
+
+      if (normalizedPhone) {
+        return normalizedPhone;
+      }
+    }
+
+    const normalizedFullValue = normalizeGhanaPhone(rawValue);
+
+    if (normalizedFullValue) {
+      return normalizedFullValue;
+    }
+  }
+
+  return "";
+}
+
 async function writeSmsLog({
   branchId,
   phone,
@@ -646,6 +677,242 @@ router.post(
           : result.message || "Debt reminder SMS failed.",
       result,
       sms_message: finalMessage,
+    });
+  })
+);
+
+router.post(
+  "/low-stock/product/:productId",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+    const productId = Number(req.params.productId);
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid product ID.",
+      });
+    }
+
+    const [products] = await runQuery(
+      `
+        SELECT
+          p.id,
+          p.branch_id,
+          p.name,
+          p.barcode,
+          p.category,
+          p.size,
+          p.quantity,
+          p.low_stock_threshold,
+
+          b.branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location,
+
+          st.business_name,
+          st.business_phone,
+          st.owner_phone
+        FROM products p
+        LEFT JOIN branches b ON p.branch_id = b.id
+        LEFT JOIN settings st ON p.branch_id = st.branch_id
+        WHERE p.id = ?
+          AND p.branch_id = ?
+        LIMIT 1
+      `,
+      [productId, branchId]
+    );
+
+    if (products.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Product not found in the selected branch.",
+      });
+    }
+
+    const product = products[0];
+    const quantity = Number(product.quantity || 0);
+    const threshold = Number(product.low_stock_threshold || 0);
+
+    if (threshold > 0 && quantity > threshold) {
+      return res.status(400).json({
+        status: "error",
+        message: "This product is not currently below its low-stock threshold.",
+      });
+    }
+
+    const alertPhone = firstValidGhanaPhone(
+      req.body.phone,
+      product.owner_phone,
+      product.business_phone
+    );
+
+    if (!alertPhone) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "No valid alert phone number found. Add owner phone in settings or provide phone in the request.",
+      });
+    }
+
+    const businessName = product.business_name || "Chalin 03 Company Limited";
+    const branchCode = product.branch_code || "MAIN";
+    const branchName = product.branch_name || "Chalin 03";
+
+    const productDetails = [
+      product.name,
+      product.size ? `Size: ${product.size}` : "",
+      product.category ? `Category: ${product.category}` : "",
+      product.barcode ? `Barcode: ${product.barcode}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const lowStockMessage = `${businessName}: Low stock alert for ${branchName} (${branchCode}). ${productDetails} has only ${quantity} left. Threshold: ${threshold}. Please restock soon.`;
+
+    const finalMessage = truncateMessage(lowStockMessage, 480);
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: alertPhone,
+      message: finalMessage,
+      smsType: "low_stock",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "Low stock SMS alert sent successfully."
+          : result.message || "Low stock SMS alert failed.",
+      result,
+      sms_message: finalMessage,
+      product,
+    });
+  })
+);
+
+router.post(
+  "/low-stock/all",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+
+    const [branchSettings] = await runQuery(
+      `
+        SELECT
+          b.id AS branch_id,
+          b.branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location,
+
+          st.business_name,
+          st.business_phone,
+          st.owner_phone
+        FROM branches b
+        LEFT JOIN settings st ON b.id = st.branch_id
+        WHERE b.id = ?
+        LIMIT 1
+      `,
+      [branchId]
+    );
+
+    const settings = branchSettings[0] || {};
+
+    const [lowStockProducts] = await runQuery(
+      `
+        SELECT
+          id,
+          name,
+          barcode,
+          category,
+          size,
+          quantity,
+          low_stock_threshold
+        FROM products
+        WHERE branch_id = ?
+          AND low_stock_threshold IS NOT NULL
+          AND quantity <= low_stock_threshold
+        ORDER BY quantity ASC, name ASC
+      `,
+      [branchId]
+    );
+
+    if (lowStockProducts.length === 0) {
+      return res.json({
+        status: "success",
+        message: "No low-stock products found in the selected branch.",
+        branch_id: branchId,
+        count: 0,
+        products: [],
+      });
+    }
+
+    const alertPhone = firstValidGhanaPhone(
+      req.body.phone,
+      settings.owner_phone,
+      settings.business_phone
+    );
+
+    if (!alertPhone) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "No valid alert phone number found. Add owner phone in settings or provide phone in the request.",
+      });
+    }
+
+    const businessName = settings.business_name || "Chalin 03 Company Limited";
+    const branchCode = settings.branch_code || "MAIN";
+    const branchName = settings.branch_name || "Chalin 03";
+
+    const productSummary = lowStockProducts
+      .slice(0, 8)
+      .map((product) => {
+        return `${product.name}: ${Number(product.quantity || 0)}/${Number(
+          product.low_stock_threshold || 0
+        )}`;
+      })
+      .join("; ");
+
+    const moreText =
+      lowStockProducts.length > 8
+        ? `; +${lowStockProducts.length - 8} more product(s)`
+        : "";
+
+    const lowStockMessage = `${businessName}: Low stock alert for ${branchName} (${branchCode}). ${lowStockProducts.length} product(s) need attention: ${productSummary}${moreText}. Please restock soon.`;
+
+    const finalMessage = truncateMessage(lowStockMessage, 480);
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: alertPhone,
+      message: finalMessage,
+      smsType: "low_stock",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "All low stock SMS alert sent successfully."
+          : result.message || "Low stock SMS alert failed.",
+      result,
+      sms_message: finalMessage,
+      branch_id: branchId,
+      count: lowStockProducts.length,
+      products: lowStockProducts,
     });
   })
 );
