@@ -7,6 +7,8 @@ const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+const tableColumnCache = {};
+
 function cleanText(value) {
   if (value === undefined || value === null) {
     return "";
@@ -25,7 +27,49 @@ function cleanNumber(value, fallback = null) {
   return number;
 }
 
+function safeTableName(tableName) {
+  const cleanName = String(tableName || "").trim();
+
+  if (!/^[a-zA-Z0-9_]+$/.test(cleanName)) {
+    throw new Error("Invalid table name.");
+  }
+
+  return cleanName;
+}
+
+async function getTableColumns(tableName) {
+  const cleanName = safeTableName(tableName);
+
+  if (tableColumnCache[cleanName]) {
+    return tableColumnCache[cleanName];
+  }
+
+  try {
+    const [columns] = await pool.query(`SHOW COLUMNS FROM \`${cleanName}\``);
+    const columnSet = new Set(columns.map((column) => column.Field));
+    tableColumnCache[cleanName] = columnSet;
+    return columnSet;
+  } catch {
+    const emptySet = new Set();
+    tableColumnCache[cleanName] = emptySet;
+    return emptySet;
+  }
+}
+
+async function tableExists(tableName) {
+  const columns = await getTableColumns(tableName);
+  return columns.size > 0;
+}
+
+function boolValue(value) {
+  return value === true || Number(value || 0) === 1;
+}
+
 function createToken(user, branch) {
+  const branchCode = branch?.branch_code || branch?.code || null;
+  const branchName = branch?.name || branch?.branch_name || null;
+  const branchLocation = branch?.location || branch?.branch_location || null;
+
   return jwt.sign(
     {
       id: user.id,
@@ -33,10 +77,10 @@ function createToken(user, branch) {
       username: user.username,
       role: user.role,
       branch_id: branch?.id || null,
-      branch_code: branch?.branch_code || null,
-      branch_name: branch?.name || null,
-      branch_location: branch?.location || null,
-      can_access_all_branches: Boolean(user.can_access_all_branches),
+      branch_code: branchCode,
+      branch_name: branchName,
+      branch_location: branchLocation,
+      can_access_all_branches: boolValue(user.can_access_all_branches),
     },
     process.env.JWT_SECRET,
     {
@@ -45,23 +89,96 @@ function createToken(user, branch) {
   );
 }
 
+async function buildUserSelectByWhere(whereSql, params) {
+  const userColumns = await getTableColumns("users");
+
+  const phoneSql = userColumns.has("phone") ? "phone" : "NULL AS phone";
+  const defaultBranchSql = userColumns.has("default_branch_id")
+    ? "default_branch_id"
+    : "1 AS default_branch_id";
+  const allBranchesSql = userColumns.has("can_access_all_branches")
+    ? "can_access_all_branches"
+    : "0 AS can_access_all_branches";
+  const activeSql = userColumns.has("is_active") ? "is_active" : "1 AS is_active";
+  const createdAtSql = userColumns.has("created_at")
+    ? "created_at"
+    : "NULL AS created_at";
+
+  const [users] = await pool.query(
+    `SELECT
+      id,
+      full_name,
+      username,
+      password_hash,
+      role,
+      ${phoneSql},
+      ${defaultBranchSql},
+      ${allBranchesSql},
+      ${activeSql},
+      ${createdAtSql}
+     FROM users
+     ${whereSql}
+     LIMIT 1`,
+    params
+  );
+
+  return users;
+}
+
 async function getBranchById(branchId) {
   if (!branchId) {
     return null;
   }
 
+  const branchColumns = await getTableColumns("branches");
+
+  if (branchColumns.size === 0) {
+    return null;
+  }
+
+  const branchCodeSql = branchColumns.has("branch_code")
+    ? "branch_code"
+    : branchColumns.has("code")
+    ? "code AS branch_code"
+    : "CONCAT('BR-', id) AS branch_code";
+
+  const nameSql = branchColumns.has("name")
+    ? "name"
+    : branchColumns.has("branch_name")
+    ? "branch_name AS name"
+    : "CONCAT('Branch ', id) AS name";
+
+  const locationSql = branchColumns.has("location")
+    ? "location"
+    : branchColumns.has("branch_location")
+    ? "branch_location AS location"
+    : "NULL AS location";
+
+  const phoneSql = branchColumns.has("phone")
+    ? "phone"
+    : branchColumns.has("branch_phone")
+    ? "branch_phone AS phone"
+    : "NULL AS phone";
+
+  const headOfficeSql = branchColumns.has("is_head_office")
+    ? "is_head_office"
+    : "0 AS is_head_office";
+
+  const activeSql = branchColumns.has("is_active") ? "is_active" : "1 AS is_active";
+  const activeWhere = branchColumns.has("is_active") ? "AND is_active = TRUE" : "";
+
   const [branches] = await pool.query(
     `SELECT
       id,
-      branch_code,
-      name,
-      location,
-      phone,
-      is_head_office,
-      is_active
+      ${branchCodeSql},
+      ${nameSql},
+      ${locationSql},
+      ${phoneSql},
+      ${headOfficeSql},
+      ${activeSql}
      FROM branches
      WHERE id = ?
-     AND is_active = TRUE
+     ${activeWhere}
      LIMIT 1`,
     [branchId]
   );
@@ -85,8 +202,20 @@ async function userCanAccessBranch(user, branchId) {
     return false;
   }
 
-  if (user.can_access_all_branches) {
+  if (boolValue(user.can_access_all_branches)) {
     return true;
+  }
+
+  const defaultBranchId = cleanNumber(user.default_branch_id, 1);
+
+  if (Number(branchId) === Number(defaultBranchId)) {
+    return true;
+  }
+
+  const accessTableExists = await tableExists("user_branch_access");
+
+  if (!accessTableExists) {
+    return false;
   }
 
   const [accessRows] = await pool.query(
@@ -138,6 +267,10 @@ async function resolveLoginBranch(user, requestedBranchId) {
 }
 
 function buildUserResponse(user, branch) {
+  const branchCode = branch?.branch_code || branch?.code || null;
+  const branchName = branch?.name || branch?.branch_name || null;
+  const branchLocation = branch?.location || branch?.branch_location || null;
+
   return {
     id: user.id,
     full_name: user.full_name,
@@ -145,23 +278,50 @@ function buildUserResponse(user, branch) {
     role: user.role,
     phone: user.phone,
     default_branch_id: user.default_branch_id,
-    can_access_all_branches: Boolean(user.can_access_all_branches),
+    can_access_all_branches: boolValue(user.can_access_all_branches),
     branch_id: branch?.id || null,
-    branch_code: branch?.branch_code || null,
-    branch_name: branch?.name || null,
-    branch_location: branch?.location || null,
+    branch_code: branchCode,
+    branch_name: branchName,
+    branch_location: branchLocation,
     branch_phone: branch?.phone || null,
     selected_branch: branch
       ? {
           id: branch.id,
-          branch_code: branch.branch_code,
-          name: branch.name,
-          location: branch.location,
+          branch_id: branch.id,
+          code: branchCode,
+          branch_code: branchCode,
+          name: branchName,
+          branch_name: branchName,
+          location: branchLocation,
+          branch_location: branchLocation,
           phone: branch.phone,
-          is_head_office: Boolean(branch.is_head_office),
+          is_head_office: boolValue(branch.is_head_office),
         }
       : null,
   };
+}
+
+async function writeActivityLog(branchId, userId, action, details) {
+  const activityColumns = await getTableColumns("activity_log");
+
+  if (activityColumns.size === 0) {
+    return;
+  }
+
+  if (activityColumns.has("branch_id")) {
+    await pool.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [branchId || null, userId || null, action, details]
+    );
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO activity_log (user_id, action, details)
+     VALUES (?, ?, ?)`,
+    [userId || null, action, details]
+  );
 }
 
 // POST /api/auth/login
@@ -185,20 +345,8 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const [users] = await pool.query(
-      `SELECT
-        id,
-        full_name,
-        username,
-        password_hash,
-        role,
-        phone,
-        default_branch_id,
-        can_access_all_branches,
-        is_active
-       FROM users
-       WHERE username = ?
-       LIMIT 1`,
+    const users = await buildUserSelectByWhere(
+      `WHERE username = ?`,
       [username]
     );
 
@@ -211,7 +359,7 @@ router.post("/login", async (req, res) => {
 
     const user = users[0];
 
-    if (!user.is_active) {
+    if (!boolValue(user.is_active)) {
       return res.status(403).json({
         status: "error",
         message: "This account has been disabled.",
@@ -239,15 +387,11 @@ router.post("/login", async (req, res) => {
     const selectedBranch = branchResult.branch;
     const token = createToken(user, selectedBranch);
 
-    await pool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        selectedBranch.id,
-        user.id,
-        "LOGIN",
-        `${user.username} logged in successfully to ${selectedBranch.name}`,
-      ]
+    await writeActivityLog(
+      selectedBranch.id,
+      user.id,
+      "LOGIN",
+      `${user.username} logged in successfully to ${selectedBranch.name}`
     );
 
     return res.json({
@@ -269,20 +413,8 @@ router.post("/login", async (req, res) => {
 // GET /api/auth/me
 router.get("/me", requireAuth, async (req, res) => {
   try {
-    const [users] = await pool.query(
-      `SELECT
-        id,
-        full_name,
-        username,
-        role,
-        phone,
-        default_branch_id,
-        can_access_all_branches,
-        is_active,
-        created_at
-       FROM users
-       WHERE id = ?
-       LIMIT 1`,
+    const users = await buildUserSelectByWhere(
+      `WHERE id = ?`,
       [req.user.id]
     );
 
@@ -346,20 +478,8 @@ router.post("/change-password", requireAuth, async (req, res) => {
       });
     }
 
-    const [users] = await pool.query(
-      `SELECT
-        id,
-        full_name,
-        username,
-        password_hash,
-        role,
-        phone,
-        default_branch_id,
-        can_access_all_branches,
-        is_active
-       FROM users
-       WHERE id = ?
-       LIMIT 1`,
+    const users = await buildUserSelectByWhere(
+      `WHERE id = ?`,
       [req.user.id]
     );
 
@@ -372,7 +492,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
 
     const user = users[0];
 
-    if (!user.is_active) {
+    if (!boolValue(user.is_active)) {
       return res.status(403).json({
         status: "error",
         message: "This account has been disabled.",
@@ -416,15 +536,11 @@ router.post("/change-password", requireAuth, async (req, res) => {
       (await getBranchById(req.user.branch_id)) ||
       (await getDefaultBranchForUser(user));
 
-    await pool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        selectedBranch?.id || null,
-        user.id,
-        "CHANGE_PASSWORD",
-        `${user.username} changed account password`,
-      ]
+    await writeActivityLog(
+      selectedBranch?.id || null,
+      user.id,
+      "CHANGE_PASSWORD",
+      `${user.username} changed account password`
     );
 
     const token = createToken(user, selectedBranch);
@@ -451,24 +567,17 @@ router.post("/forgot-password", async (req, res) => {
     const username = cleanText(req.body.username);
 
     if (username) {
-      const [users] = await pool.query(
-        `SELECT id, username, default_branch_id
-         FROM users
-         WHERE username = ?
-         LIMIT 1`,
+      const users = await buildUserSelectByWhere(
+        `WHERE username = ?`,
         [username]
       );
 
       if (users.length > 0) {
-        await pool.query(
-          `INSERT INTO activity_log (branch_id, user_id, action, details)
-           VALUES (?, ?, ?, ?)`,
-          [
-            users[0].default_branch_id || null,
-            users[0].id,
-            "FORGOT_PASSWORD_REQUEST",
-            `${users[0].username} requested password reset help`,
-          ]
+        await writeActivityLog(
+          users[0].default_branch_id || null,
+          users[0].id,
+          "FORGOT_PASSWORD_REQUEST",
+          `${users[0].username} requested password reset help`
         );
       }
     }
