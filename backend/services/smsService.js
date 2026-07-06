@@ -1,13 +1,17 @@
 const DEFAULT_HUBTEL_BASE_URL = "https://smsc.hubtel.com/v1/messages/send";
+const DEFAULT_SMS_TIMEOUT_MS = 15000;
 
 function getSmsConfig() {
   return {
     enabled: String(process.env.SMS_ENABLED || "false").toLowerCase() === "true",
-    provider: String(process.env.SMS_PROVIDER || "mock").toLowerCase(),
-    senderId: process.env.SMS_SENDER_ID || "CHALIN03",
-    hubtelClientId: process.env.SMS_HUBTEL_CLIENT_ID || "",
-    hubtelClientSecret: process.env.SMS_HUBTEL_CLIENT_SECRET || "",
-    hubtelBaseUrl: process.env.SMS_HUBTEL_BASE_URL || DEFAULT_HUBTEL_BASE_URL,
+    provider: String(process.env.SMS_PROVIDER || "mock").toLowerCase().trim(),
+    senderId: String(process.env.SMS_SENDER_ID || "CHALIN03").trim(),
+    hubtelClientId: String(process.env.SMS_HUBTEL_CLIENT_ID || "").trim(),
+    hubtelClientSecret: String(process.env.SMS_HUBTEL_CLIENT_SECRET || "").trim(),
+    hubtelBaseUrl: String(
+      process.env.SMS_HUBTEL_BASE_URL || DEFAULT_HUBTEL_BASE_URL
+    ).trim(),
+    timeoutMs: Number(process.env.SMS_TIMEOUT_MS || DEFAULT_SMS_TIMEOUT_MS),
   };
 }
 
@@ -28,19 +32,27 @@ function normalizeGhanaPhone(phone) {
     digits = digits.slice(2);
   }
 
-  if (digits.startsWith("0")) {
+  // Example: 0543421127 -> 233543421127
+  if (digits.startsWith("0") && digits.length === 10) {
     digits = `233${digits.slice(1)}`;
   }
 
+  // Example: 543421127 -> 233543421127
   if (digits.length === 9) {
     digits = `233${digits}`;
   }
 
+  // Example: 2330543421127 -> 233543421127
+  if (digits.startsWith("2330") && digits.length === 13) {
+    digits = `233${digits.slice(4)}`;
+  }
+
+  // Ghana normal SMS format should now be 233 + 9 digits = 12 digits.
   if (!digits.startsWith("233")) {
     return "";
   }
 
-  if (digits.length < 12 || digits.length > 13) {
+  if (digits.length !== 12) {
     return "";
   }
 
@@ -61,6 +73,143 @@ function validateSmsMessage(message) {
   return cleanMessage;
 }
 
+function createSmsError(message, extra = {}) {
+  const error = new Error(message);
+
+  if (extra.statusCode) {
+    error.statusCode = extra.statusCode;
+  }
+
+  if (extra.providerResponse !== undefined) {
+    error.providerResponse = extra.providerResponse;
+  }
+
+  if (extra.provider) {
+    error.provider = extra.provider;
+  }
+
+  return error;
+}
+
+async function readResponseBody(response) {
+  const responseText = await response.text();
+
+  if (!responseText) {
+    return {
+      raw: "",
+      parsed: null,
+    };
+  }
+
+  try {
+    return {
+      raw: responseText,
+      parsed: JSON.parse(responseText),
+    };
+  } catch {
+    return {
+      raw: responseText,
+      parsed: responseText,
+    };
+  }
+}
+
+function validateHubtelConfig(config) {
+  if (!config.hubtelClientId || !config.hubtelClientSecret) {
+    throw new Error(
+      "Hubtel Client ID and Client Secret are required. Add them to backend .env."
+    );
+  }
+
+  if (!config.senderId) {
+    throw new Error("SMS sender ID is required. Add SMS_SENDER_ID to backend .env.");
+  }
+
+  if (!config.hubtelBaseUrl) {
+    throw new Error("Hubtel base URL is required. Add SMS_HUBTEL_BASE_URL to backend .env.");
+  }
+
+  if (typeof fetch !== "function") {
+    throw new Error(
+      "This backend needs Node.js 18 or newer for live SMS sending."
+    );
+  }
+}
+
+async function sendHubtelSms({ config, to, message }) {
+  validateHubtelConfig(config);
+
+  const authToken = Buffer.from(
+    `${config.hubtelClientId}:${config.hubtelClientSecret}`
+  ).toString("base64");
+
+  const payload = {
+    From: config.senderId,
+    To: to,
+    Content: message,
+  };
+
+  const controller = new AbortController();
+  const timeoutMs =
+    Number.isFinite(config.timeoutMs) && config.timeoutMs > 0
+      ? config.timeoutMs
+      : DEFAULT_SMS_TIMEOUT_MS;
+
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+
+  try {
+    response = await fetch(config.hubtelBaseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${authToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw createSmsError("Hubtel SMS request timed out.", {
+        provider: "hubtel",
+        statusCode: 408,
+        providerResponse: {
+          message: `Request timed out after ${timeoutMs}ms.`,
+        },
+      });
+    }
+
+    throw createSmsError(`Hubtel SMS network error: ${error.message}`, {
+      provider: "hubtel",
+      providerResponse: {
+        message: error.message,
+      },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const responseBody = await readResponseBody(response);
+
+  if (!response.ok) {
+    throw createSmsError("Hubtel SMS request failed.", {
+      provider: "hubtel",
+      statusCode: response.status,
+      providerResponse: responseBody.parsed,
+    });
+  }
+
+  return {
+    success: true,
+    provider: "hubtel",
+    to,
+    status: "sent",
+    providerResponse: responseBody.parsed,
+  };
+}
+
 async function sendSms({ to, message }) {
   const config = getSmsConfig();
 
@@ -69,6 +218,10 @@ async function sendSms({ to, message }) {
 
   if (!normalizedTo) {
     throw new Error("Invalid Ghana phone number.");
+  }
+
+  if (!config.enabled) {
+    throw new Error("SMS is disabled. Set SMS_ENABLED=true in backend .env.");
   }
 
   if (config.provider === "mock") {
@@ -84,76 +237,20 @@ async function sendSms({ to, message }) {
     };
   }
 
-  if (!config.enabled) {
-    throw new Error("SMS is disabled. Set SMS_ENABLED=true in backend .env.");
+  if (config.provider === "hubtel") {
+    return sendHubtelSms({
+      config,
+      to: normalizedTo,
+      message: cleanMessage,
+    });
   }
 
-  if (config.provider !== "hubtel") {
-    throw new Error(`Unsupported SMS provider: ${config.provider}`);
-  }
-
-  if (!config.hubtelClientId || !config.hubtelClientSecret) {
-    throw new Error("Hubtel Client ID and Client Secret are required.");
-  }
-
-  if (!config.senderId) {
-    throw new Error("SMS sender ID is required.");
-  }
-
-  if (typeof fetch !== "function") {
-    throw new Error(
-      "This backend needs Node.js 18 or newer for SMS sending. Railway should be okay, but check your Node version."
-    );
-  }
-
-  const authToken = Buffer.from(
-    `${config.hubtelClientId}:${config.hubtelClientSecret}`
-  ).toString("base64");
-
-  const payload = {
-    From: config.senderId,
-    To: normalizedTo,
-    Content: cleanMessage,
-  };
-
-  const response = await fetch(config.hubtelBaseUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${authToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const responseText = await response.text();
-
-  let parsedResponse = responseText;
-
-  try {
-    parsedResponse = JSON.parse(responseText);
-  } catch {
-    parsedResponse = responseText;
-  }
-
-  if (!response.ok) {
-    const error = new Error("Hubtel SMS request failed.");
-    error.providerResponse = parsedResponse;
-    error.statusCode = response.status;
-    throw error;
-  }
-
-  return {
-    success: true,
-    provider: "hubtel",
-    to: normalizedTo,
-    status: "sent",
-    providerResponse: parsedResponse,
-  };
+  throw new Error(`Unsupported SMS provider: ${config.provider}`);
 }
 
 module.exports = {
   getSmsConfig,
   normalizeGhanaPhone,
   sendSms,
+  validateSmsMessage,
 };
