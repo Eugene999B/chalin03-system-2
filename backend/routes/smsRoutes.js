@@ -363,16 +363,67 @@ router.get(
   asyncHandler(async (req, res) => {
     const config = getSmsConfig();
 
+    const provider = String(config.provider || "mock").toLowerCase();
+    const smsEnabled = Boolean(config.enabled);
+    const isMock = provider === "mock";
+    const isArkesel = provider === "arkesel";
+    const isHubtel = provider === "hubtel";
+    const isLive = smsEnabled && !isMock;
+
+    const arkeselReady = Boolean(config.arkeselApiKey && config.senderId);
+    const hubtelReady = Boolean(
+      config.hubtelClientId &&
+        config.hubtelClientSecret &&
+        config.senderId
+    );
+
+    let providerLabel = "Mock";
+    let modeTitle = "SMS MODE: MOCK";
+    let modeMessage =
+      "Safe testing mode. SMS records will be saved, but no real SMS credit will be used.";
+    let safetyLevel = "safe";
+
+    if (!smsEnabled) {
+      providerLabel = "Disabled";
+      modeTitle = "SMS DISABLED";
+      modeMessage =
+        "SMS sending is turned off. The system will not send SMS until SMS_ENABLED=true.";
+      safetyLevel = "disabled";
+    } else if (isArkesel) {
+      providerLabel = "Arkesel";
+      modeTitle = "SMS MODE: ARKESEL LIVE";
+      modeMessage = arkeselReady
+        ? "Live SMS is active. Real SMS will be sent and SMS credit will be used."
+        : "Arkesel is selected, but the API key or Sender ID is missing. Live SMS will fail until configured.";
+      safetyLevel = arkeselReady ? "live" : "warning";
+    } else if (isHubtel) {
+      providerLabel = "Hubtel";
+      modeTitle = "SMS MODE: HUBTEL LIVE";
+      modeMessage = hubtelReady
+        ? "Live SMS is active. Real SMS will be sent and SMS credit will be used."
+        : "Hubtel is selected, but Client ID, Client Secret, or Sender ID is missing. Live SMS will fail until configured.";
+      safetyLevel = hubtelReady ? "live" : "warning";
+    } else if (!isMock) {
+      providerLabel = provider || "Unknown";
+      modeTitle = "SMS PROVIDER ERROR";
+      modeMessage = `Unsupported SMS provider "${provider}". Use mock, arkesel, or hubtel.`;
+      safetyLevel = "danger";
+    }
+
     res.json({
       status: "success",
       sms: {
-        enabled: config.enabled,
-        provider: config.provider,
-        sender_id: config.senderId,
-        mode:
-          config.provider === "mock"
-            ? "Mock mode. No real SMS credit will be used."
-            : "Live mode.",
+        enabled: smsEnabled,
+        provider,
+        provider_label: providerLabel,
+        sender_id: config.senderId || "",
+        live_sending: isLive,
+        safety_level: safetyLevel,
+        mode_title: modeTitle,
+        mode_message: modeMessage,
+        arkesel_ready: arkeselReady,
+        hubtel_ready: hubtelReady,
+        supported_providers: ["mock", "arkesel", "hubtel"],
       },
     });
   })
