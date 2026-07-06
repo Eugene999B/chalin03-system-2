@@ -4,7 +4,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, branchCode, branchName, branchLocation } = useAuth();
   const navigate = useNavigate();
 
   const [isMobile, setIsMobile] = useState(false);
@@ -23,6 +23,24 @@ export default function Layout() {
     role === "admin";
 
   const displayName = user?.full_name || user?.username || "User";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.name ||
+    "No store selected";
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    "STORE";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.location ||
+    "Location not set";
 
   const commandItems = useMemo(() => {
     const items = [
@@ -343,6 +361,41 @@ export default function Layout() {
     background: isActive ? "#164777" : "transparent",
   });
 
+  const storeCardStyle = {
+    marginTop: "12px",
+    padding: "13px",
+    borderRadius: "16px",
+    background:
+      "linear-gradient(135deg, rgba(224,186,40,0.18), rgba(22,71,119,0.35))",
+    border: "1px solid rgba(224,186,40,0.36)",
+    boxShadow: "0 10px 24px rgba(0,0,0,0.16)",
+  };
+
+  const storeLabelStyle = {
+    margin: 0,
+    color: "#e0ba28",
+    fontSize: "10px",
+    fontWeight: "950",
+    letterSpacing: "0.09em",
+    textTransform: "uppercase",
+  };
+
+  const storeNameStyle = {
+    margin: "5px 0 0",
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: "950",
+    lineHeight: 1.25,
+  };
+
+  const storeLocationStyle = {
+    margin: "4px 0 0",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: "12px",
+    fontWeight: "750",
+    lineHeight: 1.3,
+  };
+
   const sectionTitleStyle = {
     display: "block",
     margin: "16px 8px 8px",
@@ -355,7 +408,6 @@ export default function Layout() {
 
   const sidebarStyle = {
     width: isMobile ? "100vw" : "270px",
-    height: "100vh",
     height: "100dvh",
     background: "#07182c",
     color: "#ffffff",
@@ -382,7 +434,6 @@ export default function Layout() {
     <div
       style={{
         width: "100%",
-        height: "100vh",
         height: "100dvh",
         display: "flex",
         overflow: "hidden",
@@ -468,7 +519,7 @@ export default function Layout() {
                 textOverflow: "ellipsis",
               }}
             >
-              Find pages fast
+              {currentStoreName}
             </small>
           </button>
 
@@ -528,6 +579,7 @@ export default function Layout() {
             >
               Chalin 03
             </h2>
+
             <p
               style={{
                 margin: "4px 0 0",
@@ -661,6 +713,16 @@ export default function Layout() {
               )}
             </div>
           </button>
+
+          <div style={storeCardStyle}>
+            <p style={storeLabelStyle}>Current Store</p>
+
+            <p style={storeNameStyle}>
+              {currentStoreCode} — {currentStoreName}
+            </p>
+
+            <p style={storeLocationStyle}>{currentStoreLocation}</p>
+          </div>
         </div>
 
         <div
@@ -719,7 +781,6 @@ export default function Layout() {
                   style={linkStyle}
                   onClick={closeMobileMenu}
                 >
-
                   Customer Statement
                 </NavLink>
 
@@ -872,6 +933,41 @@ export default function Layout() {
             {user?.role || "role"}
           </span>
 
+          <div
+            style={{
+              marginBottom: "12px",
+              padding: "10px",
+              borderRadius: "12px",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                color: "#e0ba28",
+                fontSize: "10px",
+                fontWeight: "950",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Working Branch
+            </p>
+
+            <p
+              style={{
+                margin: "4px 0 0",
+                color: "#ffffff",
+                fontSize: "12px",
+                fontWeight: "900",
+                lineHeight: 1.35,
+              }}
+            >
+              {currentStoreName}
+            </p>
+          </div>
+
           <InstallAppButton />
 
           <button
@@ -916,7 +1012,6 @@ export default function Layout() {
           flex: 1,
           minWidth: 0,
           width: "100%",
-          height: "100vh",
           height: "100dvh",
           overflowY: "auto",
           overflowX: "auto",
@@ -1009,6 +1104,35 @@ export default function Layout() {
                     Search any page and jump there quickly. On desktop, press
                     Ctrl + K anytime.
                   </p>
+
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      display: "inline-flex",
+                      maxWidth: "100%",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "8px 10px",
+                      borderRadius: "999px",
+                      background: "rgba(224, 186, 40, 0.14)",
+                      border: "1px solid rgba(224, 186, 40, 0.28)",
+                      color: "#ffffff",
+                      fontSize: "12px",
+                      fontWeight: "900",
+                    }}
+                  >
+                    <span>🏬</span>
+                    <span
+                      style={{
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {currentStoreCode} — {currentStoreName}
+                    </span>
+                  </div>
                 </div>
 
                 <button

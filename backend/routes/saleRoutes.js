@@ -39,7 +39,42 @@ function cleanText(value) {
   return text;
 }
 
-function generateReceiptNumber() {
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return null;
+  }
+
+  return branchId;
+}
+
+function requireSelectedBranch(req, res) {
+  const branchId = getBranchId(req);
+
+  if (!branchId) {
+    res.status(400).json({
+      status: "error",
+      message:
+        "No store selected. Please logout, choose a store, and login again.",
+    });
+
+    return null;
+  }
+
+  return branchId;
+}
+
+function cleanReceiptPrefix(prefix, branchCode) {
+  const value = cleanText(prefix) || `CHL-${cleanText(branchCode) || "STORE"}`;
+
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .slice(0, 20);
+}
+
+function generateReceiptNumber(prefix) {
   const now = new Date();
 
   const year = now.getFullYear();
@@ -50,7 +85,7 @@ function generateReceiptNumber() {
   const second = String(now.getSeconds()).padStart(2, "0");
   const random = Math.floor(1000 + Math.random() * 9000);
 
-  return `CHL-${year}${month}${day}-${hour}${minute}${second}-${random}`;
+  return `${prefix}-${year}${month}${day}-${hour}${minute}${second}-${random}`;
 }
 
 function getDebtStatus(balance, amountPaid) {
@@ -65,22 +100,70 @@ function getDebtStatus(balance, amountPaid) {
   return "unpaid";
 }
 
-async function getSettings(connection) {
+async function getSettings(connection, branchId) {
   const [settingsRows] = await connection.query(
-    `SELECT tax_rate, debt_reminder_days
-     FROM settings
-     ORDER BY id ASC
-     LIMIT 1`
+    `SELECT
+      s.tax_rate,
+      s.debt_reminder_days,
+      s.business_name,
+      s.business_address,
+      s.business_phone,
+      s.owner_phone,
+      s.branch_name,
+      s.receipt_prefix,
+      b.branch_code,
+      b.name AS branch_table_name,
+      b.location AS branch_location,
+      b.phone AS branch_phone
+     FROM settings s
+     LEFT JOIN branches b ON s.branch_id = b.id
+     WHERE s.branch_id = ?
+     LIMIT 1`,
+    [branchId]
   );
 
   if (settingsRows.length === 0) {
+    const [fallbackRows] = await connection.query(
+      `SELECT
+        id,
+        branch_code,
+        name,
+        location,
+        phone
+       FROM branches
+       WHERE id = ?
+       LIMIT 1`,
+      [branchId]
+    );
+
+    const fallbackBranch = fallbackRows[0] || {};
+
     return {
       tax_rate: 0,
       debt_reminder_days: 7,
+      business_name: "Chalin 03 Company Limited",
+      business_address:
+        fallbackBranch.location || "",
+      business_phone: fallbackBranch.phone || "0249469080 / 0249995510",
+      owner_phone: "0543421127",
+      branch_name: fallbackBranch.name || "Selected Store",
+      receipt_prefix: cleanReceiptPrefix(null, fallbackBranch.branch_code),
+      branch_code: fallbackBranch.branch_code || "STORE",
+      branch_table_name: fallbackBranch.name || "Selected Store",
+      branch_location: fallbackBranch.location || "",
+      branch_phone: fallbackBranch.phone || "",
     };
   }
 
-  return settingsRows[0];
+  const settings = settingsRows[0];
+
+  return {
+    ...settings,
+    receipt_prefix: cleanReceiptPrefix(
+      settings.receipt_prefix,
+      settings.branch_code
+    ),
+  };
 }
 
 function calculateDueDate(daysToAdd) {
@@ -100,13 +183,14 @@ function toDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
-async function findApprovedAuditLockForDate(connection, dateValue) {
+async function findApprovedAuditLockForDate(connection, branchId, dateValue) {
   const dateOnly = toDateOnly(dateValue);
 
   try {
     const [locks] = await connection.query(
       `SELECT
         id,
+        branch_id,
         period_type,
         period_label,
         period_start,
@@ -118,7 +202,8 @@ async function findApprovedAuditLockForDate(connection, dateValue) {
         review_date,
         updated_at
        FROM audit_signoffs
-       WHERE period_status = 'approved'
+       WHERE branch_id = ?
+       AND period_status = 'approved'
        AND (
         period_type = 'all'
         OR (
@@ -139,14 +224,15 @@ async function findApprovedAuditLockForDate(connection, dateValue) {
        )
        ORDER BY updated_at DESC, id DESC
        LIMIT 1`,
-      [dateOnly, dateOnly, dateOnly]
+      [branchId, dateOnly, dateOnly, dateOnly]
     );
 
     return locks.length > 0 ? locks[0] : null;
   } catch (error) {
     if (
       error.code === "ER_NO_SUCH_TABLE" ||
-      error.code === "ER_BAD_TABLE_ERROR"
+      error.code === "ER_BAD_TABLE_ERROR" ||
+      error.code === "ER_BAD_FIELD_ERROR"
     ) {
       return null;
     }
@@ -162,6 +248,7 @@ function sendAuditLockedResponse(res, lock, actionText) {
     message: `This accounting period is already approved and locked. You cannot ${actionText} inside this period.`,
     locked_period: {
       id: lock.id,
+      branch_id: lock.branch_id,
       period_type: lock.period_type,
       period_label: lock.period_label,
       period_start: lock.period_start,
@@ -176,6 +263,7 @@ function sendAuditLockedResponse(res, lock, actionText) {
 
 async function findOrCreateCustomer(
   connection,
+  branchId,
   customerName,
   customerPhone,
   customerLocation
@@ -190,11 +278,12 @@ async function findOrCreateCustomer(
 
   if (cleanPhone) {
     const [existingCustomers] = await connection.query(
-      `SELECT id, name, phone, location
+      `SELECT id, branch_id, name, phone, location
        FROM customers
-       WHERE phone = ?
+       WHERE branch_id = ?
+       AND phone = ?
        LIMIT 1`,
-      [cleanPhone]
+      [branchId, cleanPhone]
     );
 
     if (existingCustomers.length > 0) {
@@ -204,8 +293,9 @@ async function findOrCreateCustomer(
         await connection.query(
           `UPDATE customers
            SET name = ?, location = COALESCE(?, location)
-           WHERE id = ?`,
-          [cleanName, cleanLocation, existingCustomer.id]
+           WHERE id = ?
+           AND branch_id = ?`,
+          [cleanName, cleanLocation, existingCustomer.id, branchId]
         );
 
         return {
@@ -222,13 +312,14 @@ async function findOrCreateCustomer(
   const finalName = cleanName || "Walk-in Customer";
 
   const [result] = await connection.query(
-    `INSERT INTO customers (name, phone, location)
-     VALUES (?, ?, ?)`,
-    [finalName, cleanPhone, cleanLocation]
+    `INSERT INTO customers (branch_id, name, phone, location)
+     VALUES (?, ?, ?, ?)`,
+    [branchId, finalName, cleanPhone, cleanLocation]
   );
 
   return {
     id: result.insertId,
+    branch_id: branchId,
     name: finalName,
     phone: cleanPhone,
     location: cleanLocation,
@@ -240,6 +331,12 @@ router.post("/", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const {
       customer_name,
       customer_phone,
@@ -299,22 +396,19 @@ router.post("/", requireAuth, async (req, res) => {
 
     const lockedPeriod = await findApprovedAuditLockForDate(
       connection,
+      branchId,
       new Date()
     );
 
     if (lockedPeriod) {
       await connection.rollback();
 
-      return sendAuditLockedResponse(
-        res,
-        lockedPeriod,
-        "record a sale"
-      );
+      return sendAuditLockedResponse(res, lockedPeriod, "record a sale");
     }
 
-    const settings = await getSettings(connection);
+    const settings = await getSettings(connection, branchId);
     const taxRate = Number(settings.tax_rate || 0);
-    const receiptNumber = generateReceiptNumber();
+    const receiptNumber = generateReceiptNumber(settings.receipt_prefix);
 
     const saleItems = [];
     let subtotal = 0;
@@ -333,12 +427,20 @@ router.post("/", requireAuth, async (req, res) => {
       }
 
       const [products] = await connection.query(
-        `SELECT id, name, cost_price, selling_price, quantity, is_active
+        `SELECT
+          id,
+          branch_id,
+          name,
+          cost_price,
+          selling_price,
+          quantity,
+          is_active
          FROM products
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1
          FOR UPDATE`,
-        [productId]
+        [productId, branchId]
       );
 
       if (products.length === 0 || !products[0].is_active) {
@@ -346,13 +448,14 @@ router.post("/", requireAuth, async (req, res) => {
 
         return res.status(404).json({
           status: "error",
-          message: `Product with ID ${productId} was not found.`,
+          message:
+            "Product was not found in the selected store. Please refresh products and try again.",
         });
       }
 
       const product = products[0];
 
-      if (product.quantity < quantity) {
+      if (Number(product.quantity) < quantity) {
         await connection.rollback();
 
         return res.status(400).json({
@@ -409,6 +512,7 @@ router.post("/", requireAuth, async (req, res) => {
 
     const customer = await findOrCreateCustomer(
       connection,
+      branchId,
       cleanCustomerName,
       cleanCustomerPhone,
       cleanCustomerLocation
@@ -421,6 +525,7 @@ router.post("/", requireAuth, async (req, res) => {
 
     const [saleResult] = await connection.query(
       `INSERT INTO sales (
+        branch_id,
         receipt_number,
         customer_id,
         customer_name,
@@ -435,8 +540,9 @@ router.post("/", requireAuth, async (req, res) => {
         balance,
         sale_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
       [
+        branchId,
         receiptNumber,
         customer ? customer.id : null,
         finalCustomerName,
@@ -480,8 +586,9 @@ router.post("/", requireAuth, async (req, res) => {
       await connection.query(
         `UPDATE products
          SET quantity = quantity - ?
-         WHERE id = ?`,
-        [saleItem.quantity, saleItem.product_id]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [saleItem.quantity, saleItem.product_id, branchId]
       );
     }
 
@@ -493,6 +600,7 @@ router.post("/", requireAuth, async (req, res) => {
 
       const [debtResult] = await connection.query(
         `INSERT INTO debts (
+          branch_id,
           sale_id,
           customer_id,
           customer_name,
@@ -503,8 +611,9 @@ router.post("/", requireAuth, async (req, res) => {
           status,
           due_date
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           saleId,
           customer ? customer.id : null,
           finalCustomerName,
@@ -519,6 +628,7 @@ router.post("/", requireAuth, async (req, res) => {
 
       debt = {
         id: debtResult.insertId,
+        branch_id: branchId,
         sale_id: saleId,
         customer_name: finalCustomerName,
         customer_phone: finalCustomerPhone,
@@ -531,9 +641,10 @@ router.post("/", requireAuth, async (req, res) => {
     }
 
     await connection.query(
-      `INSERT INTO activity_log (user_id, action, details)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
       [
+        branchId,
         req.user.id,
         "CREATE_SALE",
         `Created sale ${receiptNumber} for ${finalCustomerName} with total GHS ${total} and discount GHS ${discountAmount}`,
@@ -546,10 +657,29 @@ router.post("/", requireAuth, async (req, res) => {
       status: "success",
       message: "Sale recorded successfully.",
       receipt: {
+        branch_id: branchId,
+        branch_code: settings.branch_code || req.user.branch_code || null,
+        branch_name:
+          settings.branch_name ||
+          settings.branch_table_name ||
+          req.user.branch_name ||
+          null,
+        branch_location:
+          settings.business_address ||
+          settings.branch_location ||
+          req.user.branch_location ||
+          null,
         sale_id: saleId,
         receipt_number: receiptNumber,
-        business_name: "Chalin 03 Company Limited",
-        business_address: "Dunkwa Police Barrier",
+        business_name: settings.business_name || "Chalin 03 Company Limited",
+        business_address:
+          settings.business_address ||
+          settings.branch_location ||
+          req.user.branch_location ||
+          "",
+        business_phone:
+          settings.business_phone || settings.branch_phone || null,
+        owner_phone: settings.owner_phone || null,
         staff: {
           id: req.user.id,
           full_name: req.user.full_name,
@@ -598,11 +728,21 @@ router.post("/", requireAuth, async (req, res) => {
 // GET /api/sales
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const { search, from, to } = req.query;
 
     let sql = `
       SELECT
         s.id,
+        s.branch_id,
+        b.branch_code,
+        b.name AS branch_name,
+        b.location AS branch_location,
         s.receipt_number,
         s.customer_name,
         s.customer_phone,
@@ -621,12 +761,13 @@ router.get("/", requireAuth, async (req, res) => {
         u.full_name AS staff_name,
         vu.full_name AS voided_by_name
       FROM sales s
+      LEFT JOIN branches b ON s.branch_id = b.id
       LEFT JOIN users u ON s.staff_id = u.id
       LEFT JOIN users vu ON s.voided_by = vu.id
-      WHERE 1 = 1
+      WHERE s.branch_id = ?
     `;
 
-    const params = [];
+    const params = [branchId];
 
     if (search) {
       sql += `
@@ -657,6 +798,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: sales.length,
       sales,
     });
@@ -673,25 +815,36 @@ router.get("/", requireAuth, async (req, res) => {
 // GET /api/sales/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const { id } = req.params;
 
     const [sales] = await pool.query(
       `SELECT
         s.*,
+        b.branch_code,
+        b.name AS branch_name,
+        b.location AS branch_location,
         u.full_name AS staff_name,
         vu.full_name AS voided_by_name
        FROM sales s
+       LEFT JOIN branches b ON s.branch_id = b.id
        LEFT JOIN users u ON s.staff_id = u.id
        LEFT JOIN users vu ON s.voided_by = vu.id
        WHERE s.id = ?
+       AND s.branch_id = ?
        LIMIT 1`,
-      [id]
+      [id, branchId]
     );
 
     if (sales.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Sale not found.",
+        message: "Sale not found in the selected store.",
       });
     }
 
@@ -714,12 +867,14 @@ router.get("/:id", requireAuth, async (req, res) => {
       `SELECT *
        FROM debts
        WHERE sale_id = ?
+       AND branch_id = ?
        LIMIT 1`,
-      [id]
+      [id, branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       sale: sales[0],
       items,
       debt: debts.length > 0 ? debts[0] : null,
@@ -738,11 +893,17 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.patch(
   "/:id/void",
   requireAuth,
-  requireRole(["admin"]),
+  requireRole("admin"),
   async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
       const { id } = req.params;
       const { reason } = req.body;
 
@@ -758,15 +919,17 @@ router.patch(
       const [sales] = await connection.query(
         `SELECT
           id,
+          branch_id,
           receipt_number,
           sale_status,
           is_voided,
           created_at
          FROM sales
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1
          FOR UPDATE`,
-        [id]
+        [id, branchId]
       );
 
       if (sales.length === 0) {
@@ -774,7 +937,7 @@ router.patch(
 
         return res.status(404).json({
           status: "error",
-          message: "Sale not found.",
+          message: "Sale not found in the selected store.",
         });
       }
 
@@ -782,17 +945,14 @@ router.patch(
 
       const lockedPeriod = await findApprovedAuditLockForDate(
         connection,
+        branchId,
         sale.created_at
       );
 
       if (lockedPeriod) {
         await connection.rollback();
 
-        return sendAuditLockedResponse(
-          res,
-          lockedPeriod,
-          "void a sale"
-        );
+        return sendAuditLockedResponse(res, lockedPeriod, "void a sale");
       }
 
       if (
@@ -819,13 +979,14 @@ router.patch(
          LEFT JOIN returns r
           ON r.sale_id = si.sale_id
           AND r.product_id = si.product_id
+          AND r.branch_id = ?
          WHERE si.sale_id = ?
          GROUP BY
           si.id,
           si.product_id,
           si.product_name,
           si.quantity`,
-        [id]
+        [branchId, id]
       );
 
       for (const item of items) {
@@ -837,8 +998,9 @@ router.patch(
           await connection.query(
             `UPDATE products
              SET quantity = quantity + ?
-             WHERE id = ?`,
-            [quantityToRestore, item.product_id]
+             WHERE id = ?
+             AND branch_id = ?`,
+            [quantityToRestore, item.product_id, branchId]
           );
         }
       }
@@ -851,8 +1013,9 @@ router.patch(
           void_reason = ?,
           voided_by = ?,
           voided_at = NOW()
-         WHERE id = ?`,
-        [reason.trim(), req.user.id, id]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [reason.trim(), req.user.id, id, branchId]
       );
 
       await connection.query(
@@ -861,14 +1024,16 @@ router.patch(
           amount_paid = amount_owed,
           balance = 0,
           status = 'paid'
-         WHERE sale_id = ?`,
-        [id]
+         WHERE sale_id = ?
+         AND branch_id = ?`,
+        [id, branchId]
       );
 
       await connection.query(
-        `INSERT INTO activity_log (user_id, action, details)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
         [
+          branchId,
           req.user.id,
           "VOID_SALE",
           `Voided sale ${sale.receipt_number}. Reason: ${reason.trim()}`,

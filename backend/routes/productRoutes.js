@@ -6,6 +6,16 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return null;
+  }
+
+  return branchId;
+}
+
 function toMoney(value) {
   const number = Number(value);
 
@@ -34,22 +44,44 @@ function nullIfEmpty(value) {
   return value;
 }
 
-async function logActivity(userId, action, details) {
+async function logActivity(branchId, userId, action, details) {
   await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
+    `INSERT INTO activity_log (branch_id, user_id, action, details)
+     VALUES (?, ?, ?, ?)`,
+    [branchId || null, userId || null, action, details]
   );
+}
+
+function requireSelectedBranch(req, res) {
+  const branchId = getBranchId(req);
+
+  if (!branchId) {
+    res.status(400).json({
+      status: "error",
+      message: "No store was selected. Please logout and login again through a store.",
+    });
+
+    return null;
+  }
+
+  return branchId;
 }
 
 // GET /api/products
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const { search, category, lowStock } = req.query;
 
     let sql = `
       SELECT
         id,
+        branch_id,
         name,
         size,
         category,
@@ -64,9 +96,10 @@ router.get("/", requireAuth, async (req, res) => {
         updated_at
       FROM products
       WHERE is_active = TRUE
+      AND branch_id = ?
     `;
 
-    const params = [];
+    const params = [branchId];
 
     if (search) {
       sql += `
@@ -97,6 +130,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: products.length,
       products,
     });
@@ -110,13 +144,19 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-
 // GET /api/products/low-stock
 router.get("/low-stock", requireAuth, async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const [products] = await pool.query(
       `SELECT
         id,
+        branch_id,
         name,
         size,
         category,
@@ -135,8 +175,10 @@ router.get("/low-stock", requireAuth, async (req, res) => {
         GREATEST((low_stock_threshold * 2) - quantity, 0) * cost_price AS estimated_restock_cost
        FROM products
        WHERE is_active = TRUE
+       AND branch_id = ?
        AND quantity <= low_stock_threshold
-       ORDER BY quantity ASC, name ASC`
+       ORDER BY quantity ASC, name ASC`,
+      [branchId]
     );
 
     const outOfStockCount = products.filter(
@@ -152,6 +194,7 @@ router.get("/low-stock", requireAuth, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: products.length,
       out_of_stock_count: outOfStockCount,
       low_stock_count: lowStockCount,
@@ -175,26 +218,34 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
       const { id } = req.params;
 
       const [productRows] = await pool.query(
-        `SELECT id, name, quantity
+        `SELECT id, branch_id, name, quantity
          FROM products
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1`,
-        [id]
+        [id, branchId]
       );
 
       if (productRows.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Product not found.",
+          message: "Product not found in this store.",
         });
       }
 
       const [adjustments] = await pool.query(
         `SELECT
           sa.id,
+          sa.branch_id,
           sa.product_id,
           sa.adjustment_type,
           sa.quantity,
@@ -206,12 +257,14 @@ router.get(
          FROM stock_adjustments sa
          LEFT JOIN users u ON sa.adjusted_by = u.id
          WHERE sa.product_id = ?
+         AND sa.branch_id = ?
          ORDER BY sa.adjusted_at DESC, sa.id DESC`,
-        [id]
+        [id, branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         product: productRows[0],
         count: adjustments.length,
         adjustments,
@@ -232,11 +285,18 @@ router.get(
 // GET /api/products/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const { id } = req.params;
 
     const [products] = await pool.query(
       `SELECT
         id,
+        branch_id,
         name,
         size,
         category,
@@ -251,19 +311,21 @@ router.get("/:id", requireAuth, async (req, res) => {
         updated_at
        FROM products
        WHERE id = ?
+       AND branch_id = ?
        LIMIT 1`,
-      [id]
+      [id, branchId]
     );
 
     if (products.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Product not found.",
+        message: "Product not found in this store.",
       });
     }
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       product: products[0],
     });
   } catch (error) {
@@ -283,6 +345,12 @@ router.post(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
       const {
         name,
         size,
@@ -342,6 +410,7 @@ router.post(
 
       const [result] = await pool.query(
         `INSERT INTO products (
+          branch_id,
           name,
           size,
           category,
@@ -353,8 +422,9 @@ router.post(
           image_url,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           cleanName,
           nullIfEmpty(size),
           nullIfEmpty(category),
@@ -369,19 +439,21 @@ router.post(
       );
 
       await logActivity(
+        branchId,
         req.user.id,
         "CREATE_PRODUCT",
         `Created product "${cleanName}" with quantity ${productQuantity}`
       );
 
       const [products] = await pool.query(
-        `SELECT * FROM products WHERE id = ? LIMIT 1`,
-        [result.insertId]
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [result.insertId, branchId]
       );
 
       return res.status(201).json({
         status: "success",
         message: "Product created successfully.",
+        branch_id: branchId,
         product: products[0],
       });
     } catch (error) {
@@ -390,7 +462,7 @@ router.post(
       if (error.code === "ER_DUP_ENTRY") {
         return res.status(409).json({
           status: "error",
-          message: "A product with this barcode already exists.",
+          message: "A product with this barcode already exists in this store.",
         });
       }
 
@@ -409,6 +481,12 @@ router.put(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
       const { id } = req.params;
 
       const {
@@ -425,14 +503,14 @@ router.put(
       } = req.body;
 
       const [existingProducts] = await pool.query(
-        `SELECT * FROM products WHERE id = ? LIMIT 1`,
-        [id]
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, branchId]
       );
 
       if (existingProducts.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Product not found.",
+          message: "Product not found in this store.",
         });
       }
 
@@ -474,7 +552,8 @@ router.put(
           barcode = ?,
           image_url = ?,
           is_active = ?
-         WHERE id = ?`,
+         WHERE id = ?
+         AND branch_id = ?`,
         [
           cleanName,
           nullIfEmpty(size),
@@ -487,23 +566,26 @@ router.put(
           nullIfEmpty(image_url),
           is_active === false ? false : true,
           id,
+          branchId,
         ]
       );
 
       await logActivity(
+        branchId,
         req.user.id,
         "UPDATE_PRODUCT",
         `Updated product "${cleanName}" with ID ${id}`
       );
 
       const [products] = await pool.query(
-        `SELECT * FROM products WHERE id = ? LIMIT 1`,
-        [id]
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, branchId]
       );
 
       return res.json({
         status: "success",
         message: "Product updated successfully.",
+        branch_id: branchId,
         product: products[0],
       });
     } catch (error) {
@@ -512,7 +594,7 @@ router.put(
       if (error.code === "ER_DUP_ENTRY") {
         return res.status(409).json({
           status: "error",
-          message: "A product with this barcode already exists.",
+          message: "A product with this barcode already exists in this store.",
         });
       }
 
@@ -533,6 +615,12 @@ router.patch(
     const connection = await pool.getConnection();
 
     try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
       const { id } = req.params;
       const { adjustment_type, quantity, reason } = req.body;
 
@@ -571,13 +659,14 @@ router.patch(
       await connection.beginTransaction();
 
       const [products] = await connection.query(
-        `SELECT id, name, quantity
+        `SELECT id, branch_id, name, quantity
          FROM products
          WHERE id = ?
+         AND branch_id = ?
          AND is_active = TRUE
          LIMIT 1
          FOR UPDATE`,
-        [id]
+        [id, branchId]
       );
 
       if (products.length === 0) {
@@ -585,7 +674,7 @@ router.patch(
 
         return res.status(404).json({
           status: "error",
-          message: "Product not found.",
+          message: "Product not found in this store.",
         });
       }
 
@@ -618,12 +707,14 @@ router.patch(
       await connection.query(
         `UPDATE products
          SET quantity = ?
-         WHERE id = ?`,
-        [newQuantity, id]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [newQuantity, id, branchId]
       );
 
       const [adjustmentResult] = await connection.query(
         `INSERT INTO stock_adjustments (
+          branch_id,
           product_id,
           adjustment_type,
           quantity,
@@ -632,8 +723,9 @@ router.patch(
           reason,
           adjusted_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           id,
           adjustment_type,
           adjustmentQuantity,
@@ -645,9 +737,10 @@ router.patch(
       );
 
       await connection.query(
-        `INSERT INTO activity_log (user_id, action, details)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
         [
+          branchId,
           req.user.id,
           "STOCK_ADJUSTMENT",
           `Product "${product.name}" stock changed from ${oldQuantity} to ${newQuantity}. Reason: ${cleanReason}`,
@@ -657,17 +750,19 @@ router.patch(
       await connection.commit();
 
       const [updatedProducts] = await pool.query(
-        `SELECT * FROM products WHERE id = ? LIMIT 1`,
-        [id]
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, branchId]
       );
 
       return res.json({
         status: "success",
         message: "Stock adjusted successfully.",
+        branch_id: branchId,
         old_quantity: oldQuantity,
         new_quantity: newQuantity,
         adjustment: {
           id: adjustmentResult.insertId,
+          branch_id: branchId,
           product_id: Number(id),
           adjustment_type,
           quantity: adjustmentQuantity,
@@ -698,28 +793,36 @@ router.patch(
 // DELETE /api/products/:id
 router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
     const { id } = req.params;
 
     const [products] = await pool.query(
-      `SELECT id, name FROM products WHERE id = ? LIMIT 1`,
-      [id]
+      `SELECT id, branch_id, name FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+      [id, branchId]
     );
 
     if (products.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Product not found.",
+        message: "Product not found in this store.",
       });
     }
 
     await pool.query(
       `UPDATE products
        SET is_active = FALSE
-       WHERE id = ?`,
-      [id]
+       WHERE id = ?
+       AND branch_id = ?`,
+      [id, branchId]
     );
 
     await logActivity(
+      branchId,
       req.user.id,
       "DELETE_PRODUCT",
       `Soft-deleted product "${products[0].name}" with ID ${id}`
@@ -728,6 +831,7 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     return res.json({
       status: "success",
       message: "Product deleted successfully.",
+      branch_id: branchId,
     });
   } catch (error) {
     console.error("Delete product error:", error);

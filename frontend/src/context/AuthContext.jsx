@@ -8,6 +8,7 @@ const USER_KEY = "chalin03_user";
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
+
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem(USER_KEY);
 
@@ -41,10 +42,11 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  async function login(username, password) {
+  async function login(username, password, branchId) {
     const response = await axiosClient.post("/auth/login", {
       username,
       password,
+      branch_id: branchId,
     });
 
     saveSession(response.data.token, response.data.user);
@@ -79,9 +81,17 @@ export function AuthProvider({ children }) {
     if (token) {
       refreshUser();
     }
+    // We only want this to run once when the app opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const role = String(user?.role || "").toLowerCase();
+
+  const selectedBranch = user?.selected_branch || null;
+  const branchId = user?.branch_id || selectedBranch?.id || null;
+  const branchCode = user?.branch_code || selectedBranch?.branch_code || "";
+  const branchName = user?.branch_name || selectedBranch?.name || "";
+  const branchLocation = user?.branch_location || selectedBranch?.location || "";
 
   return (
     <AuthContext.Provider
@@ -91,6 +101,13 @@ export function AuthProvider({ children }) {
         role,
         loading,
         isLoggedIn: Boolean(token && user),
+
+        selectedBranch,
+        branchId,
+        branchCode,
+        branchName,
+        branchLocation,
+
         login,
         logout,
         refreshUser,
