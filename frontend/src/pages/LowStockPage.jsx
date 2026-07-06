@@ -1,7 +1,31 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 export default function LowStockPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [products, setProducts] = useState([]);
   const [summary, setSummary] = useState({
     count: 0,
@@ -21,6 +45,10 @@ export default function LowStockPage() {
     if (value === "out_of_stock") return "Out of Stock";
     if (value === "low_stock") return "Low Stock";
     return "OK";
+  }
+
+  function getProductStoreCode(product) {
+    return product?.branch_code || product?.store_code || currentStoreCode;
   }
 
   async function loadLowStockProducts() {
@@ -48,14 +76,21 @@ export default function LowStockPage() {
 
   useEffect(() => {
     loadLowStockProducts();
-  }, []);
+    // Reload low-stock products when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   return (
     <div>
       <div className="page-header">
         <div>
           <h1>Low Stock / Restock List</h1>
-          <p>See products that are low or out of stock</p>
+          <p>
+            See products that are low or out of stock for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={loadLowStockProducts}>
@@ -63,11 +98,31 @@ export default function LowStockPage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Low-stock products, out-of-stock products and estimated restock cost
+          are filtered to this selected store only.
+        </small>
+      </div>
+
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid">
         <div className="stat-card">
-          <span>Total Low Stock Items</span>
+          <span>{currentStoreCode} Total Low Stock Items</span>
           <strong>{summary.count}</strong>
         </div>
 
@@ -88,16 +143,17 @@ export default function LowStockPage() {
       </div>
 
       <div className="section-card">
-        <h2>Restock List</h2>
+        <h2>Restock List - {currentStoreCode}</h2>
 
         {loading ? (
-          <p>Loading low stock products...</p>
+          <p>Loading low stock products for {currentStoreCode}...</p>
         ) : products.length === 0 ? (
-          <p>No low stock products found.</p>
+          <p>No low stock products found for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
+                <th>Store</th>
                 <th>Product</th>
                 <th>Category</th>
                 <th>Current Qty</th>
@@ -112,11 +168,14 @@ export default function LowStockPage() {
             <tbody>
               {products.map((product) => (
                 <tr key={product.id}>
+                  <td>{getProductStoreCode(product)}</td>
+
                   <td>
                     <strong>{product.name}</strong>
                     <br />
                     <small>
-                      {product.size || "-"} {product.barcode ? `| ${product.barcode}` : ""}
+                      {product.size || "-"}{" "}
+                      {product.barcode ? `| ${product.barcode}` : ""}
                     </small>
                   </td>
 

@@ -25,6 +25,29 @@ export default class PageErrorBoundary extends Component {
     window.location.reload();
   };
 
+  handleGoDashboard = () => {
+    window.location.href = "/";
+  };
+
+  handleGoLogin = () => {
+    window.location.href = "/login";
+  };
+
+  handleClearSession = () => {
+    const confirmed = window.confirm(
+      "This will logout the current user and clear the selected store session on this browser. Continue?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    localStorage.removeItem("chalin03_token");
+    localStorage.removeItem("chalin03_user");
+
+    window.location.href = "/login";
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -81,7 +104,9 @@ export default class PageErrorBoundary extends Component {
               }}
             >
               The system stopped this page from making the whole app blank.
-              Please copy the error below and fix the page file.
+              Please copy the error below and fix the page file. If this
+              happened after changing store/login details, clear the session and
+              login again with the correct store.
             </p>
 
             <pre
@@ -99,22 +124,78 @@ export default class PageErrorBoundary extends Component {
               {this.state.errorMessage}
             </pre>
 
-            <button
-              type="button"
-              onClick={this.handleReload}
+            <div
               style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
                 marginTop: "16px",
-                border: "none",
-                borderRadius: "12px",
-                padding: "12px 16px",
-                background: "#07182c",
-                color: "#ffffff",
-                fontWeight: "950",
-                cursor: "pointer",
               }}
             >
-              Reload Page
-            </button>
+              <button
+                type="button"
+                onClick={this.handleReload}
+                style={{
+                  border: "none",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  background: "#07182c",
+                  color: "#ffffff",
+                  fontWeight: "950",
+                  cursor: "pointer",
+                }}
+              >
+                Reload Page
+              </button>
+
+              <button
+                type="button"
+                onClick={this.handleGoDashboard}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  background: "#ffffff",
+                  color: "#07182c",
+                  fontWeight: "950",
+                  cursor: "pointer",
+                }}
+              >
+                Go to Dashboard
+              </button>
+
+              <button
+                type="button"
+                onClick={this.handleGoLogin}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  background: "#ffffff",
+                  color: "#07182c",
+                  fontWeight: "950",
+                  cursor: "pointer",
+                }}
+              >
+                Go to Login
+              </button>
+
+              <button
+                type="button"
+                onClick={this.handleClearSession}
+                style={{
+                  border: "none",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  fontWeight: "950",
+                  cursor: "pointer",
+                }}
+              >
+                Clear Session & Login
+              </button>
+            </div>
           </div>
         </div>
       );

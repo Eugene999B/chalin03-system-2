@@ -3,8 +3,29 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+function getStoreCode(store) {
+  return store?.code || store?.branch_code || "";
+}
+
+function getStoreName(store) {
+  return store?.name || store?.branch_name || "";
+}
+
+function getStoreLocation(store) {
+  return store?.location || store?.branch_location || "";
+}
+
 export default function Layout() {
-  const { user, logout, branchCode, branchName, branchLocation } = useAuth();
+  const {
+    user,
+    logout,
+    selectedBranch,
+    branchId,
+    branchCode,
+    branchName,
+    branchLocation,
+    canAccessAllBranches,
+  } = useAuth();
   const navigate = useNavigate();
 
   const [isMobile, setIsMobile] = useState(false);
@@ -27,20 +48,29 @@ export default function Layout() {
   const currentStoreName =
     branchName ||
     user?.branch_name ||
-    user?.selected_branch?.name ||
+    getStoreName(selectedBranch) ||
+    getStoreName(user?.selected_branch) ||
     "No store selected";
 
   const currentStoreCode =
     branchCode ||
     user?.branch_code ||
-    user?.selected_branch?.branch_code ||
+    getStoreCode(selectedBranch) ||
+    getStoreCode(user?.selected_branch) ||
     "STORE";
 
   const currentStoreLocation =
     branchLocation ||
     user?.branch_location ||
-    user?.selected_branch?.location ||
+    getStoreLocation(selectedBranch) ||
+    getStoreLocation(user?.selected_branch) ||
     "Location not set";
+
+  const storeAccessLabel = canAccessAllBranches
+    ? "All-store access"
+    : branchId
+    ? `Store ID ${branchId}`
+    : "No store ID";
 
   const commandItems = useMemo(() => {
     const items = [
@@ -722,6 +752,18 @@ export default function Layout() {
             </p>
 
             <p style={storeLocationStyle}>{currentStoreLocation}</p>
+
+            <p
+              style={{
+                margin: "6px 0 0",
+                color: "rgba(255,255,255,0.62)",
+                fontSize: "11px",
+                fontWeight: "800",
+                lineHeight: 1.25,
+              }}
+            >
+              {storeAccessLabel}
+            </p>
           </div>
         </div>
 
@@ -965,6 +1007,18 @@ export default function Layout() {
               }}
             >
               {currentStoreName}
+            </p>
+
+            <p
+              style={{
+                margin: "4px 0 0",
+                color: "rgba(255,255,255,0.62)",
+                fontSize: "11px",
+                fontWeight: "800",
+                lineHeight: 1.3,
+              }}
+            >
+              {currentStoreCode} • {storeAccessLabel}
             </p>
           </div>
 

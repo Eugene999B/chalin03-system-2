@@ -1,9 +1,35 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 const CONFIRMATION_TEXT = "CLEAR CHALIN03 TEST DATA";
 
 export default function MaintenancePage() {
+  const { user, branchCode, branchName, branchLocation } = useAuth();
+  const role = String(user?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [summary, setSummary] = useState(null);
   const [systemAdminPassword, setSystemAdminPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -36,17 +62,28 @@ export default function MaintenancePage() {
   }
 
   useEffect(() => {
-    loadSummary();
-  }, []);
+    if (isAdmin) {
+      loadSummary();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   async function clearBusinessData(event) {
     event.preventDefault();
 
     const confirmBrowser = window.confirm(
-      "This will permanently clear test/business data. Users and settings will be kept. Do you want to continue?"
+      "This will permanently clear test/business data across ALL stores. Users, store records and settings will be kept. Do you want to continue?"
     );
 
     if (!confirmBrowser) {
+      return;
+    }
+
+    const secondConfirm = window.confirm(
+      "Final warning: this action is system-wide, not only the selected store. It will clear business/test records for MAIN, AJAKAA and any other store. Continue?"
+    );
+
+    if (!secondConfirm) {
       return;
     }
 
@@ -88,6 +125,27 @@ export default function MaintenancePage() {
     confirmation === CONFIRMATION_TEXT &&
     !clearing;
 
+  if (!isAdmin) {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <h1>Access Denied</h1>
+            <p>
+              You are not allowed to open System Maintenance from{" "}
+              {currentStoreCode} — {currentStoreName}.
+            </p>
+          </div>
+        </div>
+
+        <div className="error-box">
+          Only admin accounts can open system maintenance. The backend still
+          requires the main System Administrator password before clearing data.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -103,10 +161,31 @@ export default function MaintenancePage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#fff7ed",
+          border: "1px solid #fed7aa",
+          color: "#9a3412",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Maintenance is system-wide. It is not limited to the selected store.
+          Clearing test/business data will clear records across all stores while
+          keeping users, branches, store access and settings.
+        </small>
+      </div>
+
       <div className="warning-box">
         <strong>Important:</strong> This page is for the main System
-        Administrator only. It clears business/test records but keeps users and
-        business settings.
+        Administrator only. It clears business/test records across all stores,
+        but keeps users, branches, user store access and business settings.
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -119,6 +198,8 @@ export default function MaintenancePage() {
 
           <ul style={{ lineHeight: "1.8", fontWeight: "700" }}>
             <li>Users / login accounts</li>
+            <li>Branches / stores</li>
+            <li>User store access</li>
             <li>Business settings</li>
             <li>Receipt settings</li>
             <li>System Administrator account</li>
@@ -126,12 +207,16 @@ export default function MaintenancePage() {
 
           <div className="warning-box">
             Do not use this after real business operation has started unless you
-            are intentionally resetting the system.
+            are intentionally resetting the whole system across all stores.
           </div>
         </div>
 
         <div className="section-card">
           <h2>Records That Will Be Cleared</h2>
+          <p>
+            These counts represent clearable business/test records across all
+            stores.
+          </p>
 
           {loading ? (
             <p>Loading summary...</p>
@@ -169,6 +254,11 @@ export default function MaintenancePage() {
           confirmation text.
         </p>
 
+        <div className="error-box">
+          This action is not for only {currentStoreCode}. It clears business
+          records across all stores.
+        </div>
+
         <div className="warning-box">
           Type exactly: <strong>{CONFIRMATION_TEXT}</strong>
         </div>
@@ -190,12 +280,8 @@ export default function MaintenancePage() {
             placeholder={CONFIRMATION_TEXT}
           />
 
-          <button
-            type="submit"
-            className="danger-button"
-            disabled={!canClear}
-          >
-            {clearing ? "Clearing..." : "Clear Test Data"}
+          <button type="submit" className="danger-button" disabled={!canClear}>
+            {clearing ? "Clearing..." : "Clear Test Data Across All Stores"}
           </button>
         </form>
       </div>

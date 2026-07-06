@@ -8,6 +8,8 @@ const emptyUserForm = {
   password: "",
   role: "cashier",
   phone: "",
+  branch_ids: [],
+  can_access_all_branches: false,
 };
 
 const emptyResetPasswordForm = {
@@ -21,10 +23,51 @@ const emptyResetPasswordForm = {
 const SYSTEM_ADMIN_ID = 1;
 const SYSTEM_ADMIN_USERNAME = "admin";
 
+function getBranchId(branch) {
+  return Number(branch?.id || branch?.branch_id || 0);
+}
+
+function getBranchCode(branch) {
+  return branch?.code || branch?.branch_code || "";
+}
+
+function getBranchName(branch) {
+  return branch?.name || branch?.branch_name || "Store";
+}
+
+function getBranchLocation(branch) {
+  return branch?.location || branch?.branch_location || "";
+}
+
+function normalizeBranches(data) {
+  if (Array.isArray(data?.branches)) {
+    return data.branches;
+  }
+
+  if (Array.isArray(data?.stores)) {
+    return data.stores;
+  }
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  return [];
+}
+
+function formatBranchLabel(branch) {
+  const code = getBranchCode(branch);
+  const name = getBranchName(branch);
+  const location = getBranchLocation(branch);
+
+  return `${code ? `${code} - ` : ""}${name}${location ? ` (${location})` : ""}`;
+}
+
 export default function UsersSettingsPage() {
   const { user: currentUser } = useAuth();
 
   const [users, setUsers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [userForm, setUserForm] = useState(emptyUserForm);
   const [resetPasswordForm, setResetPasswordForm] = useState(
     emptyResetPasswordForm
@@ -35,6 +78,8 @@ export default function UsersSettingsPage() {
     business_address: "",
     business_phone: "",
     owner_phone: "",
+    branch_name: "",
+    receipt_prefix: "",
     tax_rate: 0,
     debt_reminder_days: 7,
     daily_summary_time: "18:00:00",
@@ -45,6 +90,10 @@ export default function UsersSettingsPage() {
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState("");
+
+  const selectedBranchId = Number(
+    currentUser?.branch_id || currentUser?.default_branch_id || 0
+  );
 
   function isOriginalSystemAdministrator(user) {
     return (
@@ -74,6 +123,46 @@ export default function UsersSettingsPage() {
     return true;
   }
 
+  function getCurrentStoreName() {
+    return (
+      currentUser?.branch_name ||
+      currentUser?.branch?.name ||
+      settings.branch_name ||
+      "Selected Store"
+    );
+  }
+
+  async function loadBranches() {
+    const response = await axiosClient.get("/branches");
+    const loadedBranches = normalizeBranches(response.data);
+
+    setBranches(loadedBranches);
+
+    setUserForm((previousForm) => {
+      if (previousForm.branch_ids.length > 0) {
+        return previousForm;
+      }
+
+      if (selectedBranchId) {
+        return {
+          ...previousForm,
+          branch_ids: [selectedBranchId],
+        };
+      }
+
+      const firstBranchId = getBranchId(loadedBranches[0]);
+
+      if (firstBranchId) {
+        return {
+          ...previousForm,
+          branch_ids: [firstBranchId],
+        };
+      }
+
+      return previousForm;
+    });
+  }
+
   async function loadUsers() {
     const response = await axiosClient.get("/users");
     setUsers(response.data.users || []);
@@ -81,14 +170,14 @@ export default function UsersSettingsPage() {
 
   async function loadSettings() {
     const response = await axiosClient.get("/settings");
-    setSettings(response.data.settings);
+    setSettings(response.data.settings || {});
   }
 
   async function loadPageData() {
     setError("");
 
     try {
-      await Promise.all([loadUsers(), loadSettings()]);
+      await Promise.all([loadBranches(), loadUsers(), loadSettings()]);
     } catch (error) {
       setError(
         error.response?.data?.message ||
@@ -99,12 +188,57 @@ export default function UsersSettingsPage() {
 
   useEffect(() => {
     loadPageData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleUserChange(event) {
-    setUserForm({
-      ...userForm,
-      [event.target.name]: event.target.value,
+    const { name, value, checked, type } = event.target;
+
+    setUserForm((previousForm) => {
+      const nextForm = {
+        ...previousForm,
+        [name]: type === "checkbox" ? checked : value,
+      };
+
+      if (name === "role" && value === "admin") {
+        nextForm.can_access_all_branches = true;
+      }
+
+      if (name === "can_access_all_branches" && checked) {
+        nextForm.branch_ids = branches
+          .map((branch) => getBranchId(branch))
+          .filter((branchId) => branchId > 0);
+      }
+
+      if (name === "can_access_all_branches" && !checked) {
+        nextForm.branch_ids =
+          nextForm.branch_ids.length > 0
+            ? nextForm.branch_ids
+            : selectedBranchId
+            ? [selectedBranchId]
+            : [];
+      }
+
+      return nextForm;
+    });
+  }
+
+  function handleBranchAccessChange(branchId, checked) {
+    setUserForm((previousForm) => {
+      const currentBranchIds = previousForm.branch_ids.map((id) => Number(id));
+
+      let nextBranchIds = checked
+        ? [...new Set([...currentBranchIds, branchId])]
+        : currentBranchIds.filter((id) => Number(id) !== Number(branchId));
+
+      if (nextBranchIds.length === 0 && selectedBranchId) {
+        nextBranchIds = [selectedBranchId];
+      }
+
+      return {
+        ...previousForm,
+        branch_ids: nextBranchIds,
+      };
     });
   }
 
@@ -139,17 +273,53 @@ export default function UsersSettingsPage() {
     setResetPasswordForm(emptyResetPasswordForm);
   }
 
+  function getUserBranchNames(user) {
+    if (user.can_access_all_branches) {
+      return "All stores";
+    }
+
+    if (Array.isArray(user.branches) && user.branches.length > 0) {
+      return user.branches.map((branch) => formatBranchLabel(branch)).join(", ");
+    }
+
+    if (user.default_branch_id) {
+      const branch = branches.find(
+        (item) => Number(getBranchId(item)) === Number(user.default_branch_id)
+      );
+
+      return branch ? formatBranchLabel(branch) : `Store ID ${user.default_branch_id}`;
+    }
+
+    return "-";
+  }
+
   async function createUser(event) {
     event.preventDefault();
 
     setMessage("");
     setError("");
 
+    if (
+      !userForm.can_access_all_branches &&
+      (!Array.isArray(userForm.branch_ids) || userForm.branch_ids.length === 0)
+    ) {
+      setError("Select at least one store for this user.");
+      return;
+    }
+
     try {
-      await axiosClient.post("/users", userForm);
+      await axiosClient.post("/users", {
+        ...userForm,
+        branch_ids: userForm.branch_ids.map((branchId) => Number(branchId)),
+        can_access_all_branches:
+          userForm.can_access_all_branches || userForm.role === "admin",
+      });
 
       setMessage("User created successfully.");
-      setUserForm(emptyUserForm);
+      setUserForm({
+        ...emptyUserForm,
+        branch_ids: selectedBranchId ? [selectedBranchId] : [],
+      });
       loadUsers();
     } catch (error) {
       setError(error.response?.data?.message || "Failed to create user.");
@@ -289,7 +459,7 @@ export default function UsersSettingsPage() {
       });
 
       setSettings(response.data.settings);
-      setMessage("Settings updated successfully.");
+      setMessage(`Settings updated successfully for ${getCurrentStoreName()}.`);
     } catch (error) {
       setError(error.response?.data?.message || "Failed to update settings.");
     }
@@ -300,10 +470,32 @@ export default function UsersSettingsPage() {
       <div className="page-header">
         <div>
           <h1>Users & Settings</h1>
-          <p>Admin controls for staff accounts and system settings</p>
+          <p>
+            Admin controls for staff accounts and selected-store system settings
+          </p>
         </div>
 
         <button onClick={loadPageData}>Refresh</button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {getCurrentStoreName()}
+        {currentUser?.branch_location ? ` - ${currentUser.branch_location}` : ""}
+        <br />
+        <small>
+          Settings below affect only the selected store. User accounts can be
+          given access to one store or all stores.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -371,11 +563,107 @@ export default function UsersSettingsPage() {
             placeholder="Example: 0240000000"
           />
 
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              background: "#f8fafc",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontWeight: "800",
+              }}
+            >
+              <input
+                type="checkbox"
+                name="can_access_all_branches"
+                checked={Boolean(
+                  userForm.can_access_all_branches || userForm.role === "admin"
+                )}
+                onChange={handleUserChange}
+                disabled={userForm.role === "admin"}
+              />
+              Allow access to all stores
+            </label>
+
+            {userForm.role === "admin" && (
+              <small style={{ display: "block", marginTop: "6px" }}>
+                Admin users automatically get access to all stores.
+              </small>
+            )}
+
+            {!userForm.can_access_all_branches && userForm.role !== "admin" && (
+              <div style={{ marginTop: "10px" }}>
+                <label>Store Access</label>
+
+                {branches.length === 0 ? (
+                  <p>No stores found.</p>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      marginTop: "8px",
+                    }}
+                  >
+                    {branches.map((branch) => {
+                      const branchId = getBranchId(branch);
+
+                      return (
+                        <label
+                          key={branchId}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "8px",
+                            borderRadius: "10px",
+                            background: "#ffffff",
+                            border: "1px solid #e5e7eb",
+                            fontWeight: "700",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={userForm.branch_ids
+                              .map((id) => Number(id))
+                              .includes(branchId)}
+                            onChange={(event) =>
+                              handleBranchAccessChange(
+                                branchId,
+                                event.target.checked
+                              )
+                            }
+                          />
+                          {formatBranchLabel(branch)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button type="submit">Create User</button>
         </form>
 
         <form className="section-card" onSubmit={saveSettings}>
-          <h2>System Settings</h2>
+          <h2>Selected Store Settings</h2>
+
+          <label>Store / Branch Name</label>
+          <input
+            name="branch_name"
+            value={settings.branch_name || ""}
+            onChange={handleSettingsChange}
+            placeholder="Example: Chalin 03 Main Store"
+          />
 
           <label>Business Name</label>
           <input
@@ -403,6 +691,14 @@ export default function UsersSettingsPage() {
             name="owner_phone"
             value={settings.owner_phone || ""}
             onChange={handleSettingsChange}
+          />
+
+          <label>Receipt Prefix</label>
+          <input
+            name="receipt_prefix"
+            value={settings.receipt_prefix || ""}
+            onChange={handleSettingsChange}
+            placeholder="Example: CHL-MAIN"
           />
 
           <label>Tax Rate (%)</label>
@@ -439,7 +735,7 @@ export default function UsersSettingsPage() {
             onChange={handleSettingsChange}
           />
 
-          <button type="submit">Save Settings</button>
+          <button type="submit">Save Store Settings</button>
         </form>
       </div>
 
@@ -529,6 +825,7 @@ export default function UsersSettingsPage() {
                   <th>Staff</th>
                   <th>Username</th>
                   <th>Role</th>
+                  <th>Store Access</th>
                   <th>Phone</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -543,6 +840,7 @@ export default function UsersSettingsPage() {
                     </td>
                     <td>{user.username}</td>
                     <td>{user.role}</td>
+                    <td>{getUserBranchNames(user)}</td>
                     <td>{user.phone || "-"}</td>
                     <td>
                       <span

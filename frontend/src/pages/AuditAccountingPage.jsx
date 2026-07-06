@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 const SIGN_OFF_CHECKLIST_ITEMS = [
   {
@@ -53,6 +54,29 @@ const EMPTY_SIGN_OFF = {
 };
 
 export default function AuditAccountingPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -73,6 +97,28 @@ export default function AuditAccountingPage() {
   const [signOffHistory, setSignOffHistory] = useState([]);
 
   const businessName = "Chalin 03 Company Limited";
+
+  function getCurrentStoreLabel() {
+    return `${currentStoreCode} - ${currentStoreName}${
+      currentStoreLocation ? ` - ${currentStoreLocation}` : ""
+    }`;
+  }
+
+  function getRecordStoreCode(record) {
+    return record?.branch_code || record?.store_code || currentStoreCode;
+  }
+
+  function getRecordStoreName(record) {
+    return record?.branch_name || record?.store_name || currentStoreName;
+  }
+
+  function getRecordStoreLocation(record) {
+    return (
+      record?.branch_location ||
+      record?.store_location ||
+      currentStoreLocation
+    );
+  }
 
   function cleanText(value) {
     return String(value ?? "").trim();
@@ -310,7 +356,8 @@ export default function AuditAccountingPage() {
 
   function fileName(base, extension) {
     const period = makeFilePrefix(auditData.period.shortLabel);
-    return `${base}_${period}.${extension}`;
+    const store = makeFilePrefix(currentStoreCode);
+    return `${base}_${store}_${period}.${extension}`;
   }
 
   function getSignOffCompletion() {
@@ -491,12 +538,16 @@ export default function AuditAccountingPage() {
 
   useEffect(() => {
     loadAuditData();
-  }, []);
+    // Reload audit/accounting data when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   useEffect(() => {
     loadLatestSignOffFromDatabase();
     loadSignOffHistory();
-  }, [periodType, customStartDate, customEndDate]);
+    // Reload sign-off records when selected store or period changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId, periodType, customStartDate, customEndDate]);
 
   const auditData = useMemo(() => {
     const period = getPeriodRange();
@@ -994,6 +1045,8 @@ export default function AuditAccountingPage() {
     ];
 
     const accessSalesRows = completedSales.map((sale) => ({
+      store_code: getRecordStoreCode(sale),
+      store_name: getRecordStoreName(sale),
       sale_id: sale.id,
       receipt_number: sale.receipt_number || "",
       customer_name: sale.customer_name || "Walk-in Customer",
@@ -1009,6 +1062,8 @@ export default function AuditAccountingPage() {
     }));
 
     const accessExpenseRows = periodExpenses.map((expense) => ({
+      store_code: getRecordStoreCode(expense),
+      store_name: getRecordStoreName(expense),
       expense_id: expense.id,
       category: expense.category || "",
       description: expense.description || "",
@@ -1018,6 +1073,8 @@ export default function AuditAccountingPage() {
     }));
 
     const accessProductRows = products.map((product) => ({
+      store_code: getRecordStoreCode(product),
+      store_name: getRecordStoreName(product),
       product_id: product.id,
       name: product.name || "",
       excavator_type: product.size || "",
@@ -1072,7 +1129,17 @@ export default function AuditAccountingPage() {
       accessExpenseRows,
       accessProductRows,
     };
-  }, [products, sales, expenses, debtSummary, periodType, customStartDate, customEndDate]);
+  }, [
+    products,
+    sales,
+    expenses,
+    debtSummary,
+    periodType,
+    customStartDate,
+    customEndDate,
+    currentStoreCode,
+    currentStoreName,
+  ]);
 
   function updateSignOffField(field, value) {
     setSignOff((current) => ({
@@ -1227,6 +1294,8 @@ export default function AuditAccountingPage() {
 
   function downloadAuditSummaryCsv() {
     const rows = auditData.accountantSummary.map((item) => ({
+      store_code: currentStoreCode,
+      store_name: currentStoreName,
       item: item.label,
       amount: item.isText ? item.value : plainMoney(item.value),
       meaning: item.meaning,
@@ -1234,21 +1303,29 @@ export default function AuditAccountingPage() {
 
     rows.push(
       {
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         item: "Audit Score",
         amount: `${auditData.auditScore}%`,
         meaning: auditData.auditStatus,
       },
       {
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         item: "Red Flags",
         amount: auditData.redFlags,
         meaning: "High risk audit warnings.",
       },
       {
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         item: "Orange Flags",
         amount: auditData.orangeFlags,
         meaning: "Medium risk audit warnings.",
       },
       {
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         item: "Blue Flags",
         amount: auditData.blueFlags,
         meaning: "Information or review notes.",
@@ -1261,6 +1338,8 @@ export default function AuditAccountingPage() {
   function downloadAuditWarningsCsv() {
     const rows = auditData.auditFlags.map((flag, index) => ({
       number: index + 1,
+      store_code: currentStoreCode,
+      store_name: currentStoreName,
       period: auditData.period.label,
       severity: flag.severity,
       title: flag.title,
@@ -1274,6 +1353,8 @@ export default function AuditAccountingPage() {
   function downloadAccountingWorkbookCsv() {
     const rows = [
       ...auditData.accountantSummary.map((item) => ({
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         period: auditData.period.label,
         section: "Accounting Summary",
         item: item.label,
@@ -1281,6 +1362,8 @@ export default function AuditAccountingPage() {
         note: item.meaning,
       })),
       ...auditData.auditFlags.map((flag) => ({
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         period: auditData.period.label,
         section: "Audit Warning",
         item: flag.title,
@@ -1288,6 +1371,8 @@ export default function AuditAccountingPage() {
         note: `${flag.detail} Recommendation: ${flag.recommendation}`,
       })),
       ...auditData.topExpenseCategories.map((expense) => ({
+        store_code: currentStoreCode,
+        store_name: currentStoreName,
         period: auditData.period.label,
         section: "Expense Category",
         item: expense.category,
@@ -1393,6 +1478,7 @@ export default function AuditAccountingPage() {
             <div>
               <h1>${escapeHtml(businessName)}</h1>
               <p class="muted">Audit & Accounting Intelligence Pro Review</p>
+              <p><strong>Store:</strong> ${escapeHtml(getCurrentStoreLabel())}</p>
               <p><strong>Period:</strong> ${escapeHtml(auditData.period.label)}</p>
               <p><strong>Generated:</strong> ${escapeHtml(formatDateTime(new Date()))}</p>
             </div>
@@ -1404,6 +1490,7 @@ export default function AuditAccountingPage() {
           </div>
 
           <div class="grid">
+            <div class="box"><span>Store</span><strong>${escapeHtml(currentStoreCode)} - ${escapeHtml(currentStoreName)}</strong></div>
             <div class="box"><span>Period Sales</span><strong>${formatMoney(auditData.totalSales)}</strong></div>
             <div class="box"><span>Cash Collected</span><strong>${formatMoney(auditData.cashCollected)}</strong></div>
             <div class="box"><span>Outstanding Debts</span><strong>${formatMoney(auditData.outstandingDebts)}</strong></div>
@@ -1476,6 +1563,7 @@ export default function AuditAccountingPage() {
       "",
       "Slide 1: Title",
       `${businessName} - Audit & Accounting Review`,
+      `Store: ${getCurrentStoreLabel()}`,
       `Period: ${auditData.period.label}`,
       `Generated: ${formatDateTime(new Date())}`,
       "",
@@ -1594,6 +1682,7 @@ function getSignOffStatusLabel(status) {
         </div>
 
         <div class="grid">
+          <div class="box"><strong>Store:</strong><br />${escapeHtml(currentStoreCode)} - ${escapeHtml(currentStoreName)}</div>
           <div class="box"><strong>Accounting Period:</strong><br />${escapeHtml(auditData.period.label)}</div>
           <div class="box"><strong>Review Date:</strong><br />${escapeHtml(formatDate(signOff.reviewDate))}</div>
           <div class="box"><strong>Prepared By:</strong><br />${escapeHtml(signOff.preparedBy || "-")}</div>
@@ -1654,7 +1743,7 @@ function getSignOffStatusLabel(status) {
   }
 
   async function copyAuditSummary() {
-    const summary = `${businessName.toUpperCase()}\nPROFESSIONAL AUDIT & ACCOUNTING SUMMARY\n\nPeriod: ${auditData.period.label}\nGenerated: ${formatDateTime(new Date())}\n\nAudit Score: ${auditData.auditScore}% - ${auditData.auditStatus}\nRed Flags: ${auditData.redFlags}\nOrange Flags: ${auditData.orangeFlags}\nBlue Flags: ${auditData.blueFlags}\n\nPeriod Sales: ${formatMoney(auditData.totalSales)}\nCash Collected: ${formatMoney(auditData.cashCollected)}\nOutstanding Debts: ${formatMoney(auditData.outstandingDebts)}\nPeriod Expenses: ${formatMoney(auditData.totalExpenses)}\nOperating Result: ${formatMoney(auditData.operatingResult)}\n\nSign-Off Status: ${getSignOffStatusLabel(signOff.accountingStatus)}\nPrepared By: ${signOff.preparedBy || "-"}\nReviewed By: ${signOff.reviewedBy || "-"}\nApproved By: ${signOff.approvedBy || "-"}`;
+    const summary = `${businessName.toUpperCase()}\nPROFESSIONAL AUDIT & ACCOUNTING SUMMARY\n\nStore: ${getCurrentStoreLabel()}\nPeriod: ${auditData.period.label}\nGenerated: ${formatDateTime(new Date())}\n\nAudit Score: ${auditData.auditScore}% - ${auditData.auditStatus}\nRed Flags: ${auditData.redFlags}\nOrange Flags: ${auditData.orangeFlags}\nBlue Flags: ${auditData.blueFlags}\n\nPeriod Sales: ${formatMoney(auditData.totalSales)}\nCash Collected: ${formatMoney(auditData.cashCollected)}\nOutstanding Debts: ${formatMoney(auditData.outstandingDebts)}\nPeriod Expenses: ${formatMoney(auditData.totalExpenses)}\nOperating Result: ${formatMoney(auditData.operatingResult)}\n\nSign-Off Status: ${getSignOffStatusLabel(signOff.accountingStatus)}\nPrepared By: ${signOff.preparedBy || "-"}\nReviewed By: ${signOff.reviewedBy || "-"}\nApproved By: ${signOff.approvedBy || "-"}`;
 
     try {
       await navigator.clipboard.writeText(summary);
@@ -1683,7 +1772,11 @@ function getSignOffStatusLabel(status) {
           <h1 style={styles.title}>Audit & Accounting Intelligence Pro</h1>
           <p style={styles.subtitle}>
             Review sales, cash, debts, expenses, fuel, stock, discounts, audit
-            warnings and accounting sign-off approval for the selected period.
+            warnings and accounting sign-off approval for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+            .
           </p>
         </div>
 
@@ -1702,6 +1795,26 @@ function getSignOffStatusLabel(status) {
         </div>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Audit review, accounting figures, sign-off records, exports and
+          certificates are filtered to this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
@@ -1710,7 +1823,7 @@ function getSignOffStatusLabel(status) {
           <p style={styles.eyebrowDark}>Accounting Period Control</p>
           <h2 style={{ margin: "5px 0" }}>{auditData.period.label}</h2>
           <p style={styles.panelText}>
-            Choose the period before printing, exporting or saving audit sign-off records.
+            Choose the period before printing, exporting or saving audit sign-off records for {currentStoreCode}.
           </p>
         </div>
 
@@ -1796,14 +1909,14 @@ function getSignOffStatusLabel(status) {
         <div style={styles.exportPanel}>
           <h2>Export Center</h2>
           <p style={styles.panelText}>
-            All exports use the selected accounting period.
+            All exports use the selected accounting period and selected store.
           </p>
 
           <div style={styles.monthPack}>
             <h3>Month-End Audit Pack</h3>
             <p>
               Downloads Audit Word Report, accounting CSVs, PowerPoint outline
-              and sign-off certificate.
+              and sign-off certificate for {currentStoreCode}.
             </p>
             <button type="button" onClick={downloadMonthEndAuditPack}>
               Generate Month-End Audit Pack
@@ -1824,13 +1937,13 @@ function getSignOffStatusLabel(status) {
       </div>
 
       <div style={styles.cardsGrid}>
-        <MetricCard title="Period Sales" value={formatMoney(auditData.totalSales)} note={`${auditData.completedSales.length} completed sale(s)`} icon="📈" />
+        <MetricCard title={`${currentStoreCode} Period Sales`} value={formatMoney(auditData.totalSales)} note={`${auditData.completedSales.length} completed sale(s)`} icon="📈" />
         <MetricCard title="Cash Collected" value={formatMoney(auditData.cashCollected)} note="Amount paid by customers" icon="💰" />
         <MetricCard title="Outstanding Debts" value={formatMoney(auditData.outstandingDebts)} note={`${auditData.unpaidDebtCount} unpaid, ${auditData.partialDebtCount} partial`} icon="📞" />
         <MetricCard title="Period Expenses" value={formatMoney(auditData.totalExpenses)} note={`${auditData.periodExpenses.length} expense record(s)`} icon="📉" />
         <MetricCard title="Fuel Expenses" value={formatMoney(auditData.fuelExpenses)} note="Fuel category total" icon="⛽" />
         <MetricCard title="Discounts Given" value={formatMoney(auditData.totalDiscounts)} note="Needs approval review" icon="🏷️" />
-        <MetricCard title="Stock Value" value={formatMoney(auditData.stockValue)} note={`${products.length} product(s) in inventory`} icon="📦" />
+        <MetricCard title={`${currentStoreCode} Stock Value`} value={formatMoney(auditData.stockValue)} note={`${products.length} product(s) in inventory`} icon="📦" />
         <MetricCard title="Operating Result" value={formatMoney(auditData.operatingResult)} note="Period sales minus period expenses" icon="🧮" />
       </div>
 
@@ -1908,7 +2021,7 @@ function getSignOffStatusLabel(status) {
             <p style={styles.eyebrowDark}>Audit Sign-Off & Accounting Approval</p>
             <h2 style={{ margin: "5px 0" }}>Period Approval Center</h2>
             <p style={styles.panelText}>
-              Save the audit approval to MySQL after the accountant and boss review the period.
+              Save the audit approval to MySQL after the accountant and boss review the period for {currentStoreCode}.
             </p>
           </div>
 
@@ -2023,8 +2136,8 @@ function getSignOffStatusLabel(status) {
       </div>
 
       <div style={styles.panel}>
-        <h2>Recent Saved Sign-Off History</h2>
-        <p style={styles.panelText}>Latest saved records from the audit_signoffs database table.</p>
+        <h2>Recent Saved Sign-Off History - {currentStoreCode}</h2>
+        <p style={styles.panelText}>Latest saved records from the audit_signoffs database table for the selected store.</p>
 
         {signOffHistory.length === 0 ? (
           <div style={styles.emptyState}>No saved sign-off history found yet.</div>
@@ -2034,6 +2147,7 @@ function getSignOffStatusLabel(status) {
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Store</th>
                   <th>Period</th>
                   <th>Score</th>
                   <th>Status</th>
@@ -2047,6 +2161,7 @@ function getSignOffStatusLabel(status) {
                 {signOffHistory.slice(0, 10).map((item) => (
                   <tr key={item.id}>
                     <td>#{item.id}</td>
+                    <td>{getRecordStoreCode(item)}</td>
                     <td>{item.period_label || "-"}</td>
                     <td>{Number(item.audit_score || 0)}%</td>
                     <td>{getSignOffStatusLabel(item.period_status)}</td>
@@ -2063,7 +2178,7 @@ function getSignOffStatusLabel(status) {
       </div>
 
       <div style={styles.disclaimer}>
-        This page supports internal management and accounting review. It does not replace a licensed accountant, tax consultant or external auditor.
+        This page supports internal management and accounting review for {currentStoreCode} — {currentStoreName}. It does not replace a licensed accountant, tax consultant or external auditor.
       </div>
     </div>
   );

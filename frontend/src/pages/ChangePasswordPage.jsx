@@ -5,7 +5,28 @@ import { useAuth } from "../context/AuthContext";
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -43,7 +64,7 @@ export default function ChangePasswordPage() {
     }
 
     const confirmed = window.confirm(
-      "Are you sure you want to change your password?"
+      "Are you sure you want to change your password? This password is for your account and will apply whenever you login to any store you are allowed to access."
     );
 
     if (!confirmed) {
@@ -72,9 +93,7 @@ export default function ChangePasswordPage() {
         navigate("/login");
       }, 1500);
     } catch (error) {
-      setError(
-        error.response?.data?.message || "Failed to change password."
-      );
+      setError(error.response?.data?.message || "Failed to change password.");
     } finally {
       setSaving(false);
     }
@@ -85,8 +104,32 @@ export default function ChangePasswordPage() {
       <div className="page-header">
         <div>
           <h1>Change Password</h1>
-          <p>Update your login password securely</p>
+          <p>
+            Update your login password securely for{" "}
+            <strong>{user?.full_name || user?.username || "your account"}</strong>
+          </p>
         </div>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Password changes are account-wide. After changing your password, you
+          will be logged out and must login again. The new password will work
+          for every store your account is allowed to access.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}

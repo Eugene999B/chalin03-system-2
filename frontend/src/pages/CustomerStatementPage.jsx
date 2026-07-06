@@ -1,7 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 export default function CustomerStatementPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState([]);
   const [statement, setStatement] = useState(null);
@@ -35,6 +59,20 @@ export default function CustomerStatementPage() {
       .replace(/-+/g, "-")
       .toLowerCase();
   }
+
+  function getRecordStoreCode(record) {
+    return record?.branch_code || record?.store_code || currentStoreCode;
+  }
+
+  function getRecordStoreName(record) {
+    return record?.branch_name || record?.store_name || currentStoreName;
+  }
+
+  useEffect(() => {
+    setCustomers([]);
+    setStatement(null);
+    setError("");
+  }, [branchId]);
 
   async function searchCustomers(event) {
     event.preventDefault();
@@ -118,7 +156,7 @@ export default function CustomerStatementPage() {
       link.href = fileUrl;
       link.setAttribute(
         "download",
-        `chalin03-customer-statement-${safeName}.xlsx`
+        `chalin03-${makeSafeFileName(currentStoreCode)}-customer-statement-${safeName}.xlsx`
       );
 
       document.body.appendChild(link);
@@ -140,14 +178,39 @@ export default function CustomerStatementPage() {
       <div className="page-header">
         <div>
           <h1>Customer Statement</h1>
-          <p>Search a customer and view sales, debts, payments and balance</p>
+          <p>
+            Search a customer and view sales, debts, payments and balance for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Customer search, statements, sales, debt records and exports are
+          filtered to this selected store only.
+        </small>
       </div>
 
       {error && <div className="error-box">{error}</div>}
 
       <div className="section-card">
-        <h2>Search Customer</h2>
+        <h2>Search Customer - {currentStoreCode}</h2>
 
         <form onSubmit={searchCustomers} className="filter-grid">
           <div>
@@ -170,13 +233,14 @@ export default function CustomerStatementPage() {
 
       {customers.length > 0 && (
         <div className="section-card">
-          <h2>Search Results</h2>
+          <h2>Search Results - {currentStoreCode}</h2>
 
           <table>
             <thead>
               <tr>
                 <th>Customer</th>
                 <th>Phone</th>
+                <th>Store</th>
                 <th>Sales Count</th>
                 <th>Total Sales</th>
                 <th>Sales Balance</th>
@@ -189,6 +253,7 @@ export default function CustomerStatementPage() {
                 <tr key={`${customer.customer_phone || "no-phone"}-${index}`}>
                   <td>{customer.customer_name || "-"}</td>
                   <td>{customer.customer_phone || "-"}</td>
+                  <td>{getRecordStoreCode(customer)}</td>
                   <td>{Number(customer.sales_count || 0)}</td>
                   <td>{formatMoney(customer.total_sales)}</td>
                   <td>{formatMoney(customer.sales_balance)}</td>
@@ -225,7 +290,12 @@ export default function CustomerStatementPage() {
                     ? `(${statement.customer.phone})`
                     : ""}
                 </h2>
-                <p>Customer sales, debts, payments and outstanding balance</p>
+                <p>
+                  Customer sales, debts, payments and outstanding balance for{" "}
+                  <strong>
+                    {currentStoreCode} — {currentStoreName}
+                  </strong>
+                </p>
               </div>
 
               <button
@@ -239,7 +309,7 @@ export default function CustomerStatementPage() {
 
             <div className="cards-grid">
               <div className="stat-card">
-                <span>Total Sales</span>
+                <span>{currentStoreCode} Total Sales</span>
                 <strong>{formatMoney(statement.summary?.total_sales)}</strong>
               </div>
 
@@ -277,16 +347,17 @@ export default function CustomerStatementPage() {
           </div>
 
           <div className="section-card">
-            <h2>Sales History</h2>
+            <h2>Sales History - {currentStoreCode}</h2>
 
             {statement.sales?.length === 0 ? (
-              <p>No sales found for this customer.</p>
+              <p>No sales found for this customer in {currentStoreCode}.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Receipt</th>
+                    <th>Store</th>
                     <th>Total</th>
                     <th>Paid</th>
                     <th>Balance</th>
@@ -304,6 +375,7 @@ export default function CustomerStatementPage() {
                       <tr key={sale.id}>
                         <td>{formatDateTime(sale.created_at)}</td>
                         <td>{sale.receipt_number}</td>
+                        <td>{getRecordStoreCode(sale)}</td>
                         <td>{voided ? "VOIDED" : formatMoney(sale.total)}</td>
                         <td>
                           {voided ? "VOIDED" : formatMoney(sale.amount_paid)}
@@ -321,16 +393,17 @@ export default function CustomerStatementPage() {
           </div>
 
           <div className="section-card">
-            <h2>Debt Records</h2>
+            <h2>Debt Records - {currentStoreCode}</h2>
 
             {statement.debts?.length === 0 ? (
-              <p>No debt records found for this customer.</p>
+              <p>No debt records found for this customer in {currentStoreCode}.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Receipt</th>
+                    <th>Store</th>
                     <th>Amount Owed</th>
                     <th>Amount Paid</th>
                     <th>Balance</th>
@@ -344,6 +417,7 @@ export default function CustomerStatementPage() {
                     <tr key={debt.id}>
                       <td>{formatDateTime(debt.created_at)}</td>
                       <td>{debt.receipt_number || "-"}</td>
+                      <td>{getRecordStoreCode(debt)}</td>
                       <td>{formatMoney(debt.amount_owed)}</td>
                       <td>{formatMoney(debt.amount_paid)}</td>
                       <td>{formatMoney(debt.balance)}</td>
@@ -357,16 +431,17 @@ export default function CustomerStatementPage() {
           </div>
 
           <div className="section-card">
-            <h2>Debt Payment History</h2>
+            <h2>Debt Payment History - {currentStoreCode}</h2>
 
             {statement.debt_payments?.length === 0 ? (
-              <p>No debt payments found for this customer.</p>
+              <p>No debt payments found for this customer in {currentStoreCode}.</p>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Receipt</th>
+                    <th>Store</th>
                     <th>Amount</th>
                     <th>Method</th>
                     <th>Received By</th>
@@ -379,6 +454,7 @@ export default function CustomerStatementPage() {
                     <tr key={payment.id}>
                       <td>{formatDateTime(payment.paid_at)}</td>
                       <td>{payment.receipt_number || "-"}</td>
+                      <td>{getRecordStoreCode(payment)}</td>
                       <td>{formatMoney(payment.amount)}</td>
                       <td>{payment.payment_method}</td>
                       <td>{payment.received_by_name || "-"}</td>

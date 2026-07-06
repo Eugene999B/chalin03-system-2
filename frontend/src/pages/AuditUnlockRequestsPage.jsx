@@ -3,8 +3,29 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 export default function AuditUnlockRequestsPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [requests, setRequests] = useState([]);
   const [summary, setSummary] = useState({
@@ -113,20 +134,45 @@ export default function AuditUnlockRequestsPage() {
     return areas[cleanValue] || value || "-";
   }
 
+  function makeSafeFileName(value) {
+    return String(value || "store")
+      .replace(/[^a-z0-9]/gi, "-")
+      .replace(/-+/g, "-")
+      .toLowerCase();
+  }
+
+  function getRequestStoreCode(request) {
+    return request?.branch_code || request?.store_code || currentStoreCode;
+  }
+
+  function getRequestStoreName(request) {
+    return request?.branch_name || request?.store_name || currentStoreName;
+  }
+
+  function getRequestStoreLocation(request) {
+    return (
+      request?.branch_location ||
+      request?.store_location ||
+      currentStoreLocation
+    );
+  }
+
   function getFriendlyApiError(error, fallbackMessage) {
     return error?.response?.data?.message || fallbackMessage;
   }
 
-  async function loadUnlockRequests() {
+  async function loadUnlockRequests(customFilters = null) {
     setLoading(true);
     setError("");
 
+    const filters = customFilters || {
+      status: statusFilter,
+      search,
+    };
+
     try {
       const response = await axiosClient.get("/audit-unlock-requests", {
-        params: {
-          status: statusFilter,
-          search,
-        },
+        params: filters,
       });
 
       setRequests(response.data.requests || []);
@@ -144,8 +190,13 @@ export default function AuditUnlockRequestsPage() {
   }
 
   useEffect(() => {
-    loadUnlockRequests();
-  }, []);
+    loadUnlockRequests({
+      status: "",
+      search: "",
+    });
+    // Reload unlock requests when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   const pendingRequests = useMemo(() => {
     return requests.filter(
@@ -156,7 +207,12 @@ export default function AuditUnlockRequestsPage() {
   function openReviewModal(request, status) {
     setMessage("");
     setError("");
-    setSelectedRequest(request);
+    setSelectedRequest({
+      ...request,
+      branch_code: getRequestStoreCode(request),
+      branch_name: getRequestStoreName(request),
+      branch_location: getRequestStoreLocation(request),
+    });
     setReviewStatus(status);
     setReviewNotes("");
     setUnlockPeriod(status === "approved");
@@ -185,9 +241,15 @@ export default function AuditUnlockRequestsPage() {
     const confirmText =
       reviewStatus === "approved"
         ? unlockPeriod
-          ? "Approve this request and reopen the accounting period?"
-          : "Approve this request without reopening the accounting period?"
-        : "Reject this unlock request?";
+          ? `Approve this request and reopen the accounting period for ${getRequestStoreCode(
+              selectedRequest
+            )}?`
+          : `Approve this request for ${getRequestStoreCode(
+              selectedRequest
+            )} without reopening the accounting period?`
+        : `Reject this unlock request for ${getRequestStoreCode(
+            selectedRequest
+          )}?`;
 
     const confirmed = window.confirm(confirmText);
 
@@ -211,9 +273,7 @@ export default function AuditUnlockRequestsPage() {
       closeReviewModal();
       await loadUnlockRequests();
     } catch (error) {
-      setError(
-        getFriendlyApiError(error, "Failed to review unlock request.")
-      );
+      setError(getFriendlyApiError(error, "Failed to review unlock request."));
     } finally {
       setReviewing(false);
     }
@@ -223,6 +283,8 @@ export default function AuditUnlockRequestsPage() {
     const rows = [
       [
         "ID",
+        "Store Code",
+        "Store Name",
         "Status",
         "Period",
         "Period Start",
@@ -238,6 +300,8 @@ export default function AuditUnlockRequestsPage() {
       ],
       ...requests.map((request) => [
         request.id,
+        getRequestStoreCode(request),
+        getRequestStoreName(request),
         formatStatus(request.status),
         request.period_label || "",
         request.period_start || "",
@@ -269,9 +333,9 @@ export default function AuditUnlockRequestsPage() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `audit_unlock_requests_${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
+    link.download = `chalin03-${makeSafeFileName(
+      currentStoreCode
+    )}-audit-unlock-requests-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
 
     window.URL.revokeObjectURL(url);
@@ -283,7 +347,10 @@ export default function AuditUnlockRequestsPage() {
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>You are not allowed to open Audit Unlock Requests.</p>
+            <p>
+              You are not allowed to open Audit Unlock Requests for{" "}
+              {currentStoreCode} — {currentStoreName}.
+            </p>
           </div>
         </div>
 
@@ -301,6 +368,10 @@ export default function AuditUnlockRequestsPage() {
           <h1>Audit Unlock Requests</h1>
           <p>
             Review requests to reopen approved accounting periods for correction
+            in{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
           </p>
         </div>
 
@@ -311,7 +382,7 @@ export default function AuditUnlockRequestsPage() {
             flexWrap: "wrap",
           }}
         >
-          <button type="button" onClick={loadUnlockRequests}>
+          <button type="button" onClick={() => loadUnlockRequests()}>
             Refresh
           </button>
 
@@ -325,12 +396,32 @@ export default function AuditUnlockRequestsPage() {
         </div>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Unlock requests, review decisions, CSV exports and reopened periods
+          are filtered to this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid">
         <div className="stat-card">
-          <span>Total Requests</span>
+          <span>{currentStoreCode} Total Requests</span>
           <strong>{summary.total_requests || 0}</strong>
         </div>
 
@@ -358,12 +449,13 @@ export default function AuditUnlockRequestsPage() {
           }}
         >
           <strong>{pendingRequests.length}</strong> unlock request
-          {pendingRequests.length === 1 ? "" : "s"} waiting for review.
+          {pendingRequests.length === 1 ? "" : "s"} waiting for review in{" "}
+          <strong>{currentStoreCode}</strong>.
         </div>
       )}
 
       <div className="section-card">
-        <h2>Filter Requests</h2>
+        <h2>Filter Requests - {currentStoreCode}</h2>
 
         <div
           style={{
@@ -392,11 +484,11 @@ export default function AuditUnlockRequestsPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search period, reason, staff or area"
+              placeholder="Search period, reason, staff, store or area"
             />
           </div>
 
-          <button type="button" onClick={loadUnlockRequests}>
+          <button type="button" onClick={() => loadUnlockRequests()}>
             Apply
           </button>
 
@@ -406,7 +498,10 @@ export default function AuditUnlockRequestsPage() {
             onClick={() => {
               setStatusFilter("");
               setSearch("");
-              setTimeout(loadUnlockRequests, 0);
+              loadUnlockRequests({
+                status: "",
+                search: "",
+              });
             }}
           >
             Clear
@@ -415,17 +510,18 @@ export default function AuditUnlockRequestsPage() {
       </div>
 
       <div className="section-card">
-        <h2>Unlock Request Records</h2>
+        <h2>Unlock Request Records - {currentStoreCode}</h2>
 
         {loading ? (
-          <p>Loading unlock requests...</p>
+          <p>Loading unlock requests for {currentStoreCode}...</p>
         ) : requests.length === 0 ? (
-          <p>No unlock requests found.</p>
+          <p>No unlock requests found for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Status</th>
+                <th>Store</th>
                 <th>Period</th>
                 <th>Area</th>
                 <th>Requested By</th>
@@ -452,6 +548,12 @@ export default function AuditUnlockRequestsPage() {
                     >
                       {formatStatus(request.status)}
                     </span>
+                  </td>
+
+                  <td>
+                    <strong>{getRequestStoreCode(request)}</strong>
+                    <br />
+                    <small>{getRequestStoreName(request)}</small>
                   </td>
 
                   <td>
@@ -541,6 +643,12 @@ export default function AuditUnlockRequestsPage() {
                     : "Reject Unlock Request"}
                 </h2>
                 <p>
+                  Store:{" "}
+                  <strong>
+                    {getRequestStoreCode(selectedRequest)} —{" "}
+                    {getRequestStoreName(selectedRequest)}
+                  </strong>
+                  <br />
                   Period: <strong>{selectedRequest.period_label}</strong>
                 </p>
               </div>
@@ -556,6 +664,12 @@ export default function AuditUnlockRequestsPage() {
 
             <form className="receipt-preview" onSubmit={submitReview}>
               <div className="receipt-info-grid">
+                <p>
+                  <strong>Store:</strong>{" "}
+                  {getRequestStoreCode(selectedRequest)} —{" "}
+                  {getRequestStoreName(selectedRequest)}
+                </p>
+
                 <p>
                   <strong>Requested By:</strong>{" "}
                   {selectedRequest.requested_by_name ||
@@ -641,7 +755,8 @@ export default function AuditUnlockRequestsPage() {
                       height: "18px",
                     }}
                   />
-                  Reopen this accounting period for correction
+                  Reopen this accounting period for correction in{" "}
+                  {getRequestStoreCode(selectedRequest)}
                 </label>
               )}
 

@@ -7,7 +7,7 @@ const DAILY_TARGET = 5000;
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
 
   const displayName =
     user?.full_name ||
@@ -15,6 +15,27 @@ export default function DashboardPage() {
     user?.name ||
     user?.username ||
     "User";
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -146,7 +167,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+    // Reload dashboard when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   useEffect(() => {
     function checkScreenSize() {
@@ -663,7 +686,9 @@ export default function DashboardPage() {
               />
 
               <div>
-                <p style={styles.eyebrow}>Business Command Center</p>
+                <p style={styles.eyebrow}>
+                  Business Command Center • {currentStoreCode}
+                </p>
 
                 <h1 style={{ ...styles.heroTitle, ...mobileHeroTitle }}>
                   Welcome back, {displayName}
@@ -671,7 +696,10 @@ export default function DashboardPage() {
 
                 <p style={styles.heroSubtitle}>
                   Real-time view of sales, stock, debts, cash movement, urgent
-                  alerts and boss-level business intelligence.
+                  alerts and boss-level business intelligence for{" "}
+                  <strong>{currentStoreName}</strong>
+                  {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
+                  Every figure here belongs to the selected store only.
                 </p>
               </div>
             </div>
@@ -690,6 +718,8 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
+            <HeroMetric label="Store : " value={currentStoreCode} />
+
             <HeroMetric
               label="Today : "
               value={`GHS ${formatMoney(dashboardData.todaySalesAmount)}`}
@@ -715,6 +745,24 @@ export default function DashboardPage() {
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      <div
+        style={{
+          ...styles.storeNotice,
+          ...(isMobile ? styles.storeNoticeMobile : {}),
+        }}
+      >
+        <span>🏬</span>
+        <div>
+          <strong>
+            {currentStoreCode} — {currentStoreName}
+          </strong>
+          <p>
+            Dashboard data is filtered to this selected store. Logout and choose
+            another store to view a different branch.
+          </p>
+        </div>
+      </div>
 
       <div style={{ ...styles.quickActions, ...mobileQuickActions }}>
         <button style={styles.actionPrimary} onClick={() => navigate("/new-sale")}>
@@ -1526,6 +1574,23 @@ const styles = {
     borderRadius: "18px",
     background: "rgba(255,255,255,0.1)",
     border: "1px solid rgba(255,255,255,0.14)",
+  },
+
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "18px",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  storeNoticeMobile: {
+    padding: "12px",
   },
 
   quickActions: {

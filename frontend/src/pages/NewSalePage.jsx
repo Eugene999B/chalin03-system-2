@@ -3,6 +3,29 @@ import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 export default function NewSalePage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
 
@@ -28,6 +51,46 @@ export default function NewSalePage() {
   const momoNumber = "0543421127";
   const receiptFooter = "Thank You For Coming";
   const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
+
+  function getReceiptBusinessName(receiptData) {
+    return (
+      receiptData?.business_name ||
+      businessName
+    );
+  }
+
+  function getReceiptBusinessAddress(receiptData) {
+    return (
+      receiptData?.business_address ||
+      receiptData?.branch_location ||
+      currentStoreLocation ||
+      businessAddress
+    );
+  }
+
+  function getReceiptBusinessPhone(receiptData) {
+    return receiptData?.business_phone || businessPhone;
+  }
+
+  function getReceiptMomoNumber(receiptData) {
+    return receiptData?.owner_phone || momoNumber;
+  }
+
+  function getReceiptStoreName(receiptData) {
+    return (
+      receiptData?.branch_name ||
+      receiptData?.store_name ||
+      currentStoreName
+    );
+  }
+
+  function getReceiptStoreCode(receiptData) {
+    return (
+      receiptData?.branch_code ||
+      receiptData?.store_code ||
+      currentStoreCode
+    );
+  }
 
   function cleanText(value) {
     if (value === undefined || value === null) {
@@ -175,9 +238,10 @@ export default function NewSalePage() {
 
     return `Hello ${customer},
 
-Thank you for buying from ${businessName}.
+Thank you for buying from ${getReceiptBusinessName(receiptData)}.
 
 RECEIPT DETAILS
+Store: ${getReceiptStoreCode(receiptData)} - ${getReceiptStoreName(receiptData)}
 Receipt No: ${receiptData.receipt_number}
 Customer: ${customer}
 Phone: ${phone}
@@ -241,7 +305,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
   useEffect(() => {
     loadProducts();
-  }, []);
+    // Reload available products when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   const selectedProduct = useMemo(() => {
     return products.find(
@@ -421,6 +487,13 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       setReceipt({
         ...savedReceipt,
+        branch_id: savedReceipt.branch_id || branchId,
+        branch_code: savedReceipt.branch_code || currentStoreCode,
+        branch_name: savedReceipt.branch_name || currentStoreName,
+        branch_location:
+          savedReceipt.branch_location ||
+          savedReceipt.business_address ||
+          currentStoreLocation,
         customer: {
           ...(savedReceipt.customer || {}),
           name:
@@ -503,6 +576,12 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     const receiptDiscount = Number(receipt.discount_amount || 0);
     const receiptCustomerName = getReceiptCustomerName(receipt);
     const receiptCustomerPhone = getReceiptCustomerPhone(receipt);
+    const receiptBusinessName = getReceiptBusinessName(receipt);
+    const receiptBusinessAddress = getReceiptBusinessAddress(receipt);
+    const receiptBusinessPhone = getReceiptBusinessPhone(receipt);
+    const receiptMomoNumber = getReceiptMomoNumber(receipt);
+    const receiptStoreCode = getReceiptStoreCode(receipt);
+    const receiptStoreName = getReceiptStoreName(receipt);
 
     const itemsHtml = receipt.items
       .map(
@@ -635,12 +714,13 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
         <body>
           <div class="receipt">
-            <h1>${escapeHtml(businessName)}</h1>
+            <h1>${escapeHtml(receiptBusinessName)}</h1>
 
             <div class="center">
-              <p>${escapeHtml(businessAddress)}</p>
-              <p>Tel: ${escapeHtml(businessPhone)}</p>
-              <p>MOMO #: ${escapeHtml(momoNumber)}</p>
+              <p>${escapeHtml(receiptBusinessAddress)}</p>
+              <p>Tel: ${escapeHtml(receiptBusinessPhone)}</p>
+              <p>MOMO #: ${escapeHtml(receiptMomoNumber)}</p>
+              <p>Store: ${escapeHtml(receiptStoreCode)} - ${escapeHtml(receiptStoreName)}</p>
             </div>
 
             <div class="dash"></div>
@@ -766,12 +846,37 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       <div className="page-header">
         <div>
           <h1>New Sale</h1>
-          <p>Record cash, MoMo, bank, mixed or credit sales</p>
+          <p>
+            Record cash, MoMo, bank, mixed or credit sales for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={loadProducts}>
           Refresh Products
         </button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          This sale will reduce stock, create receipt records and create debts
+          only inside this selected store.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -792,7 +897,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       <div className="two-column">
         <div className="section-card">
-          <h2>Select Items</h2>
+          <h2>Select Items - {currentStoreCode}</h2>
 
           <label>Search Product</label>
           <input
@@ -824,7 +929,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                     color: "#667085",
                   }}
                 >
-                  No matching product found.
+                  No matching product found in this selected store.
                 </p>
               ) : (
                 filteredProducts.map((product) => {
@@ -934,7 +1039,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
           <h2>Sale Items</h2>
 
           {cart.length === 0 ? (
-            <p>No items added yet.</p>
+            <p>No items added yet for {currentStoreCode}.</p>
           ) : (
             <table>
               <thead>
@@ -978,7 +1083,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         </div>
 
         <form className="section-card" onSubmit={completeSale}>
-          <h2>Payment Details</h2>
+          <h2>Payment Details - {currentStoreCode}</h2>
 
           <label>Customer Name</label>
           <input
@@ -1063,13 +1168,22 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         <div className="section-card receipt-card">
           <div className="receipt-preview">
             <div className="receipt-center">
-              <h2>{businessName}</h2>
-              <p>{businessAddress}</p>
-              <p>Tel: {businessPhone}</p>
-              <p>MOMO #: {momoNumber}</p>
+              <h2>{getReceiptBusinessName(receipt)}</h2>
+              <p>{getReceiptBusinessAddress(receipt)}</p>
+              <p>Tel: {getReceiptBusinessPhone(receipt)}</p>
+              <p>MOMO #: {getReceiptMomoNumber(receipt)}</p>
+              <p>
+                Store: {getReceiptStoreCode(receipt)} —{" "}
+                {getReceiptStoreName(receipt)}
+              </p>
             </div>
 
             <div className="receipt-info-grid">
+              <p>
+                <strong>Store:</strong> {getReceiptStoreCode(receipt)} —{" "}
+                {getReceiptStoreName(receipt)}
+              </p>
+
               <p>
                 <strong>Customer:</strong> {getReceiptCustomerName(receipt)}
               </p>

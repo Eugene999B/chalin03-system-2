@@ -13,8 +13,29 @@ const emptyExpenseForm = {
 };
 
 export default function ExpensesPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState({
@@ -99,7 +120,9 @@ export default function ExpensesPage() {
 
   useEffect(() => {
     loadExpenses();
-  }, []);
+    // Reload expenses when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function handleChange(event) {
     setForm({
@@ -171,7 +194,10 @@ export default function ExpensesPage() {
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>You are not allowed to open Expenses.</p>
+            <p>
+              You are not allowed to open Expenses for {currentStoreCode} —{" "}
+              {currentStoreName}.
+            </p>
           </div>
         </div>
 
@@ -189,11 +215,34 @@ export default function ExpensesPage() {
           <h1>Expenses</h1>
           <p>
             Record business costs such as fuel, transport, rent, repairs and
-            salary
+            salary for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
           </p>
         </div>
 
         <button onClick={loadExpenses}>Refresh</button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Expenses, expense summary, filters and delete actions are filtered to
+          this selected store only.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -212,19 +261,24 @@ export default function ExpensesPage() {
 
       <div className="cards-grid expense-summary-grid">
         <div className="stat-card">
-          <span>Total Expenses</span>
+          <span>{currentStoreCode} Total Expenses</span>
           <strong>{formatMoney(summary.total_expenses)}</strong>
         </div>
 
         <div className="stat-card">
-          <span>Number of Expenses</span>
+          <span>{currentStoreCode} Number of Expenses</span>
           <strong>{summary.expense_count || 0}</strong>
         </div>
       </div>
 
       <div className="two-column expenses-grid">
         <form className="section-card" onSubmit={createExpense}>
-          <h2>Record Expense</h2>
+          <h2>Record Expense - {currentStoreCode}</h2>
+
+          <div className="warning-box">
+            You are working in {currentStoreCode} — {currentStoreName}. This
+            expense will belong to this selected store only.
+          </div>
 
           <label>Category</label>
           <select
@@ -276,7 +330,7 @@ export default function ExpensesPage() {
         </form>
 
         <div className="section-card">
-          <h2>Filter Expenses</h2>
+          <h2>Filter Expenses - {currentStoreCode}</h2>
 
           <label>Search</label>
           <input
@@ -311,7 +365,11 @@ export default function ExpensesPage() {
                 setSearch("");
                 setFrom("");
                 setTo("");
-                setTimeout(loadExpenses, 0);
+                loadExpenses({
+                  search: "",
+                  from: "",
+                  to: "",
+                });
               }}
             >
               Clear
@@ -321,15 +379,16 @@ export default function ExpensesPage() {
       </div>
 
       <div className="section-card">
-        <h2>Expense Records</h2>
+        <h2>Expense Records - {currentStoreCode}</h2>
 
         {expenses.length === 0 ? (
-          <p>No expenses recorded yet.</p>
+          <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Store</th>
                 <th>Category</th>
                 <th>Description</th>
                 <th>Amount</th>
@@ -342,6 +401,7 @@ export default function ExpensesPage() {
               {expenses.map((expense) => (
                 <tr key={expense.id}>
                   <td>{new Date(expense.expense_date).toLocaleDateString()}</td>
+                  <td>{expense.branch_code || expense.store_code || currentStoreCode}</td>
                   <td>
                     <strong>{expense.category}</strong>
                   </td>

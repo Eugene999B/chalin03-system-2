@@ -3,8 +3,29 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 export default function ActivityLogPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [logs, setLogs] = useState([]);
   const [actions, setActions] = useState([]);
@@ -20,17 +41,19 @@ export default function ActivityLogPage() {
 
   const [error, setError] = useState("");
 
-  async function loadActivityLog() {
+  async function loadActivityLog(customFilters = null) {
     setError("");
+
+    const filters = customFilters || {
+      search,
+      action,
+      from,
+      to,
+    };
 
     try {
       const response = await axiosClient.get("/activity-log", {
-        params: {
-          search,
-          action,
-          from,
-          to,
-        },
+        params: filters,
       });
 
       setLogs(response.data.logs || []);
@@ -45,8 +68,15 @@ export default function ActivityLogPage() {
   }
 
   useEffect(() => {
-    loadActivityLog();
-  }, []);
+    loadActivityLog({
+      search: "",
+      action: "",
+      from: "",
+      to: "",
+    });
+    // Reload activity log when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function formatAction(actionText) {
     return String(actionText || "")
@@ -73,13 +103,24 @@ export default function ActivityLogPage() {
     return "activity-neutral";
   }
 
+  function getLogStoreCode(log) {
+    return log?.branch_code || log?.store_code || currentStoreCode;
+  }
+
+  function getLogStoreName(log) {
+    return log?.branch_name || log?.store_name || currentStoreName;
+  }
+
   if (role !== "admin") {
     return (
       <div>
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>You are not allowed to open Activity Log.</p>
+            <p>
+              You are not allowed to open Activity Log for {currentStoreCode} —{" "}
+              {currentStoreName}.
+            </p>
           </div>
         </div>
 
@@ -95,28 +136,53 @@ export default function ActivityLogPage() {
       <div className="page-header">
         <div>
           <h1>Activity Log</h1>
-          <p>Track important actions performed inside the system</p>
+          <p>
+            Track important actions performed inside{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
-        <button onClick={loadActivityLog}>Refresh</button>
+        <button onClick={() => loadActivityLog()}>Refresh</button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Staff activity logs, action filters and summary counts are filtered to
+          this selected store only.
+        </small>
       </div>
 
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid activity-summary-grid">
         <div className="stat-card">
-          <span>Total Logs</span>
+          <span>{currentStoreCode} Total Logs</span>
           <strong>{summary.total_logs || 0}</strong>
         </div>
 
         <div className="stat-card">
-          <span>Users Involved</span>
+          <span>{currentStoreCode} Users Involved</span>
           <strong>{summary.active_users || 0}</strong>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>Filter Activity</h2>
+        <h2>Filter Activity - {currentStoreCode}</h2>
 
         <div className="activity-filter-grid">
           <div>
@@ -163,7 +229,7 @@ export default function ActivityLogPage() {
           </div>
 
           <div className="filter-actions">
-            <button type="button" onClick={loadActivityLog}>
+            <button type="button" onClick={() => loadActivityLog()}>
               Apply
             </button>
 
@@ -175,7 +241,12 @@ export default function ActivityLogPage() {
                 setAction("");
                 setFrom("");
                 setTo("");
-                setTimeout(loadActivityLog, 0);
+                loadActivityLog({
+                  search: "",
+                  action: "",
+                  from: "",
+                  to: "",
+                });
               }}
             >
               Clear
@@ -185,10 +256,10 @@ export default function ActivityLogPage() {
       </div>
 
       <div className="section-card">
-        <h2>Recent Activities</h2>
+        <h2>Recent Activities - {currentStoreCode}</h2>
 
         {logs.length === 0 ? (
-          <p>No activity logs found yet.</p>
+          <p>No activity logs found yet for {currentStoreCode}.</p>
         ) : (
           <div className="activity-list">
             {logs.map((log) => (
@@ -198,7 +269,10 @@ export default function ActivityLogPage() {
                     {formatAction(log.action)}
                   </span>
 
-                  <small>{new Date(log.created_at).toLocaleString()}</small>
+                  <small>
+                    {getLogStoreCode(log)} •{" "}
+                    {new Date(log.created_at).toLocaleString()}
+                  </small>
                 </div>
 
                 <p className="activity-details">{log.details}</p>
@@ -207,6 +281,9 @@ export default function ActivityLogPage() {
                   <strong>{log.full_name || "System"}</strong>
                   {log.username && <span>@{log.username}</span>}
                   {log.role && <span>{log.role}</span>}
+                  <span>
+                    {getLogStoreCode(log)} — {getLogStoreName(log)}
+                  </span>
                 </div>
               </div>
             ))}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 export default function AuditUnlockRequestBox({
   lockedPeriod,
@@ -7,6 +8,35 @@ export default function AuditUnlockRequestBox({
   requestedAction = "Correction needed inside locked period",
   onRequestSent,
 }) {
+  const { user, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    lockedPeriod?.branch_code ||
+    lockedPeriod?.store_code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    lockedPeriod?.branch_name ||
+    lockedPeriod?.store_name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    lockedPeriod?.branch_location ||
+    lockedPeriod?.store_location ||
+    "";
+
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
@@ -24,6 +54,14 @@ export default function AuditUnlockRequestBox({
 
     if (!reason.trim()) {
       setError("Please explain why this approved period should be reopened.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Send unlock request for ${currentStoreCode} — ${currentStoreName}?`
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -79,6 +117,24 @@ export default function AuditUnlockRequestBox({
         Request Period Unlock
       </h3>
 
+      <div
+        style={{
+          marginBottom: "10px",
+          padding: "10px",
+          borderRadius: "12px",
+          background: "#ffffff",
+          border: "1px solid #fed7aa",
+          fontWeight: "800",
+        }}
+      >
+        Store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          This unlock request will be reviewed inside the selected store only.
+        </small>
+      </div>
+
       <p
         style={{
           margin: "0 0 10px",
@@ -88,8 +144,8 @@ export default function AuditUnlockRequestBox({
       >
         This transaction is blocked because{" "}
         <strong>{lockedPeriod.period_label || "this accounting period"}</strong>{" "}
-        has already been approved. You can send a request for an admin or manager
-        to review.
+        has already been approved for <strong>{currentStoreCode}</strong>. You
+        can send a request for an admin or manager to review.
       </p>
 
       <form onSubmit={sendUnlockRequest}>

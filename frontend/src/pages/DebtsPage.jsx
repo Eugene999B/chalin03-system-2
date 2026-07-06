@@ -1,8 +1,32 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 export default function DebtsPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [debts, setDebts] = useState([]);
   const [summary, setSummary] = useState(null);
 
@@ -27,6 +51,18 @@ export default function DebtsPage() {
 
   const businessName = "Chalin 03 Company Limited";
   const momoNumber = "0543421127";
+
+  function getDebtStoreCode(debt) {
+    return debt?.branch_code || debt?.store_code || currentStoreCode;
+  }
+
+  function getDebtStoreName(debt) {
+    return debt?.branch_name || debt?.store_name || currentStoreName;
+  }
+
+  function getDebtStoreLocation(debt) {
+    return debt?.branch_location || debt?.store_location || currentStoreLocation;
+  }
 
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
@@ -136,6 +172,7 @@ export default function DebtsPage() {
 This is a friendly debt reminder from ${businessName}.
 
 DEBT DETAILS
+Store: ${getDebtStoreCode(debt)} - ${getDebtStoreName(debt)}
 Receipt No: ${debt.receipt_number || "-"}
 Total Debt: ${formatMoney(debt.amount_owed)}
 Amount Paid: ${formatMoney(debt.amount_paid)}
@@ -198,7 +235,9 @@ Thank you.`;
 
   useEffect(() => {
     loadDebts();
-  }, []);
+    // Reload debts when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   async function viewDebt(debtId) {
     setMessage("");
@@ -208,7 +247,21 @@ Thank you.`;
     try {
       const response = await axiosClient.get(`/debts/${debtId}`);
 
-      setSelectedDebt(response.data.debt);
+      setSelectedDebt({
+        ...(response.data.debt || {}),
+        branch_code:
+          response.data.debt?.branch_code ||
+          response.data.debt?.store_code ||
+          currentStoreCode,
+        branch_name:
+          response.data.debt?.branch_name ||
+          response.data.debt?.store_name ||
+          currentStoreName,
+        branch_location:
+          response.data.debt?.branch_location ||
+          response.data.debt?.store_location ||
+          currentStoreLocation,
+      });
       setSelectedPayments(response.data.payments || []);
     } catch (error) {
       setError(getFriendlyApiError(error, "Failed to load debt details."));
@@ -317,12 +370,18 @@ Thank you.`;
         <body>
           <div class="receipt">
             <h1>Chalin 03 Company Limited</h1>
-            <div class="center">Dunkwa Police Barrier</div>
+            <div class="center">${getDebtStoreLocation(debt) || "Dunkwa Police Barrier"}</div>
             <div class="center">Tel: 0249469080 / 0249995510</div>
+            <div class="center">Store: ${getDebtStoreCode(debt)} - ${getDebtStoreName(debt)}</div>
 
             <div class="line"></div>
 
             <h2>Debt Payment Receipt</h2>
+
+            <div class="row">
+              <span>Store:</span>
+              <span>${getDebtStoreCode(debt)} - ${getDebtStoreName(debt)}</span>
+            </div>
 
             <div class="row">
               <span>Payment ID:</span>
@@ -451,7 +510,23 @@ Thank you.`;
       );
 
       setMessage("Debt payment recorded successfully.");
-      setLatestReceipt(response.data.receipt || null);
+      setLatestReceipt(
+        response.data.receipt
+          ? {
+              ...response.data.receipt,
+              debt: {
+                ...(response.data.receipt.debt || {}),
+                branch_code:
+                  response.data.receipt.debt?.branch_code || currentStoreCode,
+                branch_name:
+                  response.data.receipt.debt?.branch_name || currentStoreName,
+                branch_location:
+                  response.data.receipt.debt?.branch_location ||
+                  currentStoreLocation,
+              },
+            }
+          : null
+      );
 
       setSelectedDebtId("");
       setAmount("");
@@ -476,12 +551,37 @@ Thank you.`;
       <div className="page-header">
         <div>
           <h1>Debts</h1>
-          <p>Track credit customers, debt balances and payment history</p>
+          <p>
+            Track credit customers, debt balances and payment history for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={loadDebts}>
           Refresh
         </button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Debt list, debt payments, payment receipts and WhatsApp reminders are
+          filtered to this selected store only.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -501,7 +601,7 @@ Thank you.`;
       {summary && (
         <div className="cards-grid">
           <div className="stat-card">
-            <span>Outstanding Balance</span>
+            <span>{currentStoreCode} Outstanding Balance</span>
             <strong>{formatMoney(summary.outstanding_balance)}</strong>
           </div>
 
@@ -524,7 +624,7 @@ Thank you.`;
 
       {latestReceipt && (
         <div className="section-card">
-          <h2>Latest Debt Payment Receipt</h2>
+          <h2>Latest Debt Payment Receipt - {currentStoreCode}</h2>
           <p>
             Payment of{" "}
             <strong>{formatMoney(latestReceipt.payment.amount)}</strong> from{" "}
@@ -553,12 +653,12 @@ Thank you.`;
 
       <div className="two-column">
         <div className="section-card">
-          <h2>Debt List</h2>
+          <h2>Debt List - {currentStoreCode}</h2>
 
           {detailsLoading && <div className="success-box">Loading details...</div>}
 
           {debts.length === 0 ? (
-            <p>No debts found. Record a credit sale first.</p>
+            <p>No debts found for {currentStoreCode}. Record a credit sale first.</p>
           ) : (
             <table>
               <thead>
@@ -625,7 +725,7 @@ Thank you.`;
         </div>
 
         <form className="section-card" onSubmit={recordPayment}>
-          <h2>Record Payment</h2>
+          <h2>Record Payment - {currentStoreCode}</h2>
 
           <label>Select Debt</label>
           <select
@@ -679,9 +779,11 @@ Thank you.`;
           <div className="receipt-modal">
             <div className="modal-header">
               <div>
-                <h2>Debt Details</h2>
+                <h2>Debt Details - {getDebtStoreCode(selectedDebt)}</h2>
                 <p>
                   Customer: <strong>{selectedDebt.customer_name}</strong>
+                  <br />
+                  Store: <strong>{getDebtStoreName(selectedDebt)}</strong>
                 </p>
               </div>
 
@@ -696,6 +798,11 @@ Thank you.`;
 
             <div className="receipt-preview">
               <div className="receipt-info-grid">
+                <p>
+                  <strong>Store:</strong> {getDebtStoreCode(selectedDebt)} —{" "}
+                  {getDebtStoreName(selectedDebt)}
+                </p>
+
                 <p>
                   <strong>Receipt Number:</strong>{" "}
                   {selectedDebt.receipt_number || "-"}
@@ -791,6 +898,10 @@ Thank you.`;
                                 payment,
                                 debt: {
                                   ...selectedDebt,
+                                  branch_code: getDebtStoreCode(selectedDebt),
+                                  branch_name: getDebtStoreName(selectedDebt),
+                                  branch_location:
+                                    getDebtStoreLocation(selectedDebt),
                                   previous_balance:
                                     Number(selectedDebt.balance || 0) +
                                     Number(payment.amount || 0),

@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
+
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -35,6 +36,18 @@ function SafePage({ children }) {
   return <PageErrorBoundary>{children}</PageErrorBoundary>;
 }
 
+function safe(page) {
+  return <SafePage>{page}</SafePage>;
+}
+
+function adminManagerPage(page) {
+  return <RoleRoute allowedRoles={adminManagerRoles}>{safe(page)}</RoleRoute>;
+}
+
+function adminOnlyPage(page) {
+  return <RoleRoute allowedRoles={adminOnlyRoles}>{safe(page)}</RoleRoute>;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -50,146 +63,79 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<SafePage><DashboardPage /></SafePage>} />
-            <Route path="products" element={<SafePage><ProductsPage /></SafePage>} />
-            <Route path="new-sale" element={<SafePage><NewSalePage /></SafePage>} />
-            <Route path="sales-history" element={<SafePage><SalesHistoryPage /></SafePage>} />
-            <Route path="debts" element={<SafePage><DebtsPage /></SafePage>} />
-            <Route path="change-password" element={<SafePage><ChangePasswordPage /></SafePage>} />
-            <Route path="help" element={<SafePage><HelpPage /></SafePage>} />
+            <Route index element={safe(<DashboardPage />)} />
+
+            <Route path="products" element={safe(<ProductsPage />)} />
+            <Route path="new-sale" element={safe(<NewSalePage />)} />
+            <Route path="sales-history" element={safe(<SalesHistoryPage />)} />
+            <Route path="debts" element={safe(<DebtsPage />)} />
+            <Route
+              path="change-password"
+              element={safe(<ChangePasswordPage />)}
+            />
+            <Route path="help" element={safe(<HelpPage />)} />
 
             <Route
               path="customer-statement"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><CustomerStatementPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<CustomerStatementPage />)}
+            />
+            <Route
+              path="reports"
+              element={adminManagerPage(<ReportsPage />)}
+            />
+            <Route
+              path="audit-accounting"
+              element={adminManagerPage(<AuditAccountingPage />)}
+            />
+            <Route
+              path="audit-signoffs"
+              element={adminManagerPage(<AuditSignoffHistoryPage />)}
             />
             <Route
               path="audit-unlock-requests"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><AuditUnlockRequestsPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<AuditUnlockRequestsPage />)}
             />
-
-            <Route
-              path="reports"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><ReportsPage /></SafePage>
-                </RoleRoute>
-              }
-            />
-
-            <Route
-              path="audit-accounting"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><AuditAccountingPage /></SafePage>
-                </RoleRoute>
-              }
-            />
-
-            <Route
-              path="audit-signoffs"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><AuditSignoffHistoryPage /></SafePage>
-                </RoleRoute>
-              }
-            />
-
             <Route
               path="low-stock"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><LowStockPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<LowStockPage />)}
             />
-
             <Route
               path="expenses"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><ExpensesPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<ExpensesPage />)}
             />
-
             <Route
               path="purchases"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><PurchasesPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<PurchasesPage />)}
             />
-
             <Route
               path="returns"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><ReturnsPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<ReturnsPage />)}
             />
-
             <Route
               path="daily-closing"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><DailyClosingPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<DailyClosingPage />)}
             />
-
             <Route
               path="exports"
-              element={
-                <RoleRoute allowedRoles={adminManagerRoles}>
-                  <SafePage><ExportsPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminManagerPage(<ExportsPage />)}
             />
 
             <Route
               path="users-settings"
-              element={
-                <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <SafePage><UsersSettingsPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminOnlyPage(<UsersSettingsPage />)}
             />
-
             <Route
               path="activity-log"
-              element={
-                <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <SafePage><ActivityLogPage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminOnlyPage(<ActivityLogPage />)}
             />
-
+            <Route path="backup" element={adminOnlyPage(<BackupPage />)} />
             <Route
-              path="backup"
-              element={
-                <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <SafePage><BackupPage /></SafePage>
-                </RoleRoute>
-              }
+              path="backup-restore"
+              element={<Navigate to="/backup" replace />}
             />
-
             <Route
               path="maintenance"
-              element={
-                <RoleRoute allowedRoles={adminOnlyRoles}>
-                  <SafePage><MaintenancePage /></SafePage>
-                </RoleRoute>
-              }
+              element={adminOnlyPage(<MaintenancePage />)}
             />
           </Route>
 

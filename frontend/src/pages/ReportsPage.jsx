@@ -1,7 +1,31 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 export default function ReportsPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [summary, setSummary] = useState(null);
   const [topProducts, setTopProducts] = useState([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
@@ -42,7 +66,9 @@ export default function ReportsPage() {
       from: "",
       to: "",
     });
-  }, []);
+    // Reload reports when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
@@ -72,7 +98,12 @@ export default function ReportsPage() {
       <div className="page-header">
         <div>
           <h1>Reports</h1>
-          <p>Sales, discount, profit, debts and stock reports</p>
+          <p>
+            Sales, discount, profit, debts and stock reports for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={() => loadReports()}>
@@ -80,10 +111,30 @@ export default function ReportsPage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Sales summary, profit, debts, payment breakdown, top products and
+          low-stock reports are filtered to this selected store only.
+        </small>
+      </div>
+
       {error && <div className="error-box">{error}</div>}
 
       <div className="section-card">
-        <h2>Report Filter</h2>
+        <h2>Report Filter - {currentStoreCode}</h2>
 
         <div className="filter-grid">
           <div>
@@ -122,7 +173,7 @@ export default function ReportsPage() {
 
       <div className="cards-grid reports-grid">
         <div className="stat-card">
-          <span>Before Discount</span>
+          <span>{currentStoreCode} Before Discount</span>
           <strong>{formatMoney(totalBeforeDiscount)}</strong>
         </div>
 
@@ -174,10 +225,10 @@ export default function ReportsPage() {
 
       <div className="two-column reports-two-column">
         <div className="section-card">
-          <h2>Top Products</h2>
+          <h2>Top Products - {currentStoreCode}</h2>
 
           {topProducts.length === 0 ? (
-            <p>No product sales found.</p>
+            <p>No product sales found for {currentStoreCode}.</p>
           ) : (
             <table>
               <thead>
@@ -202,10 +253,10 @@ export default function ReportsPage() {
         </div>
 
         <div className="section-card">
-          <h2>Payment Breakdown</h2>
+          <h2>Payment Breakdown - {currentStoreCode}</h2>
 
           {paymentBreakdown.length === 0 ? (
-            <p>No payment records found.</p>
+            <p>No payment records found for {currentStoreCode}.</p>
           ) : (
             <table>
               <thead>
@@ -231,10 +282,10 @@ export default function ReportsPage() {
       </div>
 
       <div className="section-card">
-        <h2>Low Stock Report</h2>
+        <h2>Low Stock Report - {currentStoreCode}</h2>
 
         {lowStockProducts.length === 0 ? (
-          <p>No low-stock products at the moment.</p>
+          <p>No low-stock products at the moment for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>

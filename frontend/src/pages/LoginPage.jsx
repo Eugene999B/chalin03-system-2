@@ -3,6 +3,38 @@ import { Navigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
+function getBranchId(branch) {
+  return Number(branch?.id || branch?.branch_id || 0);
+}
+
+function getBranchCode(branch) {
+  return branch?.code || branch?.branch_code || "";
+}
+
+function getBranchName(branch) {
+  return branch?.name || branch?.branch_name || "Store";
+}
+
+function getBranchLocation(branch) {
+  return branch?.location || branch?.branch_location || "";
+}
+
+function normalizeBranches(data) {
+  if (Array.isArray(data?.branches)) {
+    return data.branches;
+  }
+
+  if (Array.isArray(data?.stores)) {
+    return data.stores;
+  }
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  return [];
+}
+
 export default function LoginPage() {
   const { login, isLoggedIn } = useAuth();
 
@@ -26,7 +58,7 @@ export default function LoginPage() {
 
   const selectedBranch = useMemo(() => {
     return branches.find(
-      (branch) => Number(branch.id) === Number(selectedBranchId)
+      (branch) => getBranchId(branch) === Number(selectedBranchId)
     );
   }, [branches, selectedBranchId]);
 
@@ -39,7 +71,7 @@ export default function LoginPage() {
 
       try {
         const response = await axiosClient.get("/branches/public");
-        const list = response.data?.branches || [];
+        const list = normalizeBranches(response.data);
 
         if (ignore) {
           return;
@@ -48,7 +80,7 @@ export default function LoginPage() {
         setBranches(list);
 
         if (list.length > 0) {
-          setSelectedBranchId(String(list[0].id));
+          setSelectedBranchId(String(getBranchId(list[0])));
         }
       } catch (error) {
         if (ignore) {
@@ -839,7 +871,7 @@ export default function LoginPage() {
           <div>
             <div className="hero-stats">
               <div className="hero-stat">
-                <strong>2</strong>
+                <strong>{branchesLoading ? "..." : branches.length}</strong>
                 <span>Active Stores</span>
               </div>
 
@@ -856,10 +888,11 @@ export default function LoginPage() {
 
             <div className="selected-store-preview">
               <small>Selected Store</small>
-              <h2>{selectedBranch?.name || "Choose a store"}</h2>
+              <h2>{selectedBranch ? getBranchName(selectedBranch) : "Choose a store"}</h2>
               <p>
-                {selectedBranch?.location ||
-                  "Select the branch you are working with before login."}
+                {selectedBranch
+                  ? getBranchLocation(selectedBranch) || "No location set"
+                  : "Select the branch you are working with before login."}
               </p>
             </div>
           </div>
@@ -900,22 +933,26 @@ export default function LoginPage() {
 
             <div className="branch-grid">
               {branches.map((branch) => {
-                const active = Number(selectedBranchId) === Number(branch.id);
+                const branchId = getBranchId(branch);
+                const active = Number(selectedBranchId) === branchId;
 
                 return (
                   <button
                     type="button"
-                    key={branch.id}
+                    key={branchId}
                     className={`branch-card ${active ? "active" : ""}`}
-                    onClick={() => setSelectedBranchId(String(branch.id))}
+                    onClick={() => setSelectedBranchId(String(branchId))}
                   >
                     <div className="branch-icon">
                       {branch.is_head_office ? "🏢" : "🏬"}
                     </div>
 
                     <div className="branch-info">
-                      <strong>{branch.name}</strong>
-                      <span>{branch.location || "No location set"}</span>
+                      <strong>
+                        {getBranchName(branch)}
+                        {getBranchCode(branch) ? ` - ${getBranchCode(branch)}` : ""}
+                      </strong>
+                      <span>{getBranchLocation(branch) || "No location set"}</span>
                     </div>
 
                     <div className="branch-check">✓</div>
@@ -964,7 +1001,7 @@ export default function LoginPage() {
                 {loading
                   ? "Opening store portal..."
                   : selectedBranch
-                  ? `Login to ${selectedBranch.branch_code || "Store"}`
+                  ? `Login to ${getBranchCode(selectedBranch) || getBranchName(selectedBranch)}`
                   : "Login"}
               </button>
 

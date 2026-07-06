@@ -15,8 +15,29 @@ const emptyForm = {
 };
 
 export default function ProductsPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const canAddOrEdit = role === "admin" || role === "manager";
   const canDelete = role === "admin";
@@ -109,7 +130,9 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadProducts();
-  }, []);
+    // Reload products when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function handleChange(event) {
     setForm({
@@ -315,12 +338,37 @@ export default function ProductsPage() {
       <div className="page-header">
         <div>
           <h1>Products</h1>
-          <p>Add, edit, adjust and manage spare parts stock</p>
+          <p>
+            Add, edit, adjust and manage spare parts stock for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={loadProducts}>
           Refresh
         </button>
+      </div>
+
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Product list, stock adjustments, low-stock warnings and barcode
+          checks are filtered to this selected store only.
+        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -330,6 +378,11 @@ export default function ProductsPage() {
         {canAddOrEdit ? (
           <form className="section-card" onSubmit={handleSubmit}>
             <h2>{isEditing ? "Edit Product" : "Add Product"}</h2>
+
+            <div className="warning-box">
+              You are working in {currentStoreCode} — {currentStoreName}. This
+              product will belong to this selected store only.
+            </div>
 
             {isEditing && (
               <div className="warning-box">
@@ -440,7 +493,7 @@ export default function ProductsPage() {
 
         <div className="section-card">
           <div className="table-header">
-            <h2>Product List</h2>
+            <h2>Product List - {currentStoreCode}</h2>
 
             <div className="inline-search">
               <input
@@ -456,7 +509,7 @@ export default function ProductsPage() {
           </div>
 
           {products.length === 0 ? (
-            <p>No products found.</p>
+            <p>No products found for {currentStoreCode} — {currentStoreName}.</p>
           ) : (
             <table>
               <thead>
@@ -554,9 +607,11 @@ export default function ProductsPage() {
           <div className="receipt-modal">
             <div className="modal-header">
               <div>
-                <h2>Stock Adjustment</h2>
+                <h2>Stock Adjustment - {currentStoreCode}</h2>
                 <p>
                   Product: <strong>{stockProduct.name}</strong>
+                  <br />
+                  Store: <strong>{currentStoreName}</strong>
                 </p>
               </div>
 

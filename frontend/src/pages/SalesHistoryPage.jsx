@@ -3,9 +3,30 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 export default function SalesHistoryPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
   const isAdmin = role === "admin";
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [sales, setSales] = useState([]);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -25,6 +46,43 @@ export default function SalesHistoryPage() {
   const momoNumber = "0543421127";
   const receiptFooter = "Thank You For Coming";
   const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
+
+  function getReceiptBusinessName(receiptData) {
+    return receiptData?.business_name || businessName;
+  }
+
+  function getReceiptBusinessAddress(receiptData) {
+    return (
+      receiptData?.business_address ||
+      receiptData?.branch_location ||
+      currentStoreLocation ||
+      businessAddress
+    );
+  }
+
+  function getReceiptBusinessPhone(receiptData) {
+    return receiptData?.business_phone || businessPhone;
+  }
+
+  function getReceiptMomoNumber(receiptData) {
+    return receiptData?.owner_phone || momoNumber;
+  }
+
+  function getReceiptStoreCode(receiptData) {
+    return (
+      receiptData?.branch_code ||
+      receiptData?.store_code ||
+      currentStoreCode
+    );
+  }
+
+  function getReceiptStoreName(receiptData) {
+    return (
+      receiptData?.branch_name ||
+      receiptData?.store_name ||
+      currentStoreName
+    );
+  }
 
   function formatMoney(value) {
     return Number(value || 0).toFixed(2);
@@ -82,8 +140,12 @@ export default function SalesHistoryPage() {
   }
 
   function isSaleVoided(sale) {
+    const status = String(sale?.sale_status || "").toLowerCase();
+
     return (
-      Number(sale?.is_voided || 0) === 1 || sale?.sale_status === "cancelled"
+      Number(sale?.is_voided || 0) === 1 ||
+      status === "cancelled" ||
+      status === "voided"
     );
   }
 
@@ -115,7 +177,21 @@ export default function SalesHistoryPage() {
     try {
       const response = await axiosClient.get(`/sales/${saleId}`);
 
-      setSelectedReceipt(response.data.sale);
+      setSelectedReceipt({
+        ...(response.data.sale || {}),
+        branch_code:
+          response.data.sale?.branch_code ||
+          response.data.sale?.store_code ||
+          currentStoreCode,
+        branch_name:
+          response.data.sale?.branch_name ||
+          response.data.sale?.store_name ||
+          currentStoreName,
+        branch_location:
+          response.data.sale?.branch_location ||
+          response.data.sale?.business_address ||
+          currentStoreLocation,
+      });
       setSelectedItems(response.data.items || []);
       setSelectedDebt(response.data.debt || null);
     } catch (error) {
@@ -205,6 +281,12 @@ export default function SalesHistoryPage() {
     if (!selectedReceipt) return;
 
     const receiptDiscount = Number(selectedReceipt.discount_amount || 0);
+    const receiptBusinessName = getReceiptBusinessName(selectedReceipt);
+    const receiptBusinessAddress = getReceiptBusinessAddress(selectedReceipt);
+    const receiptBusinessPhone = getReceiptBusinessPhone(selectedReceipt);
+    const receiptMomoNumber = getReceiptMomoNumber(selectedReceipt);
+    const receiptStoreCode = getReceiptStoreCode(selectedReceipt);
+    const receiptStoreName = getReceiptStoreName(selectedReceipt);
 
     const itemsHtml = selectedItems
       .map(
@@ -358,17 +440,23 @@ export default function SalesHistoryPage() {
 
         <body>
           <div class="receipt">
-            <h1>${businessName}</h1>
+            <h1>${escapeHtml(receiptBusinessName)}</h1>
 
             <div class="center">
-              <p>${businessAddress}</p>
-              <p>Tel: ${businessPhone}</p>
-              <p>MOMO #: ${momoNumber}</p>
+              <p>${escapeHtml(receiptBusinessAddress)}</p>
+              <p>Tel: ${escapeHtml(receiptBusinessPhone)}</p>
+              <p>MOMO #: ${escapeHtml(receiptMomoNumber)}</p>
+              <p>Store: ${escapeHtml(receiptStoreCode)} - ${escapeHtml(receiptStoreName)}</p>
             </div>
 
             ${voidedHtml}
 
             <div class="dash"></div>
+
+            <div class="details-row">
+              <span>Store :</span>
+              <span>${escapeHtml(receiptStoreCode)} - ${escapeHtml(receiptStoreName)}</span>
+            </div>
 
             <div class="details-row">
               <span>Customer :</span>
@@ -504,7 +592,9 @@ export default function SalesHistoryPage() {
       from: "",
       to: "",
     });
-  }, []);
+    // Reload sales when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   return (
     <div>
@@ -513,6 +603,10 @@ export default function SalesHistoryPage() {
           <h1>Sales History</h1>
           <p>
             View past sales, reprint receipts, download PDF and void wrong sales
+            for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
           </p>
         </div>
 
@@ -521,11 +615,31 @@ export default function SalesHistoryPage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Sales history, receipt preview, PDF download and void actions are
+          filtered to this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <div className="section-card">
-        <h2>Filter Sales</h2>
+        <h2>Filter Sales - {currentStoreCode}</h2>
 
         <div className="filter-grid">
           <div>
@@ -572,10 +686,10 @@ export default function SalesHistoryPage() {
       </div>
 
       <div className="section-card">
-        <h2>Sales List</h2>
+        <h2>Sales List - {currentStoreCode}</h2>
 
         {sales.length === 0 ? (
-          <p>No sales found.</p>
+          <p>No sales found for {currentStoreCode} — {currentStoreName}.</p>
         ) : (
           <table>
             <thead>
@@ -680,8 +794,11 @@ export default function SalesHistoryPage() {
           <div className="receipt-modal">
             <div className="modal-header">
               <div>
-                <h2>Receipt Preview</h2>
-                <p>{selectedReceipt.receipt_number}</p>
+                <h2>Receipt Preview - {getReceiptStoreCode(selectedReceipt)}</h2>
+                <p>
+                  {selectedReceipt.receipt_number} •{" "}
+                  {getReceiptStoreName(selectedReceipt)}
+                </p>
               </div>
 
               <button
@@ -695,10 +812,14 @@ export default function SalesHistoryPage() {
 
             <div className="receipt-preview">
               <div className="receipt-center">
-                <h2>{businessName}</h2>
-                <p>{businessAddress}</p>
-                <p>Tel: {businessPhone}</p>
-                <p>MOMO #: {momoNumber}</p>
+                <h2>{getReceiptBusinessName(selectedReceipt)}</h2>
+                <p>{getReceiptBusinessAddress(selectedReceipt)}</p>
+                <p>Tel: {getReceiptBusinessPhone(selectedReceipt)}</p>
+                <p>MOMO #: {getReceiptMomoNumber(selectedReceipt)}</p>
+                <p>
+                  Store: {getReceiptStoreCode(selectedReceipt)} —{" "}
+                  {getReceiptStoreName(selectedReceipt)}
+                </p>
                 <strong>Sales Receipt</strong>
               </div>
 
@@ -720,6 +841,11 @@ export default function SalesHistoryPage() {
               )}
 
               <div className="receipt-info-grid">
+                <p>
+                  <strong>Store:</strong> {getReceiptStoreCode(selectedReceipt)}{" "}
+                  — {getReceiptStoreName(selectedReceipt)}
+                </p>
+
                 <p>
                   <strong>Receipt:</strong> {selectedReceipt.receipt_number}
                 </p>

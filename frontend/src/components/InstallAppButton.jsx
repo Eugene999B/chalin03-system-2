@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 const INSTALL_STORAGE_KEY = "chalin03_app_installed";
 
@@ -33,6 +34,22 @@ function saveInstalledStatus() {
 }
 
 export default function InstallAppButton() {
+  const { user, branchCode, branchName } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [message, setMessage] = useState("");
@@ -56,14 +73,19 @@ export default function InstallAppButton() {
       saveInstalledStatus();
       setIsInstalled(true);
       setInstallPrompt(null);
-      setMessage("✅ Chalin 03 app has been installed successfully.");
+      setMessage(
+        "✅ Chalin 03 app has been installed successfully. The same app can be used for all stores your account can access."
+      );
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleInstalled);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
       window.removeEventListener("appinstalled", handleInstalled);
     };
   }, []);
@@ -74,7 +96,9 @@ export default function InstallAppButton() {
     if (isInstalled || getStoredInstalledStatus() || isStandaloneApp()) {
       setIsInstalled(true);
       saveInstalledStatus();
-      setMessage("✅ Chalin 03 app is already installed on this device.");
+      setMessage(
+        "✅ Chalin 03 app is already installed on this device. Open it from your desktop, Start menu, taskbar, or phone Home Screen."
+      );
       return;
     }
 
@@ -86,7 +110,9 @@ export default function InstallAppButton() {
       if (result.outcome === "accepted") {
         saveInstalledStatus();
         setIsInstalled(true);
-        setMessage("✅ Chalin 03 app has been installed successfully.");
+        setMessage(
+          "✅ Chalin 03 app has been installed successfully. Login and choose the correct store before working."
+        );
       } else {
         setMessage("Installation was cancelled.");
       }
@@ -97,13 +123,13 @@ export default function InstallAppButton() {
 
     if (isIosDevice()) {
       setMessage(
-        "On iPhone/iPad: open this site in Safari, tap Share, then choose Add to Home Screen. After adding it, open the app from your Home Screen."
+        "On iPhone/iPad: open Chalin 03 in Safari, tap Share, then choose Add to Home Screen. After adding it, open the app from your Home Screen and select the correct store when logging in."
       );
       return;
     }
 
     setMessage(
-      "If Chalin 03 is already on your desktop, open it from your desktop/start menu. If not, use Chrome/Edge address-bar install icon or browser menu → Install app."
+      "Use Chrome/Edge address-bar install icon, or browser menu → Install app. The installed app is for the full Chalin 03 system, not only one store."
     );
   }
 
@@ -113,6 +139,7 @@ export default function InstallAppButton() {
         type="button"
         onClick={handleInstallClick}
         disabled={isInstalled}
+        title={`Install Chalin 03 app. Current store: ${currentStoreCode} — ${currentStoreName}`}
         style={{
           width: "100%",
           border: "none",
@@ -142,6 +169,10 @@ export default function InstallAppButton() {
           }}
         >
           {message}
+          <br />
+          <strong>
+            Current store: {currentStoreCode} — {currentStoreName}
+          </strong>
         </div>
       )}
     </div>
