@@ -2,6 +2,34 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
+const SMS_TEMPLATES = [
+  {
+    title: "Goods Ready",
+    message:
+      "CHALIN03: Dear customer, your goods are ready for collection at Chalin 03. Thank you.",
+  },
+  {
+    title: "Payment Reminder",
+    message:
+      "CHALIN03: Dear customer, kindly settle your outstanding balance at Chalin 03. Thank you.",
+  },
+  {
+    title: "New Stock",
+    message:
+      "CHALIN03: New spare parts are available at Chalin 03. Kindly visit us for quality parts. Thank you.",
+  },
+  {
+    title: "Shop Notice",
+    message:
+      "CHALIN03: Dear customer, thank you for doing business with Chalin 03 Company Limited.",
+  },
+  {
+    title: "Thank You",
+    message:
+      "CHALIN03: Thank you for buying from Chalin 03 Company Limited. We appreciate your business.",
+  },
+];
+
 export default function SmsPage() {
   const { user, branchId, branchCode, branchName } = useAuth();
 
@@ -179,6 +207,12 @@ export default function SmsPage() {
   function resetLiveBulkConfirmation() {
     setLiveBulkConfirmed(false);
     setLiveBulkConfirmText("");
+  }
+
+  function useTemplate(templateMessage) {
+    setMessage(templateMessage);
+    setError("");
+    setNotice("");
   }
 
   async function sendTestSms() {
@@ -528,6 +562,27 @@ export default function SmsPage() {
                 />
               </div>
             )}
+
+            <label>SMS Templates</label>
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                marginBottom: "12px",
+              }}
+            >
+              {SMS_TEMPLATES.map((template) => (
+                <button
+                  key={template.title}
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => useTemplate(template.message)}
+                >
+                  {template.title}
+                </button>
+              ))}
+            </div>
 
             <label>Message</label>
             <textarea
