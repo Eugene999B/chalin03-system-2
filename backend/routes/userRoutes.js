@@ -4,7 +4,11 @@ const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
-const { normalizeGhanaPhone, sendSms } = require("../services/smsService");
+const {
+  buildOwnerAlertContext,
+  formatSecurityDateTime,
+  sendOwnerSmsAlert,
+} = require("../services/smsAlertService");
 
 const router = express.Router();
 
@@ -41,65 +45,6 @@ function cleanText(value) {
 
 function cleanBoolean(value) {
   return value === true || value === 1 || value === "1" || value === "true";
-}
-
-function safeJson(value) {
-  try {
-    return JSON.stringify(value || {});
-  } catch {
-    return String(value || "");
-  }
-}
-
-function truncateMessage(message, maxLength = 480) {
-  const cleanSmsMessage = String(message || "").trim();
-
-  if (cleanSmsMessage.length <= maxLength) {
-    return cleanSmsMessage;
-  }
-
-  return `${cleanSmsMessage.slice(0, maxLength - 3)}...`;
-}
-
-function firstValidGhanaPhone(...values) {
-  for (const value of values) {
-    const rawValue = String(value || "").trim();
-
-    if (!rawValue) {
-      continue;
-    }
-
-    const possiblePhones = rawValue
-      .split(/[\/,;|]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    for (const possiblePhone of possiblePhones) {
-      const normalizedPhone = normalizeGhanaPhone(possiblePhone);
-
-      if (normalizedPhone) {
-        return normalizedPhone;
-      }
-    }
-
-    const normalizedFullValue = normalizeGhanaPhone(rawValue);
-
-    if (normalizedFullValue) {
-      return normalizedFullValue;
-    }
-  }
-
-  return "";
-}
-
-function formatSecurityDateTime() {
-  return new Date().toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function isOriginalSystemAdministrator(user) {
@@ -306,156 +251,6 @@ async function getUserById(userId) {
   return user;
 }
 
-async function getBranchInfoById(branchId) {
-  const cleanBranchId = Number(branchId || 1);
-
-  if (!(await tableExists(pool, "branches"))) {
-    return {
-      id: cleanBranchId || 1,
-      code: `BR-${cleanBranchId || 1}`,
-      name: `Branch ${cleanBranchId || 1}`,
-      location: "",
-    };
-  }
-
-  const hasBranchCode = await columnExists(pool, "branches", "branch_code");
-  const hasCode = await columnExists(pool, "branches", "code");
-  const hasName = await columnExists(pool, "branches", "name");
-  const hasBranchName = await columnExists(pool, "branches", "branch_name");
-  const hasLocation = await columnExists(pool, "branches", "location");
-  const hasBranchLocation = await columnExists(
-    pool,
-    "branches",
-    "branch_location"
-  );
-  const hasIsActive = await columnExists(pool, "branches", "is_active");
-
-  const codeSql = hasBranchCode
-    ? "branch_code AS code"
-    : hasCode
-    ? "code"
-    : "CONCAT('BR-', id) AS code";
-
-  const nameSql = hasName
-    ? "name"
-    : hasBranchName
-    ? "branch_name AS name"
-    : "CONCAT('Branch ', id) AS name";
-
-  const locationSql = hasLocation
-    ? "location"
-    : hasBranchLocation
-    ? "branch_location AS location"
-    : "'' AS location";
-
-  const activeWhere = hasIsActive ? "AND is_active = TRUE" : "";
-
-  const [branches] = await pool.query(
-    `SELECT
-      id,
-      ${codeSql},
-      ${nameSql},
-      ${locationSql}
-     FROM branches
-     WHERE id = ?
-     ${activeWhere}
-     LIMIT 1`,
-    [cleanBranchId || 1]
-  );
-
-  if (branches.length > 0) {
-    return branches[0];
-  }
-
-  return {
-    id: cleanBranchId || 1,
-    code: `BR-${cleanBranchId || 1}`,
-    name: `Branch ${cleanBranchId || 1}`,
-    location: "",
-  };
-}
-
-async function getSmsSettingsForBranch(branchId) {
-  if (!(await tableExists(pool, "settings"))) {
-    return {};
-  }
-
-  const hasBranchId = await columnExists(pool, "settings", "branch_id");
-  const hasBusinessName = await columnExists(pool, "settings", "business_name");
-  const hasBusinessPhone = await columnExists(pool, "settings", "business_phone");
-  const hasOwnerPhone = await columnExists(pool, "settings", "owner_phone");
-
-  const businessNameSql = hasBusinessName
-    ? "business_name"
-    : "'Chalin 03 Company Limited' AS business_name";
-
-  const businessPhoneSql = hasBusinessPhone
-    ? "business_phone"
-    : "NULL AS business_phone";
-
-  const ownerPhoneSql = hasOwnerPhone ? "owner_phone" : "NULL AS owner_phone";
-
-  const whereSql = hasBranchId ? "WHERE branch_id = ?" : "";
-  const params = hasBranchId ? [branchId || 1] : [];
-
-  const [settingsRows] = await pool.query(
-    `SELECT
-      ${businessNameSql},
-      ${businessPhoneSql},
-      ${ownerPhoneSql}
-     FROM settings
-     ${whereSql}
-     LIMIT 1`,
-    params
-  );
-
-  return settingsRows[0] || {};
-}
-
-async function writeSmsLogSafe({
-  branchId,
-  phone,
-  message,
-  smsType,
-  status,
-  providerResponse,
-  sentBy,
-}) {
-  try {
-    if (!(await tableExists(pool, "sms_log"))) {
-      return;
-    }
-
-    const sentAt = status === "sent" ? new Date() : null;
-
-    await pool.query(
-      `INSERT INTO sms_log (
-        branch_id,
-        recipient_phone,
-        message,
-        sms_type,
-        status,
-        provider_response,
-        sent_by,
-        sent_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        branchId || null,
-        phone,
-        message,
-        smsType || "security_alert",
-        status,
-        safeJson(providerResponse).slice(0, 6000),
-        sentBy || null,
-        sentAt,
-      ]
-    );
-  } catch (error) {
-    console.warn("Security SMS log skipped:", error.message);
-  }
-}
-
 async function sendNewUserCreatedSecuritySmsAlert({
   createdUser,
   createdByUser,
@@ -464,22 +259,8 @@ async function sendNewUserCreatedSecuritySmsAlert({
   accessAllBranches,
 }) {
   try {
-    const settings = await getSmsSettingsForBranch(branchId);
+    const { businessName, branch } = await buildOwnerAlertContext(branchId);
 
-    const alertPhone = firstValidGhanaPhone(
-      settings.owner_phone,
-      settings.business_phone
-    );
-
-    if (!alertPhone) {
-      console.warn(
-        "New user SMS alert skipped: no valid owner/admin phone found."
-      );
-      return;
-    }
-
-    const branch = await getBranchInfoById(branchId);
-    const businessName = settings.business_name || "Chalin 03 Company Limited";
     const creatorName =
       createdByUser?.full_name || createdByUser?.username || "Admin";
     const createdUserName =
@@ -491,43 +272,14 @@ async function sendNewUserCreatedSecuritySmsAlert({
       ? "Access: all stores"
       : `Access store IDs: ${(selectedBranchIds || []).join(", ")}`;
 
-    const alertMessage = truncateMessage(
-      `${businessName}: Security alert. New user account created: ${createdUserName} (${createdUsername}), role ${createdRole}. ${accessText}. Created by ${creatorName} at ${branch.name} (${branch.code}) on ${formatSecurityDateTime()}.`,
-      480
-    );
+    const message = `${businessName}: Security alert. New user account created: ${createdUserName} (${createdUsername}), role ${createdRole}. ${accessText}. Created by ${creatorName} at ${branch.name} (${branch.code}) on ${formatSecurityDateTime()}.`;
 
-    try {
-      const result = await sendSms({
-        to: alertPhone,
-        message: alertMessage,
-      });
-
-      await writeSmsLogSafe({
-        branchId,
-        phone: alertPhone,
-        message: alertMessage,
-        smsType: "security_alert",
-        status: "sent",
-        providerResponse: result.providerResponse,
-        sentBy: createdByUser?.id || null,
-      });
-    } catch (error) {
-      await writeSmsLogSafe({
-        branchId,
-        phone: alertPhone,
-        message: alertMessage,
-        smsType: "security_alert",
-        status: "failed",
-        providerResponse: {
-          error: error.message,
-          statusCode: error.statusCode || null,
-          providerResponse: error.providerResponse || null,
-        },
-        sentBy: createdByUser?.id || null,
-      });
-
-      console.warn("New user SMS alert failed:", error.message);
-    }
+    await sendOwnerSmsAlert({
+      branchId,
+      message,
+      smsType: "security_alert",
+      sentBy: createdByUser?.id || null,
+    });
   } catch (error) {
     console.warn("New user SMS alert skipped:", error.message);
   }
