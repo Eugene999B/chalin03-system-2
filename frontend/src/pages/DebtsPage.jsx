@@ -48,6 +48,7 @@ export default function DebtsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [sendingDebtSmsId, setSendingDebtSmsId] = useState(null);
 
   const businessName = "Chalin 03 Company Limited";
   const momoNumber = "0543421127";
@@ -185,6 +186,38 @@ Please make payment as soon as possible.
 MoMo Number: ${momoNumber}
 
 Thank you.`;
+  }
+
+  async function sendDebtReminderSms(debt) {
+    setMessage("");
+    setError("");
+
+    if (!debt?.id) {
+      setError("Debt information is missing.");
+      return;
+    }
+
+    if (String(debt.status || "").toLowerCase() === "paid") {
+      setError("This debt is already paid. No SMS reminder is needed.");
+      return;
+    }
+
+    if (!debt.customer_phone) {
+      setError("Customer phone number is missing. Add customer phone first.");
+      return;
+    }
+
+    setSendingDebtSmsId(debt.id);
+
+    try {
+      const response = await axiosClient.post(`/sms/debt/${debt.id}`);
+
+      setMessage(response.data.message || "Debt reminder SMS sent successfully.");
+    } catch (error) {
+      setError(getFriendlyApiError(error, "Failed to send debt reminder SMS."));
+    } finally {
+      setSendingDebtSmsId(null);
+    }
   }
 
   function sendDebtReminderWhatsApp(debt) {
@@ -370,9 +403,13 @@ Thank you.`;
         <body>
           <div class="receipt">
             <h1>Chalin 03 Company Limited</h1>
-            <div class="center">${getDebtStoreLocation(debt) || "Dunkwa Police Barrier"}</div>
+            <div class="center">${
+              getDebtStoreLocation(debt) || "Dunkwa Police Barrier"
+            }</div>
             <div class="center">Tel: 0249469080 / 0249995510</div>
-            <div class="center">Store: ${getDebtStoreCode(debt)} - ${getDebtStoreName(debt)}</div>
+            <div class="center">Store: ${getDebtStoreCode(
+              debt
+            )} - ${getDebtStoreName(debt)}</div>
 
             <div class="line"></div>
 
@@ -579,8 +616,8 @@ Thank you.`;
         {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
         <br />
         <small>
-          Debt list, debt payments, payment receipts and WhatsApp reminders are
-          filtered to this selected store only.
+          Debt list, debt payments, payment receipts, SMS reminders and WhatsApp
+          reminders are filtered to this selected store only.
         </small>
       </div>
 
@@ -655,10 +692,14 @@ Thank you.`;
         <div className="section-card">
           <h2>Debt List - {currentStoreCode}</h2>
 
-          {detailsLoading && <div className="success-box">Loading details...</div>}
+          {detailsLoading && (
+            <div className="success-box">Loading details...</div>
+          )}
 
           {debts.length === 0 ? (
-            <p>No debts found for {currentStoreCode}. Record a credit sale first.</p>
+            <p>
+              No debts found for {currentStoreCode}. Record a credit sale first.
+            </p>
           ) : (
             <table>
               <thead>
@@ -703,17 +744,30 @@ Thank you.`;
                         </button>
 
                         {String(debt.status || "").toLowerCase() !== "paid" && (
-                          <button
-                            type="button"
-                            onClick={() => sendDebtReminderWhatsApp(debt)}
-                            style={{
-                              background: "#16a34a",
-                              color: "#ffffff",
-                              border: "none",
-                            }}
-                          >
-                            WhatsApp Reminder
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => sendDebtReminderSms(debt)}
+                              disabled={sendingDebtSmsId === debt.id}
+                            >
+                              {sendingDebtSmsId === debt.id
+                                ? "Sending SMS..."
+                                : "SMS Reminder"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => sendDebtReminderWhatsApp(debt)}
+                              style={{
+                                background: "#16a34a",
+                                color: "#ffffff",
+                                border: "none",
+                              }}
+                            >
+                              WhatsApp Reminder
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -828,7 +882,8 @@ Thank you.`;
                 </p>
 
                 <p>
-                  <strong>Status:</strong> {formatDebtStatus(selectedDebt.status)}
+                  <strong>Status:</strong>{" "}
+                  {formatDebtStatus(selectedDebt.status)}
                 </p>
 
                 <p>
@@ -851,17 +906,30 @@ Thank you.`;
                 }}
               >
                 {String(selectedDebt.status || "").toLowerCase() !== "paid" && (
-                  <button
-                    type="button"
-                    onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
-                    style={{
-                      background: "#16a34a",
-                      color: "#ffffff",
-                      border: "none",
-                    }}
-                  >
-                    Send WhatsApp Reminder
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => sendDebtReminderSms(selectedDebt)}
+                      disabled={sendingDebtSmsId === selectedDebt.id}
+                    >
+                      {sendingDebtSmsId === selectedDebt.id
+                        ? "Sending SMS..."
+                        : "Send SMS Reminder"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
+                      style={{
+                        background: "#16a34a",
+                        color: "#ffffff",
+                        border: "none",
+                      }}
+                    >
+                      Send WhatsApp Reminder
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -921,17 +989,30 @@ Thank you.`;
 
             <div className="modal-actions">
               {String(selectedDebt.status || "").toLowerCase() !== "paid" && (
-                <button
-                  type="button"
-                  onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
-                  style={{
-                    background: "#16a34a",
-                    color: "#ffffff",
-                    border: "none",
-                  }}
-                >
-                  Send WhatsApp Reminder
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => sendDebtReminderSms(selectedDebt)}
+                    disabled={sendingDebtSmsId === selectedDebt.id}
+                  >
+                    {sendingDebtSmsId === selectedDebt.id
+                      ? "Sending SMS..."
+                      : "Send SMS Reminder"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => sendDebtReminderWhatsApp(selectedDebt)}
+                    style={{
+                      background: "#16a34a",
+                      color: "#ffffff",
+                      border: "none",
+                    }}
+                  >
+                    Send WhatsApp Reminder
+                  </button>
+                </>
               )}
 
               <button

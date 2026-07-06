@@ -45,6 +45,7 @@ export default function NewSalePage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [lockedPeriod, setLockedPeriod] = useState(null);
+  const [sendingReceiptSms, setSendingReceiptSms] = useState(false);
 
   const businessName = "CHALIN 03 COMPANY LIMITED";
   const businessAddress = "Dunkwa Police Barrier";
@@ -54,10 +55,7 @@ export default function NewSalePage() {
   const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
 
   function getReceiptBusinessName(receiptData) {
-    return (
-      receiptData?.business_name ||
-      businessName
-    );
+    return receiptData?.business_name || businessName;
   }
 
   function getReceiptBusinessAddress(receiptData) {
@@ -160,7 +158,8 @@ export default function NewSalePage() {
 
     if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
       const lockedPeriod = responseData.locked_period || {};
-      const periodLabel = lockedPeriod.period_label || "Approved accounting period";
+      const periodLabel =
+        lockedPeriod.period_label || "Approved accounting period";
       const approvedBy = lockedPeriod.approved_by_name || "management";
       const reviewDate = lockedPeriod.review_date || "";
 
@@ -265,6 +264,27 @@ ${receiptFooter}
 ${policyText}
 
 Note: Your PDF receipt can also be attached manually on WhatsApp.`;
+  }
+
+  async function sendReceiptSms() {
+    setMessage("");
+    setError("");
+
+    if (!receipt?.sale_id) {
+      setError("Receipt ID is missing. Cannot send SMS receipt.");
+      return;
+    }
+
+    setSendingReceiptSms(true);
+
+    try {
+      const response = await axiosClient.post(`/sms/receipt/${receipt.sale_id}`);
+      setMessage(response.data.message || "Receipt SMS sent successfully.");
+    } catch (error) {
+      setError(getFriendlyApiError(error, "Failed to send receipt SMS."));
+    } finally {
+      setSendingReceiptSms(false);
+    }
   }
 
   function sendReceiptWhatsApp() {
@@ -721,7 +741,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               <p>${escapeHtml(receiptBusinessAddress)}</p>
               <p>Tel: ${escapeHtml(receiptBusinessPhone)}</p>
               <p>MOMO #: ${escapeHtml(receiptMomoNumber)}</p>
-              <p>Store: ${escapeHtml(receiptStoreCode)} - ${escapeHtml(receiptStoreName)}</p>
+              <p>Store: ${escapeHtml(receiptStoreCode)} - ${escapeHtml(
+      receiptStoreName
+    )}</p>
             </div>
 
             <div class="dash"></div>
@@ -753,7 +775,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
             <div class="details-row">
               <span>Payment :</span>
-              <span>${escapeHtml(formatPaymentMethod(receipt.payment_type))}</span>
+              <span>${escapeHtml(
+                formatPaymentMethod(receipt.payment_type)
+              )}</span>
             </div>
 
             <div class="dash"></div>
@@ -1294,6 +1318,15 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 onClick={downloadReceiptPdf}
               >
                 Download PDF
+              </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={sendReceiptSms}
+                disabled={sendingReceiptSms}
+              >
+                {sendingReceiptSms ? "Sending SMS..." : "Send SMS Receipt"}
               </button>
 
               <button

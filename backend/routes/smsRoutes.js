@@ -154,6 +154,20 @@ function cleanCustomerIds(value) {
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
+function formatMoney(value) {
+  return Number(value || 0).toFixed(2);
+}
+
+function truncateMessage(message, maxLength = 480) {
+  const cleanSmsMessage = String(message || "").trim();
+
+  if (cleanSmsMessage.length <= maxLength) {
+    return cleanSmsMessage;
+  }
+
+  return `${cleanSmsMessage.slice(0, maxLength - 3)}...`;
+}
+
 async function writeSmsLog({
   branchId,
   phone,
@@ -381,6 +395,257 @@ router.post(
     res.status(statusCode).json({
       status: result.status === "sent" ? "success" : "error",
       result,
+    });
+  })
+);
+
+router.post(
+  "/receipt/:saleId",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+    const saleId = Number(req.params.saleId);
+
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid sale ID.",
+      });
+    }
+
+    const [sales] = await runQuery(
+      `
+        SELECT
+          s.id,
+          s.branch_id,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone,
+          s.subtotal,
+          s.discount_amount,
+          s.tax_amount,
+          s.total,
+          s.payment_type,
+          s.amount_paid,
+          s.balance,
+          s.created_at,
+
+          b.branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location,
+
+          st.business_name,
+          st.business_phone,
+          st.owner_phone,
+          st.receipt_footer,
+
+          u.full_name AS staff_name,
+          u.username AS staff_username
+        FROM sales s
+        LEFT JOIN branches b ON s.branch_id = b.id
+        LEFT JOIN settings st ON s.branch_id = st.branch_id
+        LEFT JOIN users u ON s.staff_id = u.id
+        WHERE s.id = ?
+          AND s.branch_id = ?
+        LIMIT 1
+      `,
+      [saleId, branchId]
+    );
+
+    if (sales.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Sale not found in the selected branch.",
+      });
+    }
+
+    const sale = sales[0];
+
+    const [items] = await runQuery(
+      `
+        SELECT product_name, quantity, unit_price, line_total
+        FROM sale_items
+        WHERE sale_id = ?
+        ORDER BY id ASC
+      `,
+      [saleId]
+    );
+
+    const customerPhone = sale.customer_phone;
+
+    if (!customerPhone) {
+      return res.status(400).json({
+        status: "error",
+        message: "Customer phone number is missing for this sale.",
+      });
+    }
+
+    const itemSummary = items
+      .slice(0, 4)
+      .map((item) => {
+        return `${item.product_name} x${item.quantity}=GHS ${formatMoney(
+          item.line_total
+        )}`;
+      })
+      .join("; ");
+
+    const moreItemsText =
+      items.length > 4 ? `; +${items.length - 4} more item(s)` : "";
+
+    const businessName = sale.business_name || "Chalin 03 Company Limited";
+    const branchCode = sale.branch_code || "MAIN";
+    const receiptFooter = sale.receipt_footer || "Thank You For Coming";
+
+    const receiptMessage = `${businessName}: Receipt ${sale.receipt_number}. Items: ${itemSummary}${moreItemsText}. Total: GHS ${formatMoney(
+      sale.total
+    )}. Paid: GHS ${formatMoney(sale.amount_paid)}. Balance: GHS ${formatMoney(
+      sale.balance
+    )}. Store: ${branchCode}. ${receiptFooter}`;
+
+    const finalMessage = truncateMessage(receiptMessage, 480);
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: customerPhone,
+      message: finalMessage,
+      smsType: "receipt",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "Receipt SMS sent successfully."
+          : result.message || "Receipt SMS failed.",
+      result,
+      sms_message: finalMessage,
+    });
+  })
+);
+
+router.post(
+  "/debt/:debtId",
+  requireAuth,
+  requireSmsPermission,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const sentBy = getUserId(req);
+    const debtId = Number(req.params.debtId);
+
+    if (!Number.isInteger(debtId) || debtId <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid debt ID.",
+      });
+    }
+
+    const [debts] = await runQuery(
+      `
+        SELECT
+          d.id,
+          d.branch_id,
+          d.sale_id,
+          d.customer_id,
+          d.customer_name,
+          d.customer_phone,
+          d.amount_owed,
+          d.amount_paid,
+          d.balance,
+          d.status,
+          d.due_date,
+          d.created_at,
+          d.updated_at,
+
+          b.branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location,
+
+          st.business_name,
+          st.business_phone,
+          st.owner_phone,
+          st.receipt_footer
+        FROM debts d
+        LEFT JOIN branches b ON d.branch_id = b.id
+        LEFT JOIN settings st ON d.branch_id = st.branch_id
+        WHERE d.id = ?
+          AND d.branch_id = ?
+        LIMIT 1
+      `,
+      [debtId, branchId]
+    );
+
+    if (debts.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Debt record not found in the selected branch.",
+      });
+    }
+
+    const debt = debts[0];
+
+    if (String(debt.status || "").toLowerCase() === "paid") {
+      return res.status(400).json({
+        status: "error",
+        message: "This debt is already marked as paid.",
+      });
+    }
+
+    if (Number(debt.balance || 0) <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "This debt has no outstanding balance.",
+      });
+    }
+
+    if (!debt.customer_phone) {
+      return res.status(400).json({
+        status: "error",
+        message: "Customer phone number is missing for this debt.",
+      });
+    }
+
+    const businessName = debt.business_name || "Chalin 03 Company Limited";
+    const branchCode = debt.branch_code || "MAIN";
+    const customerName = debt.customer_name || "Customer";
+    const balance = formatMoney(debt.balance);
+    const ownerPhone = debt.owner_phone || "";
+    const branchName = debt.branch_name || "Chalin 03";
+
+    const dueDateText = debt.due_date
+      ? ` Due date: ${new Date(debt.due_date).toLocaleDateString("en-GB")}.`
+      : "";
+
+    const contactText = ownerPhone
+      ? ` Contact ${ownerPhone} for payment.`
+      : "";
+
+    const debtMessage = `${businessName}: Dear ${customerName}, your outstanding balance is GHS ${balance} at ${branchName} (${branchCode}). Please make payment.${dueDateText}${contactText} Thank you.`;
+
+    const finalMessage = truncateMessage(debtMessage, 480);
+
+    const result = await sendAndLogSms({
+      branchId,
+      phone: debt.customer_phone,
+      message: finalMessage,
+      smsType: "debt_reminder",
+      sentBy,
+    });
+
+    const statusCode = result.status === "sent" ? 200 : 400;
+
+    res.status(statusCode).json({
+      status: result.status === "sent" ? "success" : "error",
+      message:
+        result.status === "sent"
+          ? "Debt reminder SMS sent successfully."
+          : result.message || "Debt reminder SMS failed.",
+      result,
+      sms_message: finalMessage,
     });
   })
 );
