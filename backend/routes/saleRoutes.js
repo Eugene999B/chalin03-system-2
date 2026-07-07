@@ -9,6 +9,7 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const { sendSaleReceiptWhatsApp } = require("../services/whatsappService");
 
 const router = express.Router();
 
