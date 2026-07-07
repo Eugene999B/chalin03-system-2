@@ -163,8 +163,62 @@ export default function SmsPage() {
     };
   }, [smsStatus]);
 
+
+  function formatProviderResponse(value) {
+    if (!value) return "";
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  function buildSmsFailureMessage(data, fallback) {
+    const baseMessage = data?.message || fallback || "SMS failed.";
+
+    const rawResults = Array.isArray(data?.results)
+      ? data.results
+      : data?.result
+      ? [data.result]
+      : [];
+
+    const failedResults = rawResults.filter(
+      (result) => String(result?.status || "").toLowerCase() === "failed"
+    );
+
+    if (failedResults.length === 0) {
+      return baseMessage;
+    }
+
+    const details = failedResults.map((result, index) => {
+      const statusCode = result.status_code || result.statusCode || "";
+      const providerResponse =
+        result.provider_response || result.providerResponse || null;
+      const providerText = formatProviderResponse(providerResponse);
+
+      return [
+        `Failed SMS ${index + 1}: ${result.message || "SMS failed."}`,
+        statusCode ? `HTTP Status: ${statusCode}` : "",
+        result.provider ? `Provider: ${result.provider}` : "",
+        providerText ? `Provider Response: ${providerText}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    });
+
+    return [baseMessage, ...details].join("\n\n");
+  }
+
   function getFriendlyError(error, fallback) {
-    return error?.response?.data?.message || error?.message || fallback;
+    return buildSmsFailureMessage(
+      error?.response?.data,
+      error?.message || fallback
+    );
   }
 
   function escapeCsvValue(value) {
@@ -365,6 +419,7 @@ export default function SmsPage() {
     }
   }
 
+
   async function sendCustomSms(event) {
     event.preventDefault();
 
@@ -383,11 +438,29 @@ export default function SmsPage() {
         confirm_text: liveBulkConfirmText,
       });
 
-      setNotice(response.data.message || "SMS sending completed.");
-      setManualPhone("");
-      setMessage("");
-      setSelectedCustomerIds([]);
-      resetLiveBulkConfirmation();
+      const smsFeedback = buildSmsFailureMessage(
+        response.data,
+        "SMS sending completed."
+      );
+
+      const failedCount = Number(response.data?.failed_count || 0);
+      const responseStatus = String(response.data?.status || "").toLowerCase();
+
+      if (
+        failedCount > 0 ||
+        responseStatus === "partial" ||
+        responseStatus === "error"
+      ) {
+        setError(smsFeedback);
+        setNotice("");
+      } else {
+        setNotice(smsFeedback);
+        setError("");
+        setManualPhone("");
+        setMessage("");
+        setSelectedCustomerIds([]);
+        resetLiveBulkConfirmation();
+      }
 
       await loadSmsPageData({ silent: true });
     } catch (error) {
@@ -446,8 +519,18 @@ export default function SmsPage() {
         </div>
       </div>
 
-      {notice && <div className="success-box">{notice}</div>}
-      {error && <div className="error-box">{error}</div>}
+
+      {notice && (
+        <div className="success-box" style={{ whiteSpace: "pre-wrap" }}>
+          {notice}
+        </div>
+      )}
+
+      {error && (
+        <div className="error-box" style={{ whiteSpace: "pre-wrap" }}>
+          {error}
+        </div>
+      )}
 
       <div
         style={{
