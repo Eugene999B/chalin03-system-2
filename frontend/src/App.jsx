@@ -99,7 +99,7 @@ export default function App() {
               element={adminManagerPage(<AuditUnlockRequestsPage />)}
             />
             <Route
-              path="accounting-intelligence"
+              path="advanced-accounting-intelligence"
               element={adminManagerPage(<AdvancedAccountingIntelligencePage />)}
             />
             <Route
