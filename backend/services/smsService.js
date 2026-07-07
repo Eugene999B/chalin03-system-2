@@ -4,8 +4,10 @@ const DEFAULT_SMS_TIMEOUT_MS = 15000;
 
 function getSmsConfig() {
   return {
-    enabled: String(process.env.SMS_ENABLED || "false").toLowerCase() === "true",
-    provider: String(process.env.SMS_PROVIDER || "mock").toLowerCase().trim(),
+    enabled:
+      String(process.env.SMS_ENABLED || "false").trim().toLowerCase() ===
+      "true",
+    provider: String(process.env.SMS_PROVIDER || "mock").trim().toLowerCase(),
     senderId: String(process.env.SMS_SENDER_ID || "CHALIN03").trim(),
 
     // Arkesel
@@ -124,6 +126,52 @@ async function readResponseBody(response) {
   }
 }
 
+function getProviderMessage(providerResponse) {
+  if (!providerResponse) {
+    return "";
+  }
+
+  if (typeof providerResponse === "string") {
+    return providerResponse;
+  }
+
+  if (Array.isArray(providerResponse)) {
+    return providerResponse
+      .map((item) => getProviderMessage(item))
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  if (typeof providerResponse === "object") {
+    const possibleMessage =
+      providerResponse.message ||
+      providerResponse.error ||
+      providerResponse.detail ||
+      providerResponse.description ||
+      providerResponse.reason;
+
+    if (possibleMessage) {
+      return String(possibleMessage);
+    }
+
+    if (providerResponse.errors) {
+      return getProviderMessage(providerResponse.errors);
+    }
+
+    if (providerResponse.data) {
+      return getProviderMessage(providerResponse.data);
+    }
+
+    try {
+      return JSON.stringify(providerResponse);
+    } catch {
+      return "";
+    }
+  }
+
+  return String(providerResponse);
+}
+
 function getTimeoutMs(config) {
   if (Number.isFinite(config.timeoutMs) && config.timeoutMs > 0) {
     return config.timeoutMs;
@@ -149,6 +197,12 @@ function validateArkeselConfig(config) {
 
   if (!config.senderId) {
     throw new Error("SMS sender ID is required. Add SMS_SENDER_ID to backend .env.");
+  }
+
+  if (config.senderId.length > 11) {
+    throw new Error(
+      "SMS sender ID is too long. Arkesel sender IDs must be 11 characters or fewer."
+    );
   }
 
   if (!config.arkeselBaseUrl) {
@@ -228,13 +282,20 @@ async function sendArkeselSms({ config, to, message }) {
   }
 
   const responseBody = await readResponseBody(response);
+  const providerResponse = responseBody.parsed || responseBody.raw;
+  const providerMessage = getProviderMessage(providerResponse);
 
   if (!response.ok) {
-    throw createSmsError("Arkesel SMS request failed.", {
-      provider: "arkesel",
-      statusCode: response.status,
-      providerResponse: responseBody.parsed,
-    });
+    throw createSmsError(
+      providerMessage
+        ? `Arkesel SMS request failed. HTTP ${response.status}: ${providerMessage}`
+        : `Arkesel SMS request failed. HTTP ${response.status}.`,
+      {
+        provider: "arkesel",
+        statusCode: response.status,
+        providerResponse,
+      }
+    );
   }
 
   if (
@@ -243,11 +304,16 @@ async function sendArkeselSms({ config, to, message }) {
     responseBody.parsed.status &&
     String(responseBody.parsed.status).toLowerCase() !== "success"
   ) {
-    throw createSmsError("Arkesel SMS was not accepted.", {
-      provider: "arkesel",
-      statusCode: response.status,
-      providerResponse: responseBody.parsed,
-    });
+    throw createSmsError(
+      providerMessage
+        ? `Arkesel SMS was not accepted: ${providerMessage}`
+        : "Arkesel SMS was not accepted.",
+      {
+        provider: "arkesel",
+        statusCode: response.status,
+        providerResponse,
+      }
+    );
   }
 
   return {
@@ -255,7 +321,7 @@ async function sendArkeselSms({ config, to, message }) {
     provider: "arkesel",
     to,
     status: "sent",
-    providerResponse: responseBody.parsed,
+    providerResponse,
   };
 }
 
@@ -311,13 +377,20 @@ async function sendHubtelSms({ config, to, message }) {
   }
 
   const responseBody = await readResponseBody(response);
+  const providerResponse = responseBody.parsed || responseBody.raw;
+  const providerMessage = getProviderMessage(providerResponse);
 
   if (!response.ok) {
-    throw createSmsError("Hubtel SMS request failed.", {
-      provider: "hubtel",
-      statusCode: response.status,
-      providerResponse: responseBody.parsed,
-    });
+    throw createSmsError(
+      providerMessage
+        ? `Hubtel SMS request failed. HTTP ${response.status}: ${providerMessage}`
+        : `Hubtel SMS request failed. HTTP ${response.status}.`,
+      {
+        provider: "hubtel",
+        statusCode: response.status,
+        providerResponse,
+      }
+    );
   }
 
   return {
@@ -325,7 +398,7 @@ async function sendHubtelSms({ config, to, message }) {
     provider: "hubtel",
     to,
     status: "sent",
-    providerResponse: responseBody.parsed,
+    providerResponse,
   };
 }
 

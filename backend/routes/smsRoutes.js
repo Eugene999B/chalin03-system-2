@@ -292,6 +292,8 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
   const normalizedPhone = normalizeGhanaPhone(phone);
 
   if (!normalizedPhone) {
+    const failureMessage = "Invalid Ghana phone number.";
+
     await writeSmsLog({
       branchId,
       phone: phone || "",
@@ -299,7 +301,7 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       smsType,
       status: "failed",
       providerResponse: {
-        error: "Invalid Ghana phone number.",
+        error: failureMessage,
       },
       sentBy,
     });
@@ -308,7 +310,12 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       phone,
       normalized_phone: "",
       status: "failed",
-      message: "Invalid Ghana phone number.",
+      message: failureMessage,
+      status_code: null,
+      provider: null,
+      provider_response: {
+        error: failureMessage,
+      },
     };
   }
 
@@ -334,8 +341,13 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       status: "sent",
       message: "SMS sent successfully.",
       provider: result.provider,
+      status_code: null,
+      provider_response: result.providerResponse || null,
     };
   } catch (error) {
+    const providerResponse = error.providerResponse || null;
+    const failureMessage = error.message || "SMS failed.";
+
     await writeSmsLog({
       branchId,
       phone: normalizedPhone,
@@ -343,9 +355,10 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       smsType,
       status: "failed",
       providerResponse: {
-        error: error.message,
+        error: failureMessage,
         statusCode: error.statusCode || null,
-        providerResponse: error.providerResponse || null,
+        provider: error.provider || null,
+        providerResponse,
       },
       sentBy,
     });
@@ -354,11 +367,13 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       phone,
       normalized_phone: normalizedPhone,
       status: "failed",
-      message: error.message || "SMS failed.",
+      message: failureMessage,
+      status_code: error.statusCode || null,
+      provider: error.provider || null,
+      provider_response: providerResponse,
     };
   }
 }
-
 router.get(
   "/status",
   requireAuth,
