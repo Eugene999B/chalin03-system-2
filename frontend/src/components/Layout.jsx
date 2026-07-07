@@ -873,7 +873,7 @@ export default function Layout() {
                   style={linkStyle}
                   onClick={closeMobileMenu}
               >
-                Accounting Intelligence
+                  Accounting Intelligence
                 </NavLink>
 
                 <NavLink
