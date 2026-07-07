@@ -1,9 +1,10 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 
-require("dotenv").config();
-
 const { testDatabaseConnection } = require("./config/db");
+const { getSmsConfig } = require("./services/smsService");
 
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
@@ -24,7 +25,8 @@ const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
 const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
-const branchRoutes = require("./routes/branchRoutes");const smsRoutes = require("./routes/smsRoutes");
+const branchRoutes = require("./routes/branchRoutes");
+const smsRoutes = require("./routes/smsRoutes");
 
 const app = express();
 
@@ -82,6 +84,30 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.get("/api/debug/sms-env", (req, res) => {
+  const config = getSmsConfig();
+
+  res.json({
+    status: "success",
+    message: "SMS environment check. API key value is hidden for safety.",
+    sms: {
+      enabled: config.enabled,
+      provider: config.provider,
+      sender_id: config.senderId,
+      has_arkesel_key: Boolean(config.arkeselApiKey),
+      arkesel_base_url: config.arkeselBaseUrl,
+      timeout_ms: config.timeoutMs,
+    },
+    raw_env: {
+      SMS_ENABLED: process.env.SMS_ENABLED || null,
+      SMS_PROVIDER: process.env.SMS_PROVIDER || null,
+      SMS_SENDER_ID: process.env.SMS_SENDER_ID || null,
+      SMS_ARKESEL_API_KEY_EXISTS: Boolean(process.env.SMS_ARKESEL_API_KEY),
+      SMS_ARKESEL_BASE_URL: process.env.SMS_ARKESEL_BASE_URL || null,
+    },
+  });
+});
+
 app.get("/api", (req, res) => {
   res.json({
     status: "success",
@@ -107,6 +133,8 @@ app.get("/api", (req, res) => {
       "/api/maintenance",
       "/api/audit-signoffs",
       "/api/audit-unlock-requests",
+      "/api/sms",
+      "/api/debug/sms-env",
     ],
   });
 });
