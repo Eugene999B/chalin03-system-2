@@ -30,7 +30,7 @@ import AuditAccountingPage from "./pages/AuditAccountingPage";
 import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
 import SmsPage from "./pages/SmsPage";
-import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage"
+import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
