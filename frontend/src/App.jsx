@@ -30,6 +30,7 @@ import AuditAccountingPage from "./pages/AuditAccountingPage";
 import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
 import SmsPage from "./pages/SmsPage";
+import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage"
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -96,6 +97,10 @@ export default function App() {
             <Route
               path="audit-unlock-requests"
               element={adminManagerPage(<AuditUnlockRequestsPage />)}
+            />
+            <Route
+              path="accounting-intelligence"
+              element={adminManagerPage(<AdvancedAccountingIntelligencePage />)}
             />
             <Route
               path="low-stock"

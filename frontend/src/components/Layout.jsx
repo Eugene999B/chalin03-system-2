@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+
 function getStoreCode(store) {
   return store?.code || store?.branch_code || "";
 }
@@ -186,6 +187,15 @@ export default function Layout() {
           keywords: "audit unlock requests approval management",
           group: "Management",
         },
+        {
+          title: "Accounting Intelligence",
+          description: "Advanced ledger, audit score, profit, debt, stock and branch intelligence",
+          path: "/advanced-accounting-intelligence",
+          icon: "📈",
+          keywords:
+            "advanced accounting intelligence ledger profit loss audit score branch debt stock expenses recommendations",
+          group: "Management",
+},
         {
           title: "Low Stock / Restock",
           description: "View items that need restocking",
@@ -857,6 +867,13 @@ export default function Layout() {
                   onClick={closeMobileMenu}
                 >
                   Audit & Accounting
+                </NavLink>
+                <NavLink
+                  to="/advanced-accounting-intelligence"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+              >
+                Accounting Intelligence
                 </NavLink>
 
                 <NavLink
