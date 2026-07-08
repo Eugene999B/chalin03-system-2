@@ -10,6 +10,56 @@ const {
 
 const router = express.Router();
 
+/*
+  Audit unlock requests are branch/store aware.
+
+  This route now includes all important correction areas in the current system:
+  sales, debts, expenses, purchases, returns, stock, stock adjustments,
+  stock transfers, stock movement ledger source records, SMS, backup/restore,
+  maintenance clear-data activity, reports/exports, audit signoff and
+  re-approval records.
+*/
+
+const ALLOWED_REQUEST_AREAS = [
+  "sale",
+  "expense",
+  "debt_payment",
+  "stock",
+  "stock_adjustment",
+  "stock_transfer",
+  "stock_ledger",
+  "purchase",
+  "return",
+  "sms",
+  "backup_restore",
+  "maintenance",
+  "audit_signoff",
+  "audit_reapproval",
+  "report",
+  "export",
+  "other",
+];
+
+const REQUEST_AREA_LABELS = {
+  sale: "Sale",
+  expense: "Expense",
+  debt_payment: "Debt Payment",
+  stock: "Stock",
+  stock_adjustment: "Stock Adjustment",
+  stock_transfer: "Stock Transfer",
+  stock_ledger: "Stock Movement Ledger Source Records",
+  purchase: "Purchase",
+  return: "Return",
+  sms: "SMS / SMS Log",
+  backup_restore: "Backup / Restore",
+  maintenance: "Maintenance / Clear Data",
+  audit_signoff: "Audit Sign-Off",
+  audit_reapproval: "Audit Re-Approval",
+  report: "Reports",
+  export: "Exports",
+  other: "Other",
+};
+
 function getBranchId(req) {
   const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
 
@@ -28,12 +78,37 @@ function cleanText(value) {
   return String(value).trim();
 }
 
+function cleanDate(value) {
+  const text = cleanText(value);
+
+  if (!text) {
+    return null;
+  }
+
+  const date = new Date(text);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
 function getUserId(req) {
   return Number(req.user?.id || req.user?.user_id || req.userId || 0);
 }
 
 function getUserRole(req) {
   return String(req.user?.role || "").toLowerCase();
+}
+
+function getUserDisplayName(user) {
+  return (
+    cleanText(user?.full_name) ||
+    cleanText(user?.username) ||
+    cleanText(user?.email) ||
+    "User"
+  );
 }
 
 function isAdminOrManager(req) {
@@ -70,24 +145,51 @@ async function columnExists(connection, tableName, columnName) {
 }
 
 async function ensureColumn(connection, tableName, columnName, columnDefinition) {
-  const [columns] = await connection.query(`SHOW COLUMNS FROM ${tableName} LIKE ?`, [
-    columnName,
-  ]);
+  const [columns] = await connection.query(
+    `SHOW COLUMNS FROM \`${tableName}\` LIKE ?`,
+    [columnName]
+  );
 
   if (columns.length === 0) {
-    await connection.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+    await connection.query(
+      `ALTER TABLE \`${tableName}\` ADD COLUMN ${columnDefinition}`
+    );
   }
 }
 
 async function ensureIndex(connection, tableName, indexName, indexDefinition) {
   const [indexes] = await connection.query(
-    `SHOW INDEX FROM ${tableName} WHERE Key_name = ?`,
+    `SHOW INDEX FROM \`${tableName}\` WHERE Key_name = ?`,
     [indexName]
   );
 
   if (indexes.length === 0) {
-    await connection.query(`ALTER TABLE ${tableName} ADD INDEX ${indexDefinition}`);
+    await connection.query(
+      `ALTER TABLE \`${tableName}\` ADD INDEX ${indexDefinition}`
+    );
   }
+}
+
+async function ensureRequestAreaEnum(connection) {
+  if (!(await columnExists(connection, "audit_unlock_requests", "request_area"))) {
+    await ensureColumn(
+      connection,
+      "audit_unlock_requests",
+      "request_area",
+      `request_area ENUM(${ALLOWED_REQUEST_AREAS.map((area) => `'${area}'`).join(
+        ", "
+      )}) NOT NULL DEFAULT 'other' AFTER period_end`
+    );
+
+    return;
+  }
+
+  const enumValues = ALLOWED_REQUEST_AREAS.map((area) => `'${area}'`).join(", ");
+
+  await connection.query(
+    `ALTER TABLE audit_unlock_requests
+     MODIFY COLUMN request_area ENUM(${enumValues}) NOT NULL DEFAULT 'other'`
+  );
 }
 
 async function safeLogActivity(connection, userId, branchId, action, details) {
@@ -119,8 +221,18 @@ async function ensureAuditUnlockRequestTable(connection = pool) {
         'expense',
         'debt_payment',
         'stock',
+        'stock_adjustment',
+        'stock_transfer',
+        'stock_ledger',
         'purchase',
         'return',
+        'sms',
+        'backup_restore',
+        'maintenance',
+        'audit_signoff',
+        'audit_reapproval',
+        'report',
+        'export',
         'other'
       ) NOT NULL DEFAULT 'other',
 
@@ -155,36 +267,89 @@ async function ensureAuditUnlockRequestTable(connection = pool) {
     "branch_id INT NOT NULL DEFAULT 1 AFTER id"
   );
 
+  await ensureRequestAreaEnum(connection);
+
   await ensureIndex(
     connection,
     "audit_unlock_requests",
     "idx_unlock_request_branch",
     "idx_unlock_request_branch (branch_id)"
   );
+
+  await ensureIndex(
+    connection,
+    "audit_unlock_requests",
+    "idx_unlock_request_area",
+    "idx_unlock_request_area (request_area)"
+  );
 }
 
 function normalizeRequestArea(value) {
-  const cleanValue = cleanText(value).toLowerCase();
+  const cleanValue = cleanText(value)
+    .toLowerCase()
+    .replaceAll("-", "_")
+    .replaceAll(" ", "_");
 
-  const allowedAreas = [
-    "sale",
-    "expense",
-    "debt_payment",
-    "stock",
-    "purchase",
-    "return",
-    "other",
-  ];
+  const aliases = {
+    debt: "debt_payment",
+    debt_payment: "debt_payment",
+    debt_payments: "debt_payment",
 
-  if (allowedAreas.includes(cleanValue)) {
-    return cleanValue;
+    stock_adjustments: "stock_adjustment",
+    adjustment: "stock_adjustment",
+    adjustments: "stock_adjustment",
+
+    transfer: "stock_transfer",
+    transfers: "stock_transfer",
+    stock_transfers: "stock_transfer",
+
+    ledger: "stock_ledger",
+    stock_movement_ledger: "stock_ledger",
+    stock_ledger_source: "stock_ledger",
+    stock_ledger_source_records: "stock_ledger",
+
+    purchases: "purchase",
+    returns: "return",
+
+    sms_log: "sms",
+    sms_logs: "sms",
+    sms_center: "sms",
+
+    backup: "backup_restore",
+    restore: "backup_restore",
+    backups: "backup_restore",
+    backup_and_restore: "backup_restore",
+
+    clear_data: "maintenance",
+    clear_business_data: "maintenance",
+    maintenance_clear_data: "maintenance",
+
+    signoff: "audit_signoff",
+    sign_off: "audit_signoff",
+    audit_signoffs: "audit_signoff",
+
+    reapproval: "audit_reapproval",
+    re_approval: "audit_reapproval",
+    reapproval_log: "audit_reapproval",
+    audit_reapproval_log: "audit_reapproval",
+
+    reports: "report",
+    exports: "export",
+    export_routes: "export",
+  };
+
+  const normalized = aliases[cleanValue] || cleanValue;
+
+  if (ALLOWED_REQUEST_AREAS.includes(normalized)) {
+    return normalized;
   }
 
   return "other";
 }
 
 function formatRequestArea(value) {
-  return String(value || "other").replace(/_/g, " ");
+  const normalized = normalizeRequestArea(value);
+  return REQUEST_AREA_LABELS[normalized] || String(value || "Other").replace(/_/g, " ");
 }
 
 async function findAuditSignoffById(connection, auditSignoffId, branchId) {
@@ -247,6 +412,36 @@ async function sendAuditUnlockRequestSecuritySmsAlert({
   }
 }
 
+async function sendAuditUnlockReviewSecuritySmsAlert({
+  reviewedRequest,
+  reviewerUser,
+  branchId,
+  periodUnlocked,
+}) {
+  try {
+    const { businessName, branch } = await buildOwnerAlertContext(branchId);
+    const reviewer = getUserDisplayName(reviewerUser);
+    const decision = String(reviewedRequest.status || "reviewed").toUpperCase();
+
+    const message = `${businessName}: Security alert. Audit unlock request #${
+      reviewedRequest.id
+    } ${decision} for ${branch.name} (${branch.code}). Period: ${
+      reviewedRequest.period_label
+    }. Area: ${formatRequestArea(
+      reviewedRequest.request_area
+    )}. Period reopened: ${periodUnlocked ? "Yes" : "No"}. Reviewed by ${reviewer}. Date: ${formatSecurityDateTime()}.`;
+
+    await sendOwnerSmsAlert({
+      branchId,
+      message,
+      smsType: "security_alert",
+      sentBy: reviewerUser?.id || null,
+    });
+  } catch (error) {
+    console.warn("Audit unlock review SMS alert skipped:", error.message);
+  }
+}
+
 // POST /api/audit-unlock-requests
 router.post("/", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
@@ -299,8 +494,9 @@ router.post("/", requireAuth, async (req, res) => {
       cleanText(period_label) ||
       "Locked accounting period";
 
-    const finalPeriodStart = signoff?.period_start || period_start || null;
-    const finalPeriodEnd = signoff?.period_end || period_end || null;
+    const finalPeriodStart =
+      signoff?.period_start || cleanDate(period_start) || null;
+    const finalPeriodEnd = signoff?.period_end || cleanDate(period_end) || null;
 
     const finalRequestArea = normalizeRequestArea(request_area);
     const finalRequestedAction =
@@ -386,129 +582,163 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/audit-unlock-requests
-router.get(
-  "/",
-  requireAuth,
-  requireAdminOrManager,
-  async (req, res) => {
-    try {
-      await ensureAuditUnlockRequestTable(pool);
+router.get("/", requireAuth, requireAdminOrManager, async (req, res) => {
+  try {
+    await ensureAuditUnlockRequestTable(pool);
 
-      const branchId = getBranchId(req);
-      const status = cleanText(req.query.status);
-      const search = cleanText(req.query.search);
+    const branchId = getBranchId(req);
+    const status = cleanText(req.query.status).toLowerCase();
+    const area = cleanText(req.query.area || req.query.request_area).toLowerCase();
+    const search = cleanText(req.query.search);
 
-      const params = [branchId];
-      let whereClause = "WHERE aur.branch_id = ?";
+    const params = [branchId];
+    let whereClause = "WHERE aur.branch_id = ?";
 
-      if (status) {
-        whereClause += " AND aur.status = ?";
-        params.push(status);
-      }
-
-      if (search) {
-        whereClause += `
-          AND (
-            aur.period_label LIKE ?
-            OR aur.request_area LIKE ?
-            OR aur.requested_action LIKE ?
-            OR aur.reason LIKE ?
-            OR requester.full_name LIKE ?
-            OR reviewer.full_name LIKE ?
-            OR b.name LIKE ?
-            OR b.location LIKE ?
-          )
-        `;
-
-        const searchValue = `%${search}%`;
-
-        params.push(
-          searchValue,
-          searchValue,
-          searchValue,
-          searchValue,
-          searchValue,
-          searchValue,
-          searchValue,
-          searchValue
-        );
-      }
-
-      const [requests] = await pool.query(
-        `SELECT
-          aur.id,
-          aur.branch_id,
-          aur.audit_signoff_id,
-          aur.period_label,
-          aur.period_start,
-          aur.period_end,
-          aur.request_area,
-          aur.requested_action,
-          aur.reason,
-          aur.status,
-          aur.requested_by,
-          requester.full_name AS requested_by_name,
-          requester.username AS requested_by_username,
-          aur.reviewed_by,
-          reviewer.full_name AS reviewed_by_name,
-          reviewer.username AS reviewed_by_username,
-          aur.reviewed_at,
-          aur.review_notes,
-          aur.created_at,
-          aur.updated_at,
-          aso.period_status AS current_period_status,
-          aso.audit_score,
-          aso.audit_status,
-          b.name AS branch_name,
-          b.location AS branch_location
-         FROM audit_unlock_requests aur
-         LEFT JOIN users requester ON aur.requested_by = requester.id
-         LEFT JOIN users reviewer ON aur.reviewed_by = reviewer.id
-         LEFT JOIN audit_signoffs aso
-          ON aur.audit_signoff_id = aso.id
-          AND aso.branch_id = aur.branch_id
-         LEFT JOIN branches b ON aur.branch_id = b.id
-         ${whereClause}
-         ORDER BY
-          CASE aur.status
-            WHEN 'pending' THEN 1
-            WHEN 'approved' THEN 2
-            WHEN 'rejected' THEN 3
-            ELSE 4
-          END,
-          aur.created_at DESC
-         LIMIT 300`,
-        params
-      );
-
-      const [summaryRows] = await pool.query(
-        `SELECT
-          COUNT(*) AS total_requests,
-          COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count,
-          COUNT(CASE WHEN status = 'approved' THEN 1 END) AS approved_count,
-          COUNT(CASE WHEN status = 'rejected' THEN 1 END) AS rejected_count
-         FROM audit_unlock_requests
-         WHERE branch_id = ?`,
-        [branchId]
-      );
-
-      return res.json({
-        status: "success",
-        branch_id: branchId,
-        count: requests.length,
-        summary: summaryRows[0],
-        requests,
-      });
-    } catch (error) {
-      console.error("Get audit unlock requests error:", error);
-
-      return res.status(500).json({
-        status: "error",
-        message: "Something went wrong while fetching unlock requests.",
-      });
+    if (status) {
+      whereClause += " AND aur.status = ?";
+      params.push(status);
     }
+
+    if (area) {
+      whereClause += " AND aur.request_area = ?";
+      params.push(normalizeRequestArea(area));
+    }
+
+    if (search) {
+      whereClause += `
+        AND (
+          aur.period_label LIKE ?
+          OR aur.request_area LIKE ?
+          OR aur.requested_action LIKE ?
+          OR aur.reason LIKE ?
+          OR requester.full_name LIKE ?
+          OR requester.username LIKE ?
+          OR reviewer.full_name LIKE ?
+          OR reviewer.username LIKE ?
+          OR b.name LIKE ?
+          OR b.location LIKE ?
+        )
+      `;
+
+      const searchValue = `%${search}%`;
+
+      params.push(
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue,
+        searchValue
+      );
+    }
+
+    const [requests] = await pool.query(
+      `SELECT
+        aur.id,
+        aur.branch_id,
+        aur.audit_signoff_id,
+        aur.period_label,
+        aur.period_start,
+        aur.period_end,
+        aur.request_area,
+        aur.requested_action,
+        aur.reason,
+        aur.status,
+        aur.requested_by,
+        requester.full_name AS requested_by_name,
+        requester.username AS requested_by_username,
+        aur.reviewed_by,
+        reviewer.full_name AS reviewed_by_name,
+        reviewer.username AS reviewed_by_username,
+        aur.reviewed_at,
+        aur.review_notes,
+        aur.created_at,
+        aur.updated_at,
+        aso.period_status AS current_period_status,
+        aso.audit_score,
+        aso.audit_status,
+        b.name AS branch_name,
+        b.location AS branch_location
+       FROM audit_unlock_requests aur
+       LEFT JOIN users requester ON aur.requested_by = requester.id
+       LEFT JOIN users reviewer ON aur.reviewed_by = reviewer.id
+       LEFT JOIN audit_signoffs aso
+        ON aur.audit_signoff_id = aso.id
+        AND aso.branch_id = aur.branch_id
+       LEFT JOIN branches b ON aur.branch_id = b.id
+       ${whereClause}
+       ORDER BY
+        CASE aur.status
+          WHEN 'pending' THEN 1
+          WHEN 'approved' THEN 2
+          WHEN 'rejected' THEN 3
+          ELSE 4
+        END,
+        aur.created_at DESC
+       LIMIT 300`,
+      params
+    );
+
+    const [summaryRows] = await pool.query(
+      `SELECT
+        COUNT(*) AS total_requests,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count,
+        COUNT(CASE WHEN status = 'approved' THEN 1 END) AS approved_count,
+        COUNT(CASE WHEN status = 'rejected' THEN 1 END) AS rejected_count,
+        COUNT(CASE WHEN request_area IN ('stock', 'stock_adjustment', 'stock_transfer', 'stock_ledger') THEN 1 END) AS stock_related_count,
+        COUNT(CASE WHEN request_area = 'sms' THEN 1 END) AS sms_related_count,
+        COUNT(CASE WHEN request_area IN ('backup_restore', 'maintenance') THEN 1 END) AS system_related_count,
+        COUNT(CASE WHEN request_area IN ('audit_signoff', 'audit_reapproval') THEN 1 END) AS audit_related_count,
+        COUNT(CASE WHEN request_area IN ('report', 'export') THEN 1 END) AS report_export_related_count
+       FROM audit_unlock_requests
+       WHERE branch_id = ?`,
+      [branchId]
+    );
+
+    const [areaSummaryRows] = await pool.query(
+      `SELECT request_area, COUNT(*) AS total_count
+       FROM audit_unlock_requests
+       WHERE branch_id = ?
+       GROUP BY request_area
+       ORDER BY total_count DESC, request_area ASC`,
+      [branchId]
+    );
+
+    return res.json({
+      status: "success",
+      branch_id: branchId,
+      count: requests.length,
+      summary: summaryRows[0] || {
+        total_requests: 0,
+        pending_count: 0,
+        approved_count: 0,
+        rejected_count: 0,
+        stock_related_count: 0,
+        sms_related_count: 0,
+        system_related_count: 0,
+        audit_related_count: 0,
+        report_export_related_count: 0,
+      },
+      area_summary: areaSummaryRows,
+      request_area_options: ALLOWED_REQUEST_AREAS.map((value) => ({
+        value,
+        label: REQUEST_AREA_LABELS[value] || value,
+      })),
+      requests,
+    });
+  } catch (error) {
+    console.error("Get audit unlock requests error:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message: "Something went wrong while fetching unlock requests.",
+    });
   }
-);
+});
 
 // GET /api/audit-unlock-requests/mine
 router.get("/mine", requireAuth, async (req, res) => {
@@ -546,6 +776,10 @@ router.get("/mine", requireAuth, async (req, res) => {
       status: "success",
       branch_id: branchId,
       count: requests.length,
+      request_area_options: ALLOWED_REQUEST_AREAS.map((value) => ({
+        value,
+        label: REQUEST_AREA_LABELS[value] || value,
+      })),
       requests,
     });
   } catch (error) {
@@ -583,6 +817,14 @@ router.patch(
       }
 
       const cleanReviewNotes = cleanText(review_notes);
+
+      if (!cleanReviewNotes) {
+        return res.status(400).json({
+          status: "error",
+          message: "Review notes are required before approving or rejecting.",
+        });
+      }
+
       const shouldUnlockPeriod =
         cleanStatus === "approved" && unlock_period !== false;
 
@@ -629,7 +871,7 @@ router.patch(
           review_notes = ?
          WHERE id = ?
          AND branch_id = ?`,
-        [cleanStatus, reviewerId || null, cleanReviewNotes || null, id, branchId]
+        [cleanStatus, reviewerId || null, cleanReviewNotes, id, branchId]
       );
 
       let periodUnlocked = false;
@@ -667,10 +909,26 @@ router.patch(
           : "REJECT_AUDIT_UNLOCK_REQUEST",
         `${cleanStatus.toUpperCase()} unlock request #${id} for ${
           request.period_label
-        }. Period unlocked: ${periodUnlocked ? "Yes" : "No"}.`
+        }. Area: ${request.request_area}. Period unlocked: ${
+          periodUnlocked ? "Yes" : "No"
+        }.`
       );
 
       await connection.commit();
+
+      const reviewedRequest = {
+        ...request,
+        status: cleanStatus,
+        reviewed_by: reviewerId || null,
+        review_notes: cleanReviewNotes,
+      };
+
+      await sendAuditUnlockReviewSecuritySmsAlert({
+        reviewedRequest,
+        reviewerUser: req.user,
+        branchId,
+        periodUnlocked,
+      });
 
       return res.json({
         status: "success",

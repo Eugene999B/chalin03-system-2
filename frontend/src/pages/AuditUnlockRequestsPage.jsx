@@ -2,6 +2,39 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
+const REQUEST_AREA_OPTIONS = [
+  { value: "", label: "All Areas" },
+  { value: "sale", label: "Sale" },
+  { value: "expense", label: "Expense" },
+  { value: "debt_payment", label: "Debt Payment" },
+  { value: "stock", label: "Stock" },
+  { value: "stock_adjustment", label: "Stock Adjustment" },
+  { value: "stock_transfer", label: "Stock Transfer" },
+  { value: "product_ledger", label: "Stock Movement Ledger" },
+  { value: "purchase", label: "Purchase" },
+  { value: "return", label: "Return" },
+  { value: "daily_closing", label: "Daily Closing" },
+  { value: "sms", label: "SMS" },
+  { value: "backup_restore", label: "Backup / Restore" },
+  { value: "maintenance", label: "Maintenance Clear Data" },
+  { value: "audit_signoff", label: "Audit Sign-Off" },
+  { value: "audit_reapproval", label: "Audit Re-Approval" },
+  { value: "reports", label: "Reports / Exports" },
+  { value: "other", label: "Other" },
+];
+
+const AREA_LABELS = REQUEST_AREA_OPTIONS.reduce((labels, option) => {
+  if (option.value) {
+    labels[option.value] = option.label;
+  }
+
+  return labels;
+}, {});
+
+function cleanArea(value) {
+  return String(value || "other").toLowerCase();
+}
+
 export default function AuditUnlockRequestsPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
@@ -33,9 +66,11 @@ export default function AuditUnlockRequestsPage() {
     pending_count: 0,
     approved_count: 0,
     rejected_count: 0,
+    cancelled_count: 0,
   });
 
   const [statusFilter, setStatusFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
   const [search, setSearch] = useState("");
 
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -119,19 +154,68 @@ export default function AuditUnlockRequestsPage() {
   }
 
   function formatArea(value) {
-    const cleanValue = String(value || "").toLowerCase();
+    const cleanValue = cleanArea(value);
+    return AREA_LABELS[cleanValue] || value || "-";
+  }
 
-    const areas = {
-      sale: "Sale",
-      expense: "Expense",
-      debt_payment: "Debt Payment",
-      stock: "Stock",
-      purchase: "Purchase",
-      return: "Return",
-      other: "Other",
+  function getAreaStyle(value) {
+    const cleanValue = cleanArea(value);
+
+    if (["stock", "stock_adjustment", "stock_transfer", "product_ledger"].includes(cleanValue)) {
+      return {
+        background: "#ecfdf5",
+        color: "#047857",
+        border: "1px solid #bbf7d0",
+      };
+    }
+
+    if (["sms", "backup_restore", "maintenance"].includes(cleanValue)) {
+      return {
+        background: "#fff7ed",
+        color: "#9a3412",
+        border: "1px solid #fed7aa",
+      };
+    }
+
+    if (["audit_signoff", "audit_reapproval", "reports"].includes(cleanValue)) {
+      return {
+        background: "#eef2ff",
+        color: "#3730a3",
+        border: "1px solid #c7d2fe",
+      };
+    }
+
+    return {
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      border: "1px solid #bfdbfe",
+    };
+  }
+
+  function getAreaReviewGuide(value) {
+    const cleanValue = cleanArea(value);
+
+    const guides = {
+      sale: "Check receipt number, customer, payment type, amount paid, balance, staff, date and stock reduction before approving.",
+      expense: "Check expense date, branch, category, amount, note and supporting evidence before approving.",
+      debt_payment: "Check customer balance, payment amount, receipt and whether the debt record still matches the customer statement.",
+      stock: "Check the stock item, quantity before/after, reason and whether the change should have been a sale, purchase, return or transfer instead.",
+      stock_adjustment: "Check damaged, lost, physical count or wrong-entry reason. Too many manual adjustments should be questioned.",
+      stock_transfer: "Check transfer request, approval, dispatch, receive quantity and the two stores involved before reopening the period.",
+      product_ledger: "The stock movement ledger is calculated from sales, purchases, returns, stock adjustments and stock transfers. Correct the source record, not a separate ledger table.",
+      purchase: "Check supplier, purchase date, received branch, item quantity, cost and payment before approving.",
+      return: "Check returned item, sale reference, customer, quantity, refund impact and whether stock should return to the same branch.",
+      daily_closing: "Check expected cash, MoMo, bank, credit, expenses and counted amounts for the selected store.",
+      sms: "Check the SMS log, recipient, message type, failed reason, provider response and whether the message should be retried.",
+      backup_restore: "Check who created or restored the backup, the date, reason, and whether management approved the system-wide action.",
+      maintenance: "Maintenance clear-data actions are system-wide and dangerous. Confirm management approval and backup before approving any correction.",
+      audit_signoff: "Check whether the period was approved, reviewed or rejected and whether a new sign-off or re-approval is required after correction.",
+      audit_reapproval: "Check the approved unlock request, correction reason and re-approval notes before closing the audit trail.",
+      reports: "Check report filters, selected store, dates and exports used by management or accountant before approving.",
+      other: "Check the reason carefully, confirm the affected records and write clear review notes.",
     };
 
-    return areas[cleanValue] || value || "-";
+    return guides[cleanValue] || guides.other;
   }
 
   function makeSafeFileName(value) {
@@ -198,11 +282,86 @@ export default function AuditUnlockRequestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
+  const displayedRequests = useMemo(() => {
+    const cleanSearch = search.trim().toLowerCase();
+
+    return requests.filter((request) => {
+      const requestStatus = String(request.status || "").toLowerCase();
+      const requestArea = cleanArea(request.request_area);
+
+      const matchesStatus = !statusFilter || requestStatus === statusFilter;
+      const matchesArea = !areaFilter || requestArea === areaFilter;
+
+      const searchableText = [
+        request.id,
+        getRequestStoreCode(request),
+        getRequestStoreName(request),
+        request.status,
+        request.period_label,
+        request.period_start,
+        request.period_end,
+        formatArea(request.request_area),
+        request.request_area,
+        request.requested_action,
+        request.reason,
+        request.requested_by_name,
+        request.requested_by_username,
+        request.reviewed_by_name,
+        request.reviewed_by_username,
+        request.review_notes,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !cleanSearch || searchableText.includes(cleanSearch);
+
+      return matchesStatus && matchesArea && matchesSearch;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, statusFilter, areaFilter, search, currentStoreCode, currentStoreName]);
+
   const pendingRequests = useMemo(() => {
     return requests.filter(
       (request) => String(request.status || "").toLowerCase() === "pending"
     );
   }, [requests]);
+
+  const localSummary = useMemo(() => {
+    const total = displayedRequests.length;
+    const pending = displayedRequests.filter(
+      (request) => String(request.status || "").toLowerCase() === "pending"
+    ).length;
+    const approved = displayedRequests.filter(
+      (request) => String(request.status || "").toLowerCase() === "approved"
+    ).length;
+    const rejected = displayedRequests.filter(
+      (request) => String(request.status || "").toLowerCase() === "rejected"
+    ).length;
+    const stockRelated = displayedRequests.filter((request) =>
+      ["stock", "stock_adjustment", "stock_transfer", "product_ledger"].includes(
+        cleanArea(request.request_area)
+      )
+    ).length;
+    const smsRelated = displayedRequests.filter(
+      (request) => cleanArea(request.request_area) === "sms"
+    ).length;
+    const systemRelated = displayedRequests.filter((request) =>
+      ["backup_restore", "maintenance", "audit_signoff", "audit_reapproval"].includes(
+        cleanArea(request.request_area)
+      )
+    ).length;
+
+    return {
+      total,
+      pending,
+      approved,
+      rejected,
+      stockRelated,
+      smsRelated,
+      systemRelated,
+    };
+  }, [displayedRequests]);
 
   function openReviewModal(request, status) {
     setMessage("");
@@ -280,6 +439,11 @@ export default function AuditUnlockRequestsPage() {
   }
 
   function exportRequestsCsv() {
+    if (displayedRequests.length === 0) {
+      setError("No unlock requests available to export.");
+      return;
+    }
+
     const rows = [
       [
         "ID",
@@ -298,7 +462,7 @@ export default function AuditUnlockRequestsPage() {
         "Reviewed At",
         "Review Notes",
       ],
-      ...requests.map((request) => [
+      ...displayedRequests.map((request) => [
         request.id,
         getRequestStoreCode(request),
         getRequestStoreName(request),
@@ -339,6 +503,7 @@ export default function AuditUnlockRequestsPage() {
     link.click();
 
     window.URL.revokeObjectURL(url);
+    setMessage("Audit unlock requests CSV downloaded successfully.");
   }
 
   if (!canReview) {
@@ -382,8 +547,8 @@ export default function AuditUnlockRequestsPage() {
             flexWrap: "wrap",
           }}
         >
-          <button type="button" onClick={() => loadUnlockRequests()}>
-            Refresh
+          <button type="button" onClick={() => loadUnlockRequests()} disabled={loading}>
+            {loading ? "Loading..." : "Refresh"}
           </button>
 
           <button
@@ -412,8 +577,18 @@ export default function AuditUnlockRequestsPage() {
         <br />
         <small>
           Unlock requests, review decisions, CSV exports and reopened periods
-          are filtered to this selected store only.
+          are filtered to this selected store only. Review coverage now includes
+          sales, debts, purchases, returns, stock transfers, stock adjustments,
+          stock ledger source records, SMS, backups, restore actions and
+          maintenance clear-data events.
         </small>
+      </div>
+
+      <div className="warning-box">
+        <strong>Review rule:</strong> Approving an unlock request should explain
+        exactly what must be corrected. For stock ledger issues, correct the
+        source record: sale, purchase, return, stock adjustment or stock transfer.
+        For SMS issues, check the SMS log and provider response before retrying.
       </div>
 
       {message && <div className="success-box">{message}</div>}
@@ -422,22 +597,37 @@ export default function AuditUnlockRequestsPage() {
       <div className="cards-grid">
         <div className="stat-card">
           <span>{currentStoreCode} Total Requests</span>
-          <strong>{summary.total_requests || 0}</strong>
+          <strong>{summary.total_requests || localSummary.total || 0}</strong>
         </div>
 
         <div className="stat-card">
           <span>Pending</span>
-          <strong>{summary.pending_count || 0}</strong>
+          <strong>{summary.pending_count || localSummary.pending || 0}</strong>
         </div>
 
         <div className="stat-card">
           <span>Approved</span>
-          <strong>{summary.approved_count || 0}</strong>
+          <strong>{summary.approved_count || localSummary.approved || 0}</strong>
         </div>
 
         <div className="stat-card">
           <span>Rejected</span>
-          <strong>{summary.rejected_count || 0}</strong>
+          <strong>{summary.rejected_count || localSummary.rejected || 0}</strong>
+        </div>
+
+        <div className="stat-card">
+          <span>Stock / Ledger Related</span>
+          <strong>{localSummary.stockRelated}</strong>
+        </div>
+
+        <div className="stat-card">
+          <span>SMS Related</span>
+          <strong>{localSummary.smsRelated}</strong>
+        </div>
+
+        <div className="stat-card">
+          <span>System / Audit Related</span>
+          <strong>{localSummary.systemRelated}</strong>
         </div>
       </div>
 
@@ -460,7 +650,7 @@ export default function AuditUnlockRequestsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr auto auto",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "12px",
             alignItems: "end",
           }}
@@ -480,11 +670,25 @@ export default function AuditUnlockRequestsPage() {
           </div>
 
           <div>
+            <label>Area</label>
+            <select
+              value={areaFilter}
+              onChange={(event) => setAreaFilter(event.target.value)}
+            >
+              {REQUEST_AREA_OPTIONS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label>Search</label>
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search period, reason, staff, store or area"
+              placeholder="Search period, reason, staff, store, SMS, stock transfer or area"
             />
           </div>
 
@@ -497,6 +701,7 @@ export default function AuditUnlockRequestsPage() {
             className="secondary-button"
             onClick={() => {
               setStatusFilter("");
+              setAreaFilter("");
               setSearch("");
               loadUnlockRequests({
                 status: "",
@@ -514,7 +719,7 @@ export default function AuditUnlockRequestsPage() {
 
         {loading ? (
           <p>Loading unlock requests for {currentStoreCode}...</p>
-        ) : requests.length === 0 ? (
+        ) : displayedRequests.length === 0 ? (
           <p>No unlock requests found for {currentStoreCode}.</p>
         ) : (
           <table>
@@ -533,7 +738,7 @@ export default function AuditUnlockRequestsPage() {
             </thead>
 
             <tbody>
-              {requests.map((request) => (
+              {displayedRequests.map((request) => (
                 <tr key={request.id}>
                   <td>
                     <span
@@ -566,7 +771,18 @@ export default function AuditUnlockRequestsPage() {
                   </td>
 
                   <td>
-                    <strong>{formatArea(request.request_area)}</strong>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontWeight: "900",
+                        fontSize: "12px",
+                        ...getAreaStyle(request.request_area),
+                      }}
+                    >
+                      {formatArea(request.request_area)}
+                    </span>
                     <br />
                     <small>{request.requested_action || "-"}</small>
                   </td>
@@ -579,11 +795,15 @@ export default function AuditUnlockRequestsPage() {
 
                   <td
                     style={{
-                      maxWidth: "280px",
+                      maxWidth: "300px",
                       whiteSpace: "normal",
                     }}
                   >
                     {request.reason || "-"}
+                    <br />
+                    <small style={{ color: "#64748b" }}>
+                      {getAreaReviewGuide(request.request_area)}
+                    </small>
                   </td>
 
                   <td>
@@ -723,6 +943,11 @@ export default function AuditUnlockRequestsPage() {
                 </p>
               </div>
 
+              <div className="warning-box">
+                <strong>Review guide:</strong>{" "}
+                {getAreaReviewGuide(selectedRequest.request_area)}
+              </div>
+
               <label>Review Decision</label>
               <select
                 value={reviewStatus}
@@ -766,8 +991,12 @@ export default function AuditUnlockRequestsPage() {
                 onChange={(event) => setReviewNotes(event.target.value)}
                 placeholder={
                   reviewStatus === "approved"
-                    ? "Example: Approved because the customer payment was entered on the wrong date."
-                    : "Example: Rejected because the request reason is not enough."
+                    ? `Approved. Correction area: ${formatArea(
+                        selectedRequest.request_area
+                      )}. Explain the exact record to correct and what the accountant/manager must recheck.`
+                    : `Rejected. Correction area: ${formatArea(
+                        selectedRequest.request_area
+                      )}. Explain why the request is not enough or what evidence is missing.`
                 }
                 rows={5}
               />

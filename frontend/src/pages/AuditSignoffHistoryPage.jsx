@@ -29,6 +29,191 @@ function formatDateTime(value) {
   return date.toLocaleString("en-GB");
 }
 
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function readNestedValue(source, path) {
+  if (!source || !path) return undefined;
+
+  return String(path)
+    .split(".")
+    .reduce((current, key) => {
+      if (current === undefined || current === null) return undefined;
+      return current[key];
+    }, source);
+}
+
+function readFirstValue(source, paths, fallback = 0) {
+  for (const path of paths) {
+    const value = readNestedValue(source, path);
+
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  return fallback;
+}
+
+function readFirstNumber(source, paths, fallback = 0) {
+  const value = readFirstValue(source, paths, fallback);
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return number;
+}
+
+function getReviewWarnings(reviewSummary) {
+  const warnings =
+    reviewSummary?.warnings ||
+    reviewSummary?.audit_warnings ||
+    reviewSummary?.review_warnings ||
+    reviewSummary?.summary?.warnings ||
+    [];
+
+  return Array.isArray(warnings) ? warnings : [];
+}
+
+function buildReviewMetrics(reviewSummary) {
+  const source = reviewSummary?.summary || reviewSummary || {};
+
+  const totalSms = readFirstNumber(source, [
+    "sms.total_sms",
+    "sms.total_messages",
+    "sms.total_logs",
+    "sms_log.total_sms",
+    "sms_log.total_messages",
+  ]);
+
+  const failedSms = readFirstNumber(source, [
+    "sms.failed_sms",
+    "sms.failed_messages",
+    "sms.failed_count",
+    "sms_log.failed_sms",
+    "sms_log.failed_messages",
+  ]);
+
+  return [
+    {
+      title: "Sales",
+      value: readFirstNumber(source, [
+        "sales.total_sales",
+        "sales.sales_count",
+        "sales.count",
+        "total_sales",
+      ]),
+      detail: "Sale records checked",
+    },
+    {
+      title: "Debts",
+      value: readFirstNumber(source, [
+        "debts.total_debts",
+        "debts.debt_count",
+        "debts.count",
+        "debt_count",
+      ]),
+      detail: "Debt records checked",
+    },
+    {
+      title: "Expenses",
+      value: readFirstNumber(source, [
+        "expenses.total_expenses",
+        "expenses.expense_count",
+        "expenses.count",
+        "expense_count",
+      ]),
+      detail: "Expense records checked",
+    },
+    {
+      title: "Purchases",
+      value: readFirstNumber(source, [
+        "purchases.total_purchases",
+        "purchases.purchase_count",
+        "purchases.count",
+        "purchase_count",
+      ]),
+      detail: "Supplier purchase records",
+    },
+    {
+      title: "Returns",
+      value: readFirstNumber(source, [
+        "returns.total_returns",
+        "returns.return_count",
+        "returns.count",
+        "return_count",
+      ]),
+      detail: "Returned item records",
+    },
+    {
+      title: "Stock Adjustments",
+      value: readFirstNumber(source, [
+        "stock_adjustments.total_adjustments",
+        "stock_adjustments.adjustment_count",
+        "stock_adjustments.count",
+        "adjustment_count",
+      ]),
+      detail: "Manual stock corrections",
+    },
+    {
+      title: "Stock Transfers",
+      value: readFirstNumber(source, [
+        "stock_transfers.total_transfers",
+        "stock_transfers.transfer_count",
+        "stock_transfers.count",
+        "transfer_count",
+      ]),
+      detail: "Store-to-store movements",
+    },
+    {
+      title: "SMS Logs",
+      value: `${formatNumber(failedSms)} / ${formatNumber(totalSms)}`,
+      detail: "Failed / total messages",
+    },
+    {
+      title: "Daily Closings",
+      value: readFirstNumber(source, [
+        "daily_closings.total_closings",
+        "daily_closings.closing_count",
+        "daily_closings.count",
+        "closing_count",
+      ]),
+      detail: "End-of-day records",
+    },
+    {
+      title: "Backup / Restore",
+      value: readFirstNumber(source, [
+        "security.backup_restore_count",
+        "activity.backup_restore_count",
+        "backup_restore_count",
+      ]),
+      detail: "Security activity checks",
+    },
+    {
+      title: "Maintenance Clears",
+      value: readFirstNumber(source, [
+        "security.clear_data_count",
+        "activity.clear_data_count",
+        "clear_data_count",
+      ]),
+      detail: "Clear-data activity checks",
+    },
+    {
+      title: "Unlock / Reapproval",
+      value: readFirstNumber(source, [
+        "audit_unlocks.total_unlock_requests",
+        "unlock_requests.total_unlock_requests",
+        "reapproval.total_reapprovals",
+        "unlock_request_count",
+      ]),
+      detail: "Locked period corrections",
+    },
+  ];
+}
+
 function getStatusLabel(status) {
   if (status === "approved") return "Approved";
   if (status === "reviewed") return "Reviewed";
@@ -118,6 +303,8 @@ export default function AuditSignoffHistoryPage() {
   const [search, setSearch] = useState("");
   const [periodType, setPeriodType] = useState("");
   const [periodStatus, setPeriodStatus] = useState("");
+  const [reviewSummary, setReviewSummary] = useState(null);
+  const [reviewSummaryLoading, setReviewSummaryLoading] = useState(false);
 
   function getSignoffStoreCode(signoff) {
     return signoff?.branch_code || signoff?.store_code || currentStoreCode;
@@ -190,11 +377,42 @@ export default function AuditSignoffHistoryPage() {
     return { total, approved, reviewed, draft, rejected, averageScore };
   }, [filteredSignoffs]);
 
+  const reviewMetrics = useMemo(
+    () => buildReviewMetrics(reviewSummary),
+    [reviewSummary]
+  );
+
+  const reviewWarnings = useMemo(
+    () => getReviewWarnings(reviewSummary),
+    [reviewSummary]
+  );
+
   useEffect(() => {
-    loadSignoffs();
-    // Reload audit sign-off history when the selected store changes.
+    loadPageData();
+    // Reload audit sign-off history and audit review summary when the selected store changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
+
+  async function loadPageData() {
+    await Promise.all([loadSignoffs(), loadReviewSummary()]);
+  }
+
+  async function loadReviewSummary() {
+    setReviewSummaryLoading(true);
+
+    try {
+      const response = await axiosClient.get("/audit-signoffs/review-summary");
+      setReviewSummary(response.data || null);
+    } catch (requestError) {
+      setReviewSummary(null);
+      setError(
+        requestError.response?.data?.message ||
+          "Audit review summary could not be loaded. Make sure the updated audit sign-off backend route is deployed."
+      );
+    } finally {
+      setReviewSummaryLoading(false);
+    }
+  }
 
   async function loadSignoffs() {
     setLoading(true);
@@ -238,6 +456,12 @@ export default function AuditSignoffHistoryPage() {
       review_date: formatDate(item.review_date),
       created_by_name: item.created_by_name || "",
       approved_by_user_name: item.approved_by_user_name || "",
+      sales_checked: item.sales_checked ? "Yes" : "No",
+      expenses_checked: item.expenses_checked ? "Yes" : "No",
+      debts_checked: item.debts_checked ? "Yes" : "No",
+      stock_checked: item.stock_checked ? "Yes" : "No",
+      warnings_checked: item.warnings_checked ? "Yes" : "No",
+      reports_checked: item.reports_checked ? "Yes" : "No",
       updated_at: formatDateTime(item.updated_at),
     }));
 
@@ -299,8 +523,12 @@ export default function AuditSignoffHistoryPage() {
               <tbody><tr><td>${escapeHtml(signoff.prepared_by_name || "-")}</td><td>${escapeHtml(signoff.reviewed_by_name || "-")}</td><td>${escapeHtml(signoff.approved_by_name || "-")}</td></tr></tbody>
             </table>
             <table>
-              <thead><tr><th>Sales</th><th>Expenses</th><th>Debts</th><th>Stock</th><th>Warnings</th><th>Reports</th></tr></thead>
+              <thead><tr><th>Sales</th><th>Expenses</th><th>Debts</th><th>Stock / Transfers</th><th>SMS / Warnings</th><th>Reports</th></tr></thead>
               <tbody><tr><td>${signoff.sales_checked ? "Checked" : "Pending"}</td><td>${signoff.expenses_checked ? "Checked" : "Pending"}</td><td>${signoff.debts_checked ? "Checked" : "Pending"}</td><td>${signoff.stock_checked ? "Checked" : "Pending"}</td><td>${signoff.warnings_checked ? "Checked" : "Pending"}</td><td>${signoff.reports_checked ? "Checked" : "Pending"}</td></tr></tbody>
+            </table>
+            <table>
+              <thead><tr><th>Audit Coverage Note</th></tr></thead>
+              <tbody><tr><td>This sign-off belongs to the selected store period. The current audit review process should include sales, debts, expenses, purchases, returns, stock adjustments, stock transfers, stock transfer items, SMS logs, failed SMS warnings, backup/restore activity, maintenance clear-data activity, audit unlock requests, re-approval logs and Stock Movement Ledger source records.</td></tr></tbody>
             </table>
             <div class="signature-grid"><div class="signature">Prepared By</div><div class="signature">Reviewed By</div><div class="signature">Approved By</div></div>
           </div>
@@ -378,8 +606,12 @@ export default function AuditSignoffHistoryPage() {
           </p>
         </div>
         <div style={styles.heroActions}>
-          <button type="button" onClick={loadSignoffs} disabled={loading}>
-            {loading ? "Loading..." : "Refresh"}
+          <button
+            type="button"
+            onClick={loadPageData}
+            disabled={loading || reviewSummaryLoading}
+          >
+            {loading || reviewSummaryLoading ? "Loading..." : "Refresh"}
           </button>
           <button
             type="button"
@@ -413,6 +645,61 @@ export default function AuditSignoffHistoryPage() {
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
+
+      <div style={styles.panel}>
+        <div style={styles.panelHeader}>
+          <div>
+            <h2 style={{ marginBottom: "6px" }}>Current Audit Review Coverage</h2>
+            <p style={styles.mutedText}>
+              This live review summary helps management check the newest system
+              areas before approving or trusting a period: SMS, stock transfers,
+              stock adjustments, backup/restore, maintenance activity and Stock
+              Movement Ledger source records.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={loadReviewSummary}
+            disabled={reviewSummaryLoading}
+          >
+            {reviewSummaryLoading ? "Loading..." : "Refresh Review"}
+          </button>
+        </div>
+
+        <div style={styles.auditCoverageGrid}>
+          {reviewMetrics.map((metric) => (
+            <div key={metric.title} style={styles.auditCoverageCard}>
+              <p>{metric.title}</p>
+              <strong>
+                {typeof metric.value === "number"
+                  ? formatNumber(metric.value)
+                  : metric.value}
+              </strong>
+              <small>{metric.detail}</small>
+            </div>
+          ))}
+        </div>
+
+        <div style={styles.warningNote}>
+          <strong>Stock Movement Ledger note:</strong> the ledger has no separate
+          table. It is rebuilt from sales, purchases, returns, stock adjustments,
+          stock transfers and stock transfer items, so those source records must
+          be reviewed and protected during audit, backup, restore and
+          maintenance.
+        </div>
+
+        {reviewWarnings.length > 0 && (
+          <div className="warning-box">
+            <strong>Audit warnings found:</strong>
+            <ul style={{ marginBottom: 0 }}>
+              {reviewWarnings.map((warning, index) => (
+                <li key={`${warning}-${index}`}>{String(warning)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div style={styles.summaryGrid}>
         <SummaryCard title={`${currentStoreCode} Total`} value={summary.total} />
@@ -664,6 +951,43 @@ const styles = {
     border: "1px solid #e2e8f0",
     boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
     minWidth: 0,
+    marginBottom: "18px",
+  },
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "14px",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+  mutedText: {
+    margin: 0,
+    color: "#64748b",
+    fontWeight: "700",
+    lineHeight: 1.6,
+  },
+  auditCoverageGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "12px",
+    marginBottom: "14px",
+  },
+  auditCoverageCard: {
+    padding: "14px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+  warningNote: {
+    padding: "13px",
+    borderRadius: "16px",
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    fontWeight: "800",
+    lineHeight: 1.6,
+    marginBottom: "12px",
   },
   tableWrap: { width: "100%", overflowX: "auto", marginTop: "12px" },
   table: { width: "100%", borderCollapse: "collapse", minWidth: "1180px" },
