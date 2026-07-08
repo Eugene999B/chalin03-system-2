@@ -28,6 +28,7 @@ const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
 const branchRoutes = require("./routes/branchRoutes");
 const smsRoutes = require("./routes/smsRoutes");
 const accountingIntelligenceRoutes = require("./routes/accountingIntelligenceRoutes");
+const stockTransferRoutes = require("./routes/stockTransferRoutes");
 
 const app = express();
 
@@ -167,6 +168,8 @@ app.use("/api/audit-signoffs", auditSignoffRoutes);
 app.use("/api/audit-unlock-requests", auditUnlockRequestRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/accounting-intelligence", accountingIntelligenceRoutes);
+app.use("/api/stock-transfers", stockTransferRoutes);
+
 
 app.use((req, res) => {
   res.status(404).json({

@@ -31,6 +31,7 @@ import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
 import SmsPage from "./pages/SmsPage";
 import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage";
+import StockTransfersPage from "./pages/StockTransfersPage";
 
 const adminManagerRoles = ["admin", "manager"];
 const adminOnlyRoles = ["admin"];
@@ -106,6 +107,10 @@ export default function App() {
               path="low-stock"
               element={adminManagerPage(<LowStockPage />)}
             />
+            <Route
+              path="stock-transfers"
+              element={adminManagerPage(<StockTransfersPage />)}
+              />
             <Route
               path="expenses"
               element={adminManagerPage(<ExpensesPage />)}

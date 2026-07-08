@@ -205,6 +205,15 @@ export default function Layout() {
           group: "Management",
         },
         {
+          title: "Stock Transfers",
+          description: "Move stock between stores with approval, dispatch and receiving",
+          path: "/stock-transfers",
+          icon: "🔁",
+          keywords:
+            "stock transfers transfer between stores branches move stock dispatch receive approve inventory",
+          group: "Management",
+        },
+        {
           title: "Expenses",
           description: "Record fuel, transport, rent, salary and other costs",
           path: "/expenses",
@@ -868,6 +877,15 @@ export default function Layout() {
                 >
                   Audit & Accounting
                 </NavLink>
+
+                <NavLink
+                  to="/stock-transfers"
+                  style={linkStyle}
+                  onClick={closeMobileMenu}
+                >
+                  Stock Transfers
+                </NavLink>
+                
                 <NavLink
                   to="/advanced-accounting-intelligence"
                   style={linkStyle}
