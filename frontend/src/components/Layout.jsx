@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-
 function getStoreCode(store) {
   return store?.code || store?.branch_code || "";
 }
@@ -14,6 +13,19 @@ function getStoreName(store) {
 
 function getStoreLocation(store) {
   return store?.location || store?.branch_location || "";
+}
+
+function getUserInitials(name) {
+  const cleanName = String(name || "User").trim();
+
+  if (!cleanName) return "U";
+
+  return cleanName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 }
 
 export default function Layout() {
@@ -27,11 +39,11 @@ export default function Layout() {
     branchLocation,
     canAccessAllBranches,
   } = useAuth();
+
   const navigate = useNavigate();
 
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
 
@@ -45,6 +57,7 @@ export default function Layout() {
     role === "admin";
 
   const displayName = user?.full_name || user?.username || "User";
+  const userInitials = getUserInitials(displayName);
 
   const currentStoreName =
     branchName ||
@@ -73,198 +86,187 @@ export default function Layout() {
     ? `Store ID ${branchId}`
     : "No store ID";
 
-  const commandItems = useMemo(() => {
-    const items = [
+  const navigationSections = useMemo(() => {
+    const sections = [
       {
-        title: "Dashboard",
-        description: "Open business command center",
-        path: "/",
-        icon: "🏠",
-        keywords: "home dashboard business command center overview boss",
-        group: "Main",
-      },
-      {
-        title: "Products",
-        description: "Add, edit and manage spare parts stock",
-        path: "/products",
-        icon: "📦",
-        keywords:
-          "products inventory stock spare parts excavator type barcode quantity",
-        group: "Main",
-      },
-      {
-        title: "New Sale",
-        description: "Record a new cash, MoMo, bank, mixed or credit sale",
-        path: "/new-sale",
-        icon: "🛒",
-        keywords: "sale sell receipt customer payment cash momo bank credit",
-        group: "Main",
-      },
-      {
-        title: "Sales History",
-        description: "View previous sales and receipts",
-        path: "/sales-history",
-        icon: "🧾",
-        keywords: "sales history receipt transaction old sale previous",
-        group: "Main",
-      },
-      {
-        title: "Debts",
-        description: "Track debts and send WhatsApp reminders",
-        path: "/debts",
-        icon: "📞",
-        keywords: "debt debts credit balance payment reminder whatsapp owing",
-        group: "Main",
-      },
-      {
-        title: "Change Password",
-        description: "Update your login password",
-        path: "/change-password",
-        icon: "🔐",
-        keywords: "password security change login",
-        group: "Account",
-      },
-      {
-        title: "Help / User Guide",
-        description: "Open system usage guide",
-        path: "/help",
-        icon: "📘",
-        keywords: "help guide manual learn support instructions",
-        group: "Account",
+        title: "Main Work",
+        items: [
+          {
+            title: "Dashboard",
+            description: "Open the business command center",
+            path: "/",
+            icon: "🏠",
+            keywords: "home dashboard business command center overview boss",
+          },
+          {
+            title: "Products",
+            description: "Stock, prices, barcodes, ledger and adjustments",
+            path: "/products",
+            icon: "📦",
+            keywords:
+              "products inventory stock spare parts excavator barcode quantity ledger adjustment",
+          },
+          {
+            title: "New Sale",
+            description: "Record cash, MoMo, bank, mixed or credit sale",
+            path: "/new-sale",
+            icon: "🛒",
+            keywords: "sale sell receipt customer payment cash momo bank credit",
+          },
+          {
+            title: "Sales History",
+            description: "View previous sales, receipts and transactions",
+            path: "/sales-history",
+            icon: "🧾",
+            keywords: "sales history receipt transaction old sale previous",
+          },
+          {
+            title: "Debts",
+            description: "Track customer balances and payments",
+            path: "/debts",
+            icon: "📞",
+            keywords: "debt debts credit balance payment reminder whatsapp owing",
+          },
+          {
+            title: "Change Password",
+            description: "Update your staff login password",
+            path: "/change-password",
+            icon: "🔐",
+            keywords: "password security change login",
+          },
+          {
+            title: "Help / User Guide",
+            description: "Open the built-in operating guide",
+            path: "/help",
+            icon: "📘",
+            keywords: "help guide manual learn support instructions",
+          },
+        ],
       },
     ];
 
     if (canManage) {
-      items.push(
-        {
-          title: "Customer Statement",
-          description: "Check customer sales and debt records",
-          path: "/customer-statement",
-          icon: "👤",
-          keywords: "customer statement account balance records history",
-          group: "Management",
-        },
-        {
-          title: "SMS Center",
-          description: "Send custom SMS messages to customers",
-          path: "/sms",
-          icon: "📩",
-          keywords:
-            "sms text message customers customer phone bulk selected all reminder notice",
-          group: "Management",
-},
-        {
-          title: "Reports",
-          description: "View business reports and performance",
-          path: "/reports",
-          icon: "📊",
-          keywords: "reports analytics sales profit business performance",
-          group: "Management",
-        },
-        {
-          title: "Audit & Accounting",
-          description: "Review sales, cash, debts, expenses and audit warnings",
-          path: "/audit-accounting",
-          icon: "🧮",
-          keywords:
-            "audit accounting accountant auditor review cash sales expenses debts fuel discounts warnings",
-          group: "Management",
-        },
-        {
-          title: "Audit Sign-Off History",
-          description: "View approved periods and saved audit sign-off records",
-          path: "/audit-signoffs",
-          icon: "✅",
-          keywords:
-            "audit signoff sign-off approval history approved period accountant auditor certificate prepared reviewed approved boss management",
-          group: "Management",
-        },
-        {
-          title: "Audit Unlock Requests",
-          description: "View and manage audit unlock requests",
-          path: "/audit-unlock-requests",
-          icon: "🔓",
-          keywords: "audit unlock requests approval management",
-          group: "Management",
-        },
-        {
-          title: "Accounting Intelligence",
-          description: "Advanced ledger, audit score, profit, debt, stock and branch intelligence",
-          path: "/advanced-accounting-intelligence",
-          icon: "📈",
-          keywords:
-            "advanced accounting intelligence ledger profit loss audit score branch debt stock expenses recommendations",
-          group: "Management",
-},
-        {
-          title: "Low Stock / Restock",
-          description: "View items that need restocking",
-          path: "/low-stock",
-          icon: "🚨",
-          keywords: "low stock restock reorder shortage products inventory",
-          group: "Management",
-        },
-        {
-          title: "Stock Transfers",
-          description: "Move stock between stores with approval, dispatch and receiving",
-          path: "/stock-transfers",
-          icon: "🔁",
-          keywords:
-            "stock transfers transfer between stores branches move stock dispatch receive approve inventory",
-          group: "Management",
-        },
-        {
-          title: "Expenses",
-          description: "Record fuel, transport, rent, salary and other costs",
-          path: "/expenses",
-          icon: "⛽",
-          keywords: "expenses fuel transport rent salary internet repairs cost",
-          group: "Management",
-        },
-        {
-          title: "Purchases",
-          description: "Record stock purchases and supplier transactions",
-          path: "/purchases",
-          icon: "🚚",
-          keywords: "purchases suppliers stock buying purchase payment",
-          group: "Management",
-        },
-        {
-          title: "Returns",
-          description: "Record returned items",
-          path: "/returns",
-          icon: "↩️",
-          keywords: "returns returned items refund exchange",
-          group: "Management",
-        },
-        {
-          title: "Daily Closing",
-          description: "Close the day and check cash movement",
-          path: "/daily-closing",
-          icon: "🌙",
-          keywords: "daily closing close day cash sales summary",
-          group: "Management",
-        },
-        {
-          title: "Exports",
-          description: "Export business data",
-          path: "/exports",
-          icon: "📤",
-          keywords: "exports excel download data report backup",
-          group: "Management",
-        }
-      );
+      sections.push({
+        title: "Management",
+        items: [
+          {
+            title: "Customer Statement",
+            description: "Check customer sales and debt records",
+            path: "/customer-statement",
+            icon: "👤",
+            keywords: "customer statement account balance records history",
+          },
+          {
+            title: "SMS Center",
+            description: "Send live SMS, review logs and retry failures",
+            path: "/sms",
+            icon: "📩",
+            keywords:
+              "sms text message customers phone bulk selected all reminder notice failed arkesel",
+          },
+          {
+            title: "Reports",
+            description: "Sales, stock, transfers and management reports",
+            path: "/reports",
+            icon: "📊",
+            keywords:
+              "reports analytics sales profit business performance stock transfers adjustments",
+          },
+          {
+            title: "Audit & Accounting",
+            description: "Review money, debts, expenses, stock and warnings",
+            path: "/audit-accounting",
+            icon: "🧮",
+            keywords:
+              "audit accounting accountant review cash sales expenses debts fuel discounts warnings",
+          },
+          {
+            title: "Stock Transfers",
+            description: "Request, approve, dispatch and receive stock",
+            path: "/stock-transfers",
+            icon: "🔁",
+            keywords:
+              "stock transfers transfer between stores branches move dispatch receive approve inventory",
+          },
+          {
+            title: "Accounting Intelligence",
+            description: "Advanced ledger, audit score, SMS and stock intelligence",
+            path: "/advanced-accounting-intelligence",
+            icon: "📈",
+            keywords:
+              "advanced accounting intelligence ledger profit loss audit score branch debt stock sms maintenance backup restore",
+          },
+          {
+            title: "Audit Sign-Off History",
+            description: "Saved approvals, certificates and audit history",
+            path: "/audit-signoffs",
+            icon: "✅",
+            keywords:
+              "audit signoff sign-off approval history approved period accountant certificate management",
+          },
+          {
+            title: "Audit Unlock Requests",
+            description: "Approve or reject locked-period correction requests",
+            path: "/audit-unlock-requests",
+            icon: "🔓",
+            keywords:
+              "audit unlock requests approval correction locked period stock sms backup maintenance",
+          },
+          {
+            title: "Low Stock / Restock",
+            description: "View items that need restocking",
+            path: "/low-stock",
+            icon: "🚨",
+            keywords: "low stock restock reorder shortage products inventory",
+          },
+          {
+            title: "Expenses",
+            description: "Fuel, transport, rent, salary and other costs",
+            path: "/expenses",
+            icon: "⛽",
+            keywords: "expenses fuel transport rent salary internet repairs cost",
+          },
+          {
+            title: "Purchases",
+            description: "Supplier purchases and payment records",
+            path: "/purchases",
+            icon: "🚚",
+            keywords: "purchases suppliers stock buying purchase payment",
+          },
+          {
+            title: "Returns",
+            description: "Record returned items and corrections",
+            path: "/returns",
+            icon: "↩️",
+            keywords: "returns returned items refund exchange correction",
+          },
+          {
+            title: "Daily Closing",
+            description: "Close the day and compare cash movement",
+            path: "/daily-closing",
+            icon: "🌙",
+            keywords: "daily closing close day cash sales summary",
+          },
+          {
+            title: "Exports",
+            description: "Export business records and stock ledgers",
+            path: "/exports",
+            icon: "📤",
+            keywords:
+              "exports excel download data report backup stock ledger transfers adjustments",
+          },
+        ],
+      });
     }
 
     if (isAdmin) {
-      items.push(
+      const adminItems = [
         {
           title: "Users & Settings",
-          description: "Manage users, roles and business settings",
+          description: "Manage staff, roles and business settings",
           path: "/users-settings",
           icon: "⚙️",
           keywords: "users settings roles admin cashier manager reset password",
-          group: "Admin",
         },
         {
           title: "Activity Log",
@@ -272,39 +274,45 @@ export default function Layout() {
           path: "/activity-log",
           icon: "🕵️",
           keywords: "activity log audit staff actions security",
-          group: "Admin",
         },
         {
           title: "Backup & Restore",
-          description: "Manage system backup and restore options",
+          description: "Download or restore the full system database",
           path: "/backup",
           icon: "💾",
-          keywords: "backup restore database data safety",
-          group: "Admin",
-        }
-      );
-    }
+          keywords: "backup restore database data safety full system",
+        },
+      ];
 
-    if (isSystemAdministrator) {
-      items.push({
-        title: "System Maintenance",
-        description: "Clear test data and maintain the system",
-        path: "/maintenance",
-        icon: "🧰",
-        keywords: "maintenance clear test data reset system administrator",
-        group: "Admin",
+      if (isSystemAdministrator) {
+        adminItems.push({
+          title: "System Maintenance",
+          description: "Clear test data and maintain the system",
+          path: "/maintenance",
+          icon: "🧰",
+          keywords: "maintenance clear test data reset system administrator",
+        });
+      }
+
+      sections.push({
+        title: "Admin Control",
+        items: adminItems,
       });
     }
 
-    return items;
+    return sections;
   }, [canManage, isAdmin, isSystemAdministrator]);
+
+  const commandItems = useMemo(() => {
+    return navigationSections.flatMap((section) =>
+      section.items.map((item) => ({ ...item, group: section.title }))
+    );
+  }, [navigationSections]);
 
   const filteredCommandItems = useMemo(() => {
     const query = commandQuery.trim().toLowerCase();
 
-    if (!query) {
-      return commandItems;
-    }
+    if (!query) return commandItems;
 
     return commandItems.filter((item) => {
       const searchableText = [
@@ -322,7 +330,7 @@ export default function Layout() {
 
   useEffect(() => {
     function checkScreenSize() {
-      const mobile = window.innerWidth <= 900;
+      const mobile = window.innerWidth <= 920;
       setIsMobile(mobile);
 
       if (!mobile) {
@@ -369,6 +377,7 @@ export default function Layout() {
     return () => {
       window.removeEventListener("keydown", handleKeyboard);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleLogout() {
@@ -404,838 +413,1024 @@ export default function Layout() {
     navigate(path);
   }
 
-  const linkStyle = ({ isActive }) => ({
-    display: "block",
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "11px 13px",
-    marginBottom: "6px",
-    borderRadius: "10px",
-    color: "#ffffff",
-    textDecoration: "none",
-    fontWeight: "800",
-    fontSize: "15px",
-    lineHeight: "1.25",
-    background: isActive ? "#164777" : "transparent",
-  });
-
-  const storeCardStyle = {
-    marginTop: "12px",
-    padding: "13px",
-    borderRadius: "16px",
-    background:
-      "linear-gradient(135deg, rgba(224,186,40,0.18), rgba(22,71,119,0.35))",
-    border: "1px solid rgba(224,186,40,0.36)",
-    boxShadow: "0 10px 24px rgba(0,0,0,0.16)",
-  };
-
-  const storeLabelStyle = {
-    margin: 0,
-    color: "#e0ba28",
-    fontSize: "10px",
-    fontWeight: "950",
-    letterSpacing: "0.09em",
-    textTransform: "uppercase",
-  };
-
-  const storeNameStyle = {
-    margin: "5px 0 0",
-    color: "#ffffff",
-    fontSize: "14px",
-    fontWeight: "950",
-    lineHeight: 1.25,
-  };
-
-  const storeLocationStyle = {
-    margin: "4px 0 0",
-    color: "rgba(255,255,255,0.72)",
-    fontSize: "12px",
-    fontWeight: "750",
-    lineHeight: 1.3,
-  };
-
-  const sectionTitleStyle = {
-    display: "block",
-    margin: "16px 8px 8px",
-    fontSize: "11px",
-    fontWeight: "900",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    color: "rgba(255, 255, 255, 0.5)",
-  };
-
-  const sidebarStyle = {
-    width: isMobile ? "100vw" : "270px",
-    height: "100dvh",
-    background: "#07182c",
-    color: "#ffffff",
-    display: "grid",
-    gridTemplateRows: "auto auto minmax(0, 1fr) auto",
-    overflow: "hidden",
-    flexShrink: 0,
-    zIndex: 1000,
-    transition: "transform 0.25s ease",
-    ...(isMobile
-      ? {
-          position: "fixed",
-          top: 0,
-          left: 0,
-          transform: menuOpen ? "translateX(0)" : "translateX(-100%)",
-        }
-      : {
-          position: "relative",
-          transform: "translateX(0)",
-        }),
-  };
-
   return (
-    <div
-      style={{
-        width: "100%",
-        height: "100dvh",
-        display: "flex",
-        overflow: "hidden",
-        background: "#f4f7fb",
-      }}
-    >
+    <div className="premium-layout">
+      <style>{`
+        .premium-layout {
+          --navy: #07182c;
+          --navy-2: #0d2f55;
+          --navy-3: #164777;
+          --gold: #e0ba28;
+          --paper: #f5f7fb;
+          --text: #07182c;
+          width: 100%;
+          height: 100dvh;
+          display: flex;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 16% 12%, rgba(224, 186, 40, 0.18), transparent 30%),
+            radial-gradient(circle at 88% 10%, rgba(59, 130, 246, 0.14), transparent 28%),
+            linear-gradient(135deg, #eef3f9 0%, #f8fafc 54%, #eaf0f7 100%);
+          color: var(--text);
+        }
+
+        .premium-layout * {
+          box-sizing: border-box;
+        }
+
+        .premium-mobile-bar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 66px;
+          z-index: 900;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 9px;
+          padding: 0 11px;
+          background:
+            linear-gradient(135deg, rgba(7, 24, 44, 0.96), rgba(13, 47, 85, 0.96));
+          color: #ffffff;
+          border-bottom: 1px solid rgba(224, 186, 40, 0.24);
+          box-shadow: 0 12px 30px rgba(7, 24, 44, 0.25);
+          backdrop-filter: blur(18px);
+        }
+
+        .premium-mobile-button {
+          border: none;
+          border-radius: 14px;
+          color: #ffffff;
+          padding: 10px 12px;
+          font-weight: 950;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .premium-mobile-menu-button {
+          background: rgba(224, 186, 40, 0.18);
+          border: 1px solid rgba(224, 186, 40, 0.32);
+        }
+
+        .premium-mobile-out-button {
+          background: rgba(195, 38, 29, 0.92);
+        }
+
+        .premium-mobile-search {
+          min-width: 0;
+          border: 1px solid rgba(224, 186, 40, 0.42);
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+          padding: 9px 11px;
+          font-weight: 950;
+          cursor: pointer;
+          text-align: left;
+          overflow: hidden;
+        }
+
+        .premium-mobile-search span,
+        .premium-mobile-search small {
+          display: block;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-mobile-search span {
+          font-size: 13px;
+          line-height: 1.1;
+        }
+
+        .premium-mobile-search small {
+          margin-top: 2px;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 10px;
+          line-height: 1;
+        }
+
+        .premium-sidebar {
+          width: 286px;
+          height: 100dvh;
+          color: #ffffff;
+          display: grid;
+          grid-template-rows: auto auto minmax(0, 1fr) auto;
+          overflow: hidden;
+          flex-shrink: 0;
+          z-index: 1000;
+          background:
+            radial-gradient(circle at 20% 0%, rgba(224, 186, 40, 0.18), transparent 28%),
+            radial-gradient(circle at 88% 25%, rgba(22, 71, 119, 0.62), transparent 34%),
+            linear-gradient(180deg, #07182c 0%, #0a213d 48%, #06101f 100%);
+          border-right: 1px solid rgba(224, 186, 40, 0.18);
+          box-shadow: 20px 0 55px rgba(7, 24, 44, 0.18);
+          transition: transform 0.25s ease;
+        }
+
+        .premium-sidebar.mobile {
+          width: min(100vw, 390px);
+          position: fixed;
+          top: 0;
+          left: 0;
+          transform: translateX(-110%);
+          box-shadow: 30px 0 90px rgba(0, 0, 0, 0.42);
+        }
+
+        .premium-sidebar.mobile.open {
+          transform: translateX(0);
+        }
+
+        .premium-sidebar-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 980;
+          background: rgba(2, 6, 23, 0.62);
+          backdrop-filter: blur(4px);
+        }
+
+        .premium-brand {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 13px;
+          padding: 18px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .premium-brand-logo {
+          width: 58px;
+          height: 58px;
+          border-radius: 19px;
+          object-fit: cover;
+          background: var(--navy);
+          border: 2px solid rgba(224, 186, 40, 0.92);
+          box-shadow: 0 16px 36px rgba(224, 186, 40, 0.16);
+        }
+
+        .premium-brand h2 {
+          margin: 0;
+          font-size: 22px;
+          line-height: 1.05;
+          font-weight: 950;
+          letter-spacing: -0.04em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-brand p {
+          margin: 5px 0 0;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-close-button {
+          border: none;
+          border-radius: 13px;
+          background: rgba(255, 255, 255, 0.12);
+          color: #ffffff;
+          padding: 10px 12px;
+          font-weight: 950;
+          cursor: pointer;
+        }
+
+        .premium-sidebar-tools {
+          padding: 14px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .premium-command-button {
+          width: 100%;
+          border: 1px solid rgba(224, 186, 40, 0.45);
+          border-radius: 20px;
+          background:
+            linear-gradient(135deg, rgba(224, 186, 40, 0.16), rgba(22, 71, 119, 0.52));
+          color: #ffffff;
+          padding: 13px;
+          cursor: pointer;
+          text-align: left;
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+          overflow: hidden;
+        }
+
+        .premium-command-button-grid {
+          display: grid;
+          grid-template-columns: 38px minmax(0, 1fr) auto;
+          gap: 11px;
+          align-items: center;
+        }
+
+        .premium-command-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 14px;
+          display: grid;
+          place-items: center;
+          background: rgba(255, 255, 255, 0.10);
+          font-size: 18px;
+        }
+
+        .premium-command-button strong,
+        .premium-command-button small {
+          display: block;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-command-button strong {
+          font-size: 14px;
+          line-height: 1.15;
+          font-weight: 950;
+        }
+
+        .premium-command-button small {
+          margin-top: 3px;
+          color: rgba(255, 255, 255, 0.68);
+          font-size: 11px;
+          font-weight: 750;
+        }
+
+        .premium-command-shortcut {
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 9px;
+          padding: 5px 7px;
+          color: rgba(255, 255, 255, 0.78);
+          font-size: 10px;
+          font-weight: 950;
+          line-height: 1;
+        }
+
+        .premium-store-card {
+          margin-top: 13px;
+          padding: 14px;
+          border-radius: 22px;
+          background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+          border: 1px solid rgba(224, 186, 40, 0.32);
+          box-shadow: 0 16px 34px rgba(0, 0, 0, 0.16);
+        }
+
+        .premium-store-card label {
+          display: block;
+          margin: 0;
+          color: var(--gold);
+          font-size: 10px;
+          font-weight: 950;
+          letter-spacing: 0.09em;
+          text-transform: uppercase;
+        }
+
+        .premium-store-card h3 {
+          margin: 6px 0 0;
+          color: #ffffff;
+          font-size: 14px;
+          font-weight: 950;
+          line-height: 1.25;
+        }
+
+        .premium-store-card p {
+          margin: 5px 0 0;
+          color: rgba(255, 255, 255, 0.70);
+          font-size: 12px;
+          font-weight: 750;
+          line-height: 1.35;
+        }
+
+        .premium-nav-scroll {
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 14px 14px 18px;
+        }
+
+        .premium-nav-scroll::-webkit-scrollbar,
+        .premium-command-list::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .premium-nav-scroll::-webkit-scrollbar-thumb,
+        .premium-command-list::-webkit-scrollbar-thumb {
+          background: rgba(224, 186, 40, 0.24);
+          border-radius: 999px;
+        }
+
+        .premium-nav-section-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 18px 8px 9px;
+          color: rgba(255, 255, 255, 0.52);
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.09em;
+          text-transform: uppercase;
+        }
+
+        .premium-nav-section-title::after {
+          content: "";
+          height: 1px;
+          flex: 1;
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .premium-nav-link {
+          display: grid;
+          grid-template-columns: 34px minmax(0, 1fr);
+          gap: 10px;
+          align-items: center;
+          width: 100%;
+          min-height: 46px;
+          padding: 9px 11px;
+          margin-bottom: 6px;
+          border-radius: 16px;
+          color: rgba(255, 255, 255, 0.84);
+          text-decoration: none;
+          font-weight: 850;
+          font-size: 14px;
+          line-height: 1.2;
+          border: 1px solid transparent;
+          transition: 0.18s ease;
+        }
+
+        .premium-nav-link:hover {
+          transform: translateX(2px);
+          background: rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+          border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .premium-nav-link.active {
+          background:
+            linear-gradient(135deg, rgba(224, 186, 40, 0.24), rgba(22, 71, 119, 0.55));
+          border-color: rgba(224, 186, 40, 0.38);
+          box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+          color: #ffffff;
+        }
+
+        .premium-nav-icon {
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 13px;
+          background: rgba(255, 255, 255, 0.08);
+          font-size: 17px;
+        }
+
+        .premium-nav-link.active .premium-nav-icon {
+          background: rgba(224, 186, 40, 0.22);
+        }
+
+        .premium-nav-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-user-panel {
+          padding: 14px 16px 18px;
+          border-top: 1px solid rgba(255, 255, 255, 0.10);
+          background: rgba(2, 6, 23, 0.18);
+        }
+
+        .premium-user-row {
+          display: grid;
+          grid-template-columns: 44px minmax(0, 1fr);
+          gap: 11px;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+
+        .premium-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 16px;
+          display: grid;
+          place-items: center;
+          background: linear-gradient(135deg, var(--gold), #f5d76e);
+          color: var(--navy);
+          font-size: 15px;
+          font-weight: 950;
+          box-shadow: 0 12px 26px rgba(224, 186, 40, 0.18);
+        }
+
+        .premium-user-name {
+          margin: 0;
+          font-weight: 950;
+          color: #ffffff;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-user-role {
+          display: block;
+          margin-top: 3px;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.62);
+          text-transform: uppercase;
+          font-weight: 950;
+          letter-spacing: 0.08em;
+        }
+
+        .premium-working-branch {
+          margin-bottom: 12px;
+          padding: 11px;
+          border-radius: 17px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.10);
+        }
+
+        .premium-working-branch label {
+          display: block;
+          margin: 0;
+          color: var(--gold);
+          font-size: 10px;
+          font-weight: 950;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .premium-working-branch strong,
+        .premium-working-branch span {
+          display: block;
+        }
+
+        .premium-working-branch strong {
+          margin-top: 5px;
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 950;
+          line-height: 1.35;
+        }
+
+        .premium-working-branch span {
+          margin-top: 4px;
+          color: rgba(255, 255, 255, 0.62);
+          font-size: 11px;
+          font-weight: 800;
+          line-height: 1.3;
+        }
+
+        .premium-side-action {
+          width: 100%;
+          border: none;
+          border-radius: 13px;
+          padding: 11px 12px;
+          color: #ffffff;
+          font-weight: 950;
+          cursor: pointer;
+          margin-top: 9px;
+        }
+
+        .premium-password-button {
+          background: var(--navy-3);
+        }
+
+        .premium-logout-button {
+          background: #c3261d;
+        }
+
+        .premium-main {
+          flex: 1;
+          min-width: 0;
+          width: 100%;
+          height: 100dvh;
+          overflow-y: auto;
+          overflow-x: auto;
+          padding: 24px 28px 32px;
+        }
+
+        .premium-main-topbar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 20px;
+          padding: 14px 16px;
+          border-radius: 24px;
+          background: rgba(255, 255, 255, 0.82);
+          border: 1px solid rgba(203, 213, 225, 0.82);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+          backdrop-filter: blur(16px);
+        }
+
+        .premium-main-topbar h1 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 950;
+          letter-spacing: -0.03em;
+          color: var(--navy);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-main-topbar p {
+          margin: 4px 0 0;
+          color: #667085;
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-topbar-button {
+          border: 1px solid #dbe3ef;
+          border-radius: 15px;
+          background: #ffffff;
+          color: var(--navy);
+          padding: 11px 13px;
+          font-weight: 950;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .premium-topbar-command {
+          border-color: rgba(224, 186, 40, 0.42);
+          background: linear-gradient(135deg, #ffffff, #fff9df);
+        }
+
+        .premium-topbar-logout {
+          background: #fff5f5;
+          color: #b91c1c;
+          border-color: #fecaca;
+        }
+
+        .premium-command-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 3000;
+          background: rgba(7, 24, 44, 0.74);
+          backdrop-filter: blur(10px);
+          display: grid;
+          place-items: center;
+          padding: 24px;
+        }
+
+        .premium-command-modal {
+          width: 100%;
+          max-width: 800px;
+          max-height: 84vh;
+          background: #ffffff;
+          border-radius: 30px;
+          box-shadow: 0 34px 100px rgba(0, 0, 0, 0.38);
+          overflow: hidden;
+          display: grid;
+          grid-template-rows: auto auto minmax(0, 1fr);
+        }
+
+        .premium-command-header {
+          padding: 22px;
+          background:
+            radial-gradient(circle at 20% 0%, rgba(224, 186, 40, 0.23), transparent 34%),
+            linear-gradient(135deg, #07182c 0%, #0d2f55 58%, #111827 100%);
+          color: #ffffff;
+        }
+
+        .premium-command-header-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 14px;
+          align-items: start;
+        }
+
+        .premium-command-eyebrow {
+          margin: 0;
+          color: var(--gold);
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .premium-command-header h2 {
+          margin: 6px 0 0;
+          font-size: 30px;
+          line-height: 1.05;
+          font-weight: 950;
+          letter-spacing: -0.04em;
+        }
+
+        .premium-command-header p {
+          margin: 9px 0 0;
+          color: rgba(255, 255, 255, 0.74);
+          line-height: 1.5;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .premium-command-store-pill {
+          margin-top: 13px;
+          display: inline-flex;
+          max-width: 100%;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 11px;
+          border-radius: 999px;
+          background: rgba(224, 186, 40, 0.15);
+          border: 1px solid rgba(224, 186, 40, 0.30);
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .premium-command-store-pill span:last-child {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .premium-command-close {
+          border: none;
+          border-radius: 14px;
+          background: rgba(255, 255, 255, 0.12);
+          color: #ffffff;
+          padding: 10px 13px;
+          cursor: pointer;
+          font-weight: 950;
+        }
+
+        .premium-command-search {
+          padding: 16px;
+          border-bottom: 1px solid #e2e8f0;
+          background: #f8fafc;
+        }
+
+        .premium-command-search input {
+          width: 100%;
+          border: 2px solid #dbe3ef;
+          border-radius: 18px;
+          padding: 15px 17px;
+          font-size: 16px;
+          font-weight: 850;
+          outline: none;
+          background: #ffffff;
+          color: var(--navy);
+        }
+
+        .premium-command-search input:focus {
+          border-color: var(--gold);
+          box-shadow: 0 0 0 4px rgba(224, 186, 40, 0.14);
+        }
+
+        .premium-command-chips {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 10px;
+        }
+
+        .premium-command-chip {
+          border: 1px solid #dbe3ef;
+          background: #ffffff;
+          color: var(--navy-3);
+          border-radius: 999px;
+          padding: 7px 11px;
+          cursor: pointer;
+          font-weight: 950;
+          font-size: 12px;
+        }
+
+        .premium-command-list {
+          min-height: 0;
+          overflow-y: auto;
+          padding: 14px;
+          background: #ffffff;
+        }
+
+        .premium-command-item {
+          width: 100%;
+          display: grid;
+          grid-template-columns: 46px minmax(0, 1fr) auto;
+          gap: 12px;
+          align-items: center;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          border-radius: 18px;
+          padding: 12px;
+          text-align: left;
+          cursor: pointer;
+          color: var(--navy);
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+          margin-bottom: 10px;
+          transition: 0.16s ease;
+        }
+
+        .premium-command-item:hover {
+          transform: translateY(-2px);
+          border-color: rgba(224, 186, 40, 0.48);
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.10);
+        }
+
+        .premium-command-item-icon {
+          width: 46px;
+          height: 46px;
+          border-radius: 16px;
+          background: #f1f5f9;
+          display: grid;
+          place-items: center;
+          font-size: 23px;
+        }
+
+        .premium-command-item strong {
+          display: block;
+          font-size: 15px;
+          font-weight: 950;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .premium-command-item small {
+          display: block;
+          margin-top: 4px;
+          color: #64748b;
+          font-weight: 750;
+          line-height: 1.4;
+        }
+
+        .premium-command-arrow {
+          color: #94a3b8;
+          font-weight: 950;
+          font-size: 18px;
+        }
+
+        .premium-empty-command {
+          padding: 24px;
+          border-radius: 18px;
+          background: #f8fafc;
+          color: #64748b;
+          text-align: center;
+          font-weight: 850;
+          border: 1px dashed #cbd5e1;
+        }
+
+        @media (max-width: 920px) {
+          .premium-layout {
+            display: block;
+          }
+
+          .premium-command-button-grid {
+            grid-template-columns: 38px minmax(0, 1fr);
+          }
+
+          .premium-command-shortcut,
+          .premium-main-topbar {
+            display: none;
+          }
+
+          .premium-main {
+            height: 100dvh;
+            padding: 86px 14px 24px;
+          }
+
+          .premium-command-overlay {
+            place-items: start center;
+            padding: 78px 14px 20px;
+          }
+
+          .premium-command-modal {
+            max-height: calc(100dvh - 96px);
+            border-radius: 22px;
+          }
+
+          .premium-command-header {
+            padding: 17px;
+          }
+
+          .premium-command-header h2 {
+            font-size: 23px;
+          }
+
+          .premium-command-item {
+            grid-template-columns: 44px minmax(0, 1fr);
+          }
+
+          .premium-command-arrow {
+            display: none;
+          }
+        }
+      `}</style>
+
       {isMobile && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: "60px",
-            background: "#07182c",
-            color: "#ffffff",
-            zIndex: 900,
-            display: "grid",
-            gridTemplateColumns: "auto minmax(0, 1fr) auto",
-            alignItems: "center",
-            gap: "8px",
-            padding: "0 10px",
-            boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
-          }}
-        >
+        <header className="premium-mobile-bar">
           <button
             type="button"
+            className="premium-mobile-button premium-mobile-menu-button"
             onClick={() => setMenuOpen(true)}
-            style={{
-              border: "none",
-              borderRadius: "9px",
-              background: "#164777",
-              color: "#ffffff",
-              padding: "9px 10px",
-              fontWeight: "900",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
           >
-            Menu
+            ☰ Menu
           </button>
 
           <button
             type="button"
+            className="premium-mobile-search"
             onClick={openCommandCenter}
-            style={{
-              minWidth: 0,
-              border: "1px solid rgba(224, 186, 40, 0.5)",
-              borderRadius: "11px",
-              background:
-                "linear-gradient(135deg, rgba(22,71,119,0.9), rgba(7,24,44,0.9))",
-              color: "#ffffff",
-              padding: "8px 9px",
-              fontWeight: "900",
-              cursor: "pointer",
-              textAlign: "left",
-              overflow: "hidden",
-              boxShadow: "0 6px 14px rgba(0,0,0,0.16)",
-            }}
           >
-            <span
-              style={{
-                display: "block",
-                fontSize: "13px",
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              🔎 Smart Search
-            </span>
-
-            <small
-              style={{
-                display: "block",
-                marginTop: "2px",
-                color: "rgba(255,255,255,0.68)",
-                fontSize: "10px",
-                lineHeight: 1,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {currentStoreName}
-            </small>
+            <span>🔎 Smart Search</span>
+            <small>{currentStoreCode} — {currentStoreName}</small>
           </button>
 
           <button
             type="button"
+            className="premium-mobile-button premium-mobile-out-button"
             onClick={handleLogout}
-            style={{
-              border: "none",
-              borderRadius: "9px",
-              background: "#c3261d",
-              color: "#ffffff",
-              padding: "9px 10px",
-              fontWeight: "900",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
           >
             Out
           </button>
-        </div>
+        </header>
       )}
 
-      <aside style={sidebarStyle}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            padding: "18px",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            minWidth: 0,
-          }}
-        >
+      {isMobile && menuOpen && (
+        <div className="premium-sidebar-overlay" onClick={closeMobileMenu} />
+      )}
+
+      <aside
+        className={`premium-sidebar ${isMobile ? "mobile" : ""} ${
+          menuOpen ? "open" : ""
+        }`}
+      >
+        <div className="premium-brand">
           <img
             src="/chalin03-logo.png"
             alt="Chalin 03 Logo"
-            style={{
-              width: "56px",
-              height: "56px",
-              borderRadius: "14px",
-              objectFit: "cover",
-              background: "#07182c",
-              flexShrink: 0,
-            }}
+            className="premium-brand-logo"
           />
 
           <div style={{ minWidth: 0 }}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "22px",
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              Chalin 03
-            </h2>
-
-            <p
-              style={{
-                margin: "4px 0 0",
-                color: "rgba(255,255,255,0.72)",
-                fontSize: "13px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              Sales & Inventory
-            </p>
+            <h2>Chalin 03</h2>
+            <p>Sales • Stock • Audit</p>
           </div>
 
           {isMobile && (
             <button
               type="button"
+              className="premium-close-button"
               onClick={() => setMenuOpen(false)}
-              style={{
-                marginLeft: "auto",
-                border: "none",
-                borderRadius: "8px",
-                background: "rgba(255,255,255,0.12)",
-                color: "#ffffff",
-                padding: "9px 12px",
-                fontWeight: "900",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
             >
-              Close
+              ✕
             </button>
           )}
         </div>
 
-        <div
-          style={{
-            padding: "12px 14px",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
+        <div className="premium-sidebar-tools">
           <button
             type="button"
+            className="premium-command-button"
             onClick={openCommandCenter}
-            style={{
-              width: "100%",
-              border: "1px solid rgba(224, 186, 40, 0.5)",
-              borderRadius: "14px",
-              background:
-                "linear-gradient(135deg, rgba(22,71,119,0.95), rgba(7,24,44,0.95))",
-              color: "#ffffff",
-              padding: "12px",
-              cursor: "pointer",
-              textAlign: "left",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-              overflow: "hidden",
-            }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: !isMobile
-                  ? "34px minmax(0, 1fr) auto"
-                  : "34px minmax(0, 1fr)",
-                gap: "10px",
-                alignItems: "center",
-                minWidth: 0,
-              }}
-            >
-              <span
-                style={{
-                  width: "34px",
-                  height: "34px",
-                  borderRadius: "11px",
-                  display: "grid",
-                  placeItems: "center",
-                  background: "rgba(224,186,40,0.18)",
-                  flexShrink: 0,
-                  fontSize: "18px",
-                }}
-              >
-                🔎
-              </span>
+            <div className="premium-command-button-grid">
+              <span className="premium-command-icon">🔎</span>
 
               <span style={{ minWidth: 0 }}>
-                <strong
-                  style={{
-                    display: "block",
-                    fontSize: "14px",
-                    lineHeight: 1.2,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  Smart Command
-                </strong>
-
-                <small
-                  style={{
-                    display: "block",
-                    marginTop: "3px",
-                    color: "rgba(255,255,255,0.68)",
-                    fontWeight: "700",
-                    fontSize: "11px",
-                    lineHeight: 1.2,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  Search pages fast
-                </small>
+                <strong>Smart Command</strong>
+                <small>Search pages, reports and tools</small>
               </span>
 
               {!isMobile && (
-                <span
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.22)",
-                    borderRadius: "8px",
-                    padding: "4px 6px",
-                    color: "rgba(255,255,255,0.8)",
-                    fontSize: "10px",
-                    fontWeight: "950",
-                    flexShrink: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  Ctrl K
-                </span>
+                <span className="premium-command-shortcut">Ctrl K</span>
               )}
             </div>
           </button>
 
-          <div style={storeCardStyle}>
-            <p style={storeLabelStyle}>Current Store</p>
-
-            <p style={storeNameStyle}>
+          <div className="premium-store-card">
+            <label>Current Store</label>
+            <h3>
               {currentStoreCode} — {currentStoreName}
-            </p>
-
-            <p style={storeLocationStyle}>{currentStoreLocation}</p>
-
-            <p
-              style={{
-                margin: "6px 0 0",
-                color: "rgba(255,255,255,0.62)",
-                fontSize: "11px",
-                fontWeight: "800",
-                lineHeight: 1.25,
-              }}
-            >
-              {storeAccessLabel}
-            </p>
+            </h3>
+            <p>{currentStoreLocation}</p>
+            <p>{storeAccessLabel}</p>
           </div>
         </div>
 
-        <div
-          style={{
-            minHeight: 0,
-            overflowY: "auto",
-            overflowX: "hidden",
-            padding: "14px 16px",
-          }}
-        >
-          <nav style={{ display: "block", width: "100%" }}>
-            <p style={sectionTitleStyle}>Main</p>
+        <div className="premium-nav-scroll">
+          <nav>
+            {navigationSections.map((section) => (
+              <div key={section.title}>
+                <p className="premium-nav-section-title">{section.title}</p>
 
-            <NavLink to="/" end style={linkStyle} onClick={closeMobileMenu}>
-              Dashboard
-            </NavLink>
-
-            <NavLink to="/products" style={linkStyle} onClick={closeMobileMenu}>
-              Products
-            </NavLink>
-
-            <NavLink to="/new-sale" style={linkStyle} onClick={closeMobileMenu}>
-              New Sale
-            </NavLink>
-
-            <NavLink
-              to="/sales-history"
-              style={linkStyle}
-              onClick={closeMobileMenu}
-            >
-              Sales History
-            </NavLink>
-
-            <NavLink to="/debts" style={linkStyle} onClick={closeMobileMenu}>
-              Debts
-            </NavLink>
-
-            <NavLink
-              to="/change-password"
-              style={linkStyle}
-              onClick={closeMobileMenu}
-            >
-              Change Password
-            </NavLink>
-
-            <NavLink to="/help" style={linkStyle} onClick={closeMobileMenu}>
-              Help / User Guide
-            </NavLink>
-
-            {canManage && (
-              <>
-                <p style={sectionTitleStyle}>Management</p>
-
-                <NavLink
-                  to="/customer-statement"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Customer Statement
-                </NavLink>
-
-                <NavLink
-                  to="/sms"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  SMS Center
-                </NavLink>
-
-                <NavLink
-                  to="/reports"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Reports
-                </NavLink>
-
-                <NavLink
-                  to="/audit-accounting"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Audit & Accounting
-                </NavLink>
-
-                <NavLink
-                  to="/stock-transfers"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Stock Transfers
-                </NavLink>
-                
-                <NavLink
-                  to="/advanced-accounting-intelligence"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-              >
-                  Accounting Intelligence
-                </NavLink>
-
-                <NavLink
-                  to="/audit-signoffs"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Audit Sign-Off History
-                </NavLink>
-
-                <NavLink
-                  to="/low-stock"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Low Stock / Restock
-                </NavLink>
-
-                <NavLink
-                  to="/expenses"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Expenses
-                </NavLink>
-
-                <NavLink
-                  to="/purchases"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Purchases
-                </NavLink>
-
-                <NavLink
-                  to="/returns"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Returns
-                </NavLink>
-
-                <NavLink
-                  to="/daily-closing"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Daily Closing
-                </NavLink>
-
-                <NavLink
-                  to="/exports"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Exports
-                </NavLink>
-
-                <NavLink
-                  to="/audit-unlock-requests"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Audit Unlock Requests
-                </NavLink>
-              </>
-            )}
-
-            {isAdmin && (
-              <>
-                <p style={sectionTitleStyle}>Admin</p>
-
-                <NavLink
-                  to="/users-settings"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Users & Settings
-                </NavLink>
-
-                <NavLink
-                  to="/activity-log"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Activity Log
-                </NavLink>
-
-                <NavLink
-                  to="/backup"
-                  style={linkStyle}
-                  onClick={closeMobileMenu}
-                >
-                  Backup & Restore
-                </NavLink>
-
-                {isSystemAdministrator && (
+                {section.items.map((item) => (
                   <NavLink
-                    to="/maintenance"
-                    style={linkStyle}
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === "/"}
+                    className={({ isActive }) =>
+                      `premium-nav-link ${isActive ? "active" : ""}`
+                    }
                     onClick={closeMobileMenu}
                   >
-                    System Maintenance
+                    <span className="premium-nav-icon">{item.icon}</span>
+                    <span className="premium-nav-text">{item.title}</span>
                   </NavLink>
-                )}
-              </>
-            )}
+                ))}
+              </div>
+            ))}
           </nav>
         </div>
 
-        <div
-          style={{
-            padding: "14px 18px 18px",
-            background: "#07182c",
-            borderTop: "1px solid rgba(255,255,255,0.12)",
-          }}
-        >
-          <p style={{ margin: 0, fontWeight: "900", color: "#ffffff" }}>
-            {displayName}
-          </p>
+        <div className="premium-user-panel">
+          <div className="premium-user-row">
+            <div className="premium-avatar">{userInitials}</div>
 
-          <span
-            style={{
-              display: "block",
-              marginTop: "4px",
-              marginBottom: "10px",
-              fontSize: "13px",
-              color: "rgba(255,255,255,0.65)",
-              textTransform: "uppercase",
-              fontWeight: "900",
-            }}
-          >
-            {user?.role || "role"}
-          </span>
+            <div style={{ minWidth: 0 }}>
+              <p className="premium-user-name">{displayName}</p>
+              <span className="premium-user-role">{user?.role || "role"}</span>
+            </div>
+          </div>
 
-          <div
-            style={{
-              marginBottom: "12px",
-              padding: "10px",
-              borderRadius: "12px",
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(255,255,255,0.10)",
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                color: "#e0ba28",
-                fontSize: "10px",
-                fontWeight: "950",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              Working Branch
-            </p>
-
-            <p
-              style={{
-                margin: "4px 0 0",
-                color: "#ffffff",
-                fontSize: "12px",
-                fontWeight: "900",
-                lineHeight: 1.35,
-              }}
-            >
-              {currentStoreName}
-            </p>
-
-            <p
-              style={{
-                margin: "4px 0 0",
-                color: "rgba(255,255,255,0.62)",
-                fontSize: "11px",
-                fontWeight: "800",
-                lineHeight: 1.3,
-              }}
-            >
+          <div className="premium-working-branch">
+            <label>Working Branch</label>
+            <strong>{currentStoreName}</strong>
+            <span>
               {currentStoreCode} • {storeAccessLabel}
-            </p>
+            </span>
           </div>
 
           <InstallAppButton />
 
           <button
             type="button"
+            className="premium-side-action premium-password-button"
             onClick={goToChangePassword}
-            style={{
-              width: "100%",
-              border: "none",
-              borderRadius: "9px",
-              padding: "11px 12px",
-              background: "#164777",
-              color: "#ffffff",
-              fontWeight: "900",
-              cursor: "pointer",
-              marginBottom: "10px",
-            }}
           >
             Change Password
           </button>
 
           <button
             type="button"
+            className="premium-side-action premium-logout-button"
             onClick={handleLogout}
-            style={{
-              width: "100%",
-              border: "none",
-              borderRadius: "9px",
-              padding: "11px 12px",
-              background: "#c3261d",
-              color: "#ffffff",
-              fontWeight: "900",
-              cursor: "pointer",
-            }}
           >
             Logout
           </button>
         </div>
       </aside>
 
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          width: "100%",
-          height: "100dvh",
-          overflowY: "auto",
-          overflowX: "auto",
-          padding: isMobile ? "82px 14px 24px" : "32px",
-        }}
-      >
+      <main className="premium-main">
+        {!isMobile && (
+          <div className="premium-main-topbar">
+            <div style={{ minWidth: 0 }}>
+              <h1>
+                {currentStoreCode} — {currentStoreName}
+              </h1>
+              <p>
+                {currentStoreLocation} • {displayName} • {storeAccessLabel}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="premium-topbar-button premium-topbar-command"
+              onClick={openCommandCenter}
+            >
+              🔎 Smart Command
+            </button>
+
+            <button
+              type="button"
+              className="premium-topbar-button premium-topbar-logout"
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          </div>
+        )}
+
         <Outlet />
       </main>
 
       {commandOpen && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 3000,
-            background: "rgba(7, 24, 44, 0.72)",
-            backdropFilter: "blur(8px)",
-            display: "grid",
-            placeItems: isMobile ? "start center" : "center",
-            padding: isMobile ? "78px 14px 20px" : "24px",
-          }}
+          className="premium-command-overlay"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closeCommandCenter();
             }
           }}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "760px",
-              maxHeight: isMobile ? "calc(100dvh - 100px)" : "82vh",
-              background: "#ffffff",
-              borderRadius: isMobile ? "20px" : "26px",
-              boxShadow: "0 30px 90px rgba(0,0,0,0.35)",
-              overflow: "hidden",
-              display: "grid",
-              gridTemplateRows: "auto auto minmax(0, 1fr)",
-            }}
-          >
-            <div
-              style={{
-                padding: isMobile ? "16px" : "20px",
-                background:
-                  "linear-gradient(135deg, #07182c 0%, #0d2f55 60%, #111827 100%)",
-                color: "#ffffff",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) auto",
-                  gap: "12px",
-                  alignItems: "start",
-                }}
-              >
+          <div className="premium-command-modal">
+            <div className="premium-command-header">
+              <div className="premium-command-header-row">
                 <div style={{ minWidth: 0 }}>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "#e0ba28",
-                      fontSize: "12px",
-                      fontWeight: "950",
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Smart Navigation
-                  </p>
-
-                  <h2
-                    style={{
-                      margin: "5px 0 0",
-                      fontSize: isMobile ? "22px" : "28px",
-                      fontWeight: "950",
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    Smart Command Center
-                  </h2>
-
-                  <p
-                    style={{
-                      margin: "8px 0 0",
-                      color: "rgba(255,255,255,0.75)",
-                      lineHeight: 1.5,
-                      fontSize: "14px",
-                    }}
-                  >
+                  <p className="premium-command-eyebrow">Smart Navigation</p>
+                  <h2>Smart Command Center</h2>
+                  <p>
                     Search any page and jump there quickly. On desktop, press
                     Ctrl + K anytime.
                   </p>
 
-                  <div
-                    style={{
-                      marginTop: "12px",
-                      display: "inline-flex",
-                      maxWidth: "100%",
-                      alignItems: "center",
-                      gap: "8px",
-                      padding: "8px 10px",
-                      borderRadius: "999px",
-                      background: "rgba(224, 186, 40, 0.14)",
-                      border: "1px solid rgba(224, 186, 40, 0.28)",
-                      color: "#ffffff",
-                      fontSize: "12px",
-                      fontWeight: "900",
-                    }}
-                  >
+                  <div className="premium-command-store-pill">
                     <span>🏬</span>
-                    <span
-                      style={{
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <span>
                       {currentStoreCode} — {currentStoreName}
                     </span>
                   </div>
@@ -1243,188 +1438,71 @@ export default function Layout() {
 
                 <button
                   type="button"
+                  className="premium-command-close"
                   onClick={closeCommandCenter}
-                  style={{
-                    border: "none",
-                    borderRadius: "11px",
-                    background: "rgba(255,255,255,0.12)",
-                    color: "#ffffff",
-                    padding: "10px 12px",
-                    cursor: "pointer",
-                    fontWeight: "950",
-                    flexShrink: 0,
-                  }}
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            <div
-              style={{
-                padding: isMobile ? "14px" : "16px",
-                borderBottom: "1px solid #e2e8f0",
-                background: "#f8fafc",
-              }}
-            >
+            <div className="premium-command-search">
               <input
                 autoFocus
                 value={commandQuery}
                 onChange={(event) => setCommandQuery(event.target.value)}
-                placeholder="Type sale, product, debt, expense, audit, report..."
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  border: "2px solid #dbe3ef",
-                  borderRadius: "16px",
-                  padding: "14px 16px",
-                  fontSize: "16px",
-                  fontWeight: "800",
-                  outline: "none",
-                  background: "#ffffff",
-                  color: "#07182c",
-                }}
+                placeholder="Type sale, product, debt, stock, SMS, audit, backup..."
               />
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  flexWrap: "wrap",
-                  marginTop: "10px",
-                }}
-              >
-                {["sale", "product", "debt", "expense", "audit", "report"].map(
-                  (sample) => (
-                    <button
-                      key={sample}
-                      type="button"
-                      onClick={() => setCommandQuery(sample)}
-                      style={{
-                        border: "1px solid #dbe3ef",
-                        background: "#ffffff",
-                        color: "#164777",
-                        borderRadius: "999px",
-                        padding: "6px 10px",
-                        cursor: "pointer",
-                        fontWeight: "900",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {sample}
-                    </button>
-                  )
-                )}
+              <div className="premium-command-chips">
+                {[
+                  "sale",
+                  "product",
+                  "stock",
+                  "sms",
+                  "debt",
+                  "audit",
+                  "backup",
+                ].map((sample) => (
+                  <button
+                    key={sample}
+                    type="button"
+                    className="premium-command-chip"
+                    onClick={() => setCommandQuery(sample)}
+                  >
+                    {sample}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div
-              style={{
-                minHeight: 0,
-                overflowY: "auto",
-                padding: isMobile ? "12px" : "14px",
-                background: "#ffffff",
-              }}
-            >
+            <div className="premium-command-list">
               {filteredCommandItems.length === 0 ? (
-                <div
-                  style={{
-                    padding: "24px",
-                    borderRadius: "16px",
-                    background: "#f8fafc",
-                    color: "#64748b",
-                    textAlign: "center",
-                    fontWeight: "800",
-                    border: "1px dashed #cbd5e1",
-                  }}
-                >
+                <div className="premium-empty-command">
                   No matching command found.
                 </div>
               ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "10px",
-                  }}
-                >
-                  {filteredCommandItems.map((item) => (
-                    <button
-                      key={`${item.group}-${item.path}-${item.title}`}
-                      type="button"
-                      onClick={() => runCommand(item.path)}
-                      style={{
-                        width: "100%",
-                        display: "grid",
-                        gridTemplateColumns: isMobile
-                          ? "42px minmax(0, 1fr)"
-                          : "44px minmax(0, 1fr) auto",
-                        gap: "12px",
-                        alignItems: "center",
-                        border: "1px solid #e2e8f0",
-                        background: "#ffffff",
-                        borderRadius: "16px",
-                        padding: "12px",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        color: "#07182c",
-                        boxShadow: "0 8px 20px rgba(15,23,42,0.05)",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: isMobile ? "42px" : "44px",
-                          height: isMobile ? "42px" : "44px",
-                          borderRadius: "14px",
-                          background: "#f1f5f9",
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: "22px",
-                        }}
-                      >
-                        {item.icon}
-                      </span>
+                filteredCommandItems.map((item) => (
+                  <button
+                    key={`${item.group}-${item.path}-${item.title}`}
+                    type="button"
+                    className="premium-command-item"
+                    onClick={() => runCommand(item.path)}
+                  >
+                    <span className="premium-command-item-icon">
+                      {item.icon}
+                    </span>
 
-                      <span style={{ minWidth: 0 }}>
-                        <strong
-                          style={{
-                            display: "block",
-                            fontSize: "15px",
-                            fontWeight: "950",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {item.title}
-                        </strong>
+                    <span style={{ minWidth: 0 }}>
+                      <strong>{item.title}</strong>
+                      <small>
+                        {item.group} • {item.description}
+                      </small>
+                    </span>
 
-                        <small
-                          style={{
-                            display: "block",
-                            marginTop: "3px",
-                            color: "#64748b",
-                            fontWeight: "700",
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {item.description}
-                        </small>
-                      </span>
-
-                      {!isMobile && (
-                        <span
-                          style={{
-                            color: "#94a3b8",
-                            fontWeight: "950",
-                            fontSize: "18px",
-                          }}
-                        >
-                          →
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                    <span className="premium-command-arrow">→</span>
+                  </button>
+                ))
               )}
             </div>
           </div>
