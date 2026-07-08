@@ -1,617 +1,548 @@
-import { useEffect, useState } from "react";
-import axiosClient from "../api/axiosClient";
-import { useAuth } from "../context/AuthContext";
+const express = require("express");
 
-export default function ReportsPage() {
-  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+const { pool } = require("../config/db");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { requireRole } = require("../middleware/roleMiddleware");
 
-  const currentStoreCode =
-    branchCode ||
-    user?.branch_code ||
-    user?.selected_branch?.branch_code ||
-    user?.selected_branch?.code ||
-    "STORE";
+const router = express.Router();
 
-  const currentStoreName =
-    branchName ||
-    user?.branch_name ||
-    user?.selected_branch?.branch_name ||
-    user?.selected_branch?.name ||
-    "Selected Store";
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
 
-  const currentStoreLocation =
-    branchLocation ||
-    user?.branch_location ||
-    user?.selected_branch?.branch_location ||
-    user?.selected_branch?.location ||
-    "";
-
-  const [summary, setSummary] = useState(null);
-  const [topProducts, setTopProducts] = useState([]);
-  const [paymentBreakdown, setPaymentBreakdown] = useState([]);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-
-  const [stockTransferSummary, setStockTransferSummary] = useState(null);
-  const [stockAdjustmentSummary, setStockAdjustmentSummary] = useState(null);
-  const [recentStockTransfers, setRecentStockTransfers] = useState([]);
-  const [recentStockAdjustments, setRecentStockAdjustments] = useState([]);
-
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
-  const [error, setError] = useState("");
-
-  async function loadReports(customFilters = null) {
-    setError("");
-
-    const filters = customFilters || {
-      from,
-      to,
-    };
-
-    try {
-      const [summaryRes, lowStockRes] = await Promise.all([
-        axiosClient.get("/reports/summary", {
-          params: filters,
-        }),
-        axiosClient.get("/reports/low-stock"),
-      ]);
-
-      setSummary(summaryRes.data.summary);
-      setTopProducts(summaryRes.data.top_products || []);
-      setPaymentBreakdown(summaryRes.data.payment_breakdown || []);
-      setLowStockProducts(lowStockRes.data.products || []);
-
-      setStockTransferSummary(summaryRes.data.stock_transfer_summary || null);
-      setStockAdjustmentSummary(
-        summaryRes.data.stock_adjustment_summary || null
-      );
-      setRecentStockTransfers(summaryRes.data.recent_stock_transfers || []);
-      setRecentStockAdjustments(summaryRes.data.recent_stock_adjustments || []);
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to load reports.");
-    }
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
   }
 
-  useEffect(() => {
-    loadReports({
-      from: "",
-      to: "",
-    });
-    // Reload reports when the selected store changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId]);
-
-  function formatMoney(value) {
-    return `GHS ${Number(value || 0).toFixed(2)}`;
-  }
-
-  function formatNumber(value) {
-    return Number(value || 0).toLocaleString();
-  }
-
-  function formatDateTime(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleString();
-  }
-
-  function formatStatus(value) {
-    return String(value || "-").replaceAll("_", " ").toUpperCase();
-  }
-
-  function formatAdjustmentType(value) {
-    const types = {
-      increase: "Increase",
-      decrease: "Decrease",
-      set: "Set Stock",
-    };
-
-    return types[String(value || "").toLowerCase()] || value || "-";
-  }
-
-  function getTransferDirection(transfer) {
-    if (Number(transfer?.from_branch_id) === Number(branchId)) {
-      return "OUT";
-    }
-
-    if (Number(transfer?.to_branch_id) === Number(branchId)) {
-      return "IN";
-    }
-
-    return "-";
-  }
-
-  function clearFilters() {
-    setFrom("");
-    setTo("");
-
-    loadReports({
-      from: "",
-      to: "",
-    });
-  }
-
-  const totalBeforeDiscount =
-    summary?.total_before_discount ??
-    summary?.total_subtotal_amount ??
-    summary?.total_subtotal ??
-    0;
-
-  const totalDiscount =
-    summary?.total_discount_amount ?? summary?.total_discount ?? 0;
-
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Reports</h1>
-          <p>
-            Sales, discount, profit, debts, stock adjustments and stock transfer
-            reports for{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-          </p>
-        </div>
-
-        <button type="button" onClick={() => loadReports()}>
-          Refresh
-        </button>
-      </div>
-
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Sales summary, profit, debts, payment breakdown, top products,
-          low-stock reports, stock adjustments and stock transfers are filtered
-          to this selected store only.
-        </small>
-      </div>
-
-      {error && <div className="error-box">{error}</div>}
-
-      <div className="section-card">
-        <h2>Report Filter - {currentStoreCode}</h2>
-
-        <div className="filter-grid">
-          <div>
-            <label>From Date</label>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-            />
-          </div>
-
-          <div>
-            <label>To Date</label>
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-            />
-          </div>
-
-          <div className="filter-actions">
-            <button type="button" onClick={() => loadReports()}>
-              Apply Filter
-            </button>
-
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={clearFilters}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="cards-grid reports-grid">
-        <div className="stat-card">
-          <span>{currentStoreCode} Before Discount</span>
-          <strong>{formatMoney(totalBeforeDiscount)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Total Discount</span>
-          <strong>{formatMoney(totalDiscount)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Total Sales</span>
-          <strong>{formatMoney(summary?.total_sales_amount)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Gross Profit</span>
-          <strong>{formatMoney(summary?.gross_profit)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Expenses</span>
-          <strong>{formatMoney(summary?.total_expenses)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Net Profit</span>
-          <strong>{formatMoney(summary?.net_profit)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Amount Paid</span>
-          <strong>{formatMoney(summary?.total_amount_paid)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Sales Balance</span>
-          <strong>{formatMoney(summary?.total_sales_balance)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Outstanding Debts</span>
-          <strong>{formatMoney(summary?.outstanding_debts)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Low Stock Items</span>
-          <strong>{summary?.low_stock_count || 0}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Transfers Out</span>
-          <strong>
-            {formatNumber(stockTransferSummary?.transfer_out_count)}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Transfers In</span>
-          <strong>{formatNumber(stockTransferSummary?.transfer_in_count)}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Qty Transferred Out</span>
-          <strong>
-            {formatNumber(stockTransferSummary?.total_transfer_out_quantity)}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Qty Received In</span>
-          <strong>
-            {formatNumber(stockTransferSummary?.total_transfer_in_quantity)}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Stock Adjustments</span>
-          <strong>
-            {formatNumber(stockAdjustmentSummary?.total_adjustment_count)}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Damaged / Lost Records</span>
-          <strong>
-            {formatNumber(
-              Number(stockAdjustmentSummary?.damaged_count || 0) +
-                Number(stockAdjustmentSummary?.lost_count || 0)
-            )}
-          </strong>
-        </div>
-      </div>
-
-      <div className="two-column reports-two-column">
-        <div className="section-card">
-          <h2>Top Products - {currentStoreCode}</h2>
-
-          {topProducts.length === 0 ? (
-            <p>No product sales found for {currentStoreCode}.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Qty Sold</th>
-                  <th>Line Revenue</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {topProducts.map((product) => (
-                  <tr key={product.product_id}>
-                    <td>{product.product_name}</td>
-                    <td>{product.quantity_sold}</td>
-                    <td>{formatMoney(product.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="section-card">
-          <h2>Payment Breakdown - {currentStoreCode}</h2>
-
-          {paymentBreakdown.length === 0 ? (
-            <p>No payment records found for {currentStoreCode}.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Payment Type</th>
-                  <th>Count</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {paymentBreakdown.map((payment) => (
-                  <tr key={payment.payment_type}>
-                    <td>{payment.payment_type}</td>
-                    <td>{payment.count}</td>
-                    <td>{formatMoney(payment.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div className="two-column reports-two-column">
-        <div className="section-card">
-          <h2>Stock Transfer Summary - {currentStoreCode}</h2>
-
-          <table>
-            <tbody>
-              <tr>
-                <th>Total Transfers</th>
-                <td>
-                  {formatNumber(stockTransferSummary?.total_transfer_count)}
-                </td>
-              </tr>
-              <tr>
-                <th>Requested</th>
-                <td>{formatNumber(stockTransferSummary?.requested_count)}</td>
-              </tr>
-              <tr>
-                <th>Approved</th>
-                <td>{formatNumber(stockTransferSummary?.approved_count)}</td>
-              </tr>
-              <tr>
-                <th>Dispatched</th>
-                <td>{formatNumber(stockTransferSummary?.dispatched_count)}</td>
-              </tr>
-              <tr>
-                <th>Received</th>
-                <td>{formatNumber(stockTransferSummary?.received_count)}</td>
-              </tr>
-              <tr>
-                <th>Cancelled</th>
-                <td>{formatNumber(stockTransferSummary?.cancelled_count)}</td>
-              </tr>
-              <tr>
-                <th>Rejected</th>
-                <td>{formatNumber(stockTransferSummary?.rejected_count)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div className="section-card">
-          <h2>Stock Adjustment Summary - {currentStoreCode}</h2>
-
-          <table>
-            <tbody>
-              <tr>
-                <th>Total Adjustments</th>
-                <td>
-                  {formatNumber(stockAdjustmentSummary?.total_adjustment_count)}
-                </td>
-              </tr>
-              <tr>
-                <th>Increase Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.increase_count)}</td>
-              </tr>
-              <tr>
-                <th>Decrease Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.decrease_count)}</td>
-              </tr>
-              <tr>
-                <th>Set Exact Stock Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.set_count)}</td>
-              </tr>
-              <tr>
-                <th>Total Qty Increased</th>
-                <td>
-                  {formatNumber(
-                    stockAdjustmentSummary?.total_increased_quantity
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th>Total Qty Decreased</th>
-                <td>
-                  {formatNumber(
-                    stockAdjustmentSummary?.total_decreased_quantity
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th>Damaged Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.damaged_count)}</td>
-              </tr>
-              <tr>
-                <th>Lost Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.lost_count)}</td>
-              </tr>
-              <tr>
-                <th>Physical Count Records</th>
-                <td>
-                  {formatNumber(stockAdjustmentSummary?.physical_count_count)}
-                </td>
-              </tr>
-              <tr>
-                <th>Wrong Entry Records</th>
-                <td>{formatNumber(stockAdjustmentSummary?.wrong_entry_count)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="section-card">
-        <h2>Recent Stock Transfers - {currentStoreCode}</h2>
-
-        {recentStockTransfers.length === 0 ? (
-          <p>No stock transfer records found for this filter.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Transfer</th>
-                <th>Direction</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Status</th>
-                <th>Items</th>
-                <th>Requested Qty</th>
-                <th>Dispatched Qty</th>
-                <th>Received Qty</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {recentStockTransfers.map((transfer) => (
-                <tr key={transfer.id}>
-                  <td>
-                    <strong>{transfer.transfer_number}</strong>
-                  </td>
-                  <td>{getTransferDirection(transfer)}</td>
-                  <td>
-                    {transfer.from_branch_code} — {transfer.from_branch_name}
-                  </td>
-                  <td>
-                    {transfer.to_branch_code} — {transfer.to_branch_name}
-                  </td>
-                  <td>{formatStatus(transfer.status)}</td>
-                  <td>{formatNumber(transfer.item_count)}</td>
-                  <td>{formatNumber(transfer.total_requested_quantity)}</td>
-                  <td>{formatNumber(transfer.total_dispatched_quantity)}</td>
-                  <td>{formatNumber(transfer.total_received_quantity)}</td>
-                  <td>{formatDateTime(transfer.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="section-card">
-        <h2>Recent Stock Adjustments - {currentStoreCode}</h2>
-
-        {recentStockAdjustments.length === 0 ? (
-          <p>No stock adjustment records found for this filter.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Product</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Old</th>
-                <th>New</th>
-                <th>Reason</th>
-                <th>By</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {recentStockAdjustments.map((adjustment) => (
-                <tr key={adjustment.id}>
-                  <td>{formatDateTime(adjustment.adjusted_at)}</td>
-                  <td>
-                    <strong>{adjustment.product_name || "-"}</strong>
-                    <br />
-                    <small>
-                      {[adjustment.category, adjustment.size, adjustment.barcode]
-                        .filter(Boolean)
-                        .join(" • ") || "-"}
-                    </small>
-                  </td>
-                  <td>{formatAdjustmentType(adjustment.adjustment_type)}</td>
-                  <td>{formatNumber(adjustment.quantity)}</td>
-                  <td>{formatNumber(adjustment.old_quantity)}</td>
-                  <td>{formatNumber(adjustment.new_quantity)}</td>
-                  <td>{adjustment.reason || "-"}</td>
-                  <td>{adjustment.adjusted_by_name || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="section-card">
-        <h2>Low Stock Report - {currentStoreCode}</h2>
-
-        {lowStockProducts.length === 0 ? (
-          <p>No low-stock products at the moment for {currentStoreCode}.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Quantity</th>
-                <th>Low Stock Level</th>
-                <th>Selling Price</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {lowStockProducts.map((product) => (
-                <tr key={product.id} className="low-stock-row">
-                  <td>
-                    <strong>{product.name}</strong>
-                    <br />
-                    <small>{product.size}</small>
-                  </td>
-
-                  <td>{product.category}</td>
-                  <td>{product.quantity}</td>
-                  <td>{product.low_stock_threshold}</td>
-                  <td>{formatMoney(product.selling_price)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+  return branchId;
 }
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function buildDateFilter(alias, from, to, params) {
+  let filter = "";
+
+  if (from) {
+    filter += ` AND DATE(${alias}.created_at) >= ?`;
+    params.push(from);
+  }
+
+  if (to) {
+    filter += ` AND DATE(${alias}.created_at) <= ?`;
+    params.push(to);
+  }
+
+  return filter;
+}
+
+function buildCustomDateFilter(alias, column, from, to, params) {
+  let filter = "";
+
+  if (from) {
+    filter += ` AND DATE(${alias}.${column}) >= ?`;
+    params.push(from);
+  }
+
+  if (to) {
+    filter += ` AND DATE(${alias}.${column}) <= ?`;
+    params.push(to);
+  }
+
+  return filter;
+}
+
+function buildExpenseDateFilter(alias, from, to, params) {
+  let filter = "";
+
+  if (from) {
+    filter += ` AND ${alias}.expense_date >= ?`;
+    params.push(from);
+  }
+
+  if (to) {
+    filter += ` AND ${alias}.expense_date <= ?`;
+    params.push(to);
+  }
+
+  return filter;
+}
+
+function activeCompletedSalesFilter(alias = "s") {
+  return `
+    ${alias}.sale_status = 'completed'
+    AND COALESCE(${alias}.is_voided, 0) = 0
+  `;
+}
+
+// GET /api/reports/summary
+router.get(
+  "/summary",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+
+      const salesParams = [branchId];
+      const salesDateFilter = buildDateFilter("s", from, to, salesParams);
+
+      const [salesSummaryRows] = await pool.query(
+        `SELECT
+          COUNT(*) AS total_sales_count,
+          COALESCE(SUM(s.subtotal), 0) AS total_before_discount,
+          COALESCE(SUM(s.discount_amount), 0) AS total_discount_amount,
+          COALESCE(SUM(s.tax_amount), 0) AS total_tax_amount,
+          COALESCE(SUM(s.total), 0) AS total_sales_amount,
+          COALESCE(SUM(s.amount_paid), 0) AS total_amount_paid,
+          COALESCE(SUM(s.balance), 0) AS total_sales_balance
+         FROM sales s
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
+         ${salesDateFilter}`,
+        salesParams
+      );
+
+      const profitParams = [branchId];
+      const profitDateFilter = buildDateFilter("s", from, to, profitParams);
+
+      const [profitRows] = await pool.query(
+        `SELECT
+          COALESCE(SUM(s.subtotal), 0) AS total_before_discount,
+          COALESCE(SUM(s.discount_amount), 0) AS total_discount_amount,
+          COALESCE(SUM(s.total - s.tax_amount), 0) AS net_sales_before_tax,
+          COALESCE(SUM(sale_costs.total_cost), 0) AS total_cost,
+          COALESCE(
+            SUM((s.total - s.tax_amount) - sale_costs.total_cost),
+            0
+          ) AS gross_profit
+         FROM sales s
+         LEFT JOIN (
+          SELECT
+            sale_id,
+            COALESCE(SUM(cost_price_at_sale * quantity), 0) AS total_cost
+          FROM sale_items
+          GROUP BY sale_id
+         ) sale_costs ON sale_costs.sale_id = s.id
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
+         ${profitDateFilter}`,
+        profitParams
+      );
+
+      const expenseParams = [branchId];
+      const expenseDateFilter = buildExpenseDateFilter(
+        "e",
+        from,
+        to,
+        expenseParams
+      );
+
+      const [expenseRows] = await pool.query(
+        `SELECT
+          COALESCE(SUM(e.amount), 0) AS total_expenses
+         FROM expenses e
+         WHERE e.branch_id = ?
+         ${expenseDateFilter}`,
+        expenseParams
+      );
+
+      const debtParams = [branchId, branchId];
+      const debtDateFilter = buildDateFilter("s", from, to, debtParams);
+
+      const [debtRows] = await pool.query(
+        `SELECT
+          COALESCE(SUM(d.balance), 0) AS outstanding_debts,
+          COUNT(*) AS active_debt_count
+         FROM debts d
+         INNER JOIN sales s ON d.sale_id = s.id
+         WHERE d.branch_id = ?
+         AND s.branch_id = ?
+         AND d.status != 'paid'
+         AND ${activeCompletedSalesFilter("s")}
+         ${debtDateFilter}`,
+        debtParams
+      );
+
+      const [lowStockRows] = await pool.query(
+        `SELECT COUNT(*) AS low_stock_count
+         FROM products
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         AND quantity <= low_stock_threshold`,
+        [branchId]
+      );
+
+      const topProductsParams = [branchId];
+      const topProductsDateFilter = buildDateFilter(
+        "s",
+        from,
+        to,
+        topProductsParams
+      );
+
+      const [topProducts] = await pool.query(
+        `SELECT
+          si.product_id,
+          si.product_name,
+          SUM(si.quantity) AS quantity_sold,
+          SUM(si.line_total) AS revenue
+         FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
+         ${topProductsDateFilter}
+         GROUP BY si.product_id, si.product_name
+         ORDER BY quantity_sold DESC, revenue DESC
+         LIMIT 10`,
+        topProductsParams
+      );
+
+      const paymentParams = [branchId];
+      const paymentDateFilter = buildDateFilter("s", from, to, paymentParams);
+
+      const [paymentBreakdown] = await pool.query(
+        `SELECT
+          s.payment_type,
+          COUNT(*) AS count,
+          COALESCE(SUM(s.total), 0) AS total
+         FROM sales s
+         WHERE s.branch_id = ?
+         AND ${activeCompletedSalesFilter("s")}
+         ${paymentDateFilter}
+         GROUP BY s.payment_type
+         ORDER BY total DESC`,
+        paymentParams
+      );
+
+      const transferParams = [
+        branchId,
+        branchId,
+        branchId,
+        branchId,
+        branchId,
+        branchId,
+      ];
+
+      const transferDateFilter = buildDateFilter(
+        "st",
+        from,
+        to,
+        transferParams
+      );
+
+      const [stockTransferRows] = await pool.query(
+        `SELECT
+          COUNT(*) AS total_transfer_count,
+
+          COALESCE(SUM(CASE WHEN st.from_branch_id = ? THEN 1 ELSE 0 END), 0) AS transfer_out_count,
+          COALESCE(SUM(CASE WHEN st.to_branch_id = ? THEN 1 ELSE 0 END), 0) AS transfer_in_count,
+
+          COALESCE(SUM(CASE WHEN st.from_branch_id = ? THEN transfer_totals.total_requested_quantity ELSE 0 END), 0) AS total_transfer_out_quantity,
+          COALESCE(SUM(CASE WHEN st.to_branch_id = ? THEN transfer_totals.total_received_quantity ELSE 0 END), 0) AS total_transfer_in_quantity,
+
+          COALESCE(SUM(CASE WHEN st.status = 'requested' THEN 1 ELSE 0 END), 0) AS requested_count,
+          COALESCE(SUM(CASE WHEN st.status = 'approved' THEN 1 ELSE 0 END), 0) AS approved_count,
+          COALESCE(SUM(CASE WHEN st.status = 'dispatched' THEN 1 ELSE 0 END), 0) AS dispatched_count,
+          COALESCE(SUM(CASE WHEN st.status = 'received' THEN 1 ELSE 0 END), 0) AS received_count,
+          COALESCE(SUM(CASE WHEN st.status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_count,
+          COALESCE(SUM(CASE WHEN st.status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected_count
+
+         FROM stock_transfers st
+         LEFT JOIN (
+          SELECT
+            transfer_id,
+            COALESCE(SUM(requested_quantity), 0) AS total_requested_quantity,
+            COALESCE(SUM(dispatched_quantity), 0) AS total_dispatched_quantity,
+            COALESCE(SUM(received_quantity), 0) AS total_received_quantity
+          FROM stock_transfer_items
+          GROUP BY transfer_id
+         ) transfer_totals ON transfer_totals.transfer_id = st.id
+
+         WHERE (st.from_branch_id = ? OR st.to_branch_id = ?)
+         ${transferDateFilter}`,
+        transferParams
+      );
+
+      const recentTransferParams = [branchId, branchId];
+      const recentTransferDateFilter = buildDateFilter(
+        "st",
+        from,
+        to,
+        recentTransferParams
+      );
+
+      const [recentStockTransfers] = await pool.query(
+        `SELECT
+          st.id,
+          st.transfer_number,
+          st.from_branch_id,
+          st.to_branch_id,
+          st.status,
+          st.requested_at,
+          st.approved_at,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+
+          fb.branch_code AS from_branch_code,
+          fb.name AS from_branch_name,
+
+          tb.branch_code AS to_branch_code,
+          tb.name AS to_branch_name,
+
+          u.full_name AS requested_by_name,
+
+          COUNT(sti.id) AS item_count,
+          COALESCE(SUM(sti.requested_quantity), 0) AS total_requested_quantity,
+          COALESCE(SUM(sti.dispatched_quantity), 0) AS total_dispatched_quantity,
+          COALESCE(SUM(sti.received_quantity), 0) AS total_received_quantity
+
+         FROM stock_transfers st
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users u ON u.id = st.requested_by
+         LEFT JOIN stock_transfer_items sti ON sti.transfer_id = st.id
+
+         WHERE (st.from_branch_id = ? OR st.to_branch_id = ?)
+         ${recentTransferDateFilter}
+
+         GROUP BY st.id
+         ORDER BY st.id DESC
+         LIMIT 10`,
+        recentTransferParams
+      );
+
+      const adjustmentParams = [branchId];
+      const adjustmentDateFilter = buildCustomDateFilter(
+        "sa",
+        "adjusted_at",
+        from,
+        to,
+        adjustmentParams
+      );
+
+      const [stockAdjustmentRows] = await pool.query(
+        `SELECT
+          COUNT(*) AS total_adjustment_count,
+
+          COALESCE(SUM(CASE WHEN sa.adjustment_type = 'increase' THEN 1 ELSE 0 END), 0) AS increase_count,
+          COALESCE(SUM(CASE WHEN sa.adjustment_type = 'decrease' THEN 1 ELSE 0 END), 0) AS decrease_count,
+          COALESCE(SUM(CASE WHEN sa.adjustment_type = 'set' THEN 1 ELSE 0 END), 0) AS set_count,
+
+          COALESCE(SUM(CASE WHEN sa.adjustment_type = 'increase' THEN sa.quantity ELSE 0 END), 0) AS total_increased_quantity,
+          COALESCE(SUM(CASE WHEN sa.adjustment_type = 'decrease' THEN sa.quantity ELSE 0 END), 0) AS total_decreased_quantity,
+
+          COALESCE(SUM(CASE WHEN LOWER(sa.reason) LIKE '%damaged%' THEN 1 ELSE 0 END), 0) AS damaged_count,
+          COALESCE(SUM(CASE WHEN LOWER(sa.reason) LIKE '%lost%' THEN 1 ELSE 0 END), 0) AS lost_count,
+          COALESCE(SUM(CASE WHEN LOWER(sa.reason) LIKE '%physical%' OR LOWER(sa.reason) LIKE '%count%' THEN 1 ELSE 0 END), 0) AS physical_count_count,
+          COALESCE(SUM(CASE WHEN LOWER(sa.reason) LIKE '%wrong%' THEN 1 ELSE 0 END), 0) AS wrong_entry_count
+
+         FROM stock_adjustments sa
+         WHERE sa.branch_id = ?
+         ${adjustmentDateFilter}`,
+        adjustmentParams
+      );
+
+      const recentAdjustmentParams = [branchId];
+      const recentAdjustmentDateFilter = buildCustomDateFilter(
+        "sa",
+        "adjusted_at",
+        from,
+        to,
+        recentAdjustmentParams
+      );
+
+      const [recentStockAdjustments] = await pool.query(
+        `SELECT
+          sa.id,
+          sa.branch_id,
+          sa.product_id,
+          sa.adjustment_type,
+          sa.quantity,
+          sa.old_quantity,
+          sa.new_quantity,
+          sa.reason,
+          sa.adjusted_at,
+
+          p.name AS product_name,
+          p.barcode,
+          p.category,
+          p.size,
+
+          u.full_name AS adjusted_by_name
+
+         FROM stock_adjustments sa
+         LEFT JOIN products p ON p.id = sa.product_id
+         LEFT JOIN users u ON u.id = sa.adjusted_by
+         WHERE sa.branch_id = ?
+         ${recentAdjustmentDateFilter}
+         ORDER BY sa.adjusted_at DESC, sa.id DESC
+         LIMIT 10`,
+        recentAdjustmentParams
+      );
+
+      const salesSummary = salesSummaryRows[0] || {};
+      const profitSummary = profitRows[0] || {};
+      const expenseSummary = expenseRows[0] || {};
+      const debtSummary = debtRows[0] || {};
+      const lowStockSummary = lowStockRows[0] || {};
+      const stockTransferSummary = stockTransferRows[0] || {};
+      const stockAdjustmentSummary = stockAdjustmentRows[0] || {};
+
+      const grossProfit = Number(profitSummary.gross_profit || 0);
+      const totalExpenses = Number(expenseSummary.total_expenses || 0);
+      const netProfit = grossProfit - totalExpenses;
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        filters: {
+          branch_id: branchId,
+          from: from || null,
+          to: to || null,
+        },
+        summary: {
+          total_sales_count: Number(salesSummary.total_sales_count || 0),
+
+          total_before_discount: Number(
+            salesSummary.total_before_discount || 0
+          ),
+          total_subtotal_amount: Number(
+            salesSummary.total_before_discount || 0
+          ),
+          total_discount_amount: Number(
+            salesSummary.total_discount_amount || 0
+          ),
+          total_tax_amount: Number(salesSummary.total_tax_amount || 0),
+
+          total_sales_amount: Number(salesSummary.total_sales_amount || 0),
+          total_amount_paid: Number(salesSummary.total_amount_paid || 0),
+          total_sales_balance: Number(salesSummary.total_sales_balance || 0),
+
+          net_sales_before_tax: Number(
+            profitSummary.net_sales_before_tax || 0
+          ),
+          total_cost: Number(profitSummary.total_cost || 0),
+          gross_profit: grossProfit,
+          total_expenses: totalExpenses,
+          net_profit: netProfit,
+
+          outstanding_debts: Number(debtSummary.outstanding_debts || 0),
+          active_debt_count: Number(debtSummary.active_debt_count || 0),
+          low_stock_count: Number(lowStockSummary.low_stock_count || 0),
+        },
+        stock_transfer_summary: {
+          total_transfer_count: Number(
+            stockTransferSummary.total_transfer_count || 0
+          ),
+          transfer_out_count: Number(
+            stockTransferSummary.transfer_out_count || 0
+          ),
+          transfer_in_count: Number(
+            stockTransferSummary.transfer_in_count || 0
+          ),
+          total_transfer_out_quantity: Number(
+            stockTransferSummary.total_transfer_out_quantity || 0
+          ),
+          total_transfer_in_quantity: Number(
+            stockTransferSummary.total_transfer_in_quantity || 0
+          ),
+          requested_count: Number(stockTransferSummary.requested_count || 0),
+          approved_count: Number(stockTransferSummary.approved_count || 0),
+          dispatched_count: Number(stockTransferSummary.dispatched_count || 0),
+          received_count: Number(stockTransferSummary.received_count || 0),
+          cancelled_count: Number(stockTransferSummary.cancelled_count || 0),
+          rejected_count: Number(stockTransferSummary.rejected_count || 0),
+        },
+        stock_adjustment_summary: {
+          total_adjustment_count: Number(
+            stockAdjustmentSummary.total_adjustment_count || 0
+          ),
+          increase_count: Number(stockAdjustmentSummary.increase_count || 0),
+          decrease_count: Number(stockAdjustmentSummary.decrease_count || 0),
+          set_count: Number(stockAdjustmentSummary.set_count || 0),
+          total_increased_quantity: Number(
+            stockAdjustmentSummary.total_increased_quantity || 0
+          ),
+          total_decreased_quantity: Number(
+            stockAdjustmentSummary.total_decreased_quantity || 0
+          ),
+          damaged_count: Number(stockAdjustmentSummary.damaged_count || 0),
+          lost_count: Number(stockAdjustmentSummary.lost_count || 0),
+          physical_count_count: Number(
+            stockAdjustmentSummary.physical_count_count || 0
+          ),
+          wrong_entry_count: Number(
+            stockAdjustmentSummary.wrong_entry_count || 0
+          ),
+        },
+        top_products: topProducts,
+        payment_breakdown: paymentBreakdown,
+        recent_stock_transfers: recentStockTransfers,
+        recent_stock_adjustments: recentStockAdjustments,
+      });
+    } catch (error) {
+      console.error("Report summary error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message || "Something went wrong while generating report summary.",
+      });
+    }
+  }
+);
+
+// GET /api/reports/low-stock
+router.get(
+  "/low-stock",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+
+      const [products] = await pool.query(
+        `SELECT
+          id,
+          branch_id,
+          name,
+          size,
+          category,
+          quantity,
+          low_stock_threshold,
+          selling_price
+         FROM products
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         AND quantity <= low_stock_threshold
+         ORDER BY quantity ASC, name ASC`,
+        [branchId]
+      );
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        count: products.length,
+        products,
+      });
+    } catch (error) {
+      console.error("Low stock report error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message || "Something went wrong while fetching low-stock report.",
+      });
+    }
+  }
+);
+
+module.exports = router;
