@@ -270,8 +270,29 @@ export default function ProductsPage() {
     try {
       const response = await axiosClient.delete(`/products/${productId}`);
 
+      setProducts((currentProducts) =>
+        currentProducts.filter(
+          (product) => Number(product.id) !== Number(productId)
+        )
+      );
+
+      if (editingProductId && Number(editingProductId) === Number(productId)) {
+        cancelEdit();
+      }
+
+      if (stockProduct && Number(stockProduct.id) === Number(productId)) {
+        closeStockAdjustment();
+      }
+
+      if (ledgerProduct && Number(ledgerProduct.id) === Number(productId)) {
+        closeStockLedger();
+      }
+
       setMessage(response.data.message || "Product deleted successfully.");
-      await refreshPageData();
+
+      if (canAddOrEdit) {
+        await loadRecentStockAdjustments();
+      }
     } catch (error) {
       setError(error.response?.data?.message || "Failed to delete product.");
     }
