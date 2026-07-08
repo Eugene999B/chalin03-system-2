@@ -94,7 +94,8 @@ export default function HelpPage() {
       <div className="success-box">
         This system helps Chalin 03 manage sales, stock, debts, purchases,
         expenses, reports, receipts, audit controls, daily closing, stock
-        transfers, stock adjustments, SMS alerts and multi-store records.
+        transfers, stock adjustments, stock movement ledger, SMS alerts and
+        multi-store records.
       </div>
 
       <div style={gridStyle}>
@@ -127,7 +128,8 @@ export default function HelpPage() {
             <li>Print or download receipt after sale.</li>
             <li>Record debt payment when customer pays later.</li>
             <li>Record expenses, purchases and returns when needed.</li>
-            <li>Do Daily Closing for the selected store at the end of the day.</li>
+            <li>Use stock transfers when moving items between stores.</li>
+            <li>Use Daily Closing for the selected store at the end of the day.</li>
           </ol>
         </div>
 
@@ -166,8 +168,34 @@ export default function HelpPage() {
         </div>
 
         <div style={cardStyle}>
+          <span style={badgeStyle}>Stock Audit</span>
+          <h2>5. Product Stock Movement Ledger</h2>
+          <ol style={listStyle}>
+            <li>Go to Products.</li>
+            <li>Find the product you want to inspect.</li>
+            <li>Click View Ledger.</li>
+            <li>
+              The ledger shows how the product stock moved from opening stock to
+              current stock.
+            </li>
+            <li>
+              It includes purchases, sales, returns, stock adjustments, transfers
+              in and transfers out.
+            </li>
+            <li>
+              Use the running balance to understand why the current stock is what
+              it is.
+            </li>
+            <li>
+              This is useful when stock quantity is questioned during audit or
+              physical counting.
+            </li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
           <span style={badgeStyle}>Two Stores</span>
-          <h2>5. Stock Transfers Between Stores</h2>
+          <h2>6. Stock Transfers Between Stores</h2>
           <ol style={listStyle}>
             <li>Go to Stock Transfers.</li>
             <li>Select the source store and destination store.</li>
@@ -180,11 +208,16 @@ export default function HelpPage() {
               Download the Transfer Note PDF for printing or physical signing.
             </li>
           </ol>
+
+          <div className="warning-box" style={{ marginTop: "12px" }}>
+            Approval does not move stock. Dispatch reduces the source store.
+            Receive increases the destination store.
+          </div>
         </div>
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Sales</span>
-          <h2>6. New Sale</h2>
+          <h2>7. New Sale</h2>
           <ol style={listStyle}>
             <li>Go to New Sale.</li>
             <li>Confirm the selected store before selling.</li>
@@ -199,7 +232,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Customers</span>
-          <h2>7. Debts</h2>
+          <h2>8. Debts</h2>
           <ol style={listStyle}>
             <li>Credit sales automatically create debt records.</li>
             <li>Go to Debts to see unpaid customers for the selected store.</li>
@@ -212,7 +245,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Purchasing</span>
-          <h2>8. Purchases & Suppliers</h2>
+          <h2>9. Purchases & Suppliers</h2>
           <ol style={listStyle}>
             <li>Use Purchases when buying stock from suppliers.</li>
             <li>Confirm the selected store before saving a purchase.</li>
@@ -225,7 +258,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Shop Costs</span>
-          <h2>9. Expenses & Returns</h2>
+          <h2>10. Expenses & Returns</h2>
           <ol style={listStyle}>
             <li>Use Expenses for shop costs like transport, rent and repairs.</li>
             <li>Expenses are saved under the selected store.</li>
@@ -238,20 +271,47 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Reports</span>
-          <h2>10. Reports, Exports & Daily Closing</h2>
+          <h2>11. Reports, Exports & Daily Closing</h2>
           <ol style={listStyle}>
             <li>Managers and admins can view Reports.</li>
             <li>Use date filters to check sales performance.</li>
             <li>Reports show data for the selected store only.</li>
             <li>Use Exports to download selected-store business records.</li>
+            <li>
+              Export Stock Movement Ledger to download a full product stock audit
+              workbook.
+            </li>
             <li>Use Daily Closing to confirm end-of-day money for a store.</li>
             <li>Daily Closing helps compare system sales and cash available.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
+          <span style={badgeStyle}>Export Files</span>
+          <h2>12. Excel Exports</h2>
+          <ol style={listStyle}>
+            <li>Go to Exports.</li>
+            <li>Use the date filter if you want records within a date range.</li>
+            <li>Products, Low Stock and Debts export all records for the store.</li>
+            <li>
+              Sales, Expenses, Purchases, Returns, Stock Adjustments, Stock
+              Transfers, Stock Movement Ledger, Debt Payments and Daily Closings
+              can use the date filter.
+            </li>
+            <li>
+              Use Stock Movement Ledger export when management wants to review
+              stock movements for all products.
+            </li>
+            <li>
+              Use Stock Transfers export when management wants to review
+              movements between stores.
+            </li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
           <span style={badgeStyle}>Accounting</span>
-          <h2>11. Advanced Accounting Intelligence</h2>
+          <h2>13. Advanced Accounting Intelligence</h2>
           <ol style={listStyle}>
             <li>Use this page to review advanced accounting signals.</li>
             <li>Check profit, loss, stock movement and suspicious changes.</li>
@@ -265,7 +325,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>SMS</span>
-          <h2>12. SMS Center</h2>
+          <h2>14. SMS Center</h2>
           <ol style={listStyle}>
             <li>Use SMS Center to send business messages to customers.</li>
             <li>Use templates for debt reminders and customer notices.</li>
@@ -278,7 +338,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Audit</span>
-          <h2>13. Audit Controls</h2>
+          <h2>15. Audit Controls</h2>
           <ol style={listStyle}>
             <li>Audit Sign-Off locks approved accounting periods.</li>
             <li>Locked periods stop changes inside approved records.</li>
@@ -291,7 +351,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>System Safety</span>
-          <h2>14. Backup, Restore & Maintenance</h2>
+          <h2>16. Backup, Restore & Maintenance</h2>
           <ol style={listStyle}>
             <li>Backup and Restore are full-system actions.</li>
             <li>Maintenance clear test data is also a full-system action.</li>
@@ -304,7 +364,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Permissions</span>
-          <h2>15. User Roles</h2>
+          <h2>17. User Roles</h2>
           <ul style={listStyle}>
             <li>
               <strong>Cashier:</strong> Can sell, view products, debts and basic
@@ -328,7 +388,7 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>PWA</span>
-          <h2>16. Install App</h2>
+          <h2>18. Install App</h2>
           <ol style={listStyle}>
             <li>Click Install App in the sidebar.</li>
             <li>Accept the browser install prompt.</li>
@@ -340,13 +400,20 @@ export default function HelpPage() {
 
         <div style={cardStyle}>
           <span style={badgeStyle}>Security</span>
-          <h2>17. Important Safety Notes</h2>
+          <h2>19. Important Safety Notes</h2>
           <ul style={listStyle}>
             <li>Do not share admin password.</li>
             <li>Change password regularly.</li>
             <li>Always confirm the selected store before recording sales.</li>
             <li>Always enter clear reasons for stock adjustments.</li>
-            <li>Use stock transfers instead of manually reducing one store and increasing another.</li>
+            <li>
+              Use stock transfers instead of manually reducing one store and
+              increasing another.
+            </li>
+            <li>
+              Use stock movement ledger when product quantity does not look
+              correct.
+            </li>
             <li>Backup before clearing test data.</li>
             <li>Only use System Maintenance before real operation starts.</li>
             <li>Do not delete data after real business starts unless approved.</li>
