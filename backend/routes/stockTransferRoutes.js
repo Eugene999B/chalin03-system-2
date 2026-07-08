@@ -1,4 +1,5 @@
 const express = require("express");
+const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -119,7 +120,9 @@ function assertBranchAccess(req, res, branchIds) {
     return false;
   }
 
-  const allowed = branchIds.some((branchId) => Number(branchId) === selectedBranchId);
+  const allowed = branchIds.some(
+    (branchId) => Number(branchId) === selectedBranchId
+  );
 
   if (!allowed) {
     res.status(403).json({
@@ -197,6 +200,287 @@ function normalizeTransferItems(items) {
     .filter((item) => item.source_product_id && item.requested_quantity);
 }
 
+function safePdfText(value, fallback = "—") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function formatPdfDate(value) {
+  if (!value) {
+    return "—";
+  }
+
+  try {
+    return new Date(value).toLocaleString("en-GB", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function sanitizeFilename(value) {
+  return String(value || "stock-transfer")
+    .replace(/[^a-z0-9-_]/gi, "_")
+    .slice(0, 80);
+}
+
+function drawLine(doc, y) {
+  doc
+    .moveTo(40, y)
+    .lineTo(555, y)
+    .strokeColor("#d1d5db")
+    .lineWidth(1)
+    .stroke()
+    .strokeColor("#000000");
+}
+
+function drawTransferPdf(doc, transfer) {
+  const status = String(transfer.status || "").toUpperCase();
+
+  doc.fontSize(18).font("Helvetica-Bold").text("CHALIN 03 COMPANY LIMITED", {
+    align: "center",
+  });
+
+  doc
+    .fontSize(10)
+    .font("Helvetica")
+    .text("Sales & Inventory Management System", { align: "center" });
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(15)
+    .font("Helvetica-Bold")
+    .text("STOCK TRANSFER NOTE", { align: "center" });
+
+  doc.moveDown(0.5);
+  drawLine(doc, doc.y);
+  doc.moveDown(0.8);
+
+  doc.fontSize(10).font("Helvetica-Bold").text("Transfer Details");
+  doc.moveDown(0.4);
+
+  const startY = doc.y;
+
+  doc.fontSize(9);
+
+  doc.font("Helvetica-Bold").text("Transfer No:", 40, startY);
+  doc.font("Helvetica").text(safePdfText(transfer.transfer_number), 130, startY);
+
+  doc.font("Helvetica-Bold").text("Status:", 350, startY);
+  doc.font("Helvetica").text(status, 420, startY);
+
+  doc.font("Helvetica-Bold").text("Requested:", 40, startY + 18);
+  doc
+    .font("Helvetica")
+    .text(formatPdfDate(transfer.requested_at), 130, startY + 18);
+
+  doc.font("Helvetica-Bold").text("Requested By:", 350, startY + 18);
+  doc
+    .font("Helvetica")
+    .text(safePdfText(transfer.requested_by_name), 440, startY + 18);
+
+  doc.font("Helvetica-Bold").text("Approved:", 40, startY + 36);
+  doc
+    .font("Helvetica")
+    .text(formatPdfDate(transfer.approved_at), 130, startY + 36);
+
+  doc.font("Helvetica-Bold").text("Approved By:", 350, startY + 36);
+  doc
+    .font("Helvetica")
+    .text(safePdfText(transfer.approved_by_name), 440, startY + 36);
+
+  doc.font("Helvetica-Bold").text("Dispatched:", 40, startY + 54);
+  doc
+    .font("Helvetica")
+    .text(formatPdfDate(transfer.dispatched_at), 130, startY + 54);
+
+  doc.font("Helvetica-Bold").text("Dispatched By:", 350, startY + 54);
+  doc
+    .font("Helvetica")
+    .text(safePdfText(transfer.dispatched_by_name), 440, startY + 54);
+
+  doc.font("Helvetica-Bold").text("Received:", 40, startY + 72);
+  doc
+    .font("Helvetica")
+    .text(formatPdfDate(transfer.received_at), 130, startY + 72);
+
+  doc.font("Helvetica-Bold").text("Received By:", 350, startY + 72);
+  doc
+    .font("Helvetica")
+    .text(safePdfText(transfer.received_by_name), 440, startY + 72);
+
+  doc.y = startY + 100;
+  drawLine(doc, doc.y);
+  doc.moveDown(0.8);
+
+  doc.fontSize(10).font("Helvetica-Bold").text("Store Movement");
+  doc.moveDown(0.4);
+
+  doc.fontSize(9).font("Helvetica-Bold").text("From Store:");
+  doc
+    .font("Helvetica")
+    .text(
+      `${safePdfText(transfer.from_branch_code)} — ${safePdfText(
+        transfer.from_branch_name
+      )}`
+    );
+
+  if (transfer.from_branch_location) {
+    doc.text(safePdfText(transfer.from_branch_location));
+  }
+
+  doc.moveDown(0.5);
+
+  doc.font("Helvetica-Bold").text("To Store:");
+  doc
+    .font("Helvetica")
+    .text(
+      `${safePdfText(transfer.to_branch_code)} — ${safePdfText(
+        transfer.to_branch_name
+      )}`
+    );
+
+  if (transfer.to_branch_location) {
+    doc.text(safePdfText(transfer.to_branch_location));
+  }
+
+  doc.moveDown(0.8);
+  drawLine(doc, doc.y);
+  doc.moveDown(0.8);
+
+  doc.fontSize(10).font("Helvetica-Bold").text("Items Transferred");
+  doc.moveDown(0.5);
+
+  const tableTop = doc.y;
+  const columns = {
+    item: 40,
+    requested: 300,
+    dispatched: 370,
+    received: 445,
+    sourceStock: 505,
+  };
+
+  doc.fontSize(8).font("Helvetica-Bold");
+  doc.text("Item", columns.item, tableTop);
+  doc.text("Req", columns.requested, tableTop);
+  doc.text("Disp", columns.dispatched, tableTop);
+  doc.text("Rec", columns.received, tableTop);
+  doc.text("Source", columns.sourceStock, tableTop);
+
+  drawLine(doc, tableTop + 14);
+
+  let y = tableTop + 22;
+
+  const items = Array.isArray(transfer.items) ? transfer.items : [];
+
+  if (items.length === 0) {
+    doc.font("Helvetica").text("No items found.", 40, y);
+    y += 18;
+  }
+
+  items.forEach((item, index) => {
+    if (y > 710) {
+      doc.addPage();
+
+      y = 50;
+
+      doc.fontSize(8).font("Helvetica-Bold");
+      doc.text("Item", columns.item, y);
+      doc.text("Req", columns.requested, y);
+      doc.text("Disp", columns.dispatched, y);
+      doc.text("Rec", columns.received, y);
+      doc.text("Source", columns.sourceStock, y);
+
+      drawLine(doc, y + 14);
+      y += 22;
+    }
+
+    const itemTitle = `${index + 1}. ${safePdfText(item.product_name)}`;
+    const itemSub = [item.category, item.size, item.barcode]
+      .filter(Boolean)
+      .join(" • ");
+
+    doc.fontSize(8).font("Helvetica-Bold").fillColor("#000000");
+    doc.text(itemTitle, columns.item, y, {
+      width: 245,
+    });
+
+    if (itemSub) {
+      doc
+        .fontSize(7)
+        .font("Helvetica")
+        .fillColor("#475569")
+        .text(itemSub, columns.item + 12, y + 11, { width: 235 })
+        .fillColor("#000000");
+    }
+
+    doc.fontSize(8).font("Helvetica").fillColor("#000000");
+    doc.text(String(item.requested_quantity || 0), columns.requested, y);
+    doc.text(String(item.dispatched_quantity ?? "—"), columns.dispatched, y);
+    doc.text(String(item.received_quantity ?? "—"), columns.received, y);
+
+    const sourceStock =
+      item.source_quantity_before !== null &&
+      item.source_quantity_before !== undefined
+        ? `${item.source_quantity_before} → ${item.source_quantity_after}`
+        : "—";
+
+    doc.text(sourceStock, columns.sourceStock, y, { width: 60 });
+
+    y += itemSub ? 34 : 24;
+  });
+
+  doc.y = y + 8;
+  drawLine(doc, doc.y);
+  doc.moveDown(0.8);
+
+  doc.fontSize(10).font("Helvetica-Bold").text("Notes");
+  doc.moveDown(0.3);
+
+  doc.fontSize(8).font("Helvetica");
+  doc.text(`Request Note: ${safePdfText(transfer.request_note)}`);
+  doc.text(`Approval Note: ${safePdfText(transfer.approval_note)}`);
+  doc.text(`Dispatch Note: ${safePdfText(transfer.dispatch_note)}`);
+  doc.text(`Receive Note: ${safePdfText(transfer.receive_note)}`);
+  doc.text(`Cancel Note: ${safePdfText(transfer.cancel_note)}`);
+  doc.text(`Reject Note: ${safePdfText(transfer.reject_note)}`);
+
+  doc.moveDown(1.2);
+
+  if (doc.y > 700) {
+    doc.addPage();
+  }
+
+  doc.fontSize(9).font("Helvetica-Bold").text("Signatures");
+  doc.moveDown(1);
+
+  const signatureY = doc.y;
+
+  doc.fontSize(8).font("Helvetica");
+  doc.text("Source Store Officer", 40, signatureY + 30);
+  doc.moveTo(40, signatureY + 25).lineTo(210, signatureY + 25).stroke();
+
+  doc.text("Destination Store Officer", 310, signatureY + 30);
+  doc.moveTo(310, signatureY + 25).lineTo(520, signatureY + 25).stroke();
+
+  doc
+    .fontSize(7)
+    .fillColor("#64748b")
+    .text(
+      "This transfer note was generated by the Chalin 03 Sales & Inventory Management System.",
+      40,
+      780,
+      { align: "center", width: 515 }
+    )
+    .fillColor("#000000");
+}
+
 async function getBranch(connection, branchId) {
   const [rows] = await connection.query(
     `
@@ -221,7 +505,12 @@ async function requireBranch(connection, branchId, label) {
   return branch;
 }
 
-async function getSourceProduct(connection, productId, branchId, lockForUpdate = false) {
+async function getSourceProduct(
+  connection,
+  productId,
+  branchId,
+  lockForUpdate = false
+) {
   const lockSql = lockForUpdate ? "FOR UPDATE" : "";
 
   const [rows] = await connection.query(
@@ -299,7 +588,11 @@ async function findDestinationProduct(connection, item, toBranchId) {
   return nameRows[0] || null;
 }
 
-async function createDestinationProductCopy(connection, sourceProduct, toBranchId) {
+async function createDestinationProductCopy(
+  connection,
+  sourceProduct,
+  toBranchId
+) {
   const [columns] = await connection.query("SHOW COLUMNS FROM products");
 
   const allowedFields = columns.map((column) => column.Field);
@@ -665,7 +958,12 @@ router.get(
         });
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         return;
       }
 
@@ -673,6 +971,63 @@ router.get(
         status: "success",
         transfer,
       });
+    } finally {
+      connection.release();
+    }
+  })
+);
+
+router.get(
+  "/:id/pdf",
+  asyncHandler(async (req, res) => {
+    const transferId = toPositiveInt(req.params.id);
+
+    if (!transferId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid transfer ID.",
+      });
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+      const transfer = await loadTransferDetails(connection, transferId);
+
+      if (!transfer) {
+        return res.status(404).json({
+          status: "error",
+          message: "Stock transfer was not found.",
+        });
+      }
+
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
+        return;
+      }
+
+      const filename = `${sanitizeFilename(
+        transfer.transfer_number
+      )}_transfer_note.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+
+      const doc = new PDFDocument({
+        size: "A4",
+        margin: 40,
+      });
+
+      doc.pipe(res);
+      drawTransferPdf(doc, transfer);
+      doc.end();
     } finally {
       connection.release();
     }
@@ -865,7 +1220,12 @@ router.post(
         throw new Error("Stock transfer was not found.");
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         await connection.rollback();
         return;
       }
@@ -955,7 +1315,12 @@ router.post(
         throw new Error("Stock transfer was not found.");
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         await connection.rollback();
         return;
       }
@@ -1045,7 +1410,12 @@ router.post(
         throw new Error("Stock transfer was not found.");
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         await connection.rollback();
         return;
       }
@@ -1146,7 +1516,8 @@ router.post(
 
       res.json({
         status: "success",
-        message: "Stock transfer dispatched successfully. Source store stock has been reduced.",
+        message:
+          "Stock transfer dispatched successfully. Source store stock has been reduced.",
         transfer: updatedTransfer,
       });
     } catch (error) {
@@ -1197,7 +1568,12 @@ router.post(
         throw new Error("Stock transfer was not found.");
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         await connection.rollback();
         return;
       }
@@ -1320,7 +1696,8 @@ router.post(
 
       res.json({
         status: "success",
-        message: "Stock transfer received successfully. Destination store stock has been increased.",
+        message:
+          "Stock transfer received successfully. Destination store stock has been increased.",
         transfer: updatedTransfer,
       });
     } catch (error) {
@@ -1371,7 +1748,12 @@ router.post(
         throw new Error("Stock transfer was not found.");
       }
 
-      if (!assertBranchAccess(req, res, [transfer.from_branch_id, transfer.to_branch_id])) {
+      if (
+        !assertBranchAccess(req, res, [
+          transfer.from_branch_id,
+          transfer.to_branch_id,
+        ])
+      ) {
         await connection.rollback();
         return;
       }
