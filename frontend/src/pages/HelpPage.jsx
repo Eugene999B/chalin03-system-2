@@ -44,6 +44,17 @@ export default function HelpPage() {
     marginBottom: 0,
   };
 
+  const badgeStyle = {
+    display: "inline-block",
+    padding: "5px 10px",
+    borderRadius: "999px",
+    background: "#eff6ff",
+    color: "#1e3a8a",
+    fontSize: "12px",
+    fontWeight: "900",
+    marginBottom: "10px",
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -82,147 +93,227 @@ export default function HelpPage() {
 
       <div className="success-box">
         This system helps Chalin 03 manage sales, stock, debts, purchases,
-        expenses, reports, receipts, audit controls, daily closing and
-        multi-store records.
+        expenses, reports, receipts, audit controls, daily closing, stock
+        transfers, stock adjustments, SMS alerts and multi-store records.
       </div>
 
       <div style={gridStyle}>
         <div style={cardStyle}>
+          <span style={badgeStyle}>Store Control</span>
           <h2>1. Store Selection</h2>
           <ol style={listStyle}>
             <li>Choose the correct store on the login page before logging in.</li>
-            <li>
-              Always check the selected store name at the top of the system.
-            </li>
+            <li>Always check the selected store name at the top of the system.</li>
             <li>
               Sales, debts, stock, purchases, expenses, returns and reports
               belong to the selected store.
             </li>
+            <li>To switch store, logout, select another store, and login again.</li>
             <li>
-              To switch store, logout, select another store, and login again.
-            </li>
-            <li>
-              Do not record a sale or purchase until you are sure the selected
-              store is correct.
+              Do not record a sale, purchase, transfer, return or stock
+              adjustment until the selected store is correct.
             </li>
           </ol>
         </div>
 
         <div style={cardStyle}>
+          <span style={badgeStyle}>Daily Work</span>
           <h2>2. Daily Workflow</h2>
           <ol style={listStyle}>
             <li>Login with your username, password and selected store.</li>
-            <li>Check Dashboard for sales, debts, and low stock.</li>
+            <li>Check Dashboard for sales, debts, stock value and low stock.</li>
             <li>Add or update products if stock arrives.</li>
             <li>Use New Sale to sell products from the selected store.</li>
             <li>Print or download receipt after sale.</li>
             <li>Record debt payment when customer pays later.</li>
+            <li>Record expenses, purchases and returns when needed.</li>
             <li>Do Daily Closing for the selected store at the end of the day.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
+          <span style={badgeStyle}>Inventory</span>
           <h2>3. Products</h2>
           <ol style={listStyle}>
             <li>Go to Products.</li>
-            <li>Add product name, category, size, price, and quantity.</li>
+            <li>Add product name, category, excavator type, price and quantity.</li>
             <li>Use low-stock level to know when to restock.</li>
-            <li>Search products by name, barcode, category, or size.</li>
+            <li>Search products by name, barcode, category or excavator type.</li>
             <li>Product stock is separated by store.</li>
-            <li>Admin can update or delete products if needed.</li>
+            <li>Admin or manager can edit products and adjust stock.</li>
+            <li>Admin can delete or disable products when necessary.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>4. New Sale</h2>
+          <span style={badgeStyle}>Stock Control</span>
+          <h2>4. Stock Adjustment</h2>
+          <ol style={listStyle}>
+            <li>Go to Products.</li>
+            <li>Click Adjust Stock on the product.</li>
+            <li>Choose Increase Stock, Decrease Stock or Set Exact Stock.</li>
+            <li>Enter the quantity and the reason.</li>
+            <li>
+              Use this for damaged items, lost items, physical count correction,
+              wrong entry correction or stock count update.
+            </li>
+            <li>The system records old stock, new stock, reason, date and user.</li>
+            <li>
+              Recent Stock Adjustment Records show at the bottom of the Products
+              page.
+            </li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
+          <span style={badgeStyle}>Two Stores</span>
+          <h2>5. Stock Transfers Between Stores</h2>
+          <ol style={listStyle}>
+            <li>Go to Stock Transfers.</li>
+            <li>Select the source store and destination store.</li>
+            <li>Add products and quantities to transfer.</li>
+            <li>Create the transfer request.</li>
+            <li>Approve the transfer when management agrees.</li>
+            <li>Dispatch the transfer to reduce stock from the source store.</li>
+            <li>Receive the transfer to add stock to the destination store.</li>
+            <li>
+              Download the Transfer Note PDF for printing or physical signing.
+            </li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
+          <span style={badgeStyle}>Sales</span>
+          <h2>6. New Sale</h2>
           <ol style={listStyle}>
             <li>Go to New Sale.</li>
             <li>Confirm the selected store before selling.</li>
             <li>Search and select product.</li>
             <li>Enter quantity.</li>
             <li>Add customer details if needed.</li>
-            <li>Select payment type: cash, MoMo, bank, credit, or mixed.</li>
-            <li>Save sale and print/download receipt.</li>
+            <li>Select payment type: cash, MoMo, bank, credit or mixed.</li>
+            <li>Save sale and print or download receipt.</li>
+            <li>For credit sales, debt is created automatically.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>5. Debts</h2>
+          <span style={badgeStyle}>Customers</span>
+          <h2>7. Debts</h2>
           <ol style={listStyle}>
             <li>Credit sales automatically create debt records.</li>
             <li>Go to Debts to see unpaid customers for the selected store.</li>
-            <li>Record payment when customer pays.</li>
+            <li>Record payment when the customer pays.</li>
             <li>The balance reduces automatically.</li>
-            <li>Paid debts will show as completed/paid.</li>
-            <li>WhatsApp reminders include the selected store details.</li>
+            <li>Paid debts will show as completed or paid.</li>
+            <li>Debt records help management follow customers who owe money.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>6. Purchases & Suppliers</h2>
+          <span style={badgeStyle}>Purchasing</span>
+          <h2>8. Purchases & Suppliers</h2>
           <ol style={listStyle}>
             <li>Use Purchases when buying stock from suppliers.</li>
             <li>Confirm the selected store before saving a purchase.</li>
             <li>Purchase items increase stock only in the selected store.</li>
             <li>Supplier records are also separated by store.</li>
             <li>Record supplier balance payments when paying later.</li>
+            <li>Use purchase history to track how stock entered the business.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>7. Expenses & Returns</h2>
+          <span style={badgeStyle}>Shop Costs</span>
+          <h2>9. Expenses & Returns</h2>
           <ol style={listStyle}>
             <li>Use Expenses for shop costs like transport, rent and repairs.</li>
             <li>Expenses are saved under the selected store.</li>
             <li>Use Returns when a customer returns an item.</li>
             <li>Returns increase stock only in the selected store.</li>
             <li>Managers and admins should review returns carefully.</li>
+            <li>Returns and expenses affect business reports.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>8. Reports, Exports & Daily Closing</h2>
+          <span style={badgeStyle}>Reports</span>
+          <h2>10. Reports, Exports & Daily Closing</h2>
           <ol style={listStyle}>
             <li>Managers and admins can view Reports.</li>
             <li>Use date filters to check sales performance.</li>
             <li>Reports show data for the selected store only.</li>
             <li>Use Exports to download selected-store business records.</li>
             <li>Use Daily Closing to confirm end-of-day money for a store.</li>
+            <li>Daily Closing helps compare system sales and cash available.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>9. Audit Controls</h2>
+          <span style={badgeStyle}>Accounting</span>
+          <h2>11. Advanced Accounting Intelligence</h2>
+          <ol style={listStyle}>
+            <li>Use this page to review advanced accounting signals.</li>
+            <li>Check profit, loss, stock movement and suspicious changes.</li>
+            <li>Review sales, expenses, debts, purchases and returns together.</li>
+            <li>Managers should use it to detect business mistakes early.</li>
+            <li>
+              The page helps management understand whether the store is healthy.
+            </li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
+          <span style={badgeStyle}>SMS</span>
+          <h2>12. SMS Center</h2>
+          <ol style={listStyle}>
+            <li>Use SMS Center to send business messages to customers.</li>
+            <li>Use templates for debt reminders and customer notices.</li>
+            <li>Confirm recipient numbers carefully before sending live SMS.</li>
+            <li>Check SMS status to see successful and failed messages.</li>
+            <li>Retry failed SMS only after confirming the phone number.</li>
+            <li>Only approved users should send bulk SMS.</li>
+          </ol>
+        </div>
+
+        <div style={cardStyle}>
+          <span style={badgeStyle}>Audit</span>
+          <h2>13. Audit Controls</h2>
           <ol style={listStyle}>
             <li>Audit Sign-Off locks approved accounting periods.</li>
             <li>Locked periods stop changes inside approved records.</li>
             <li>Staff can request unlock when a correction is needed.</li>
             <li>Admin or manager must review unlock requests.</li>
             <li>Audit history and unlock requests are separated by store.</li>
+            <li>Use audit controls before presenting final reports.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>10. Backup, Restore & Maintenance</h2>
+          <span style={badgeStyle}>System Safety</span>
+          <h2>14. Backup, Restore & Maintenance</h2>
           <ol style={listStyle}>
             <li>Backup and Restore are full-system actions.</li>
             <li>Maintenance clear test data is also a full-system action.</li>
             <li>These actions are not limited to the selected store.</li>
             <li>Backup before clearing test data.</li>
             <li>Only use Maintenance before real operation starts.</li>
+            <li>Do not reset or clear real business data without approval.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>11. User Roles</h2>
+          <span style={badgeStyle}>Permissions</span>
+          <h2>15. User Roles</h2>
           <ul style={listStyle}>
             <li>
-              <strong>Cashier:</strong> Can sell, view products, debts, and
-              basic records.
+              <strong>Cashier:</strong> Can sell, view products, debts and basic
+              records.
             </li>
             <li>
-              <strong>Manager:</strong> Can access reports, purchases,
-              expenses, returns, exports, daily closing and audit review areas.
+              <strong>Manager:</strong> Can access reports, purchases, expenses,
+              returns, exports, stock adjustments, stock transfers, daily closing
+              and audit review areas.
             </li>
             <li>
               <strong>Admin:</strong> Can manage users, settings, backups,
@@ -236,21 +327,26 @@ export default function HelpPage() {
         </div>
 
         <div style={cardStyle}>
-          <h2>12. Install App</h2>
+          <span style={badgeStyle}>PWA</span>
+          <h2>16. Install App</h2>
           <ol style={listStyle}>
             <li>Click Install App in the sidebar.</li>
             <li>Accept the browser install prompt.</li>
             <li>The system will appear like an app on the phone or computer.</li>
             <li>On iPhone, use Share then Add to Home Screen.</li>
+            <li>Always use the official Chalin 03 link when opening the app.</li>
           </ol>
         </div>
 
         <div style={cardStyle}>
-          <h2>13. Important Safety Notes</h2>
+          <span style={badgeStyle}>Security</span>
+          <h2>17. Important Safety Notes</h2>
           <ul style={listStyle}>
             <li>Do not share admin password.</li>
             <li>Change password regularly.</li>
             <li>Always confirm the selected store before recording sales.</li>
+            <li>Always enter clear reasons for stock adjustments.</li>
+            <li>Use stock transfers instead of manually reducing one store and increasing another.</li>
             <li>Backup before clearing test data.</li>
             <li>Only use System Maintenance before real operation starts.</li>
             <li>Do not delete data after real business starts unless approved.</li>
