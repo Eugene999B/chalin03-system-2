@@ -17,40 +17,63 @@ const router = express.Router();
 
   We do NOT separate backup by selected store because a real backup must be able
   to restore the whole business system: branches, users, store access, products,
-  sales, debts, audit records, settings, and logs.
+  stock transfers, stock movement source records, sales, debts, audit records,
+  settings, SMS logs, and activity logs.
 
   Store-separated downloads for boss/accounting are handled by exportRoutes.js.
+
+  This route now uses a preferred table order plus automatic table discovery.
+  That means new current/future tables can be included in the backup without
+  forgetting to update this route again.
 */
 
-const TABLES = [
+const PREFERRED_TABLE_ORDER = [
+  // Core identity / configuration tables.
   "branches",
   "users",
   "user_branch_access",
   "settings",
 
+  // Supplier, product, and inventory foundation.
   "suppliers",
   "products",
   "stock_adjustments",
 
+  // Store-to-store transfer workflow.
+  "stock_transfers",
+  "stock_transfer_items",
+
+  // Customers, sales, debts, and returns.
   "customers",
   "sales",
   "sale_items",
   "debts",
   "debt_payments",
-
   "returns",
-  "expenses",
 
+  // Expenses, purchases, and daily closing.
+  "expenses",
   "purchases",
   "purchase_items",
   "purchase_payments",
-
   "daily_closings",
 
+  // Audit/accounting foundation.
   "audit_signoffs",
   "audit_unlock_requests",
   "audit_reapproval_log",
 
+  // Optional accounting intelligence tables if they exist.
+  "accounting_intelligence_snapshots",
+  "accounting_intelligence_findings",
+  "accounting_ledger_history",
+  "accounting_snapshots",
+  "accounting_findings",
+  "accounting_ledger_entries",
+  "monthly_accounting_snapshots",
+  "audit_findings",
+
+  // Communication and system logs.
   "sms_log",
   "activity_log",
 ];
@@ -68,6 +91,7 @@ const DATE_ONLY_COLUMNS = new Set([
 const DATE_TIME_COLUMNS = new Set([
   "created_at",
   "updated_at",
+  "deleted_at",
   "returned_at",
   "sent_at",
   "paid_at",
@@ -76,6 +100,14 @@ const DATE_TIME_COLUMNS = new Set([
   "voided_at",
   "reviewed_at",
   "reapproved_at",
+  "requested_at",
+  "approved_at",
+  "dispatched_at",
+  "received_at",
+  "cancelled_at",
+  "rejected_at",
+  "logged_at",
+  "resolved_at",
 ]);
 
 function getBranchId(req) {
@@ -86,6 +118,18 @@ function getBranchId(req) {
   }
 
   return branchId;
+}
+
+function isSafeIdentifier(value) {
+  return /^[a-zA-Z0-9_]+$/.test(String(value || ""));
+}
+
+function safeTableName(tableName) {
+  if (!isSafeIdentifier(tableName)) {
+    throw new Error(`Invalid table name: ${tableName}`);
+  }
+
+  return `\`${tableName}\``;
 }
 
 function formatMysqlDateTime(value) {
@@ -128,15 +172,36 @@ function normalizeValue(columnName, value) {
   return value;
 }
 
-function safeTableName(tableName) {
-  if (!TABLES.includes(tableName)) {
-    throw new Error(`Invalid table name: ${tableName}`);
-  }
+function orderTables(tableNames) {
+  const uniqueTables = Array.from(new Set(tableNames)).filter(isSafeIdentifier);
+  const tableSet = new Set(uniqueTables);
 
-  return `\`${tableName}\``;
+  const preferred = PREFERRED_TABLE_ORDER.filter((tableName) =>
+    tableSet.has(tableName)
+  );
+
+  const remaining = uniqueTables
+    .filter((tableName) => !PREFERRED_TABLE_ORDER.includes(tableName))
+    .sort((a, b) => a.localeCompare(b));
+
+  return [...preferred, ...remaining];
+}
+
+async function getExistingTables(connection) {
+  const [rows] = await connection.query("SHOW TABLES");
+
+  const tableNames = rows
+    .map((row) => Object.values(row)[0])
+    .filter(isSafeIdentifier);
+
+  return orderTables(tableNames);
 }
 
 async function tableExists(connection, tableName) {
+  if (!isSafeIdentifier(tableName)) {
+    return false;
+  }
+
   const [rows] = await connection.query(
     `SELECT TABLE_NAME
      FROM information_schema.TABLES
@@ -149,24 +214,26 @@ async function tableExists(connection, tableName) {
   return rows.length > 0;
 }
 
-async function getExistingTables(connection) {
-  const existingTables = [];
-
-  for (const tableName of TABLES) {
-    if (await tableExists(connection, tableName)) {
-      existingTables.push(tableName);
-    }
-  }
-
-  return existingTables;
-}
-
 async function getTableColumns(connection, tableName) {
   const [columns] = await connection.query(
     `SHOW COLUMNS FROM ${safeTableName(tableName)}`
   );
 
-  return columns.map((column) => column.Field);
+  return columns.map((column) => column.Field).filter(isSafeIdentifier);
+}
+
+async function getTableCounts(connection, tableNames) {
+  const counts = {};
+
+  for (const tableName of tableNames) {
+    const [rows] = await connection.query(
+      `SELECT COUNT(*) AS total_count FROM ${safeTableName(tableName)}`
+    );
+
+    counts[tableName] = Number(rows[0]?.total_count || 0);
+  }
+
+  return counts;
 }
 
 async function insertRows(connection, tableName, rows) {
@@ -181,8 +248,8 @@ async function insertRows(connection, tableName, rows) {
   const tableColumns = await getTableColumns(connection, tableName);
   const allowedColumns = new Set(tableColumns);
 
-  const columns = Object.keys(rows[0]).filter((column) =>
-    allowedColumns.has(column)
+  const columns = Object.keys(rows[0]).filter(
+    (column) => isSafeIdentifier(column) && allowedColumns.has(column)
   );
 
   if (columns.length === 0) {
@@ -251,6 +318,7 @@ async function safeInsertBackupActivity({
   backupCreatedAt,
   tableCount,
   skippedTableCount,
+  totalRecordCount,
 }) {
   try {
     if (!(await tableExists(connection, "activity_log"))) {
@@ -260,7 +328,7 @@ async function safeInsertBackupActivity({
     const columns = await getTableColumns(connection, "activity_log");
     const columnSet = new Set(columns);
 
-    const details = `Created full system backup at ${backupCreatedAt}. Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}.`;
+    const details = `Created full system backup at ${backupCreatedAt}. Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}. Total records: ${totalRecordCount}.`;
 
     if (columnSet.has("branch_id")) {
       await connection.query(
@@ -288,6 +356,7 @@ async function sendBackupCreatedSecuritySmsAlert({
   backupCreatedAt,
   tableCount,
   skippedTableCount,
+  totalRecordCount,
 }) {
   try {
     const { businessName, branch } = await buildOwnerAlertContext(branchId);
@@ -295,7 +364,7 @@ async function sendBackupCreatedSecuritySmsAlert({
     const createdBy =
       createdByUser?.full_name || createdByUser?.username || "Admin";
 
-    const message = `${businessName}: Security alert. Full system backup created/downloaded for ${branch.name} (${branch.code}). Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}. Created by ${createdBy} on ${formatSecurityDateTime(
+    const message = `${businessName}: Security alert. Full system backup created/downloaded for ${branch.name} (${branch.code}). Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}. Records: ${totalRecordCount}. Created by ${createdBy} on ${formatSecurityDateTime(
       backupCreatedAt
     )}. Keep backup file private.`;
 
@@ -317,10 +386,13 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     const branchId = getBranchId(req);
     const existingTables = await getExistingTables(connection);
-    const skippedTables = TABLES.filter(
-      (tableName) => !existingTables.includes(tableName)
-    );
     const backupCreatedAt = new Date().toISOString();
+
+    const initialCounts = await getTableCounts(connection, existingTables);
+    const initialTotalRecordCount = Object.values(initialCounts).reduce(
+      (sum, count) => sum + Number(count || 0),
+      0
+    );
 
     await safeInsertBackupActivity({
       connection,
@@ -328,27 +400,43 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
       userId: req.user?.id || null,
       backupCreatedAt,
       tableCount: existingTables.length,
-      skippedTableCount: skippedTables.length,
+      skippedTableCount: 0,
+      totalRecordCount: initialTotalRecordCount,
     });
+
+    const finalCounts = await getTableCounts(connection, existingTables);
+    const finalTotalRecordCount = Object.values(finalCounts).reduce(
+      (sum, count) => sum + Number(count || 0),
+      0
+    );
 
     await sendBackupCreatedSecuritySmsAlert({
       branchId,
       createdByUser: req.user,
       backupCreatedAt,
       tableCount: existingTables.length,
-      skippedTableCount: skippedTables.length,
+      skippedTableCount: 0,
+      totalRecordCount: finalTotalRecordCount,
     });
 
     const backup = {
       app: "Chalin 03 Sales & Inventory Management System",
-      version: "multi-store",
+      version: "multi-store-stock-ledger",
       backup_type: "full_system_backup",
       selected_branch_id_when_created: branchId,
       created_at: backupCreatedAt,
       warning:
-        "This backup contains all stores, business records, users, access records, and password hashes. Keep it private.",
+        "This backup contains all stores, business records, users, store access records, settings, logs, and password hashes. Keep it private.",
+      notes: [
+        "This is a full-system backup, not a selected-store export.",
+        "Stock Movement Ledger does not have one separate table; it is rebuilt from sales, purchases, returns, stock adjustments, and stock transfers.",
+        "Use Exports for accountant/boss reports. Use Backups only for system recovery.",
+      ],
+      included_tables: existingTables,
+      skipped_tables: [],
+      table_counts: finalCounts,
+      total_record_count: finalTotalRecordCount,
       tables: {},
-      skipped_tables: skippedTables,
     };
 
     for (const tableName of existingTables) {
@@ -376,7 +464,7 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
 
     return res.status(500).json({
       status: "error",
-      message: "Something went wrong while creating backup.",
+      message: error.message || "Something went wrong while creating backup.",
     });
   } finally {
     connection.release();
@@ -426,13 +514,22 @@ router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
 
     await safeInsertRestoreActivity(connection, branchId, backup.created_at);
 
+    const afterCounts = await getTableCounts(connection, restoreTables);
+    const totalRestoredRecords = Object.values(afterCounts).reduce(
+      (sum, count) => sum + Number(count || 0),
+      0
+    );
+
     await connection.commit();
 
     return res.json({
       status: "success",
       message:
         "Backup restored successfully. Please logout and login again to refresh the system.",
+      restore_scope: "full_system_all_stores",
       restored_tables: restoreTables,
+      restored_table_counts: afterCounts,
+      total_restored_records: totalRestoredRecords,
       skipped_tables: existingTables.filter(
         (tableName) => !restoreTables.includes(tableName)
       ),

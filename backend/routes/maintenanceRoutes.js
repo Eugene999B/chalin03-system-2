@@ -23,42 +23,87 @@ const SYSTEM_ADMIN_USERNAME = process.env.SYSTEM_ADMIN_USERNAME || "admin";
   - users
   - user_branch_access
   - settings
+
+  Newly included business data areas:
+  - stock transfers and transfer items
+  - stock adjustments
+  - stock movement ledger source records are cleared through their source tables
+  - accounting/audit intelligence tables when they exist
+  - WhatsApp/receipt notification logs when they exist
 */
 
 const TABLES_TO_CLEAR = [
+  // Communication and notification logs.
   "sms_log",
-  "activity_log",
+  "whatsapp_log",
+  "whatsapp_logs",
+  "whatsapp_receipt_log",
+  "whatsapp_receipt_logs",
+  "notification_log",
+  "notification_logs",
+  "receipt_links",
 
+  // Activity and audit/accounting generated records.
+  "activity_log",
   "audit_reapproval_log",
   "audit_unlock_requests",
   "audit_signoffs",
+  "audit_findings",
+  "accounting_findings",
+  "accounting_snapshots",
+  "accounting_ledger_entries",
+  "accounting_ledger_history",
+  "accounting_intelligence_findings",
+  "accounting_intelligence_snapshots",
+  "accounting_intelligence_ledger_history",
+  "monthly_accounting_snapshots",
 
+  // Debt records.
   "debt_payments",
   "debts",
 
+  // Returns and sales records.
   "returns",
-
   "sale_items",
   "sales",
 
+  // Purchase and supplier payment records.
   "purchase_payments",
   "purchase_items",
   "purchases",
 
+  // Store closing and expenses.
   "expenses",
   "daily_closings",
 
+  // Stock transfers must be cleared before products.
+  "stock_transfer_items",
+  "stock_transfers",
+
+  // Stock adjustment records.
   "stock_adjustments",
 
+  // Master business records. These are cleared only before real operation starts.
   "customers",
   "suppliers",
   "products",
 ];
 
-const PROTECTED_TABLES = ["branches", "users", "user_branch_access", "settings"];
+const PROTECTED_TABLES = [
+  "branches",
+  "users",
+  "user_branch_access",
+  "settings",
+  "sms_templates",
+  "business_settings",
+  "backup_history",
+  "restore_history",
+];
 
 function getBranchId(req) {
-  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+  const branchId = Number(
+    req.user?.branch_id || req.user?.default_branch_id || 1
+  );
 
   if (!Number.isInteger(branchId) || branchId <= 0) {
     return 1;
@@ -83,6 +128,7 @@ async function getExistingTables(connection = pool) {
 
 async function getTableColumns(connection, tableName) {
   const [columns] = await connection.query(`SHOW COLUMNS FROM \`${tableName}\``);
+
   return columns.map((column) => column.Field);
 }
 
@@ -200,6 +246,41 @@ async function insertClearActivityLog(connection, req) {
   }
 }
 
+async function truncateTableSafely(connection, tableName) {
+  try {
+    await connection.query(`TRUNCATE TABLE \`${tableName}\``);
+
+    return {
+      table: tableName,
+      method: "TRUNCATE",
+      status: "cleared",
+    };
+  } catch (truncateError) {
+    console.warn(
+      `TRUNCATE failed for ${tableName}; falling back to DELETE:`,
+      truncateError.message
+    );
+
+    await connection.query(`DELETE FROM \`${tableName}\``);
+
+    try {
+      await connection.query(`ALTER TABLE \`${tableName}\` AUTO_INCREMENT = 1`);
+    } catch (alterError) {
+      console.warn(
+        `Could not reset AUTO_INCREMENT for ${tableName}:`,
+        alterError.message
+      );
+    }
+
+    return {
+      table: tableName,
+      method: "DELETE",
+      status: "cleared",
+      note: "TRUNCATE failed, DELETE fallback used.",
+    };
+  }
+}
+
 // GET /api/maintenance/business-data-summary
 router.get(
   "/business-data-summary",
@@ -217,6 +298,10 @@ router.get(
         existingTables.includes(tableName)
       );
 
+      const missingOptionalTables = TABLES_TO_CLEAR.filter(
+        (tableName) => !existingTables.includes(tableName)
+      );
+
       const counts = await getTableCounts(availableTables);
 
       return res.json({
@@ -226,10 +311,13 @@ router.get(
         clear_scope: "full_system_all_stores",
         protected_tables: protectedTables,
         tables_to_clear: availableTables,
+        missing_optional_tables: missingOptionalTables,
         counts,
         confirmation_required: CONFIRMATION_TEXT,
         clear_enabled: isClearEnabled(),
         system_admin_only: true,
+        note:
+          "Stock movement ledger has no separate table in the current system. It is rebuilt from sales, purchases, returns, stock transfers and stock adjustments.",
       });
     } catch (error) {
       console.error("Business data summary error:", error);
@@ -297,14 +385,21 @@ router.delete(
         existingTables.includes(tableName)
       );
 
+      const missingOptionalTables = TABLES_TO_CLEAR.filter(
+        (tableName) => !existingTables.includes(tableName)
+      );
+
       const beforeCounts = await getTableCounts(availableTables, connection);
 
       await connection.beginTransaction();
 
       await connection.query("SET FOREIGN_KEY_CHECKS = 0");
 
+      const clear_results = [];
+
       for (const tableName of availableTables) {
-        await connection.query(`TRUNCATE TABLE \`${tableName}\``);
+        const clearResult = await truncateTableSafely(connection, tableName);
+        clear_results.push(clearResult);
       }
 
       await connection.query("SET FOREIGN_KEY_CHECKS = 1");
@@ -318,12 +413,16 @@ router.delete(
       return res.json({
         status: "success",
         message:
-          "Business/test data cleared successfully for the whole multi-store system. Users, branches, store access, and settings were kept.",
+          "Business/test data cleared successfully for the whole multi-store system. Users, branches, store access, settings, SMS templates, backup history and restore history were kept where those tables exist.",
         clear_scope: "full_system_all_stores",
         protected_tables: protectedTables,
         cleared_tables: availableTables,
+        missing_optional_tables: missingOptionalTables,
+        clear_results,
         before_counts: beforeCounts,
         after_counts: afterCounts,
+        note:
+          "Stock movement ledger records are cleared through their source records: sales, purchases, returns, stock transfers and stock adjustments.",
       });
     } catch (error) {
       await connection.rollback();
