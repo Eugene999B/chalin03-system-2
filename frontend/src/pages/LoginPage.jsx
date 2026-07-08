@@ -62,6 +62,16 @@ export default function LoginPage() {
     );
   }, [branches, selectedBranchId]);
 
+  const selectedStoreTitle = selectedBranch
+    ? `${getBranchCode(selectedBranch) || "STORE"} — ${getBranchName(
+        selectedBranch
+      )}`
+    : "Choose your store";
+
+  const selectedStoreLocation = selectedBranch
+    ? getBranchLocation(selectedBranch) || "Location not set"
+    : "Select the branch you are working with before login.";
+
   useEffect(() => {
     let ignore = false;
 
@@ -188,391 +198,449 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="store-login-page">
+    <div className="premium-login-page">
       <style>{`
-        .store-login-page {
+        .premium-login-page {
           min-height: 100vh;
           position: relative;
           overflow: hidden;
-          background:
-            radial-gradient(circle at 15% 10%, rgba(224, 186, 40, 0.28), transparent 30%),
-            radial-gradient(circle at 85% 15%, rgba(59, 130, 246, 0.26), transparent 32%),
-            radial-gradient(circle at 75% 85%, rgba(34, 197, 94, 0.20), transparent 30%),
-            linear-gradient(135deg, #020617 0%, #07182c 42%, #0f172a 100%);
           color: #ffffff;
-          padding: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          padding: 28px;
+          display: grid;
+          place-items: center;
+          background:
+            radial-gradient(circle at 13% 10%, rgba(224, 186, 40, 0.35), transparent 26%),
+            radial-gradient(circle at 88% 9%, rgba(14, 165, 233, 0.24), transparent 30%),
+            radial-gradient(circle at 80% 88%, rgba(34, 197, 94, 0.18), transparent 31%),
+            linear-gradient(135deg, #020617 0%, #07182c 38%, #0f172a 100%);
         }
 
-        .store-login-page * {
+        .premium-login-page * {
           box-sizing: border-box;
         }
 
-        .store-bg-grid {
+        .premium-login-page button,
+        .premium-login-page input {
+          font: inherit;
+        }
+
+        .premium-login-noise {
           position: absolute;
           inset: 0;
+          opacity: 0.22;
+          pointer-events: none;
           background-image:
-            linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.055) 1px, transparent 1px);
-          background-size: 46px 46px;
-          mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
-          pointer-events: none;
+            linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+          background-size: 52px 52px;
+          mask-image: radial-gradient(circle at center, black, transparent 75%);
         }
 
-        .store-orb {
+        .premium-login-page::before,
+        .premium-login-page::after {
+          content: "";
           position: absolute;
+          width: 520px;
+          height: 520px;
           border-radius: 999px;
-          filter: blur(18px);
-          opacity: 0.55;
-          animation: floatOrb 8s ease-in-out infinite;
+          filter: blur(34px);
+          opacity: 0.28;
           pointer-events: none;
+          animation: glowFloat 9s ease-in-out infinite;
         }
 
-        .store-orb.one {
-          width: 210px;
-          height: 210px;
-          left: -50px;
-          bottom: 14%;
-          background: rgba(224, 186, 40, 0.45);
+        .premium-login-page::before {
+          left: -180px;
+          bottom: -160px;
+          background: #e0ba28;
         }
 
-        .store-orb.two {
-          width: 180px;
-          height: 180px;
-          right: 4%;
-          top: 10%;
-          background: rgba(14, 165, 233, 0.36);
-          animation-delay: 1.2s;
-        }
-
-        .store-orb.three {
-          width: 130px;
-          height: 130px;
-          right: 16%;
-          bottom: 10%;
-          background: rgba(34, 197, 94, 0.32);
+        .premium-login-page::after {
+          right: -190px;
+          top: -160px;
+          background: #38bdf8;
           animation-delay: 2s;
         }
 
-        @keyframes floatOrb {
-          0%, 100% {
-            transform: translateY(0) scale(1);
-          }
-          50% {
-            transform: translateY(-22px) scale(1.04);
-          }
+        @keyframes glowFloat {
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+          50% { transform: translate3d(0, -24px, 0) scale(1.05); }
         }
 
-        .store-login-shell {
-          width: min(1180px, 100%);
+        .premium-login-shell {
           position: relative;
           z-index: 2;
+          width: min(1240px, 100%);
+          min-height: 720px;
           display: grid;
-          grid-template-columns: 1.08fr 0.92fr;
-          gap: 24px;
-          align-items: stretch;
+          grid-template-columns: 1.05fr 0.95fr;
+          gap: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 38px;
+          padding: 16px;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
+          backdrop-filter: blur(24px);
+          box-shadow:
+            0 42px 120px rgba(0, 0, 0, 0.42),
+            inset 0 1px 0 rgba(255, 255, 255, 0.18);
         }
 
-        .hero-panel,
-        .login-panel {
-          border: 1px solid rgba(255, 255, 255, 0.16);
-          background: rgba(255, 255, 255, 0.10);
-          backdrop-filter: blur(22px);
-          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
-          border-radius: 34px;
+        .premium-hero {
+          position: relative;
           overflow: hidden;
-        }
-
-        .hero-panel {
+          border-radius: 30px;
           padding: 34px;
-          min-height: 700px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          position: relative;
+          background:
+            linear-gradient(140deg, rgba(7, 24, 44, 0.92), rgba(15, 23, 42, 0.72)),
+            radial-gradient(circle at 38% 20%, rgba(224, 186, 40, 0.24), transparent 34%);
+          border: 1px solid rgba(255, 255, 255, 0.14);
         }
 
-        .hero-panel::before {
+        .premium-hero::before {
           content: "";
           position: absolute;
-          inset: 0;
-          background:
-            linear-gradient(135deg, rgba(224, 186, 40, 0.18), transparent 34%),
-            radial-gradient(circle at 60% 55%, rgba(255,255,255,0.10), transparent 35%);
-          pointer-events: none;
+          inset: auto -28% -34% 23%;
+          height: 370px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(224, 186, 40, 0.44), rgba(14, 165, 233, 0.1));
+          filter: blur(32px);
+          transform: rotate(-12deg);
         }
 
-        .hero-content {
+        .premium-brand-row {
           position: relative;
           z-index: 1;
-        }
-
-        .brand-row {
           display: flex;
           align-items: center;
           gap: 16px;
-          margin-bottom: 42px;
         }
 
-        .brand-logo {
-          width: 82px;
-          height: 82px;
-          border-radius: 24px;
+        .premium-brand-mark {
+          width: 86px;
+          height: 86px;
+          position: relative;
+          display: grid;
+          place-items: center;
+          flex: 0 0 auto;
+          border-radius: 27px;
           overflow: hidden;
-          background: #07182c;
+          background:
+            linear-gradient(135deg, #07182c, #0f2a48),
+            #07182c;
           border: 3px solid #e0ba28;
-          box-shadow: 0 18px 40px rgba(224, 186, 40, 0.20);
-          flex-shrink: 0;
+          box-shadow: 0 22px 50px rgba(224, 186, 40, 0.22);
         }
 
-        .brand-logo img {
+        .premium-brand-mark img {
+          position: absolute;
+          inset: 0;
           width: 100%;
           height: 100%;
           object-fit: cover;
-          display: block;
+          z-index: 2;
         }
 
-        .brand-kicker {
-          margin: 0 0 4px;
-          color: rgba(255,255,255,0.72);
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-        }
-
-        .brand-name {
-          margin: 0;
-          font-size: 25px;
+        .premium-brand-mark span {
+          font-size: 24px;
           font-weight: 950;
-          letter-spacing: -0.04em;
-        }
-
-        .hero-title {
-          margin: 0;
-          font-size: clamp(38px, 5vw, 70px);
-          line-height: 0.95;
-          letter-spacing: -0.075em;
-          font-weight: 950;
-        }
-
-        .gold-text {
           color: #e0ba28;
-          text-shadow: 0 15px 50px rgba(224, 186, 40, 0.22);
+          letter-spacing: -0.05em;
         }
 
-        .hero-subtitle {
-          width: min(560px, 100%);
-          margin: 24px 0 0;
-          color: rgba(255,255,255,0.76);
-          font-size: 17px;
-          line-height: 1.7;
-          font-weight: 650;
-        }
-
-        .hero-stats {
-          position: relative;
-          z-index: 1;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
-          margin-top: 34px;
-        }
-
-        .hero-stat {
-          padding: 16px;
-          border-radius: 22px;
-          background: rgba(255,255,255,0.10);
-          border: 1px solid rgba(255,255,255,0.12);
-        }
-
-        .hero-stat strong {
-          display: block;
-          font-size: 24px;
-          font-weight: 950;
-          margin-bottom: 4px;
-        }
-
-        .hero-stat span {
-          color: rgba(255,255,255,0.68);
+        .premium-brand-kicker {
+          margin: 0 0 5px;
+          color: rgba(255, 255, 255, 0.64);
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 950;
+          letter-spacing: 0.16em;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
         }
 
-        .selected-store-preview {
+        .premium-brand-name {
+          margin: 0;
+          font-size: 27px;
+          font-weight: 950;
+          letter-spacing: -0.06em;
+        }
+
+        .premium-hero-copy {
           position: relative;
           z-index: 1;
-          margin-top: 28px;
-          padding: 22px;
-          border-radius: 28px;
-          background: linear-gradient(135deg, rgba(224, 186, 40, 0.22), rgba(255,255,255,0.10));
-          border: 1px solid rgba(224, 186, 40, 0.35);
+          margin-top: 48px;
         }
 
-        .selected-store-preview small {
-          display: block;
-          color: rgba(255,255,255,0.68);
-          font-weight: 900;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          margin-bottom: 8px;
-        }
-
-        .selected-store-preview h2 {
-          margin: 0;
-          font-size: 24px;
-          letter-spacing: -0.04em;
-        }
-
-        .selected-store-preview p {
-          margin: 8px 0 0;
-          color: rgba(255,255,255,0.74);
-          font-weight: 700;
-        }
-
-        .login-panel {
-          background: rgba(248, 250, 252, 0.96);
-          color: #07182c;
-          padding: 28px;
-        }
-
-        .login-top {
+        .premium-pill-row {
           display: flex;
-          justify-content: space-between;
-          gap: 14px;
-          align-items: flex-start;
-          margin-bottom: 22px;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
         }
 
-        .login-top h1 {
-          margin: 0;
-          font-size: 30px;
-          line-height: 1.05;
-          letter-spacing: -0.055em;
-          font-weight: 950;
-          color: #07182c;
-        }
-
-        .secure-badge {
+        .premium-pill {
           display: inline-flex;
           align-items: center;
           gap: 8px;
           border-radius: 999px;
+          padding: 9px 12px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .premium-hero-title {
+          margin: 0;
+          font-size: clamp(44px, 6vw, 86px);
+          line-height: 0.9;
+          letter-spacing: -0.085em;
+          font-weight: 950;
+        }
+
+        .premium-gold {
+          color: #e0ba28;
+          text-shadow: 0 24px 80px rgba(224, 186, 40, 0.26);
+        }
+
+        .premium-hero-subtitle {
+          width: min(620px, 100%);
+          margin: 24px 0 0;
+          color: rgba(255, 255, 255, 0.72);
+          font-size: 17px;
+          line-height: 1.75;
+          font-weight: 680;
+        }
+
+        .premium-hero-bottom {
+          position: relative;
+          z-index: 1;
+          display: grid;
+          gap: 16px;
+        }
+
+        .premium-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+
+        .premium-stat-card,
+        .premium-selected-store {
+          border-radius: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.13);
+          background: rgba(255, 255, 255, 0.09);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+        }
+
+        .premium-stat-card {
+          padding: 16px;
+        }
+
+        .premium-stat-card strong {
+          display: block;
+          font-size: 27px;
+          font-weight: 950;
+          letter-spacing: -0.05em;
+        }
+
+        .premium-stat-card span {
+          display: block;
+          margin-top: 5px;
+          color: rgba(255, 255, 255, 0.65);
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing: 0.11em;
+          text-transform: uppercase;
+        }
+
+        .premium-selected-store {
+          padding: 22px;
+          background:
+            linear-gradient(135deg, rgba(224, 186, 40, 0.22), rgba(255, 255, 255, 0.08));
+          border-color: rgba(224, 186, 40, 0.34);
+        }
+
+        .premium-selected-store small {
+          display: block;
+          margin-bottom: 8px;
+          color: rgba(255, 255, 255, 0.66);
+          font-weight: 950;
+          text-transform: uppercase;
+          letter-spacing: 0.15em;
+        }
+
+        .premium-selected-store h2 {
+          margin: 0;
+          font-size: 26px;
+          font-weight: 950;
+          letter-spacing: -0.055em;
+        }
+
+        .premium-selected-store p {
+          margin: 8px 0 0;
+          color: rgba(255, 255, 255, 0.74);
+          font-weight: 750;
+        }
+
+        .premium-login-panel {
+          border-radius: 30px;
+          padding: 28px;
+          background: rgba(248, 250, 252, 0.985);
+          color: #07182c;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+
+        .premium-login-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+
+        .premium-login-eyebrow {
+          margin: 0 0 6px;
+          color: #9a6b00;
+          font-size: 12px;
+          font-weight: 950;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+        }
+
+        .premium-login-title {
+          margin: 0;
+          font-size: 36px;
+          line-height: 1;
+          letter-spacing: -0.065em;
+          font-weight: 950;
+        }
+
+        .premium-secure-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          border-radius: 999px;
+          padding: 9px 12px;
           background: #ecfdf3;
           color: #027a48;
           border: 1px solid #bbf7d0;
-          padding: 9px 12px;
           font-size: 12px;
-          font-weight: 900;
-          white-space: nowrap;
+          font-weight: 950;
+          box-shadow: 0 12px 25px rgba(2, 122, 72, 0.09);
         }
 
-        .login-help {
-          margin: -8px 0 20px;
+        .premium-login-help {
+          margin: 0 0 18px;
           color: #667085;
-          font-weight: 700;
-          line-height: 1.55;
+          font-weight: 720;
+          line-height: 1.6;
         }
 
-        .branch-section-title {
+        .premium-branch-title {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
+          gap: 10px;
           margin: 18px 0 10px;
         }
 
-        .branch-section-title label {
+        .premium-branch-title label {
           margin: 0;
+          font-size: 14px;
           color: #07182c;
           font-weight: 950;
-          font-size: 14px;
         }
 
-        .branch-count {
-          font-size: 12px;
-          font-weight: 900;
-          color: #475467;
+        .premium-branch-count {
+          border-radius: 999px;
+          padding: 7px 10px;
           background: #eef2ff;
           border: 1px solid #dbe4ff;
-          border-radius: 999px;
-          padding: 6px 10px;
+          color: #344054;
+          font-size: 12px;
+          font-weight: 950;
         }
 
-        .branch-grid {
+        .premium-branch-grid {
           display: grid;
           gap: 10px;
-          margin-bottom: 18px;
+          max-height: 280px;
+          overflow: auto;
+          padding-right: 3px;
+          margin-bottom: 16px;
         }
 
-        .branch-card {
+        .premium-branch-card {
           width: 100%;
           text-align: left;
           border: 1px solid #e5e7eb;
           background: #ffffff;
-          border-radius: 20px;
-          padding: 15px;
+          color: #07182c;
+          border-radius: 21px;
+          padding: 14px;
           cursor: pointer;
           display: grid;
           grid-template-columns: auto 1fr auto;
-          gap: 12px;
           align-items: center;
-          transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-          color: #07182c;
+          gap: 12px;
+          transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
         }
 
-        .branch-card:hover {
+        .premium-branch-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12);
           border-color: rgba(224, 186, 40, 0.55);
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.11);
         }
 
-        .branch-card.active {
+        .premium-branch-card.active {
           border-color: #e0ba28;
-          box-shadow: 0 18px 42px rgba(224, 186, 40, 0.18);
           background:
-            linear-gradient(135deg, rgba(224, 186, 40, 0.16), rgba(255,255,255,1));
+            linear-gradient(135deg, rgba(224, 186, 40, 0.17), #ffffff);
+          box-shadow: 0 18px 38px rgba(224, 186, 40, 0.18);
         }
 
-        .branch-icon {
-          width: 46px;
-          height: 46px;
-          border-radius: 16px;
+        .premium-branch-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 17px;
           display: grid;
           place-items: center;
           background: #07182c;
           color: #e0ba28;
-          font-size: 22px;
+          font-size: 23px;
           box-shadow: 0 10px 25px rgba(7, 24, 44, 0.14);
         }
 
-        .branch-card.active .branch-icon {
+        .premium-branch-card.active .premium-branch-icon {
           background: #e0ba28;
           color: #07182c;
         }
 
-        .branch-info strong {
+        .premium-branch-info strong {
           display: block;
+          margin-bottom: 4px;
           font-size: 15px;
           font-weight: 950;
           letter-spacing: -0.02em;
-          margin-bottom: 4px;
         }
 
-        .branch-info span {
+        .premium-branch-info span {
           display: block;
           color: #667085;
           font-size: 13px;
-          font-weight: 750;
+          font-weight: 760;
         }
 
-        .branch-check {
-          width: 28px;
-          height: 28px;
+        .premium-branch-check {
+          width: 30px;
+          height: 30px;
           border-radius: 999px;
           display: grid;
           place-items: center;
@@ -581,94 +649,105 @@ export default function LoginPage() {
           font-weight: 950;
         }
 
-        .branch-card.active .branch-check {
+        .premium-branch-card.active .premium-branch-check {
           color: #07182c;
           background: #e0ba28;
           border-color: #e0ba28;
         }
 
-        .form-box {
-          background: #ffffff;
+        .premium-form-box {
           border: 1px solid #e5e7eb;
-          border-radius: 24px;
+          border-radius: 25px;
           padding: 18px;
-          box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+          background: #ffffff;
+          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
         }
 
-        .form-box label {
+        .premium-form-box label,
+        .premium-forgot-panel label {
           display: block;
-          margin: 0 0 7px;
+          margin: 0 0 8px;
           color: #344054;
-          font-weight: 900;
           font-size: 13px;
+          font-weight: 950;
         }
 
-        .form-box input {
+        .premium-field-wrap {
+          position: relative;
+        }
+
+        .premium-field-icon {
+          position: absolute;
+          left: 14px;
+          top: 14px;
+          color: #98a2b3;
+          pointer-events: none;
+        }
+
+        .premium-form-box input,
+        .premium-forgot-panel input {
           width: 100%;
           border: 1px solid #d0d5dd;
           background: #f8fafc;
-          border-radius: 15px;
-          padding: 13px 14px;
           color: #07182c;
-          font-weight: 750;
+          border-radius: 16px;
+          padding: 13px 14px 13px 42px;
           outline: none;
+          font-weight: 760;
           margin-bottom: 14px;
           transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
         }
 
-        .form-box input:focus {
+        .premium-form-box input:focus,
+        .premium-forgot-panel input:focus {
           background: #ffffff;
           border-color: #e0ba28;
-          box-shadow: 0 0 0 4px rgba(224, 186, 40, 0.16);
+          box-shadow: 0 0 0 4px rgba(224, 186, 40, 0.15);
         }
 
-        .password-row {
+        .premium-password-grid {
           display: grid;
           grid-template-columns: 1fr auto;
           gap: 8px;
           align-items: start;
         }
 
-        .password-row input {
-          margin-bottom: 14px;
-        }
-
-        .password-toggle {
-          height: 47px;
-          padding: 0 14px;
-          border-radius: 15px;
+        .premium-password-toggle {
+          height: 48px;
           border: 1px solid #d0d5dd;
+          border-radius: 16px;
           background: #f2f4f7;
           color: #344054;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .login-main-button {
-          width: 100%;
-          border: none;
-          border-radius: 17px;
-          padding: 14px 16px;
-          background: linear-gradient(135deg, #07182c, #0f2a48);
-          color: white;
-          font-size: 16px;
+          padding: 0 14px;
           font-weight: 950;
           cursor: pointer;
-          box-shadow: 0 18px 35px rgba(7, 24, 44, 0.23);
-          transition: transform 0.18s ease, box-shadow 0.18s ease;
         }
 
-        .login-main-button:hover:not(:disabled) {
+        .premium-login-button {
+          width: 100%;
+          border: none;
+          border-radius: 18px;
+          padding: 15px 16px;
+          cursor: pointer;
+          color: #ffffff;
+          font-size: 16px;
+          font-weight: 950;
+          background: linear-gradient(135deg, #07182c 0%, #0f2a48 55%, #07182c 100%);
+          box-shadow: 0 20px 42px rgba(7, 24, 44, 0.25);
+          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+        }
+
+        .premium-login-button:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 22px 45px rgba(7, 24, 44, 0.28);
+          box-shadow: 0 26px 55px rgba(7, 24, 44, 0.31);
         }
 
-        .login-main-button:disabled {
+        .premium-login-button:disabled {
+          opacity: 0.7;
           cursor: not-allowed;
-          opacity: 0.72;
         }
 
-        .forgot-button {
+        .premium-forgot-button {
           width: 100%;
           margin-top: 12px;
           border: 1px solid #e5e7eb;
@@ -676,262 +755,288 @@ export default function LoginPage() {
           padding: 12px 14px;
           background: #f8fafc;
           color: #475467;
-          font-weight: 900;
+          font-weight: 950;
           cursor: pointer;
         }
 
-        .forgot-button:hover {
+        .premium-forgot-button:hover {
           background: #eef2f7;
         }
 
-        .error-box,
-        .success-box,
-        .warning-box {
+        .premium-error-box,
+        .premium-success-box,
+        .premium-warning-box {
           padding: 12px 13px;
-          border-radius: 15px;
+          border-radius: 16px;
           margin-bottom: 14px;
-          font-weight: 800;
+          font-weight: 850;
           font-size: 13px;
           line-height: 1.45;
         }
 
-        .error-box {
+        .premium-error-box {
           background: #fef2f2;
           color: #991b1b;
           border: 1px solid #fecaca;
         }
 
-        .success-box {
+        .premium-success-box {
           background: #ecfdf3;
           color: #027a48;
           border: 1px solid #bbf7d0;
         }
 
-        .warning-box {
+        .premium-warning-box {
           background: #fff7ed;
           color: #9a3412;
           border: 1px solid #fed7aa;
         }
 
-        .forgot-panel {
+        .premium-forgot-panel {
           margin-top: 16px;
           padding: 16px;
-          border-radius: 22px;
+          border-radius: 24px;
           background: #fff7ed;
           border: 1px solid #fed7aa;
           color: #9a3412;
         }
 
-        .forgot-panel h3 {
+        .premium-forgot-panel h3 {
           margin: 0 0 8px;
           color: #9a3412;
+          font-size: 20px;
+          font-weight: 950;
+          letter-spacing: -0.03em;
+        }
+
+        .premium-forgot-panel p {
+          margin: 0 0 12px;
+          line-height: 1.55;
+          font-weight: 720;
+        }
+
+        .premium-forgot-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .premium-forgot-action,
+        .premium-forgot-cancel {
+          border-radius: 16px;
+          padding: 12px 14px;
+          cursor: pointer;
           font-weight: 950;
         }
 
-        .forgot-panel p {
-          margin: 0 0 12px;
-          line-height: 1.55;
-          font-weight: 700;
-        }
-
-        .forgot-panel input {
-          width: 100%;
-          border: 1px solid #fed7aa;
-          background: #fffaf5;
-          border-radius: 15px;
-          padding: 13px 14px;
-          color: #7c2d12;
-          font-weight: 750;
-          outline: none;
-        }
-
-        .forgot-action {
-          width: 100%;
-          margin-top: 10px;
+        .premium-forgot-action {
           border: none;
-          border-radius: 15px;
-          padding: 12px 14px;
           background: #9a3412;
           color: #ffffff;
-          font-weight: 900;
-          cursor: pointer;
         }
 
-        .forgot-cancel {
-          width: 100%;
-          margin-top: 10px;
+        .premium-forgot-cancel {
           border: 1px solid #fed7aa;
-          border-radius: 15px;
-          padding: 12px 14px;
           background: #ffffff;
           color: #9a3412;
-          font-weight: 900;
-          cursor: pointer;
         }
 
-        .login-footer {
-          margin: 16px 0 0;
+        .premium-login-footer {
+          margin: 15px 0 0;
           color: #667085;
           font-size: 12px;
-          font-weight: 750;
+          font-weight: 760;
           text-align: center;
-          line-height: 1.5;
+          line-height: 1.55;
         }
 
-        @media (max-width: 980px) {
-          .store-login-page {
-            padding: 18px;
-            align-items: flex-start;
+        @media (max-width: 1020px) {
+          .premium-login-page {
+            padding: 16px;
+            place-items: start center;
           }
 
-          .store-login-shell {
+          .premium-login-shell {
             grid-template-columns: 1fr;
-          }
-
-          .hero-panel {
             min-height: auto;
           }
 
-          .hero-stats {
-            grid-template-columns: 1fr;
+          .premium-hero {
+            min-height: auto;
           }
         }
 
-        @media (max-width: 560px) {
-          .store-login-page {
+        @media (max-width: 620px) {
+          .premium-login-page {
             padding: 10px;
           }
 
-          .hero-panel,
-          .login-panel {
-            border-radius: 24px;
+          .premium-login-shell {
+            border-radius: 28px;
+            padding: 10px;
+          }
+
+          .premium-hero,
+          .premium-login-panel {
+            border-radius: 23px;
             padding: 20px;
           }
 
-          .brand-logo {
+          .premium-brand-mark {
             width: 64px;
             height: 64px;
-            border-radius: 18px;
+            border-radius: 20px;
           }
 
-          .brand-name {
+          .premium-brand-name {
             font-size: 20px;
           }
 
-          .hero-title {
-            font-size: 39px;
+          .premium-hero-title {
+            font-size: 44px;
           }
 
-          .login-top {
+          .premium-stat-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .premium-login-header {
             flex-direction: column;
           }
 
-          .branch-card {
+          .premium-login-title {
+            font-size: 31px;
+          }
+
+          .premium-branch-card {
             grid-template-columns: auto 1fr;
           }
 
-          .branch-check {
+          .premium-branch-check {
             display: none;
+          }
+
+          .premium-password-grid,
+          .premium-forgot-actions {
+            grid-template-columns: 1fr;
+          }
+
+          .premium-password-toggle {
+            width: 100%;
           }
         }
       `}</style>
 
-      <div className="store-bg-grid" />
-      <div className="store-orb one" />
-      <div className="store-orb two" />
-      <div className="store-orb three" />
+      <div className="premium-login-noise" />
 
-      <main className="store-login-shell">
-        <section className="hero-panel">
-          <div className="hero-content">
-            <div className="brand-row">
-              <div className="brand-logo">
-                <img src="/chalin03-logo.png" alt="Chalin 03 Logo" />
+      <main className="premium-login-shell">
+        <section className="premium-hero">
+          <div>
+            <div className="premium-brand-row">
+              <div className="premium-brand-mark">
+                <span>C03</span>
+                <img
+                  src="/chalin03-logo.png"
+                  alt="Chalin 03 Logo"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
               </div>
 
               <div>
-                <p className="brand-kicker">Sales • Stock • Audit</p>
-                <h2 className="brand-name">Chalin 03 Company Ltd</h2>
+                <p className="premium-brand-kicker">Business Control System</p>
+                <h2 className="premium-brand-name">Chalin 03 Company Ltd</h2>
               </div>
             </div>
 
-            <h1 className="hero-title">
-              Choose your <span className="gold-text">store</span>.
-              <br />
-              Control every record.
-            </h1>
+            <div className="premium-hero-copy">
+              <div className="premium-pill-row">
+                <span className="premium-pill">● Multi-store</span>
+                <span className="premium-pill">● Sales & stock</span>
+                <span className="premium-pill">● Audit ready</span>
+              </div>
 
-            <p className="hero-subtitle">
-              A professional multi-store sales and inventory portal for Chalin
-              03. Each branch keeps its own products, sales, debts, expenses,
-              reports, and audit records.
-            </p>
+              <h1 className="premium-hero-title">
+                Welcome to the
+                <br />
+                <span className="premium-gold">control room.</span>
+              </h1>
+
+              <p className="premium-hero-subtitle">
+                A premium staff portal for sales, products, debts, stock
+                transfers, receipts, SMS, reports, backups, maintenance and
+                accounting intelligence across every Chalin 03 store.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <div className="hero-stats">
-              <div className="hero-stat">
+          <div className="premium-hero-bottom">
+            <div className="premium-stat-grid">
+              <div className="premium-stat-card">
                 <strong>{branchesLoading ? "..." : branches.length}</strong>
-                <span>Active Stores</span>
+                <span>Stores loaded</span>
               </div>
 
-              <div className="hero-stat">
-                <strong>24/7</strong>
-                <span>Secure Portal</span>
+              <div className="premium-stat-card">
+                <strong>Live</strong>
+                <span>Business portal</span>
               </div>
 
-              <div className="hero-stat">
-                <strong>100%</strong>
-                <span>Branch Records</span>
+              <div className="premium-stat-card">
+                <strong>Secure</strong>
+                <span>Staff access</span>
               </div>
             </div>
 
-            <div className="selected-store-preview">
-              <small>Selected Store</small>
-              <h2>{selectedBranch ? getBranchName(selectedBranch) : "Choose a store"}</h2>
-              <p>
-                {selectedBranch
-                  ? getBranchLocation(selectedBranch) || "No location set"
-                  : "Select the branch you are working with before login."}
-              </p>
+            <div className="premium-selected-store">
+              <small>Selected store</small>
+              <h2>{selectedStoreTitle}</h2>
+              <p>{selectedStoreLocation}</p>
             </div>
           </div>
         </section>
 
-        <section className="login-panel">
-          <div className="login-top">
+        <section className="premium-login-panel">
+          <div className="premium-login-header">
             <div>
-              <h1>Staff Portal</h1>
+              <p className="premium-login-eyebrow">Authorized staff only</p>
+              <h1 className="premium-login-title">Staff Login</h1>
             </div>
 
-            <div className="secure-badge">● Secure Login</div>
+            <div className="premium-secure-badge">● Secure</div>
           </div>
 
-          <p className="login-help">
-            Select the store first, then enter your staff username and password.
+          <p className="premium-login-help">
+            Choose the exact store you are working in. Sales, stock, debts,
+            transfers and reports will follow that selected store.
           </p>
 
           <form onSubmit={handleLogin} autoComplete="off">
-            <div className="branch-section-title">
+            <div className="premium-branch-title">
               <label>Choose Store / Branch</label>
-              <span className="branch-count">
+              <span className="premium-branch-count">
                 {branchesLoading ? "Loading..." : `${branches.length} stores`}
               </span>
             </div>
 
-            {branchesError && <div className="error-box">{branchesError}</div>}
+            {branchesError && (
+              <div className="premium-error-box">{branchesError}</div>
+            )}
 
             {branchesLoading && (
-              <div className="warning-box">Loading available stores...</div>
+              <div className="premium-warning-box">
+                Loading available stores...
+              </div>
             )}
 
             {!branchesLoading && branches.length === 0 && !branchesError && (
-              <div className="error-box">
+              <div className="premium-error-box">
                 No active stores found. Please contact the system admin.
               </div>
             )}
 
-            <div className="branch-grid">
+            <div className="premium-branch-grid">
               {branches.map((branch) => {
                 const branchId = getBranchId(branch);
                 const active = Number(selectedBranchId) === branchId;
@@ -940,53 +1045,61 @@ export default function LoginPage() {
                   <button
                     type="button"
                     key={branchId}
-                    className={`branch-card ${active ? "active" : ""}`}
+                    className={`premium-branch-card ${active ? "active" : ""}`}
                     onClick={() => setSelectedBranchId(String(branchId))}
                   >
-                    <div className="branch-icon">
+                    <div className="premium-branch-icon">
                       {branch.is_head_office ? "🏢" : "🏬"}
                     </div>
 
-                    <div className="branch-info">
+                    <div className="premium-branch-info">
                       <strong>
                         {getBranchName(branch)}
-                        {getBranchCode(branch) ? ` - ${getBranchCode(branch)}` : ""}
+                        {getBranchCode(branch)
+                          ? ` — ${getBranchCode(branch)}`
+                          : ""}
                       </strong>
                       <span>{getBranchLocation(branch) || "No location set"}</span>
                     </div>
 
-                    <div className="branch-check">✓</div>
+                    <div className="premium-branch-check">✓</div>
                   </button>
                 );
               })}
             </div>
 
-            <div className="form-box">
-              {error && <div className="error-box">{error}</div>}
+            <div className="premium-form-box">
+              {error && <div className="premium-error-box">{error}</div>}
 
               <label>Username</label>
-              <input
-                name="chalin03_login_username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="Enter username"
-                autoComplete="off"
-              />
+              <div className="premium-field-wrap">
+                <span className="premium-field-icon">👤</span>
+                <input
+                  name="chalin03_login_username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Enter username"
+                  autoComplete="off"
+                />
+              </div>
 
               <label>Password</label>
-              <div className="password-row">
-                <input
-                  name="chalin03_login_password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter password"
-                  autoComplete="new-password"
-                />
+              <div className="premium-password-grid">
+                <div className="premium-field-wrap">
+                  <span className="premium-field-icon">🔒</span>
+                  <input
+                    name="chalin03_login_password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter password"
+                    autoComplete="new-password"
+                  />
+                </div>
 
                 <button
                   type="button"
-                  className="password-toggle"
+                  className="premium-password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? "Hide" : "Show"}
@@ -995,19 +1108,19 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="login-main-button"
+                className="premium-login-button"
                 disabled={loading || branchesLoading || !branches.length}
               >
                 {loading
-                  ? "Opening store portal..."
+                  ? "Opening secure portal..."
                   : selectedBranch
-                  ? `Login to ${getBranchCode(selectedBranch) || getBranchName(selectedBranch)}`
+                  ? `Enter ${getBranchCode(selectedBranch) || getBranchName(selectedBranch)}`
                   : "Login"}
               </button>
 
               <button
                 type="button"
-                className="forgot-button"
+                className="premium-forgot-button"
                 onClick={openForgotPassword}
               >
                 Forgot Password?
@@ -1016,47 +1129,57 @@ export default function LoginPage() {
           </form>
 
           {showForgotPassword && (
-            <div className="forgot-panel">
+            <div className="premium-forgot-panel">
               <h3>Forgot Password</h3>
 
               <p>
                 Enter your username. The system will guide you to contact the
-                admin for a password reset.
+                administrator for password reset support.
               </p>
 
-              {forgotMessage && <div className="success-box">{forgotMessage}</div>}
-              {forgotError && <div className="error-box">{forgotError}</div>}
+              {forgotMessage && (
+                <div className="premium-success-box">{forgotMessage}</div>
+              )}
+              {forgotError && (
+                <div className="premium-error-box">{forgotError}</div>
+              )}
 
               <label>Username</label>
-              <input
-                value={forgotUsername}
-                onChange={(event) => setForgotUsername(event.target.value)}
-                placeholder="Enter your username"
-                autoComplete="off"
-              />
+              <div className="premium-field-wrap">
+                <span className="premium-field-icon">👤</span>
+                <input
+                  value={forgotUsername}
+                  onChange={(event) => setForgotUsername(event.target.value)}
+                  placeholder="Enter your username"
+                  autoComplete="off"
+                />
+              </div>
 
-              <button
-                type="button"
-                className="forgot-action"
-                onClick={handleForgotPassword}
-                disabled={forgotLoading}
-              >
-                {forgotLoading ? "Checking..." : "Request Password Help"}
-              </button>
+              <div className="premium-forgot-actions">
+                <button
+                  type="button"
+                  className="premium-forgot-action"
+                  onClick={handleForgotPassword}
+                  disabled={forgotLoading}
+                >
+                  {forgotLoading ? "Checking..." : "Request Help"}
+                </button>
 
-              <button
-                type="button"
-                className="forgot-cancel"
-                onClick={closeForgotPassword}
-              >
-                Cancel
-              </button>
+                <button
+                  type="button"
+                  className="premium-forgot-cancel"
+                  onClick={closeForgotPassword}
+                  disabled={forgotLoading}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
-          <p className="login-footer">
-            Secure access for authorized Chalin 03 staff only. Every action is
-            connected to the selected store.
+          <p className="premium-login-footer">
+            Protected Chalin 03 access. Every action is connected to the chosen
+            store and recorded for business control.
           </p>
         </section>
       </main>
