@@ -53,6 +53,98 @@ function buildDateFilter(alias, dateColumn, from, to, params) {
   return filter;
 }
 
+
+function toLedgerNumber(value) {
+  const number = Number(value || 0);
+
+  if (Number.isNaN(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
+function normaliseLedgerDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function isLedgerDateInRange(value, from, to) {
+  const date = normaliseLedgerDate(value);
+
+  if (!date) {
+    return false;
+  }
+
+  if (from) {
+    const fromDate = new Date(`${from}T00:00:00`);
+
+    if (!Number.isNaN(fromDate.getTime()) && date < fromDate) {
+      return false;
+    }
+  }
+
+  if (to) {
+    const toDate = new Date(`${to}T23:59:59.999`);
+
+    if (!Number.isNaN(toDate.getTime()) && date > toDate) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function safeExportQuery(label, sql, params, warnings) {
+  try {
+    const [rows] = await pool.query(sql, params);
+
+    return rows;
+  } catch (error) {
+    const message = `${label} skipped: ${error.message}`;
+    console.warn(message);
+    warnings.push(message);
+
+    return [];
+  }
+}
+
+function getProductNameKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function createLedgerEntry(entry) {
+  return {
+    product_id: entry.product_id,
+    product_name: entry.product_name || "",
+    product_size: entry.product_size || "",
+    product_category: entry.product_category || "",
+    product_barcode: entry.product_barcode || "",
+    date: entry.date || null,
+    movement_type: entry.movement_type || "Movement",
+    reference: entry.reference || "",
+    details: entry.details || "",
+    change_quantity: toLedgerNumber(entry.change_quantity),
+    quantity_before:
+      entry.quantity_before === undefined ? null : entry.quantity_before,
+    quantity_after: entry.quantity_after === undefined ? null : entry.quantity_after,
+    recorded_by: entry.recorded_by || "",
+    source: entry.source || "",
+    sort_id: Number(entry.sort_id || 0),
+  };
+}
+
 function isVoidedSale(sale) {
   return (
     Number(sale.is_voided || 0) === 1 ||
@@ -2345,6 +2437,685 @@ router.get(
         message:
           error.message ||
           "Something went wrong while exporting stock transfers.",
+      });
+    }
+  }
+);
+
+
+// GET /api/exports/stock-ledger
+router.get(
+  "/stock-ledger",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+      const warnings = [];
+
+      const [products] = await pool.query(
+        `SELECT
+          id,
+          branch_id,
+          name,
+          size,
+          category,
+          barcode,
+          quantity,
+          low_stock_threshold,
+          is_active,
+          created_at
+         FROM products
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         ORDER BY name ASC`,
+        [branchId]
+      );
+
+      const productMap = new Map();
+      const productNameMap = new Map();
+      const ledgerMap = new Map();
+
+      products.forEach((product) => {
+        const cleanProduct = {
+          id: product.id,
+          branch_id: product.branch_id,
+          name: product.name || "",
+          size: product.size || "",
+          category: product.category || "",
+          barcode: product.barcode || "",
+          quantity: toLedgerNumber(product.quantity),
+          low_stock_threshold: toLedgerNumber(product.low_stock_threshold),
+          created_at: product.created_at,
+        };
+
+        productMap.set(Number(product.id), cleanProduct);
+        ledgerMap.set(Number(product.id), []);
+
+        const nameKey = getProductNameKey(product.name);
+
+        if (nameKey && !productNameMap.has(nameKey)) {
+          productNameMap.set(nameKey, Number(product.id));
+        }
+      });
+
+      function findProductByName(productName) {
+        const productId = productNameMap.get(getProductNameKey(productName));
+
+        if (!productId) {
+          return null;
+        }
+
+        return productMap.get(productId) || null;
+      }
+
+      function addLedgerEntry(productId, entry) {
+        const numericProductId = Number(productId);
+        const product = productMap.get(numericProductId);
+
+        if (!product || !ledgerMap.has(numericProductId)) {
+          return;
+        }
+
+        ledgerMap.get(numericProductId).push(
+          createLedgerEntry({
+            ...entry,
+            product_id: numericProductId,
+            product_name: product.name,
+            product_size: product.size,
+            product_category: product.category,
+            product_barcode: product.barcode,
+          })
+        );
+      }
+
+      const adjustments = await safeExportQuery(
+        "Stock adjustments",
+        `SELECT
+          sa.id,
+          sa.product_id,
+          sa.adjustment_type,
+          sa.quantity,
+          sa.old_quantity,
+          sa.new_quantity,
+          sa.reason,
+          sa.adjusted_at,
+          u.full_name AS adjusted_by_name
+         FROM stock_adjustments sa
+         LEFT JOIN users u ON sa.adjusted_by = u.id
+         WHERE sa.branch_id = ?
+         ORDER BY sa.adjusted_at ASC, sa.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      adjustments.forEach((adjustment) => {
+        const productId = Number(adjustment.product_id);
+        const oldQuantity = toLedgerNumber(adjustment.old_quantity);
+        const newQuantity = toLedgerNumber(adjustment.new_quantity);
+        const changeQuantity = newQuantity - oldQuantity;
+
+        addLedgerEntry(productId, {
+          date: adjustment.adjusted_at,
+          movement_type: `Stock Adjustment - ${adjustment.adjustment_type || ""}`,
+          reference: `ADJ-${adjustment.id}`,
+          details: adjustment.reason || "",
+          change_quantity: changeQuantity,
+          quantity_before: oldQuantity,
+          quantity_after: newQuantity,
+          recorded_by: adjustment.adjusted_by_name || "",
+          source: "stock_adjustments",
+          sort_id: adjustment.id,
+        });
+      });
+
+      const sales = await safeExportQuery(
+        "Sales movement",
+        `SELECT
+          si.id,
+          si.sale_id,
+          si.product_name,
+          si.quantity,
+          si.unit_price,
+          si.line_total,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone,
+          s.created_at,
+          u.full_name AS staff_name
+         FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
+         LEFT JOIN users u ON s.staff_id = u.id
+         WHERE s.branch_id = ?
+         AND COALESCE(s.is_voided, 0) = 0
+         AND COALESCE(s.sale_status, 'completed') != 'cancelled'
+         ORDER BY s.created_at ASC, si.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      sales.forEach((saleItem) => {
+        const product = findProductByName(saleItem.product_name);
+
+        if (!product) {
+          return;
+        }
+
+        const quantity = toLedgerNumber(saleItem.quantity);
+
+        addLedgerEntry(product.id, {
+          date: saleItem.created_at,
+          movement_type: "Sale",
+          reference: saleItem.receipt_number || `SALE-${saleItem.sale_id}`,
+          details: `Sold to ${
+            saleItem.customer_name || saleItem.customer_phone || "Walk-in Customer"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: saleItem.staff_name || "",
+          source: "sale_items",
+          sort_id: saleItem.id,
+        });
+      });
+
+      const purchases = await safeExportQuery(
+        "Purchase movement",
+        `SELECT
+          pi.id,
+          pi.purchase_id,
+          pi.product_name,
+          pi.quantity,
+          pi.cost_price,
+          pi.line_total,
+          p.invoice_number,
+          p.purchase_date,
+          p.created_at,
+          s.name AS supplier_name,
+          u.full_name AS created_by_name
+         FROM purchase_items pi
+         INNER JOIN purchases p ON pi.purchase_id = p.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
+         LEFT JOIN users u ON p.created_by = u.id
+         WHERE p.branch_id = ?
+         ORDER BY p.purchase_date ASC, pi.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      purchases.forEach((purchaseItem) => {
+        const product = findProductByName(purchaseItem.product_name);
+
+        if (!product) {
+          return;
+        }
+
+        const quantity = toLedgerNumber(purchaseItem.quantity);
+
+        addLedgerEntry(product.id, {
+          date: purchaseItem.purchase_date || purchaseItem.created_at,
+          movement_type: "Purchase",
+          reference:
+            purchaseItem.invoice_number || `PUR-${purchaseItem.purchase_id}`,
+          details: `Purchased from ${purchaseItem.supplier_name || "Supplier"}`,
+          change_quantity: quantity,
+          recorded_by: purchaseItem.created_by_name || "",
+          source: "purchase_items",
+          sort_id: purchaseItem.id,
+        });
+      });
+
+      const returns = await safeExportQuery(
+        "Returns movement",
+        `SELECT
+          r.id,
+          r.product_id,
+          r.quantity,
+          r.reason,
+          r.returned_at,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone
+         FROM returns r
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         WHERE r.branch_id = ?
+         ORDER BY r.returned_at ASC, r.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      returns.forEach((returnItem) => {
+        const productId = Number(returnItem.product_id);
+        const quantity = toLedgerNumber(returnItem.quantity);
+
+        addLedgerEntry(productId, {
+          date: returnItem.returned_at,
+          movement_type: "Return",
+          reference: returnItem.receipt_number || `RET-${returnItem.id}`,
+          details:
+            returnItem.reason ||
+            `Returned by ${
+              returnItem.customer_name || returnItem.customer_phone || "Customer"
+            }`,
+          change_quantity: quantity,
+          recorded_by: "",
+          source: "returns",
+          sort_id: returnItem.id,
+        });
+      });
+
+      const transferOut = await safeExportQuery(
+        "Transfer out movement",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.source_product_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          tb.code AS to_branch_code,
+          tb.name AS to_branch_name,
+          u.full_name AS dispatched_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users u ON st.dispatched_by = u.id
+         WHERE st.from_branch_id = ?
+         AND st.status IN ('dispatched', 'received')
+         ORDER BY COALESCE(st.dispatched_at, st.created_at) ASC, sti.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      transferOut.forEach((transferItem) => {
+        const productId = Number(transferItem.source_product_id);
+        const quantity =
+          toLedgerNumber(transferItem.dispatched_quantity) ||
+          toLedgerNumber(transferItem.received_quantity);
+
+        addLedgerEntry(productId, {
+          date: transferItem.dispatched_at || transferItem.created_at,
+          movement_type: "Transfer Out",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Transferred to ${
+            transferItem.to_branch_code ||
+            transferItem.to_branch_name ||
+            "another store"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: transferItem.dispatched_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      const transferIn = await safeExportQuery(
+        "Transfer in movement",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.destination_product_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          fb.code AS from_branch_code,
+          fb.name AS from_branch_name,
+          u.full_name AS received_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN users u ON st.received_by = u.id
+         WHERE st.to_branch_id = ?
+         AND st.status = 'received'
+         ORDER BY COALESCE(st.received_at, st.created_at) ASC, sti.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      transferIn.forEach((transferItem) => {
+        const productId = Number(transferItem.destination_product_id);
+        const quantity =
+          toLedgerNumber(transferItem.received_quantity) ||
+          toLedgerNumber(transferItem.dispatched_quantity);
+
+        addLedgerEntry(productId, {
+          date: transferItem.received_at || transferItem.created_at,
+          movement_type: "Transfer In",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Received from ${
+            transferItem.from_branch_code ||
+            transferItem.from_branch_name ||
+            "another store"
+          }`,
+          change_quantity: quantity,
+          recorded_by: transferItem.received_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+
+      const ledgerWorksheet = workbook.addWorksheet("Stock Movement Ledger");
+
+      ledgerWorksheet.columns = [
+        { header: "Date", key: "date" },
+        { header: "Product", key: "product_name" },
+        { header: "Size", key: "product_size" },
+        { header: "Category", key: "product_category" },
+        { header: "Barcode", key: "product_barcode" },
+        { header: "Movement Type", key: "movement_type" },
+        { header: "Reference", key: "reference" },
+        { header: "Details", key: "details" },
+        { header: "Change Qty", key: "change_quantity" },
+        { header: "Qty Before", key: "quantity_before" },
+        { header: "Qty After", key: "quantity_after" },
+        { header: "Recorded By", key: "recorded_by" },
+        { header: "Source", key: "source" },
+      ];
+
+      const productSummaryWorksheet = workbook.addWorksheet("Product Summary");
+
+      productSummaryWorksheet.columns = [
+        { header: "Product", key: "product_name" },
+        { header: "Size", key: "product_size" },
+        { header: "Category", key: "product_category" },
+        { header: "Barcode", key: "product_barcode" },
+        { header: "Opening Qty", key: "opening_quantity" },
+        { header: "Purchases", key: "purchase_quantity" },
+        { header: "Sales", key: "sales_quantity" },
+        { header: "Returns", key: "returns_quantity" },
+        { header: "Transfer In", key: "transfer_in_quantity" },
+        { header: "Transfer Out", key: "transfer_out_quantity" },
+        { header: "Adjustment Increase", key: "adjustment_increase_quantity" },
+        { header: "Adjustment Decrease", key: "adjustment_decrease_quantity" },
+        { header: "Current Qty", key: "current_quantity" },
+        { header: "Movement Records", key: "movement_records" },
+      ];
+
+      const summaryWorksheet = workbook.addWorksheet("Ledger Summary");
+
+      summaryWorksheet.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+
+      const allExportedEntries = [];
+      const productSummaries = [];
+
+      products.forEach((product) => {
+        const productId = Number(product.id);
+        const productEntries = ledgerMap.get(productId) || [];
+
+        productEntries.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+
+          if (dateA !== dateB) {
+            return dateA - dateB;
+          }
+
+          return a.sort_id - b.sort_id;
+        });
+
+        const currentQuantity = toLedgerNumber(product.quantity);
+        const totalChange = productEntries.reduce(
+          (sum, entry) => sum + toLedgerNumber(entry.change_quantity),
+          0
+        );
+        const openingQuantity = currentQuantity - totalChange;
+        let runningQuantity = openingQuantity;
+
+        const productEntriesWithRunningStock = productEntries.map((entry) => {
+          const quantityBefore =
+            entry.quantity_before === null
+              ? runningQuantity
+              : toLedgerNumber(entry.quantity_before);
+
+          const quantityAfter =
+            entry.quantity_after === null
+              ? quantityBefore + toLedgerNumber(entry.change_quantity)
+              : toLedgerNumber(entry.quantity_after);
+
+          runningQuantity = quantityAfter;
+
+          return {
+            ...entry,
+            quantity_before: quantityBefore,
+            quantity_after: quantityAfter,
+          };
+        });
+
+        const exportedProductEntries = productEntriesWithRunningStock.filter(
+          (entry) => isLedgerDateInRange(entry.date, from, to)
+        );
+
+        exportedProductEntries.forEach((entry) => {
+          allExportedEntries.push(entry);
+
+          ledgerWorksheet.addRow({
+            date: formatDateTime(entry.date),
+            product_name: entry.product_name,
+            product_size: entry.product_size,
+            product_category: entry.product_category,
+            product_barcode: entry.product_barcode,
+            movement_type: entry.movement_type,
+            reference: entry.reference,
+            details: entry.details,
+            change_quantity: toLedgerNumber(entry.change_quantity),
+            quantity_before: toLedgerNumber(entry.quantity_before),
+            quantity_after: toLedgerNumber(entry.quantity_after),
+            recorded_by: entry.recorded_by,
+            source: entry.source,
+          });
+        });
+
+        const summaryEntries = exportedProductEntries;
+
+        const purchaseQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Purchase")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const salesQuantity = Math.abs(
+          summaryEntries
+            .filter((entry) => entry.movement_type === "Sale")
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const returnsQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Return")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const transferInQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Transfer In")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const transferOutQuantity = Math.abs(
+          summaryEntries
+            .filter((entry) => entry.movement_type === "Transfer Out")
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const adjustmentIncreaseQuantity = summaryEntries
+          .filter(
+            (entry) =>
+              String(entry.movement_type).startsWith("Stock Adjustment") &&
+              toLedgerNumber(entry.change_quantity) > 0
+          )
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const adjustmentDecreaseQuantity = Math.abs(
+          summaryEntries
+            .filter(
+              (entry) =>
+                String(entry.movement_type).startsWith("Stock Adjustment") &&
+                toLedgerNumber(entry.change_quantity) < 0
+            )
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const productSummary = {
+          product_name: product.name || "",
+          product_size: product.size || "",
+          product_category: product.category || "",
+          product_barcode: product.barcode || "",
+          opening_quantity: openingQuantity,
+          purchase_quantity: purchaseQuantity,
+          sales_quantity: salesQuantity,
+          returns_quantity: returnsQuantity,
+          transfer_in_quantity: transferInQuantity,
+          transfer_out_quantity: transferOutQuantity,
+          adjustment_increase_quantity: adjustmentIncreaseQuantity,
+          adjustment_decrease_quantity: adjustmentDecreaseQuantity,
+          current_quantity: currentQuantity,
+          movement_records: summaryEntries.length,
+        };
+
+        productSummaries.push(productSummary);
+
+        productSummaryWorksheet.addRow(productSummary);
+      });
+
+      const totalPurchases = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.purchase_quantity),
+        0
+      );
+
+      const totalSales = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.sales_quantity),
+        0
+      );
+
+      const totalReturns = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.returns_quantity),
+        0
+      );
+
+      const totalTransferIn = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.transfer_in_quantity),
+        0
+      );
+
+      const totalTransferOut = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.transfer_out_quantity),
+        0
+      );
+
+      const totalAdjustmentIncrease = productSummaries.reduce(
+        (sum, product) =>
+          sum + toLedgerNumber(product.adjustment_increase_quantity),
+        0
+      );
+
+      const totalAdjustmentDecrease = productSummaries.reduce(
+        (sum, product) =>
+          sum + toLedgerNumber(product.adjustment_decrease_quantity),
+        0
+      );
+
+      summaryWorksheet.addRow({
+        metric: "Store ID",
+        value: branchId,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "From Date",
+        value: from || "All time",
+      });
+
+      summaryWorksheet.addRow({
+        metric: "To Date",
+        value: to || "All time",
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Products exported",
+        value: products.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Ledger movement records exported",
+        value: allExportedEntries.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total purchases quantity",
+        value: totalPurchases,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total sales quantity",
+        value: totalSales,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total returns quantity",
+        value: totalReturns,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total transfer in quantity",
+        value: totalTransferIn,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total transfer out quantity",
+        value: totalTransferOut,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total adjustment increase quantity",
+        value: totalAdjustmentIncrease,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total adjustment decrease quantity",
+        value: totalAdjustmentDecrease,
+      });
+
+      if (warnings.length > 0) {
+        const warningWorksheet = workbook.addWorksheet("Warnings");
+
+        warningWorksheet.columns = [
+          { header: "Warning", key: "warning" },
+        ];
+
+        warnings.forEach((warning) => {
+          warningWorksheet.addRow({ warning });
+        });
+
+        styleWorksheet(warningWorksheet);
+      }
+
+      styleWorksheet(ledgerWorksheet);
+      styleWorksheet(productSummaryWorksheet);
+      styleWorksheet(summaryWorksheet);
+
+      return sendStoreWorkbook(req, res, workbook, "stock-movement-ledger");
+    } catch (error) {
+      console.error("Export stock movement ledger error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while exporting stock movement ledger.",
       });
     }
   }

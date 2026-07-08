@@ -132,9 +132,9 @@ export default function ExportsPage() {
         <h2>Date Filter - {currentStoreCode}</h2>
         <p>
           The date filter affects Sales, Expenses, Purchases, Returns, Stock
-          Adjustments, Stock Transfers, Debt Payments and Daily Closings exports
-          for the selected store. Products, Low Stock and Debts export all
-          records for the selected store.
+          Adjustments, Stock Transfers, Stock Movement Ledger, Debt Payments and
+          Daily Closings exports for the selected store. Products, Low Stock and
+          Debts export all records for the selected store.
         </p>
 
         <div className="filter-grid export-filter-grid">
@@ -244,6 +244,27 @@ export default function ExportsPage() {
             }
           >
             Export Stock Transfers
+          </button>
+        </div>
+
+        <div className="section-card export-card">
+          <h2>Stock Movement Ledger - {currentStoreCode}</h2>
+          <p>
+            Download one complete stock audit ledger showing purchases, sales,
+            returns, stock adjustments, transfers in, transfers out and running
+            balances for every product.
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              downloadFile(
+                "/exports/stock-ledger",
+                buildStoreFileName("stock-movement-ledger"),
+                true
+              )
+            }
+          >
+            Export Stock Movement Ledger
           </button>
         </div>
 
