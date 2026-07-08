@@ -99,14 +99,6 @@ export default function StockTransfersPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  const fromBranch = useMemo(() => {
-    return branches.find((branch) => Number(branch.id) === Number(fromBranchId));
-  }, [branches, fromBranchId]);
-
-  const toBranch = useMemo(() => {
-    return branches.find((branch) => Number(branch.id) === Number(toBranchId));
-  }, [branches, toBranchId]);
-
   const selectedProduct = useMemo(() => {
     return products.find(
       (product) => Number(product.id) === Number(selectedProductId)
@@ -338,6 +330,51 @@ export default function StockTransfersPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function downloadTransferPdf(transfer) {
+    const transferId = transfer?.id;
+
+    if (!transferId) {
+      setError("Please select a transfer first.");
+      return;
+    }
+
+    setActionLoading(`${transferId}-pdf`);
+    setNotice("");
+    setError("");
+
+    try {
+      const response = await axiosClient.get(`/stock-transfers/${transferId}/pdf`, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], {
+        type: "application/pdf",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${
+        transfer.transfer_number || `stock-transfer-${transferId}`
+      }_transfer_note.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      setNotice("Transfer note PDF downloaded successfully.");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Failed to download transfer note PDF."
+      );
+    } finally {
+      setActionLoading("");
     }
   }
 
@@ -864,8 +901,7 @@ export default function StockTransfersPage() {
                 Status:{" "}
                 <strong
                   style={{
-                    color:
-                      statusColors[selectedTransfer.status] || "#07182c",
+                    color: statusColors[selectedTransfer.status] || "#07182c",
                   }}
                 >
                   {cleanStatus(selectedTransfer.status)}
@@ -878,17 +914,30 @@ export default function StockTransfersPage() {
                 value={actionNote}
                 onChange={(event) => setActionNote(event.target.value)}
                 placeholder="Optional action note before approve, dispatch, receive, reject or cancel..."
-                style={{ ...styles.input, minHeight: "76px", resize: "vertical" }}
+                style={{
+                  ...styles.input,
+                  minHeight: "76px",
+                  resize: "vertical",
+                }}
               />
 
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  style={styles.mutedButton}
+                  disabled={actionLoading === `${selectedTransfer.id}-pdf`}
+                  onClick={() => downloadTransferPdf(selectedTransfer)}
+                >
+                  {actionLoading === `${selectedTransfer.id}-pdf`
+                    ? "Downloading..."
+                    : "Download Transfer Note PDF"}
+                </button>
+
                 {canApprove(selectedTransfer) && (
                   <button
                     type="button"
                     style={styles.smallButton}
-                    disabled={
-                      actionLoading === `${selectedTransfer.id}-approve`
-                    }
+                    disabled={actionLoading === `${selectedTransfer.id}-approve`}
                     onClick={() =>
                       runTransferAction(selectedTransfer.id, "approve")
                     }
@@ -916,9 +965,7 @@ export default function StockTransfersPage() {
                   <button
                     type="button"
                     style={styles.goldButton}
-                    disabled={
-                      actionLoading === `${selectedTransfer.id}-receive`
-                    }
+                    disabled={actionLoading === `${selectedTransfer.id}-receive`}
                     onClick={() =>
                       runTransferAction(selectedTransfer.id, "receive")
                     }
@@ -1121,8 +1168,7 @@ export default function StockTransfersPage() {
                     <td style={styles.td}>
                       {formatNumber(transfer.item_count)} item(s)
                       <br />
-                      Qty:{" "}
-                      {formatNumber(transfer.total_requested_quantity)}
+                      Qty: {formatNumber(transfer.total_requested_quantity)}
                     </td>
                     <td style={styles.td}>
                       {transfer.requested_by_name || "—"}
