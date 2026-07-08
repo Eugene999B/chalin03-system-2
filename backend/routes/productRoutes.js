@@ -52,6 +52,35 @@ function toSafeLimit(value, fallback = 50) {
   return Math.min(number, 200);
 }
 
+
+async function safeStockLedgerQuery(label, sql, params) {
+  try {
+    const [rows] = await pool.query(sql, params);
+
+    return {
+      rows,
+      warning: null,
+    };
+  } catch (error) {
+    console.warn(`Stock ledger ${label} query skipped:`, error.message);
+
+    return {
+      rows: [],
+      warning: `${label} records skipped: ${error.message}`,
+    };
+  }
+}
+
+function toLedgerNumber(value) {
+  const number = Number(value || 0);
+
+  if (Number.isNaN(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
 function nullIfEmpty(value) {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -321,6 +350,523 @@ router.get(
         message:
           error.message ||
           "Something went wrong while fetching recent stock adjustment records.",
+      });
+    }
+  }
+);
+
+
+// GET /api/products/:id/stock-ledger
+router.get(
+  "/:id/stock-ledger",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
+      const { id } = req.params;
+
+      const [productRows] = await pool.query(
+        `SELECT
+          id,
+          branch_id,
+          name,
+          size,
+          category,
+          barcode,
+          quantity,
+          created_at
+         FROM products
+         WHERE id = ?
+         AND branch_id = ?
+         LIMIT 1`,
+        [id, branchId]
+      );
+
+      if (productRows.length === 0) {
+        return res.status(404).json({
+          status: "error",
+          message: "Product not found in this store.",
+        });
+      }
+
+      const product = productRows[0];
+      const warnings = [];
+      const ledger = [];
+
+      function addWarning(warning) {
+        if (warning) {
+          warnings.push(warning);
+        }
+      }
+
+      function addLedgerEntry(entry) {
+        ledger.push({
+          date: entry.date || null,
+          movement_type: entry.movement_type || "Movement",
+          reference: entry.reference || "",
+          details: entry.details || "",
+          change_quantity: toLedgerNumber(entry.change_quantity),
+          quantity_before:
+            entry.quantity_before === undefined ? null : entry.quantity_before,
+          quantity_after:
+            entry.quantity_after === undefined ? null : entry.quantity_after,
+          recorded_by: entry.recorded_by || "",
+          source: entry.source || "",
+          sort_id: Number(entry.sort_id || 0),
+        });
+      }
+
+      const adjustmentResult = await safeStockLedgerQuery(
+        "stock adjustments",
+        `SELECT
+          sa.id,
+          sa.adjustment_type,
+          sa.quantity,
+          sa.old_quantity,
+          sa.new_quantity,
+          sa.reason,
+          sa.adjusted_at,
+          u.full_name AS adjusted_by_name
+         FROM stock_adjustments sa
+         LEFT JOIN users u ON sa.adjusted_by = u.id
+         WHERE sa.product_id = ?
+         AND sa.branch_id = ?
+         ORDER BY sa.adjusted_at ASC, sa.id ASC`,
+        [id, branchId]
+      );
+
+      addWarning(adjustmentResult.warning);
+
+      adjustmentResult.rows.forEach((adjustment) => {
+        const oldQuantity = toLedgerNumber(adjustment.old_quantity);
+        const newQuantity = toLedgerNumber(adjustment.new_quantity);
+        const changeQuantity = newQuantity - oldQuantity;
+
+        addLedgerEntry({
+          date: adjustment.adjusted_at,
+          movement_type: `Stock Adjustment - ${adjustment.adjustment_type}`,
+          reference: `ADJ-${adjustment.id}`,
+          details: adjustment.reason || "",
+          change_quantity: changeQuantity,
+          quantity_before: oldQuantity,
+          quantity_after: newQuantity,
+          recorded_by: adjustment.adjusted_by_name || "",
+          source: "stock_adjustments",
+          sort_id: adjustment.id,
+        });
+      });
+
+      const salesByProductIdResult = await safeStockLedgerQuery(
+        "sales by product ID",
+        `SELECT
+          si.id,
+          si.sale_id,
+          si.quantity,
+          si.product_name,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone,
+          s.created_at,
+          u.full_name AS staff_name
+         FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
+         LEFT JOIN users u ON s.staff_id = u.id
+         WHERE s.branch_id = ?
+         AND si.product_id = ?
+         AND COALESCE(s.is_voided, 0) = 0
+         AND COALESCE(s.sale_status, 'completed') != 'cancelled'
+         ORDER BY s.created_at ASC, si.id ASC`,
+        [branchId, id]
+      );
+
+      addWarning(salesByProductIdResult.warning);
+
+      let salesRows = salesByProductIdResult.rows;
+
+      if (salesRows.length === 0) {
+        const salesByNameResult = await safeStockLedgerQuery(
+          "sales by product name",
+          `SELECT
+            si.id,
+            si.sale_id,
+            si.quantity,
+            si.product_name,
+            s.receipt_number,
+            s.customer_name,
+            s.customer_phone,
+            s.created_at,
+            u.full_name AS staff_name
+           FROM sale_items si
+           INNER JOIN sales s ON si.sale_id = s.id
+           LEFT JOIN users u ON s.staff_id = u.id
+           WHERE s.branch_id = ?
+           AND si.product_name = ?
+           AND COALESCE(s.is_voided, 0) = 0
+           AND COALESCE(s.sale_status, 'completed') != 'cancelled'
+           ORDER BY s.created_at ASC, si.id ASC`,
+          [branchId, product.name]
+        );
+
+        addWarning(salesByNameResult.warning);
+        salesRows = salesByNameResult.rows;
+      }
+
+      salesRows.forEach((saleItem) => {
+        const quantity = toLedgerNumber(saleItem.quantity);
+
+        addLedgerEntry({
+          date: saleItem.created_at,
+          movement_type: "Sale",
+          reference: saleItem.receipt_number || `SALE-${saleItem.sale_id}`,
+          details: `Sold to ${
+            saleItem.customer_name || saleItem.customer_phone || "Walk-in Customer"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: saleItem.staff_name || "",
+          source: "sale_items",
+          sort_id: saleItem.id,
+        });
+      });
+
+      const purchaseByProductIdResult = await safeStockLedgerQuery(
+        "purchases by product ID",
+        `SELECT
+          pi.id,
+          pi.purchase_id,
+          pi.quantity,
+          pi.product_name,
+          p.invoice_number,
+          p.purchase_date,
+          p.created_at,
+          s.name AS supplier_name,
+          u.full_name AS created_by_name
+         FROM purchase_items pi
+         INNER JOIN purchases p ON pi.purchase_id = p.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
+         LEFT JOIN users u ON p.created_by = u.id
+         WHERE p.branch_id = ?
+         AND pi.product_id = ?
+         ORDER BY p.purchase_date ASC, pi.id ASC`,
+        [branchId, id]
+      );
+
+      addWarning(purchaseByProductIdResult.warning);
+
+      let purchaseRows = purchaseByProductIdResult.rows;
+
+      if (purchaseRows.length === 0) {
+        const purchaseByNameResult = await safeStockLedgerQuery(
+          "purchases by product name",
+          `SELECT
+            pi.id,
+            pi.purchase_id,
+            pi.quantity,
+            pi.product_name,
+            p.invoice_number,
+            p.purchase_date,
+            p.created_at,
+            s.name AS supplier_name,
+            u.full_name AS created_by_name
+           FROM purchase_items pi
+           INNER JOIN purchases p ON pi.purchase_id = p.id
+           LEFT JOIN suppliers s
+            ON p.supplier_id = s.id
+            AND s.branch_id = p.branch_id
+           LEFT JOIN users u ON p.created_by = u.id
+           WHERE p.branch_id = ?
+           AND pi.product_name = ?
+           ORDER BY p.purchase_date ASC, pi.id ASC`,
+          [branchId, product.name]
+        );
+
+        addWarning(purchaseByNameResult.warning);
+        purchaseRows = purchaseByNameResult.rows;
+      }
+
+      purchaseRows.forEach((purchaseItem) => {
+        const quantity = toLedgerNumber(purchaseItem.quantity);
+
+        addLedgerEntry({
+          date: purchaseItem.purchase_date || purchaseItem.created_at,
+          movement_type: "Purchase",
+          reference:
+            purchaseItem.invoice_number || `PUR-${purchaseItem.purchase_id}`,
+          details: `Purchased from ${purchaseItem.supplier_name || "Supplier"}`,
+          change_quantity: quantity,
+          recorded_by: purchaseItem.created_by_name || "",
+          source: "purchase_items",
+          sort_id: purchaseItem.id,
+        });
+      });
+
+      const returnsResult = await safeStockLedgerQuery(
+        "returns",
+        `SELECT
+          r.id,
+          r.quantity,
+          r.reason,
+          r.returned_at,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone
+         FROM returns r
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         WHERE r.branch_id = ?
+         AND r.product_id = ?
+         ORDER BY r.returned_at ASC, r.id ASC`,
+        [branchId, id]
+      );
+
+      addWarning(returnsResult.warning);
+
+      returnsResult.rows.forEach((returnItem) => {
+        const quantity = toLedgerNumber(returnItem.quantity);
+
+        addLedgerEntry({
+          date: returnItem.returned_at,
+          movement_type: "Return",
+          reference: returnItem.receipt_number || `RET-${returnItem.id}`,
+          details:
+            returnItem.reason ||
+            `Returned by ${
+              returnItem.customer_name || returnItem.customer_phone || "Customer"
+            }`,
+          change_quantity: quantity,
+          recorded_by: "",
+          source: "returns",
+          sort_id: returnItem.id,
+        });
+      });
+
+      const transferOutResult = await safeStockLedgerQuery(
+        "stock transfer out",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          tb.branch_code AS to_branch_code,
+          tb.name AS to_branch_name,
+          u.full_name AS dispatched_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users u ON st.dispatched_by = u.id
+         WHERE st.from_branch_id = ?
+         AND sti.source_product_id = ?
+         AND st.status IN ('dispatched', 'received')
+         ORDER BY COALESCE(st.dispatched_at, st.created_at) ASC, sti.id ASC`,
+        [branchId, id]
+      );
+
+      addWarning(transferOutResult.warning);
+
+      transferOutResult.rows.forEach((transferItem) => {
+        const quantity =
+          toLedgerNumber(transferItem.dispatched_quantity) ||
+          toLedgerNumber(transferItem.received_quantity);
+
+        addLedgerEntry({
+          date: transferItem.dispatched_at || transferItem.created_at,
+          movement_type: "Transfer Out",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Transferred to ${
+            transferItem.to_branch_code ||
+            transferItem.to_branch_name ||
+            "another store"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: transferItem.dispatched_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      const transferInResult = await safeStockLedgerQuery(
+        "stock transfer in",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          fb.branch_code AS from_branch_code,
+          fb.name AS from_branch_name,
+          u.full_name AS received_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN users u ON st.received_by = u.id
+         WHERE st.to_branch_id = ?
+         AND sti.destination_product_id = ?
+         AND st.status = 'received'
+         ORDER BY COALESCE(st.received_at, st.created_at) ASC, sti.id ASC`,
+        [branchId, id]
+      );
+
+      addWarning(transferInResult.warning);
+
+      transferInResult.rows.forEach((transferItem) => {
+        const quantity =
+          toLedgerNumber(transferItem.received_quantity) ||
+          toLedgerNumber(transferItem.dispatched_quantity);
+
+        addLedgerEntry({
+          date: transferItem.received_at || transferItem.created_at,
+          movement_type: "Transfer In",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Received from ${
+            transferItem.from_branch_code ||
+            transferItem.from_branch_name ||
+            "another store"
+          }`,
+          change_quantity: quantity,
+          recorded_by: transferItem.received_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      ledger.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+
+        if (dateA !== dateB) {
+          return dateA - dateB;
+        }
+
+        return a.sort_id - b.sort_id;
+      });
+
+      const currentQuantity = toLedgerNumber(product.quantity);
+      const totalChange = ledger.reduce(
+        (sum, entry) => sum + toLedgerNumber(entry.change_quantity),
+        0
+      );
+
+      const openingQuantity = currentQuantity - totalChange;
+      let runningQuantity = openingQuantity;
+
+      const ledgerWithRunningStock = ledger.map((entry) => {
+        const quantityBefore =
+          entry.quantity_before === null
+            ? runningQuantity
+            : toLedgerNumber(entry.quantity_before);
+
+        const quantityAfter =
+          entry.quantity_after === null
+            ? quantityBefore + toLedgerNumber(entry.change_quantity)
+            : toLedgerNumber(entry.quantity_after);
+
+        runningQuantity = quantityAfter;
+
+        return {
+          ...entry,
+          quantity_before: quantityBefore,
+          quantity_after: quantityAfter,
+        };
+      });
+
+      const summary = {
+        opening_quantity: openingQuantity,
+        current_quantity: currentQuantity,
+        total_purchase_quantity: purchaseRows.reduce(
+          (sum, item) => sum + toLedgerNumber(item.quantity),
+          0
+        ),
+        total_sales_quantity: salesRows.reduce(
+          (sum, item) => sum + toLedgerNumber(item.quantity),
+          0
+        ),
+        total_returns_quantity: returnsResult.rows.reduce(
+          (sum, item) => sum + toLedgerNumber(item.quantity),
+          0
+        ),
+        total_transfer_out_quantity: transferOutResult.rows.reduce(
+          (sum, item) =>
+            sum +
+            (toLedgerNumber(item.dispatched_quantity) ||
+              toLedgerNumber(item.received_quantity)),
+          0
+        ),
+        total_transfer_in_quantity: transferInResult.rows.reduce(
+          (sum, item) =>
+            sum +
+            (toLedgerNumber(item.received_quantity) ||
+              toLedgerNumber(item.dispatched_quantity)),
+          0
+        ),
+        total_adjustment_increase_quantity: adjustmentResult.rows
+          .filter(
+            (item) =>
+              toLedgerNumber(item.new_quantity) -
+                toLedgerNumber(item.old_quantity) >
+              0
+          )
+          .reduce(
+            (sum, item) =>
+              sum +
+              (toLedgerNumber(item.new_quantity) -
+                toLedgerNumber(item.old_quantity)),
+            0
+          ),
+        total_adjustment_decrease_quantity: Math.abs(
+          adjustmentResult.rows
+            .filter(
+              (item) =>
+                toLedgerNumber(item.new_quantity) -
+                  toLedgerNumber(item.old_quantity) <
+                0
+            )
+            .reduce(
+              (sum, item) =>
+                sum +
+                (toLedgerNumber(item.new_quantity) -
+                  toLedgerNumber(item.old_quantity)),
+              0
+            )
+        ),
+        total_movement_records: ledgerWithRunningStock.length,
+      };
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        product,
+        summary,
+        count: ledgerWithRunningStock.length,
+        warnings,
+        ledger: ledgerWithRunningStock.reverse(),
+      });
+    } catch (error) {
+      console.error("Get stock ledger error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while fetching the stock movement ledger.",
       });
     }
   }

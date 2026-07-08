@@ -57,6 +57,12 @@ export default function ProductsPage() {
   const [stockHistoryLoading, setStockHistoryLoading] = useState(false);
   const [stockSaving, setStockSaving] = useState(false);
 
+  const [ledgerProduct, setLedgerProduct] = useState(null);
+  const [stockLedger, setStockLedger] = useState([]);
+  const [stockLedgerSummary, setStockLedgerSummary] = useState(null);
+  const [stockLedgerWarnings, setStockLedgerWarnings] = useState([]);
+  const [stockLedgerLoading, setStockLedgerLoading] = useState(false);
+
   const [recentAdjustments, setRecentAdjustments] = useState([]);
   const [recentAdjustmentsLoading, setRecentAdjustmentsLoading] =
     useState(false);
@@ -88,6 +94,42 @@ export default function ProductsPage() {
     };
 
     return types[String(value || "").toLowerCase()] || value || "-";
+  }
+
+  function formatNumber(value) {
+    return Number(value || 0).toLocaleString();
+  }
+
+  function formatChangeQuantity(value) {
+    const number = Number(value || 0);
+
+    if (number > 0) {
+      return `+${formatNumber(number)}`;
+    }
+
+    return formatNumber(number);
+  }
+
+  function getChangeStyle(value) {
+    const number = Number(value || 0);
+
+    if (number > 0) {
+      return {
+        fontWeight: "900",
+        color: "#047857",
+      };
+    }
+
+    if (number < 0) {
+      return {
+        fontWeight: "900",
+        color: "#b91c1c",
+      };
+    }
+
+    return {
+      fontWeight: "900",
+    };
   }
 
   function calculateExpectedStock() {
@@ -305,6 +347,43 @@ export default function ProductsPage() {
     setStockSaving(false);
   }
 
+  async function openStockLedger(product) {
+    setMessage("");
+    setError("");
+    setLedgerProduct(product);
+    setStockLedger([]);
+    setStockLedgerSummary(null);
+    setStockLedgerWarnings([]);
+    setStockLedgerLoading(true);
+
+    try {
+      const response = await axiosClient.get(
+        `/products/${product.id}/stock-ledger`
+      );
+
+      setLedgerProduct(response.data.product || product);
+      setStockLedger(response.data.ledger || []);
+      setStockLedgerSummary(response.data.summary || null);
+      setStockLedgerWarnings(response.data.warnings || []);
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Failed to load stock movement ledger. Make sure the backend ledger route is installed."
+      );
+      setLedgerProduct(null);
+    } finally {
+      setStockLedgerLoading(false);
+    }
+  }
+
+  function closeStockLedger() {
+    setLedgerProduct(null);
+    setStockLedger([]);
+    setStockLedgerSummary(null);
+    setStockLedgerWarnings([]);
+    setStockLedgerLoading(false);
+  }
+
   async function saveStockAdjustment(event) {
     event.preventDefault();
 
@@ -378,7 +457,7 @@ export default function ProductsPage() {
         <div>
           <h1>Products</h1>
           <p>
-            Add, edit, adjust and manage spare parts stock for{" "}
+            Add, edit, adjust, audit and manage spare parts stock for{" "}
             <strong>
               {currentStoreCode} — {currentStoreName}
             </strong>
@@ -405,8 +484,8 @@ export default function ProductsPage() {
         {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
         <br />
         <small>
-          Product list, stock adjustments, low-stock warnings and barcode checks
-          are filtered to this selected store only.
+          Product list, stock adjustments, stock movement ledger, low-stock
+          warnings and barcode checks are filtered to this selected store only.
         </small>
       </div>
 
@@ -614,6 +693,14 @@ export default function ProductsPage() {
                                 onClick={() => openStockAdjustment(product)}
                               >
                                 Adjust Stock
+                              </button>
+
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => openStockLedger(product)}
+                              >
+                                View Ledger
                               </button>
                             </>
                           )}
@@ -828,6 +915,164 @@ export default function ProductsPage() {
                         <td>{adjustment.new_quantity}</td>
                         <td>{adjustment.reason}</td>
                         <td>{adjustment.adjusted_by_name || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ledgerProduct && (
+        <div className="modal-backdrop">
+          <div className="receipt-modal" style={{ maxWidth: "1180px" }}>
+            <div className="modal-header">
+              <div>
+                <h2>Stock Movement Ledger - {currentStoreCode}</h2>
+                <p>
+                  Product: <strong>{ledgerProduct.name}</strong>
+                  <br />
+                  Store: <strong>{currentStoreName}</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeStockLedger}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="receipt-preview">
+              <h3>Ledger Summary</h3>
+
+              {stockLedgerLoading ? (
+                <p>Loading stock movement ledger...</p>
+              ) : (
+                <>
+                  <div className="receipt-info-grid">
+                    <p>
+                      <strong>Opening Stock:</strong>{" "}
+                      {formatNumber(stockLedgerSummary?.opening_quantity)}
+                    </p>
+
+                    <p>
+                      <strong>Current Stock:</strong>{" "}
+                      {formatNumber(stockLedgerSummary?.current_quantity)}
+                    </p>
+
+                    <p>
+                      <strong>Total Purchases:</strong>{" "}
+                      {formatNumber(
+                        stockLedgerSummary?.total_purchase_quantity
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Total Sales:</strong>{" "}
+                      {formatNumber(stockLedgerSummary?.total_sales_quantity)}
+                    </p>
+
+                    <p>
+                      <strong>Total Returns:</strong>{" "}
+                      {formatNumber(stockLedgerSummary?.total_returns_quantity)}
+                    </p>
+
+                    <p>
+                      <strong>Transfers Out:</strong>{" "}
+                      {formatNumber(
+                        stockLedgerSummary?.total_transfer_out_quantity
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Transfers In:</strong>{" "}
+                      {formatNumber(
+                        stockLedgerSummary?.total_transfer_in_quantity
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Adjustment Increase:</strong>{" "}
+                      {formatNumber(
+                        stockLedgerSummary?.total_adjustment_increase_quantity
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Adjustment Decrease:</strong>{" "}
+                      {formatNumber(
+                        stockLedgerSummary?.total_adjustment_decrease_quantity
+                      )}
+                    </p>
+
+                    <p>
+                      <strong>Movement Records:</strong>{" "}
+                      {formatNumber(stockLedgerSummary?.total_movement_records)}
+                    </p>
+                  </div>
+
+                  <div className="warning-box">
+                    This ledger is calculated from stock adjustments, sales,
+                    purchases, returns and stock transfers. It is shown newest
+                    first for easier auditing.
+                  </div>
+
+                  {stockLedgerWarnings.length > 0 && (
+                    <div className="warning-box">
+                      <strong>Ledger warnings:</strong>
+                      <ul style={{ marginBottom: 0 }}>
+                        {stockLedgerWarnings.map((warning, index) => (
+                          <li key={`${warning}-${index}`}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="receipt-preview">
+              <h3>Movement History</h3>
+
+              {stockLedgerLoading ? (
+                <p>Loading movement history...</p>
+              ) : stockLedger.length === 0 ? (
+                <p>No stock movement records found for this product.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Movement</th>
+                      <th>Reference</th>
+                      <th>Details</th>
+                      <th>Change</th>
+                      <th>Before</th>
+                      <th>After</th>
+                      <th>By</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {stockLedger.map((entry, index) => (
+                      <tr
+                        key={`${entry.source}-${entry.reference}-${entry.sort_id}-${index}`}
+                      >
+                        <td>{formatDateTime(entry.date)}</td>
+                        <td>{entry.movement_type || "-"}</td>
+                        <td>{entry.reference || "-"}</td>
+                        <td>{entry.details || "-"}</td>
+                        <td style={getChangeStyle(entry.change_quantity)}>
+                          {formatChangeQuantity(entry.change_quantity)}
+                        </td>
+                        <td>{formatNumber(entry.quantity_before)}</td>
+                        <td>{formatNumber(entry.quantity_after)}</td>
+                        <td>{entry.recorded_by || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
