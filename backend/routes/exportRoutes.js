@@ -1907,4 +1907,447 @@ router.get(
   }
 );
 
+
+// GET /api/exports/stock-transfers
+router.get(
+  "/stock-transfers",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+
+      const transferParams = [branchId, branchId];
+      const transferDateFilter = buildDateFilter(
+        "st",
+        "created_at",
+        from,
+        to,
+        transferParams
+      );
+
+      const [transfers] = await pool.query(
+        `SELECT
+          st.id,
+          st.transfer_number,
+          st.from_branch_id,
+          st.to_branch_id,
+          st.status,
+          st.request_note,
+          st.approve_note,
+          st.dispatch_note,
+          st.receive_note,
+          st.cancel_note,
+          st.reject_note,
+          st.requested_at,
+          st.approved_at,
+          st.dispatched_at,
+          st.received_at,
+          st.cancelled_at,
+          st.rejected_at,
+          st.created_at,
+
+          fb.code AS from_branch_code,
+          fb.name AS from_branch_name,
+          fb.location AS from_branch_location,
+
+          tb.code AS to_branch_code,
+          tb.name AS to_branch_name,
+          tb.location AS to_branch_location,
+
+          rb.full_name AS requested_by_name,
+          ab.full_name AS approved_by_name,
+          db.full_name AS dispatched_by_name,
+          rcb.full_name AS received_by_name,
+          cb.full_name AS cancelled_by_name,
+          rjb.full_name AS rejected_by_name,
+
+          COUNT(sti.id) AS item_count,
+          COALESCE(SUM(sti.requested_quantity), 0) AS total_requested_quantity,
+          COALESCE(SUM(sti.dispatched_quantity), 0) AS total_dispatched_quantity,
+          COALESCE(SUM(sti.received_quantity), 0) AS total_received_quantity
+
+         FROM stock_transfers st
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users rb ON rb.id = st.requested_by
+         LEFT JOIN users ab ON ab.id = st.approved_by
+         LEFT JOIN users db ON db.id = st.dispatched_by
+         LEFT JOIN users rcb ON rcb.id = st.received_by
+         LEFT JOIN users cb ON cb.id = st.cancelled_by
+         LEFT JOIN users rjb ON rjb.id = st.rejected_by
+         LEFT JOIN stock_transfer_items sti ON sti.transfer_id = st.id
+
+         WHERE (st.from_branch_id = ? OR st.to_branch_id = ?)
+         ${transferDateFilter}
+
+         GROUP BY
+          st.id,
+          st.transfer_number,
+          st.from_branch_id,
+          st.to_branch_id,
+          st.status,
+          st.request_note,
+          st.approve_note,
+          st.dispatch_note,
+          st.receive_note,
+          st.cancel_note,
+          st.reject_note,
+          st.requested_at,
+          st.approved_at,
+          st.dispatched_at,
+          st.received_at,
+          st.cancelled_at,
+          st.rejected_at,
+          st.created_at,
+          fb.code,
+          fb.name,
+          fb.location,
+          tb.code,
+          tb.name,
+          tb.location,
+          rb.full_name,
+          ab.full_name,
+          db.full_name,
+          rcb.full_name,
+          cb.full_name,
+          rjb.full_name
+
+         ORDER BY st.created_at DESC, st.id DESC`,
+        transferParams
+      );
+
+      const transferIds = transfers.map((transfer) => transfer.id);
+
+      let transferItems = [];
+
+      if (transferIds.length > 0) {
+        const placeholders = transferIds.map(() => "?").join(",");
+
+        const [items] = await pool.query(
+          `SELECT
+            sti.id,
+            sti.transfer_id,
+            sti.source_product_id,
+            sti.destination_product_id,
+            sti.product_name,
+            sti.barcode,
+            sti.category,
+            sti.size,
+            sti.requested_quantity,
+            sti.dispatched_quantity,
+            sti.received_quantity,
+            sti.source_quantity_before,
+            sti.source_quantity_after,
+            sti.destination_quantity_before,
+            sti.destination_quantity_after,
+            sti.item_note,
+
+            st.transfer_number,
+            st.status,
+            st.created_at,
+
+            fb.code AS from_branch_code,
+            fb.name AS from_branch_name,
+
+            tb.code AS to_branch_code,
+            tb.name AS to_branch_name
+
+           FROM stock_transfer_items sti
+           INNER JOIN stock_transfers st ON st.id = sti.transfer_id
+           LEFT JOIN branches fb ON fb.id = st.from_branch_id
+           LEFT JOIN branches tb ON tb.id = st.to_branch_id
+
+           WHERE sti.transfer_id IN (${placeholders})
+           AND (st.from_branch_id = ? OR st.to_branch_id = ?)
+
+           ORDER BY st.created_at DESC, sti.id ASC`,
+          [...transferIds, branchId, branchId]
+        );
+
+        transferItems = items;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+
+      const transfersWorksheet = workbook.addWorksheet("Stock Transfers");
+
+      transfersWorksheet.columns = [
+        { header: "Transfer Number", key: "transfer_number" },
+        { header: "Direction", key: "direction" },
+        { header: "From Store", key: "from_store" },
+        { header: "To Store", key: "to_store" },
+        { header: "Status", key: "status" },
+        { header: "Item Count", key: "item_count" },
+        { header: "Requested Quantity", key: "total_requested_quantity" },
+        { header: "Dispatched Quantity", key: "total_dispatched_quantity" },
+        { header: "Received Quantity", key: "total_received_quantity" },
+        { header: "Requested By", key: "requested_by_name" },
+        { header: "Approved By", key: "approved_by_name" },
+        { header: "Dispatched By", key: "dispatched_by_name" },
+        { header: "Received By", key: "received_by_name" },
+        { header: "Cancelled By", key: "cancelled_by_name" },
+        { header: "Rejected By", key: "rejected_by_name" },
+        { header: "Request Note", key: "request_note" },
+        { header: "Approve Note", key: "approve_note" },
+        { header: "Dispatch Note", key: "dispatch_note" },
+        { header: "Receive Note", key: "receive_note" },
+        { header: "Cancel Note", key: "cancel_note" },
+        { header: "Reject Note", key: "reject_note" },
+        { header: "Requested At", key: "requested_at" },
+        { header: "Approved At", key: "approved_at" },
+        { header: "Dispatched At", key: "dispatched_at" },
+        { header: "Received At", key: "received_at" },
+        { header: "Cancelled At", key: "cancelled_at" },
+        { header: "Rejected At", key: "rejected_at" },
+        { header: "Created At", key: "created_at" },
+      ];
+
+      transfers.forEach((transfer) => {
+        let direction = "Related";
+
+        if (Number(transfer.from_branch_id) === Number(branchId)) {
+          direction = "Transfer Out";
+        }
+
+        if (Number(transfer.to_branch_id) === Number(branchId)) {
+          direction = "Transfer In";
+        }
+
+        transfersWorksheet.addRow({
+          transfer_number: transfer.transfer_number || "",
+          direction,
+          from_store: `${transfer.from_branch_code || ""} - ${
+            transfer.from_branch_name || ""
+          }`,
+          to_store: `${transfer.to_branch_code || ""} - ${
+            transfer.to_branch_name || ""
+          }`,
+          status: transfer.status || "",
+          item_count: Number(transfer.item_count || 0),
+          total_requested_quantity: Number(
+            transfer.total_requested_quantity || 0
+          ),
+          total_dispatched_quantity: Number(
+            transfer.total_dispatched_quantity || 0
+          ),
+          total_received_quantity: Number(
+            transfer.total_received_quantity || 0
+          ),
+          requested_by_name: transfer.requested_by_name || "",
+          approved_by_name: transfer.approved_by_name || "",
+          dispatched_by_name: transfer.dispatched_by_name || "",
+          received_by_name: transfer.received_by_name || "",
+          cancelled_by_name: transfer.cancelled_by_name || "",
+          rejected_by_name: transfer.rejected_by_name || "",
+          request_note: transfer.request_note || "",
+          approve_note: transfer.approve_note || "",
+          dispatch_note: transfer.dispatch_note || "",
+          receive_note: transfer.receive_note || "",
+          cancel_note: transfer.cancel_note || "",
+          reject_note: transfer.reject_note || "",
+          requested_at: formatDateTime(transfer.requested_at),
+          approved_at: formatDateTime(transfer.approved_at),
+          dispatched_at: formatDateTime(transfer.dispatched_at),
+          received_at: formatDateTime(transfer.received_at),
+          cancelled_at: formatDateTime(transfer.cancelled_at),
+          rejected_at: formatDateTime(transfer.rejected_at),
+          created_at: formatDateTime(transfer.created_at),
+        });
+      });
+
+      const itemsWorksheet = workbook.addWorksheet("Transfer Items");
+
+      itemsWorksheet.columns = [
+        { header: "Transfer Number", key: "transfer_number" },
+        { header: "Status", key: "status" },
+        { header: "From Store", key: "from_store" },
+        { header: "To Store", key: "to_store" },
+        { header: "Product", key: "product_name" },
+        { header: "Category", key: "category" },
+        { header: "Size", key: "size" },
+        { header: "Barcode", key: "barcode" },
+        { header: "Requested Quantity", key: "requested_quantity" },
+        { header: "Dispatched Quantity", key: "dispatched_quantity" },
+        { header: "Received Quantity", key: "received_quantity" },
+        { header: "Source Qty Before", key: "source_quantity_before" },
+        { header: "Source Qty After", key: "source_quantity_after" },
+        {
+          header: "Destination Qty Before",
+          key: "destination_quantity_before",
+        },
+        { header: "Destination Qty After", key: "destination_quantity_after" },
+        { header: "Item Note", key: "item_note" },
+        { header: "Created At", key: "created_at" },
+      ];
+
+      transferItems.forEach((item) => {
+        itemsWorksheet.addRow({
+          transfer_number: item.transfer_number || "",
+          status: item.status || "",
+          from_store: `${item.from_branch_code || ""} - ${
+            item.from_branch_name || ""
+          }`,
+          to_store: `${item.to_branch_code || ""} - ${
+            item.to_branch_name || ""
+          }`,
+          product_name: item.product_name || "",
+          category: item.category || "",
+          size: item.size || "",
+          barcode: item.barcode || "",
+          requested_quantity: Number(item.requested_quantity || 0),
+          dispatched_quantity: Number(item.dispatched_quantity || 0),
+          received_quantity: Number(item.received_quantity || 0),
+          source_quantity_before:
+            item.source_quantity_before === null ||
+            item.source_quantity_before === undefined
+              ? ""
+              : Number(item.source_quantity_before || 0),
+          source_quantity_after:
+            item.source_quantity_after === null ||
+            item.source_quantity_after === undefined
+              ? ""
+              : Number(item.source_quantity_after || 0),
+          destination_quantity_before:
+            item.destination_quantity_before === null ||
+            item.destination_quantity_before === undefined
+              ? ""
+              : Number(item.destination_quantity_before || 0),
+          destination_quantity_after:
+            item.destination_quantity_after === null ||
+            item.destination_quantity_after === undefined
+              ? ""
+              : Number(item.destination_quantity_after || 0),
+          item_note: item.item_note || "",
+          created_at: formatDateTime(item.created_at),
+        });
+      });
+
+      const summaryWorksheet = workbook.addWorksheet("Transfer Summary");
+
+      const transfersOut = transfers.filter(
+        (transfer) => Number(transfer.from_branch_id) === Number(branchId)
+      );
+
+      const transfersIn = transfers.filter(
+        (transfer) => Number(transfer.to_branch_id) === Number(branchId)
+      );
+
+      const requestedTransfers = transfers.filter(
+        (transfer) => transfer.status === "requested"
+      );
+
+      const approvedTransfers = transfers.filter(
+        (transfer) => transfer.status === "approved"
+      );
+
+      const dispatchedTransfers = transfers.filter(
+        (transfer) => transfer.status === "dispatched"
+      );
+
+      const receivedTransfers = transfers.filter(
+        (transfer) => transfer.status === "received"
+      );
+
+      const cancelledTransfers = transfers.filter(
+        (transfer) => transfer.status === "cancelled"
+      );
+
+      const rejectedTransfers = transfers.filter(
+        (transfer) => transfer.status === "rejected"
+      );
+
+      const totalQtyOut = transfersOut.reduce(
+        (sum, transfer) =>
+          sum + Number(transfer.total_dispatched_quantity || 0),
+        0
+      );
+
+      const totalQtyIn = transfersIn.reduce(
+        (sum, transfer) => sum + Number(transfer.total_received_quantity || 0),
+        0
+      );
+
+      summaryWorksheet.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+
+      summaryWorksheet.addRow({
+        metric: "Transfers exported",
+        value: transfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Transfer out records",
+        value: transfersOut.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Transfer in records",
+        value: transfersIn.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Requested transfers",
+        value: requestedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Approved transfers",
+        value: approvedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Dispatched transfers",
+        value: dispatchedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Received transfers",
+        value: receivedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Cancelled transfers",
+        value: cancelledTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Rejected transfers",
+        value: rejectedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total quantity transferred out",
+        value: totalQtyOut,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total quantity received in",
+        value: totalQtyIn,
+      });
+
+      styleWorksheet(transfersWorksheet);
+      styleWorksheet(itemsWorksheet);
+      styleWorksheet(summaryWorksheet);
+
+      return sendStoreWorkbook(req, res, workbook, "stock-transfers");
+    } catch (error) {
+      console.error("Export stock transfers error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while exporting stock transfers.",
+      });
+    }
+  }
+);
+
 module.exports = router;

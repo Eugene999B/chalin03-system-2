@@ -132,9 +132,9 @@ export default function ExportsPage() {
         <h2>Date Filter - {currentStoreCode}</h2>
         <p>
           The date filter affects Sales, Expenses, Purchases, Returns, Stock
-          Adjustments, Debt Payments and Daily Closings exports for the selected
-          store. Products, Low Stock and Debts export all records for the
-          selected store.
+          Adjustments, Stock Transfers, Debt Payments and Daily Closings exports
+          for the selected store. Products, Low Stock and Debts export all
+          records for the selected store.
         </p>
 
         <div className="filter-grid export-filter-grid">
@@ -224,6 +224,26 @@ export default function ExportsPage() {
             }
           >
             Export Stock Adjustments
+          </button>
+        </div>
+
+        <div className="section-card export-card">
+          <h2>Stock Transfers - {currentStoreCode}</h2>
+          <p>
+            Download transfer requests, approvals, dispatches, receiving records
+            and transfer item details between stores.
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              downloadFile(
+                "/exports/stock-transfers",
+                buildStoreFileName("stock-transfers"),
+                true
+              )
+            }
+          >
+            Export Stock Transfers
           </button>
         </div>
 
