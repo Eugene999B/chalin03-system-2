@@ -42,6 +42,16 @@ function toNonNegativeInt(value) {
   return number;
 }
 
+function toSafeLimit(value, fallback = 50) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return fallback;
+  }
+
+  return Math.min(number, 200);
+}
+
 function nullIfEmpty(value) {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -64,7 +74,8 @@ function requireSelectedBranch(req, res) {
   if (!branchId) {
     res.status(400).json({
       status: "error",
-      message: "No store was selected. Please logout and login again through a store.",
+      message:
+        "No store was selected. Please logout and login again through a store.",
     });
 
     return null;
@@ -247,6 +258,73 @@ router.get("/low-stock", requireAuth, async (req, res) => {
     });
   }
 });
+
+// GET /api/products/stock-adjustments/recent
+// IMPORTANT: This route must stay before /:id routes.
+router.get(
+  "/stock-adjustments/recent",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
+      const limit = toSafeLimit(req.query.limit, 50);
+
+      const [adjustments] = await pool.query(
+        `SELECT
+          sa.id,
+          sa.branch_id,
+          sa.product_id,
+          sa.adjustment_type,
+          sa.quantity,
+          sa.old_quantity,
+          sa.new_quantity,
+          sa.reason,
+          sa.adjusted_at,
+
+          b.branch_code,
+          b.name AS branch_name,
+
+          p.name AS product_name,
+          p.barcode,
+          p.category,
+          p.size,
+
+          u.full_name AS adjusted_by_name
+
+         FROM stock_adjustments sa
+         LEFT JOIN branches b ON b.id = sa.branch_id
+         LEFT JOIN products p ON p.id = sa.product_id
+         LEFT JOIN users u ON sa.adjusted_by = u.id
+         WHERE sa.branch_id = ?
+         ORDER BY sa.adjusted_at DESC, sa.id DESC
+         LIMIT ?`,
+        [branchId, limit]
+      );
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        count: adjustments.length,
+        adjustments,
+      });
+    } catch (error) {
+      console.error("Get recent stock adjustments error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while fetching recent stock adjustment records.",
+      });
+    }
+  }
+);
 
 // GET /api/products/:id/stock-adjustments
 router.get(

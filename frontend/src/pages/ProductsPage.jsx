@@ -57,6 +57,10 @@ export default function ProductsPage() {
   const [stockHistoryLoading, setStockHistoryLoading] = useState(false);
   const [stockSaving, setStockSaving] = useState(false);
 
+  const [recentAdjustments, setRecentAdjustments] = useState([]);
+  const [recentAdjustmentsLoading, setRecentAdjustmentsLoading] =
+    useState(false);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -128,9 +132,46 @@ export default function ProductsPage() {
     }
   }
 
+  async function loadRecentStockAdjustments() {
+    if (!canAddOrEdit) {
+      setRecentAdjustments([]);
+      return;
+    }
+
+    setRecentAdjustmentsLoading(true);
+
+    try {
+      const response = await axiosClient.get(
+        "/products/stock-adjustments/recent",
+        {
+          params: {
+            limit: 50,
+          },
+        }
+      );
+
+      setRecentAdjustments(response.data.adjustments || []);
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Failed to load recent stock adjustment records."
+      );
+    } finally {
+      setRecentAdjustmentsLoading(false);
+    }
+  }
+
+  async function refreshPageData() {
+    await loadProducts();
+
+    if (canAddOrEdit) {
+      await loadRecentStockAdjustments();
+    }
+  }
+
   useEffect(() => {
-    loadProducts();
-    // Reload products when the selected store changes.
+    refreshPageData();
+    // Reload products and recent stock adjustments when the selected store changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
@@ -188,7 +229,7 @@ export default function ProductsPage() {
       const response = await axiosClient.delete(`/products/${productId}`);
 
       setMessage(response.data.message || "Product deleted successfully.");
-      await loadProducts();
+      await refreshPageData();
     } catch (error) {
       setError(error.response?.data?.message || "Failed to delete product.");
     }
@@ -222,7 +263,7 @@ export default function ProductsPage() {
       setForm(emptyForm);
       setIsEditing(false);
       setEditingProductId(null);
-      await loadProducts();
+      await refreshPageData();
     } catch (error) {
       setError(
         error.response?.data?.message ||
@@ -248,9 +289,7 @@ export default function ProductsPage() {
 
       setStockAdjustments(response.data.adjustments || []);
     } catch (error) {
-      setError(
-        error.response?.data?.message || "Failed to load stock history."
-      );
+      setError(error.response?.data?.message || "Failed to load stock history.");
     } finally {
       setStockHistoryLoading(false);
     }
@@ -325,7 +364,7 @@ export default function ProductsPage() {
 
       setStockAdjustments(historyResponse.data.adjustments || []);
 
-      await loadProducts();
+      await refreshPageData();
     } catch (error) {
       setError(error.response?.data?.message || "Failed to adjust stock.");
     } finally {
@@ -346,7 +385,7 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        <button type="button" onClick={loadProducts}>
+        <button type="button" onClick={refreshPageData}>
           Refresh
         </button>
       </div>
@@ -366,8 +405,8 @@ export default function ProductsPage() {
         {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
         <br />
         <small>
-          Product list, stock adjustments, low-stock warnings and barcode
-          checks are filtered to this selected store only.
+          Product list, stock adjustments, low-stock warnings and barcode checks
+          are filtered to this selected store only.
         </small>
       </div>
 
@@ -539,7 +578,6 @@ export default function ProductsPage() {
                       <strong>{product.name}</strong>
                       {product.barcode && (
                         <>
-
                           <br />
                           <small>Barcode: {product.barcode}</small>
                         </>
@@ -601,6 +639,68 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {canAddOrEdit && (
+        <div className="section-card" style={{ marginTop: "18px" }}>
+          <div className="table-header">
+            <div>
+              <h2>Recent Stock Adjustment Records - {currentStoreCode}</h2>
+              <p style={{ margin: 0, color: "#64748b", fontWeight: "700" }}>
+                Shows the latest damaged, lost, physical count, wrong entry and
+                manual stock corrections for this selected store.
+              </p>
+            </div>
+
+            <button type="button" onClick={loadRecentStockAdjustments}>
+              Refresh Records
+            </button>
+          </div>
+
+          {recentAdjustmentsLoading ? (
+            <p>Loading recent stock adjustment records...</p>
+          ) : recentAdjustments.length === 0 ? (
+            <p>No recent stock adjustment records found for this store.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Type</th>
+                  <th>Qty</th>
+                  <th>Old</th>
+                  <th>New</th>
+                  <th>Reason</th>
+                  <th>By</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {recentAdjustments.map((adjustment) => (
+                  <tr key={adjustment.id}>
+                    <td>{formatDateTime(adjustment.adjusted_at)}</td>
+                    <td>
+                      <strong>{adjustment.product_name || "-"}</strong>
+                      <br />
+                      <small>
+                        {[adjustment.category, adjustment.size, adjustment.barcode]
+                          .filter(Boolean)
+                          .join(" • ") || "-"}
+                      </small>
+                    </td>
+                    <td>{formatAdjustmentType(adjustment.adjustment_type)}</td>
+                    <td>{adjustment.quantity}</td>
+                    <td>{adjustment.old_quantity}</td>
+                    <td>{adjustment.new_quantity}</td>
+                    <td>{adjustment.reason}</td>
+                    <td>{adjustment.adjusted_by_name || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {stockProduct && (
         <div className="modal-backdrop">
@@ -667,9 +767,7 @@ export default function ProductsPage() {
                   setStockAdjustmentQuantity(event.target.value)
                 }
                 placeholder={
-                  stockAdjustmentType === "set"
-                    ? "Example: 50"
-                    : "Example: 5"
+                  stockAdjustmentType === "set" ? "Example: 50" : "Example: 5"
                 }
               />
 
