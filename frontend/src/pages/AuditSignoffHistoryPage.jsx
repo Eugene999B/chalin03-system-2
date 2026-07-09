@@ -13,8 +13,11 @@ function escapeHtml(value) {
 
 function formatDate(value) {
   if (!value) return "-";
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "-";
+
   return date.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
@@ -24,8 +27,11 @@ function formatDate(value) {
 
 function formatDateTime(value) {
   if (!value) return "-";
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return "-";
+
   return date.toLocaleString("en-GB");
 }
 
@@ -107,6 +113,7 @@ function buildReviewMetrics(reviewSummary) {
         "total_sales",
       ]),
       detail: "Sale records checked",
+      icon: "🧾",
     },
     {
       title: "Debts",
@@ -117,6 +124,7 @@ function buildReviewMetrics(reviewSummary) {
         "debt_count",
       ]),
       detail: "Debt records checked",
+      icon: "💳",
     },
     {
       title: "Expenses",
@@ -127,6 +135,7 @@ function buildReviewMetrics(reviewSummary) {
         "expense_count",
       ]),
       detail: "Expense records checked",
+      icon: "📉",
     },
     {
       title: "Purchases",
@@ -137,6 +146,7 @@ function buildReviewMetrics(reviewSummary) {
         "purchase_count",
       ]),
       detail: "Supplier purchase records",
+      icon: "📦",
     },
     {
       title: "Returns",
@@ -147,6 +157,7 @@ function buildReviewMetrics(reviewSummary) {
         "return_count",
       ]),
       detail: "Returned item records",
+      icon: "↩️",
     },
     {
       title: "Stock Adjustments",
@@ -157,6 +168,7 @@ function buildReviewMetrics(reviewSummary) {
         "adjustment_count",
       ]),
       detail: "Manual stock corrections",
+      icon: "🛠️",
     },
     {
       title: "Stock Transfers",
@@ -167,11 +179,13 @@ function buildReviewMetrics(reviewSummary) {
         "transfer_count",
       ]),
       detail: "Store-to-store movements",
+      icon: "🚚",
     },
     {
       title: "SMS Logs",
       value: `${formatNumber(failedSms)} / ${formatNumber(totalSms)}`,
       detail: "Failed / total messages",
+      icon: "📩",
     },
     {
       title: "Daily Closings",
@@ -182,6 +196,7 @@ function buildReviewMetrics(reviewSummary) {
         "closing_count",
       ]),
       detail: "End-of-day records",
+      icon: "🔒",
     },
     {
       title: "Backup / Restore",
@@ -191,6 +206,7 @@ function buildReviewMetrics(reviewSummary) {
         "backup_restore_count",
       ]),
       detail: "Security activity checks",
+      icon: "🛡️",
     },
     {
       title: "Maintenance Clears",
@@ -200,6 +216,7 @@ function buildReviewMetrics(reviewSummary) {
         "clear_data_count",
       ]),
       detail: "Clear-data activity checks",
+      icon: "🧹",
     },
     {
       title: "Unlock / Reapproval",
@@ -210,6 +227,7 @@ function buildReviewMetrics(reviewSummary) {
         "unlock_request_count",
       ]),
       detail: "Locked period corrections",
+      icon: "🔓",
     },
   ];
 }
@@ -222,22 +240,25 @@ function getStatusLabel(status) {
 }
 
 function getStatusStyle(status) {
-  if (status === "approved") return { background: "#dcfce7", color: "#166534" };
-  if (status === "reviewed") return { background: "#dbeafe", color: "#1d4ed8" };
-  if (status === "rejected") return { background: "#fee2e2", color: "#991b1b" };
-  return { background: "#f8fafc", color: "#475569" };
+  if (status === "approved") return styles.statusApproved;
+  if (status === "reviewed") return styles.statusReviewed;
+  if (status === "rejected") return styles.statusRejected;
+  return styles.statusDraft;
 }
 
 function getScoreStyle(score) {
   const number = Number(score || 0);
-  if (number >= 85) return { background: "#dcfce7", color: "#166534" };
-  if (number >= 70) return { background: "#dbeafe", color: "#1d4ed8" };
-  if (number >= 50) return { background: "#ffedd5", color: "#9a3412" };
-  return { background: "#fee2e2", color: "#991b1b" };
+
+  if (number >= 85) return styles.scoreStrong;
+  if (number >= 70) return styles.scoreGood;
+  if (number >= 50) return styles.scoreWatch;
+
+  return styles.scoreRisk;
 }
 
 function makeCsv(rows) {
   if (!rows || rows.length === 0) return "";
+
   const headers = Object.keys(rows[0]);
   const escapeCsv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 
@@ -253,9 +274,11 @@ function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") 
   const blob = new Blob([content], { type });
   const fileUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
+
   link.href = fileUrl;
   link.download = filename;
   link.style.display = "none";
+
   document.body.appendChild(link);
   link.click();
 
@@ -352,18 +375,23 @@ export default function AuditSignoffHistoryPage() {
 
   const summary = useMemo(() => {
     const total = filteredSignoffs.length;
+
     const approved = filteredSignoffs.filter(
       (item) => item.period_status === "approved"
     ).length;
+
     const reviewed = filteredSignoffs.filter(
       (item) => item.period_status === "reviewed"
     ).length;
+
     const draft = filteredSignoffs.filter(
       (item) => item.period_status === "draft"
     ).length;
+
     const rejected = filteredSignoffs.filter(
       (item) => item.period_status === "rejected"
     ).length;
+
     const averageScore =
       total > 0
         ? Math.round(
@@ -421,6 +449,7 @@ export default function AuditSignoffHistoryPage() {
 
     try {
       const response = await axiosClient.get("/audit-signoffs");
+
       setSignoffs(response.data.signoffs || []);
       setMessage("Audit sign-off history loaded.");
     } catch (requestError) {
@@ -470,6 +499,7 @@ export default function AuditSignoffHistoryPage() {
       makeCsv(rows),
       "text/csv;charset=utf-8"
     );
+
     setMessage("Audit sign-off history CSV downloaded successfully.");
   }
 
@@ -486,51 +516,229 @@ export default function AuditSignoffHistoryPage() {
           <title>Audit Sign-Off Certificate</title>
           <style>
             @page { size: A4; margin: 16mm; }
-            body { font-family: Arial, sans-serif; color: #111827; line-height: 1.5; font-size: 12px; }
-            .certificate { border: 4px solid #07182c; padding: 24px; min-height: 92vh; }
-            h1 { color: #07182c; text-align: center; margin: 0; font-size: 26px; text-transform: uppercase; }
-            .subtitle { text-align: center; color: #64748b; margin-top: 8px; }
-            .store { text-align: center; color: #07182c; margin-top: 8px; font-weight: 800; }
-            .badge { margin: 22px auto; width: 150px; height: 150px; border-radius: 50%; border: 8px solid #e0ba28; display: grid; place-items: center; text-align: center; color: #07182c; }
-            .badge strong { display: block; font-size: 30px; }
-            .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 18px; }
-            .box { border: 1px solid #dbe3ef; background: #f8fafc; border-radius: 10px; padding: 10px; }
-            .box span { display: block; color: #64748b; font-size: 11px; }
-            .box strong { display: block; margin-top: 4px; color: #07182c; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #dbe3ef; padding: 8px; text-align: left; vertical-align: top; }
-            th { background: #07182c; color: #ffffff; }
-            .signature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 60px; }
-            .signature { border-top: 1px solid #111827; padding-top: 7px; text-align: center; }
+
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              line-height: 1.5;
+              font-size: 12px;
+              background: #ffffff;
+            }
+
+            .certificate {
+              border: 4px solid #07182c;
+              padding: 24px;
+              min-height: 92vh;
+              position: relative;
+            }
+
+            .certificate:before {
+              content: "APPROVAL ARCHIVE";
+              position: absolute;
+              top: 44%;
+              left: 50%;
+              transform: translate(-50%, -50%) rotate(-25deg);
+              color: rgba(224, 186, 40, 0.12);
+              font-size: 52px;
+              font-weight: 900;
+              letter-spacing: 0.08em;
+              z-index: 0;
+              white-space: nowrap;
+            }
+
+            .content {
+              position: relative;
+              z-index: 1;
+            }
+
+            h1 {
+              color: #07182c;
+              text-align: center;
+              margin: 0;
+              font-size: 26px;
+              text-transform: uppercase;
+            }
+
+            .subtitle {
+              text-align: center;
+              color: #64748b;
+              margin-top: 8px;
+            }
+
+            .store {
+              text-align: center;
+              color: #07182c;
+              margin-top: 8px;
+              font-weight: 800;
+            }
+
+            .badge {
+              margin: 22px auto;
+              width: 150px;
+              height: 150px;
+              border-radius: 50%;
+              border: 8px solid #e0ba28;
+              display: grid;
+              place-items: center;
+              text-align: center;
+              color: #07182c;
+              background: #ffffff;
+            }
+
+            .badge strong {
+              display: block;
+              font-size: 30px;
+            }
+
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 10px;
+              margin-top: 18px;
+            }
+
+            .box {
+              border: 1px solid #dbe3ef;
+              background: #f8fafc;
+              border-radius: 10px;
+              padding: 10px;
+            }
+
+            .box span {
+              display: block;
+              color: #64748b;
+              font-size: 11px;
+            }
+
+            .box strong {
+              display: block;
+              margin-top: 4px;
+              color: #07182c;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+
+            th,
+            td {
+              border: 1px solid #dbe3ef;
+              padding: 8px;
+              text-align: left;
+              vertical-align: top;
+            }
+
+            th {
+              background: #07182c;
+              color: #ffffff;
+            }
+
+            .signature-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 18px;
+              margin-top: 60px;
+            }
+
+            .signature {
+              border-top: 1px solid #111827;
+              padding-top: 7px;
+              text-align: center;
+            }
           </style>
         </head>
+
         <body>
           <div class="certificate">
-            <h1>Chalin 03 Company Limited</h1>
-            <p class="subtitle">Audit Sign-Off & Accounting Approval Certificate</p>
-            <p class="store">${escapeHtml(certificateStoreCode)} - ${escapeHtml(certificateStoreName)}${certificateStoreLocation ? ` | ${escapeHtml(certificateStoreLocation)}` : ""}</p>
-            <div class="badge"><div><strong>${Number(signoff.audit_score || 0)}%</strong><span>${escapeHtml(signoff.audit_status || "-")}</span></div></div>
-            <div class="grid">
-              <div class="box"><span>Store</span><strong>${escapeHtml(certificateStoreCode)} - ${escapeHtml(certificateStoreName)}</strong></div>
-              <div class="box"><span>Period</span><strong>${escapeHtml(signoff.period_label || "-")}</strong></div>
-              <div class="box"><span>Status</span><strong>${escapeHtml(getStatusLabel(signoff.period_status))}</strong></div>
-              <div class="box"><span>Review Date</span><strong>${escapeHtml(formatDate(signoff.review_date))}</strong></div>
-              <div class="box"><span>Saved By</span><strong>${escapeHtml(signoff.created_by_name || "-")}</strong></div>
-              <div class="box"><span>Last Updated</span><strong>${escapeHtml(formatDateTime(signoff.updated_at))}</strong></div>
+            <div class="content">
+              <h1>Chalin 03 Company Limited</h1>
+
+              <p class="subtitle">Audit Sign-Off & Accounting Approval Certificate</p>
+
+              <p class="store">${escapeHtml(certificateStoreCode)} - ${escapeHtml(certificateStoreName)}${
+      certificateStoreLocation ? ` | ${escapeHtml(certificateStoreLocation)}` : ""
+    }</p>
+
+              <div class="badge">
+                <div>
+                  <strong>${Number(signoff.audit_score || 0)}%</strong>
+                  <span>${escapeHtml(signoff.audit_status || "-")}</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <div class="box"><span>Store</span><strong>${escapeHtml(certificateStoreCode)} - ${escapeHtml(certificateStoreName)}</strong></div>
+                <div class="box"><span>Period</span><strong>${escapeHtml(signoff.period_label || "-")}</strong></div>
+                <div class="box"><span>Status</span><strong>${escapeHtml(getStatusLabel(signoff.period_status))}</strong></div>
+                <div class="box"><span>Review Date</span><strong>${escapeHtml(formatDate(signoff.review_date))}</strong></div>
+                <div class="box"><span>Saved By</span><strong>${escapeHtml(signoff.created_by_name || "-")}</strong></div>
+                <div class="box"><span>Last Updated</span><strong>${escapeHtml(formatDateTime(signoff.updated_at))}</strong></div>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Prepared By</th>
+                    <th>Reviewed By</th>
+                    <th>Approved By</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>${escapeHtml(signoff.prepared_by_name || "-")}</td>
+                    <td>${escapeHtml(signoff.reviewed_by_name || "-")}</td>
+                    <td>${escapeHtml(signoff.approved_by_name || "-")}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sales</th>
+                    <th>Expenses</th>
+                    <th>Debts</th>
+                    <th>Stock / Transfers</th>
+                    <th>SMS / Warnings</th>
+                    <th>Reports</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>${signoff.sales_checked ? "Checked" : "Pending"}</td>
+                    <td>${signoff.expenses_checked ? "Checked" : "Pending"}</td>
+                    <td>${signoff.debts_checked ? "Checked" : "Pending"}</td>
+                    <td>${signoff.stock_checked ? "Checked" : "Pending"}</td>
+                    <td>${signoff.warnings_checked ? "Checked" : "Pending"}</td>
+                    <td>${signoff.reports_checked ? "Checked" : "Pending"}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Audit Coverage Note</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr>
+                    <td>This sign-off belongs to the selected store period. The current audit review process should include sales, debts, expenses, purchases, returns, stock adjustments, stock transfers, stock transfer items, SMS logs, failed SMS warnings, backup/restore activity, maintenance clear-data activity, audit unlock requests, re-approval logs and Stock Movement Ledger source records.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="signature-grid">
+                <div class="signature">Prepared By</div>
+                <div class="signature">Reviewed By</div>
+                <div class="signature">Approved By</div>
+              </div>
             </div>
-            <table>
-              <thead><tr><th>Prepared By</th><th>Reviewed By</th><th>Approved By</th></tr></thead>
-              <tbody><tr><td>${escapeHtml(signoff.prepared_by_name || "-")}</td><td>${escapeHtml(signoff.reviewed_by_name || "-")}</td><td>${escapeHtml(signoff.approved_by_name || "-")}</td></tr></tbody>
-            </table>
-            <table>
-              <thead><tr><th>Sales</th><th>Expenses</th><th>Debts</th><th>Stock / Transfers</th><th>SMS / Warnings</th><th>Reports</th></tr></thead>
-              <tbody><tr><td>${signoff.sales_checked ? "Checked" : "Pending"}</td><td>${signoff.expenses_checked ? "Checked" : "Pending"}</td><td>${signoff.debts_checked ? "Checked" : "Pending"}</td><td>${signoff.stock_checked ? "Checked" : "Pending"}</td><td>${signoff.warnings_checked ? "Checked" : "Pending"}</td><td>${signoff.reports_checked ? "Checked" : "Pending"}</td></tr></tbody>
-            </table>
-            <table>
-              <thead><tr><th>Audit Coverage Note</th></tr></thead>
-              <tbody><tr><td>This sign-off belongs to the selected store period. The current audit review process should include sales, debts, expenses, purchases, returns, stock adjustments, stock transfers, stock transfer items, SMS logs, failed SMS warnings, backup/restore activity, maintenance clear-data activity, audit unlock requests, re-approval logs and Stock Movement Ledger source records.</td></tr></tbody>
-            </table>
-            <div class="signature-grid"><div class="signature">Prepared By</div><div class="signature">Reviewed By</div><div class="signature">Approved By</div></div>
           </div>
         </body>
       </html>
@@ -539,6 +747,7 @@ export default function AuditSignoffHistoryPage() {
 
   function printCertificate(signoff) {
     const printWindow = window.open("", "_blank", "width=1000,height=800");
+
     if (!printWindow) {
       setError("Popup blocked. Please allow popups and try again.");
       return;
@@ -559,7 +768,11 @@ export default function AuditSignoffHistoryPage() {
       <html xmlns:o="urn:schemas-microsoft-com:office:office"
             xmlns:w="urn:schemas-microsoft-com:office:word"
             xmlns="http://www.w3.org/TR/REC-html40">
-        <head><meta charset="UTF-8" /><meta name="ProgId" content="Word.Document" /></head>
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="ProgId" content="Word.Document" />
+        </head>
+
         <body>${buildCertificateHtml(signoff)}</body>
       </html>
     `;
@@ -569,6 +782,7 @@ export default function AuditSignoffHistoryPage() {
       wordDocument,
       "application/msword;charset=utf-8"
     );
+
     setMessage("Sign-off certificate Word document downloaded.");
   }
 
@@ -576,11 +790,14 @@ export default function AuditSignoffHistoryPage() {
     const confirmed = window.confirm(
       `Delete audit sign-off for "${signoff.period_label}" in ${getSignoffStoreCode(signoff)}?`
     );
+
     if (!confirmed) return;
 
     try {
       await axiosClient.delete(`/audit-signoffs/${signoff.id}`);
+
       setMessage("Audit sign-off deleted successfully.");
+
       await loadSignoffs();
     } catch (requestError) {
       setError(
@@ -592,64 +809,116 @@ export default function AuditSignoffHistoryPage() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.hero}>
+      <section style={styles.hero}>
+        <div style={styles.archiveStamp}>ARCHIVE</div>
+
+        <div style={styles.heroContent}>
+          <div>
+            <p style={styles.eyebrow}>Digital Audit Archive • {currentStoreCode}</p>
+
+            <h1 style={styles.title}>Audit Sign-Off History</h1>
+
+            <p style={styles.subtitle}>
+              View saved accounting approvals, approved periods, audit scores,
+              certificates and sign-off records for{" "}
+              <strong>
+                {currentStoreCode} — {currentStoreName}
+              </strong>
+              . This page works like a compliance archive for management.
+            </p>
+          </div>
+
+          <div style={styles.heroActions}>
+            <button
+              type="button"
+              onClick={loadPageData}
+              disabled={loading || reviewSummaryLoading}
+              style={styles.heroButton}
+            >
+              {loading || reviewSummaryLoading ? "Loading..." : "Refresh Archive"}
+            </button>
+
+            <button
+              type="button"
+              onClick={exportHistoryCsv}
+              style={styles.heroGhostButton}
+            >
+              Export History CSV
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div style={styles.storeNotice}>
+        <span style={styles.noticeIcon}>🏛️</span>
         <div>
-          <p style={styles.eyebrow}>Audit Control</p>
-          <h1 style={styles.title}>Audit Sign-Off History</h1>
-          <p style={styles.subtitle}>
-            View saved accounting approvals, approved periods, audit scores and
-            sign-off records for{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-            .
+          <strong>
+            Current selected store: {currentStoreCode} — {currentStoreName}
+          </strong>
+
+          {currentStoreLocation ? <p>{currentStoreLocation}</p> : null}
+
+          <p>
+            Audit sign-off history, approval certificates, CSV exports and
+            delete actions are filtered to this selected store only.
           </p>
         </div>
-        <div style={styles.heroActions}>
-          <button
-            type="button"
-            onClick={loadPageData}
-            disabled={loading || reviewSummaryLoading}
-          >
-            {loading || reviewSummaryLoading ? "Loading..." : "Refresh"}
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={exportHistoryCsv}
-          >
-            Export History CSV
-          </button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Audit sign-off history, approval certificates, CSV exports and delete
-          actions are filtered to this selected store only.
-        </small>
       </div>
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div style={styles.panel}>
+      <section style={styles.archiveDashboard}>
+        <ArchiveMetric
+          title={`${currentStoreCode} Records`}
+          value={summary.total}
+          note="Filtered sign-off records"
+          icon="🗃️"
+        />
+
+        <ArchiveMetric
+          title="Approved"
+          value={summary.approved}
+          note="Locked/approved periods"
+          icon="✅"
+        />
+
+        <ArchiveMetric
+          title="Reviewed"
+          value={summary.reviewed}
+          note="Accountant reviewed periods"
+          icon="👁️"
+        />
+
+        <ArchiveMetric
+          title="Draft"
+          value={summary.draft}
+          note="Pending completion"
+          icon="✍️"
+        />
+
+        <ArchiveMetric
+          title="Rejected"
+          value={summary.rejected}
+          note="Needs correction"
+          icon="🚫"
+        />
+
+        <ArchiveMetric
+          title="Average Score"
+          value={`${summary.averageScore}%`}
+          note="Average audit score"
+          icon="📊"
+        />
+      </section>
+
+      <section style={styles.coverageVault}>
         <div style={styles.panelHeader}>
           <div>
-            <h2 style={{ marginBottom: "6px" }}>Current Audit Review Coverage</h2>
+            <p style={styles.eyebrowDark}>Live Review Coverage</p>
+
+            <h2 style={styles.panelTitle}>Current Audit Coverage Vault</h2>
+
             <p style={styles.mutedText}>
               This live review summary helps management check the newest system
               areas before approving or trusting a period: SMS, stock transfers,
@@ -657,9 +926,10 @@ export default function AuditSignoffHistoryPage() {
               Movement Ledger source records.
             </p>
           </div>
+
           <button
             type="button"
-            className="secondary-button"
+            style={styles.secondaryInlineButton}
             onClick={loadReviewSummary}
             disabled={reviewSummaryLoading}
           >
@@ -670,13 +940,17 @@ export default function AuditSignoffHistoryPage() {
         <div style={styles.auditCoverageGrid}>
           {reviewMetrics.map((metric) => (
             <div key={metric.title} style={styles.auditCoverageCard}>
-              <p>{metric.title}</p>
-              <strong>
-                {typeof metric.value === "number"
-                  ? formatNumber(metric.value)
-                  : metric.value}
-              </strong>
-              <small>{metric.detail}</small>
+              <span style={styles.metricIcon}>{metric.icon}</span>
+
+              <div>
+                <p>{metric.title}</p>
+                <strong>
+                  {typeof metric.value === "number"
+                    ? formatNumber(metric.value)
+                    : metric.value}
+                </strong>
+                <small>{metric.detail}</small>
+              </div>
             </div>
           ))}
         </div>
@@ -692,6 +966,7 @@ export default function AuditSignoffHistoryPage() {
         {reviewWarnings.length > 0 && (
           <div className="warning-box">
             <strong>Audit warnings found:</strong>
+
             <ul style={{ marginBottom: 0 }}>
               {reviewWarnings.map((warning, index) => (
                 <li key={`${warning}-${index}`}>{String(warning)}</li>
@@ -699,71 +974,93 @@ export default function AuditSignoffHistoryPage() {
             </ul>
           </div>
         )}
-      </div>
+      </section>
 
-      <div style={styles.summaryGrid}>
-        <SummaryCard title={`${currentStoreCode} Total`} value={summary.total} />
-        <SummaryCard title="Approved" value={summary.approved} />
-        <SummaryCard title="Reviewed" value={summary.reviewed} />
-        <SummaryCard title="Draft" value={summary.draft} />
-        <SummaryCard title="Rejected" value={summary.rejected} />
-        <SummaryCard title="Average Score" value={`${summary.averageScore}%`} />
-      </div>
-
-      <div style={styles.filterPanel}>
-        <label>
-          Search
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search period, names or store"
-          />
-        </label>
-        <label>
-          Period Type
-          <select
-            value={periodType}
-            onChange={(event) => setPeriodType(event.target.value)}
-          >
-            <option value="">All Periods</option>
-            <option value="all">All Records</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select
-            value={periodStatus}
-            onChange={(event) => setPeriodStatus(event.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="reviewed">Reviewed</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </label>
-        <div style={styles.filterButtons}>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              setSearch("");
-              setPeriodType("");
-              setPeriodStatus("");
-            }}
-          >
-            Clear Filters
-          </button>
+      <section style={styles.filterPanel}>
+        <div>
+          <p style={styles.eyebrowDark}>Archive Search</p>
+          <h2 style={styles.panelTitle}>Find Approval Records</h2>
+          <p style={styles.mutedText}>
+            Search by period, staff name, reviewer, approver or store.
+          </p>
         </div>
-      </div>
 
-      <div style={styles.panel}>
-        <h2>Saved Sign-Off Records - {currentStoreCode}</h2>
+        <div style={styles.filterGrid}>
+          <label>
+            Search
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search period, names or store"
+            />
+          </label>
+
+          <label>
+            Period Type
+            <select
+              value={periodType}
+              onChange={(event) => setPeriodType(event.target.value)}
+            >
+              <option value="">All Periods</option>
+              <option value="all">All Records</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+
+          <label>
+            Status
+            <select
+              value={periodStatus}
+              onChange={(event) => setPeriodStatus(event.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+
+          <div style={styles.filterButtons}>
+            <button
+              type="button"
+              style={styles.secondaryInlineButton}
+              onClick={() => {
+                setSearch("");
+                setPeriodType("");
+                setPeriodStatus("");
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section style={styles.recordsPanel}>
+        <div style={styles.panelHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>Compliance Archive</p>
+
+            <h2 style={styles.panelTitle}>
+              Saved Sign-Off Records - {currentStoreCode}
+            </h2>
+
+            <p style={styles.mutedText}>
+              Each record below can be printed as a certificate, downloaded as a
+              Word file, or deleted by authorized management.
+            </p>
+          </div>
+
+          <span style={styles.resultBadge}>
+            {filteredSignoffs.length} record(s)
+          </span>
+        </div>
+
         {loading ? (
           <div style={styles.emptyState}>Loading sign-off history...</div>
         ) : filteredSignoffs.length === 0 ? (
@@ -771,39 +1068,38 @@ export default function AuditSignoffHistoryPage() {
             No audit sign-offs found for {currentStoreCode}.
           </div>
         ) : (
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Store</th>
-                  <th>Period</th>
-                  <th>Score</th>
-                  <th>Status</th>
-                  <th>Prepared</th>
-                  <th>Reviewed</th>
-                  <th>Approved</th>
-                  <th>Review Date</th>
-                  <th>Saved By</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSignoffs.map((item) => (
-                  <tr key={item.id}>
-                    <td>#{item.id}</td>
-                    <td>
-                      <strong>{getSignoffStoreCode(item)}</strong>
-                      <br />
-                      <small>{getSignoffStoreName(item)}</small>
-                    </td>
-                    <td>
-                      <strong>{item.period_label}</strong>
-                      <br />
-                      <small>{item.period_type}</small>
-                    </td>
-                    <td>
+          <div style={styles.recordTimeline}>
+            {filteredSignoffs.map((item) => (
+              <article key={item.id} style={styles.recordCard}>
+                <div style={styles.timelinePin} />
+
+                <div style={styles.recordMain}>
+                  <div style={styles.recordHeader}>
+                    <div>
+                      <div style={styles.recordTitleRow}>
+                        <strong>#{item.id} • {item.period_label}</strong>
+
+                        <span
+                          style={{
+                            ...styles.badge,
+                            ...getStatusStyle(item.period_status),
+                          }}
+                        >
+                          {getStatusLabel(item.period_status)}
+                        </span>
+                      </div>
+
+                      <p>
+                        {getSignoffStoreCode(item)} — {getSignoffStoreName(item)}
+                      </p>
+
+                      <small>
+                        Period type: {item.period_type || "-"} • Review date:{" "}
+                        {formatDate(item.review_date)}
+                      </small>
+                    </div>
+
+                    <div style={styles.scoreSeal}>
                       <span
                         style={{
                           ...styles.badge,
@@ -812,65 +1108,115 @@ export default function AuditSignoffHistoryPage() {
                       >
                         {Number(item.audit_score || 0)}%
                       </span>
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          ...styles.badge,
-                          ...getStatusStyle(item.period_status),
-                        }}
-                      >
-                        {getStatusLabel(item.period_status)}
-                      </span>
-                    </td>
-                    <td>{item.prepared_by_name || "-"}</td>
-                    <td>{item.reviewed_by_name || "-"}</td>
-                    <td>{item.approved_by_name || "-"}</td>
-                    <td>{formatDate(item.review_date)}</td>
-                    <td>{item.created_by_name || "-"}</td>
-                    <td>{formatDateTime(item.updated_at)}</td>
-                    <td>
-                      <div style={styles.actionButtons}>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => printCertificate(item)}
-                        >
-                          Print
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => downloadCertificateWord(item)}
-                        >
-                          Word
-                        </button>
-                        <button
-                          type="button"
-                          style={styles.deleteButton}
-                          onClick={() => deleteSignoff(item)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+                      <small>{item.audit_status || "Audit Score"}</small>
+                    </div>
+                  </div>
+
+                  <div style={styles.approvalGrid}>
+                    <ApprovalBox
+                      label="Prepared"
+                      value={item.prepared_by_name || "-"}
+                    />
+
+                    <ApprovalBox
+                      label="Reviewed"
+                      value={item.reviewed_by_name || "-"}
+                    />
+
+                    <ApprovalBox
+                      label="Approved"
+                      value={item.approved_by_name || "-"}
+                    />
+
+                    <ApprovalBox
+                      label="Saved By"
+                      value={item.created_by_name || "-"}
+                    />
+
+                    <ApprovalBox
+                      label="Updated"
+                      value={formatDateTime(item.updated_at)}
+                    />
+                  </div>
+
+                  <div style={styles.checkGrid}>
+                    <CheckPill label="Sales" checked={item.sales_checked} />
+                    <CheckPill label="Expenses" checked={item.expenses_checked} />
+                    <CheckPill label="Debts" checked={item.debts_checked} />
+                    <CheckPill label="Stock" checked={item.stock_checked} />
+                    <CheckPill label="Warnings" checked={item.warnings_checked} />
+                    <CheckPill label="Reports" checked={item.reports_checked} />
+                  </div>
+
+                  <div style={styles.actionButtons}>
+                    <button
+                      type="button"
+                      style={styles.secondaryInlineButton}
+                      onClick={() => printCertificate(item)}
+                    >
+                      Print Certificate
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.secondaryInlineButton}
+                      onClick={() => downloadCertificateWord(item)}
+                    >
+                      Word Certificate
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.deleteButton}
+                      onClick={() => deleteSignoff(item)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function ArchiveMetric({ title, value, note, icon }) {
+  return (
+    <div style={styles.summaryCard}>
+      <span style={styles.summaryIcon}>{icon}</span>
+
+      <div>
+        <p>{title}</p>
+        <strong>{value}</strong>
+        <small>{note}</small>
       </div>
     </div>
   );
 }
 
-function SummaryCard({ title, value }) {
+function ApprovalBox({ label, value }) {
   return (
-    <div style={styles.summaryCard}>
-      <p>{title}</p>
+    <div style={styles.approvalBox}>
+      <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function CheckPill({ label, checked }) {
+  return (
+    <span
+      style={{
+        ...styles.checkPill,
+        ...(checked ? styles.checkPillDone : styles.checkPillPending),
+      }}
+    >
+      {checked ? "✓" : "•"} {label}
+    </span>
   );
 }
 
@@ -879,22 +1225,45 @@ const styles = {
     width: "100%",
     maxWidth: "1680px",
     margin: "0 auto",
-    paddingBottom: "40px",
+    paddingBottom: "44px",
   },
+
   hero: {
+    position: "relative",
+    overflow: "hidden",
+    marginBottom: "18px",
+    padding: "28px",
+    borderRadius: "30px",
+    background:
+      "linear-gradient(135deg, #0f172a 0%, #334155 46%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 26px 70px rgba(15, 23, 42, 0.25)",
+  },
+
+  archiveStamp: {
+    position: "absolute",
+    right: "-18px",
+    top: "18px",
+    transform: "rotate(16deg)",
+    border: "3px solid rgba(224, 186, 40, 0.32)",
+    color: "rgba(224, 186, 40, 0.22)",
+    borderRadius: "18px",
+    padding: "12px 20px",
+    fontSize: "34px",
+    fontWeight: "950",
+    letterSpacing: "0.10em",
+  },
+
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
     display: "flex",
     justifyContent: "space-between",
     gap: "18px",
     flexWrap: "wrap",
     alignItems: "flex-start",
-    marginBottom: "18px",
-    padding: "24px",
-    borderRadius: "26px",
-    background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 55%, #111827 100%)",
-    color: "#ffffff",
-    boxShadow: "0 22px 55px rgba(7, 24, 44, 0.24)",
   },
+
   eyebrow: {
     margin: 0,
     color: "#e0ba28",
@@ -903,56 +1272,114 @@ const styles = {
     letterSpacing: "0.08em",
     textTransform: "uppercase",
   },
+
+  eyebrowDark: {
+    margin: 0,
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+
   title: {
     margin: "6px 0 0",
-    fontSize: "clamp(28px, 4vw, 44px)",
+    fontSize: "clamp(30px, 4vw, 52px)",
     fontWeight: "950",
-    lineHeight: 1.05,
+    lineHeight: 1.04,
   },
+
   subtitle: {
     margin: "10px 0 0",
     color: "rgba(255,255,255,0.76)",
-    maxWidth: "850px",
-    lineHeight: 1.6,
+    maxWidth: "860px",
+    lineHeight: 1.65,
   },
-  heroActions: { display: "flex", flexWrap: "wrap", gap: "10px" },
-  summaryGrid: {
+
+  heroActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+  },
+
+  heroButton: {
+    border: "none",
+    borderRadius: "15px",
+    padding: "11px 14px",
+    background: "#e0ba28",
+    color: "#07182c",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  heroGhostButton: {
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: "15px",
+    padding: "11px 14px",
+    background: "rgba(255,255,255,0.10)",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "18px",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #f8fafc, #ffffff)",
+    border: "1px solid #cbd5e1",
+    color: "#334155",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  noticeIcon: {
+    fontSize: "22px",
+  },
+
+  archiveDashboard: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
     gap: "14px",
     marginBottom: "18px",
   },
+
   summaryCard: {
-    padding: "16px",
-    borderRadius: "20px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 14px 30px rgba(15,23,42,0.07)",
-  },
-  filterPanel: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "12px",
-    padding: "18px",
-    borderRadius: "22px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
-    marginBottom: "18px",
-  },
-  filterButtons: {
     display: "flex",
-    alignItems: "end",
-  },
-  panel: {
-    background: "#ffffff",
+    gap: "12px",
+    alignItems: "center",
+    padding: "16px",
     borderRadius: "22px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 34px rgba(15,23,42,0.07)",
+    minWidth: 0,
+  },
+
+  summaryIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "15px",
+    display: "grid",
+    placeItems: "center",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    fontSize: "21px",
+    flexShrink: 0,
+  },
+
+  coverageVault: {
+    background: "#ffffff",
+    borderRadius: "26px",
     padding: "20px",
     border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
     minWidth: 0,
     marginBottom: "18px",
   },
+
   panelHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -961,24 +1388,59 @@ const styles = {
     flexWrap: "wrap",
     marginBottom: "14px",
   },
+
+  panelTitle: {
+    margin: "5px 0 0",
+    color: "#0f172a",
+    fontSize: "22px",
+    fontWeight: "950",
+  },
+
   mutedText: {
-    margin: 0,
+    margin: "6px 0 0",
     color: "#64748b",
     fontWeight: "700",
     lineHeight: 1.6,
   },
+
+  secondaryInlineButton: {
+    border: "1px solid #cbd5e1",
+    borderRadius: "13px",
+    padding: "9px 11px",
+    background: "#ffffff",
+    color: "#334155",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
   auditCoverageGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "12px",
     marginBottom: "14px",
   },
+
   auditCoverageCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
     padding: "14px",
     borderRadius: "18px",
-    background: "#f8fafc",
+    background: "linear-gradient(135deg, #f8fafc, #ffffff)",
     border: "1px solid #e2e8f0",
   },
+
+  metricIcon: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "14px",
+    display: "grid",
+    placeItems: "center",
+    background: "#f1f5f9",
+    border: "1px solid #e2e8f0",
+    flexShrink: 0,
+  },
+
   warningNote: {
     padding: "13px",
     borderRadius: "16px",
@@ -989,8 +1451,142 @@ const styles = {
     lineHeight: 1.6,
     marginBottom: "12px",
   },
-  tableWrap: { width: "100%", overflowX: "auto", marginTop: "12px" },
-  table: { width: "100%", borderCollapse: "collapse", minWidth: "1180px" },
+
+  filterPanel: {
+    display: "grid",
+    gridTemplateColumns: "minmax(240px, 0.5fr) minmax(0, 1fr)",
+    gap: "16px",
+    padding: "20px",
+    borderRadius: "26px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    marginBottom: "18px",
+  },
+
+  filterGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: "12px",
+    alignItems: "end",
+  },
+
+  filterButtons: {
+    display: "flex",
+    alignItems: "end",
+  },
+
+  recordsPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    padding: "20px",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    minWidth: 0,
+    marginBottom: "18px",
+  },
+
+  resultBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "7px 11px",
+    background: "#f8fafc",
+    color: "#475569",
+    border: "1px solid #e2e8f0",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  recordTimeline: {
+    display: "grid",
+    gap: "14px",
+    position: "relative",
+  },
+
+  recordCard: {
+    display: "grid",
+    gridTemplateColumns: "22px minmax(0, 1fr)",
+    gap: "12px",
+    borderRadius: "22px",
+    border: "1px solid #e2e8f0",
+    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+    padding: "15px",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  timelinePin: {
+    width: "14px",
+    height: "14px",
+    borderRadius: "50%",
+    marginTop: "7px",
+    background: "#e0ba28",
+    boxShadow: "0 0 0 6px rgba(224,186,40,0.18)",
+  },
+
+  recordMain: {
+    minWidth: 0,
+  },
+
+  recordHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "14px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+
+  recordTitleRow: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  scoreSeal: {
+    display: "grid",
+    justifyItems: "end",
+    gap: "5px",
+  },
+
+  approvalGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "10px",
+    marginTop: "14px",
+  },
+
+  approvalBox: {
+    padding: "10px",
+    borderRadius: "15px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+
+  checkGrid: {
+    display: "flex",
+    gap: "7px",
+    flexWrap: "wrap",
+    marginTop: "12px",
+  },
+
+  checkPill: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "6px 9px",
+    fontSize: "11px",
+    fontWeight: "950",
+  },
+
+  checkPillDone: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+
+  checkPillPending: {
+    background: "#f1f5f9",
+    color: "#64748b",
+  },
+
   badge: {
     display: "inline-flex",
     padding: "6px 10px",
@@ -998,16 +1594,64 @@ const styles = {
     fontWeight: "950",
     fontSize: "12px",
   },
-  actionButtons: { display: "flex", flexWrap: "wrap", gap: "7px" },
+
+  statusApproved: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+
+  statusReviewed: {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+  },
+
+  statusRejected: {
+    background: "#fee2e2",
+    color: "#991b1b",
+  },
+
+  statusDraft: {
+    background: "#f8fafc",
+    color: "#475569",
+  },
+
+  scoreStrong: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+
+  scoreGood: {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+  },
+
+  scoreWatch: {
+    background: "#ffedd5",
+    color: "#9a3412",
+  },
+
+  scoreRisk: {
+    background: "#fee2e2",
+    color: "#991b1b",
+  },
+
+  actionButtons: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+    marginTop: "14px",
+  },
+
   deleteButton: {
     background: "#dc2626",
     color: "#ffffff",
     border: "none",
-    borderRadius: "10px",
-    padding: "8px 10px",
-    fontWeight: "900",
+    borderRadius: "13px",
+    padding: "9px 11px",
+    fontWeight: "950",
     cursor: "pointer",
   },
+
   emptyState: {
     padding: "18px",
     borderRadius: "16px",
