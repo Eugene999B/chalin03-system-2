@@ -109,6 +109,30 @@ async function ensureUserBranchSetup(connection = pool) {
     )
   `);
 
+  // Older live databases may already have user_branch_access without these
+  // newer columns. CREATE TABLE IF NOT EXISTS will not add missing columns,
+  // so we repair the existing table before any SELECT uses uba.can_access.
+  await ensureColumn(
+    connection,
+    "user_branch_access",
+    "can_access",
+    "can_access BOOLEAN NOT NULL DEFAULT TRUE AFTER branch_id"
+  );
+
+  await ensureColumn(
+    connection,
+    "user_branch_access",
+    "created_at",
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER can_access"
+  );
+
+  await ensureColumn(
+    connection,
+    "user_branch_access",
+    "updated_at",
+    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at"
+  );
+
   await ensureColumn(
     connection,
     "users",
