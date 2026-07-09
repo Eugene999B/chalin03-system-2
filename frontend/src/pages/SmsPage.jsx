@@ -31,7 +31,7 @@ const SMS_TEMPLATES = [
 ];
 
 export default function SmsPage() {
-  const { user, branchId, branchCode, branchName } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
 
   const currentBranchCode =
     branchCode ||
@@ -46,6 +46,13 @@ export default function SmsPage() {
     user?.selected_branch?.branch_name ||
     user?.selected_branch?.name ||
     "Selected Store";
+
+  const currentBranchLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [smsStatus, setSmsStatus] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -107,6 +114,35 @@ export default function SmsPage() {
     });
   }, [logs, logStatusFilter, logTypeFilter]);
 
+  const smsDashboard = useMemo(() => {
+    const sentCount = logs.filter(
+      (log) => String(log.status || "").toLowerCase() === "sent"
+    ).length;
+
+    const failedCount = logs.filter(
+      (log) => String(log.status || "").toLowerCase() === "failed"
+    ).length;
+
+    const receiptCount = logs.filter(
+      (log) => String(log.sms_type || "").toLowerCase() === "receipt"
+    ).length;
+
+    const debtReminderCount = logs.filter(
+      (log) => String(log.sms_type || "").toLowerCase() === "debt_reminder"
+    ).length;
+
+    const successRate =
+      logs.length === 0 ? 0 : Math.round((sentCount / logs.length) * 100);
+
+    return {
+      sentCount,
+      failedCount,
+      receiptCount,
+      debtReminderCount,
+      successRate,
+    };
+  }, [logs]);
+
   const selectedCount = selectedCustomerIds.length;
 
   const liveBulkConfirmationText = String(
@@ -125,44 +161,23 @@ export default function SmsPage() {
     const safetyLevel = smsStatus?.safety_level || "safe";
 
     if (safetyLevel === "live") {
-      return {
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
-        color: "#991b1b",
-      };
+      return styles.statusLive;
     }
 
     if (safetyLevel === "warning") {
-      return {
-        background: "#fffbeb",
-        border: "1px solid #fde68a",
-        color: "#92400e",
-      };
+      return styles.statusWarning;
     }
 
     if (safetyLevel === "danger") {
-      return {
-        background: "#fee2e2",
-        border: "1px solid #fca5a5",
-        color: "#7f1d1d",
-      };
+      return styles.statusDanger;
     }
 
     if (safetyLevel === "disabled") {
-      return {
-        background: "#f3f4f6",
-        border: "1px solid #d1d5db",
-        color: "#374151",
-      };
+      return styles.statusDisabled;
     }
 
-    return {
-      background: "#eff6ff",
-      border: "1px solid #bfdbfe",
-      color: "#1e3a8a",
-    };
+    return styles.statusSafe;
   }, [smsStatus]);
-
 
   function formatProviderResponse(value) {
     if (!value) return "";
@@ -224,6 +239,18 @@ export default function SmsPage() {
   function escapeCsvValue(value) {
     const cleanValue = String(value ?? "").replace(/\r?\n|\r/g, " ");
     return `"${cleanValue.replace(/"/g, '""')}"`;
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "-";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleString();
   }
 
   function downloadSmsCsv() {
@@ -419,7 +446,6 @@ export default function SmsPage() {
     }
   }
 
-
   async function sendCustomSms(event) {
     event.preventDefault();
 
@@ -470,55 +496,36 @@ export default function SmsPage() {
     }
   }
 
-  function formatDateTime(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
-
-    return date.toLocaleString();
-  }
-
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>SMS Center</h1>
-          <p>
-            Send custom SMS messages for{" "}
-            <strong>
-              {currentBranchCode} — {currentBranchName}
-            </strong>
-          </p>
+    <div style={styles.page}>
+      <section style={styles.hero}>
+        <div style={styles.signalOne} />
+        <div style={styles.signalTwo} />
+
+        <div style={styles.heroContent}>
+          <div>
+            <p style={styles.eyebrow}>SMS Operations Console • {currentBranchCode}</p>
+
+            <h1 style={styles.heroTitle}>SMS Center</h1>
+
+            <p style={styles.heroSubtitle}>
+              Send customer notices, debt reminders, receipt messages, stock
+              alerts and daily summaries for{" "}
+              <strong>{currentBranchName}</strong>
+              {currentBranchLocation ? ` - ${currentBranchLocation}` : ""}.
+              This page uses a communications-control design for management.
+            </p>
+          </div>
+
+          <div style={styles.signalCard}>
+            <span>📡</span>
+            <div>
+              <strong>{smsStatus?.provider_label || "SMS Provider"}</strong>
+              <small>{smsStatus?.live_sending ? "LIVE SMS" : "Mock / Safe Mode"}</small>
+            </div>
+          </div>
         </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-          }}
-        >
-          <button type="button" onClick={() => loadSmsPageData()}>
-            Refresh
-          </button>
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={sendDailySummarySms}
-            disabled={sendingDailySummary}
-          >
-            {sendingDailySummary
-              ? "Sending Summary..."
-              : "Send Today's Summary SMS"}
-          </button>
-        </div>
-      </div>
-
+      </section>
 
       {notice && (
         <div className="success-box" style={{ whiteSpace: "pre-wrap" }}>
@@ -532,33 +539,17 @@ export default function SmsPage() {
         </div>
       )}
 
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "16px",
-          borderRadius: "14px",
-          fontWeight: "800",
-          ...statusStyle,
-        }}
-      >
-        <div style={{ fontSize: "16px", marginBottom: "6px" }}>
-          {smsStatus?.mode_title || "SMS MODE: CHECKING..."}
+      <div style={{ ...styles.statusPanel, ...statusStyle }}>
+        <div>
+          <p style={styles.eyebrowDark}>Provider Safety Mode</p>
+          <h2>{smsStatus?.mode_title || "SMS MODE: CHECKING..."}</h2>
+          <p>
+            {smsStatus?.mode_message ||
+              "Checking SMS provider mode. Mock mode means no real SMS credit is used while testing."}
+          </p>
         </div>
 
-        <div style={{ fontSize: "14px", marginBottom: "8px" }}>
-          {smsStatus?.mode_message ||
-            "Checking SMS provider mode. Mock mode means no real SMS credit is used while testing."}
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-            fontSize: "13px",
-            fontWeight: "700",
-          }}
-        >
+        <div style={styles.statusFacts}>
           <span>Provider: {smsStatus?.provider_label || "Unknown"}</span>
           <span>Sender ID: {smsStatus?.sender_id || "-"}</span>
           <span>SMS Enabled: {smsStatus?.enabled ? "Yes" : "No"}</span>
@@ -566,328 +557,325 @@ export default function SmsPage() {
         </div>
       </div>
 
+      <div style={styles.metricsGrid}>
+        <MetricCard label="Customers With Phone" value={customers.length} icon="👥" />
+        <MetricCard label="Sent SMS" value={smsDashboard.sentCount} icon="✅" />
+        <MetricCard label="Failed SMS" value={smsDashboard.failedCount} icon="⚠️" />
+        <MetricCard label="Success Rate" value={`${smsDashboard.successRate}%`} icon="📈" />
+      </div>
+
       {loading ? (
-        <div className="section-card">
-          <p>Loading SMS page...</p>
-        </div>
+        <div style={styles.loadingPanel}>Loading SMS page...</div>
       ) : (
-        <div className="two-column">
-          <form className="section-card" onSubmit={sendCustomSms}>
-            <h2>Compose SMS</h2>
-
-            <label>Send To</label>
-            <select
-              value={targetType}
-              onChange={(event) => {
-                setTargetType(event.target.value);
-                setError("");
-                setNotice("");
-                resetLiveBulkConfirmation();
-              }}
-            >
-              <option value="single">One phone number</option>
-              <option value="selected">Selected customers</option>
-              <option value="all">All customers in selected store</option>
-            </select>
-
-            {targetType === "single" && (
-              <>
-                <label>Phone Number</label>
-                <input
-                  value={manualPhone}
-                  onChange={(event) => setManualPhone(event.target.value)}
-                  placeholder="Example: 0240000000"
-                />
-              </>
-            )}
-
-            {targetType === "selected" && (
+        <div style={styles.controlGrid}>
+          <main style={styles.composerPanel}>
+            <div style={styles.panelHeader}>
               <div>
-                <label>Search Customers</label>
-                <input
-                  value={customerSearch}
-                  onChange={(event) => setCustomerSearch(event.target.value)}
-                  placeholder="Search by name, phone or location"
-                />
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "10px",
-                    flexWrap: "wrap",
-                    margin: "10px 0",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={selectAllFilteredCustomers}
-                  >
-                    Select Filtered
-                  </button>
-
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={clearSelectedCustomers}
-                  >
-                    Clear Selected
-                  </button>
-                </div>
-
-                <p>
-                  Selected customers: <strong>{selectedCount}</strong>
+                <p style={styles.eyebrowDark}>Message Composer</p>
+                <h2 style={styles.panelTitle}>Send Customer SMS</h2>
+                <p style={styles.panelSubtitle}>
+                  Choose recipients, apply a template, write the message and
+                  send. Live bulk messages require confirmation.
                 </p>
-
-                <div
-                  style={{
-                    maxHeight: "280px",
-                    overflowY: "auto",
-                    border: "1px solid #d8e0ea",
-                    borderRadius: "12px",
-                    padding: "8px",
-                    background: "#ffffff",
-                  }}
-                >
-                  {filteredCustomers.length === 0 ? (
-                    <p>No customers with phone numbers found.</p>
-                  ) : (
-                    filteredCustomers.map((customer) => (
-                      <label
-                        key={customer.id}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "auto 1fr",
-                          gap: "10px",
-                          alignItems: "start",
-                          padding: "10px",
-                          borderBottom: "1px solid #edf1f5",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedCustomerIds.includes(
-                            Number(customer.id)
-                          )}
-                          onChange={() => toggleCustomer(customer.id)}
-                        />
-
-                        <span>
-                          <strong>{customer.name}</strong>
-                          <br />
-                          <small>
-                            {customer.phone}
-                            {customer.location
-                              ? ` | ${customer.location}`
-                              : ""}
-                          </small>
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
               </div>
-            )}
 
-            {targetType === "all" && (
-              <div className="warning-box">
-                This will send the message to all customers with phone numbers
-                inside {currentBranchCode}. Current count: {customers.length}.
-                Use this carefully because live SMS will spend credit.
+              <button type="button" style={styles.refreshButton} onClick={() => loadSmsPageData()}>
+                Refresh
+              </button>
+            </div>
+
+            <form onSubmit={sendCustomSms}>
+              <div style={styles.targetTabs}>
+                {[
+                  ["single", "One Phone"],
+                  ["selected", "Selected Customers"],
+                  ["all", "All Customers"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    style={{
+                      ...styles.targetTab,
+                      ...(targetType === value ? styles.targetTabActive : {}),
+                    }}
+                    onClick={() => {
+                      setTargetType(value);
+                      setError("");
+                      setNotice("");
+                      resetLiveBulkConfirmation();
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {isLiveBulkSms && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  marginBottom: "12px",
-                  padding: "14px",
-                  borderRadius: "12px",
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  color: "#991b1b",
-                  fontWeight: "800",
-                }}
-              >
-                <p style={{ marginTop: 0 }}>
-                  Live bulk SMS safety lock is active. This will spend real SMS
-                  credit.
-                </p>
-
-                <label
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "auto 1fr",
-                    gap: "10px",
-                    alignItems: "start",
-                    cursor: "pointer",
-                  }}
-                >
+              {targetType === "single" && (
+                <div style={styles.fieldBlock}>
+                  <label>Phone Number</label>
                   <input
-                    type="checkbox"
-                    checked={liveBulkConfirmed}
-                    onChange={(event) =>
-                      setLiveBulkConfirmed(event.target.checked)
-                    }
+                    value={manualPhone}
+                    onChange={(event) => setManualPhone(event.target.value)}
+                    placeholder="Example: 0240000000"
                   />
-                  <span>
-                    I understand this will send a real SMS to all customers in
-                    this store.
-                  </span>
-                </label>
+                </div>
+              )}
 
-                <label>Type this confirmation text:</label>
-                <p>
-                  <strong>{liveBulkConfirmationText}</strong>
-                </p>
+              {targetType === "selected" && (
+                <section style={styles.recipientBoard}>
+                  <div style={styles.recipientHeader}>
+                    <div>
+                      <strong>Customer Recipients</strong>
+                      <p>
+                        Selected customers: <b>{selectedCount}</b>
+                      </p>
+                    </div>
 
-                <input
-                  value={liveBulkConfirmText}
-                  onChange={(event) =>
-                    setLiveBulkConfirmText(event.target.value)
-                  }
-                  placeholder={liveBulkConfirmationText}
-                />
+                    <div style={styles.smallButtonGroup}>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={selectAllFilteredCustomers}
+                      >
+                        Select Filtered
+                      </button>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={clearSelectedCustomers}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <label>Search Customers</label>
+                  <input
+                    value={customerSearch}
+                    onChange={(event) => setCustomerSearch(event.target.value)}
+                    placeholder="Search by name, phone or location"
+                  />
+
+                  <div style={styles.customerList}>
+                    {filteredCustomers.length === 0 ? (
+                      <p>No customers with phone numbers found.</p>
+                    ) : (
+                      filteredCustomers.map((customer) => (
+                        <label key={customer.id} style={styles.customerRow}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCustomerIds.includes(
+                              Number(customer.id)
+                            )}
+                            onChange={() => toggleCustomer(customer.id)}
+                          />
+
+                          <span>
+                            <strong>{customer.name}</strong>
+                            <small>
+                              {customer.phone}
+                              {customer.location ? ` • ${customer.location}` : ""}
+                            </small>
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {targetType === "all" && (
+                <div style={styles.warningPanel}>
+                  This will send the message to all customers with phone numbers
+                  inside {currentBranchCode}. Current count: {customers.length}.
+                  Use this carefully because live SMS will spend credit.
+                </div>
+              )}
+
+              {isLiveBulkSms && (
+                <div style={styles.liveLockPanel}>
+                  <p>
+                    Live bulk SMS safety lock is active. This will spend real
+                    SMS credit.
+                  </p>
+
+                  <label style={styles.confirmLabel}>
+                    <input
+                      type="checkbox"
+                      checked={liveBulkConfirmed}
+                      onChange={(event) =>
+                        setLiveBulkConfirmed(event.target.checked)
+                      }
+                    />
+                    <span>
+                      I understand this will send a real SMS to all customers in
+                      this store.
+                    </span>
+                  </label>
+
+                  <label>Type this confirmation text:</label>
+                  <p>
+                    <strong>{liveBulkConfirmationText}</strong>
+                  </p>
+
+                  <input
+                    value={liveBulkConfirmText}
+                    onChange={(event) =>
+                      setLiveBulkConfirmText(event.target.value)
+                    }
+                    placeholder={liveBulkConfirmationText}
+                  />
+                </div>
+              )}
+
+              <div style={styles.templateBoard}>
+                <div style={styles.templateHeader}>
+                  <strong>Quick Templates</strong>
+                  <span>{SMS_TEMPLATES.length}</span>
+                </div>
+
+                <div style={styles.templateGrid}>
+                  {SMS_TEMPLATES.map((template) => (
+                    <button
+                      key={template.title}
+                      type="button"
+                      style={styles.templateCard}
+                      onClick={() => useTemplate(template.message)}
+                    >
+                      <strong>{template.title}</strong>
+                      <small>{template.message}</small>
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
 
-            <label>SMS Templates</label>
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                flexWrap: "wrap",
-                marginBottom: "12px",
-              }}
-            >
-              {SMS_TEMPLATES.map((template) => (
-                <button
-                  key={template.title}
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => useTemplate(template.message)}
-                >
-                  {template.title}
-                </button>
-              ))}
-            </div>
+              <label>Message</label>
+              <textarea
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                rows="7"
+                placeholder="Type your SMS message here..."
+                maxLength="480"
+              />
 
-            <label>Message</label>
-            <textarea
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              rows="7"
-              placeholder="Type your SMS message here..."
-              maxLength="480"
-            />
+              <div style={styles.characterRow}>
+                <span>
+                  Characters: <strong>{message.length}</strong> / 480
+                </span>
 
-            <p>
-              Characters: <strong>{message.length}</strong> / 480
-            </p>
+                <span>
+                  Target: <strong>{targetType}</strong>
+                </span>
+              </div>
 
-            <button type="submit" disabled={sending || liveBulkSendLocked}>
-              {sending
-                ? "Sending..."
-                : liveBulkSendLocked
-                ? "Confirm Live Bulk SMS First"
-                : "Send SMS"}
-            </button>
-          </form>
+              <button type="submit" disabled={sending || liveBulkSendLocked} style={styles.sendButton}>
+                {sending
+                  ? "Sending..."
+                  : liveBulkSendLocked
+                  ? "Confirm Live Bulk SMS First"
+                  : "Send SMS"}
+              </button>
+            </form>
+          </main>
 
-          <div className="section-card">
-            <h2>SMS Guide</h2>
+          <aside style={styles.sideStack}>
+            <section style={styles.testPanel}>
+              <p style={styles.eyebrowDark}>Test Provider</p>
+              <h2>Test SMS Setup</h2>
+              <p>
+                Use this before messaging customers. In mock mode, no real SMS
+                credit is used.
+              </p>
 
-            <p>
-              Use this page for customer notices, payment reminders, product
-              availability messages, shop announcements, and daily business
-              summaries.
-            </p>
+              <label>Test Phone Number</label>
+              <input
+                value={testPhone}
+                onChange={(event) => setTestPhone(event.target.value)}
+                placeholder="Example: 0240000000"
+              />
 
-            <div className="warning-box">
-              Start in mock mode first. After testing, switch the backend to
-              Arkesel live mode only when the boss approves SMS spending.
-            </div>
+              <label>Test Message</label>
+              <textarea
+                value={testMessage}
+                onChange={(event) => setTestMessage(event.target.value)}
+                rows="4"
+                maxLength="480"
+              />
 
-            <h3>Test SMS Provider</h3>
-            <p>
-              Use this first before sending SMS to customers. In mock mode, no
-              real SMS credit is used.
-            </p>
+              <p>
+                Characters: <strong>{testMessage.length}</strong> / 480
+              </p>
 
-            <label>Test Phone Number</label>
-            <input
-              value={testPhone}
-              onChange={(event) => setTestPhone(event.target.value)}
-              placeholder="Example: 0240000000"
-            />
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={sendTestSms}
+                disabled={sendingTest}
+              >
+                {sendingTest ? "Sending Test..." : "Send Test SMS"}
+              </button>
+            </section>
 
-            <label>Test Message</label>
-            <textarea
-              value={testMessage}
-              onChange={(event) => setTestMessage(event.target.value)}
-              rows="4"
-              maxLength="480"
-            />
+            <section style={styles.summaryPanel}>
+              <p style={styles.eyebrowDark}>Owner Alert</p>
+              <h2>Boss Daily Summary</h2>
+              <p>
+                Sends today&apos;s sales, debts, expenses and low-stock summary
+                to the owner or manager phone number saved in settings.
+              </p>
 
-            <p>
-              Characters: <strong>{testMessage.length}</strong> / 480
-            </p>
+              <button
+                type="button"
+                style={styles.summaryButton}
+                onClick={sendDailySummarySms}
+                disabled={sendingDailySummary}
+              >
+                {sendingDailySummary
+                  ? "Sending Summary..."
+                  : "Send Today's Summary SMS"}
+              </button>
+            </section>
 
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={sendTestSms}
-              disabled={sendingTest}
-            >
-              {sendingTest ? "Sending Test..." : "Send Test SMS"}
-            </button>
+            <section style={styles.rulesPanel}>
+              <p style={styles.eyebrowDark}>SMS Rules</p>
+              <h2>Important</h2>
+              <p>
+                Do not send unnecessary messages. SMS credit costs money, and
+                customers should only receive useful business messages.
+              </p>
 
-            <h3>Boss Daily Summary</h3>
-            <p>
-              Click the button below to send today&apos;s sales, debts,
-              expenses, and low-stock summary to the owner or manager phone
-              number saved in settings.
-            </p>
-
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={sendDailySummarySms}
-              disabled={sendingDailySummary}
-            >
-              {sendingDailySummary
-                ? "Sending Summary..."
-                : "Send Today's Daily Summary SMS"}
-            </button>
-
-            <h3>Good example</h3>
-            <p>
-              CHALIN03: Dear customer, your goods are ready for collection at
-              Chalin 03 Main Store. Thank you.
-            </p>
-
-            <h3>Important</h3>
-            <p>
-              Do not send unnecessary messages. SMS credit costs money, and
-              customers should only receive useful business messages.
-            </p>
-          </div>
+              <div style={styles.ruleList}>
+                <span>Confirm customer phone numbers.</span>
+                <span>Use mock mode before live SMS.</span>
+                <span>Do not bulk send without approval.</span>
+                <span>Retry failed SMS only after checking the number.</span>
+              </div>
+            </section>
+          </aside>
         </div>
       )}
 
-      <div className="section-card">
-        <h2>Recent SMS History</h2>
+      <section style={styles.historyPanel}>
+        <div style={styles.panelHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>Message History</p>
+            <h2 style={styles.panelTitle}>Recent SMS History</h2>
+            <p style={styles.panelSubtitle}>
+              Filter, retry failed SMS and export SMS history as CSV.
+            </p>
+          </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: "12px",
-            marginBottom: "14px",
-          }}
-        >
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={downloadSmsCsv}
+          >
+            Export CSV
+          </button>
+        </div>
+
+        <div style={styles.logToolbar}>
           <div>
             <label>Status Filter</label>
             <select
@@ -926,17 +914,6 @@ export default function SmsPage() {
               Clear Filters
             </button>
           </div>
-
-          <div>
-            <label>&nbsp;</label>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={downloadSmsCsv}
-            >
-              Export CSV
-            </button>
-          </div>
         </div>
 
         <p>
@@ -945,61 +922,579 @@ export default function SmsPage() {
         </p>
 
         {logs.length === 0 ? (
-          <p>No SMS records yet.</p>
+          <div style={styles.emptyState}>No SMS records yet.</div>
         ) : filteredLogs.length === 0 ? (
-          <p>No SMS records match the selected filters.</p>
+          <div style={styles.emptyState}>
+            No SMS records match the selected filters.
+          </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Phone</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Message</th>
-                <th>Sent By</th>
-                <th>Action</th>
-              </tr>
-            </thead>
+          <div style={styles.logList}>
+            {filteredLogs.map((log) => {
+              const isFailedSms =
+                String(log.status || "").toLowerCase() === "failed";
 
-            <tbody>
-              {filteredLogs.map((log) => {
-                const isFailedSms =
-                  String(log.status || "").toLowerCase() === "failed";
+              return (
+                <article
+                  key={log.id}
+                  style={{
+                    ...styles.logCard,
+                    ...(isFailedSms ? styles.logCardFailed : {}),
+                  }}
+                >
+                  <div>
+                    <div style={styles.logTitleRow}>
+                      <strong>{log.recipient_phone}</strong>
+                      <span
+                        style={{
+                          ...styles.logStatus,
+                          ...(isFailedSms ? styles.logStatusFailed : {}),
+                        }}
+                      >
+                        {log.status}
+                      </span>
+                    </div>
 
-                return (
-                  <tr key={log.id}>
-                    <td>{formatDateTime(log.created_at)}</td>
-                    <td>{log.recipient_phone}</td>
-                    <td>{log.sms_type}</td>
-                    <td>
-                      <strong>{log.status}</strong>
-                    </td>
-                    <td>{log.message}</td>
-                    <td>{log.sent_by_name || log.sent_by_username || "-"}</td>
-                    <td>
-                      {isFailedSms ? (
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => retrySmsLog(log.id)}
-                          disabled={retryingLogId === Number(log.id)}
-                        >
-                          {retryingLogId === Number(log.id)
-                            ? "Retrying..."
-                            : "Retry"}
-                        </button>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    <p>{log.message}</p>
+
+                    <small>
+                      {formatDateTime(log.created_at)} • {log.sms_type} • Sent
+                      by {log.sent_by_name || log.sent_by_username || "-"}
+                    </small>
+                  </div>
+
+                  <div>
+                    {isFailedSms ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => retrySmsLog(log.id)}
+                        disabled={retryingLogId === Number(log.id)}
+                      >
+                        {retryingLogId === Number(log.id)
+                          ? "Retrying..."
+                          : "Retry"}
+                      </button>
+                    ) : (
+                      <span style={styles.doneMark}>Done</span>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, icon }) {
+  return (
+    <div style={styles.metricCard}>
+      <span>{icon}</span>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
       </div>
     </div>
   );
 }
+
+const styles = {
+  page: {
+    width: "100%",
+    maxWidth: "1720px",
+    margin: "0 auto",
+    paddingBottom: "44px",
+  },
+
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: "30px",
+    padding: "28px",
+    marginBottom: "18px",
+    background:
+      "linear-gradient(135deg, #052e2b 0%, #0f766e 48%, #07182c 100%)",
+    color: "#ffffff",
+    boxShadow: "0 24px 70px rgba(15, 118, 110, 0.22)",
+  },
+
+  signalOne: {
+    position: "absolute",
+    width: "280px",
+    height: "280px",
+    right: "-100px",
+    top: "-100px",
+    borderRadius: "50%",
+    background: "rgba(20, 184, 166, 0.35)",
+    filter: "blur(14px)",
+  },
+
+  signalTwo: {
+    position: "absolute",
+    width: "230px",
+    height: "230px",
+    left: "38%",
+    bottom: "-135px",
+    borderRadius: "50%",
+    background: "rgba(224, 186, 40, 0.30)",
+    filter: "blur(18px)",
+  },
+
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+
+  eyebrow: {
+    margin: 0,
+    color: "#fef3c7",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+
+  eyebrowDark: {
+    margin: 0,
+    color: "#0f766e",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "11px",
+  },
+
+  heroTitle: {
+    margin: "7px 0 0",
+    fontSize: "clamp(30px, 4vw, 52px)",
+    lineHeight: 1.03,
+    fontWeight: "950",
+  },
+
+  heroSubtitle: {
+    margin: "10px 0 0",
+    maxWidth: "850px",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: "15px",
+    lineHeight: 1.7,
+  },
+
+  signalCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    minWidth: "230px",
+    padding: "15px",
+    borderRadius: "22px",
+    background: "rgba(255, 255, 255, 0.12)",
+    border: "1px solid rgba(255,255,255,0.18)",
+  },
+
+  statusPanel: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    flexWrap: "wrap",
+    marginBottom: "18px",
+    padding: "18px",
+    borderRadius: "24px",
+    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.07)",
+    fontWeight: "800",
+  },
+
+  statusSafe: {
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+  },
+
+  statusLive: {
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#991b1b",
+  },
+
+  statusWarning: {
+    background: "#fffbeb",
+    border: "1px solid #fde68a",
+    color: "#92400e",
+  },
+
+  statusDanger: {
+    background: "#fee2e2",
+    border: "1px solid #fca5a5",
+    color: "#7f1d1d",
+  },
+
+  statusDisabled: {
+    background: "#f3f4f6",
+    border: "1px solid #d1d5db",
+    color: "#374151",
+  },
+
+  statusFacts: {
+    display: "grid",
+    gap: "7px",
+    minWidth: "220px",
+    fontSize: "13px",
+  },
+
+  metricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+
+  metricCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    background: "#ffffff",
+    borderRadius: "22px",
+    padding: "16px",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.07)",
+    minWidth: 0,
+  },
+
+  loadingPanel: {
+    padding: "20px",
+    borderRadius: "22px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    color: "#475569",
+    fontWeight: "850",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+  },
+
+  controlGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.72fr)",
+    gap: "18px",
+    alignItems: "start",
+    marginBottom: "18px",
+  },
+
+  composerPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  panelTitle: {
+    margin: "4px 0 0",
+    color: "#0f172a",
+    fontSize: "22px",
+    fontWeight: "950",
+  },
+
+  panelSubtitle: {
+    margin: "5px 0 0",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+
+  refreshButton: {
+    border: "1px solid #ccfbf1",
+    borderRadius: "14px",
+    padding: "10px 13px",
+    background: "#f0fdfa",
+    color: "#0f766e",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  targetTabs: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "10px",
+    marginBottom: "16px",
+  },
+
+  targetTab: {
+    border: "1px solid #dbe3ef",
+    borderRadius: "16px",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "12px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  targetTabActive: {
+    background: "#0f766e",
+    color: "#ffffff",
+    borderColor: "#0f766e",
+  },
+
+  fieldBlock: {
+    marginBottom: "14px",
+  },
+
+  recipientBoard: {
+    padding: "14px",
+    borderRadius: "20px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    marginBottom: "14px",
+  },
+
+  recipientHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: "12px",
+  },
+
+  smallButtonGroup: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+
+  customerList: {
+    maxHeight: "310px",
+    overflowY: "auto",
+    border: "1px solid #d8e0ea",
+    borderRadius: "16px",
+    padding: "8px",
+    background: "#ffffff",
+    marginTop: "10px",
+  },
+
+  customerRow: {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: "10px",
+    alignItems: "start",
+    padding: "10px",
+    borderBottom: "1px solid #edf1f5",
+    cursor: "pointer",
+  },
+
+  warningPanel: {
+    marginBottom: "14px",
+    padding: "14px",
+    borderRadius: "16px",
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    fontWeight: "800",
+  },
+
+  liveLockPanel: {
+    marginBottom: "14px",
+    padding: "14px",
+    borderRadius: "16px",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#991b1b",
+    fontWeight: "800",
+  },
+
+  confirmLabel: {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: "10px",
+    alignItems: "start",
+    cursor: "pointer",
+  },
+
+  templateBoard: {
+    marginBottom: "14px",
+  },
+
+  templateHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    alignItems: "center",
+    marginBottom: "10px",
+    fontWeight: "950",
+  },
+
+  templateGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "10px",
+  },
+
+  templateCard: {
+    textAlign: "left",
+    border: "1px solid #dbe3ef",
+    borderRadius: "16px",
+    padding: "12px",
+    background: "#ffffff",
+    color: "#0f172a",
+    cursor: "pointer",
+  },
+
+  characterRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    flexWrap: "wrap",
+    color: "#64748b",
+    fontWeight: "800",
+    marginBottom: "12px",
+  },
+
+  sendButton: {
+    width: "100%",
+    border: "none",
+    borderRadius: "16px",
+    padding: "13px 16px",
+    background: "#0f766e",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(15, 118, 110, 0.22)",
+  },
+
+  sideStack: {
+    display: "grid",
+    gap: "18px",
+    position: "sticky",
+    top: "18px",
+  },
+
+  testPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+  },
+
+  summaryPanel: {
+    borderRadius: "26px",
+    padding: "20px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #0d2f55 58%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 20px 50px rgba(7, 24, 44, 0.25)",
+  },
+
+  summaryButton: {
+    width: "100%",
+    border: "none",
+    borderRadius: "16px",
+    padding: "13px 16px",
+    background: "#e0ba28",
+    color: "#07182c",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  rulesPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+  },
+
+  ruleList: {
+    display: "grid",
+    gap: "8px",
+    marginTop: "12px",
+    color: "#475569",
+    fontWeight: "800",
+  },
+
+  historyPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  logToolbar: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "12px",
+    marginBottom: "14px",
+  },
+
+  emptyState: {
+    padding: "20px",
+    color: "#64748b",
+    fontWeight: "800",
+    textAlign: "center",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px dashed #cbd5e1",
+  },
+
+  logList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  logCard: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "12px",
+    alignItems: "center",
+    padding: "14px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  logCardFailed: {
+    background: "#fff7f7",
+    borderColor: "#fecaca",
+  },
+
+  logTitleRow: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  logStatus: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "5px 8px",
+    background: "#dcfce7",
+    color: "#166534",
+    fontSize: "11px",
+    fontWeight: "950",
+  },
+
+  logStatusFailed: {
+    background: "#fee2e2",
+    color: "#991b1b",
+  },
+
+  doneMark: {
+    fontWeight: "950",
+    color: "#166534",
+  },
+};
