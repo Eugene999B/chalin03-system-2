@@ -1,10 +1,13 @@
+const AUDITOR_FULL_AUDIT_PREFIXES = [
+  "/api/audit-signoffs",
+  "/api/accounting-intelligence",
+  "/api/exports",
+];
+
 const AUDITOR_READ_ONLY_PREFIXES = [
   "/api/customer-statement",
   "/api/customer-statements",
   "/api/reports",
-  "/api/audit-signoffs",
-  "/api/accounting-intelligence",
-  "/api/exports",
 ];
 
 function normalizeRole(role) {
@@ -15,10 +18,24 @@ function getCleanPath(req) {
   return String(req.originalUrl || req.url || "").split("?")[0];
 }
 
-function canAuditorReadThisRoute(req) {
-  const role = normalizeRole(req.user?.role);
+function isAuditor(req) {
+  return normalizeRole(req.user?.role) === "auditor";
+}
 
-  if (role !== "auditor") {
+function canAuditorUseFullAuditRoute(req) {
+  if (!isAuditor(req)) {
+    return false;
+  }
+
+  const cleanPath = getCleanPath(req);
+
+  return AUDITOR_FULL_AUDIT_PREFIXES.some((prefix) =>
+    cleanPath.startsWith(prefix)
+  );
+}
+
+function canAuditorReadOnlyRoute(req) {
+  if (!isAuditor(req)) {
     return false;
   }
 
@@ -50,10 +67,17 @@ function requireRole(...allowedRoles) {
       return next();
     }
 
-    // Auditor accounts are read-only and are only allowed to open accounting,
-    // audit, reports, customer statements and export/report routes.
-    // They cannot create, edit, approve, delete, restore, clear, sell or adjust.
-    if (canAuditorReadThisRoute(req)) {
+    // Auditor accounts have boss-approved working access to the audit area:
+    // - Audit Sign-Offs: can create/update/delete/approve where the route supports it
+    // - Accounting Intelligence: can open and run accounting intelligence endpoints
+    // - Exports: can download/export audit and management records
+    if (canAuditorUseFullAuditRoute(req)) {
+      return next();
+    }
+
+    // Auditor accounts can still view supporting reports/customer statements,
+    // but cannot change records through those supporting routes.
+    if (canAuditorReadOnlyRoute(req)) {
       return next();
     }
 
