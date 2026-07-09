@@ -60,12 +60,25 @@ const statusColors = {
 };
 
 export default function StockTransfersPage() {
-  const { user, branchId, branchCode, branchName, canAccessAllBranches } =
-    useAuth();
+  const {
+    user,
+    branchId,
+    branchCode,
+    branchName,
+    branchLocation,
+    canAccessAllBranches,
+  } = useAuth();
 
   const currentBranchId = Number(
     branchId || user?.branch_id || user?.default_branch_id || 0
   );
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [branches, setBranches] = useState([]);
   const [transfers, setTransfers] = useState([]);
@@ -112,12 +125,62 @@ export default function StockTransfersPage() {
       ? `Store ID ${currentBranchId}`
       : "No store selected";
 
+  const transferDashboard = useMemo(() => {
+    const requested = transfers.filter(
+      (transfer) => String(transfer.status) === "requested"
+    ).length;
+
+    const approved = transfers.filter(
+      (transfer) => String(transfer.status) === "approved"
+    ).length;
+
+    const dispatched = transfers.filter(
+      (transfer) => String(transfer.status) === "dispatched"
+    ).length;
+
+    const received = transfers.filter(
+      (transfer) => String(transfer.status) === "received"
+    ).length;
+
+    const cancelledRejected = transfers.filter((transfer) =>
+      ["cancelled", "rejected"].includes(String(transfer.status))
+    ).length;
+
+    const totalRequestedQuantity = transfers.reduce(
+      (sum, transfer) => sum + Number(transfer.total_requested_quantity || 0),
+      0
+    );
+
+    return {
+      requested,
+      approved,
+      dispatched,
+      received,
+      cancelledRejected,
+      totalRequestedQuantity,
+    };
+  }, [transfers]);
+
+  const transferCartTotalQuantity = items.reduce(
+    (sum, item) => sum + Number(item.requested_quantity || 0),
+    0
+  );
+
+  useEffect(() => {
+    if (currentBranchId) {
+      setFromBranchId(String(currentBranchId));
+      setBranchFilter(String(currentBranchId));
+    }
+  }, [currentBranchId]);
+
   useEffect(() => {
     loadBranches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, branchFilter]);
 
   useEffect(() => {
@@ -126,6 +189,7 @@ export default function StockTransfersPage() {
     } else {
       setProducts([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromBranchId]);
 
   async function loadBranches() {
@@ -213,6 +277,7 @@ export default function StockTransfersPage() {
     try {
       const response = await axiosClient.get(`/stock-transfers/${transferId}`);
       setSelectedTransfer(response.data?.transfer || null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setError(
         err.response?.data?.message || "Failed to load transfer details."
@@ -436,246 +501,106 @@ export default function StockTransfersPage() {
     return ["requested", "approved"].includes(String(transfer?.status));
   }
 
-  const styles = {
-    page: {
-      display: "grid",
-      gap: "20px",
-      color: "#07182c",
-    },
-    hero: {
-      borderRadius: "24px",
-      padding: "22px",
-      background:
-        "linear-gradient(135deg, #07182c 0%, #164777 58%, #0f172a 100%)",
-      color: "#ffffff",
-      boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
-    },
-    heroTop: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: "12px",
-      flexWrap: "wrap",
-    },
-    badge: {
-      display: "inline-flex",
-      alignItems: "center",
-      gap: "8px",
-      borderRadius: "999px",
-      padding: "8px 12px",
-      background: "rgba(224,186,40,0.16)",
-      border: "1px solid rgba(224,186,40,0.35)",
-      color: "#ffffff",
-      fontWeight: "900",
-      fontSize: "12px",
-    },
-    gridTwo: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-      gap: "16px",
-    },
-    card: {
-      background: "#ffffff",
-      borderRadius: "20px",
-      border: "1px solid #dbe3ef",
-      boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
-      padding: "18px",
-      overflow: "hidden",
-    },
-    sectionTitle: {
-      margin: "0 0 12px",
-      fontSize: "18px",
-      fontWeight: "950",
-      color: "#07182c",
-    },
-    label: {
-      display: "block",
-      marginBottom: "6px",
-      fontSize: "12px",
-      fontWeight: "950",
-      color: "#334155",
-      textTransform: "uppercase",
-      letterSpacing: "0.04em",
-    },
-    input: {
-      width: "100%",
-      boxSizing: "border-box",
-      border: "1px solid #cbd5e1",
-      borderRadius: "12px",
-      padding: "11px 12px",
-      fontSize: "14px",
-      fontWeight: "800",
-      outline: "none",
-      color: "#07182c",
-      background: "#ffffff",
-    },
-    formGrid: {
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-      gap: "12px",
-    },
-    button: {
-      border: "none",
-      borderRadius: "12px",
-      padding: "11px 14px",
-      fontWeight: "950",
-      cursor: "pointer",
-      background: "#164777",
-      color: "#ffffff",
-    },
-    goldButton: {
-      border: "none",
-      borderRadius: "12px",
-      padding: "11px 14px",
-      fontWeight: "950",
-      cursor: "pointer",
-      background: "#e0ba28",
-      color: "#07182c",
-    },
-    dangerButton: {
-      border: "none",
-      borderRadius: "12px",
-      padding: "9px 11px",
-      fontWeight: "950",
-      cursor: "pointer",
-      background: "#b91c1c",
-      color: "#ffffff",
-    },
-    smallButton: {
-      border: "none",
-      borderRadius: "10px",
-      padding: "8px 10px",
-      fontWeight: "900",
-      cursor: "pointer",
-      background: "#164777",
-      color: "#ffffff",
-      fontSize: "12px",
-    },
-    mutedButton: {
-      border: "1px solid #cbd5e1",
-      borderRadius: "10px",
-      padding: "8px 10px",
-      fontWeight: "900",
-      cursor: "pointer",
-      background: "#ffffff",
-      color: "#164777",
-      fontSize: "12px",
-    },
-    tableWrap: {
-      width: "100%",
-      overflowX: "auto",
-      border: "1px solid #e2e8f0",
-      borderRadius: "16px",
-    },
-    table: {
-      width: "100%",
-      borderCollapse: "collapse",
-      minWidth: "850px",
-    },
-    th: {
-      textAlign: "left",
-      padding: "11px",
-      background: "#f8fafc",
-      borderBottom: "1px solid #e2e8f0",
-      color: "#334155",
-      fontSize: "12px",
-      textTransform: "uppercase",
-      letterSpacing: "0.04em",
-    },
-    td: {
-      padding: "11px",
-      borderBottom: "1px solid #f1f5f9",
-      verticalAlign: "top",
-      fontSize: "13px",
-      fontWeight: "750",
-    },
-    notice: {
-      padding: "12px 14px",
-      borderRadius: "14px",
-      background: "#ecfdf5",
-      border: "1px solid #bbf7d0",
-      color: "#047857",
-      fontWeight: "900",
-      whiteSpace: "pre-wrap",
-    },
-    error: {
-      padding: "12px 14px",
-      borderRadius: "14px",
-      background: "#fef2f2",
-      border: "1px solid #fecaca",
-      color: "#b91c1c",
-      fontWeight: "900",
-      whiteSpace: "pre-wrap",
-    },
-    info: {
-      padding: "12px 14px",
-      borderRadius: "14px",
-      background: "#f8fafc",
-      border: "1px solid #e2e8f0",
-      color: "#475569",
-      fontWeight: "800",
-      lineHeight: 1.5,
-    },
-  };
-
   return (
     <div style={styles.page}>
       <section style={styles.hero}>
+        <div style={styles.routeLine} />
+
         <div style={styles.heroTop}>
           <div>
-            <p
-              style={{
-                margin: 0,
-                color: "#e0ba28",
-                fontSize: "12px",
-                fontWeight: "950",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Two-Store Control
-            </p>
+            <p style={styles.eyebrow}>Logistics Yard • Two-Store Stock Movement</p>
 
-            <h1
-              style={{
-                margin: "6px 0 0",
-                fontSize: "32px",
-                fontWeight: "950",
-                lineHeight: 1.08,
-              }}
-            >
-              Stock Transfers
-            </h1>
+            <h1 style={styles.heroTitle}>Stock Transfers</h1>
 
-            <p
-              style={{
-                margin: "10px 0 0",
-                maxWidth: "760px",
-                color: "rgba(255,255,255,0.78)",
-                lineHeight: 1.6,
-                fontWeight: "750",
-              }}
-            >
-              Move stock professionally between stores. The system records who
-              requested, approved, dispatched and received the items, then keeps
-              the full transfer history for audit.
+            <p style={styles.heroSubtitle}>
+              Move stock professionally between stores. The system records the
+              full journey from request to approval, dispatch and receiving for
+              audit review.
             </p>
           </div>
 
-          <span style={styles.badge}>🏬 Working Store: {currentStoreText}</span>
+          <span style={styles.workingStoreBadge}>
+            🏬 Working Store: {currentStoreText}
+          </span>
+        </div>
+
+        <div style={styles.heroMetrics}>
+          <HeroMetric label="Requested" value={transferDashboard.requested} />
+          <HeroMetric label="Approved" value={transferDashboard.approved} />
+          <HeroMetric label="Dispatched" value={transferDashboard.dispatched} />
+          <HeroMetric label="Received" value={transferDashboard.received} />
         </div>
       </section>
+
+      <div style={styles.storeNotice}>
+        <span style={styles.noticeIcon}>🚚</span>
+        <div>
+          <strong>{currentStoreText}</strong>
+          {currentStoreLocation ? <p>{currentStoreLocation}</p> : null}
+          <p>
+            Transfer requests, approval, dispatch, receiving, PDFs and history
+            are controlled here. Dispatch reduces source stock. Receive increases
+            destination stock.
+          </p>
+        </div>
+      </div>
 
       {notice && <div style={styles.notice}>{notice}</div>}
       {error && <div style={styles.error}>{error}</div>}
 
-      <section style={styles.gridTwo}>
-        <form style={styles.card} onSubmit={createTransfer}>
-          <h2 style={styles.sectionTitle}>Create Transfer Request</h2>
+      <section style={styles.commandStrip}>
+        <CommandCard
+          icon="📦"
+          title="Cart Items"
+          value={items.length}
+          note={`${formatNumber(transferCartTotalQuantity)} total quantity`}
+        />
+        <CommandCard
+          icon="🛣️"
+          title="Total Qty in List"
+          value={formatNumber(transferDashboard.totalRequestedQuantity)}
+          note="Requested quantity in loaded transfers"
+        />
+        <CommandCard
+          icon="⚠️"
+          title="Cancelled / Rejected"
+          value={transferDashboard.cancelledRejected}
+          note="Transfers that need review"
+        />
+        <CommandCard
+          icon="🏬"
+          title="Stores"
+          value={branches.length}
+          note="Available transfer locations"
+        />
+      </section>
 
-          <div style={styles.formGrid}>
+      <section style={styles.flowPanel}>
+        <p style={styles.eyebrowDark}>Transfer Journey</p>
+        <div style={styles.flowSteps}>
+          <FlowStep number="1" title="Request" note="Create transfer request" />
+          <FlowStep number="2" title="Approve" note="Manager approves movement" />
+          <FlowStep number="3" title="Dispatch" note="Source stock reduces" />
+          <FlowStep number="4" title="Receive" note="Destination stock increases" />
+        </div>
+      </section>
+
+      <section style={styles.mainGrid}>
+        <form style={styles.transferBuilder} onSubmit={createTransfer}>
+          <div style={styles.panelHeader}>
             <div>
-              <label style={styles.label}>Source Store</label>
+              <p style={styles.eyebrowDark}>Transfer Builder</p>
+              <h2 style={styles.sectionTitle}>Create Transfer Request</h2>
+              <p style={styles.panelText}>
+                Build a professional transfer request by selecting source store,
+                destination store and products to move.
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.storeRouteGrid}>
+            <div style={styles.routeBox}>
+              <span>From</span>
               <select
                 value={fromBranchId}
                 onChange={(event) => {
@@ -694,8 +619,10 @@ export default function StockTransfersPage() {
               </select>
             </div>
 
-            <div>
-              <label style={styles.label}>Destination Store</label>
+            <div style={styles.routeArrow}>→</div>
+
+            <div style={styles.routeBox}>
+              <span>To</span>
               <select
                 value={toBranchId}
                 onChange={(event) => setToBranchId(event.target.value)}
@@ -715,7 +642,7 @@ export default function StockTransfersPage() {
             </div>
           </div>
 
-          <div style={{ marginTop: "12px" }}>
+          <div style={styles.fieldBlock}>
             <label style={styles.label}>Transfer Note</label>
             <textarea
               value={requestNote}
@@ -725,23 +652,22 @@ export default function StockTransfersPage() {
             />
           </div>
 
-          <div
-            style={{
-              marginTop: "16px",
-              padding: "14px",
-              borderRadius: "16px",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-            }}
-          >
-            <h3 style={{ margin: "0 0 10px", fontWeight: "950" }}>
-              Add Products
-            </h3>
+          <div style={styles.productDock}>
+            <div style={styles.panelHeader}>
+              <div>
+                <p style={styles.eyebrowDark}>Product Loading Dock</p>
+                <h3>Add Products</h3>
+              </div>
 
-            <div style={styles.formGrid}>
+              <span style={styles.qtyBadge}>
+                Cart Qty: {formatNumber(transferCartTotalQuantity)}
+              </span>
+            </div>
+
+            <div style={styles.productGrid}>
               <div>
                 <label style={styles.label}>Search Source Products</label>
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={styles.searchRow}>
                   <input
                     value={productSearch}
                     onChange={(event) => setProductSearch(event.target.value)}
@@ -789,7 +715,7 @@ export default function StockTransfersPage() {
               </div>
             </div>
 
-            <div style={{ marginTop: "10px" }}>
+            <div style={styles.fieldBlock}>
               <label style={styles.label}>Item Note</label>
               <input
                 value={itemNote}
@@ -800,114 +726,111 @@ export default function StockTransfersPage() {
             </div>
 
             {selectedProduct && (
-              <p style={{ margin: "10px 0 0", color: "#475569" }}>
+              <div style={styles.availableBox}>
                 Available in source store:{" "}
                 <strong>{formatNumber(selectedProduct.quantity)}</strong>
-              </p>
+              </div>
             )}
 
             <button
               type="button"
               onClick={addItem}
-              style={{ ...styles.goldButton, marginTop: "12px" }}
+              style={styles.goldButton}
             >
               Add Item to Transfer
             </button>
           </div>
 
-          <div style={{ marginTop: "16px" }}>
-            <h3 style={{ margin: "0 0 10px", fontWeight: "950" }}>
-              Transfer Items
-            </h3>
+          <div style={styles.transferCart}>
+            <div style={styles.panelHeader}>
+              <div>
+                <p style={styles.eyebrowDark}>Transfer Cart</p>
+                <h3>Items Ready for Request</h3>
+              </div>
+              <span style={styles.qtyBadge}>{items.length} item(s)</span>
+            </div>
 
             {items.length === 0 ? (
               <div style={styles.info}>No items added yet.</div>
             ) : (
-              <div style={styles.tableWrap}>
-                <table style={{ ...styles.table, minWidth: "680px" }}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Product</th>
-                      <th style={styles.th}>Available</th>
-                      <th style={styles.th}>Transfer Qty</th>
-                      <th style={styles.th}>Note</th>
-                      <th style={styles.th}>Action</th>
-                    </tr>
-                  </thead>
+              <div style={styles.itemList}>
+                {items.map((item) => (
+                  <article key={item.source_product_id} style={styles.itemCard}>
+                    <div>
+                      <strong>{item.product_name}</strong>
+                      <p>
+                        {[item.category, item.size, item.barcode]
+                          .filter(Boolean)
+                          .join(" • ") || "—"}
+                      </p>
+                      {item.item_note ? <small>{item.item_note}</small> : null}
+                    </div>
 
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.source_product_id}>
-                        <td style={styles.td}>
-                          <strong>{item.product_name}</strong>
-                          <br />
-                          <span style={{ color: "#64748b" }}>
-                            {[item.category, item.size, item.barcode]
-                              .filter(Boolean)
-                              .join(" • ") || "—"}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          {formatNumber(item.available_quantity)}
-                        </td>
-                        <td style={styles.td}>
-                          {formatNumber(item.requested_quantity)}
-                        </td>
-                        <td style={styles.td}>{item.item_note || "—"}</td>
-                        <td style={styles.td}>
-                          <button
-                            type="button"
-                            style={styles.dangerButton}
-                            onClick={() => removeItem(item.source_product_id)}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    <div style={styles.itemNumbers}>
+                      <span>Available: {formatNumber(item.available_quantity)}</span>
+                      <strong>Move: {formatNumber(item.requested_quantity)}</strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={styles.dangerButton}
+                      onClick={() => removeItem(item.source_product_id)}
+                    >
+                      Remove
+                    </button>
+                  </article>
+                ))}
               </div>
             )}
           </div>
 
           <button
             type="submit"
-            style={{ ...styles.button, marginTop: "16px", width: "100%" }}
+            style={styles.submitButton}
             disabled={saving}
           >
             {saving ? "Creating Transfer..." : "Create Transfer Request"}
           </button>
         </form>
 
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>Transfer Detail</h2>
+        <aside style={styles.actionDock}>
+          <div style={styles.panelHeader}>
+            <div>
+              <p style={styles.eyebrowDark}>Action Dock</p>
+              <h2 style={styles.sectionTitle}>Transfer Detail</h2>
+              <p style={styles.panelText}>
+                Open a transfer to approve, dispatch, receive, cancel, reject or
+                download the transfer note.
+              </p>
+            </div>
+          </div>
 
           {!selectedTransfer ? (
-            <div style={styles.info}>
-              Select a transfer from the history table to view full details and
-              actions.
+            <div style={styles.emptyDetail}>
+              <span>🚛</span>
+              <strong>No transfer selected</strong>
+              <p>Select a transfer from history to view details and actions.</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: "12px" }}>
-              <div style={styles.info}>
-                <strong>{selectedTransfer.transfer_number}</strong>
-                <br />
-                {selectedTransfer.from_branch_code} —{" "}
-                {selectedTransfer.from_branch_name} →{" "}
-                {selectedTransfer.to_branch_code} —{" "}
-                {selectedTransfer.to_branch_name}
-                <br />
-                Status:{" "}
-                <strong
-                  style={{
-                    color: statusColors[selectedTransfer.status] || "#07182c",
-                  }}
-                >
+            <div style={styles.detailStack}>
+              <div style={styles.transferPassport}>
+                <span style={styles.statusPill(selectedTransfer.status)}>
                   {cleanStatus(selectedTransfer.status)}
-                </strong>
-                <br />
-                Requested: {formatDate(selectedTransfer.requested_at)}
+                </span>
+
+                <h3>{selectedTransfer.transfer_number}</h3>
+
+                <p>
+                  {selectedTransfer.from_branch_code} —{" "}
+                  {selectedTransfer.from_branch_name}
+                  <br />
+                  <strong>→</strong>
+                  <br />
+                  {selectedTransfer.to_branch_code} —{" "}
+                  {selectedTransfer.to_branch_name}
+                </p>
+
+                <small>Requested: {formatDate(selectedTransfer.requested_at)}</small>
               </div>
 
               <textarea
@@ -921,7 +844,7 @@ export default function StockTransfersPage() {
                 }}
               />
 
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <div style={styles.actionButtons}>
                 <button
                   type="button"
                   style={styles.mutedButton}
@@ -1005,84 +928,64 @@ export default function StockTransfersPage() {
                 )}
               </div>
 
-              <div style={styles.tableWrap}>
-                <table style={{ ...styles.table, minWidth: "720px" }}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Product</th>
-                      <th style={styles.th}>Requested</th>
-                      <th style={styles.th}>Dispatched</th>
-                      <th style={styles.th}>Received</th>
-                      <th style={styles.th}>Source Stock</th>
-                      <th style={styles.th}>Destination Stock</th>
-                    </tr>
-                  </thead>
+              <div style={styles.detailItemList}>
+                {(selectedTransfer.items || []).map((item) => (
+                  <article key={item.id} style={styles.detailItem}>
+                    <strong>{item.product_name}</strong>
+                    <p>
+                      {[item.category, item.size, item.barcode]
+                        .filter(Boolean)
+                        .join(" • ") || "—"}
+                    </p>
 
-                  <tbody>
-                    {(selectedTransfer.items || []).map((item) => (
-                      <tr key={item.id}>
-                        <td style={styles.td}>
-                          <strong>{item.product_name}</strong>
-                          <br />
-                          <span style={{ color: "#64748b" }}>
-                            {[item.category, item.size, item.barcode]
-                              .filter(Boolean)
-                              .join(" • ") || "—"}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          {formatNumber(item.requested_quantity)}
-                        </td>
-                        <td style={styles.td}>
-                          {item.dispatched_quantity ?? "—"}
-                        </td>
-                        <td style={styles.td}>
-                          {item.received_quantity ?? "—"}
-                        </td>
-                        <td style={styles.td}>
-                          {item.source_quantity_before ?? "—"} →{" "}
-                          {item.source_quantity_after ?? "—"}
-                        </td>
-                        <td style={styles.td}>
-                          {item.destination_quantity_before ?? "—"} →{" "}
-                          {item.destination_quantity_after ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    <div style={styles.detailNumbers}>
+                      <MiniStat
+                        label="Requested"
+                        value={item.requested_quantity}
+                      />
+                      <MiniStat
+                        label="Dispatched"
+                        value={item.dispatched_quantity ?? "—"}
+                      />
+                      <MiniStat
+                        label="Received"
+                        value={item.received_quantity ?? "—"}
+                      />
+                      <MiniStat
+                        label="Source"
+                        value={`${item.source_quantity_before ?? "—"} → ${
+                          item.source_quantity_after ?? "—"
+                        }`}
+                        raw
+                      />
+                      <MiniStat
+                        label="Destination"
+                        value={`${item.destination_quantity_before ?? "—"} → ${
+                          item.destination_quantity_after ?? "—"
+                        }`}
+                        raw
+                      />
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           )}
-        </div>
+        </aside>
       </section>
 
-      <section style={styles.card}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "12px",
-            flexWrap: "wrap",
-            alignItems: "end",
-            marginBottom: "14px",
-          }}
-        >
+      <section style={styles.historyPanel}>
+        <div style={styles.historyHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>Transfer History</h2>
-            <p style={{ margin: 0, color: "#64748b", fontWeight: "750" }}>
-              Track every stock movement between stores.
+            <p style={styles.eyebrowDark}>Transfer History</p>
+            <h2 style={styles.sectionTitle}>Movement Board</h2>
+            <p style={styles.panelText}>
+              Track every stock movement between stores and open any transfer
+              for action.
             </p>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: "10px",
-              minWidth: "330px",
-            }}
-          >
+          <div style={styles.filtersGrid}>
             <div>
               <label style={styles.label}>Status</label>
               <select
@@ -1121,77 +1024,652 @@ export default function StockTransfersPage() {
         ) : transfers.length === 0 ? (
           <div style={styles.info}>No stock transfers found.</div>
         ) : (
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Transfer</th>
-                  <th style={styles.th}>From</th>
-                  <th style={styles.th}>To</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Items</th>
-                  <th style={styles.th}>Requested By</th>
-                  <th style={styles.th}>Date</th>
-                  <th style={styles.th}>Action</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {transfers.map((transfer) => (
-                  <tr key={transfer.id}>
-                    <td style={styles.td}>
+          <div style={styles.transferList}>
+            {transfers.map((transfer) => (
+              <article key={transfer.id} style={styles.transferCard}>
+                <div style={styles.transferCardTop}>
+                  <div>
+                    <div style={styles.transferTitleRow}>
                       <strong>{transfer.transfer_number}</strong>
-                    </td>
-                    <td style={styles.td}>
-                      {transfer.from_branch_code} —{" "}
-                      {transfer.from_branch_name}
-                    </td>
-                    <td style={styles.td}>
-                      {transfer.to_branch_code} — {transfer.to_branch_name}
-                    </td>
-                    <td style={styles.td}>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          borderRadius: "999px",
-                          padding: "6px 10px",
-                          background: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          color: statusColors[transfer.status] || "#07182c",
-                          fontWeight: "950",
-                          fontSize: "12px",
-                        }}
-                      >
+                      <span style={styles.statusPill(transfer.status)}>
                         {cleanStatus(transfer.status)}
                       </span>
-                    </td>
-                    <td style={styles.td}>
-                      {formatNumber(transfer.item_count)} item(s)
-                      <br />
-                      Qty: {formatNumber(transfer.total_requested_quantity)}
-                    </td>
-                    <td style={styles.td}>
-                      {transfer.requested_by_name || "—"}
-                    </td>
-                    <td style={styles.td}>
+                    </div>
+
+                    <p>
+                      {transfer.from_branch_code} — {transfer.from_branch_name}
+                      {" "}→ {transfer.to_branch_code} —{" "}
+                      {transfer.to_branch_name}
+                    </p>
+
+                    <small>
+                      Requested by {transfer.requested_by_name || "—"} •{" "}
                       {formatDate(transfer.requested_at)}
-                    </td>
-                    <td style={styles.td}>
-                      <button
-                        type="button"
-                        style={styles.smallButton}
-                        onClick={() => loadTransferDetails(transfer.id)}
-                      >
-                        View / Action
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </small>
+                  </div>
+
+                  <button
+                    type="button"
+                    style={styles.smallButton}
+                    onClick={() => loadTransferDetails(transfer.id)}
+                  >
+                    View / Action
+                  </button>
+                </div>
+
+                <div style={styles.transferStats}>
+                  <MiniStat label="Items" value={transfer.item_count} />
+                  <MiniStat
+                    label="Requested Qty"
+                    value={transfer.total_requested_quantity}
+                  />
+                  <MiniStat
+                    label="Transfer ID"
+                    value={`#${transfer.id}`}
+                    raw
+                  />
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>
     </div>
   );
 }
+
+function HeroMetric({ label, value }) {
+  return (
+    <div style={styles.heroMetric}>
+      <span>{label}</span>
+      <strong>{formatNumber(value)}</strong>
+    </div>
+  );
+}
+
+function CommandCard({ icon, title, value, note }) {
+  return (
+    <div style={styles.commandCard}>
+      <span>{icon}</span>
+      <div>
+        <p>{title}</p>
+        <strong>{value}</strong>
+        <small>{note}</small>
+      </div>
+    </div>
+  );
+}
+
+function FlowStep({ number, title, note }) {
+  return (
+    <div style={styles.flowStep}>
+      <span>{number}</span>
+      <strong>{title}</strong>
+      <small>{note}</small>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, raw }) {
+  return (
+    <div style={styles.miniStat}>
+      <span>{label}</span>
+      <strong>{raw ? value : formatNumber(value)}</strong>
+    </div>
+  );
+}
+
+const styles = {
+  page: {
+    width: "100%",
+    maxWidth: "1720px",
+    margin: "0 auto",
+    display: "grid",
+    gap: "18px",
+    color: "#07182c",
+    paddingBottom: "44px",
+  },
+
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: "30px",
+    padding: "28px",
+    background:
+      "linear-gradient(135deg, #0f172a 0%, #164777 42%, #312e81 100%)",
+    color: "#ffffff",
+    boxShadow: "0 26px 70px rgba(22, 71, 119, 0.22)",
+  },
+
+  routeLine: {
+    position: "absolute",
+    inset: 0,
+    background:
+      "radial-gradient(circle at 12% 85%, rgba(224,186,40,0.26), transparent 30%), radial-gradient(circle at 88% 10%, rgba(96,165,250,0.28), transparent 34%)",
+  },
+
+  heroTop: {
+    position: "relative",
+    zIndex: 2,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "14px",
+    flexWrap: "wrap",
+  },
+
+  eyebrow: {
+    margin: 0,
+    color: "#e0ba28",
+    fontSize: "12px",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+
+  eyebrowDark: {
+    margin: 0,
+    color: "#164777",
+    fontSize: "11px",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+
+  heroTitle: {
+    margin: "6px 0 0",
+    fontSize: "clamp(30px, 4vw, 52px)",
+    fontWeight: "950",
+    lineHeight: 1.05,
+  },
+
+  heroSubtitle: {
+    margin: "10px 0 0",
+    maxWidth: "820px",
+    color: "rgba(255,255,255,0.78)",
+    lineHeight: 1.65,
+    fontWeight: "750",
+  },
+
+  workingStoreBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    borderRadius: "999px",
+    padding: "10px 13px",
+    background: "rgba(224,186,40,0.16)",
+    border: "1px solid rgba(224,186,40,0.35)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  heroMetrics: {
+    position: "relative",
+    zIndex: 2,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "12px",
+    marginTop: "22px",
+  },
+
+  heroMetric: {
+    padding: "14px",
+    borderRadius: "18px",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.16)",
+  },
+
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  noticeIcon: {
+    fontSize: "22px",
+  },
+
+  notice: {
+    padding: "12px 14px",
+    borderRadius: "14px",
+    background: "#ecfdf5",
+    border: "1px solid #bbf7d0",
+    color: "#047857",
+    fontWeight: "900",
+    whiteSpace: "pre-wrap",
+  },
+
+  error: {
+    padding: "12px 14px",
+    borderRadius: "14px",
+    background: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#b91c1c",
+    fontWeight: "900",
+    whiteSpace: "pre-wrap",
+  },
+
+  commandStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: "14px",
+  },
+
+  commandCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    background: "#ffffff",
+    borderRadius: "22px",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 14px 34px rgba(15,23,42,0.07)",
+    padding: "16px",
+    minWidth: 0,
+  },
+
+  flowPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    padding: "18px",
+  },
+
+  flowSteps: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "12px",
+    marginTop: "12px",
+  },
+
+  flowStep: {
+    display: "grid",
+    gap: "4px",
+    padding: "14px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  mainGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.2fr) minmax(340px, 0.8fr)",
+    gap: "18px",
+    alignItems: "start",
+  },
+
+  transferBuilder: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    padding: "20px",
+    overflow: "hidden",
+    minWidth: 0,
+  },
+
+  actionDock: {
+    position: "sticky",
+    top: "18px",
+    background: "#ffffff",
+    borderRadius: "26px",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    padding: "20px",
+    overflow: "hidden",
+    minWidth: 0,
+  },
+
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+
+  sectionTitle: {
+    margin: "4px 0 0",
+    fontSize: "22px",
+    fontWeight: "950",
+    color: "#07182c",
+  },
+
+  panelText: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontWeight: "750",
+    lineHeight: 1.5,
+  },
+
+  storeRouteGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
+    gap: "12px",
+    alignItems: "center",
+    marginBottom: "14px",
+  },
+
+  routeBox: {
+    padding: "14px",
+    borderRadius: "20px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  routeArrow: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+    background: "#164777",
+    color: "#ffffff",
+    fontWeight: "950",
+  },
+
+  label: {
+    display: "block",
+    marginBottom: "6px",
+    fontSize: "12px",
+    fontWeight: "950",
+    color: "#334155",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  },
+
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    border: "1px solid #cbd5e1",
+    borderRadius: "12px",
+    padding: "11px 12px",
+    fontSize: "14px",
+    fontWeight: "800",
+    outline: "none",
+    color: "#07182c",
+    background: "#ffffff",
+  },
+
+  fieldBlock: {
+    marginTop: "12px",
+  },
+
+  productDock: {
+    marginTop: "16px",
+    padding: "16px",
+    borderRadius: "22px",
+    background: "linear-gradient(135deg, #f8fafc, #ffffff)",
+    border: "1px solid #e2e8f0",
+  },
+
+  qtyBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "7px 10px",
+    background: "#fef3c7",
+    color: "#92400e",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+
+  productGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) 130px",
+    gap: "12px",
+    alignItems: "end",
+  },
+
+  searchRow: {
+    display: "flex",
+    gap: "8px",
+  },
+
+  buttonBase: {
+    border: "none",
+    borderRadius: "12px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  smallButton: {
+    border: "none",
+    borderRadius: "12px",
+    padding: "10px 12px",
+    fontWeight: "950",
+    cursor: "pointer",
+    background: "#164777",
+    color: "#ffffff",
+  },
+
+  goldButton: {
+    border: "none",
+    borderRadius: "12px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+    background: "#e0ba28",
+    color: "#07182c",
+  },
+
+  dangerButton: {
+    border: "none",
+    borderRadius: "12px",
+    padding: "9px 11px",
+    fontWeight: "950",
+    cursor: "pointer",
+    background: "#b91c1c",
+    color: "#ffffff",
+  },
+
+  mutedButton: {
+    border: "1px solid #cbd5e1",
+    borderRadius: "12px",
+    padding: "9px 11px",
+    fontWeight: "950",
+    cursor: "pointer",
+    background: "#ffffff",
+    color: "#164777",
+  },
+
+  availableBox: {
+    marginTop: "10px",
+    marginBottom: "10px",
+    padding: "11px",
+    borderRadius: "16px",
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    fontWeight: "850",
+  },
+
+  transferCart: {
+    marginTop: "16px",
+  },
+
+  info: {
+    padding: "14px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    color: "#475569",
+    fontWeight: "850",
+    lineHeight: 1.5,
+  },
+
+  itemList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  itemCard: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+    gap: "12px",
+    alignItems: "center",
+    padding: "13px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  itemNumbers: {
+    display: "grid",
+    gap: "4px",
+    textAlign: "right",
+  },
+
+  submitButton: {
+    width: "100%",
+    marginTop: "16px",
+    border: "none",
+    borderRadius: "16px",
+    padding: "14px 16px",
+    background: "#164777",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(22, 71, 119, 0.22)",
+  },
+
+  emptyDetail: {
+    minHeight: "260px",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    padding: "26px",
+    borderRadius: "20px",
+    background: "#f8fafc",
+    border: "1px dashed #cbd5e1",
+    color: "#64748b",
+  },
+
+  detailStack: {
+    display: "grid",
+    gap: "12px",
+  },
+
+  transferPassport: {
+    padding: "16px",
+    borderRadius: "22px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #164777 55%, #0f172a 100%)",
+    color: "#ffffff",
+  },
+
+  actionButtons: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+
+  detailItemList: {
+    display: "grid",
+    gap: "10px",
+    maxHeight: "440px",
+    overflowY: "auto",
+    paddingRight: "4px",
+  },
+
+  detailItem: {
+    padding: "13px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  detailNumbers: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))",
+    gap: "8px",
+    marginTop: "10px",
+  },
+
+  miniStat: {
+    padding: "9px",
+    borderRadius: "13px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    minWidth: 0,
+  },
+
+  historyPanel: {
+    background: "#ffffff",
+    borderRadius: "26px",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+    padding: "20px",
+    minWidth: 0,
+  },
+
+  historyHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "14px",
+    alignItems: "flex-end",
+    flexWrap: "wrap",
+    marginBottom: "14px",
+  },
+
+  filtersGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: "10px",
+    minWidth: "330px",
+  },
+
+  transferList: {
+    display: "grid",
+    gap: "12px",
+  },
+
+  transferCard: {
+    borderRadius: "20px",
+    border: "1px solid #e2e8f0",
+    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+    padding: "15px",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  transferCardTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+
+  transferTitleRow: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  transferStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: "8px",
+    marginTop: "12px",
+  },
+
+  statusPill: (status) => ({
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    color: statusColors[status] || "#07182c",
+    fontWeight: "950",
+    fontSize: "12px",
+  }),
+};
