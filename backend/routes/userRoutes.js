@@ -93,6 +93,41 @@ async function ensureColumn(connection, tableName, columnName, columnDefinition)
   }
 }
 
+
+async function ensureUserRoleSupportsAuditor(connection = pool) {
+  const [columns] = await connection.query(`SHOW COLUMNS FROM users LIKE 'role'`);
+
+  if (columns.length === 0) {
+    return;
+  }
+
+  const roleColumn = columns[0];
+  const roleType = String(roleColumn.Type || "").toLowerCase();
+
+  // Live MySQL can have role as ENUM('admin','manager','cashier').
+  // If we insert "auditor" before expanding the enum, MySQL throws:
+  // Data truncated for column 'role'.
+  if (roleType.startsWith("enum(")) {
+    if (!roleType.includes("'auditor'")) {
+      await connection.query(`
+        ALTER TABLE users
+        MODIFY role ENUM('admin', 'manager', 'cashier', 'auditor') NOT NULL DEFAULT 'cashier'
+      `);
+    }
+
+    return;
+  }
+
+  const varcharMatch = roleType.match(/varchar\((\d+)\)/);
+
+  if (varcharMatch && Number(varcharMatch[1]) < 30) {
+    await connection.query(`
+      ALTER TABLE users
+      MODIFY role VARCHAR(30) NOT NULL DEFAULT 'cashier'
+    `);
+  }
+}
+
 async function ensureUserBranchSetup(connection = pool) {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS user_branch_access (
@@ -174,6 +209,8 @@ async function ensureUserBranchSetup(connection = pool) {
     "updated_at",
     "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at"
   );
+
+  await ensureUserRoleSupportsAuditor(connection);
 }
 
 async function getBranchColumnMap(connection = pool) {
