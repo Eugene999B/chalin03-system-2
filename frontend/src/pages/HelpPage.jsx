@@ -75,7 +75,7 @@ export default function HelpPage() {
             <span>📘</span>
             <div>
               <strong>{guideSections.length}</strong>
-              <small>guide sections</small>
+              <small> guide sections</small>
             </div>
           </div>
         </div>

@@ -873,19 +873,19 @@ export default function ProductsPage() {
 
           <div style={styles.heroMetrics}>
             <HeroMetric
-              label="Products"
+              label="Products :"
               value={formatNumber(productSummary.totalProducts)}
             />
             <HeroMetric
-              label="Stock Health"
+              label="Stock Health : "
               value={`${productSummary.stockHealth}%`}
             />
             <HeroMetric
-              label="Stock Value"
+              label="Stock Value :"
               value={formatCompactMoney(productSummary.stockSellingValue)}
             />
             <HeroMetric
-              label="Low Stock"
+              label="Low Stock : "
               value={formatNumber(productSummary.lowStockCount)}
             />
           </div>

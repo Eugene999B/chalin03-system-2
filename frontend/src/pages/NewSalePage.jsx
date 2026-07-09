@@ -1012,10 +1012,10 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
           </div>
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
-            <HeroMetric label="Cart Items" value={cart.length} />
-            <HeroMetric label="Subtotal" value={formatCompactMoney(subtotal)} />
-            <HeroMetric label="Amount Due" value={formatCompactMoney(estimatedAmountDue)} />
-            <HeroMetric label="Expected Balance" value={formatCompactMoney(expectedBalance)} />
+            <HeroMetric label="Cart Items : " value={cart.length} />
+            <HeroMetric label="Subtotal : " value={formatCompactMoney(subtotal)} />
+            <HeroMetric label="Amount Due : " value={formatCompactMoney(estimatedAmountDue)} />
+            <HeroMetric label="Expected Balance : " value={formatCompactMoney(expectedBalance)} />
           </div>
         </div>
       </div>

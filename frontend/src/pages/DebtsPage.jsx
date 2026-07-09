@@ -736,12 +736,12 @@ Thank you.`;
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
             <HeroMetric
-              label="Outstanding"
+              label="Outstanding : "
               value={formatCompactMoney(dashboardSummary.outstandingBalance)}
             />
-            <HeroMetric label="Active Debts" value={dashboardSummary.activeCount} />
-            <HeroMetric label="Partial" value={dashboardSummary.partialCount} />
-            <HeroMetric label="Overdue" value={dashboardSummary.overdueCount} />
+            <HeroMetric label="Active Debts : " value={dashboardSummary.activeCount} />
+            <HeroMetric label="Partial : " value={dashboardSummary.partialCount} />
+            <HeroMetric label="Overdue : " value={dashboardSummary.overdueCount} />
           </div>
         </div>
       </div>
