@@ -156,6 +156,18 @@ export default function AdvancedAccountingIntelligencePage() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    function checkMobileView() {
+      setIsMobile(window.innerWidth <= 760);
+    }
+
+    checkMobileView();
+    window.addEventListener("resize", checkMobileView);
+
+    return () => window.removeEventListener("resize", checkMobileView);
+  }, []);
 
   const canUseAllStores = useMemo(() => {
     const role = String(user?.role || "").toLowerCase();
@@ -195,6 +207,90 @@ export default function AdvancedAccountingIntelligencePage() {
     user?.branch_location ||
     user?.selected_branch?.branch_location ||
     "";
+
+  const pageStyle = isMobile
+    ? { ...styles.page, ...styles.mobilePage }
+    : styles.page;
+
+  const heroStyle = isMobile
+    ? { ...styles.hero, ...styles.mobileHero }
+    : styles.hero;
+
+  const orbitOneStyle = isMobile
+    ? { ...styles.orbitOne, ...styles.mobileOrbitOne }
+    : styles.orbitOne;
+
+  const orbitTwoStyle = isMobile
+    ? { ...styles.orbitTwo, ...styles.mobileOrbitTwo }
+    : styles.orbitTwo;
+
+  const heroContentStyle = isMobile
+    ? { ...styles.heroContent, ...styles.mobileHeroContent }
+    : styles.heroContent;
+
+  const heroTitleStyle = isMobile
+    ? { ...styles.heroTitle, ...styles.mobileHeroTitle }
+    : styles.heroTitle;
+
+  const heroSubtitleStyle = isMobile
+    ? { ...styles.heroSubtitle, ...styles.mobileHeroSubtitle }
+    : styles.heroSubtitle;
+
+  const auditRadarStyle = isMobile
+    ? { ...styles.auditRadar, ...styles.mobileAuditRadar }
+    : styles.auditRadar;
+
+  const storeNoticeStyle = isMobile
+    ? { ...styles.storeNotice, ...styles.mobileStoreNotice }
+    : styles.storeNotice;
+
+  const controlPanelStyle = isMobile
+    ? { ...styles.controlPanel, ...styles.mobileControlPanel }
+    : styles.controlPanel;
+
+  const controlGridStyle = isMobile
+    ? { ...styles.controlGrid, ...styles.mobileControlGrid }
+    : styles.controlGrid;
+
+  const executivePanelStyle = isMobile
+    ? { ...styles.executivePanel, ...styles.mobileExecutivePanel }
+    : styles.executivePanel;
+
+  const scoreCircleWrapStyle = isMobile
+    ? { ...styles.scoreCircleWrap, ...styles.mobileScoreCircleWrap }
+    : styles.scoreCircleWrap;
+
+  const cardGridStyle = isMobile
+    ? { ...styles.cardGrid, ...styles.mobileCardGrid }
+    : styles.cardGrid;
+
+  const controlCardGridStyle = isMobile
+    ? { ...styles.controlCardGrid, ...styles.mobileCardGrid }
+    : styles.controlCardGrid;
+
+  const panelStyle = isMobile
+    ? { ...styles.panel, ...styles.mobilePanel }
+    : styles.panel;
+
+  const dualGridStyle = isMobile
+    ? { ...styles.dualGrid, ...styles.mobileDualGrid }
+    : styles.dualGrid;
+
+  const miniGridStyle = isMobile
+    ? { ...styles.miniGrid, ...styles.mobileMiniGrid }
+    : styles.miniGrid;
+
+  const tableWrapStyle = isMobile
+    ? { ...styles.tableWrap, ...styles.mobileTableWrap }
+    : styles.tableWrap;
+
+  const emptyPanelStyle = isMobile
+    ? { ...styles.emptyPanel, ...styles.mobileEmptyPanel }
+    : styles.emptyPanel;
+
+  const infoRowsStyle = isMobile
+    ? { ...styles.infoRows, ...styles.mobileInfoRows }
+    : styles.infoRows;
 
   const moneyCards = [
     {
@@ -318,20 +414,55 @@ export default function AdvancedAccountingIntelligencePage() {
   }, []);
 
   return (
-    <div style={styles.page}>
-      <section style={styles.hero}>
-        <div style={styles.orbitOne} />
-        <div style={styles.orbitTwo} />
+    <div style={pageStyle}>
+      <style>{`
+        @media (max-width: 760px) {
+          table {
+            min-width: 720px;
+            font-size: 12px;
+          }
 
-        <div style={styles.heroContent}>
+          th,
+          td {
+            padding: 10px 9px !important;
+            white-space: nowrap;
+          }
+
+          input,
+          select,
+          button {
+            width: 100%;
+            min-height: 44px;
+            font-size: 16px;
+          }
+
+          button {
+            white-space: normal;
+          }
+
+          h2,
+          h3,
+          p,
+          strong,
+          small,
+          span {
+            overflow-wrap: anywhere;
+          }
+        }
+      `}</style>
+      <section style={heroStyle}>
+        <div style={orbitOneStyle} />
+        <div style={orbitTwoStyle} />
+
+        <div style={heroContentStyle}>
           <div>
             <p style={styles.eyebrow}>
               Finance Observatory • {displayStoreCode}
             </p>
 
-            <h1 style={styles.heroTitle}>Advanced Accounting Intelligence</h1>
+            <h1 style={heroTitleStyle}>Advanced Accounting Intelligence</h1>
 
-            <p style={styles.heroSubtitle}>
+            <p style={heroSubtitleStyle}>
               High-level audit, ledger, profit, debt, stock, SMS,
               system-control and branch intelligence for{" "}
               <strong>
@@ -341,7 +472,7 @@ export default function AdvancedAccountingIntelligencePage() {
             </p>
           </div>
 
-          <div style={styles.auditRadar}>
+          <div style={auditRadarStyle}>
             <span>Audit Score</span>
             <strong>{summary.audit_score || 0}/100</strong>
             <small>{summary.audit_status || "needs_review"}</small>
@@ -349,7 +480,7 @@ export default function AdvancedAccountingIntelligencePage() {
         </div>
       </section>
 
-      <div style={styles.storeNotice}>
+      <div style={storeNoticeStyle}>
         <span style={styles.noticeIcon}>🔭</span>
         <div>
           <strong>
@@ -367,7 +498,7 @@ export default function AdvancedAccountingIntelligencePage() {
       {notice && <div className="success-box">{notice}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <section style={styles.controlPanel}>
+      <section style={controlPanelStyle}>
         <div>
           <p style={styles.eyebrowDark}>Analysis Console</p>
           <h2 style={styles.panelTitle}>Control Panel</h2>
@@ -376,7 +507,7 @@ export default function AdvancedAccountingIntelligencePage() {
           </p>
         </div>
 
-        <div style={styles.controlGrid}>
+        <div style={controlGridStyle}>
           <div>
             <label>Start Date</label>
             <input
@@ -416,7 +547,7 @@ export default function AdvancedAccountingIntelligencePage() {
       </section>
 
       {!intelligence ? (
-        <section style={styles.emptyPanel}>
+        <section style={emptyPanelStyle}>
           <span>🧠</span>
           <h2>{loading ? "Loading intelligence..." : "No intelligence loaded yet."}</h2>
           <p>
@@ -426,7 +557,7 @@ export default function AdvancedAccountingIntelligencePage() {
         </section>
       ) : (
         <>
-          <section style={styles.executivePanel}>
+          <section style={executivePanelStyle}>
             <div>
               <p style={styles.eyebrowDark}>Executive Intelligence</p>
               <h2 style={styles.panelTitle}>Financial Command Snapshot</h2>
@@ -436,7 +567,7 @@ export default function AdvancedAccountingIntelligencePage() {
               </p>
             </div>
 
-            <div style={styles.scoreCircleWrap}>
+            <div style={scoreCircleWrapStyle}>
               <div
                 style={{
                   ...styles.scoreCircle,
@@ -452,19 +583,19 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <div style={styles.cardGrid}>
+          <div style={cardGridStyle}>
             {moneyCards.map((card) => (
-              <IntelligenceCard key={card.title} {...card} />
+              <IntelligenceCard key={card.title} {...card} isMobile={isMobile} />
             ))}
           </div>
 
-          <div style={styles.controlCardGrid}>
+          <div style={controlCardGridStyle}>
             {controlCards.map((card) => (
-              <IntelligenceCard key={card.title} {...card} />
+              <IntelligenceCard key={card.title} {...card} isMobile={isMobile} />
             ))}
           </div>
 
-          <section style={styles.panel}>
+          <section style={panelStyle}>
             <SectionHeader
               eyebrow="Audit Review"
               title="Audit Review Checklist"
@@ -474,7 +605,7 @@ export default function AdvancedAccountingIntelligencePage() {
               }
             />
 
-            <div style={styles.tableWrap}>
+            <div style={tableWrapStyle}>
               <table>
                 <thead>
                   <tr>
@@ -512,8 +643,8 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.dualGrid}>
-            <div style={styles.panel}>
+          <section style={dualGridStyle}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="P&L Intelligence"
                 title="Profit and Loss Intelligence"
@@ -521,6 +652,7 @@ export default function AdvancedAccountingIntelligencePage() {
               />
 
               <InfoRows
+                isMobile={isMobile}
                 rows={[
                   ["Gross Sales", formatMoney(pnl.gross_sales)],
                   ["Discounts", formatMoney(pnl.discounts)],
@@ -542,14 +674,14 @@ export default function AdvancedAccountingIntelligencePage() {
               />
             </div>
 
-            <div style={styles.panel}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Management Ledger"
                 title="Ledger Balance"
                 note={ledger.note}
               />
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -593,31 +725,34 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.dualGrid}>
-            <div style={styles.panel}>
+          <section style={dualGridStyle}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Debt Radar"
                 title="Debt Intelligence"
                 note="Customer balance and payment collection signals."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Active Debts"
                   value={formatNumber(intelligence.debts?.active_debt_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Debt Balance"
                   value={formatMoney(intelligence.debts?.total_debt_balance)}
                   warning={Number(intelligence.debts?.total_debt_balance || 0) > 0}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Payments"
                   value={formatMoney(intelligence.debts?.debt_payments)}
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -644,38 +779,43 @@ export default function AdvancedAccountingIntelligencePage() {
               </div>
             </div>
 
-            <div style={styles.panel}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Stock Radar"
                 title="Stock Intelligence"
                 note="Stock quantity, value and low-stock risk."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Products"
                   value={formatNumber(intelligence.stock?.product_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Total Quantity"
                   value={formatNumber(intelligence.stock?.total_quantity)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Cost Value"
                   value={formatMoney(intelligence.stock?.estimated_stock_cost_value)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Retail Value"
                   value={formatMoney(intelligence.stock?.estimated_stock_retail_value)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Negative Stock"
                   value={formatNumber(intelligence.stock?.negative_stock_count)}
                   danger={Number(intelligence.stock?.negative_stock_count || 0) > 0}
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -705,46 +845,52 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.dualGrid}>
-            <div style={styles.panel}>
+          <section style={dualGridStyle}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Stock Correction"
                 title="Stock Adjustment Intelligence"
                 note="Manual stock correction and damage/loss monitoring."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Adjustments"
                   value={formatNumber(stockAdjustments.adjustment_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Increases"
                   value={formatNumber(stockAdjustments.increase_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Decreases"
                   value={formatNumber(stockAdjustments.decrease_count)}
                   warning={Number(stockAdjustments.decrease_count || 0) > 0}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Set Stock"
                   value={formatNumber(stockAdjustments.set_count)}
                   warning={Number(stockAdjustments.set_count || 0) > 0}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Damaged"
                   value={formatNumber(stockAdjustments.damaged_count)}
                   warning={Number(stockAdjustments.damaged_count || 0) > 0}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Lost"
                   value={formatNumber(stockAdjustments.lost_count)}
                   danger={Number(stockAdjustments.lost_count || 0) > 0}
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -778,36 +924,40 @@ export default function AdvancedAccountingIntelligencePage() {
               </div>
             </div>
 
-            <div style={styles.panel}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Transfer Control"
                 title="Stock Transfer Intelligence"
                 note="Store-to-store transfer movement and mismatch monitoring."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Transfers"
                   value={formatNumber(stockTransfers.transfer_count)}
                 />
-                <MiniCard title="Out" value={formatNumber(stockTransfers.transfer_out_count)} />
-                <MiniCard title="In" value={formatNumber(stockTransfers.transfer_in_count)} />
+                <MiniCard isMobile={isMobile} title="Out" value={formatNumber(stockTransfers.transfer_out_count)} />
+                <MiniCard isMobile={isMobile} title="In" value={formatNumber(stockTransfers.transfer_in_count)} />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Dispatched"
                   value={formatNumber(stockTransfers.dispatched_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Received"
                   value={formatNumber(stockTransfers.received_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Mismatch Items"
                   value={formatNumber(stockTransfers.quantity_mismatch_count)}
                   danger={Number(stockTransfers.quantity_mismatch_count || 0) > 0}
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -844,28 +994,29 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.dualGrid}>
-            <div style={styles.panel}>
+          <section style={dualGridStyle}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Communications"
                 title="SMS Intelligence"
                 note="Message delivery and failed SMS monitoring."
               />
 
-              <div style={styles.miniGrid}>
-                <MiniCard title="SMS Total" value={formatNumber(sms.sms_count)} />
-                <MiniCard title="Sent" value={formatNumber(sms.sent_count)} />
+              <div style={miniGridStyle}>
+                <MiniCard isMobile={isMobile} title="SMS Total" value={formatNumber(sms.sms_count)} />
+                <MiniCard isMobile={isMobile} title="Sent" value={formatNumber(sms.sent_count)} />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Failed"
                   value={formatNumber(sms.failed_count)}
                   warning={Number(sms.failed_count || 0) > 0}
                 />
-                <MiniCard title="Pending" value={formatNumber(sms.pending_count)} />
-                <MiniCard title="Success Rate" value={formatPercent(sms.success_rate)} />
+                <MiniCard isMobile={isMobile} title="Pending" value={formatNumber(sms.pending_count)} />
+                <MiniCard isMobile={isMobile} title="Success Rate" value={formatPercent(sms.success_rate)} />
               </div>
 
               <h3>SMS by Type</h3>
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -889,7 +1040,7 @@ export default function AdvancedAccountingIntelligencePage() {
               </div>
 
               <h3>Recent Failed SMS</h3>
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -917,27 +1068,29 @@ export default function AdvancedAccountingIntelligencePage() {
               </div>
             </div>
 
-            <div style={styles.panel}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Returns"
                 title="Returns Intelligence"
                 note="Returned item quantity, amount and reasons."
               />
 
-              <div style={styles.miniGrid}>
-                <MiniCard title="Return Count" value={formatNumber(returns.return_count)} />
+              <div style={miniGridStyle}>
+                <MiniCard isMobile={isMobile} title="Return Count" value={formatNumber(returns.return_count)} />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Return Qty"
                   value={formatNumber(returns.total_return_quantity)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Return Amount"
                   value={formatMoney(returns.total_return_amount)}
                   warning={Number(returns.total_return_amount || 0) > 0}
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -968,22 +1121,24 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.dualGrid}>
-            <div style={styles.panel}>
+          <section style={dualGridStyle}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="Audit Locks"
                 title="Audit Control Intelligence"
                 note="Unlock requests, sign-offs and reapproval records."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Unlock Requests"
                   value={formatNumber(
                     auditControls.unlock_requests?.request_count
                   )}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Pending Unlocks"
                   value={formatNumber(
                     auditControls.unlock_requests?.pending_count
@@ -993,20 +1148,24 @@ export default function AdvancedAccountingIntelligencePage() {
                   }
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Approved Unlocks"
                   value={formatNumber(
                     auditControls.unlock_requests?.approved_count
                   )}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Sign-Off Records"
                   value={formatNumber(auditControls.signoffs?.signoff_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Approved Sign-Offs"
                   value={formatNumber(auditControls.signoffs?.approved_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Reapprovals"
                   value={formatNumber(
                     auditControls.reapprovals?.reapproval_count
@@ -1015,28 +1174,32 @@ export default function AdvancedAccountingIntelligencePage() {
               </div>
             </div>
 
-            <div style={styles.panel}>
+            <div style={panelStyle}>
               <SectionHeader
                 eyebrow="System Controls"
                 title="Backup, Restore & Maintenance Intelligence"
                 note="Sensitive system actions that management must review."
               />
 
-              <div style={styles.miniGrid}>
+              <div style={miniGridStyle}>
                 <MiniCard
+                  isMobile={isMobile}
                   title="Activity"
                   value={formatNumber(systemControls.activity_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Backups"
                   value={formatNumber(systemControls.backup_download_count)}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Restores"
                   value={formatNumber(systemControls.restore_count)}
                   danger={Number(systemControls.restore_count || 0) > 0}
                 />
                 <MiniCard
+                  isMobile={isMobile}
                   title="Clear Data"
                   value={formatNumber(
                     systemControls.clear_business_data_count
@@ -1047,7 +1210,7 @@ export default function AdvancedAccountingIntelligencePage() {
                 />
               </div>
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -1081,7 +1244,7 @@ export default function AdvancedAccountingIntelligencePage() {
             </div>
           </section>
 
-          <section style={styles.panel}>
+          <section style={panelStyle}>
             <SectionHeader
               eyebrow="Audit Flags"
               title="Risk Flags"
@@ -1116,14 +1279,14 @@ export default function AdvancedAccountingIntelligencePage() {
             )}
           </section>
 
-          <section style={styles.panel}>
+          <section style={panelStyle}>
             <SectionHeader
               eyebrow="Management Action"
               title="Recommendations"
               note="Recommended next steps from the accounting intelligence engine."
             />
 
-            <div style={styles.tableWrap}>
+            <div style={tableWrapStyle}>
               <table>
                 <thead>
                   <tr>
@@ -1153,14 +1316,14 @@ export default function AdvancedAccountingIntelligencePage() {
           </section>
 
           {intelligence.branch_comparison?.length > 0 && (
-            <section style={styles.panel}>
+            <section style={panelStyle}>
               <SectionHeader
                 eyebrow="Two-Store Comparison"
                 title="Branch Comparison"
                 note="Compare performance across branches when all-store scope is selected."
               />
 
-              <div style={styles.tableWrap}>
+              <div style={tableWrapStyle}>
                 <table>
                   <thead>
                     <tr>
@@ -1197,7 +1360,7 @@ export default function AdvancedAccountingIntelligencePage() {
   );
 }
 
-function IntelligenceCard({ title, value, note, icon, tone = "normal" }) {
+function IntelligenceCard({ title, value, note, icon, tone = "normal", isMobile = false }) {
   const toneStyle =
     tone === "danger"
       ? styles.dangerTone
@@ -1206,7 +1369,13 @@ function IntelligenceCard({ title, value, note, icon, tone = "normal" }) {
       : styles.normalTone;
 
   return (
-    <div style={{ ...styles.intelligenceCard, ...toneStyle }}>
+    <div
+      style={{
+        ...styles.intelligenceCard,
+        ...(isMobile ? styles.mobileIntelligenceCard : {}),
+        ...toneStyle,
+      }}
+    >
       <span style={styles.cardIcon}>{icon}</span>
       <div>
         <p>{title}</p>
@@ -1217,11 +1386,12 @@ function IntelligenceCard({ title, value, note, icon, tone = "normal" }) {
   );
 }
 
-function MiniCard({ title, value, warning, danger }) {
+function MiniCard({ title, value, warning, danger, isMobile = false }) {
   return (
     <div
       style={{
         ...styles.miniCard,
+        ...(isMobile ? styles.mobileMiniCard : {}),
         ...(danger ? styles.miniDanger : warning ? styles.miniWarning : {}),
       }}
     >
@@ -1243,11 +1413,14 @@ function SectionHeader({ eyebrow, title, note }) {
   );
 }
 
-function InfoRows({ rows }) {
+function InfoRows({ rows, isMobile = false }) {
   return (
-    <div style={styles.infoRows}>
+    <div style={isMobile ? { ...styles.infoRows, ...styles.mobileInfoRows } : styles.infoRows}>
       {rows.map(([label, value]) => (
-        <div key={label} style={styles.infoRow}>
+        <div
+          key={label}
+          style={isMobile ? { ...styles.infoRow, ...styles.mobileInfoRow } : styles.infoRow}
+        >
           <span>{label}</span>
           <strong>{value}</strong>
         </div>
@@ -1591,5 +1764,153 @@ const styles = {
     border: "1px dashed #cbd5e1",
     textAlign: "center",
     fontWeight: "800",
+  },,
+
+  mobilePage: {
+    maxWidth: "100%",
+    overflowX: "hidden",
+    paddingBottom: "28px",
   },
+
+  mobileHero: {
+    borderRadius: "22px",
+    padding: "18px",
+    marginBottom: "14px",
+  },
+
+  mobileOrbitOne: {
+    width: "150px",
+    height: "150px",
+    right: "-60px",
+    top: "-60px",
+    opacity: 0.55,
+  },
+
+  mobileOrbitTwo: {
+    width: "130px",
+    height: "130px",
+    left: "58%",
+    bottom: "-75px",
+    opacity: 0.5,
+  },
+
+  mobileHeroContent: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "14px",
+  },
+
+  mobileHeroTitle: {
+    fontSize: "31px",
+    lineHeight: 1.02,
+    overflowWrap: "anywhere",
+  },
+
+  mobileHeroSubtitle: {
+    maxWidth: "100%",
+    fontSize: "13px",
+    lineHeight: 1.55,
+    overflowWrap: "anywhere",
+  },
+
+  mobileAuditRadar: {
+    width: "100%",
+    minWidth: 0,
+    minHeight: "auto",
+    padding: "14px",
+    borderRadius: "20px",
+    display: "block",
+  },
+
+  mobileStoreNotice: {
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
+    borderRadius: "16px",
+    padding: "12px",
+    overflowWrap: "anywhere",
+  },
+
+  mobileControlPanel: {
+    gridTemplateColumns: "1fr",
+    borderRadius: "20px",
+    padding: "15px",
+    gap: "14px",
+  },
+
+  mobileControlGrid: {
+    gridTemplateColumns: "1fr",
+  },
+
+  mobileExecutivePanel: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    borderRadius: "20px",
+    padding: "15px",
+  },
+
+  mobileScoreCircleWrap: {
+    width: "100%",
+    height: "auto",
+    justifyItems: "start",
+  },
+
+  mobileCardGrid: {
+    gridTemplateColumns: "1fr",
+    gap: "10px",
+  },
+
+  mobileIntelligenceCard: {
+    borderRadius: "18px",
+    padding: "13px",
+    alignItems: "flex-start",
+    overflowWrap: "anywhere",
+  },
+
+  mobilePanel: {
+    borderRadius: "20px",
+    padding: "15px",
+    marginBottom: "14px",
+    overflow: "hidden",
+  },
+
+  mobileDualGrid: {
+    gridTemplateColumns: "1fr",
+    gap: "14px",
+  },
+
+  mobileMiniGrid: {
+    gridTemplateColumns: "1fr",
+  },
+
+  mobileMiniCard: {
+    borderRadius: "14px",
+    padding: "11px",
+    overflowWrap: "anywhere",
+  },
+
+  mobileTableWrap: {
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
+  },
+
+  mobileEmptyPanel: {
+    minHeight: "220px",
+    borderRadius: "20px",
+    padding: "20px",
+  },
+
+  mobileInfoRows: {
+    gap: "8px",
+  },
+
+  mobileInfoRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    alignItems: "start",
+    gap: "5px",
+    overflowWrap: "anywhere",
+  },
+
 };
