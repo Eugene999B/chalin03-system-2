@@ -1117,7 +1117,7 @@ export default function AuditAccountingPage() {
           <h2>1. Accounting Summary</h2>
           <table><thead><tr><th>Section</th><th>Item</th><th>Amount / Count</th><th>Meaning</th></tr></thead><tbody>${summaryRows}</tbody></table>
 
-          <h2>2. Audit Risk Register</h2>
+          <h2>2. Risk Command Register</h2>
           <table><thead><tr><th>#</th><th>Risk</th><th>Finding</th><th>Details</th><th>Recommendation</th></tr></thead><tbody>${warningRows}</tbody></table>
 
           <h2>3. Stock Adjustment Review</h2>
@@ -1377,16 +1377,16 @@ export default function AuditAccountingPage() {
     <div style={styles.page}>
       <div style={styles.hero}>
         <div>
-          <p style={styles.eyebrow}>Professional Audit Intelligence</p>
-          <h1 style={styles.title}>Audit & Accounting Intelligence Pro</h1>
+          <p style={styles.eyebrow}>Audit Command Board</p>
+          <h1 style={styles.title}>Audit Command Board & Accounting Lock Room</h1>
           <p style={styles.subtitle}>
-            Review sales, cash, debts, expenses, purchases, returns, stock
+            Control sales, cash, debts, expenses, purchases, returns, stock
             adjustments, stock transfers, SMS, backup/restore activity,
-            maintenance events and accounting sign-off approval for{" "}
+            maintenance events and period sign-off approval for{" "}
             <strong>
               {currentStoreCode} — {currentStoreName}
             </strong>
-            .
+            . This layout is styled as an audit command room for management review.
           </p>
         </div>
 
@@ -1421,7 +1421,7 @@ export default function AuditAccountingPage() {
 
       <div style={styles.periodPanel}>
         <div>
-          <p style={styles.eyebrowDark}>Accounting Period Control</p>
+          <p style={styles.eyebrowDark}>Period Lock Selector</p>
           <h2 style={{ margin: "5px 0" }}>{period.label}</h2>
           <p style={styles.panelText}>
             Choose the period before printing, exporting or saving audit sign-off records for {currentStoreCode}.
@@ -1493,7 +1493,7 @@ export default function AuditAccountingPage() {
           </div>
 
           <div>
-            <h2>Professional Audit Score</h2>
+            <h2>Command Audit Score</h2>
             <p>
               The score is based on sales, debts, expenses, purchases, returns,
               low stock, stock adjustments, transfers, failed SMS,
@@ -1509,7 +1509,7 @@ export default function AuditAccountingPage() {
         </div>
 
         <div style={styles.exportPanel}>
-          <h2>Export Center</h2>
+          <h2>Audit Pack Vault</h2>
           <p style={styles.panelText}>
             Exports use the selected accounting period and selected store.
           </p>
@@ -1589,7 +1589,7 @@ export default function AuditAccountingPage() {
         </div>
 
         <div style={styles.panel}>
-          <h2>Security, Maintenance & Audit Control</h2>
+          <h2>System Control Watch</h2>
           <p style={styles.panelText}>Backup, restore, clear-data and audit unlock activity.</p>
 
           <AccountingRow label="Backup Activity" value={formatNumber(getObjectValue(auditData.summaries, "security_and_maintenance.backup_activity_count"))} />
@@ -1603,7 +1603,7 @@ export default function AuditAccountingPage() {
 
       <div style={styles.twoColumn}>
         <div style={styles.panel}>
-          <h2>Audit Risk Register</h2>
+          <h2>Risk Command Register</h2>
           <p style={styles.panelText}>Warnings that need management or accountant review.</p>
 
           <div style={styles.flagList}>
@@ -1621,7 +1621,7 @@ export default function AuditAccountingPage() {
         </div>
 
         <div style={styles.panel}>
-          <h2>Table Coverage Check</h2>
+          <h2>Backend Source Coverage</h2>
           <p style={styles.panelText}>Backend audit source tables included in the review.</p>
 
           {buildTableStatusRows().length === 0 ? (
@@ -1690,7 +1690,7 @@ export default function AuditAccountingPage() {
         <div style={styles.signOffHeader}>
           <div>
             <p style={styles.eyebrowDark}>Audit Sign-Off & Accounting Approval</p>
-            <h2 style={{ margin: "5px 0" }}>Period Approval Center</h2>
+            <h2 style={{ margin: "5px 0" }}>Sign-Off Control Room</h2>
             <p style={styles.panelText}>
               Save the audit approval to MySQL after the accountant and boss review the period for {currentStoreCode}.
             </p>
@@ -1809,7 +1809,7 @@ export default function AuditAccountingPage() {
       </div>
 
       <div style={styles.panel}>
-        <h2>Recent Sign-Off History - {currentStoreCode}</h2>
+        <h2>Recent Approval History - {currentStoreCode}</h2>
         {signOffHistory.length === 0 ? (
           <div style={styles.emptyState}>No sign-off history found for this selected store.</div>
         ) : (
@@ -1902,6 +1902,8 @@ const styles = {
     paddingBottom: "40px",
   },
   hero: {
+    position: "relative",
+    overflow: "hidden",
     display: "flex",
     justifyContent: "space-between",
     gap: "18px",
@@ -1911,21 +1913,21 @@ const styles = {
     padding: "24px",
     borderRadius: "26px",
     background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 55%, #111827 100%)",
+      "linear-gradient(135deg, #111827 0%, #451a03 44%, #0f172a 100%)",
     color: "#ffffff",
-    boxShadow: "0 22px 55px rgba(7, 24, 44, 0.24)",
+    boxShadow: "0 26px 70px rgba(69, 26, 3, 0.26)",
   },
   eyebrow: {
     margin: 0,
-    color: "#e0ba28",
+    color: "#fbbf24",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "0.08em",
+    letterSpacing: "0.10em",
     textTransform: "uppercase",
   },
   eyebrowDark: {
     margin: 0,
-    color: "#07182c",
+    color: "#92400e",
     fontSize: "12px",
     fontWeight: "950",
     letterSpacing: "0.08em",
@@ -1952,9 +1954,9 @@ const styles = {
     marginBottom: "18px",
     padding: "14px",
     borderRadius: "14px",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    color: "#1e3a8a",
+    background: "linear-gradient(135deg, #fff7ed, #ffffff)",
+    border: "1px solid #fed7aa",
+    color: "#92400e",
     fontWeight: "800",
   },
   periodPanel: {
@@ -1964,9 +1966,9 @@ const styles = {
     alignItems: "center",
     padding: "18px",
     borderRadius: "22px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    background: "linear-gradient(180deg, #ffffff, #fffbeb)",
+    border: "1px solid #fed7aa",
+    boxShadow: "0 18px 44px rgba(146, 64, 14, 0.09)",
     marginBottom: "18px",
   },
   periodButtons: {
@@ -1981,9 +1983,9 @@ const styles = {
     border: "1px solid #dbe3ef",
   },
   activePeriodButton: {
-    background: "#07182c",
+    background: "#451a03",
     color: "#ffffff",
-    border: "1px solid #07182c",
+    border: "1px solid #451a03",
   },
   dateGrid: {
     gridColumn: "1 / -1",
@@ -2008,9 +2010,9 @@ const styles = {
     alignItems: "center",
     padding: "22px",
     borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    background: "linear-gradient(180deg, #ffffff, #fffbeb)",
+    border: "1px solid #fed7aa",
+    boxShadow: "0 18px 44px rgba(146, 64, 14, 0.09)",
   },
   scoreRing: {
     width: "150px",
@@ -2076,9 +2078,9 @@ const styles = {
   exportPanel: {
     padding: "22px",
     borderRadius: "24px",
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.08)",
+    background: "linear-gradient(180deg, #ffffff, #fffbeb)",
+    border: "1px solid #fed7aa",
+    boxShadow: "0 18px 44px rgba(146, 64, 14, 0.09)",
   },
   monthPack: {
     padding: "14px",
@@ -2227,8 +2229,8 @@ const styles = {
     minWidth: "180px",
     padding: "14px",
     borderRadius: "18px",
-    background: "#fef3c7",
-    border: "1px solid #e0ba28",
+    background: "linear-gradient(135deg, #fef3c7, #ffffff)",
+    border: "1px solid #f59e0b",
     display: "grid",
     gap: "4px",
     textAlign: "center",
