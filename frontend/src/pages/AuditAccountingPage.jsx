@@ -2,6 +2,207 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
+function MobilePageFix() {
+  return (
+    <style>{`
+      @media (max-width: 820px) {
+        .boss-mobile-fix {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          overflow-x: hidden !important;
+          padding: 10px !important;
+          margin: 0 !important;
+        }
+
+        .boss-mobile-fix,
+        .boss-mobile-fix * {
+          box-sizing: border-box !important;
+        }
+
+        .boss-mobile-fix * {
+          max-width: 100% !important;
+        }
+
+        .boss-mobile-fix section,
+        .boss-mobile-fix article,
+        .boss-mobile-fix form,
+        .boss-mobile-fix header,
+        .boss-mobile-fix main,
+        .boss-mobile-fix aside {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+        }
+
+        .boss-mobile-fix [style*="display: grid"],
+        .boss-mobile-fix [style*="grid-template-columns"] {
+          grid-template-columns: minmax(0, 1fr) !important;
+        }
+
+        .boss-mobile-fix [style*="display: flex"] {
+          flex-wrap: wrap !important;
+        }
+
+        .boss-mobile-fix [style*="justify-content: space-between"] {
+          justify-content: flex-start !important;
+        }
+
+        .boss-mobile-fix [style*="align-items: center"] {
+          min-width: 0 !important;
+        }
+
+        .boss-mobile-fix [style*="width:"],
+        .boss-mobile-fix [style*="min-width"],
+        .boss-mobile-fix [style*="max-width"] {
+          min-width: 0 !important;
+        }
+
+        .boss-mobile-fix [style*="width: 420"],
+        .boss-mobile-fix [style*="width: 360"],
+        .boss-mobile-fix [style*="width: 340"],
+        .boss-mobile-fix [style*="width: 320"],
+        .boss-mobile-fix [style*="width: 300"],
+        .boss-mobile-fix [style*="width: 280"],
+        .boss-mobile-fix [style*="width: 260"],
+        .boss-mobile-fix [style*="width: 240"],
+        .boss-mobile-fix [style*="min-width: 420"],
+        .boss-mobile-fix [style*="min-width: 360"],
+        .boss-mobile-fix [style*="min-width: 340"],
+        .boss-mobile-fix [style*="min-width: 320"],
+        .boss-mobile-fix [style*="min-width: 300"],
+        .boss-mobile-fix [style*="min-width: 280"],
+        .boss-mobile-fix [style*="min-width: 260"],
+        .boss-mobile-fix [style*="min-width: 240"] {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+
+        .boss-mobile-fix [style*="padding: 34"],
+        .boss-mobile-fix [style*="padding: 32"],
+        .boss-mobile-fix [style*="padding: 30"],
+        .boss-mobile-fix [style*="padding: 28"],
+        .boss-mobile-fix [style*="padding: 26"],
+        .boss-mobile-fix [style*="padding: 24"],
+        .boss-mobile-fix [style*="padding: 22"],
+        .boss-mobile-fix [style*="padding: 20"] {
+          padding: 16px !important;
+        }
+
+        .boss-mobile-fix [style*="border-radius: 40"],
+        .boss-mobile-fix [style*="border-radius: 36"],
+        .boss-mobile-fix [style*="border-radius: 34"],
+        .boss-mobile-fix [style*="border-radius: 32"],
+        .boss-mobile-fix [style*="border-radius: 30"],
+        .boss-mobile-fix [style*="border-radius: 28"] {
+          border-radius: 22px !important;
+        }
+
+        .boss-mobile-fix h1,
+        .boss-mobile-fix [style*="font-size: 56"],
+        .boss-mobile-fix [style*="font-size: 54"],
+        .boss-mobile-fix [style*="font-size: 52"],
+        .boss-mobile-fix [style*="font-size: 50"],
+        .boss-mobile-fix [style*="font-size: 48"],
+        .boss-mobile-fix [style*="font-size: 46"],
+        .boss-mobile-fix [style*="font-size: 44"],
+        .boss-mobile-fix [style*="font-size: 42"],
+        .boss-mobile-fix [style*="font-size: 40"] {
+          font-size: 31px !important;
+          line-height: 1.06 !important;
+          letter-spacing: -0.04em !important;
+        }
+
+        .boss-mobile-fix h2,
+        .boss-mobile-fix [style*="font-size: 32"],
+        .boss-mobile-fix [style*="font-size: 30"],
+        .boss-mobile-fix [style*="font-size: 28"] {
+          font-size: 21px !important;
+          line-height: 1.15 !important;
+        }
+
+        .boss-mobile-fix h3,
+        .boss-mobile-fix [style*="font-size: 24"],
+        .boss-mobile-fix [style*="font-size: 22"] {
+          font-size: 18px !important;
+          line-height: 1.2 !important;
+        }
+
+        .boss-mobile-fix p,
+        .boss-mobile-fix span,
+        .boss-mobile-fix small,
+        .boss-mobile-fix strong,
+        .boss-mobile-fix label,
+        .boss-mobile-fix td,
+        .boss-mobile-fix th {
+          overflow-wrap: anywhere !important;
+          word-break: normal !important;
+        }
+
+        .boss-mobile-fix input,
+        .boss-mobile-fix select,
+        .boss-mobile-fix textarea {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          font-size: 16px !important;
+        }
+
+        .boss-mobile-fix button {
+          max-width: 100% !important;
+          white-space: normal !important;
+          overflow-wrap: anywhere !important;
+        }
+
+        .boss-mobile-fix table {
+          width: 100% !important;
+          min-width: 760px !important;
+        }
+
+        .boss-mobile-fix [style*="overflow-x: auto"],
+        .boss-mobile-fix [style*="overflow: auto"],
+        .boss-mobile-fix [style*="overflowX"] {
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+        }
+
+        .boss-mobile-fix [style*="position: absolute"] {
+          pointer-events: none !important;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .boss-mobile-fix {
+          padding: 8px !important;
+        }
+
+        .boss-mobile-fix [style*="gap: 24"],
+        .boss-mobile-fix [style*="gap: 22"],
+        .boss-mobile-fix [style*="gap: 20"],
+        .boss-mobile-fix [style*="gap: 18"] {
+          gap: 12px !important;
+        }
+
+        .boss-mobile-fix [style*="padding: 18"],
+        .boss-mobile-fix [style*="padding: 16"] {
+          padding: 13px !important;
+        }
+
+        .boss-mobile-fix h1 {
+          font-size: 29px !important;
+        }
+
+        .boss-mobile-fix table {
+          min-width: 720px !important;
+        }
+      }
+    `}</style>
+  );
+}
+
+
 const SIGN_OFF_CHECKLIST_ITEMS = [
   {
     key: "salesChecked",
@@ -1374,7 +1575,8 @@ export default function AuditAccountingPage() {
   }
 
   return (
-    <div style={styles.page}>
+    <div className="boss-mobile-fix" style={styles.page}>
+      <MobilePageFix />
       <div style={styles.hero}>
         <div>
           <p style={styles.eyebrow}>Audit Command Board</p>
