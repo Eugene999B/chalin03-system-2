@@ -872,4 +872,65 @@ th {
   .sale-total {
     font-size: 18px;
   }
+  @media (max-width: 600px) {
+  .page-header {
+    margin-bottom: 14px;
+    gap: 10px;
+  }
+
+  .page-header h1 {
+    font-size: 22px;
+    line-height: 1.15;
+  }
+
+  .page-header p {
+    font-size: 13px;
+  }
+
+  .cards-grid,
+  .dashboard-grid,
+  .reports-grid,
+  .purchase-summary-grid {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .stat-card,
+  .section-card {
+    padding: 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+
+  .stat-card h3 {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .stat-card strong {
+    font-size: 20px;
+  }
+
+  .section-card h2 {
+    font-size: 19px;
+  }
+
+  button {
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+
+  input,
+  select,
+  textarea {
+    padding: 9px;
+    margin-bottom: 10px;
+  }
+
+  th,
+  td {
+    padding: 8px;
+    font-size: 12px;
+  }
+}
 }

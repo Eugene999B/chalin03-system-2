@@ -1219,6 +1219,205 @@ export default function Layout() {
             display: none;
           }
         }
+
+        /* Compact mobile drawer fix.
+           This keeps the premium desktop design, but makes the phone menu smaller
+           so the actual pages get more space. */
+        @media (max-width: 920px) {
+          .premium-mobile-bar {
+            height: 56px;
+            padding: 0 8px;
+            gap: 7px;
+          }
+
+          .premium-mobile-button {
+            padding: 8px 9px;
+            border-radius: 12px;
+            font-size: 12px;
+          }
+
+          .premium-mobile-menu-button {
+            min-width: 0;
+          }
+
+          .premium-mobile-out-button {
+            min-width: 0;
+          }
+
+          .premium-mobile-search {
+            padding: 7px 9px;
+            border-radius: 13px;
+          }
+
+          .premium-mobile-search span {
+            font-size: 12px;
+          }
+
+          .premium-mobile-search small {
+            font-size: 9px;
+          }
+
+          .premium-main {
+            padding: 66px 10px 16px;
+          }
+
+          .premium-sidebar.mobile {
+            width: min(94vw, 340px);
+            grid-template-rows: auto auto minmax(0, 1fr) auto;
+          }
+
+          .premium-brand {
+            padding: 10px 12px;
+            gap: 9px;
+          }
+
+          .premium-brand-logo {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+          }
+
+          .premium-brand h2 {
+            font-size: 18px;
+          }
+
+          .premium-brand p {
+            margin-top: 2px;
+            font-size: 11px;
+          }
+
+          .premium-close-button {
+            padding: 7px 9px;
+            border-radius: 10px;
+          }
+
+          .premium-sidebar-tools {
+            padding: 9px 10px;
+          }
+
+          .premium-command-button {
+            padding: 9px;
+            border-radius: 14px;
+          }
+
+          .premium-command-button-grid {
+            grid-template-columns: 30px minmax(0, 1fr);
+            gap: 8px;
+          }
+
+          .premium-command-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            font-size: 14px;
+          }
+
+          .premium-command-button strong {
+            font-size: 12px;
+          }
+
+          .premium-command-button small {
+            margin-top: 1px;
+            font-size: 10px;
+          }
+
+          .premium-store-card {
+            margin-top: 8px;
+            padding: 9px 10px;
+            border-radius: 15px;
+          }
+
+          .premium-store-card label {
+            font-size: 9px;
+          }
+
+          .premium-store-card h3 {
+            margin-top: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .premium-store-card p {
+            margin-top: 3px;
+            font-size: 10px;
+            line-height: 1.2;
+          }
+
+          .premium-nav-scroll {
+            padding: 8px 9px 10px;
+          }
+
+          .premium-nav-section-title {
+            margin: 10px 6px 6px;
+            font-size: 9px;
+          }
+
+          .premium-nav-link {
+            grid-template-columns: 28px minmax(0, 1fr);
+            min-height: 37px;
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            border-radius: 12px;
+            font-size: 12px;
+          }
+
+          .premium-nav-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 10px;
+            font-size: 14px;
+          }
+
+          .premium-user-panel {
+            padding: 9px 10px 10px;
+          }
+
+          .premium-user-row {
+            grid-template-columns: 34px minmax(0, 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
+          }
+
+          .premium-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 12px;
+            font-size: 12px;
+          }
+
+          .premium-user-name {
+            font-size: 13px;
+          }
+
+          .premium-user-role {
+            margin-top: 1px;
+            font-size: 9px;
+          }
+
+          .premium-working-branch {
+            display: none;
+          }
+
+          .premium-user-panel button,
+          .premium-side-action {
+            min-height: 0;
+            padding: 9px 10px;
+            border-radius: 11px;
+            margin-top: 7px;
+            font-size: 12px;
+          }
+
+          .premium-command-overlay {
+            padding: 66px 10px 14px;
+          }
+
+          .premium-command-modal {
+            max-height: calc(100dvh - 78px);
+          }
+        }
+
       `}</style>
 
       {isMobile && (
