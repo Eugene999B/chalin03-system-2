@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -36,8 +36,23 @@ export default function ChangePasswordPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth <= 760 : false
+  );
 
   const accountName = user?.full_name || user?.username || "your account";
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 760);
+    }
+
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const passwordStrength = useMemo(() => {
     let score = 0;
@@ -150,26 +165,65 @@ export default function ChangePasswordPage() {
 
   return (
     <div style={styles.page}>
-      <section style={styles.hero}>
-        <div style={styles.heroGlowOne} />
-        <div style={styles.heroGlowTwo} />
+      <section
+        style={{
+          ...styles.hero,
+          ...(isMobile ? styles.heroMobile : {}),
+        }}
+      >
+        <div
+          style={{
+            ...styles.heroGlowOne,
+            ...(isMobile ? styles.heroGlowOneMobile : {}),
+          }}
+        />
 
-        <div style={styles.heroContent}>
-          <div>
+        <div
+          style={{
+            ...styles.heroGlowTwo,
+            ...(isMobile ? styles.heroGlowTwoMobile : {}),
+          }}
+        />
+
+        <div
+          style={{
+            ...styles.heroContent,
+            ...(isMobile ? styles.heroContentMobile : {}),
+          }}
+        >
+          <div style={isMobile ? styles.fullWidth : undefined}>
             <p style={styles.eyebrow}>Account Security Center</p>
 
-            <h1 style={styles.heroTitle}>Change Password</h1>
+            <h1
+              style={{
+                ...styles.heroTitle,
+                ...(isMobile ? styles.heroTitleMobile : {}),
+              }}
+            >
+              Change Password
+            </h1>
 
-            <p style={styles.heroSubtitle}>
+            <p
+              style={{
+                ...styles.heroSubtitle,
+                ...(isMobile ? styles.heroSubtitleMobile : {}),
+              }}
+            >
               Securely update the login password for{" "}
               <strong>{accountName}</strong>. This password is account-wide and
               will work for every store your account is allowed to access.
             </p>
           </div>
 
-          <div style={styles.heroCard}>
+          <div
+            style={{
+              ...styles.heroCard,
+              ...(isMobile ? styles.heroCardMobile : {}),
+            }}
+          >
             <span>🔐</span>
-            <div>
+
+            <div style={styles.heroCardText}>
               <strong>{currentStoreCode}</strong>
               <small>{currentStoreName}</small>
             </div>
@@ -177,13 +231,21 @@ export default function ChangePasswordPage() {
         </div>
       </section>
 
-      <div style={styles.storeNotice}>
+      <div
+        style={{
+          ...styles.storeNotice,
+          ...(isMobile ? styles.storeNoticeMobile : {}),
+        }}
+      >
         <span style={styles.noticeIcon}>🏬</span>
-        <div>
+
+        <div style={styles.noticeText}>
           <strong>
             {currentStoreCode} — {currentStoreName}
           </strong>
+
           {currentStoreLocation ? <p>{currentStoreLocation}</p> : null}
+
           <p>
             Password changes are account-wide. After changing your password, you
             will be logged out and must login again.
@@ -194,12 +256,31 @@ export default function ChangePasswordPage() {
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div style={styles.mainGrid}>
-        <section style={styles.formPanel}>
+      <div
+        style={{
+          ...styles.mainGrid,
+          ...(isMobile ? styles.mainGridMobile : {}),
+        }}
+      >
+        <section
+          style={{
+            ...styles.formPanel,
+            ...(isMobile ? styles.formPanelMobile : {}),
+          }}
+        >
           <div style={styles.panelHeader}>
             <div>
               <p style={styles.eyebrowDark}>Password Update</p>
-              <h2 style={styles.panelTitle}>Enter Password Details</h2>
+
+              <h2
+                style={{
+                  ...styles.panelTitle,
+                  ...(isMobile ? styles.panelTitleMobile : {}),
+                }}
+              >
+                Enter Password Details
+              </h2>
+
               <p style={styles.panelSubtitle}>
                 Use a password that is not easy for staff, friends or customers
                 to guess.
@@ -209,6 +290,7 @@ export default function ChangePasswordPage() {
 
           <form onSubmit={handleChangePassword}>
             <label>Current Password</label>
+
             <div style={styles.inputWrap}>
               <input
                 type={showPasswords ? "text" : "password"}
@@ -220,6 +302,7 @@ export default function ChangePasswordPage() {
             </div>
 
             <label>New Password</label>
+
             <div style={styles.inputWrap}>
               <input
                 type={showPasswords ? "text" : "password"}
@@ -231,7 +314,12 @@ export default function ChangePasswordPage() {
             </div>
 
             <div style={styles.strengthBox}>
-              <div style={styles.strengthTop}>
+              <div
+                style={{
+                  ...styles.strengthTop,
+                  ...(isMobile ? styles.strengthTopMobile : {}),
+                }}
+              >
                 <strong>Password strength: {passwordStrength.label}</strong>
                 <span>{passwordStrength.score}%</span>
               </div>
@@ -250,6 +338,7 @@ export default function ChangePasswordPage() {
             </div>
 
             <label>Confirm New Password</label>
+
             <div style={styles.inputWrap}>
               <input
                 type={showPasswords ? "text" : "password"}
@@ -260,14 +349,19 @@ export default function ChangePasswordPage() {
               />
             </div>
 
-            <label style={styles.checkboxLabel}>
+            <label
+              style={{
+                ...styles.checkboxLabel,
+                ...(isMobile ? styles.checkboxLabelMobile : {}),
+              }}
+            >
               <input
                 type="checkbox"
                 checked={showPasswords}
                 onChange={(event) => setShowPasswords(event.target.checked)}
-                style={{ width: "auto" }}
+                style={{ width: "auto", flexShrink: 0 }}
               />
-              Show passwords while typing
+              <span>Show passwords while typing</span>
             </label>
 
             <button type="submit" disabled={saving} style={styles.submitButton}>
@@ -276,10 +370,22 @@ export default function ChangePasswordPage() {
           </form>
         </section>
 
-        <aside style={styles.sideStack}>
-          <div style={styles.securityPanel}>
+        <aside
+          style={{
+            ...styles.sideStack,
+            ...(isMobile ? styles.sideStackMobile : {}),
+          }}
+        >
+          <div
+            style={{
+              ...styles.securityPanel,
+              ...(isMobile ? styles.sidePanelMobile : {}),
+            }}
+          >
             <p style={styles.eyebrowDark}>Security Checklist</p>
-            <h2>Before You Continue</h2>
+            <h2 style={isMobile ? styles.sideHeadingMobile : undefined}>
+              Before You Continue
+            </h2>
 
             <div style={styles.checkList}>
               <SecurityCheck text="Do not use the default admin password." />
@@ -289,7 +395,12 @@ export default function ChangePasswordPage() {
             </div>
           </div>
 
-          <div style={styles.warningPanel}>
+          <div
+            style={{
+              ...styles.warningPanel,
+              ...(isMobile ? styles.sidePanelMobile : {}),
+            }}
+          >
             <strong>Forgotten password?</strong>
             <p>
               Contact the admin to reset your password. After the admin gives
@@ -297,8 +408,16 @@ export default function ChangePasswordPage() {
             </p>
           </div>
 
-          <div style={styles.darkPanel}>
-            <h2>Boss Security Note</h2>
+          <div
+            style={{
+              ...styles.darkPanel,
+              ...(isMobile ? styles.sidePanelMobile : {}),
+            }}
+          >
+            <h2 style={isMobile ? styles.sideHeadingMobile : undefined}>
+              Boss Security Note
+            </h2>
+
             <p>
               Password security protects sales, stock adjustments, debt
               payments, audit records, reports and branch data. Keep your login
@@ -314,7 +433,7 @@ export default function ChangePasswordPage() {
 function SecurityCheck({ text }) {
   return (
     <div style={styles.securityCheck}>
-      <span>✓</span>
+      <span style={styles.checkIcon}>✓</span>
       <p>{text}</p>
     </div>
   );
@@ -341,6 +460,12 @@ const styles = {
     maxWidth: "1280px",
     margin: "0 auto",
     paddingBottom: "42px",
+    minWidth: 0,
+  },
+
+  fullWidth: {
+    width: "100%",
+    minWidth: 0,
   },
 
   hero: {
@@ -353,6 +478,13 @@ const styles = {
       "linear-gradient(135deg, #07182c 0%, #0d2f55 48%, #111827 100%)",
     color: "#ffffff",
     boxShadow: "0 24px 60px rgba(7, 24, 44, 0.26)",
+    minWidth: 0,
+  },
+
+  heroMobile: {
+    borderRadius: "20px",
+    padding: "18px",
+    marginBottom: "14px",
   },
 
   heroGlowOne: {
@@ -366,6 +498,13 @@ const styles = {
     filter: "blur(18px)",
   },
 
+  heroGlowOneMobile: {
+    width: "180px",
+    height: "180px",
+    right: "-75px",
+    top: "-80px",
+  },
+
   heroGlowTwo: {
     position: "absolute",
     width: "180px",
@@ -377,6 +516,13 @@ const styles = {
     filter: "blur(18px)",
   },
 
+  heroGlowTwoMobile: {
+    width: "130px",
+    height: "130px",
+    left: "12%",
+    bottom: "-90px",
+  },
+
   heroContent: {
     position: "relative",
     zIndex: 2,
@@ -385,6 +531,13 @@ const styles = {
     gap: "18px",
     alignItems: "flex-start",
     flexWrap: "wrap",
+    minWidth: 0,
+  },
+
+  heroContentMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "14px",
   },
 
   eyebrow: {
@@ -394,6 +547,7 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     fontSize: "12px",
+    overflowWrap: "anywhere",
   },
 
   eyebrowDark: {
@@ -403,6 +557,7 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     fontSize: "11px",
+    overflowWrap: "anywhere",
   },
 
   heroTitle: {
@@ -410,6 +565,12 @@ const styles = {
     fontSize: "clamp(30px, 4vw, 50px)",
     lineHeight: 1.03,
     fontWeight: "950",
+    overflowWrap: "anywhere",
+  },
+
+  heroTitleMobile: {
+    fontSize: "32px",
+    lineHeight: 1.08,
   },
 
   heroSubtitle: {
@@ -418,6 +579,13 @@ const styles = {
     color: "rgba(255,255,255,0.78)",
     fontSize: "15px",
     lineHeight: 1.6,
+    overflowWrap: "anywhere",
+  },
+
+  heroSubtitleMobile: {
+    fontSize: "13px",
+    lineHeight: 1.55,
+    maxWidth: "100%",
   },
 
   heroCard: {
@@ -431,6 +599,20 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.15)",
   },
 
+  heroCardMobile: {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+    padding: "12px",
+  },
+
+  heroCardText: {
+    display: "grid",
+    gap: "2px",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+
   storeNotice: {
     display: "flex",
     gap: "12px",
@@ -442,10 +624,24 @@ const styles = {
     border: "1px solid #bfdbfe",
     color: "#1e3a8a",
     boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+    minWidth: 0,
+  },
+
+  storeNoticeMobile: {
+    padding: "12px",
+    borderRadius: "16px",
+    gap: "10px",
+    marginBottom: "14px",
   },
 
   noticeIcon: {
     fontSize: "22px",
+    flexShrink: 0,
+  },
+
+  noticeText: {
+    minWidth: 0,
+    overflowWrap: "anywhere",
   },
 
   mainGrid: {
@@ -453,6 +649,12 @@ const styles = {
     gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 0.7fr)",
     gap: "18px",
     alignItems: "start",
+    minWidth: 0,
+  },
+
+  mainGridMobile: {
+    gridTemplateColumns: "1fr",
+    gap: "14px",
   },
 
   formPanel: {
@@ -462,6 +664,13 @@ const styles = {
     border: "1px solid rgba(226, 232, 240, 0.95)",
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
     minWidth: 0,
+    boxSizing: "border-box",
+  },
+
+  formPanelMobile: {
+    borderRadius: "20px",
+    padding: "16px",
+    width: "100%",
   },
 
   panelHeader: {
@@ -471,6 +680,7 @@ const styles = {
     alignItems: "flex-start",
     flexWrap: "wrap",
     marginBottom: "16px",
+    minWidth: 0,
   },
 
   panelTitle: {
@@ -478,6 +688,11 @@ const styles = {
     color: "#0f172a",
     fontSize: "24px",
     fontWeight: "950",
+    overflowWrap: "anywhere",
+  },
+
+  panelTitleMobile: {
+    fontSize: "21px",
   },
 
   panelSubtitle: {
@@ -485,10 +700,12 @@ const styles = {
     color: "#64748b",
     fontSize: "13px",
     lineHeight: 1.5,
+    overflowWrap: "anywhere",
   },
 
   inputWrap: {
     marginBottom: "12px",
+    minWidth: 0,
   },
 
   checkboxLabel: {
@@ -499,6 +716,12 @@ const styles = {
     marginBottom: "16px",
     fontWeight: "800",
     color: "#0f172a",
+    minWidth: 0,
+  },
+
+  checkboxLabelMobile: {
+    alignItems: "flex-start",
+    lineHeight: 1.4,
   },
 
   strengthBox: {
@@ -509,6 +732,7 @@ const styles = {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
     color: "#475569",
+    minWidth: 0,
   },
 
   strengthTop: {
@@ -518,6 +742,14 @@ const styles = {
     alignItems: "center",
     marginBottom: "8px",
     color: "#0f172a",
+    minWidth: 0,
+  },
+
+  strengthTopMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "4px",
+    alignItems: "start",
   },
 
   strengthTrack: {
@@ -549,6 +781,11 @@ const styles = {
   sideStack: {
     display: "grid",
     gap: "18px",
+    minWidth: 0,
+  },
+
+  sideStackMobile: {
+    gap: "14px",
   },
 
   securityPanel: {
@@ -557,6 +794,19 @@ const styles = {
     padding: "20px",
     border: "1px solid rgba(226, 232, 240, 0.95)",
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+    boxSizing: "border-box",
+  },
+
+  sidePanelMobile: {
+    borderRadius: "20px",
+    padding: "16px",
+    width: "100%",
+  },
+
+  sideHeadingMobile: {
+    fontSize: "20px",
+    lineHeight: 1.2,
   },
 
   checkList: {
@@ -574,6 +824,11 @@ const styles = {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
     color: "#334155",
+    minWidth: 0,
+  },
+
+  checkIcon: {
+    flexShrink: 0,
   },
 
   warningPanel: {
@@ -582,6 +837,8 @@ const styles = {
     background: "#fff7ed",
     border: "1px solid #fed7aa",
     color: "#9a3412",
+    minWidth: 0,
+    boxSizing: "border-box",
   },
 
   darkPanel: {
@@ -591,5 +848,7 @@ const styles = {
       "linear-gradient(135deg, #07182c 0%, #0d2f55 58%, #111827 100%)",
     color: "#ffffff",
     boxShadow: "0 20px 50px rgba(7, 24, 44, 0.25)",
+    minWidth: 0,
+    boxSizing: "border-box",
   },
 };
