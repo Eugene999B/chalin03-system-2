@@ -579,6 +579,7 @@ export default function UsersSettingsPage() {
           <label>Role</label>
           <select name="role" value={userForm.role} onChange={handleUserChange}>
             <option value="cashier">Cashier</option>
+            <option value="auditor">Auditor</option>
             <option value="manager">Manager</option>
             <option value="admin">Admin</option>
           </select>
@@ -623,6 +624,13 @@ export default function UsersSettingsPage() {
             {userForm.role === "admin" && (
               <small style={{ display: "block", marginTop: "6px" }}>
                 Admin users automatically get access to all stores.
+              </small>
+            )}
+
+            {userForm.role === "auditor" && (
+              <small style={{ display: "block", marginTop: "6px" }}>
+                Auditor users can only access accounting, audit, reports,
+                customer statements and export/report screens.
               </small>
             )}
 

@@ -602,7 +602,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       can_access_all_branches,
     } = req.body;
 
-    const allowedRoles = ["admin", "manager", "cashier"];
+    const allowedRoles = ["admin", "manager", "cashier", "auditor"];
 
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
@@ -621,7 +621,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         status: "error",
-        message: "Role must be admin, manager, or cashier.",
+        message: "Role must be admin, manager, cashier, or auditor.",
       });
     }
 
@@ -737,7 +737,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       can_access_all_branches,
     } = req.body;
 
-    const allowedRoles = ["admin", "manager", "cashier"];
+    const allowedRoles = ["admin", "manager", "cashier", "auditor"];
 
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
@@ -754,7 +754,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         status: "error",
-        message: "Role must be admin, manager, or cashier.",
+        message: "Role must be admin, manager, cashier, or auditor.",
       });
     }
 

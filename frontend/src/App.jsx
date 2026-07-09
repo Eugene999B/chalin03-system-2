@@ -33,7 +33,9 @@ import SmsPage from "./pages/SmsPage";
 import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage";
 import StockTransfersPage from "./pages/StockTransfersPage";
 
+const businessWorkRoles = ["admin", "manager", "cashier"];
 const adminManagerRoles = ["admin", "manager"];
+const auditReadRoles = ["admin", "manager", "auditor"];
 const adminOnlyRoles = ["admin"];
 
 function SafePage({ children }) {
@@ -44,12 +46,31 @@ function safe(page) {
   return <SafePage>{page}</SafePage>;
 }
 
+function businessWorkPage(page) {
+  return <RoleRoute allowedRoles={businessWorkRoles}>{safe(page)}</RoleRoute>;
+}
+
 function adminManagerPage(page) {
   return <RoleRoute allowedRoles={adminManagerRoles}>{safe(page)}</RoleRoute>;
 }
 
+function auditReadPage(page) {
+  return <RoleRoute allowedRoles={auditReadRoles}>{safe(page)}</RoleRoute>;
+}
+
 function adminOnlyPage(page) {
   return <RoleRoute allowedRoles={adminOnlyRoles}>{safe(page)}</RoleRoute>;
+}
+
+function HomePage() {
+  const { user } = useAuth();
+  const role = String(user?.role || "").toLowerCase();
+
+  if (role === "auditor") {
+    return <Navigate to="/audit-accounting" replace />;
+  }
+
+  return safe(<DashboardPage />);
 }
 
 export default function App() {
@@ -67,12 +88,16 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={safe(<DashboardPage />)} />
+            <Route index element={<HomePage />} />
 
-            <Route path="products" element={safe(<ProductsPage />)} />
-            <Route path="new-sale" element={safe(<NewSalePage />)} />
-            <Route path="sales-history" element={safe(<SalesHistoryPage />)} />
-            <Route path="debts" element={safe(<DebtsPage />)} />
+            <Route path="products" element={businessWorkPage(<ProductsPage />)} />
+            <Route path="new-sale" element={businessWorkPage(<NewSalePage />)} />
+            <Route
+              path="sales-history"
+              element={businessWorkPage(<SalesHistoryPage />)}
+            />
+            <Route path="debts" element={businessWorkPage(<DebtsPage />)} />
+
             <Route
               path="change-password"
               element={safe(<ChangePasswordPage />)}
@@ -81,56 +106,43 @@ export default function App() {
 
             <Route
               path="customer-statement"
-              element={adminManagerPage(<CustomerStatementPage />)}
+              element={auditReadPage(<CustomerStatementPage />)}
             />
-            <Route
-              path="reports"
-              element={adminManagerPage(<ReportsPage />)}
-            />
+            <Route path="reports" element={auditReadPage(<ReportsPage />)} />
             <Route
               path="audit-accounting"
-              element={adminManagerPage(<AuditAccountingPage />)}
+              element={auditReadPage(<AuditAccountingPage />)}
             />
             <Route
               path="audit-signoffs"
-              element={adminManagerPage(<AuditSignoffHistoryPage />)}
+              element={auditReadPage(<AuditSignoffHistoryPage />)}
             />
+            <Route
+              path="advanced-accounting-intelligence"
+              element={auditReadPage(<AdvancedAccountingIntelligencePage />)}
+            />
+            <Route path="exports" element={auditReadPage(<ExportsPage />)} />
+
             <Route
               path="audit-unlock-requests"
               element={adminManagerPage(<AuditUnlockRequestsPage />)}
             />
-            <Route
-              path="advanced-accounting-intelligence"
-              element={adminManagerPage(<AdvancedAccountingIntelligencePage />)}
-            />
-            <Route
-              path="low-stock"
-              element={adminManagerPage(<LowStockPage />)}
-            />
+            <Route path="low-stock" element={adminManagerPage(<LowStockPage />)} />
             <Route
               path="stock-transfers"
               element={adminManagerPage(<StockTransfersPage />)}
-              />
-            <Route
-              path="expenses"
-              element={adminManagerPage(<ExpensesPage />)}
             />
+            <Route path="expenses" element={adminManagerPage(<ExpensesPage />)} />
             <Route
               path="purchases"
               element={adminManagerPage(<PurchasesPage />)}
             />
-            <Route
-              path="returns"
-              element={adminManagerPage(<ReturnsPage />)}
-            />
+            <Route path="returns" element={adminManagerPage(<ReturnsPage />)} />
             <Route
               path="daily-closing"
               element={adminManagerPage(<DailyClosingPage />)}
             />
-            <Route
-              path="exports"
-              element={adminManagerPage(<ExportsPage />)}
-            />
+            <Route path="sms" element={adminManagerPage(<SmsPage />)} />
 
             <Route
               path="users-settings"
@@ -139,14 +151,6 @@ export default function App() {
             <Route
               path="activity-log"
               element={adminOnlyPage(<ActivityLogPage />)}
-            />
-            <Route
-              path="/sms"
-              element={
-               <ProtectedRoute>
-                <SmsPage />
-                </ProtectedRoute>
-              }
             />
             <Route path="backup" element={adminOnlyPage(<BackupPage />)} />
             <Route
@@ -157,7 +161,6 @@ export default function App() {
               path="maintenance"
               element={adminOnlyPage(<MaintenancePage />)}
             />
-            
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

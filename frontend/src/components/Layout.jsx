@@ -48,7 +48,9 @@ export default function Layout() {
   const [commandQuery, setCommandQuery] = useState("");
 
   const role = String(user?.role || "").toLowerCase();
+  const isAuditor = role === "auditor";
   const canManage = role === "admin" || role === "manager";
+  const canAudit = canManage || isAuditor;
   const isAdmin = role === "admin";
 
   const isSystemAdministrator =
@@ -87,10 +89,24 @@ export default function Layout() {
     : "No store ID";
 
   const navigationSections = useMemo(() => {
-    const sections = [
-      {
-        title: "Main Work",
-        items: [
+    const mainWorkItems = isAuditor
+      ? [
+          {
+            title: "Change Password",
+            description: "Update your auditor login password",
+            path: "/change-password",
+            icon: "🔐",
+            keywords: "password security change login auditor",
+          },
+          {
+            title: "Help / User Guide",
+            description: "Open the built-in operating guide",
+            path: "/help",
+            icon: "📘",
+            keywords: "help guide manual learn support instructions auditor",
+          },
+        ]
+      : [
           {
             title: "Dashboard",
             description: "Open the business command center",
@@ -141,44 +157,86 @@ export default function Layout() {
             icon: "📘",
             keywords: "help guide manual learn support instructions",
           },
-        ],
+        ];
+
+    const sections = [
+      {
+        title: isAuditor ? "Auditor Work" : "Main Work",
+        items: mainWorkItems,
       },
     ];
 
-    if (canManage) {
-      sections.push({
-        title: "Management",
-        items: [
+    if (canAudit) {
+      const auditItems = [
+        {
+          title: "Customer Statement",
+          description: "Review customer sales and debt records",
+          path: "/customer-statement",
+          icon: "👤",
+          keywords: "customer statement account balance records history audit",
+        },
+        {
+          title: "Reports",
+          description: "Sales, stock, transfers and management reports",
+          path: "/reports",
+          icon: "📊",
+          keywords:
+            "reports analytics sales profit business performance stock transfers adjustments audit",
+        },
+        {
+          title: "Audit & Accounting",
+          description: "Review money, debts, expenses, stock and warnings",
+          path: "/audit-accounting",
+          icon: "🧮",
+          keywords:
+            "audit accounting accountant review cash sales expenses debts fuel discounts warnings",
+        },
+        {
+          title: "Accounting Intelligence",
+          description: "Advanced ledger, audit score, SMS and stock intelligence",
+          path: "/advanced-accounting-intelligence",
+          icon: "📈",
+          keywords:
+            "advanced accounting intelligence ledger profit loss audit score branch debt stock sms maintenance backup restore",
+        },
+        {
+          title: "Audit Sign-Off History",
+          description: "Saved approvals, certificates and audit history",
+          path: "/audit-signoffs",
+          icon: "✅",
+          keywords:
+            "audit signoff sign-off approval history approved period accountant certificate management",
+        },
+        {
+          title: "Exports",
+          description: "Export audit and management records",
+          path: "/exports",
+          icon: "📤",
+          keywords:
+            "exports excel download data report stock ledger transfers adjustments audit",
+        },
+      ];
+
+      if (canManage) {
+        auditItems.splice(1, 0, {
+          title: "SMS Center",
+          description: "Send live SMS, review logs and retry failures",
+          path: "/sms",
+          icon: "📩",
+          keywords:
+            "sms text message customers phone bulk selected all reminder notice failed arkesel",
+        });
+
+        auditItems.splice(
+          5,
+          0,
           {
-            title: "Customer Statement",
-            description: "Check customer sales and debt records",
-            path: "/customer-statement",
-            icon: "👤",
-            keywords: "customer statement account balance records history",
-          },
-          {
-            title: "SMS Center",
-            description: "Send live SMS, review logs and retry failures",
-            path: "/sms",
-            icon: "📩",
+            title: "Audit Unlock Requests",
+            description: "Approve or reject locked-period correction requests",
+            path: "/audit-unlock-requests",
+            icon: "🔓",
             keywords:
-              "sms text message customers phone bulk selected all reminder notice failed arkesel",
-          },
-          {
-            title: "Reports",
-            description: "Sales, stock, transfers and management reports",
-            path: "/reports",
-            icon: "📊",
-            keywords:
-              "reports analytics sales profit business performance stock transfers adjustments",
-          },
-          {
-            title: "Audit & Accounting",
-            description: "Review money, debts, expenses, stock and warnings",
-            path: "/audit-accounting",
-            icon: "🧮",
-            keywords:
-              "audit accounting accountant review cash sales expenses debts fuel discounts warnings",
+              "audit unlock requests approval correction locked period stock sms backup maintenance",
           },
           {
             title: "Stock Transfers",
@@ -187,30 +245,6 @@ export default function Layout() {
             icon: "🔁",
             keywords:
               "stock transfers transfer between stores branches move dispatch receive approve inventory",
-          },
-          {
-            title: "Accounting Intelligence",
-            description: "Advanced ledger, audit score, SMS and stock intelligence",
-            path: "/advanced-accounting-intelligence",
-            icon: "📈",
-            keywords:
-              "advanced accounting intelligence ledger profit loss audit score branch debt stock sms maintenance backup restore",
-          },
-          {
-            title: "Audit Sign-Off History",
-            description: "Saved approvals, certificates and audit history",
-            path: "/audit-signoffs",
-            icon: "✅",
-            keywords:
-              "audit signoff sign-off approval history approved period accountant certificate management",
-          },
-          {
-            title: "Audit Unlock Requests",
-            description: "Approve or reject locked-period correction requests",
-            path: "/audit-unlock-requests",
-            icon: "🔓",
-            keywords:
-              "audit unlock requests approval correction locked period stock sms backup maintenance",
           },
           {
             title: "Low Stock / Restock",
@@ -246,16 +280,13 @@ export default function Layout() {
             path: "/daily-closing",
             icon: "🌙",
             keywords: "daily closing close day cash sales summary",
-          },
-          {
-            title: "Exports",
-            description: "Export business records and stock ledgers",
-            path: "/exports",
-            icon: "📤",
-            keywords:
-              "exports excel download data report backup stock ledger transfers adjustments",
-          },
-        ],
+          }
+        );
+      }
+
+      sections.push({
+        title: isAuditor ? "Audit & Accounting" : "Management",
+        items: auditItems,
       });
     }
 
@@ -266,7 +297,7 @@ export default function Layout() {
           description: "Manage staff, roles and business settings",
           path: "/users-settings",
           icon: "⚙️",
-          keywords: "users settings roles admin cashier manager reset password",
+          keywords: "users settings roles admin cashier manager auditor reset password",
         },
         {
           title: "Activity Log",
@@ -301,7 +332,7 @@ export default function Layout() {
     }
 
     return sections;
-  }, [canManage, isAdmin, isSystemAdministrator]);
+  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator]);
 
   const commandItems = useMemo(() => {
     return navigationSections.flatMap((section) =>
