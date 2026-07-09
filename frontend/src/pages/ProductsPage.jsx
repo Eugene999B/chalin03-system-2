@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -67,11 +67,29 @@ export default function ProductsPage() {
   const [recentAdjustmentsLoading, setRecentAdjustmentsLoading] =
     useState(false);
 
+  const [productsLoading, setProductsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   function formatMoney(value) {
-    return `GHS ${Number(value || 0).toFixed(2)}`;
+    return `GHS ${Number(value || 0).toLocaleString("en-GH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+
+  function formatCompactMoney(value) {
+    const number = Number(value || 0);
+
+    if (number >= 1000000) {
+      return `GHS ${(number / 1000000).toFixed(1)}M`;
+    }
+
+    if (number >= 1000) {
+      return `GHS ${(number / 1000).toFixed(1)}K`;
+    }
+
+    return formatMoney(number);
   }
 
   function formatDateTime(value) {
@@ -83,7 +101,7 @@ export default function ProductsPage() {
       return "-";
     }
 
-    return date.toLocaleString();
+    return date.toLocaleString("en-GB");
   }
 
   function formatAdjustmentType(value) {
@@ -97,7 +115,7 @@ export default function ProductsPage() {
   }
 
   function formatNumber(value) {
-    return Number(value || 0).toLocaleString();
+    return Number(value || 0).toLocaleString("en-GH");
   }
 
   function formatChangeQuantity(value) {
@@ -115,21 +133,61 @@ export default function ProductsPage() {
 
     if (number > 0) {
       return {
-        fontWeight: "900",
+        fontWeight: "950",
         color: "#047857",
       };
     }
 
     if (number < 0) {
       return {
-        fontWeight: "900",
+        fontWeight: "950",
         color: "#b91c1c",
       };
     }
 
     return {
-      fontWeight: "900",
+      fontWeight: "950",
+      color: "#334155",
     };
+  }
+
+  function getProductStockStatus(product) {
+    const quantity = Number(product.quantity || 0);
+    const lowStockLevel = Number(product.low_stock_threshold || 0);
+
+    if (quantity <= 0) {
+      return {
+        label: "Out of Stock",
+        tone: "danger",
+        style: styles.statusDanger,
+      };
+    }
+
+    if (quantity <= lowStockLevel) {
+      return {
+        label: "Low Stock",
+        tone: "warning",
+        style: styles.statusWarning,
+      };
+    }
+
+    return {
+      label: "Healthy",
+      tone: "success",
+      style: styles.statusSuccess,
+    };
+  }
+
+  function getProfitPerUnit(product) {
+    return Number(product.selling_price || 0) - Number(product.cost_price || 0);
+  }
+
+  function getProfitMarginPercent(product) {
+    const selling = Number(product.selling_price || 0);
+
+    if (selling <= 0) return 0;
+
+    return Math.round((getProfitPerUnit(product) / selling) * 100);
   }
 
   function calculateExpectedStock() {
@@ -160,6 +218,7 @@ export default function ProductsPage() {
   async function loadProducts() {
     setError("");
     setMessage("");
+    setProductsLoading(true);
 
     try {
       const response = await axiosClient.get("/products", {
@@ -171,6 +230,8 @@ export default function ProductsPage() {
       setProducts(response.data.products || []);
     } catch (error) {
       setError(error.response?.data?.message || "Failed to load products.");
+    } finally {
+      setProductsLoading(false);
     }
   }
 
@@ -315,11 +376,9 @@ export default function ProductsPage() {
     try {
       if (isEditing) {
         await axiosClient.put(`/products/${editingProductId}`, productData);
-
         setMessage("Product updated successfully.");
       } else {
         await axiosClient.post("/products", productData);
-
         setMessage("Product added successfully.");
       }
 
@@ -472,55 +531,236 @@ export default function ProductsPage() {
     }
   }
 
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Products</h1>
-          <p>
-            Add, edit, adjust, audit and manage spare parts stock for{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-          </p>
-        </div>
+  const productSummary = useMemo(() => {
+    const totalProducts = products.length;
 
-        <button type="button" onClick={refreshPageData}>
-          Refresh
-        </button>
+    const lowStockProducts = products.filter((product) => {
+      return (
+        Number(product.quantity || 0) <=
+        Number(product.low_stock_threshold || 0)
+      );
+    });
+
+    const outOfStockProducts = products.filter(
+      (product) => Number(product.quantity || 0) <= 0
+    );
+
+    const totalQuantity = products.reduce(
+      (sum, product) => sum + Number(product.quantity || 0),
+      0
+    );
+
+    const stockCostValue = products.reduce((sum, product) => {
+      return (
+        sum + Number(product.quantity || 0) * Number(product.cost_price || 0)
+      );
+    }, 0);
+
+    const stockSellingValue = products.reduce((sum, product) => {
+      return (
+        sum +
+        Number(product.quantity || 0) * Number(product.selling_price || 0)
+      );
+    }, 0);
+
+    const expectedMargin = Math.max(stockSellingValue - stockCostValue, 0);
+
+    const stockHealth =
+      totalProducts === 0
+        ? 100
+        : Math.max(
+            0,
+            Math.round(
+              ((totalProducts - lowStockProducts.length) / totalProducts) * 100
+            )
+          );
+
+    const categories = new Set(
+      products
+        .map((product) => String(product.category || "").trim())
+        .filter(Boolean)
+    );
+
+    const topValueProducts = [...products]
+      .map((product) => ({
+        ...product,
+        stockValue:
+          Number(product.quantity || 0) * Number(product.selling_price || 0),
+      }))
+      .sort((a, b) => b.stockValue - a.stockValue)
+      .slice(0, 4);
+
+    return {
+      totalProducts,
+      lowStockProducts,
+      lowStockCount: lowStockProducts.length,
+      outOfStockCount: outOfStockProducts.length,
+      totalQuantity,
+      stockCostValue,
+      stockSellingValue,
+      expectedMargin,
+      stockHealth,
+      categoryCount: categories.size,
+      topValueProducts,
+    };
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return products;
+
+    return products.filter((product) => {
+      return [
+        product.name,
+        product.size,
+        product.category,
+        product.barcode,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [products, search]);
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.hero}>
+        <div style={styles.heroGlowOne} />
+        <div style={styles.heroGlowTwo} />
+
+        <div style={styles.heroContent}>
+          <div style={styles.heroTop}>
+            <div>
+              <p style={styles.eyebrow}>Inventory Command Center</p>
+              <h1 style={styles.heroTitle}>Products & Stock Control</h1>
+              <p style={styles.heroSubtitle}>
+                Manage spare parts, prices, stock quantities, low-stock alerts,
+                stock adjustments and movement ledger records for{" "}
+                <strong>
+                  {currentStoreCode} — {currentStoreName}
+                </strong>
+                {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
+              </p>
+            </div>
+
+            <div style={styles.heroActions}>
+              <button
+                type="button"
+                onClick={refreshPageData}
+                disabled={productsLoading || recentAdjustmentsLoading}
+                style={styles.heroButton}
+              >
+                {productsLoading ? "Refreshing..." : "Refresh Stock"}
+              </button>
+
+              {canAddOrEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    cancelEdit();
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  style={styles.heroButtonGold}
+                >
+                  + New Product
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={styles.heroMetrics}>
+            <HeroMetric
+              label="Products"
+              value={formatNumber(productSummary.totalProducts)}
+            />
+            <HeroMetric
+              label="Stock Health"
+              value={`${productSummary.stockHealth}%`}
+            />
+            <HeroMetric
+              label="Stock Value"
+              value={formatCompactMoney(productSummary.stockSellingValue)}
+            />
+            <HeroMetric
+              label="Low Stock"
+              value={formatNumber(productSummary.lowStockCount)}
+            />
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Product list, stock adjustments, stock movement ledger, low-stock
-          warnings and barcode checks are filtered to this selected store only.
-        </small>
+      <div style={styles.storeNotice}>
+        <span>🏬</span>
+        <div>
+          <strong>
+            Current selected store: {currentStoreCode} — {currentStoreName}
+          </strong>
+          <p>
+            Product list, stock adjustments, stock movement ledger, low-stock
+            warnings and barcode checks are filtered to this selected store only.
+          </p>
+        </div>
       </div>
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div className="two-column">
-        {canAddOrEdit ? (
-          <form className="section-card" onSubmit={handleSubmit}>
-            <h2>{isEditing ? "Edit Product" : "Add Product"}</h2>
+      <div style={styles.summaryGrid}>
+        <SummaryCard
+          title="Total Products"
+          value={formatNumber(productSummary.totalProducts)}
+          note={`${productSummary.categoryCount} categor${
+            productSummary.categoryCount === 1 ? "y" : "ies"
+          } recorded`}
+          icon="📦"
+          tone="navy"
+        />
+        <SummaryCard
+          title="Stock Quantity"
+          value={formatNumber(productSummary.totalQuantity)}
+          note="Total pieces currently recorded"
+          icon="🏗️"
+          tone="blue"
+        />
+        <SummaryCard
+          title="Selling Stock Value"
+          value={formatMoney(productSummary.stockSellingValue)}
+          note="Estimated selling value"
+          icon="💰"
+          tone="green"
+        />
+        <SummaryCard
+          title="Expected Margin"
+          value={formatMoney(productSummary.expectedMargin)}
+          note="Selling value minus cost value"
+          icon="📈"
+          tone="gold"
+        />
+        <SummaryCard
+          title="Low Stock"
+          value={formatNumber(productSummary.lowStockCount)}
+          note={`${productSummary.outOfStockCount} out of stock`}
+          icon="🚨"
+          tone={productSummary.lowStockCount > 0 ? "danger" : "green"}
+        />
+      </div>
 
-            <div className="warning-box">
-              You are working in {currentStoreCode} — {currentStoreName}. This
-              product will belong to this selected store only.
+      <div style={styles.controlGrid}>
+        {canAddOrEdit ? (
+          <form style={styles.formPanel} onSubmit={handleSubmit}>
+            <div style={styles.panelHeader}>
+              <div>
+                <p style={styles.eyebrowDark}>Stock Master Record</p>
+                <h2 style={styles.panelTitle}>
+                  {isEditing ? "Edit Product" : "Add New Product"}
+                </h2>
+                <p style={styles.panelSubtitle}>
+                  Product will belong to {currentStoreCode} — {currentStoreName}.
+                </p>
+              </div>
+
+              {isEditing && <span style={styles.editBadge}>Editing</span>}
             </div>
 
             {isEditing && (
@@ -530,89 +770,121 @@ export default function ProductsPage() {
               </div>
             )}
 
-            <label>Product Name</label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-            />
+            <div style={styles.formGridTwo}>
+              <label>
+                Product Name
+                <input
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  placeholder="Example: Hydraulic Pump"
+                  required
+                />
+              </label>
 
-            <label>Excavator Type</label>
-            <input
-              name="size"
-              value={form.size}
-              onChange={handleChange}
-              placeholder="Example: CAT 320, CAT 330, Komatsu PC200"
-            />
+              <label>
+                Excavator Type
+                <input
+                  name="size"
+                  value={form.size}
+                  onChange={handleChange}
+                  placeholder="Example: CAT 320, Komatsu PC200"
+                />
+              </label>
+            </div>
 
-            <label>Category</label>
-            <input
-              name="category"
-              value={form.category}
-              onChange={handleChange}
-            />
+            <label>
+              Category
+              <input
+                name="category"
+                value={form.category}
+                onChange={handleChange}
+                placeholder="Example: Filters, Engine, Undercarriage"
+              />
+            </label>
 
-            <label>Cost Price</label>
-            <input
-              name="cost_price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.cost_price}
-              onChange={handleChange}
-              required
-            />
+            <div style={styles.formGridTwo}>
+              <label>
+                Cost Price
+                <input
+                  name="cost_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.cost_price}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-            <label>Selling Price</label>
-            <input
-              name="selling_price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.selling_price}
-              onChange={handleChange}
-              required
-            />
+              <label>
+                Selling Price
+                <input
+                  name="selling_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.selling_price}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+            </div>
 
-            <label>Quantity</label>
-            <input
-              name="quantity"
-              type="number"
-              min="0"
-              value={form.quantity}
-              onChange={handleChange}
-              required
-            />
+            <div style={styles.formGridTwo}>
+              <label>
+                Quantity
+                <input
+                  name="quantity"
+                  type="number"
+                  min="0"
+                  value={form.quantity}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-            <label>Low Stock Level</label>
-            <input
-              name="low_stock_threshold"
-              type="number"
-              min="0"
-              value={form.low_stock_threshold}
-              onChange={handleChange}
-            />
+              <label>
+                Low Stock Level
+                <input
+                  name="low_stock_threshold"
+                  type="number"
+                  min="0"
+                  value={form.low_stock_threshold}
+                  onChange={handleChange}
+                />
+              </label>
+            </div>
 
-            <label>Barcode</label>
-            <input name="barcode" value={form.barcode} onChange={handleChange} />
+            <label>
+              Barcode
+              <input
+                name="barcode"
+                value={form.barcode}
+                onChange={handleChange}
+                placeholder="Optional barcode"
+              />
+            </label>
 
-            <label>Image URL</label>
-            <input
-              name="image_url"
-              value={form.image_url}
-              onChange={handleChange}
-            />
+            <label>
+              Image URL
+              <input
+                name="image_url"
+                value={form.image_url}
+                onChange={handleChange}
+                placeholder="Optional product image link"
+              />
+            </label>
 
-            <div className="form-actions">
-              <button type="submit">
+            <div style={styles.formActions}>
+              <button type="submit" style={styles.primaryButton}>
                 {isEditing ? "Update Product" : "Save Product"}
               </button>
 
               {isEditing && (
                 <button
                   type="button"
-                  className="secondary-button"
+                  style={styles.secondaryButton}
                   onClick={cancelEdit}
                 >
                   Cancel Edit
@@ -621,198 +893,227 @@ export default function ProductsPage() {
             </div>
           </form>
         ) : (
-          <div className="section-card">
-            <h2>Products</h2>
-            <p>
+          <div style={styles.formPanel}>
+            <p style={styles.eyebrowDark}>View Only</p>
+            <h2 style={styles.panelTitle}>Products</h2>
+            <p style={styles.panelSubtitle}>
               You can view products, but only an admin or manager can add, edit
               or adjust products.
             </p>
           </div>
         )}
 
-        <div className="section-card">
-          <div className="table-header">
-            <h2>Product List - {currentStoreCode}</h2>
-
-            <div className="inline-search">
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search product or excavator type"
-              />
-
-              <button type="button" onClick={loadProducts}>
-                Search
-              </button>
+        <div style={styles.insightPanel}>
+          <div style={styles.panelHeader}>
+            <div>
+              <p style={styles.eyebrowDark}>Inventory Intelligence</p>
+              <h2 style={styles.panelTitle}>Stock Health Brief</h2>
+              <p style={styles.panelSubtitle}>
+                Quick view for the boss before restocking or transfer decisions.
+              </p>
             </div>
           </div>
 
-          {products.length === 0 ? (
-            <p>No products found for {currentStoreCode} — {currentStoreName}.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Excavator Type</th>
-                  <th>Category</th>
-                  <th>Stock</th>
-                  <th>Cost</th>
-                  <th>Selling</th>
-                  {(canAddOrEdit || canDelete) && <th>Action</th>}
-                </tr>
-              </thead>
+          <div style={styles.healthMeterBox}>
+            <div
+              style={{
+                ...styles.healthRing,
+                background: `conic-gradient(#e0ba28 0deg ${
+                  productSummary.stockHealth * 3.6
+                }deg, #e2e8f0 ${
+                  productSummary.stockHealth * 3.6
+                }deg 360deg)`,
+              }}
+            >
+              <div style={styles.healthInner}>
+                <strong>{productSummary.stockHealth}%</strong>
+                <span>Healthy</span>
+              </div>
+            </div>
 
-              <tbody>
-                {products.map((product) => (
-                  <tr
-                    key={product.id}
-                    className={
-                      Number(product.quantity) <=
-                      Number(product.low_stock_threshold)
-                        ? "low-stock-row"
-                        : ""
-                    }
-                  >
-                    <td>
-                      <strong>{product.name}</strong>
-                      {product.barcode && (
-                        <>
-                          <br />
-                          <small>Barcode: {product.barcode}</small>
-                        </>
-                      )}
-                    </td>
+            <div style={styles.healthList}>
+              <MiniInsight
+                label="Cost Value"
+                value={formatMoney(productSummary.stockCostValue)}
+              />
+              <MiniInsight
+                label="Selling Value"
+                value={formatMoney(productSummary.stockSellingValue)}
+              />
+              <MiniInsight
+                label="Out of Stock"
+                value={formatNumber(productSummary.outOfStockCount)}
+              />
+            </div>
+          </div>
 
-                    <td>{product.size || "-"}</td>
-                    <td>{product.category || "-"}</td>
-
-                    <td>
-                      <strong>{product.quantity}</strong>
-                      <br />
-                      <small>Low: {product.low_stock_threshold}</small>
-                    </td>
-
-                    <td>{formatMoney(product.cost_price)}</td>
-                    <td>{formatMoney(product.selling_price)}</td>
-
-                    {(canAddOrEdit || canDelete) && (
-                      <td>
-                        <div className="table-actions">
-                          {canAddOrEdit && (
-                            <>
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => startEdit(product)}
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => openStockAdjustment(product)}
-                              >
-                                Adjust Stock
-                              </button>
-
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => openStockLedger(product)}
-                              >
-                                View Ledger
-                              </button>
-                            </>
-                          )}
-
-                          {canDelete && (
-                            <button
-                              type="button"
-                              className="small-danger"
-                              onClick={() =>
-                                deleteProduct(product.id, product.name)
-                              }
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <div style={styles.topValueList}>
+            <h3 style={styles.smallTitle}>Top Stock Value Items</h3>
+            {productSummary.topValueProducts.length === 0 ? (
+              <div style={styles.emptyState}>No products yet.</div>
+            ) : (
+              productSummary.topValueProducts.map((product, index) => (
+                <div key={product.id} style={styles.topValueItem}>
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{product.name}</strong>
+                    <small>{formatMoney(product.stockValue)}</small>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
+      <section style={styles.productPanel}>
+        <div style={styles.productPanelTop}>
+          <div>
+            <p style={styles.eyebrowDark}>Product List</p>
+            <h2 style={styles.panelTitle}>Products - {currentStoreCode}</h2>
+            <p style={styles.panelSubtitle}>
+              Search, edit, adjust stock, open stock ledger and review low-stock
+              products quickly.
+            </p>
+          </div>
+
+          <form
+            style={styles.searchBar}
+            onSubmit={(event) => {
+              event.preventDefault();
+              loadProducts();
+            }}
+          >
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search product, excavator type, category or barcode"
+            />
+
+            <button type="submit" style={styles.searchButton}>
+              Search
+            </button>
+
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => {
+                setSearch("");
+                setTimeout(loadProducts, 0);
+              }}
+            >
+              Clear
+            </button>
+          </form>
+        </div>
+
+        {productsLoading ? (
+          <div style={styles.emptyState}>Loading products...</div>
+        ) : filteredProducts.length === 0 ? (
+          <div style={styles.emptyState}>
+            No products found for {currentStoreCode} — {currentStoreName}.
+          </div>
+        ) : (
+          <div style={styles.productGrid}>
+            {filteredProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                canAddOrEdit={canAddOrEdit}
+                canDelete={canDelete}
+                formatMoney={formatMoney}
+                getProductStockStatus={getProductStockStatus}
+                getProfitMarginPercent={getProfitMarginPercent}
+                startEdit={startEdit}
+                openStockAdjustment={openStockAdjustment}
+                openStockLedger={openStockLedger}
+                deleteProduct={deleteProduct}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
       {canAddOrEdit && (
-        <div className="section-card" style={{ marginTop: "18px" }}>
-          <div className="table-header">
+        <section style={styles.adjustmentPanel}>
+          <div style={styles.productPanelTop}>
             <div>
-              <h2>Recent Stock Adjustment Records - {currentStoreCode}</h2>
-              <p style={{ margin: 0, color: "#64748b", fontWeight: "700" }}>
-                Shows the latest damaged, lost, physical count, wrong entry and
-                manual stock corrections for this selected store.
+              <p style={styles.eyebrowDark}>Audit Trail</p>
+              <h2 style={styles.panelTitle}>
+                Recent Stock Adjustment Records - {currentStoreCode}
+              </h2>
+              <p style={styles.panelSubtitle}>
+                Latest damaged, lost, physical count, wrong entry and manual
+                stock corrections for this selected store.
               </p>
             </div>
 
-            <button type="button" onClick={loadRecentStockAdjustments}>
+            <button
+              type="button"
+              onClick={loadRecentStockAdjustments}
+              style={styles.secondaryButton}
+            >
               Refresh Records
             </button>
           </div>
 
           {recentAdjustmentsLoading ? (
-            <p>Loading recent stock adjustment records...</p>
+            <div style={styles.emptyState}>Loading recent stock records...</div>
           ) : recentAdjustments.length === 0 ? (
-            <p>No recent stock adjustment records found for this store.</p>
+            <div style={styles.emptyState}>
+              No recent stock adjustment records found for this store.
+            </div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Product</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Old</th>
-                  <th>New</th>
-                  <th>Reason</th>
-                  <th>By</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {recentAdjustments.map((adjustment) => (
-                  <tr key={adjustment.id}>
-                    <td>{formatDateTime(adjustment.adjusted_at)}</td>
-                    <td>
-                      <strong>{adjustment.product_name || "-"}</strong>
-                      <br />
-                      <small>
-                        {[adjustment.category, adjustment.size, adjustment.barcode]
-                          .filter(Boolean)
-                          .join(" • ") || "-"}
-                      </small>
-                    </td>
-                    <td>{formatAdjustmentType(adjustment.adjustment_type)}</td>
-                    <td>{adjustment.quantity}</td>
-                    <td>{adjustment.old_quantity}</td>
-                    <td>{adjustment.new_quantity}</td>
-                    <td>{adjustment.reason}</td>
-                    <td>{adjustment.adjusted_by_name || "-"}</td>
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Old</th>
+                    <th>New</th>
+                    <th>Reason</th>
+                    <th>By</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {recentAdjustments.map((adjustment) => (
+                    <tr key={adjustment.id}>
+                      <td>{formatDateTime(adjustment.adjusted_at)}</td>
+                      <td>
+                        <strong>{adjustment.product_name || "-"}</strong>
+                        <br />
+                        <small>
+                          {[
+                            adjustment.category,
+                            adjustment.size,
+                            adjustment.barcode,
+                          ]
+                            .filter(Boolean)
+                            .join(" • ") || "-"}
+                        </small>
+                      </td>
+                      <td>{formatAdjustmentType(adjustment.adjustment_type)}</td>
+                      <td>{adjustment.quantity}</td>
+                      <td>{adjustment.old_quantity}</td>
+                      <td>{adjustment.new_quantity}</td>
+                      <td>{adjustment.reason}</td>
+                      <td>{adjustment.adjusted_by_name || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
       {stockProduct && (
         <div className="modal-backdrop">
-          <div className="receipt-modal">
+          <div className="receipt-modal" style={styles.modalWide}>
             <div className="modal-header">
               <div>
                 <h2>Stock Adjustment - {currentStoreCode}</h2>
@@ -911,35 +1212,37 @@ export default function ProductsPage() {
               ) : stockAdjustments.length === 0 ? (
                 <p>No stock adjustments recorded for this product.</p>
               ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Qty</th>
-                      <th>Old</th>
-                      <th>New</th>
-                      <th>Reason</th>
-                      <th>By</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {stockAdjustments.map((adjustment) => (
-                      <tr key={adjustment.id}>
-                        <td>{formatDateTime(adjustment.adjusted_at)}</td>
-                        <td>
-                          {formatAdjustmentType(adjustment.adjustment_type)}
-                        </td>
-                        <td>{adjustment.quantity}</td>
-                        <td>{adjustment.old_quantity}</td>
-                        <td>{adjustment.new_quantity}</td>
-                        <td>{adjustment.reason}</td>
-                        <td>{adjustment.adjusted_by_name || "-"}</td>
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Qty</th>
+                        <th>Old</th>
+                        <th>New</th>
+                        <th>Reason</th>
+                        <th>By</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+
+                    <tbody>
+                      {stockAdjustments.map((adjustment) => (
+                        <tr key={adjustment.id}>
+                          <td>{formatDateTime(adjustment.adjusted_at)}</td>
+                          <td>
+                            {formatAdjustmentType(adjustment.adjustment_type)}
+                          </td>
+                          <td>{adjustment.quantity}</td>
+                          <td>{adjustment.old_quantity}</td>
+                          <td>{adjustment.new_quantity}</td>
+                          <td>{adjustment.reason}</td>
+                          <td>{adjustment.adjusted_by_name || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -1065,39 +1368,41 @@ export default function ProductsPage() {
               ) : stockLedger.length === 0 ? (
                 <p>No stock movement records found for this product.</p>
               ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Movement</th>
-                      <th>Reference</th>
-                      <th>Details</th>
-                      <th>Change</th>
-                      <th>Before</th>
-                      <th>After</th>
-                      <th>By</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {stockLedger.map((entry, index) => (
-                      <tr
-                        key={`${entry.source}-${entry.reference}-${entry.sort_id}-${index}`}
-                      >
-                        <td>{formatDateTime(entry.date)}</td>
-                        <td>{entry.movement_type || "-"}</td>
-                        <td>{entry.reference || "-"}</td>
-                        <td>{entry.details || "-"}</td>
-                        <td style={getChangeStyle(entry.change_quantity)}>
-                          {formatChangeQuantity(entry.change_quantity)}
-                        </td>
-                        <td>{formatNumber(entry.quantity_before)}</td>
-                        <td>{formatNumber(entry.quantity_after)}</td>
-                        <td>{entry.recorded_by || "-"}</td>
+                <div style={styles.tableWrap}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Movement</th>
+                        <th>Reference</th>
+                        <th>Details</th>
+                        <th>Change</th>
+                        <th>Before</th>
+                        <th>After</th>
+                        <th>By</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+
+                    <tbody>
+                      {stockLedger.map((entry, index) => (
+                        <tr
+                          key={`${entry.source}-${entry.reference}-${entry.sort_id}-${index}`}
+                        >
+                          <td>{formatDateTime(entry.date)}</td>
+                          <td>{entry.movement_type || "-"}</td>
+                          <td>{entry.reference || "-"}</td>
+                          <td>{entry.details || "-"}</td>
+                          <td style={getChangeStyle(entry.change_quantity)}>
+                            {formatChangeQuantity(entry.change_quantity)}
+                          </td>
+                          <td>{formatNumber(entry.quantity_before)}</td>
+                          <td>{formatNumber(entry.quantity_after)}</td>
+                          <td>{entry.recorded_by || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -1106,3 +1411,658 @@ export default function ProductsPage() {
     </div>
   );
 }
+
+function HeroMetric({ label, value }) {
+  return (
+    <div style={styles.heroMetric}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SummaryCard({ title, value, note, icon, tone }) {
+  return (
+    <div style={styles.summaryCard}>
+      <div style={styles.summaryTop}>
+        <div style={{ ...styles.summaryIcon, ...summaryTones[tone] }}>
+          {icon}
+        </div>
+        <span style={{ ...styles.summaryPill, ...summaryTones[tone] }}>
+          {tone === "danger" ? "Watch" : "Live"}
+        </span>
+      </div>
+      <p>{title}</p>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </div>
+  );
+}
+
+function MiniInsight({ label, value }) {
+  return (
+    <div style={styles.miniInsight}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ProductCard({
+  product,
+  canAddOrEdit,
+  canDelete,
+  formatMoney,
+  getProductStockStatus,
+  getProfitMarginPercent,
+  startEdit,
+  openStockAdjustment,
+  openStockLedger,
+  deleteProduct,
+}) {
+  const stockStatus = getProductStockStatus(product);
+  const quantity = Number(product.quantity || 0);
+  const sellingPrice = Number(product.selling_price || 0);
+  const stockValue = quantity * sellingPrice;
+
+  return (
+    <article style={styles.productCard}>
+      <div style={styles.productCardTop}>
+        <div style={styles.productImageBox}>
+          {product.image_url ? (
+            <img src={product.image_url} alt={product.name} />
+          ) : (
+            <span>📦</span>
+          )}
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h3 style={styles.productName}>{product.name}</h3>
+          <p style={styles.productMeta}>
+            {product.size || "No excavator type"} •{" "}
+            {product.category || "No category"}
+          </p>
+          {product.barcode && (
+            <span style={styles.barcodePill}>Barcode: {product.barcode}</span>
+          )}
+        </div>
+
+        <span style={{ ...styles.stockPill, ...stockStatus.style }}>
+          {stockStatus.label}
+        </span>
+      </div>
+
+      <div style={styles.productStatsGrid}>
+        <ProductMiniStat label="Stock" value={formatNumberSafe(product.quantity)} />
+        <ProductMiniStat label="Low Level" value={formatNumberSafe(product.low_stock_threshold)} />
+        <ProductMiniStat label="Cost" value={formatMoney(product.cost_price)} />
+        <ProductMiniStat label="Selling" value={formatMoney(product.selling_price)} />
+      </div>
+
+      <div style={styles.productValueStrip}>
+        <div>
+          <span>Stock Value</span>
+          <strong>{formatMoney(stockValue)}</strong>
+        </div>
+        <div>
+          <span>Margin</span>
+          <strong>{getProfitMarginPercent(product)}%</strong>
+        </div>
+      </div>
+
+      {(canAddOrEdit || canDelete) && (
+        <div style={styles.productActions}>
+          {canAddOrEdit && (
+            <>
+              <button
+                type="button"
+                style={styles.smallSecondaryButton}
+                onClick={() => startEdit(product)}
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
+                style={styles.smallPrimaryButton}
+                onClick={() => openStockAdjustment(product)}
+              >
+                Adjust Stock
+              </button>
+
+              <button
+                type="button"
+                style={styles.smallSecondaryButton}
+                onClick={() => openStockLedger(product)}
+              >
+                Ledger
+              </button>
+            </>
+          )}
+
+          {canDelete && (
+            <button
+              type="button"
+              style={styles.smallDangerButton}
+              onClick={() => deleteProduct(product.id, product.name)}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function ProductMiniStat({ label, value }) {
+  return (
+    <div style={styles.productMiniStat}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function formatNumberSafe(value) {
+  return Number(value || 0).toLocaleString("en-GH");
+}
+
+const summaryTones = {
+  navy: { background: "#e2e8f0", color: "#0f172a" },
+  blue: { background: "#dbeafe", color: "#1d4ed8" },
+  green: { background: "#dcfce7", color: "#166534" },
+  gold: { background: "#fef3c7", color: "#92400e" },
+  danger: { background: "#fee2e2", color: "#991b1b" },
+};
+
+const styles = {
+  page: {
+    width: "100%",
+    maxWidth: "1680px",
+    margin: "0 auto",
+    paddingBottom: "40px",
+  },
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: "28px",
+    padding: "26px",
+    marginBottom: "18px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #0d2f55 52%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 24px 60px rgba(7, 24, 44, 0.28)",
+  },
+  heroGlowOne: {
+    position: "absolute",
+    width: "260px",
+    height: "260px",
+    right: "-90px",
+    top: "-100px",
+    borderRadius: "50%",
+    background: "rgba(224, 186, 40, 0.32)",
+    filter: "blur(18px)",
+  },
+  heroGlowTwo: {
+    position: "absolute",
+    width: "200px",
+    height: "200px",
+    left: "42%",
+    bottom: "-120px",
+    borderRadius: "50%",
+    background: "rgba(37, 99, 235, 0.36)",
+    filter: "blur(18px)",
+  },
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
+  },
+  heroTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  heroActions: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  eyebrow: {
+    margin: 0,
+    color: "#e0ba28",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+  eyebrowDark: {
+    margin: 0,
+    color: "#b45309",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+  heroTitle: {
+    margin: "6px 0 0",
+    fontSize: "clamp(30px, 4vw, 50px)",
+    lineHeight: 1.05,
+    fontWeight: "950",
+    letterSpacing: "-0.04em",
+  },
+  heroSubtitle: {
+    margin: "10px 0 0",
+    maxWidth: "860px",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: "15px",
+    lineHeight: 1.65,
+  },
+  heroButton: {
+    border: "1px solid rgba(224, 186, 40, 0.65)",
+    background: "rgba(224, 186, 40, 0.15)",
+    color: "#ffffff",
+    borderRadius: "14px",
+    padding: "12px 16px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  heroButtonGold: {
+    border: "none",
+    background: "#e0ba28",
+    color: "#07182c",
+    borderRadius: "14px",
+    padding: "12px 16px",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 12px 24px rgba(224, 186, 40, 0.24)",
+  },
+  heroMetrics: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "14px",
+    marginTop: "24px",
+  },
+  heroMetric: {
+    padding: "16px",
+    borderRadius: "18px",
+    background: "rgba(255,255,255,0.1)",
+    border: "1px solid rgba(255,255,255,0.14)",
+  },
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "18px",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+  summaryCard: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "22px",
+    padding: "17px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+  summaryTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    alignItems: "center",
+  },
+  summaryIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "15px",
+    display: "grid",
+    placeItems: "center",
+    fontSize: "22px",
+  },
+  summaryPill: {
+    borderRadius: "999px",
+    padding: "6px 9px",
+    fontSize: "11px",
+    fontWeight: "950",
+  },
+  controlGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(320px, 460px) minmax(0, 1fr)",
+    gap: "18px",
+    alignItems: "start",
+    marginBottom: "18px",
+  },
+  formPanel: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "24px",
+    padding: "20px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+  insightPanel: {
+    background:
+      "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,235,0.96))",
+    border: "1px solid rgba(224, 186, 40, 0.38)",
+    borderRadius: "24px",
+    padding: "20px",
+    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.09)",
+    minWidth: 0,
+  },
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+  panelTitle: {
+    margin: "4px 0 0",
+    color: "#07182c",
+    fontSize: "22px",
+    fontWeight: "950",
+  },
+  panelSubtitle: {
+    margin: "6px 0 0",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.55,
+  },
+  editBadge: {
+    borderRadius: "999px",
+    padding: "8px 11px",
+    background: "#fff7ed",
+    color: "#9a3412",
+    border: "1px solid #fed7aa",
+    fontWeight: "950",
+    fontSize: "12px",
+  },
+  formGridTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: "12px",
+  },
+  formActions: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    marginTop: "8px",
+  },
+  primaryButton: {
+    border: "none",
+    background: "#07182c",
+    color: "#ffffff",
+    borderRadius: "13px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  secondaryButton: {
+    border: "1px solid #dbe3ef",
+    background: "#ffffff",
+    color: "#07182c",
+    borderRadius: "13px",
+    padding: "10px 13px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  healthMeterBox: {
+    display: "grid",
+    gridTemplateColumns: "170px minmax(0, 1fr)",
+    gap: "18px",
+    alignItems: "center",
+  },
+  healthRing: {
+    width: "160px",
+    height: "160px",
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
+  },
+  healthInner: {
+    width: "104px",
+    height: "104px",
+    borderRadius: "50%",
+    background: "#ffffff",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
+  },
+  healthList: {
+    display: "grid",
+    gap: "10px",
+  },
+  miniInsight: {
+    padding: "12px",
+    borderRadius: "16px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+  topValueList: {
+    marginTop: "18px",
+  },
+  smallTitle: {
+    margin: "0 0 10px",
+    color: "#07182c",
+    fontWeight: "950",
+  },
+  topValueItem: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+    padding: "10px",
+    borderRadius: "14px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    marginBottom: "8px",
+  },
+  productPanel: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "24px",
+    padding: "20px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    marginBottom: "18px",
+  },
+  productPanelTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "14px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+  searchBar: {
+    display: "grid",
+    gridTemplateColumns: "minmax(220px, 1fr) auto auto",
+    gap: "8px",
+    alignItems: "start",
+    minWidth: "min(100%, 560px)",
+  },
+  searchButton: {
+    border: "none",
+    background: "#07182c",
+    color: "#ffffff",
+    borderRadius: "13px",
+    padding: "10px 13px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  productGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: "14px",
+  },
+  productCard: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "22px",
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,1), rgba(248,250,252,0.95))",
+    padding: "16px",
+    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.07)",
+    minWidth: 0,
+  },
+  productCardTop: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+  },
+  productImageBox: {
+    width: "54px",
+    height: "54px",
+    borderRadius: "16px",
+    background: "#eef2f7",
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    flexShrink: 0,
+    fontSize: "24px",
+  },
+  productName: {
+    margin: 0,
+    color: "#07182c",
+    fontSize: "17px",
+    fontWeight: "950",
+    lineHeight: 1.2,
+  },
+  productMeta: {
+    margin: "4px 0 0",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: "750",
+    lineHeight: 1.4,
+  },
+  barcodePill: {
+    display: "inline-flex",
+    marginTop: "8px",
+    padding: "5px 8px",
+    borderRadius: "999px",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    fontSize: "11px",
+    fontWeight: "900",
+  },
+  stockPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    padding: "6px 9px",
+    fontSize: "11px",
+    fontWeight: "950",
+    whiteSpace: "nowrap",
+    border: "1px solid",
+  },
+  statusSuccess: {
+    background: "#dcfce7",
+    color: "#166534",
+    borderColor: "#bbf7d0",
+  },
+  statusWarning: {
+    background: "#ffedd5",
+    color: "#9a3412",
+    borderColor: "#fed7aa",
+  },
+  statusDanger: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    borderColor: "#fecaca",
+  },
+  productStatsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+    marginTop: "14px",
+  },
+  productMiniStat: {
+    padding: "10px",
+    borderRadius: "14px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+  productValueStrip: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px",
+    marginTop: "10px",
+    padding: "10px",
+    borderRadius: "16px",
+    background: "#07182c",
+    color: "#ffffff",
+  },
+  productActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginTop: "14px",
+  },
+  smallPrimaryButton: {
+    border: "none",
+    background: "#07182c",
+    color: "#ffffff",
+    borderRadius: "11px",
+    padding: "8px 10px",
+    fontSize: "12px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  smallSecondaryButton: {
+    border: "1px solid #dbe3ef",
+    background: "#ffffff",
+    color: "#07182c",
+    borderRadius: "11px",
+    padding: "8px 10px",
+    fontSize: "12px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  smallDangerButton: {
+    border: "none",
+    background: "#dc2626",
+    color: "#ffffff",
+    borderRadius: "11px",
+    padding: "8px 10px",
+    fontSize: "12px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+  adjustmentPanel: {
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "24px",
+    padding: "20px",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+  },
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+  table: {
+    minWidth: "940px",
+  },
+  modalWide: {
+    maxWidth: "980px",
+  },
+  emptyState: {
+    padding: "18px",
+    borderRadius: "16px",
+    background: "#f8fafc",
+    color: "#64748b",
+    border: "1px dashed #cbd5e1",
+    textAlign: "center",
+    fontWeight: "800",
+  },
+};
