@@ -285,7 +285,7 @@ export default function Layout() {
       }
 
       sections.push({
-        title: isAuditor ? "Audit & Accounting" : "Management",
+        title: isAuditor ? "Auditor Accounting Work" : "Management",
         items: auditItems,
       });
     }

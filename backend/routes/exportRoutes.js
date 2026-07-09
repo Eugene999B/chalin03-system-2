@@ -235,7 +235,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
 router.get(
   "/products",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -317,7 +317,7 @@ router.get(
 router.get(
   "/low-stock",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -464,7 +464,7 @@ router.get(
 router.get(
   "/stock-adjustments",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -613,7 +613,7 @@ router.get(
 router.get(
   "/debt-payments",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -765,7 +765,7 @@ router.get(
 router.get(
   "/daily-closings",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -967,7 +967,7 @@ router.get(
 router.get(
   "/customer-statement",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -1306,7 +1306,7 @@ router.get(
 router.get(
   "/sales",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -1508,7 +1508,7 @@ router.get(
 router.get(
   "/debts",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -1589,7 +1589,7 @@ router.get(
 router.get(
   "/expenses",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -1662,7 +1662,7 @@ router.get(
 router.get(
   "/purchases",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -1922,7 +1922,7 @@ router.get(
 router.get(
   "/returns",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -2004,7 +2004,7 @@ router.get(
 router.get(
   "/stock-transfers",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
@@ -2447,7 +2447,7 @@ router.get(
 router.get(
   "/stock-ledger",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = getBranchId(req);

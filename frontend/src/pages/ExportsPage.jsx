@@ -67,11 +67,11 @@ export default function ExportsPage() {
       link.remove();
       window.URL.revokeObjectURL(fileUrl);
     } catch (error) {
-      setError("Export failed. Make sure you are logged in as admin or manager.");
+      setError("Export failed. Make sure you are logged in as admin, manager or auditor.");
     }
   }
 
-  if (role !== "admin" && role !== "manager") {
+  if (role !== "admin" && role !== "manager" && role !== "auditor") {
     return (
       <div>
         <div className="page-header">
@@ -85,7 +85,7 @@ export default function ExportsPage() {
         </div>
 
         <div className="error-box">
-          Only admin and manager accounts can export business records.
+          Only admin, manager and auditor accounts can export business records.
         </div>
       </div>
     );

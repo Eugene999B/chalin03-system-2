@@ -159,7 +159,7 @@ export default function AdvancedAccountingIntelligencePage() {
 
   const canUseAllStores = useMemo(() => {
     const role = String(user?.role || "").toLowerCase();
-    return role === "admin" || role === "manager";
+    return role === "admin" || role === "manager" || role === "auditor";
   }, [user]);
 
   const intelligence = data?.intelligence || null;

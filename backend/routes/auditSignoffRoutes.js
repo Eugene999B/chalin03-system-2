@@ -109,10 +109,10 @@ function getUserDisplayName(req) {
 function requireAdminOrManager(req, res, next) {
   const role = getUserRole(req);
 
-  if (role !== "admin" && role !== "manager") {
+  if (role !== "admin" && role !== "manager" && role !== "auditor") {
     return res.status(403).json({
       status: "error",
-      message: "Only admin or manager can access audit sign-offs.",
+      message: "Only admin, manager or auditor can access audit sign-offs.",
     });
   }
 
@@ -122,10 +122,10 @@ function requireAdminOrManager(req, res, next) {
 function requireAdmin(req, res, next) {
   const role = getUserRole(req);
 
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "auditor") {
     return res.status(403).json({
       status: "error",
-      message: "Only admin can delete audit sign-offs.",
+      message: "Only admin or auditor can delete audit sign-offs.",
     });
   }
 

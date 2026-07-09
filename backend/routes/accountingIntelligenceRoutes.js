@@ -26,13 +26,13 @@ function asyncHandler(handler) {
 function requireAccountingAccess(req, res, next) {
   const role = String(req.user?.role || "").toLowerCase();
 
-  if (role === "admin" || role === "manager") {
+  if (role === "admin" || role === "manager" || role === "auditor") {
     return next();
   }
 
   return res.status(403).json({
     status: "error",
-    message: "Only admins and managers can view advanced accounting intelligence.",
+    message: "Only admins, managers and auditors can view advanced accounting intelligence.",
   });
 }
 

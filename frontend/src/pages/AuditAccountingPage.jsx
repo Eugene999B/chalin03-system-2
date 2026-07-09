@@ -272,7 +272,7 @@ function getObjectValue(object, path, fallback = 0) {
 export default function AuditAccountingPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
-  const canReview = role === "admin" || role === "manager";
+  const canReview = role === "admin" || role === "manager" || role === "auditor";
 
   const currentStoreCode =
     branchCode ||
@@ -1367,7 +1367,7 @@ export default function AuditAccountingPage() {
         </div>
 
         <div className="error-box">
-          Only admin and manager accounts can open audit/accounting review.
+          Only admin, manager and auditor accounts can open audit/accounting review.
         </div>
       </div>
     );
