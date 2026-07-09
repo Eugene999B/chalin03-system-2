@@ -175,15 +175,43 @@ export default function UsersSettingsPage() {
 
   async function loadPageData() {
     setError("");
+    setMessage("");
+
+    const loadErrors = [];
 
     try {
-      await Promise.all([loadBranches(), loadUsers(), loadSettings()]);
+      await loadBranches();
     } catch (error) {
-      setError(
+      loadErrors.push(
         error.response?.data?.message ||
-          "Failed to load users and settings. Make sure you are logged in as admin."
+          "Failed to load stores. Make sure the branches route is working."
       );
     }
+
+    try {
+      await loadUsers();
+    } catch (error) {
+      loadErrors.push(
+        error.response?.data?.message ||
+          "Failed to load users. Make sure you are logged in as admin."
+      );
+    }
+
+    try {
+      await loadSettings();
+    } catch (error) {
+      loadErrors.push(
+        error.response?.data?.message ||
+          "Failed to load selected-store settings."
+      );
+    }
+
+    if (loadErrors.length > 0) {
+      setError(loadErrors.join("\n"));
+      return;
+    }
+
+    setMessage("Users and settings loaded successfully.");
   }
 
   useEffect(() => {

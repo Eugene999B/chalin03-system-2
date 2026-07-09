@@ -122,17 +122,96 @@ async function ensureUserBranchSetup(connection = pool) {
     "can_access_all_branches",
     "can_access_all_branches BOOLEAN NOT NULL DEFAULT FALSE AFTER default_branch_id"
   );
+
+  await ensureColumn(
+    connection,
+    "users",
+    "phone",
+    "phone VARCHAR(30) NULL AFTER can_access_all_branches"
+  );
+
+  await ensureColumn(
+    connection,
+    "users",
+    "is_active",
+    "is_active BOOLEAN NOT NULL DEFAULT TRUE AFTER phone"
+  );
+
+  await ensureColumn(
+    connection,
+    "users",
+    "created_at",
+    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER is_active"
+  );
+
+  await ensureColumn(
+    connection,
+    "users",
+    "updated_at",
+    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at"
+  );
 }
+
+async function getBranchColumnMap(connection = pool) {
+  if (!(await tableExists(connection, "branches"))) {
+    return null;
+  }
+
+  const [columns] = await connection.query(`SHOW COLUMNS FROM branches`);
+  const columnNames = columns.map((column) => column.Field);
+
+  const pickColumn = (...names) => {
+    return names.find((name) => columnNames.includes(name)) || null;
+  };
+
+  return {
+    code: pickColumn("code", "branch_code", "store_code"),
+    name: pickColumn("name", "branch_name", "store_name"),
+    location: pickColumn("location", "branch_location", "store_location"),
+    isActive: pickColumn("is_active", "active"),
+  };
+}
+
+function branchColumnExpression(map, alias, key, fallbackSql) {
+  if (!map || !map[key]) {
+    return fallbackSql;
+  }
+
+  return `${alias}.\`${map[key]}\``;
+}
+
+function buildBranchDetailsSelect(map, alias = "b") {
+  const codeExpression = branchColumnExpression(map, alias, "code", "NULL");
+  const nameExpression = branchColumnExpression(
+    map,
+    alias,
+    "name",
+    `CONCAT('Store ', ${alias}.id)`
+  );
+  const locationExpression = branchColumnExpression(map, alias, "location", "NULL");
+
+  return `
+    ${codeExpression} AS code,
+    ${nameExpression} AS name,
+    ${locationExpression} AS location
+  `;
+}
+
 
 async function getAllBranchIds(connection = pool) {
   if (!(await tableExists(connection, "branches"))) {
     return [1];
   }
 
+  const branchMap = await getBranchColumnMap(connection);
+  const activeWhere = branchMap?.isActive
+    ? `WHERE \`${branchMap.isActive}\` = TRUE`
+    : "";
+
   const [branches] = await connection.query(
     `SELECT id
      FROM branches
-     WHERE is_active = TRUE
+     ${activeWhere}
      ORDER BY id ASC`
   );
 
@@ -202,18 +281,38 @@ async function setUserBranchAccess(
 async function getUserBranches(userId) {
   await ensureUserBranchSetup(pool);
 
+  if (!(await tableExists(pool, "branches"))) {
+    const [branches] = await pool.query(
+      `SELECT
+        uba.branch_id,
+        uba.can_access,
+        NULL AS code,
+        CONCAT('Store ', uba.branch_id) AS name,
+        NULL AS location
+       FROM user_branch_access uba
+       WHERE uba.user_id = ?
+       AND uba.can_access = TRUE
+       ORDER BY uba.branch_id ASC`,
+      [userId]
+    );
+
+    return branches;
+  }
+
+  const branchMap = await getBranchColumnMap(pool);
+  const branchDetailsSelect = buildBranchDetailsSelect(branchMap, "b");
+  const orderColumn = branchMap?.name ? `b.\`${branchMap.name}\`` : "uba.branch_id";
+
   const [branches] = await pool.query(
     `SELECT
       uba.branch_id,
       uba.can_access,
-      b.code,
-      b.name,
-      b.location
+      ${branchDetailsSelect}
      FROM user_branch_access uba
      LEFT JOIN branches b ON uba.branch_id = b.id
      WHERE uba.user_id = ?
      AND uba.can_access = TRUE
-     ORDER BY b.name ASC, uba.branch_id ASC`,
+     ORDER BY ${orderColumn} ASC, uba.branch_id ASC`,
     [userId]
   );
 
@@ -380,21 +479,48 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (userIds.length > 0) {
       const placeholders = userIds.map(() => "?").join(",");
 
-      const [branchRows] = await pool.query(
-        `SELECT
-          uba.user_id,
-          uba.branch_id,
-          uba.can_access,
-          b.code,
-          b.name,
-          b.location
-         FROM user_branch_access uba
-         LEFT JOIN branches b ON uba.branch_id = b.id
-         WHERE uba.user_id IN (${placeholders})
-         AND uba.can_access = TRUE
-         ORDER BY b.name ASC, uba.branch_id ASC`,
-        userIds
-      );
+      let branchRows = [];
+
+      if (await tableExists(pool, "branches")) {
+        const branchMap = await getBranchColumnMap(pool);
+        const branchDetailsSelect = buildBranchDetailsSelect(branchMap, "b");
+        const orderColumn = branchMap?.name
+          ? `b.\`${branchMap.name}\``
+          : "uba.branch_id";
+
+        const [rows] = await pool.query(
+          `SELECT
+            uba.user_id,
+            uba.branch_id,
+            uba.can_access,
+            ${branchDetailsSelect}
+           FROM user_branch_access uba
+           LEFT JOIN branches b ON uba.branch_id = b.id
+           WHERE uba.user_id IN (${placeholders})
+           AND uba.can_access = TRUE
+           ORDER BY ${orderColumn} ASC, uba.branch_id ASC`,
+          userIds
+        );
+
+        branchRows = rows;
+      } else {
+        const [rows] = await pool.query(
+          `SELECT
+            uba.user_id,
+            uba.branch_id,
+            uba.can_access,
+            NULL AS code,
+            CONCAT('Store ', uba.branch_id) AS name,
+            NULL AS location
+           FROM user_branch_access uba
+           WHERE uba.user_id IN (${placeholders})
+           AND uba.can_access = TRUE
+           ORDER BY uba.branch_id ASC`,
+          userIds
+        );
+
+        branchRows = rows;
+      }
 
       for (const branch of branchRows) {
         if (!branchesByUserId.has(branch.user_id)) {
