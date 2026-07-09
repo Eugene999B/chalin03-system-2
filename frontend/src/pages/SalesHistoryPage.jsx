@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -39,6 +39,8 @@ export default function SalesHistoryPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const businessName = "CHALIN 03 COMPANY LIMITED";
   const businessAddress = "Dunkwa Police Barrier";
@@ -69,23 +71,29 @@ export default function SalesHistoryPage() {
   }
 
   function getReceiptStoreCode(receiptData) {
-    return (
-      receiptData?.branch_code ||
-      receiptData?.store_code ||
-      currentStoreCode
-    );
+    return receiptData?.branch_code || receiptData?.store_code || currentStoreCode;
   }
 
   function getReceiptStoreName(receiptData) {
-    return (
-      receiptData?.branch_name ||
-      receiptData?.store_name ||
-      currentStoreName
-    );
+    return receiptData?.branch_name || receiptData?.store_name || currentStoreName;
   }
 
   function formatMoney(value) {
     return Number(value || 0).toFixed(2);
+  }
+
+  function formatCompactMoney(value) {
+    const number = Number(value || 0);
+
+    if (number >= 1000000) {
+      return `GHS ${(number / 1000000).toFixed(1)}M`;
+    }
+
+    if (number >= 1000) {
+      return `GHS ${(number / 1000).toFixed(1)}K`;
+    }
+
+    return `GHS ${formatMoney(number)}`;
   }
 
   function formatReceiptDate(value) {
@@ -117,18 +125,27 @@ export default function SalesHistoryPage() {
     });
   }
 
+  function formatDateTime(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleString();
+  }
 
   function formatPaymentMethod(value) {
-  const paymentMethods = {
-     cash: "Cash",
-     momo: "MoMo",
-     bank: "Bank",
-     credit: "Credit",
-     mixed: "Mixed",
-  };
+    const paymentMethods = {
+      cash: "Cash",
+      momo: "MoMo",
+      bank: "Bank",
+      credit: "Credit",
+      mixed: "Mixed",
+    };
 
     return paymentMethods[String(value || "").toLowerCase()] || value || "-";
-}
+  }
 
   function escapeHtml(value) {
     return String(value || "")
@@ -152,6 +169,7 @@ export default function SalesHistoryPage() {
   async function loadSales(customFilters = null) {
     setError("");
     setMessage("");
+    setLoading(true);
 
     const filters = customFilters || {
       search,
@@ -167,6 +185,8 @@ export default function SalesHistoryPage() {
       setSales(response.data.sales || []);
     } catch (error) {
       setError(error.response?.data?.message || "Failed to load sales.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -475,7 +495,6 @@ export default function SalesHistoryPage() {
               <span>${formatReceiptTime(selectedReceipt.created_at)}</span>
             </div>
 
-
             <div class="details-row">
               <span>Receipt No.:</span>
               <span>${escapeHtml(selectedReceipt.receipt_number)}</span>
@@ -488,8 +507,6 @@ export default function SalesHistoryPage() {
 
             <div class="dash"></div>
 
-            
-        
             <table>
               <thead>
                 <tr>
@@ -596,52 +613,158 @@ export default function SalesHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Sales History</h1>
-          <p>
-            View past sales, reprint receipts, download PDF and void wrong sales
-            for{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-          </p>
-        </div>
+  useEffect(() => {
+    function checkScreenSize() {
+      setIsMobile(window.innerWidth <= 760);
+    }
 
-        <button type="button" onClick={() => loadSales()}>
-          Refresh
-        </button>
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
+  }, []);
+
+  const summary = useMemo(() => {
+    const activeSales = sales.filter((sale) => !isSaleVoided(sale));
+    const voidedSales = sales.filter(isSaleVoided);
+
+    const totalSales = activeSales.reduce(
+      (sum, sale) => sum + Number(sale.total || 0),
+      0
+    );
+
+    const totalPaid = activeSales.reduce(
+      (sum, sale) => sum + Number(sale.amount_paid || 0),
+      0
+    );
+
+    const totalBalance = activeSales.reduce(
+      (sum, sale) => sum + Number(sale.balance || 0),
+      0
+    );
+
+    const totalDiscount = activeSales.reduce(
+      (sum, sale) => sum + Number(sale.discount_amount || 0),
+      0
+    );
+
+    return {
+      activeCount: activeSales.length,
+      voidedCount: voidedSales.length,
+      totalSales,
+      totalPaid,
+      totalBalance,
+      totalDiscount,
+    };
+  }, [sales]);
+
+  const oneColumn = isMobile ? styles.oneColumn : {};
+  const compactHero = isMobile ? styles.heroMobile : {};
+  const compactHeroTitle = isMobile ? styles.heroTitleMobile : {};
+  const compactFilterGrid = isMobile ? styles.filterGridMobile : {};
+  const compactModalActions = isMobile ? styles.modalActionsMobile : {};
+
+  return (
+    <div style={styles.page}>
+      <div style={{ ...styles.hero, ...compactHero }}>
+        <div style={styles.heroGlowOne} />
+        <div style={styles.heroGlowTwo} />
+
+        <div style={styles.heroContent}>
+          <div style={styles.heroTop}>
+            <div>
+              <p style={styles.eyebrow}>Receipt Control Center • {currentStoreCode}</p>
+
+              <h1 style={{ ...styles.heroTitle, ...compactHeroTitle }}>
+                Sales History
+              </h1>
+
+              <p style={styles.heroSubtitle}>
+                View past sales, reprint receipts, download PDF receipts and
+                void wrong sales for <strong>{currentStoreName}</strong>
+                {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
+                Every record shown here belongs to the selected store.
+              </p>
+            </div>
+
+            <button type="button" style={styles.heroButton} onClick={() => loadSales()}>
+              {loading ? "Refreshing..." : "Refresh Sales"}
+            </button>
+          </div>
+
+          <div style={{ ...styles.heroMetrics, ...oneColumn }}>
+            <HeroMetric label="Valid Sales" value={summary.activeCount} />
+            <HeroMetric label="Sales Value" value={formatCompactMoney(summary.totalSales)} />
+            <HeroMetric label="Paid" value={formatCompactMoney(summary.totalPaid)} />
+            <HeroMetric label="Balance" value={formatCompactMoney(summary.totalBalance)} />
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Sales history, receipt preview, PDF download and void actions are
-          filtered to this selected store only.
-        </small>
+      <div style={styles.storeNotice}>
+        <span style={styles.noticeIcon}>🏬</span>
+        <div>
+          <strong>
+            {currentStoreCode} — {currentStoreName}
+          </strong>
+          <p>
+            Sales history, receipt preview, PDF download and void actions are
+            filtered to this selected store only.
+          </p>
+        </div>
       </div>
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div className="section-card">
-        <h2>Filter Sales - {currentStoreCode}</h2>
+      <div style={{ ...styles.summaryGrid, ...oneColumn }}>
+        <SummaryCard
+          icon="🧾"
+          title="Valid Receipts"
+          value={summary.activeCount}
+          note="Completed sales counted as income"
+          tone="blue"
+        />
 
-        <div className="filter-grid">
+        <SummaryCard
+          icon="💰"
+          title="Total Sales"
+          value={`GHS ${formatMoney(summary.totalSales)}`}
+          note="Voided sales excluded"
+          tone="gold"
+        />
+
+        <SummaryCard
+          icon="✅"
+          title="Money Paid"
+          value={`GHS ${formatMoney(summary.totalPaid)}`}
+          note="Cash and other payments received"
+          tone="green"
+        />
+
+        <SummaryCard
+          icon="⚠️"
+          title="Outstanding"
+          value={`GHS ${formatMoney(summary.totalBalance)}`}
+          note={`${summary.voidedCount} voided receipt(s) in list`}
+          tone="red"
+        />
+      </div>
+
+      <section style={styles.panel}>
+        <div style={styles.panelHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>Search & Audit</p>
+            <h2 style={styles.panelTitle}>Filter Sales - {currentStoreCode}</h2>
+            <p style={styles.panelSubtitle}>
+              Search by receipt number, customer name or phone number.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ ...styles.filterGrid, ...compactFilterGrid }}>
           <div>
             <label>Search receipt/customer/phone</label>
             <input
@@ -669,129 +792,127 @@ export default function SalesHistoryPage() {
             />
           </div>
 
-          <div className="filter-actions">
+          <div style={styles.filterActions}>
             <button type="button" onClick={() => loadSales()}>
               Apply Filter
             </button>
 
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={clearFilters}
-            >
+            <button type="button" className="secondary-button" onClick={clearFilters}>
               Clear
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="section-card">
-        <h2>Sales List - {currentStoreCode}</h2>
+      <section style={styles.panelLarge}>
+        <div style={styles.panelHeader}>
+          <div>
+            <p style={styles.eyebrowDark}>Receipt List</p>
+            <h2 style={styles.panelTitle}>Sales List - {currentStoreCode}</h2>
+            <p style={styles.panelSubtitle}>
+              Open a receipt to reprint, download PDF or void the sale.
+            </p>
+          </div>
+
+          <span style={styles.goldBadge}>{sales.length} record(s)</span>
+        </div>
 
         {sales.length === 0 ? (
-          <p>No sales found for {currentStoreCode} — {currentStoreName}.</p>
+          <div style={styles.emptyState}>
+            No sales found for {currentStoreCode} — {currentStoreName}.
+          </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Receipt</th>
-                <th>Customer</th>
-                <th>Staff</th>
-                <th>Payment Method</th>
-                <th>Subtotal</th>
-                <th>Discount</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Balance</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th></th>
-              </tr>
-            </thead>
+          <div style={styles.salesList}>
+            {sales.map((sale) => {
+              const voided = isSaleVoided(sale);
 
-            <tbody>
-              {sales.map((sale) => {
-                const voided = isSaleVoided(sale);
+              return (
+                <article
+                  key={sale.id}
+                  style={{
+                    ...styles.saleCard,
+                    ...(voided ? styles.saleCardVoided : {}),
+                  }}
+                >
+                  <div style={styles.saleCardMain}>
+                    <div>
+                      <div style={styles.receiptRow}>
+                        <strong>{sale.receipt_number}</strong>
 
-                return (
-                  <tr key={sale.id}>
-                    <td>
-                      <strong>{sale.receipt_number}</strong>
-                      {voided && (
-                        <>
-                          <br />
-                          <small>Voided</small>
-                        </>
-                      )}
-                    </td>
-
-                    <td>
-                      {sale.customer_name || "Walk-in Customer"}
-                      <br />
-                      <small>{sale.customer_phone || "-"}</small>
-                    </td>
-
-                    <td>{sale.staff_name || "-"}</td>
-                    <td>{formatPaymentMethod(sale.payment_type)}</td>
-                    <td>GHS {formatMoney(sale.subtotal)}</td>
-                    <td>GHS {formatMoney(sale.discount_amount)}</td>
-                    <td>GHS {formatMoney(sale.total)}</td>
-                    <td>GHS {formatMoney(sale.amount_paid)}</td>
-                    <td>GHS {formatMoney(sale.balance)}</td>
-
-                    <td>
-                      {voided ? (
-                        <span className="danger-text">Voided</span>
-                      ) : (
-                        sale.sale_status || "completed"
-                      )}
-                    </td>
-
-                    <td>{new Date(sale.created_at).toLocaleString()}</td>
-
-                    <td>
-                      <div className="table-actions">
-                        <button
-                          type="button"
-                          onClick={() => viewReceipt(sale.id)}
-                        >
-                          View
-                        </button>
-
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() =>
-                            downloadReceiptPdf(sale.id, sale.receipt_number)
-                          }
-                        >
-                          PDF
-                        </button>
-
-                        {isAdmin && !voided && (
-                          <button
-                            type="button"
-                            className="small-danger"
-                            onClick={() =>
-                              voidSale(sale.id, sale.receipt_number)
-                            }
-                          >
-                            Void
-                          </button>
+                        {voided ? (
+                          <span style={styles.voidBadge}>Voided</span>
+                        ) : (
+                          <span style={styles.successBadge}>
+                            {sale.sale_status || "completed"}
+                          </span>
                         )}
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+
+                      <p>
+                        {sale.customer_name || "Walk-in Customer"} •{" "}
+                        {sale.customer_phone || "-"}
+                      </p>
+
+                      <small>
+                        Staff: {sale.staff_name || "-"} • Payment:{" "}
+                        {formatPaymentMethod(sale.payment_type)} •{" "}
+                        {formatDateTime(sale.created_at)}
+                      </small>
+                    </div>
+
+                    <div style={styles.saleAmountBox}>
+                      <span>Total</span>
+                      <strong>GHS {formatMoney(sale.total)}</strong>
+                      <small>
+                        Paid: GHS {formatMoney(sale.amount_paid)} • Bal: GHS{" "}
+                        {formatMoney(sale.balance)}
+                      </small>
+                    </div>
+                  </div>
+
+                  <div style={styles.saleMiniGrid}>
+                    <MiniStat label="Subtotal" value={`GHS ${formatMoney(sale.subtotal)}`} />
+                    <MiniStat
+                      label="Discount"
+                      value={`GHS ${formatMoney(sale.discount_amount)}`}
+                    />
+                    <MiniStat label="Payment" value={formatPaymentMethod(sale.payment_type)} />
+                    <MiniStat label="Date" value={formatReceiptDate(sale.created_at)} />
+                  </div>
+
+                  <div style={styles.cardActions}>
+                    <button type="button" onClick={() => viewReceipt(sale.id)}>
+                      View Receipt
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => downloadReceiptPdf(sale.id, sale.receipt_number)}
+                    >
+                      Download PDF
+                    </button>
+
+                    {isAdmin && !voided && (
+                      <button
+                        type="button"
+                        className="small-danger"
+                        onClick={() => voidSale(sale.id, sale.receipt_number)}
+                      >
+                        Void Sale
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         )}
-      </div>
+      </section>
 
       {selectedReceipt && (
         <div className="modal-backdrop">
-          <div className="receipt-modal">
+          <div className="receipt-modal" style={styles.receiptModal}>
             <div className="modal-header">
               <div>
                 <h2>Receipt Preview - {getReceiptStoreCode(selectedReceipt)}</h2>
@@ -875,27 +996,29 @@ export default function SalesHistoryPage() {
                 </p>
               </div>
 
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Qty</th>
-                    <th>Unit</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {selectedItems.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.product_name}</td>
-                      <td>{item.quantity}</td>
-                      <td>GHS {formatMoney(item.unit_price)}</td>
-                      <td>GHS {formatMoney(item.line_total)}</td>
+              <div style={styles.tableWrap}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Qty</th>
+                      <th>Unit</th>
+                      <th>Total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  <tbody>
+                    {selectedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.product_name}</td>
+                        <td>{item.quantity}</td>
+                        <td>GHS {formatMoney(item.unit_price)}</td>
+                        <td>GHS {formatMoney(item.line_total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <div className="receipt-totals">
                 <p>
@@ -948,7 +1071,7 @@ export default function SalesHistoryPage() {
               </div>
             </div>
 
-            <div className="modal-actions">
+            <div style={{ ...styles.modalActions, ...compactModalActions }}>
               <button type="button" onClick={printReceipt}>
                 Print / Reprint Receipt
               </button>
@@ -971,10 +1094,7 @@ export default function SalesHistoryPage() {
                   type="button"
                   className="small-danger"
                   onClick={() =>
-                    voidSale(
-                      selectedReceipt.id,
-                      selectedReceipt.receipt_number
-                    )
+                    voidSale(selectedReceipt.id, selectedReceipt.receipt_number)
                   }
                 >
                   Void Sale
@@ -987,3 +1107,397 @@ export default function SalesHistoryPage() {
     </div>
   );
 }
+
+function HeroMetric({ label, value }) {
+  return (
+    <div style={styles.heroMetric}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SummaryCard({ icon, title, value, note, tone }) {
+  return (
+    <div style={styles.summaryCard}>
+      <div style={{ ...styles.summaryIcon, ...summaryTones[tone] }}>{icon}</div>
+
+      <div>
+        <p>{title}</p>
+        <strong>{value}</strong>
+        <span>{note}</span>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div style={styles.miniStat}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+const summaryTones = {
+  gold: { background: "#fef3c7", color: "#92400e" },
+  blue: { background: "#dbeafe", color: "#1d4ed8" },
+  green: { background: "#dcfce7", color: "#166534" },
+  red: { background: "#fee2e2", color: "#991b1b" },
+};
+
+const styles = {
+  page: {
+    width: "100%",
+    maxWidth: "1680px",
+    margin: "0 auto",
+    paddingBottom: "42px",
+  },
+
+  oneColumn: {
+    gridTemplateColumns: "1fr",
+  },
+
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: "28px",
+    padding: "26px",
+    marginBottom: "18px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #0d2f55 48%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 24px 60px rgba(7, 24, 44, 0.26)",
+  },
+
+  heroMobile: {
+    padding: "18px 14px",
+    borderRadius: "20px",
+  },
+
+  heroGlowOne: {
+    position: "absolute",
+    width: "260px",
+    height: "260px",
+    right: "-90px",
+    top: "-90px",
+    borderRadius: "50%",
+    background: "rgba(224, 186, 40, 0.30)",
+    filter: "blur(18px)",
+  },
+
+  heroGlowTwo: {
+    position: "absolute",
+    width: "180px",
+    height: "180px",
+    left: "35%",
+    bottom: "-110px",
+    borderRadius: "50%",
+    background: "rgba(37, 99, 235, 0.34)",
+    filter: "blur(18px)",
+  },
+
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
+  },
+
+  heroTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+
+  eyebrow: {
+    margin: 0,
+    color: "#e0ba28",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+
+  eyebrowDark: {
+    margin: 0,
+    color: "#b45309",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "11px",
+  },
+
+  heroTitle: {
+    margin: "6px 0 0",
+    fontSize: "clamp(30px, 4vw, 50px)",
+    lineHeight: 1.03,
+    fontWeight: "950",
+  },
+
+  heroTitleMobile: {
+    fontSize: "30px",
+  },
+
+  heroSubtitle: {
+    margin: "10px 0 0",
+    maxWidth: "820px",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: "15px",
+    lineHeight: 1.6,
+  },
+
+  heroButton: {
+    border: "1px solid rgba(224, 186, 40, 0.62)",
+    background: "rgba(224, 186, 40, 0.16)",
+    color: "#ffffff",
+    borderRadius: "14px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  heroMetrics: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "12px",
+    marginTop: "22px",
+  },
+
+  heroMetric: {
+    padding: "14px",
+    borderRadius: "18px",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.15)",
+  },
+
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "18px",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  noticeIcon: {
+    fontSize: "22px",
+  },
+
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+
+  summaryCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    background: "#ffffff",
+    borderRadius: "20px",
+    padding: "16px",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.07)",
+    minWidth: 0,
+  },
+
+  summaryIcon: {
+    width: "46px",
+    height: "46px",
+    borderRadius: "16px",
+    display: "grid",
+    placeItems: "center",
+    fontSize: "22px",
+    flexShrink: 0,
+  },
+
+  panel: {
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+    marginBottom: "18px",
+  },
+
+  panelLarge: {
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  panelTitle: {
+    margin: "4px 0 0",
+    color: "#0f172a",
+    fontSize: "22px",
+    fontWeight: "950",
+  },
+
+  panelSubtitle: {
+    margin: "5px 0 0",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+
+  filterGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 2fr) 1fr 1fr auto",
+    gap: "12px",
+    alignItems: "end",
+  },
+
+  filterGridMobile: {
+    gridTemplateColumns: "1fr",
+  },
+
+  filterActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+
+  goldBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    padding: "7px 11px",
+    background: "#fef3c7",
+    color: "#92400e",
+    fontWeight: "950",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  },
+
+  emptyState: {
+    padding: "20px",
+    color: "#64748b",
+    fontWeight: "800",
+    textAlign: "center",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px dashed #cbd5e1",
+  },
+
+  salesList: {
+    display: "grid",
+    gap: "12px",
+  },
+
+  saleCard: {
+    borderRadius: "20px",
+    border: "1px solid #e2e8f0",
+    background: "linear-gradient(180deg, #ffffff, #f8fafc)",
+    padding: "16px",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  saleCardVoided: {
+    background: "linear-gradient(180deg, #fff7f7, #ffffff)",
+    borderColor: "#fecaca",
+  },
+
+  saleCardMain: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "14px",
+    alignItems: "start",
+  },
+
+  receiptRow: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+
+  saleAmountBox: {
+    minWidth: "190px",
+    textAlign: "right",
+    color: "#0f172a",
+  },
+
+  saleMiniGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "10px",
+    marginTop: "14px",
+  },
+
+  miniStat: {
+    padding: "10px",
+    borderRadius: "14px",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+
+  successBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "5px 8px",
+    background: "#dcfce7",
+    color: "#166534",
+    fontSize: "11px",
+    fontWeight: "950",
+    textTransform: "capitalize",
+  },
+
+  voidBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    padding: "5px 8px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontSize: "11px",
+    fontWeight: "950",
+  },
+
+  cardActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginTop: "14px",
+  },
+
+  receiptModal: {
+    maxWidth: "920px",
+  },
+
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+
+  modalActions: {
+    marginTop: "18px",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+
+  modalActionsMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+  },
+};
