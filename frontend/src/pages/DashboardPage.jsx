@@ -47,6 +47,9 @@ export default function DashboardPage() {
 
   const [isMobile, setIsMobile] = useState(false);
 
+  const role = String(user?.role || "").toLowerCase();
+  const canManage = role === "admin" || role === "manager";
+
   function formatMoney(value) {
     return Number(value || 0).toLocaleString("en-GH", {
       minimumFractionDigits: 2,
@@ -668,6 +671,7 @@ export default function DashboardPage() {
   const mobileHeroTitle = isMobile ? styles.heroTitleMobile : {};
   const mobileQuickActions = isMobile ? styles.quickActionsMobile : {};
   const mobileSmartCard = isMobile ? styles.smartCardMobile : {};
+  const mobileScoreBody = isMobile ? styles.scoreBodyMobile : {};
   const mobilePage = isMobile ? styles.pageMobile : {};
 
   return (
@@ -770,27 +774,74 @@ export default function DashboardPage() {
         </button>
 
         <button style={styles.actionButton} onClick={() => navigate("/products")}>
-          Add / View Products
+          📦 Products
         </button>
 
         <button style={styles.actionButton} onClick={() => navigate("/debts")}>
-          Record Debt Payment
-        </button>
-
-        <button style={styles.actionButton} onClick={() => navigate("/expenses")}>
-          Add Expense
+          📞 Debts
         </button>
 
         <button style={styles.actionButton} onClick={() => navigate("/reports")}>
-          View Reports
+          📊 Reports
         </button>
 
-        <button
-          style={styles.actionButton}
-          onClick={() => navigate("/daily-closing")}
-        >
-          Daily Closing
+        <button style={styles.actionButton} onClick={() => navigate("/daily-closing")}>
+          🌙 Daily Closing
         </button>
+
+        {canManage && (
+          <>
+            <button style={styles.actionButton} onClick={() => navigate("/expenses")}>
+              ⛽ Expenses
+            </button>
+
+            <button style={styles.actionButton} onClick={() => navigate("/stock-transfers")}>
+              🔁 Stock Transfers
+            </button>
+
+            <button style={styles.actionPremium} onClick={() => navigate("/audit-accounting")}>
+              🧮 Audit Review
+            </button>
+
+            <button style={styles.actionPremium} onClick={() => navigate("/advanced-accounting-intelligence")}>
+              📈 Intelligence
+            </button>
+
+            <button style={styles.actionPremium} onClick={() => navigate("/sms")}>
+              📩 SMS Center
+            </button>
+          </>
+        )}
+      </div>
+
+      <div style={{ ...styles.missionGrid, ...oneColumn }}>
+        <MissionCard
+          icon="⚡"
+          label="Today’s Activity"
+          value={`${dashboardData.todaySales.length} sale(s)`}
+          note={formatCompactMoney(dashboardData.todaySalesAmount)}
+        />
+
+        <MissionCard
+          icon="💵"
+          label="Cash Collected"
+          value={formatCompactMoney(dashboardData.todayAmountPaid)}
+          note="Money received today"
+        />
+
+        <MissionCard
+          icon="📦"
+          label="Stock Watch"
+          value={`${dashboardData.lowStockCount} low item(s)`}
+          note={`${dashboardData.stockHealth}% stock health`}
+        />
+
+        <MissionCard
+          icon="🛡️"
+          label="Control Check"
+          value={`${dashboardData.voidedSales.length} voided`}
+          note={`${dashboardData.businessScore}% business score`}
+        />
       </div>
 
       <div style={{ ...styles.executiveGrid, ...oneColumn }}>
@@ -815,7 +866,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div style={styles.scoreBody}>
+          <div style={{ ...styles.scoreBody, ...mobileScoreBody }}>
             <div
               style={{
                 ...styles.scoreRing,
@@ -1335,6 +1386,19 @@ function PulseItem({ label, value, tone }) {
   );
 }
 
+function MissionCard({ icon, label, value, note }) {
+  return (
+    <div style={styles.missionCard}>
+      <div style={styles.missionIcon}>{icon}</div>
+      <div style={{ minWidth: 0 }}>
+        <span style={styles.missionLabel}>{label}</span>
+        <strong style={styles.missionValue}>{value}</strong>
+        <small style={styles.missionNote}>{note}</small>
+      </div>
+    </div>
+  );
+}
+
 function buildPaymentGradient(paymentBreakdown) {
   const total = Object.values(paymentBreakdown).reduce(
     (sum, value) => sum + Number(value || 0),
@@ -1411,13 +1475,13 @@ const smartToneStyles = {
 const styles = {
   page: {
     width: "100%",
-    maxWidth: "1680px",
+    maxWidth: "1760px",
     margin: "0 auto",
-    paddingBottom: "40px",
+    paddingBottom: "46px",
   },
 
   pageMobile: {
-    paddingBottom: "28px",
+    paddingBottom: "20px",
   },
 
   oneColumn: {
@@ -1427,17 +1491,17 @@ const styles = {
   hero: {
     position: "relative",
     overflow: "hidden",
-    borderRadius: "28px",
-    padding: "26px",
+    borderRadius: "34px",
+    padding: "32px",
     marginBottom: "18px",
     background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 46%, #111827 100%)",
+      "radial-gradient(circle at 86% 10%, rgba(224,186,40,0.34), transparent 26%), radial-gradient(circle at 42% 120%, rgba(37,99,235,0.35), transparent 34%), linear-gradient(135deg, #06101f 0%, #07182c 38%, #0d2f55 100%)",
     boxShadow: "0 24px 60px rgba(7, 24, 44, 0.28)",
     color: "#ffffff",
   },
 
   heroMobile: {
-    padding: "20px 16px",
+    padding: "18px 14px",
     borderRadius: "22px",
   },
 
@@ -1505,8 +1569,8 @@ const styles = {
   },
 
   heroLogoMobile: {
-    width: "112px",
-    height: "112px",
+    width: "78px",
+    height: "78px",
     borderRadius: "26px",
   },
 
@@ -1536,7 +1600,7 @@ const styles = {
   },
 
   heroTitleMobile: {
-    fontSize: "27px",
+    fontSize: "25px",
     textAlign: "center",
   },
 
@@ -1570,8 +1634,8 @@ const styles = {
   },
 
   heroMetric: {
-    padding: "16px",
-    borderRadius: "18px",
+    padding: "13px",
+    borderRadius: "17px",
     background: "rgba(255,255,255,0.1)",
     border: "1px solid rgba(255,255,255,0.14)",
   },
@@ -1625,6 +1689,80 @@ const styles = {
     fontWeight: "900",
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+  },
+
+  actionPremium: {
+    border: "1px solid rgba(224, 186, 40, 0.52)",
+    background: "linear-gradient(135deg, #07182c, #0d2f55)",
+    color: "#ffffff",
+    borderRadius: "14px",
+    padding: "12px 16px",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(7, 24, 44, 0.18)",
+  },
+
+  missionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "14px",
+    marginBottom: "18px",
+  },
+
+  missionCard: {
+    display: "grid",
+    gridTemplateColumns: "44px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "12px",
+    padding: "15px",
+    borderRadius: "20px",
+    background: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(226,232,240,0.95)",
+    boxShadow: "0 16px 34px rgba(15, 23, 42, 0.07)",
+  },
+
+  missionIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "15px",
+    display: "grid",
+    placeItems: "center",
+    background: "linear-gradient(135deg, rgba(224, 186, 40, 0.18), rgba(22, 71, 119, 0.10))",
+    fontSize: "22px",
+  },
+
+  missionLabel: {
+    display: "block",
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+
+  missionValue: {
+    display: "block",
+    marginTop: "4px",
+    color: "#07182c",
+    fontSize: "18px",
+    fontWeight: "950",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+
+  missionNote: {
+    display: "block",
+    marginTop: "3px",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: "800",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
 
   executiveGrid: {
@@ -1685,6 +1823,11 @@ const styles = {
     gridTemplateColumns: "180px minmax(0, 1fr)",
     gap: "18px",
     alignItems: "center",
+  },
+
+  scoreBodyMobile: {
+    gridTemplateColumns: "1fr",
+    placeItems: "center",
   },
 
   scoreRing: {
