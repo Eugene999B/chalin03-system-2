@@ -569,7 +569,7 @@ export default function CustomerStatementPage() {
           <div style={styles.fileCard}>
             <span>🗂️</span>
             <div>
-              <strong>{statement ? "Statement Open " : "No File Open "}</strong>
+              <strong>{statement ? "Statement Open " : "No File Open. "}</strong>
               <small>{statement?.customer?.name || "Search customer first"}</small>
             </div>
           </div>
