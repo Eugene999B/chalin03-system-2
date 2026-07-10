@@ -727,10 +727,10 @@ export default function StockTransfersPage() {
         </div>
 
         <div style={styles.heroMetrics}>
-          <HeroMetric label="Requested" value={transferDashboard.requested} />
-          <HeroMetric label="Approved" value={transferDashboard.approved} />
-          <HeroMetric label="Dispatched" value={transferDashboard.dispatched} />
-          <HeroMetric label="Received" value={transferDashboard.received} />
+          <HeroMetric label="Requested :" value={transferDashboard.requested} />
+          <HeroMetric label="Approved : " value={transferDashboard.approved} />
+          <HeroMetric label="Dispatched :" value={transferDashboard.dispatched} />
+          <HeroMetric label="Received : " value={transferDashboard.received} />
         </div>
       </section>
 

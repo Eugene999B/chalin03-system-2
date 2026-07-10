@@ -873,7 +873,7 @@ export default function ProductsPage() {
 
           <div style={styles.heroMetrics}>
             <HeroMetric
-              label="Products :"
+              label="Products : "
               value={formatNumber(productSummary.totalProducts)}
             />
             <HeroMetric
@@ -881,7 +881,7 @@ export default function ProductsPage() {
               value={`${productSummary.stockHealth}%`}
             />
             <HeroMetric
-              label="Stock Value :"
+              label="Stock Value : "
               value={formatCompactMoney(productSummary.stockSellingValue)}
             />
             <HeroMetric

@@ -695,8 +695,8 @@ export default function SalesHistoryPage() {
           </div>
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
-            <HeroMetric label="Valid Sales :" value={summary.activeCount} />
-            <HeroMetric label="Sales Value " value={formatCompactMoney(summary.totalSales)} />
+            <HeroMetric label="Valid Sales : " value={summary.activeCount} />
+            <HeroMetric label="Sales Value : " value={formatCompactMoney(summary.totalSales)} />
             <HeroMetric label="Paid : " value={formatCompactMoney(summary.totalPaid)} />
             <HeroMetric label="Balance : " value={formatCompactMoney(summary.totalBalance)} />
           </div>
