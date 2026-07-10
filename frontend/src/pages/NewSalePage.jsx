@@ -53,7 +53,7 @@ export default function NewSalePage() {
   const businessPhone = "0249469080 / 0249995510";
   const momoNumber = "0543421127";
   const receiptFooter = "Thank You For Coming";
-  const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
+  const policyText = "IN GOD, WE TRUST";
 
   function getReceiptBusinessName(receiptData) {
     return receiptData?.business_name || businessName;
