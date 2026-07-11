@@ -33,6 +33,22 @@ function toPositiveInt(value) {
   return number;
 }
 
+
+function getProductSearchInfo(productSearchValue, productIdValue) {
+  const productText = cleanText(productSearchValue);
+  const explicitProductId = toPositiveInt(Number(productIdValue));
+  const textAsNumber = Number(productText);
+  const textProductId =
+    Number.isInteger(textAsNumber) && textAsNumber > 0 ? textAsNumber : null;
+
+  return {
+    text: productText,
+    like: productText ? `%${productText}%` : null,
+    productId: explicitProductId || textProductId || -1,
+    active: Boolean(productText || explicitProductId),
+  };
+}
+
 function cleanText(value) {
   if (value === undefined || value === null) {
     return null;
@@ -795,7 +811,62 @@ router.get("/", requireAuth, async (req, res) => {
       return;
     }
 
-    const { search, from, to } = req.query;
+    const { search, from, to, product_search, product_id } = req.query;
+    const cleanSearch = cleanText(search);
+    const productFilter = getProductSearchInfo(product_search, product_id);
+
+    const params = [];
+
+    const matchedProductSelect = productFilter.active
+      ? `
+        (
+          SELECT GROUP_CONCAT(
+            CONCAT(si_match.product_name, ' x', si_match.quantity)
+            ORDER BY si_match.id
+            SEPARATOR ', '
+          )
+          FROM sale_items si_match
+          WHERE si_match.sale_id = s.id
+          AND (
+            si_match.product_name LIKE ?
+            OR si_match.product_id = ?
+          )
+        ) AS matched_products,
+        (
+          SELECT COALESCE(SUM(si_match.quantity), 0)
+          FROM sale_items si_match
+          WHERE si_match.sale_id = s.id
+          AND (
+            si_match.product_name LIKE ?
+            OR si_match.product_id = ?
+          )
+        ) AS matched_product_quantity,
+        (
+          SELECT COALESCE(SUM(si_match.line_total), 0)
+          FROM sale_items si_match
+          WHERE si_match.sale_id = s.id
+          AND (
+            si_match.product_name LIKE ?
+            OR si_match.product_id = ?
+          )
+        ) AS matched_product_total,
+      `
+      : `
+        NULL AS matched_products,
+        0 AS matched_product_quantity,
+        0 AS matched_product_total,
+      `;
+
+    if (productFilter.active) {
+      params.push(
+        productFilter.like,
+        productFilter.productId,
+        productFilter.like,
+        productFilter.productId,
+        productFilter.like,
+        productFilter.productId
+      );
+    }
 
     let sql = `
       SELECT
@@ -820,7 +891,32 @@ router.get("/", requireAuth, async (req, res) => {
         s.voided_at,
         s.created_at,
         u.full_name AS staff_name,
-        vu.full_name AS voided_by_name
+        vu.full_name AS voided_by_name,
+        (
+          SELECT GROUP_CONCAT(
+            CONCAT(si_all.product_name, ' x', si_all.quantity)
+            ORDER BY si_all.id
+            SEPARATOR ', '
+          )
+          FROM sale_items si_all
+          WHERE si_all.sale_id = s.id
+        ) AS sold_products,
+        (
+          SELECT COALESCE(SUM(si_all.quantity), 0)
+          FROM sale_items si_all
+          WHERE si_all.sale_id = s.id
+        ) AS total_items_sold,
+        (
+          SELECT COALESCE(SUM(si_all.line_total), 0)
+          FROM sale_items si_all
+          WHERE si_all.sale_id = s.id
+        ) AS total_items_value,
+        ${matchedProductSelect}
+        CASE
+          WHEN s.is_voided = 1 OR s.sale_status IN ('cancelled', 'voided')
+          THEN 1
+          ELSE 0
+        END AS sale_is_voided
       FROM sales s
       LEFT JOIN branches b ON s.branch_id = b.id
       LEFT JOIN users u ON s.staff_id = u.id
@@ -828,19 +924,41 @@ router.get("/", requireAuth, async (req, res) => {
       WHERE s.branch_id = ?
     `;
 
-    const params = [branchId];
+    params.push(branchId);
 
-    if (search) {
+    if (cleanSearch) {
       sql += `
         AND (
           s.receipt_number LIKE ?
           OR s.customer_name LIKE ?
           OR s.customer_phone LIKE ?
+          OR EXISTS (
+            SELECT 1
+            FROM sale_items si_search
+            WHERE si_search.sale_id = s.id
+            AND si_search.product_name LIKE ?
+          )
         )
       `;
 
-      const searchValue = `%${search}%`;
-      params.push(searchValue, searchValue, searchValue);
+      const searchValue = `%${cleanSearch}%`;
+      params.push(searchValue, searchValue, searchValue, searchValue);
+    }
+
+    if (productFilter.active) {
+      sql += `
+        AND EXISTS (
+          SELECT 1
+          FROM sale_items si_filter
+          WHERE si_filter.sale_id = s.id
+          AND (
+            si_filter.product_name LIKE ?
+            OR si_filter.product_id = ?
+          )
+        )
+      `;
+
+      params.push(productFilter.like, productFilter.productId);
     }
 
     if (from) {
@@ -853,15 +971,46 @@ router.get("/", requireAuth, async (req, res) => {
       params.push(to);
     }
 
-    sql += ` ORDER BY s.created_at DESC LIMIT 100`;
+    sql += ` ORDER BY s.created_at DESC LIMIT 250`;
 
     const [sales] = await pool.query(sql, params);
+
+    const activeSales = sales.filter(
+      (sale) =>
+        Number(sale.is_voided || sale.sale_is_voided || 0) !== 1 &&
+        !["cancelled", "voided"].includes(
+          String(sale.sale_status || "").toLowerCase()
+        )
+    );
+
+    const productSummary = productFilter.active
+      ? {
+          product_search: productFilter.text || String(product_id || ""),
+          receipt_count: activeSales.length,
+          quantity_sold: activeSales.reduce(
+            (sum, sale) => sum + Number(sale.matched_product_quantity || 0),
+            0
+          ),
+          sales_value: activeSales.reduce(
+            (sum, sale) => sum + Number(sale.matched_product_total || 0),
+            0
+          ),
+        }
+      : null;
 
     return res.json({
       status: "success",
       branch_id: branchId,
       branch: getBranchInfo(req),
       count: sales.length,
+      filters: {
+        search: cleanSearch || "",
+        from: from || "",
+        to: to || "",
+        product_search: productFilter.text || "",
+        product_id: product_id || "",
+      },
+      product_summary: productSummary,
       sales,
     });
   } catch (error) {

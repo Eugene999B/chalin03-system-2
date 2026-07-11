@@ -34,6 +34,7 @@ export default function SalesHistoryPage() {
   const [selectedDebt, setSelectedDebt] = useState(null);
 
   const [search, setSearch] = useState("");
+  const [productSearch, setProductSearch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -173,6 +174,7 @@ export default function SalesHistoryPage() {
 
     const filters = customFilters || {
       search,
+      product_search: productSearch,
       from,
       to,
     };
@@ -593,11 +595,13 @@ export default function SalesHistoryPage() {
 
   function clearFilters() {
     setSearch("");
+    setProductSearch("");
     setFrom("");
     setTo("");
 
     loadSales({
       search: "",
+      product_search: "",
       from: "",
       to: "",
     });
@@ -606,6 +610,7 @@ export default function SalesHistoryPage() {
   useEffect(() => {
     loadSales({
       search: "",
+      product_search: "",
       from: "",
       to: "",
     });
@@ -650,6 +655,30 @@ export default function SalesHistoryPage() {
       0
     );
 
+    const productFilterActive = productSearch.trim().length > 0;
+
+    const productQuantity = activeSales.reduce(
+      (sum, sale) =>
+        sum +
+        Number(
+          productFilterActive
+            ? sale.matched_product_quantity || 0
+            : sale.total_items_sold || 0
+        ),
+      0
+    );
+
+    const productValue = activeSales.reduce(
+      (sum, sale) =>
+        sum +
+        Number(
+          productFilterActive
+            ? sale.matched_product_total || 0
+            : sale.total_items_value || 0
+        ),
+      0
+    );
+
     return {
       activeCount: activeSales.length,
       voidedCount: voidedSales.length,
@@ -657,17 +686,86 @@ export default function SalesHistoryPage() {
       totalPaid,
       totalBalance,
       totalDiscount,
+      productFilterActive,
+      productQuantity,
+      productValue,
     };
-  }, [sales]);
+  }, [sales, productSearch]);
 
   const oneColumn = isMobile ? styles.oneColumn : {};
   const compactHero = isMobile ? styles.heroMobile : {};
   const compactHeroTitle = isMobile ? styles.heroTitleMobile : {};
   const compactFilterGrid = isMobile ? styles.filterGridMobile : {};
   const compactModalActions = isMobile ? styles.modalActionsMobile : {};
+  const compactStoreNotice = isMobile ? styles.storeNoticeMobile : {};
+  const compactPanel = isMobile ? styles.panelMobile : {};
+  const compactSaleCardMain = isMobile ? styles.saleCardMainMobile : {};
+  const compactSaleAmountBox = isMobile ? styles.saleAmountBoxMobile : {};
+  const compactCardActions = isMobile ? styles.cardActionsMobile : {};
 
   return (
-    <div style={styles.page}>
+    <div className="sales-history-mobile-safe" style={styles.page}>
+      <style>{`
+        @media (max-width: 760px) {
+          .sales-history-mobile-safe {
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+          }
+
+          .sales-history-mobile-safe *,
+          .sales-history-mobile-safe *::before,
+          .sales-history-mobile-safe *::after {
+            box-sizing: border-box !important;
+          }
+
+          .sales-history-mobile-safe section,
+          .sales-history-mobile-safe article,
+          .sales-history-mobile-safe div {
+            max-width: 100% !important;
+          }
+
+          .sales-history-mobile-safe input,
+          .sales-history-mobile-safe button,
+          .sales-history-mobile-safe select {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: 44px !important;
+            font-size: 16px !important;
+          }
+
+          .sales-history-mobile-safe button {
+            white-space: normal !important;
+          }
+
+          .sales-history-mobile-safe h1,
+          .sales-history-mobile-safe h2,
+          .sales-history-mobile-safe h3,
+          .sales-history-mobile-safe p,
+          .sales-history-mobile-safe span,
+          .sales-history-mobile-safe strong,
+          .sales-history-mobile-safe small {
+            overflow-wrap: anywhere !important;
+          }
+
+          .sales-history-mobile-safe table {
+            min-width: 680px !important;
+            font-size: 12px !important;
+          }
+
+          .sales-history-mobile-safe th,
+          .sales-history-mobile-safe td {
+            white-space: nowrap !important;
+            padding: 10px 9px !important;
+          }
+
+          .sales-history-mobile-safe label {
+            display: block !important;
+            margin-bottom: 6px !important;
+          }
+        }
+      `}</style>
       <div style={{ ...styles.hero, ...compactHero }}>
         <div style={styles.heroGlowOne} />
         <div style={styles.heroGlowTwo} />
@@ -703,7 +801,7 @@ export default function SalesHistoryPage() {
         </div>
       </div>
 
-      <div style={styles.storeNotice}>
+      <div style={{ ...styles.storeNotice, ...compactStoreNotice }}>
         <span style={styles.noticeIcon}>🏬</span>
         <div>
           <strong>
@@ -744,6 +842,16 @@ export default function SalesHistoryPage() {
           tone="green"
         />
 
+        {summary.productFilterActive && (
+          <SummaryCard
+            icon="🔎"
+            title="Product Found"
+            value={`${summary.productQuantity} unit(s)`}
+            note={`Matched value: GHS ${formatMoney(summary.productValue)}`}
+            tone="blue"
+          />
+        )}
+
         <SummaryCard
           icon="⚠️"
           title="Outstanding"
@@ -753,18 +861,29 @@ export default function SalesHistoryPage() {
         />
       </div>
 
-      <section style={styles.panel}>
+      <section style={{ ...styles.panel, ...compactPanel }}>
         <div style={styles.panelHeader}>
           <div>
             <p style={styles.eyebrowDark}>Search & Audit</p>
             <h2 style={styles.panelTitle}>Filter Sales - {currentStoreCode}</h2>
             <p style={styles.panelSubtitle}>
-              Search by receipt number, customer name or phone number.
+              Search by receipt number, customer name, phone number, or a
+              particular product name. Add a date range to pull that product's
+              sales history for the selected store.
             </p>
           </div>
         </div>
 
         <div style={{ ...styles.filterGrid, ...compactFilterGrid }}>
+          <div>
+            <label>Product name / product ID</label>
+            <input
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              placeholder="Example: Brake Pad or 12"
+            />
+          </div>
+
           <div>
             <label>Search receipt/customer/phone</label>
             <input
@@ -804,13 +923,16 @@ export default function SalesHistoryPage() {
         </div>
       </section>
 
-      <section style={styles.panelLarge}>
+      <section style={{ ...styles.panelLarge, ...compactPanel }}>
         <div style={styles.panelHeader}>
           <div>
             <p style={styles.eyebrowDark}>Receipt List</p>
             <h2 style={styles.panelTitle}>Sales List - {currentStoreCode}</h2>
             <p style={styles.panelSubtitle}>
               Open a receipt to reprint, download PDF or void the sale.
+              {summary.productFilterActive
+                ? ` Product filter active: ${productSearch}.`
+                : ""}
             </p>
           </div>
 
@@ -834,7 +956,7 @@ export default function SalesHistoryPage() {
                     ...(voided ? styles.saleCardVoided : {}),
                   }}
                 >
-                  <div style={styles.saleCardMain}>
+                  <div style={{ ...styles.saleCardMain, ...compactSaleCardMain }}>
                     <div>
                       <div style={styles.receiptRow}>
                         <strong>{sale.receipt_number}</strong>
@@ -858,9 +980,27 @@ export default function SalesHistoryPage() {
                         {formatPaymentMethod(sale.payment_type)} •{" "}
                         {formatDateTime(sale.created_at)}
                       </small>
+
+                      {sale.sold_products && (
+                        <p style={styles.productLine}>
+                          <strong>Items sold:</strong> {sale.sold_products}
+                        </p>
+                      )}
+
+                      {productSearch.trim() && sale.matched_products && (
+                        <div style={styles.productMatchBox}>
+                          <strong>Product match:</strong>{" "}
+                          {sale.matched_products}
+                          <br />
+                          <span>
+                            Qty: {Number(sale.matched_product_quantity || 0)} •
+                            Value: GHS {formatMoney(sale.matched_product_total)}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    <div style={styles.saleAmountBox}>
+                    <div style={{ ...styles.saleAmountBox, ...compactSaleAmountBox }}>
                       <span>Total</span>
                       <strong>GHS {formatMoney(sale.total)}</strong>
                       <small>
@@ -880,7 +1020,7 @@ export default function SalesHistoryPage() {
                     <MiniStat label="Date" value={formatReceiptDate(sale.created_at)} />
                   </div>
 
-                  <div style={styles.cardActions}>
+                  <div style={{ ...styles.cardActions, ...compactCardActions }}>
                     <button type="button" onClick={() => viewReceipt(sale.id)}>
                       View Receipt
                     </button>
@@ -1362,7 +1502,7 @@ const styles = {
 
   filterGrid: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 2fr) 1fr 1fr auto",
+    gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1.4fr) 1fr 1fr auto",
     gap: "12px",
     alignItems: "end",
   },
@@ -1477,6 +1617,59 @@ const styles = {
     gap: "8px",
     flexWrap: "wrap",
     marginTop: "14px",
+  },
+
+
+  panelMobile: {
+    padding: "15px",
+    borderRadius: "18px",
+  },
+
+  storeNoticeMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    padding: "13px",
+    borderRadius: "16px",
+  },
+
+  saleCardMainMobile: {
+    gridTemplateColumns: "1fr",
+  },
+
+  saleAmountBoxMobile: {
+    minWidth: 0,
+    textAlign: "left",
+    width: "100%",
+    paddingTop: "10px",
+    borderTop: "1px solid #e2e8f0",
+  },
+
+  cardActionsMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+  },
+
+  productLine: {
+    margin: "10px 0 0",
+    padding: "10px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    color: "#334155",
+    fontSize: "13px",
+    lineHeight: 1.45,
+  },
+
+  productMatchBox: {
+    marginTop: "10px",
+    padding: "10px",
+    borderRadius: "14px",
+    background: "linear-gradient(135deg, #ecfeff, #f0fdf4)",
+    border: "1px solid #99f6e4",
+    color: "#0f766e",
+    fontSize: "13px",
+    lineHeight: 1.45,
+    fontWeight: "800",
   },
 
   receiptModal: {
