@@ -137,7 +137,9 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
         s.tax_amount,
         s.total,
         s.payment_type,
+        s.amount_tendered,
         s.amount_paid,
+        s.change_due,
         s.balance,
         s.sale_status,
         s.is_voided,
@@ -374,7 +376,16 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
     });
     y += 13;
 
+    addRow(doc, "Amount Tendered", formatMoney(sale.amount_tendered), y);
+    y += 12;
+
     addRow(doc, "Amount Paid", formatMoney(sale.amount_paid), y);
+    y += 12;
+
+    addRow(doc, "Change Due", formatMoney(sale.change_due), y, {
+      bold: Number(sale.change_due || 0) > 0,
+      fontSize: Number(sale.change_due || 0) > 0 ? 9 : 8,
+    });
     y += 12;
 
     addRow(doc, "Balance Outstanding", formatMoney(sale.balance), y);
