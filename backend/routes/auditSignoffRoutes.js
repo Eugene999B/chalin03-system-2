@@ -811,7 +811,7 @@ async function buildAuditReviewSummary(connection, req) {
         `
         SELECT
           COUNT(*) AS total_debts,
-          COALESCE(SUM(total_amount), 0) AS total_debt_amount,
+          COALESCE(SUM(amount_owed), 0) AS total_debt_amount,
           COALESCE(SUM(amount_paid), 0) AS total_debt_paid,
           COALESCE(SUM(balance), 0) AS total_debt_balance,
           COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_debt_count,
@@ -835,7 +835,7 @@ async function buildAuditReviewSummary(connection, req) {
         `
         SELECT
           COUNT(dp.id) AS total_debt_payments,
-          COALESCE(SUM(dp.amount_paid), 0) AS total_debt_payment_amount
+          COALESCE(SUM(dp.amount), 0) AS total_debt_payment_amount
         FROM debt_payments dp
         INNER JOIN debts d ON dp.debt_id = d.id
         WHERE ${debtPaymentWhere.join(" AND ")}

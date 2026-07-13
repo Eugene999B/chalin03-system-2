@@ -14,12 +14,35 @@ const router = express.Router();
 
 const tableColumnCache = {};
 
+const DEFAULT_WORKSPACE_CODE = "spare_parts";
+const WORKSPACE_CODES = new Set([
+  "spare_parts",
+  "mining",
+  "equipment_hire",
+]);
+
 function cleanText(value) {
   if (value === undefined || value === null) {
     return "";
   }
 
   return String(value).trim();
+}
+
+function normalizeWorkspaceCode(value) {
+  const cleaned = cleanText(value)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (!cleaned) {
+    return DEFAULT_WORKSPACE_CODE;
+  }
+
+  if (cleaned === "hire" || cleaned === "equipment") {
+    return "equipment_hire";
+  }
+
+  return WORKSPACE_CODES.has(cleaned) ? cleaned : null;
 }
 
 function cleanNumber(value, fallback = null) {
@@ -70,7 +93,7 @@ function boolValue(value) {
   return value === true || Number(value || 0) === 1;
 }
 
-function createToken(user, branch) {
+function createToken(user, branch, workspace) {
   const branchCode = branch?.branch_code || branch?.code || null;
   const branchName = branch?.name || branch?.branch_name || null;
   const branchLocation = branch?.location || branch?.branch_location || null;
@@ -81,11 +104,17 @@ function createToken(user, branch) {
       full_name: user.full_name,
       username: user.username,
       role: user.role,
+      workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
+      business_unit_id: workspace?.id || null,
+      business_unit_name: workspace?.name || "Spare Parts",
       branch_id: branch?.id || null,
       branch_code: branchCode,
       branch_name: branchName,
       branch_location: branchLocation,
-      can_access_all_branches: boolValue(user.can_access_all_branches),
+      can_access_all_branches:
+        workspace?.code === DEFAULT_WORKSPACE_CODE
+          ? boolValue(user.can_access_all_branches)
+          : false,
     },
     process.env.JWT_SECRET,
     {
@@ -277,10 +306,132 @@ async function resolveLoginBranch(user, requestedBranchId) {
   };
 }
 
-function buildUserResponse(user, branch) {
-  const branchCode = branch?.branch_code || branch?.code || null;
-  const branchName = branch?.name || branch?.branch_name || null;
-  const branchLocation = branch?.location || branch?.branch_location || null;
+async function getBusinessUnitByCode(workspaceCode) {
+  const normalizedCode = normalizeWorkspaceCode(workspaceCode);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const businessUnitsExist = await tableExists("business_units");
+
+  if (!businessUnitsExist) {
+    if (normalizedCode === DEFAULT_WORKSPACE_CODE) {
+      return {
+        id: null,
+        code: DEFAULT_WORKSPACE_CODE,
+        name: "Spare Parts",
+        is_enabled: true,
+      };
+    }
+
+    return null;
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, code, name, description, is_enabled
+     FROM business_units
+     WHERE code = ?
+     LIMIT 1`,
+    [normalizedCode]
+  );
+
+  if (rows.length === 0 || !boolValue(rows[0].is_enabled)) {
+    return null;
+  }
+
+  return rows[0];
+}
+
+async function userCanAccessWorkspace(user, workspace) {
+  if (!workspace) {
+    return false;
+  }
+
+  const role = cleanText(user.role).toLowerCase();
+
+  // Administrators manage all enabled business workspaces.
+  if (role === "admin") {
+    return true;
+  }
+
+  if (workspace.code === DEFAULT_WORKSPACE_CODE) {
+    return true;
+  }
+
+  const accessTableExists = await tableExists("user_business_access");
+
+  if (!accessTableExists || !workspace.id) {
+    return false;
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM user_business_access
+     WHERE user_id = ?
+       AND business_unit_id = ?
+       AND can_access = TRUE
+     LIMIT 1`,
+    [user.id, workspace.id]
+  );
+
+  return rows.length > 0;
+}
+
+async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
+  const workspaceCode = normalizeWorkspaceCode(requestedWorkspaceCode);
+
+  if (!workspaceCode) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: "The selected business workspace is invalid.",
+      workspace: null,
+    };
+  }
+
+  const workspace = await getBusinessUnitByCode(workspaceCode);
+
+  if (!workspace) {
+    return {
+      ok: false,
+      statusCode: 503,
+      message:
+        workspaceCode === DEFAULT_WORKSPACE_CODE
+          ? "Spare Parts workspace is not available."
+          : "This business workspace has not been enabled in the database.",
+      workspace: null,
+    };
+  }
+
+  const canAccess = await userCanAccessWorkspace(user, workspace);
+
+  if (!canAccess) {
+    return {
+      ok: false,
+      statusCode: 403,
+      message: `Your account does not have access to ${workspace.name}.`,
+      workspace: null,
+    };
+  }
+
+  return {
+    ok: true,
+    statusCode: 200,
+    message: "Workspace selected.",
+    workspace,
+  };
+}
+
+function buildUserResponse(user, branch, workspace) {
+  const isSpareParts = workspace?.code === DEFAULT_WORKSPACE_CODE;
+  const activeBranch = isSpareParts ? branch : null;
+  const branchCode =
+    activeBranch?.branch_code || activeBranch?.code || null;
+  const branchName =
+    activeBranch?.name || activeBranch?.branch_name || null;
+  const branchLocation =
+    activeBranch?.location || activeBranch?.branch_location || null;
 
   return {
     id: user.id,
@@ -288,25 +439,35 @@ function buildUserResponse(user, branch) {
     username: user.username,
     role: user.role,
     phone: user.phone,
-    default_branch_id: user.default_branch_id,
-    can_access_all_branches: boolValue(user.can_access_all_branches),
-    branch_id: branch?.id || null,
+    workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
+    business_unit_id: workspace?.id || null,
+    business_unit_name: workspace?.name || "Spare Parts",
+    active_workspace: {
+      id: workspace?.id || null,
+      code: workspace?.code || DEFAULT_WORKSPACE_CODE,
+      name: workspace?.name || "Spare Parts",
+    },
+    default_branch_id: isSpareParts ? user.default_branch_id : null,
+    can_access_all_branches: isSpareParts
+      ? boolValue(user.can_access_all_branches)
+      : false,
+    branch_id: activeBranch?.id || null,
     branch_code: branchCode,
     branch_name: branchName,
     branch_location: branchLocation,
-    branch_phone: branch?.phone || null,
-    selected_branch: branch
+    branch_phone: activeBranch?.phone || null,
+    selected_branch: activeBranch
       ? {
-          id: branch.id,
-          branch_id: branch.id,
+          id: activeBranch.id,
+          branch_id: activeBranch.id,
           code: branchCode,
           branch_code: branchCode,
           name: branchName,
           branch_name: branchName,
           location: branchLocation,
           branch_location: branchLocation,
-          phone: branch.phone,
-          is_head_office: boolValue(branch.is_head_office),
+          phone: activeBranch.phone,
+          is_head_office: boolValue(activeBranch.is_head_office),
         }
       : null,
   };
@@ -335,7 +496,7 @@ async function writeActivityLog(branchId, userId, action, details) {
   );
 }
 
-async function sendPasswordChangedSecuritySmsAlert({ user, branch }) {
+async function sendPasswordChangedSecuritySmsAlert({ user, branch, workspace }) {
   try {
     const branchId = branch?.id || user?.default_branch_id || 1;
 
@@ -351,9 +512,14 @@ async function sendPasswordChangedSecuritySmsAlert({ user, branch }) {
       branch?.branch_name ||
       "Selected Store";
 
+    const accessContext =
+      workspace?.code && workspace.code !== DEFAULT_WORKSPACE_CODE
+        ? workspace.name
+        : `${branchName} (${branchCode})`;
+
     const message = `${businessName}: Security alert. Password changed for user ${
       user.full_name || user.username
-    } (${user.username}) at ${branchName} (${branchCode}) on ${formatSecurityDateTime()}. If this was not expected, review the account immediately.`;
+    } (${user.username}) in ${accessContext} on ${formatSecurityDateTime()}. If this was not expected, review the account immediately.`;
 
     await sendOwnerSmsAlert({
       branchId,
@@ -371,6 +537,7 @@ router.post("/login", async (req, res) => {
   try {
     const username = cleanText(req.body.username);
     const password = req.body.password;
+    const workspaceCode = normalizeWorkspaceCode(req.body.workspace_code);
     const branchId = cleanNumber(req.body.branch_id, null);
 
     if (!username || !password) {
@@ -380,10 +547,25 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    if (!branchId) {
+    if (!workspaceCode) {
       return res.status(400).json({
         status: "error",
-        message: "Please choose a store before logging in.",
+        message: "Please choose a valid business workspace.",
+      });
+    }
+
+    if (workspaceCode === DEFAULT_WORKSPACE_CODE && !branchId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Please choose a Spare Parts store before logging in.",
+      });
+    }
+
+    if (workspaceCode !== DEFAULT_WORKSPACE_CODE && branchId) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Spare Parts stores cannot be used for Mining Operations or Equipment Hire.",
       });
     }
 
@@ -416,30 +598,53 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const branchResult = await resolveLoginBranch(user, branchId);
+    const workspaceResult = await resolveLoginWorkspace(user, workspaceCode);
 
-    if (!branchResult.ok) {
-      return res.status(branchResult.statusCode).json({
+    if (!workspaceResult.ok) {
+      return res.status(workspaceResult.statusCode).json({
         status: "error",
-        message: branchResult.message,
+        message: workspaceResult.message,
       });
     }
 
-    const selectedBranch = branchResult.branch;
-    const token = createToken(user, selectedBranch);
+    const workspace = workspaceResult.workspace;
+    let selectedBranch = null;
+
+    if (workspace.code === DEFAULT_WORKSPACE_CODE) {
+      const branchResult = await resolveLoginBranch(user, branchId);
+
+      if (!branchResult.ok) {
+        return res.status(branchResult.statusCode).json({
+          status: "error",
+          message: branchResult.message,
+        });
+      }
+
+      selectedBranch = branchResult.branch;
+    }
+
+    const token = createToken(user, selectedBranch, workspace);
+    const loginContext = selectedBranch
+      ? `${workspace.name} — ${selectedBranch.name}`
+      : workspace.name;
 
     await writeActivityLog(
-      selectedBranch.id,
+      selectedBranch?.id || null,
       user.id,
       "LOGIN",
-      `${user.username} logged in successfully to ${selectedBranch.name}`
+      `${user.username} logged in successfully to ${loginContext}`
     );
 
     return res.json({
       status: "success",
-      message: "Login successful.",
+      message: `Login successful. Opening ${workspace.name}.`,
       token,
-      user: buildUserResponse(user, selectedBranch),
+      workspace: {
+        id: workspace.id || null,
+        code: workspace.code,
+        name: workspace.name,
+      },
+      user: buildUserResponse(user, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -464,20 +669,55 @@ router.get("/me", requireAuth, async (req, res) => {
     }
 
     const user = users[0];
+    const workspaceCode =
+      normalizeWorkspaceCode(req.user.workspace_code) ||
+      DEFAULT_WORKSPACE_CODE;
+    const workspaceResult = await resolveLoginWorkspace(user, workspaceCode);
 
-    let selectedBranch = null;
-
-    if (req.user.branch_id) {
-      selectedBranch = await getBranchById(req.user.branch_id);
+    if (!workspaceResult.ok) {
+      return res.status(workspaceResult.statusCode).json({
+        status: "error",
+        message: workspaceResult.message,
+      });
     }
 
-    if (!selectedBranch) {
-      selectedBranch = await getDefaultBranchForUser(user);
+    const workspace = workspaceResult.workspace;
+    let selectedBranch = null;
+
+    if (workspace.code === DEFAULT_WORKSPACE_CODE) {
+      if (req.user.branch_id) {
+        selectedBranch = await getBranchById(req.user.branch_id);
+      }
+
+      if (!selectedBranch) {
+        selectedBranch = await getDefaultBranchForUser(user);
+      }
+
+      if (!selectedBranch) {
+        return res.status(400).json({
+          status: "error",
+          message: "Your Spare Parts session does not have an active store.",
+        });
+      }
+
+      const canAccess = await userCanAccessBranch(user, selectedBranch.id);
+
+      if (!canAccess) {
+        return res.status(403).json({
+          status: "error",
+          message: "You no longer have access to the selected store.",
+        });
+      }
     }
 
     return res.json({
       status: "success",
-      user: buildUserResponse(user, selectedBranch),
+      workspace: {
+        id: workspace.id || null,
+        code: workspace.code,
+        name: workspace.name,
+      },
+      user: buildUserResponse(user, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Me route error:", error);
@@ -567,29 +807,43 @@ router.post("/change-password", requireAuth, async (req, res) => {
       [newPasswordHash, user.id]
     );
 
+    const workspaceCode =
+      normalizeWorkspaceCode(req.user.workspace_code) ||
+      DEFAULT_WORKSPACE_CODE;
+    const workspace =
+      (await getBusinessUnitByCode(workspaceCode)) ||
+      (await getBusinessUnitByCode(DEFAULT_WORKSPACE_CODE));
+
     const selectedBranch =
-      (await getBranchById(req.user.branch_id)) ||
-      (await getDefaultBranchForUser(user));
+      workspace?.code === DEFAULT_WORKSPACE_CODE
+        ? (await getBranchById(req.user.branch_id)) ||
+          (await getDefaultBranchForUser(user))
+        : null;
 
     await writeActivityLog(
       selectedBranch?.id || null,
       user.id,
       "CHANGE_PASSWORD",
-      `${user.username} changed account password`
+      `${user.username} changed account password in ${
+        workspace?.name || "Chalin 03"
+      }`
     );
 
     await sendPasswordChangedSecuritySmsAlert({
       user,
-      branch: selectedBranch,
+      branch:
+        selectedBranch ||
+        (await getDefaultBranchForUser(user)),
+      workspace,
     });
 
-    const token = createToken(user, selectedBranch);
+    const token = createToken(user, selectedBranch, workspace);
 
     return res.json({
       status: "success",
       message: "Password changed successfully.",
       token,
-      user: buildUserResponse(user, selectedBranch),
+      user: buildUserResponse(user, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Change password error:", error);

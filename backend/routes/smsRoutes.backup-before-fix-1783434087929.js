@@ -373,7 +373,7 @@ async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
       provider_response: providerResponse,
     };
   }
-}) {
+} {
   const normalizedPhone = normalizeGhanaPhone(phone);
 
   if (!normalizedPhone) {

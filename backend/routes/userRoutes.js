@@ -104,14 +104,14 @@ async function ensureUserRoleSupportsAuditor(connection = pool) {
   const roleColumn = columns[0];
   const roleType = String(roleColumn.Type || "").toLowerCase();
 
-  // Live MySQL can have role as ENUM('admin','manager','cashier').
-  // If we insert "auditor" before expanding the enum, MySQL throws:
+  // Live MySQL can have older role enums.
+  // If we insert a newer role before expanding the enum, MySQL throws:
   // Data truncated for column 'role'.
   if (roleType.startsWith("enum(")) {
-    if (!roleType.includes("'auditor'")) {
+    if (!roleType.includes("'staff'") || !roleType.includes("'auditor'")) {
       await connection.query(`
         ALTER TABLE users
-        MODIFY role ENUM('admin', 'manager', 'cashier', 'auditor') NOT NULL DEFAULT 'cashier'
+        MODIFY role ENUM('admin', 'manager', 'staff', 'cashier', 'auditor') NOT NULL DEFAULT 'cashier'
       `);
     }
 

@@ -29,6 +29,13 @@ const branchRoutes = require("./routes/branchRoutes");
 const smsRoutes = require("./routes/smsRoutes");
 const accountingIntelligenceRoutes = require("./routes/accountingIntelligenceRoutes");
 const stockTransferRoutes = require("./routes/stockTransferRoutes");
+const fleetRoutes = require("./routes/fleetRoutes");
+const miningRoutes = require("./routes/miningRoutes");
+const equipmentHireRoutes = require("./routes/equipmentHireRoutes");
+const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
+const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
+const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
+const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 
 const app = express();
 
@@ -137,6 +144,12 @@ app.get("/api", (req, res) => {
       "/api/audit-unlock-requests",
       "/api/sms",
       "/api/debug/sms-env",
+      "/api/fleet",
+      "/api/mining",
+      "/api/equipment-hire",
+      "/api/operations-documents",
+      "/api/group-executive",
+      "/api/workspace-admin",
     ],
   });
 });
@@ -169,6 +182,13 @@ app.use("/api/audit-unlock-requests", auditUnlockRequestRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/accounting-intelligence", accountingIntelligenceRoutes);
 app.use("/api/stock-transfers", stockTransferRoutes);
+app.use("/api/fleet", fleetRoutes);
+app.use("/api/mining", miningRoutes);
+app.use("/api/equipment-hire", equipmentHireRoutes);
+app.use("/api/operations-documents", operationsDocumentRoutes);
+app.use("/api/group-executive", groupExecutiveRoutes);
+app.use("/api/workspace-admin", workspaceAdminRoutes);
+app.use("/api/workspace-context", workspaceContextRoutes);
 
 
 app.use((req, res) => {

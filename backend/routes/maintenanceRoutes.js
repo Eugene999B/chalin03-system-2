@@ -19,9 +19,8 @@ const SYSTEM_ADMIN_USERNAME = process.env.SYSTEM_ADMIN_USERNAME || "admin";
   It clears records for all stores, not only the selected store.
 
   Protected tables are kept:
-  - branches
-  - users
-  - user_branch_access
+  - branches and group business units/locations
+  - users and branch/business access
   - settings
 
   Newly included business data areas:
@@ -29,6 +28,8 @@ const SYSTEM_ADMIN_USERNAME = process.env.SYSTEM_ADMIN_USERNAME || "admin";
   - stock adjustments
   - stock movement ledger source records are cleared through their source tables
   - accounting/audit intelligence tables when they exist
+  - shared fleet, meter, fuel, maintenance, and inspection records
+  - mining sites, daily logs, production, equipment, fuel, expenses, and incidents
   - WhatsApp/receipt notification logs when they exist
 */
 
@@ -83,6 +84,35 @@ const TABLES_TO_CLEAR = [
   // Stock adjustment records.
   "stock_adjustments",
 
+  // Equipment Hire records must be cleared before Shared Fleet assets.
+  "hire_return_inspections",
+  "hire_payments",
+  "hire_invoice_lines",
+  "hire_invoices",
+  "hire_work_logs",
+  "hire_dispatches",
+  "hire_contract_assets",
+  "hire_contracts",
+  "hire_quotations",
+  "hire_enquiries",
+  "hire_customers",
+
+  // Mining operational records must be cleared before mining sites and fleet assets.
+  "mining_incidents",
+  "mining_expenses",
+  "mining_fuel_logs",
+  "mining_equipment_logs",
+  "mining_production_records",
+  "mining_daily_logs",
+  "mining_sites",
+
+  // Shared fleet operational records.
+  "fleet_meter_readings",
+  "fleet_fuel_logs",
+  "fleet_maintenance_records",
+  "fleet_inspections",
+  "fleet_assets",
+
   // Master business records. These are cleared only before real operation starts.
   "customers",
   "suppliers",
@@ -91,8 +121,13 @@ const TABLES_TO_CLEAR = [
 
 const PROTECTED_TABLES = [
   "branches",
+  "business_units",
+  "business_locations",
   "users",
   "user_branch_access",
+  "user_business_access",
+  "user_mining_site_access",
+  "user_hire_location_access",
   "settings",
   "sms_templates",
   "business_settings",
@@ -422,7 +457,7 @@ router.delete(
         before_counts: beforeCounts,
         after_counts: afterCounts,
         note:
-          "Stock movement ledger records are cleared through their source records: sales, purchases, returns, stock transfers and stock adjustments.",
+          "Stock movement ledger records are cleared through their source records. Shared fleet and Mining Operations records are also included when those tables exist.",
       });
     } catch (error) {
       await connection.rollback();
