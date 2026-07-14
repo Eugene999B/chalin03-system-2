@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
+import {
+  HIRE_ACTION_PERMISSIONS,
+  canUseHireAction,
+} from "../security/permissionRules";
 import "../styles/equipmentHire.css";
 
 const TABS = [
@@ -371,7 +375,7 @@ const createReportsData = () => ({
 });
 
 export default function EquipmentHireOperationsPage({ section = "overview" }) {
-  const { user } = useAuth();
+  const { effectivePermissions, hasAnyPermission } = useAuth();
   const {
     options: hireLocationOptions,
     selectedContextId,
@@ -379,8 +383,22 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
     automaticAccess,
     loading: contextLoading,
   } = useWorkspaceContext();
-  const role = String(user?.role || "").toLowerCase();
-  const canEdit = role === "admin" || role === "manager";
+  const hireMutationPermissions = Object.values(HIRE_ACTION_PERMISSIONS).filter(Boolean);
+  const canEdit = hasAnyPermission(hireMutationPermissions);
+  const canManageCustomer = canUseHireAction(effectivePermissions, "customer");
+  const canManageEnquiry = canUseHireAction(effectivePermissions, "enquiry");
+  const canManageQuotation = canUseHireAction(effectivePermissions, "quotation");
+  const canApproveQuotation = canUseHireAction(effectivePermissions, "quotationApprove");
+  const canManageContract = canUseHireAction(effectivePermissions, "contract");
+  const canManageAssignment = canUseHireAction(effectivePermissions, "assignment");
+  const canManageDispatch = canUseHireAction(effectivePermissions, "dispatch");
+  const canManageWorkLog = canUseHireAction(effectivePermissions, "work_log");
+  const canApproveWorkLog = canUseHireAction(effectivePermissions, "workLogApprove");
+  const canManageInvoice = canUseHireAction(effectivePermissions, "invoice");
+  const canManagePayment = canUseHireAction(effectivePermissions, "payment");
+  const canManageReturn = canUseHireAction(effectivePermissions, "return");
+  const canCloseOperational = canUseHireAction(effectivePermissions, "operationalClose");
+  const canCloseFinancial = canUseHireAction(effectivePermissions, "financialClose");
   const requestedSection = TABS.some(([code]) => code === section)
     ? section
     : "overview";
@@ -601,6 +619,15 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
     setFormMode("");
   }
 
+  function guardPermission(allowed, message = "Your account cannot perform this Equipment Hire action.") {
+    if (allowed) {
+      return true;
+    }
+
+    notify("error", message);
+    return false;
+  }
+
   async function performSave(saveFunction, successMessage) {
     setSaving(true);
     try {
@@ -617,6 +644,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitCustomer(event) {
     event.preventDefault();
+    if (!guardPermission(canManageCustomer)) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/customers", customerForm),
       "Hire customer saved successfully."
@@ -626,6 +654,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitEnquiry(event) {
     event.preventDefault();
+    if (!guardPermission(canManageEnquiry)) return;
     const enquiryId = enquiryForm.id;
     await performSave(
       () =>
@@ -644,6 +673,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitQuotation(event) {
     event.preventDefault();
+    if (!guardPermission(canManageQuotation)) return;
     const quotationId = quotationForm.id;
     await performSave(
       () =>
@@ -662,6 +692,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitContract(event) {
     event.preventDefault();
+    if (!guardPermission(canManageContract)) return;
     await performSave(
       () =>
         axiosClient.post("/equipment-hire/contracts", {
@@ -675,6 +706,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitAssignment(event) {
     event.preventDefault();
+    if (!guardPermission(canManageAssignment)) return;
     await performSave(
       () =>
         axiosClient.post(
@@ -688,6 +720,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitDispatch(event) {
     event.preventDefault();
+    if (!guardPermission(canManageDispatch)) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/dispatches", dispatchForm),
       "Equipment dispatch saved successfully."
@@ -697,6 +730,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitWorkLog(event) {
     event.preventDefault();
+    if (!guardPermission(canManageWorkLog)) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/work-logs", workLogForm),
       "Hire work log saved successfully."
@@ -706,6 +740,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitInvoice(event) {
     event.preventDefault();
+    if (!guardPermission(canManageInvoice)) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/invoices", invoiceForm),
       "Hire invoice created successfully."
@@ -715,6 +750,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitPayment(event) {
     event.preventDefault();
+    if (!guardPermission(canManagePayment)) return;
     if (!window.confirm("Record this payment and update the invoice balance?")) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/payments", paymentForm),
@@ -725,6 +761,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
   async function submitReturn(event) {
     event.preventDefault();
+    if (!guardPermission(canManageReturn)) return;
     if (!window.confirm("Complete this return inspection and update Fleet status?")) return;
     await performSave(
       () => axiosClient.post("/equipment-hire/returns", returnForm),
@@ -734,6 +771,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function voidInvoice(invoice) {
+    if (!guardPermission(canManageInvoice)) return;
     if (!window.confirm(`Void invoice ${invoice.invoice_number}?`)) return;
     setSaving(true);
     try {
@@ -748,6 +786,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function closeContract(contract) {
+    if (!guardPermission(canCloseOperational || canCloseFinancial)) return;
     const notes = window.prompt(
       `Close contract ${contract.contract_number}? Outstanding balances will remain visible.`,
       ""
@@ -756,7 +795,11 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
     setSaving(true);
     try {
-      await axiosClient.patch(`/equipment-hire/contracts/${contract.id}/close`, {
+      const closePath =
+        canCloseOperational
+          ? `/equipment-hire/contracts/${contract.id}/close`
+          : `/equipment-hire/contracts/${contract.id}/financial-close`;
+      await axiosClient.patch(closePath, {
         closure_notes: notes,
       });
       notify("success", "Contract closed.");
@@ -769,6 +812,21 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function updateStatus(path, status, confirmation) {
+    const isQuotationPath = path.includes("/quotations/");
+    const isWorkLogPath = path.includes("/work-logs/");
+    const allowed = isQuotationPath
+      ? status === "approved" || status === "rejected"
+        ? canApproveQuotation
+        : canManageQuotation
+      : isWorkLogPath
+      ? canApproveWorkLog
+      : path.includes("/contracts/")
+      ? canManageContract
+      : path.includes("/enquiries/")
+      ? canManageEnquiry
+      : canEdit;
+
+    if (!guardPermission(allowed)) return;
     if (!window.confirm(confirmation)) return;
     setSaving(true);
     try {
@@ -783,6 +841,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function convertEnquiryToQuotation(enquiry) {
+    if (!guardPermission(canManageEnquiry && canManageQuotation)) return;
     if (!window.confirm(`Create a draft quotation from ${enquiry.enquiry_number}?`)) return;
     setSaving(true);
     try {
@@ -798,6 +857,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function convertQuotationToContract(quote) {
+    if (!guardPermission(canManageContract)) return;
     if (!window.confirm(`Create a hire contract from ${quote.quotation_number}?`)) return;
     setSaving(true);
     try {
@@ -813,6 +873,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   }
 
   async function removeAssignment(assignment) {
+    if (!guardPermission(canManageAssignment)) return;
     if (!window.confirm(`Remove ${assignment.asset_code} before dispatch?`)) return;
     setSaving(true);
     try {
@@ -940,6 +1001,10 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
   ]);
 
   function openForm(mode, seed = {}) {
+    if (!guardPermission(canUseHireAction(effectivePermissions, mode))) {
+      return;
+    }
+
     const locationRequiredModes = new Set([
       "enquiry",
       "quotation",
@@ -996,6 +1061,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
 
     const action = actions[activeTab];
     if (!action) return null;
+    if (!canUseHireAction(effectivePermissions, action[0])) return null;
 
     return (
       <button className="hire-btn hire-btn--primary" onClick={() => openForm(action[0])}>
@@ -2840,7 +2906,8 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
       {activeTab === "enquiries" ? (
         <EnquiriesTable
           enquiries={enquiries}
-          canEdit={canEdit}
+          canEdit={canManageEnquiry}
+          canConvert={canManageEnquiry && canManageQuotation}
           onEdit={editEnquiry}
           onConvert={convertEnquiryToQuotation}
           onStatus={(id, status) =>
@@ -2858,7 +2925,10 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
       {activeTab === "quotations" ? (
         <QuotationsTable
           quotations={quotations}
-          canEdit={canEdit}
+          canEdit={canManageQuotation || canApproveQuotation || canManageContract}
+          canManage={canManageQuotation}
+          canApprove={canApproveQuotation}
+          canConvert={canManageContract}
           onEdit={editQuotation}
           onConvert={convertQuotationToContract}
           onStatus={(id, status) =>
@@ -2874,7 +2944,9 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
       {activeTab === "contracts" ? (
         <ContractsTable
           contracts={contracts}
-          canEdit={canEdit}
+          canEdit={canManageContract || canManageAssignment}
+          canAssign={canManageAssignment}
+          canChangeStatus={canManageContract}
           onAssign={(contract) =>
             openForm("assignment", { contract_id: String(contract.id) })
           }
@@ -2893,7 +2965,11 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
           assignments={assignments}
           dispatches={dispatches}
           workLogs={workLogs}
-          canEdit={canEdit}
+          canEdit={canManageAssignment || canManageDispatch || canManageWorkLog || canApproveWorkLog}
+          canAssign={canManageAssignment}
+          canDispatch={canManageDispatch}
+          canWorkLog={canManageWorkLog}
+          canApprove={canApproveWorkLog}
           onAssign={() => openForm("assignment")}
           onDispatch={(assignment) =>
             openForm("dispatch", {
@@ -2924,8 +3000,10 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
           invoices={invoices}
           payments={payments}
           financeSummary={financeSummary}
-          canEdit={canEdit}
-          onInvoice={() => setFormMode("invoice")}
+          canEdit={canManageInvoice || canManagePayment}
+          canInvoice={canManageInvoice}
+          canPayment={canManagePayment}
+          onInvoice={() => openForm("invoice")}
           onVoid={voidInvoice}
           onPayment={(invoice = null) =>
             openForm("payment", invoice
@@ -2945,7 +3023,9 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
           returns={returns}
           assignments={assignments}
           contracts={contracts}
-          canEdit={canEdit}
+          canEdit={canManageReturn || canCloseOperational || canCloseFinancial}
+          canReturn={canManageReturn}
+          canClose={canCloseOperational || canCloseFinancial}
           onCloseContract={closeContract}
           onReturn={(assignment) =>
             openForm("return", {
@@ -3138,7 +3218,14 @@ function CustomersTable({ customers }) {
   );
 }
 
-function EnquiriesTable({ enquiries, canEdit, onEdit, onConvert, onStatus }) {
+function EnquiriesTable({
+  enquiries,
+  canEdit,
+  canConvert,
+  onEdit,
+  onConvert,
+  onStatus,
+}) {
   return (
     <section className="hire-card">
       <SectionHeader
@@ -3184,7 +3271,9 @@ function EnquiriesTable({ enquiries, canEdit, onEdit, onConvert, onStatus }) {
                         {enquiry.status === "open" ? (
                           <>
                             <button onClick={() => onEdit(enquiry)}>Edit</button>
-                            <button onClick={() => onConvert(enquiry)}>Create draft quote</button>
+                            {canConvert ? (
+                              <button onClick={() => onConvert(enquiry)}>Create draft quote</button>
+                            ) : null}
                             <button onClick={() => onStatus(enquiry.id, "lost")}>Mark lost</button>
                           </>
                         ) : null}
@@ -3244,7 +3333,16 @@ function AvailabilityGrid({ assets }) {
   );
 }
 
-function QuotationsTable({ quotations, canEdit, onEdit, onConvert, onStatus }) {
+function QuotationsTable({
+  quotations,
+  canEdit,
+  canManage,
+  canApprove,
+  canConvert,
+  onEdit,
+  onConvert,
+  onStatus,
+}) {
   return (
     <section className="hire-card">
       <SectionHeader
@@ -3294,12 +3392,18 @@ function QuotationsTable({ quotations, canEdit, onEdit, onConvert, onStatus }) {
                       <div className="hire-row-actions">
                         {quote.status === "draft" ? (
                           <>
-                            <button onClick={() => onEdit(quote)}>Edit</button>
-                            <button onClick={() => onStatus(quote.id, "approved")}>Approve</button>
-                            <button onClick={() => onStatus(quote.id, "rejected")}>Reject</button>
+                            {canManage ? (
+                              <button onClick={() => onEdit(quote)}>Edit</button>
+                            ) : null}
+                            {canApprove ? (
+                              <>
+                                <button onClick={() => onStatus(quote.id, "approved")}>Approve</button>
+                                <button onClick={() => onStatus(quote.id, "rejected")}>Reject</button>
+                              </>
+                            ) : null}
                           </>
                         ) : null}
-                        {["approved", "accepted"].includes(quote.status) ? (
+                        {canConvert && ["approved", "accepted"].includes(quote.status) ? (
                           <button onClick={() => onConvert(quote)}>Create contract</button>
                         ) : null}
                       </div>
@@ -3315,7 +3419,14 @@ function QuotationsTable({ quotations, canEdit, onEdit, onConvert, onStatus }) {
   );
 }
 
-function ContractsTable({ contracts, canEdit, onAssign, onStatus }) {
+function ContractsTable({
+  contracts,
+  canEdit,
+  canAssign,
+  canChangeStatus,
+  onAssign,
+  onStatus,
+}) {
   return (
     <section className="hire-card">
       <SectionHeader
@@ -3368,13 +3479,13 @@ function ContractsTable({ contracts, canEdit, onAssign, onStatus }) {
                   {canEdit ? (
                     <td data-label="Actions">
                       <div className="hire-row-actions">
-                        {!["completed", "cancelled"].includes(contract.status) ? (
+                        {canAssign && !["completed", "cancelled"].includes(contract.status) ? (
                           <button onClick={() => onAssign(contract)}>Assign machine</button>
                         ) : null}
-                        {contract.status === "draft" ? (
+                        {canChangeStatus && contract.status === "draft" ? (
                           <button onClick={() => onStatus(contract.id, "confirmed")}>Confirm</button>
                         ) : null}
-                        {!["completed", "cancelled"].includes(contract.status) ? (
+                        {canChangeStatus && !["completed", "cancelled"].includes(contract.status) ? (
                           <button onClick={() => onStatus(contract.id, "cancelled")}>Cancel</button>
                         ) : null}
                       </div>
@@ -3395,6 +3506,10 @@ function OperationsArea({
   dispatches,
   workLogs,
   canEdit,
+  canAssign,
+  canDispatch,
+  canWorkLog,
+  canApprove,
   onAssign,
   onDispatch,
   onWorkLog,
@@ -3409,7 +3524,7 @@ function OperationsArea({
           title="Contract equipment"
           description="Current machine assignments and their operational status."
           action={
-            canEdit ? (
+            canAssign ? (
               <button className="hire-btn hire-btn--primary" onClick={onAssign}>
                 ＋ Assign equipment
               </button>
@@ -3434,15 +3549,20 @@ function OperationsArea({
                   <div><dt>Meter</dt><dd>{formatNumber(assignment.current_meter)}</dd></div>
                   <div><dt>From</dt><dd>{formatDateTime(assignment.assigned_from)}</dd></div>
                 </dl>
-                {canEdit && ["assigned", "dispatched", "active"].includes(assignment.status) ? (
+                {(canDispatch || canAssign || canWorkLog) &&
+                ["assigned", "dispatched", "active"].includes(assignment.status) ? (
                   <footer>
                     {assignment.status === "assigned" ? (
                       <>
-                        <button onClick={() => onDispatch(assignment)}>Dispatch</button>
-                        <button onClick={() => onRemoveAssignment(assignment)}>Remove</button>
+                        {canDispatch ? (
+                          <button onClick={() => onDispatch(assignment)}>Dispatch</button>
+                        ) : null}
+                        {canAssign ? (
+                          <button onClick={() => onRemoveAssignment(assignment)}>Remove</button>
+                        ) : null}
                       </>
                     ) : null}
-                    {["dispatched", "active"].includes(assignment.status) ? (
+                    {canWorkLog && ["dispatched", "active"].includes(assignment.status) ? (
                       <button onClick={() => onWorkLog(assignment)}>Work log</button>
                     ) : null}
                   </footer>
@@ -3513,7 +3633,7 @@ function OperationsArea({
                   <th>Billable</th>
                   <th>Idle / breakdown</th>
                   <th>Status</th>
-                  {canEdit ? <th>Actions</th> : null}
+                  {canApprove ? <th>Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -3530,7 +3650,7 @@ function OperationsArea({
                       {formatNumber(log.idle_hours)} / {formatNumber(log.breakdown_hours)}
                     </td>
                     <td data-label="Status"><StatusPill value={log.status} /></td>
-                    {canEdit ? (
+                    {canApprove ? (
                       <td data-label="Actions">
                         {log.status === "draft" ? (
                           <button className="hire-inline-action" onClick={() => onApprove(log.id)}>
@@ -3555,6 +3675,8 @@ function FinanceArea({
   payments,
   financeSummary,
   canEdit,
+  canInvoice,
+  canPayment,
   onInvoice,
   onPayment,
   onVoid,
@@ -3647,14 +3769,18 @@ function FinanceArea({
           title="Hire invoices"
           description="Approved hours, contract charges, payments and balances."
           action={
-            canEdit ? (
+            canInvoice || canPayment ? (
               <div className="hire-header-actions">
-                <button className="hire-btn hire-btn--ghost" onClick={() => onPayment()}>
+                {canPayment ? (
+                  <button className="hire-btn hire-btn--ghost" onClick={() => onPayment()}>
                   Record payment
-                </button>
-                <button className="hire-btn hire-btn--primary" onClick={onInvoice}>
+                  </button>
+                ) : null}
+                {canInvoice ? (
+                  <button className="hire-btn hire-btn--primary" onClick={onInvoice}>
                   ＋ New invoice
                 </button>
+                ) : null}
               </div>
             ) : null
           }
@@ -3673,7 +3799,7 @@ function FinanceArea({
                   <th>Paid</th>
                   <th>Balance</th>
                   <th>Status</th>
-                  {canEdit ? <th>Action</th> : null}
+                  {canInvoice || canPayment ? <th>Action</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -3692,15 +3818,15 @@ function FinanceArea({
                     <td data-label="Paid">{formatMoney(invoice.amount_paid)}</td>
                     <td data-label="Balance"><strong>{formatMoney(invoice.balance)}</strong></td>
                     <td data-label="Status"><StatusPill value={invoice.status} /></td>
-                    {canEdit ? (
+                    {canInvoice || canPayment ? (
                       <td data-label="Action">
                         <div className="hire-row-actions">
-                          {Number(invoice.balance) > 0 && invoice.status !== "void" ? (
+                          {canPayment && Number(invoice.balance) > 0 && invoice.status !== "void" ? (
                             <button className="hire-inline-action" onClick={() => onPayment(invoice)}>
                               Receive
                             </button>
                           ) : null}
-                          {Number(invoice.amount_paid || 0) === 0 && invoice.status !== "void" ? (
+                          {canInvoice && Number(invoice.amount_paid || 0) === 0 && invoice.status !== "void" ? (
                             <button className="hire-inline-action" onClick={() => onVoid(invoice)}>
                               Void
                             </button>
@@ -4031,6 +4157,8 @@ function ReturnsTable({
   assignments,
   contracts,
   canEdit,
+  canReturn,
+  canClose,
   onReturn,
   onCloseContract,
 }) {
@@ -4046,7 +4174,7 @@ function ReturnsTable({
 
   return (
     <div className="hire-stack">
-      {canEdit && openAssignments.length ? (
+      {canReturn && openAssignments.length ? (
         <section className="hire-card">
           <SectionHeader
             eyebrow="Awaiting closure"
@@ -4068,7 +4196,7 @@ function ReturnsTable({
         </section>
       ) : null}
 
-      {canEdit && closureCandidates.length ? (
+      {canClose && closureCandidates.length ? (
         <section className="hire-card">
           <SectionHeader
             eyebrow="Contract closure"

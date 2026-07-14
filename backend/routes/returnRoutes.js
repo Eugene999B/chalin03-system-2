@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -25,11 +26,17 @@ function cleanText(value) {
 }
 
 async function logActivity(userId, branchId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+  await writeAuditEvent({
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "return",
+    actionType: action,
+    outcome: "success",
+    severity: "notice",
+  });
 }
 
 // GET /api/returns/sales

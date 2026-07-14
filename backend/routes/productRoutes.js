@@ -9,6 +9,7 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -90,11 +91,17 @@ function nullIfEmpty(value) {
 }
 
 async function logActivity(branchId, userId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+  await writeAuditEvent({
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "product",
+    actionType: action,
+    outcome: "success",
+    severity: action.includes("DELETE") ? "critical" : "notice",
+  });
 }
 
 function requireSelectedBranch(req, res) {

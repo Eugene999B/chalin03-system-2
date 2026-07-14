@@ -30,6 +30,7 @@ const APPLICATION_TABLES = [
   "expenses",
   "sms_log",
   "activity_log",
+  "application_error_log",
   "settings",
   "daily_closings",
   "audit_signoffs",
@@ -261,7 +262,7 @@ async function main() {
 
     const resultSets = await runSchemaVerifySql(connection);
     const summary = {
-      applicationTablesExpected: 53,
+      applicationTablesExpected: 54,
       applicationTablesFound: appTableCount,
       schemaMigrationsFound: schemaMigrations === 1,
       hireTriggersExpected: 16,
@@ -279,7 +280,7 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
 
     if (
-      appTableCount !== 53 ||
+      appTableCount !== 54 ||
       schemaMigrations !== 1 ||
       triggerCount !== 16 ||
       coreColumnsFound !== 5 ||

@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { getEffectivePermissions } = require("../security/permissionCatalog");
+const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   buildOwnerAlertContext,
   formatSecurityDateTime,
@@ -20,6 +22,9 @@ const WORKSPACE_CODES = new Set([
   "mining",
   "equipment_hire",
 ]);
+const AUTH_FAILURE_MESSAGE = "Invalid username or password.";
+const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.MAX_FAILED_LOGIN_ATTEMPTS || 5);
+const LOGIN_LOCKOUT_MINUTES = Number(process.env.LOGIN_LOCKOUT_MINUTES || 15);
 
 function cleanText(value) {
   if (value === undefined || value === null) {
@@ -107,6 +112,10 @@ function createToken(user, branch, workspace) {
       workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
       business_unit_id: workspace?.id || null,
       business_unit_name: workspace?.name || "Spare Parts",
+      workspace_role:
+        user.workspace_role ||
+        user.access_role ||
+        (workspace?.code === DEFAULT_WORKSPACE_CODE ? user.role : null),
       branch_id: branch?.id || null,
       branch_code: branchCode,
       branch_name: branchName,
@@ -115,6 +124,8 @@ function createToken(user, branch, workspace) {
         workspace?.code === DEFAULT_WORKSPACE_CODE
           ? boolValue(user.can_access_all_branches)
           : false,
+      must_change_password: boolValue(user.must_change_password),
+      token_version: Number(user.token_version || 0),
     },
     process.env.JWT_SECRET,
     {
@@ -136,9 +147,30 @@ async function buildUserSelectByWhere(whereSql, params) {
   const activeSql = userColumns.has("is_active")
     ? "is_active"
     : "1 AS is_active";
+  const mustChangePasswordSql = userColumns.has("must_change_password")
+    ? "must_change_password"
+    : "0 AS must_change_password";
+  const passwordChangedAtSql = userColumns.has("password_changed_at")
+    ? "password_changed_at"
+    : "NULL AS password_changed_at";
   const createdAtSql = userColumns.has("created_at")
     ? "created_at"
     : "NULL AS created_at";
+  const failedLoginSql = userColumns.has("failed_login_attempts")
+    ? "failed_login_attempts"
+    : "0 AS failed_login_attempts";
+  const lockedUntilSql = userColumns.has("locked_until")
+    ? "locked_until"
+    : "NULL AS locked_until";
+  const lastLoginAtSql = userColumns.has("last_login_at")
+    ? "last_login_at"
+    : "NULL AS last_login_at";
+  const lastLoginIpSql = userColumns.has("last_login_ip")
+    ? "last_login_ip"
+    : "NULL AS last_login_ip";
+  const tokenVersionSql = userColumns.has("token_version")
+    ? "token_version"
+    : "0 AS token_version";
 
   const [users] = await pool.query(
     `SELECT
@@ -151,7 +183,14 @@ async function buildUserSelectByWhere(whereSql, params) {
       ${defaultBranchSql},
       ${allBranchesSql},
       ${activeSql},
-      ${createdAtSql}
+      ${mustChangePasswordSql},
+      ${passwordChangedAtSql},
+      ${createdAtSql},
+      ${failedLoginSql},
+      ${lockedUntilSql},
+      ${lastLoginAtSql},
+      ${lastLoginIpSql},
+      ${tokenVersionSql}
      FROM users
      ${whereSql}
      LIMIT 1`,
@@ -355,6 +394,10 @@ async function userCanAccessWorkspace(user, workspace) {
     return true;
   }
 
+  if (role === "cashier" && workspace.code !== DEFAULT_WORKSPACE_CODE) {
+    return false;
+  }
+
   if (workspace.code === DEFAULT_WORKSPACE_CODE) {
     return true;
   }
@@ -376,6 +419,70 @@ async function userCanAccessWorkspace(user, workspace) {
   );
 
   return rows.length > 0;
+}
+
+async function resolveWorkspaceAccess(user, workspace) {
+  if (!workspace) {
+    return {
+      canAccess: false,
+      workspaceRole: null,
+    };
+  }
+
+  const role = cleanText(user.role).toLowerCase();
+
+  if (role === "admin") {
+    return {
+      canAccess: true,
+      workspaceRole:
+        workspace.code === DEFAULT_WORKSPACE_CODE ? "admin" : "group_admin",
+    };
+  }
+
+  if (workspace.code === DEFAULT_WORKSPACE_CODE) {
+    return {
+      canAccess: true,
+      workspaceRole: role,
+    };
+  }
+
+  if (role === "cashier") {
+    return {
+      canAccess: false,
+      workspaceRole: null,
+    };
+  }
+
+  const accessTableExists = await tableExists("user_business_access");
+
+  if (!accessTableExists || !workspace.id) {
+    return {
+      canAccess: false,
+      workspaceRole: null,
+    };
+  }
+
+  const [rows] = await pool.query(
+    `SELECT access_role
+     FROM user_business_access
+     WHERE user_id = ?
+       AND business_unit_id = ?
+       AND can_access = TRUE
+     LIMIT 1`,
+    [user.id, workspace.id]
+  );
+
+  if (rows.length === 0) {
+    return {
+      canAccess: false,
+      workspaceRole: null,
+    };
+  }
+
+  return {
+    canAccess: true,
+    workspaceRole: cleanText(rows[0].access_role, 80).toLowerCase(),
+  };
 }
 
 async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
@@ -404,9 +511,9 @@ async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
     };
   }
 
-  const canAccess = await userCanAccessWorkspace(user, workspace);
+  const access = await resolveWorkspaceAccess(user, workspace);
 
-  if (!canAccess) {
+  if (!access.canAccess) {
     return {
       ok: false,
       statusCode: 403,
@@ -420,12 +527,17 @@ async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
     statusCode: 200,
     message: "Workspace selected.",
     workspace,
+    workspaceRole: access.workspaceRole,
   };
 }
 
 function buildUserResponse(user, branch, workspace) {
   const isSpareParts = workspace?.code === DEFAULT_WORKSPACE_CODE;
   const activeBranch = isSpareParts ? branch : null;
+  const workspaceRole =
+    user.workspace_role ||
+    user.access_role ||
+    (isSpareParts ? user.role : null);
   const branchCode =
     activeBranch?.branch_code || activeBranch?.code || null;
   const branchName =
@@ -438,6 +550,7 @@ function buildUserResponse(user, branch, workspace) {
     full_name: user.full_name,
     username: user.username,
     role: user.role,
+    workspace_role: workspaceRole,
     phone: user.phone,
     workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
     business_unit_id: workspace?.id || null,
@@ -451,11 +564,18 @@ function buildUserResponse(user, branch, workspace) {
     can_access_all_branches: isSpareParts
       ? boolValue(user.can_access_all_branches)
       : false,
+    must_change_password: boolValue(user.must_change_password),
+    password_changed_at: user.password_changed_at || null,
     branch_id: activeBranch?.id || null,
     branch_code: branchCode,
     branch_name: branchName,
     branch_location: branchLocation,
     branch_phone: activeBranch?.phone || null,
+    effective_permissions: getEffectivePermissions({
+      ...user,
+      workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
+      workspace_role: workspaceRole,
+    }),
     selected_branch: activeBranch
       ? {
           id: activeBranch.id,
@@ -474,26 +594,139 @@ function buildUserResponse(user, branch, workspace) {
 }
 
 async function writeActivityLog(branchId, userId, action, details) {
-  const activityColumns = await getTableColumns("activity_log");
+  await writeAuditEvent({
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    actionType: action,
+    outcome: String(action || "").includes("FAIL") ? "failure" : "success",
+    severity: String(action || "").includes("LOCK") ? "warning" : "info",
+    details,
+  });
+}
 
-  if (activityColumns.size === 0) {
-    return;
+function requestIp(req) {
+  return String(
+    req.headers["x-forwarded-for"] || req.ip || req.socket?.remoteAddress || ""
+  )
+    .split(",")[0]
+    .trim()
+    .slice(0, 50);
+}
+
+function lockedUntilDate(user) {
+  if (!user?.locked_until) return null;
+  const date = new Date(user.locked_until);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isLoginLocked(user) {
+  const lockedUntil = lockedUntilDate(user);
+  return lockedUntil ? lockedUntil.getTime() > Date.now() : false;
+}
+
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) {
+    return "Password must be at least 8 characters long.";
   }
 
-  if (activityColumns.has("branch_id")) {
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Password must include both uppercase and lowercase letters.";
+  }
+
+  if (!/\d/.test(text)) {
+    return "Password must include at least one number.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "Password must include at least one symbol.";
+  }
+
+  return "";
+}
+
+async function recordFailedLogin(req, user) {
+  const userColumns = await getTableColumns("users");
+
+  if (
+    userColumns.has("failed_login_attempts") ||
+    userColumns.has("locked_until")
+  ) {
+    const nextAttempts = Number(user.failed_login_attempts || 0) + 1;
+    const lockAccount = nextAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+    const updateFields = [];
+    const updateParams = [];
+
+    if (userColumns.has("failed_login_attempts")) {
+      updateFields.push("failed_login_attempts = ?");
+      updateParams.push(nextAttempts);
+    }
+
+    if (userColumns.has("locked_until")) {
+      updateFields.push(
+        lockAccount
+          ? "locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)"
+          : "locked_until = locked_until"
+      );
+      if (lockAccount) updateParams.push(LOGIN_LOCKOUT_MINUTES);
+    }
+
+    if (updateFields.length > 0) {
+      await pool.query(
+        `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+        [...updateParams, user.id]
+      );
+    }
+  }
+
+  await writeAuditEvent({
+    req,
+    userId: user?.id || null,
+    branchId: user?.default_branch_id || null,
+    action: "LOGIN_FAILURE",
+    actionType: "auth.login.failure",
+    outcome: "failure",
+    severity: "warning",
+    entityType: "user",
+    entityId: user?.id || null,
+    details: "Login failed.",
+    metadata: {
+      username: user?.username || null,
+      ip_address: requestIp(req),
+    },
+  });
+}
+
+async function recordSuccessfulLogin(req, user) {
+  const userColumns = await getTableColumns("users");
+  const updateFields = [];
+  const updateParams = [];
+
+  if (userColumns.has("failed_login_attempts")) {
+    updateFields.push("failed_login_attempts = 0");
+  }
+
+  if (userColumns.has("locked_until")) {
+    updateFields.push("locked_until = NULL");
+  }
+
+  if (userColumns.has("last_login_at")) {
+    updateFields.push("last_login_at = NOW()");
+  }
+
+  if (userColumns.has("last_login_ip")) {
+    updateFields.push("last_login_ip = ?");
+    updateParams.push(requestIp(req));
+  }
+
+  if (updateFields.length > 0) {
     await pool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [branchId || null, userId || null, action, details]
+      `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+      [...updateParams, user.id]
     );
-    return;
   }
-
-  await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
-  );
 }
 
 async function sendPasswordChangedSecuritySmsAlert({ user, branch, workspace }) {
@@ -576,25 +809,53 @@ router.post("/login", async (req, res) => {
     if (users.length === 0) {
       return res.status(401).json({
         status: "error",
-        message: "Invalid username or password.",
+        message: AUTH_FAILURE_MESSAGE,
       });
     }
 
     const user = users[0];
 
+    if (isLoginLocked(user)) {
+      await writeAuditEvent({
+        req,
+        userId: user.id,
+        branchId: user.default_branch_id || null,
+        action: "LOGIN_LOCKED_OUT",
+        actionType: "auth.login.lockout",
+        outcome: "blocked",
+        severity: "warning",
+        entityType: "user",
+        entityId: user.id,
+        details: "Login blocked because the account is temporarily locked.",
+        metadata: {
+          username: user.username,
+          locked_until: user.locked_until,
+        },
+      });
+
+      return res.status(429).json({
+        status: "error",
+        code: "ACCOUNT_TEMPORARILY_LOCKED",
+        message:
+          "Too many failed login attempts. Please wait and try again later.",
+      });
+    }
+
     if (!boolValue(user.is_active)) {
       return res.status(403).json({
         status: "error",
-        message: "This account has been disabled.",
+        message: AUTH_FAILURE_MESSAGE,
       });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
+      await recordFailedLogin(req, user);
+
       return res.status(401).json({
         status: "error",
-        message: "Invalid username or password.",
+        message: AUTH_FAILURE_MESSAGE,
       });
     }
 
@@ -608,6 +869,7 @@ router.post("/login", async (req, res) => {
     }
 
     const workspace = workspaceResult.workspace;
+    user.workspace_role = workspaceResult.workspaceRole;
     let selectedBranch = null;
 
     if (workspace.code === DEFAULT_WORKSPACE_CODE) {
@@ -634,6 +896,8 @@ router.post("/login", async (req, res) => {
       "LOGIN",
       `${user.username} logged in successfully to ${loginContext}`
     );
+
+    await recordSuccessfulLogin(req, user);
 
     return res.json({
       status: "success",
@@ -669,6 +933,14 @@ router.get("/me", requireAuth, async (req, res) => {
     }
 
     const user = users[0];
+
+    if (!boolValue(user.is_active)) {
+      return res.status(403).json({
+        status: "error",
+        message: "This account has been disabled. Please contact the administrator.",
+      });
+    }
+
     const workspaceCode =
       normalizeWorkspaceCode(req.user.workspace_code) ||
       DEFAULT_WORKSPACE_CODE;
@@ -682,6 +954,7 @@ router.get("/me", requireAuth, async (req, res) => {
     }
 
     const workspace = workspaceResult.workspace;
+    user.workspace_role = workspaceResult.workspaceRole;
     let selectedBranch = null;
 
     if (workspace.code === DEFAULT_WORKSPACE_CODE) {
@@ -742,10 +1015,12 @@ router.post("/change-password", requireAuth, async (req, res) => {
       });
     }
 
-    if (String(new_password).length < 6) {
+    const passwordPolicyError = strongPasswordError(new_password);
+
+    if (passwordPolicyError) {
       return res.status(400).json({
         status: "error",
-        message: "New password must be at least 6 characters long.",
+        message: passwordPolicyError,
       });
     }
 
@@ -799,12 +1074,27 @@ router.post("/change-password", requireAuth, async (req, res) => {
     }
 
     const newPasswordHash = await bcrypt.hash(new_password, 10);
+    const userColumns = await getTableColumns("users");
+    const updateFields = ["password_hash = ?"];
+    const updateParams = [newPasswordHash];
+
+    if (userColumns.has("must_change_password")) {
+      updateFields.push("must_change_password = FALSE");
+    }
+
+    if (userColumns.has("password_changed_at")) {
+      updateFields.push("password_changed_at = CURRENT_TIMESTAMP");
+    }
+
+    if (userColumns.has("token_version")) {
+      updateFields.push("token_version = token_version + 1");
+    }
 
     await pool.query(
       `UPDATE users
-       SET password_hash = ?
+       SET ${updateFields.join(",\n           ")}
        WHERE id = ?`,
-      [newPasswordHash, user.id]
+      [...updateParams, user.id]
     );
 
     const workspaceCode =
@@ -837,13 +1127,22 @@ router.post("/change-password", requireAuth, async (req, res) => {
       workspace,
     });
 
-    const token = createToken(user, selectedBranch, workspace);
+    const updatedUser = {
+      ...user,
+      must_change_password: false,
+      password_changed_at: new Date(),
+      workspace_role: req.user.workspace_role || user.workspace_role,
+      token_version: userColumns.has("token_version")
+        ? Number(user.token_version || 0) + 1
+        : Number(user.token_version || 0),
+    };
+    const token = createToken(updatedUser, selectedBranch, workspace);
 
     return res.json({
       status: "success",
       message: "Password changed successfully.",
       token,
-      user: buildUserResponse(user, selectedBranch, workspace),
+      user: buildUserResponse(updatedUser, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Change password error:", error);

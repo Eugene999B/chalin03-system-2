@@ -56,6 +56,11 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
     password_changed_at DATETIME NULL,
+    failed_login_attempts INT NOT NULL DEFAULT 0,
+    locked_until DATETIME NULL,
+    last_login_at DATETIME NULL,
+    last_login_ip VARCHAR(50) NULL,
+    token_version INT NOT NULL DEFAULT 0,
     created_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -67,6 +72,9 @@ CREATE TABLE users (
     INDEX idx_user_role (role),
     INDEX idx_user_active (is_active),
     INDEX idx_user_must_change_password (must_change_password),
+    INDEX idx_user_locked_until (locked_until),
+    INDEX idx_user_last_login_at (last_login_at),
+    INDEX idx_user_token_version (token_version),
     INDEX idx_user_default_branch (default_branch_id),
     INDEX idx_user_all_branches (can_access_all_branches),
     INDEX idx_user_created_by (created_by)
@@ -515,6 +523,18 @@ CREATE TABLE activity_log (
     details TEXT,
     ip_address VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    workspace_code VARCHAR(50) NULL,
+    business_unit_id INT NULL,
+    mining_site_id INT NULL,
+    hire_location_id INT NULL,
+    entity_type VARCHAR(80) NULL,
+    entity_id VARCHAR(80) NULL,
+    action_type VARCHAR(100) NULL,
+    outcome VARCHAR(40) NOT NULL DEFAULT 'success',
+    severity VARCHAR(40) NOT NULL DEFAULT 'info',
+    request_id VARCHAR(100) NULL,
+    user_agent VARCHAR(500) NULL,
+    metadata_json LONGTEXT NULL,
 
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
@@ -522,7 +542,36 @@ CREATE TABLE activity_log (
     INDEX idx_activity_branch (branch_id),
     INDEX idx_activity_action (action),
     INDEX idx_activity_date (created_at),
-    INDEX idx_activity_user (user_id)
+    INDEX idx_activity_user (user_id),
+    INDEX idx_activity_workspace (workspace_code),
+    INDEX idx_activity_business_unit (business_unit_id),
+    INDEX idx_activity_mining_site (mining_site_id),
+    INDEX idx_activity_hire_location (hire_location_id),
+    INDEX idx_activity_action_type (action_type),
+    INDEX idx_activity_entity (entity_type, entity_id),
+    INDEX idx_activity_outcome (outcome),
+    INDEX idx_activity_severity (severity),
+    INDEX idx_activity_request (request_id)
+);
+
+CREATE TABLE application_error_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    request_id VARCHAR(100) NULL,
+    user_id INT NULL,
+    route VARCHAR(500) NULL,
+    method VARCHAR(12) NULL,
+    status_code INT NULL,
+    error_code VARCHAR(120) NULL,
+    safe_message VARCHAR(500) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_application_error_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+
+    INDEX idx_application_error_request (request_id),
+    INDEX idx_application_error_user (user_id),
+    INDEX idx_application_error_status (status_code),
+    INDEX idx_application_error_created (created_at)
 );
 
 -- settings

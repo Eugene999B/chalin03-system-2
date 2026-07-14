@@ -2,12 +2,30 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  requirePermission,
+} = require("../middleware/permissionMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
-const READ_ROLES = ["admin", "manager", "auditor"];
-const WRITE_ROLES = ["admin", "manager"];
+const READ_ROLES = [
+  "admin",
+  "manager",
+  "auditor",
+  "site_supervisor",
+  "equipment_operator",
+  "dispatcher",
+  "fleet_officer",
+];
+const WRITE_ROLES = [
+  "admin",
+  "manager",
+  "site_supervisor",
+  "equipment_operator",
+  "dispatcher",
+  "fleet_officer",
+];
 
 const ALLOWED_STATUSES = new Set([
   "available",
@@ -129,11 +147,26 @@ function sendFleetSetupError(res, error) {
 
 async function logActivity(req, action, details) {
   try {
-    await pool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [getBranchId(req), req.user?.id || null, action, details]
-    );
+    await writeAuditEvent({
+      req,
+      action,
+      details,
+      workspaceCode: req.user?.workspace_code || "fleet",
+      entityType: "fleet_asset",
+      entityId: req.params?.id || req.params?.assetId || null,
+      actionType: action,
+      outcome: "success",
+      severity:
+        action.includes("ARCHIVE") ||
+        action.includes("STATUS") ||
+        action.includes("MAINTENANCE")
+          ? "notice"
+          : "info",
+      metadata: {
+        route: req.originalUrl,
+        method: req.method,
+      },
+    });
   } catch (error) {
     console.warn("Fleet activity log skipped:", error.message);
   }
@@ -256,11 +289,13 @@ function validateAssetPayload(body, { partial = false } = {}) {
   return { payload, errors };
 }
 
+router.use(requireAuth);
+
 // GET /api/fleet/summary
 router.get(
   "/summary",
   requireAuth,
-  requireRole(...READ_ROLES),
+  requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
       const [rows] = await pool.query(
@@ -302,7 +337,7 @@ router.get(
 router.get(
   "/assets",
   requireAuth,
-  requireRole(...READ_ROLES),
+  requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
       const search = cleanText(req.query.search, 120);
@@ -406,7 +441,7 @@ router.get(
 router.get(
   "/assets/:id",
   requireAuth,
-  requireRole(...READ_ROLES),
+  requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -485,7 +520,7 @@ router.get(
 router.post(
   "/assets",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       const { payload, errors } = validateAssetPayload(req.body);
@@ -618,7 +653,7 @@ router.post(
 router.put(
   "/assets/:id",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -751,7 +786,7 @@ router.put(
 router.patch(
   "/assets/:id/status",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -810,7 +845,7 @@ router.patch(
 router.post(
   "/assets/:id/meter-readings",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.meter.manage"),
   async (req, res) => {
     let connection;
 
@@ -928,7 +963,7 @@ router.post(
 router.post(
   "/assets/:id/fuel-logs",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.fuel.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -1042,7 +1077,7 @@ router.post(
 router.post(
   "/assets/:id/maintenance",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.maintenance.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -1160,7 +1195,7 @@ router.post(
 router.post(
   "/assets/:id/inspections",
   requireAuth,
-  requireRole(...WRITE_ROLES),
+  requirePermission("fleet.inspections.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);
@@ -1246,7 +1281,7 @@ router.post(
 router.patch(
   "/assets/:id/active",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       const assetId = toPositiveInt(req.params.id);

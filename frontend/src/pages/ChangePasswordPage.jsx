@@ -5,28 +5,69 @@ import { useAuth } from "../context/AuthContext";
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
-  const { user, logout, branchCode, branchName, branchLocation } = useAuth();
+  const {
+    user,
+    logout,
+    branchCode,
+    branchName,
+    branchLocation,
+    workspaceCode,
+    workspaceName,
+    isSparePartsWorkspace,
+    isMiningWorkspace,
+    isEquipmentHireWorkspace,
+  } = useAuth();
 
-  const currentStoreCode =
-    branchCode ||
-    user?.branch_code ||
-    user?.selected_branch?.branch_code ||
-    user?.selected_branch?.code ||
-    "STORE";
+  const currentContextCode = isSparePartsWorkspace
+    ? branchCode ||
+      user?.branch_code ||
+      user?.selected_branch?.branch_code ||
+      user?.selected_branch?.code ||
+      "STORE"
+    : isMiningWorkspace
+    ? "MINING"
+    : isEquipmentHireWorkspace
+    ? "HIRE"
+    : String(workspaceCode || "ACCOUNT").toUpperCase();
 
-  const currentStoreName =
-    branchName ||
-    user?.branch_name ||
-    user?.selected_branch?.branch_name ||
-    user?.selected_branch?.name ||
-    "Selected Store";
+  const currentContextName = isSparePartsWorkspace
+    ? branchName ||
+      user?.branch_name ||
+      user?.selected_branch?.branch_name ||
+      user?.selected_branch?.name ||
+      "Selected Store"
+    : workspaceName ||
+      user?.business_unit_name ||
+      user?.active_workspace?.name ||
+      (isMiningWorkspace
+        ? "Mining Operations"
+        : isEquipmentHireWorkspace
+        ? "Equipment Hire"
+        : "Chalin 03 Group Platform");
 
-  const currentStoreLocation =
-    branchLocation ||
-    user?.branch_location ||
-    user?.selected_branch?.branch_location ||
-    user?.selected_branch?.location ||
-    "";
+  const currentContextLocation = isSparePartsWorkspace
+    ? branchLocation ||
+      user?.branch_location ||
+      user?.selected_branch?.branch_location ||
+      user?.selected_branch?.location ||
+      ""
+    : "";
+
+  const accountScopeText = isSparePartsWorkspace
+    ? "every store your account is allowed to access"
+    : isMiningWorkspace
+    ? "every Mining site your account is allowed to access"
+    : isEquipmentHireWorkspace
+    ? "every Equipment Hire location your account is allowed to access"
+    : "every business workspace your account is allowed to access";
+
+  const protectedBusinessDataText = isSparePartsWorkspace
+    ? "sales, stock adjustments, debt payments, audit records, reports and branch data"
+    : isMiningWorkspace
+    ? "production, equipment, fuel, expense, incident, approval and Mining report data"
+    : isEquipmentHireWorkspace
+    ? "enquiries, quotations, contracts, dispatches, work logs, invoices, payments, returns and Fleet data"
+    : "business records, approvals, reports and account data";
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -128,7 +169,7 @@ export default function ChangePasswordPage() {
     }
 
     const confirmed = window.confirm(
-      "Are you sure you want to change your password? This password is for your account and will apply whenever you login to any store you are allowed to access."
+      `Are you sure you want to change your password? This password is account-wide and will apply whenever you log in to ${accountScopeText}.`
     );
 
     if (!confirmed) {
@@ -211,7 +252,7 @@ export default function ChangePasswordPage() {
             >
               Securely update the login password for{" "}
               <strong>{accountName}</strong>. This password is account-wide and
-              will work for every store your account is allowed to access.
+              will work for {accountScopeText}.
             </p>
           </div>
 
@@ -224,8 +265,8 @@ export default function ChangePasswordPage() {
             <span>🔐</span>
 
             <div style={styles.heroCardText}>
-              <strong>{currentStoreCode}</strong>
-              <small>{currentStoreName}</small>
+              <strong>{currentContextCode}</strong>
+              <small>{currentContextName}</small>
             </div>
           </div>
         </div>
@@ -237,14 +278,14 @@ export default function ChangePasswordPage() {
           ...(isMobile ? styles.storeNoticeMobile : {}),
         }}
       >
-        <span style={styles.noticeIcon}>🏬</span>
+        <span style={styles.noticeIcon}>{isSparePartsWorkspace ? "🏬" : isMiningWorkspace ? "⛏️" : "🚜"}</span>
 
         <div style={styles.noticeText}>
           <strong>
-            {currentStoreCode} — {currentStoreName}
+            {currentContextCode} — {currentContextName}
           </strong>
 
-          {currentStoreLocation ? <p>{currentStoreLocation}</p> : null}
+          {currentContextLocation ? <p>{currentContextLocation}</p> : null}
 
           <p>
             Password changes are account-wide. After changing your password, you
@@ -419,9 +460,8 @@ export default function ChangePasswordPage() {
             </h2>
 
             <p>
-              Password security protects sales, stock adjustments, debt
-              payments, audit records, reports and branch data. Keep your login
-              private.
+              Password security protects {protectedBusinessDataText}. Keep
+              your login private.
             </p>
           </div>
         </aside>

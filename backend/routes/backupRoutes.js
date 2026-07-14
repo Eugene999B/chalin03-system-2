@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -8,6 +9,7 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -23,11 +25,12 @@ const router = express.Router();
   Store-separated downloads for boss/accounting are handled by exportRoutes.js.
 
   This route backs up the clean current table contract only:
-  53 application tables plus schema_migrations. Old compatibility aliases are
+  final canonical application tables plus schema_migrations. Old compatibility aliases are
   intentionally skipped so they cannot duplicate restored business records.
 */
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
+const BACKUP_MANIFEST_VERSION = "chalin03-final-local-6b-6f-v1";
 const LEGACY_ALIAS_TABLES = new Set(["stores", "user_store_access", "activity_logs"]);
 
 const PREFERRED_TABLE_ORDER = [
@@ -53,6 +56,7 @@ const PREFERRED_TABLE_ORDER = [
   "expenses",
   "sms_log",
   "activity_log",
+  "application_error_log",
   "settings",
   "daily_closings",
   "audit_signoffs",
@@ -299,6 +303,113 @@ async function getTableCounts(connection, tableNames) {
   return counts;
 }
 
+function stableBackupChecksum(backup) {
+  const checksumPayload = JSON.stringify({
+    backup_type: backup.backup_type,
+    included_tables: backup.included_tables,
+    table_counts: backup.table_counts,
+    tables: backup.tables,
+  });
+
+  return crypto.createHash("sha256").update(checksumPayload).digest("hex");
+}
+
+async function validateBackupForRestore(connection, backup) {
+  const errors = [];
+  const warnings = [];
+
+  if (
+    !backup ||
+    backup.backup_type !== "full_system_backup" ||
+    !backup.tables ||
+    typeof backup.tables !== "object"
+  ) {
+    errors.push("Invalid full-system backup file.");
+    return { valid: false, errors, warnings, tablesToRestore: [] };
+  }
+
+  const existingTables = await getExistingTables(connection);
+  const restoreTables = existingTables.filter(
+    (tableName) => tableName !== "schema_migrations"
+  );
+  const backupTableNames = Object.keys(backup.tables).filter(isSafeIdentifier);
+  const tablesToRestore = restoreTables.filter((tableName) =>
+    Array.isArray(backup.tables[tableName])
+  );
+
+  if (tablesToRestore.length === 0) {
+    errors.push("Backup does not contain matching canonical tables for this system.");
+  }
+
+  const missingTables = restoreTables.filter(
+    (tableName) => !Array.isArray(backup.tables[tableName])
+  );
+
+  if (missingTables.length > 0) {
+    warnings.push(
+      `Backup does not contain these current canonical tables: ${missingTables.join(", ")}.`
+    );
+  }
+
+  const unsupportedTables = backupTableNames.filter(
+    (tableName) => !restoreTables.includes(tableName)
+  );
+
+  if (unsupportedTables.length > 0) {
+    warnings.push(
+      `Backup contains unsupported or legacy tables that will not be restored: ${unsupportedTables.join(", ")}.`
+    );
+  }
+
+  for (const tableName of tablesToRestore) {
+    const rows = backup.tables[tableName];
+    if (!Array.isArray(rows)) {
+      errors.push(`Table ${tableName} is not an array.`);
+      continue;
+    }
+
+    const seenIds = new Set();
+    for (const row of rows) {
+      if (!row || typeof row !== "object") {
+        errors.push(`Table ${tableName} contains a non-object row.`);
+        break;
+      }
+
+      if (row.id !== undefined && row.id !== null) {
+        const id = String(row.id);
+        if (seenIds.has(id)) {
+          errors.push(`Table ${tableName} contains duplicate id ${id}.`);
+          break;
+        }
+        seenIds.add(id);
+      }
+    }
+  }
+
+  if (backup.checksum_sha256) {
+    const actualChecksum = stableBackupChecksum({
+      ...backup,
+      checksum_sha256: undefined,
+      manifest: undefined,
+    });
+
+    if (actualChecksum !== backup.checksum_sha256) {
+      errors.push("Backup checksum does not match the backup contents.");
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    existingTables,
+    restoreTables,
+    tablesToRestore,
+    unsupportedTables,
+    missingTables,
+  };
+}
+
 async function insertRows(connection, tableName, rows) {
   if (!rows || !Array.isArray(rows) || rows.length === 0) {
     return;
@@ -350,43 +461,25 @@ async function resetAutoIncrement(connection, tableName) {
   );
 }
 
-async function safeInsertRestoreActivity(connection, branchId, backupCreatedAt) {
+async function safeInsertRestoreActivity(connection, branchId, userId, backupCreatedAt) {
   try {
-    if (!(await tableExists(connection, "activity_log"))) {
-      return;
-    }
-
-    const columns = await getTableColumns(connection, "activity_log");
-    const columnSet = new Set(columns);
-
-    if (columnSet.has("branch_id")) {
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [
-          branchId || 1,
-          null,
-          "RESTORE_BACKUP",
-          `Database restored from backup created at ${
-            backupCreatedAt || "unknown time"
-          }`,
-        ]
-      );
-
-      return;
-    }
-
-    await connection.query(
-      `INSERT INTO activity_log (user_id, action, details)
-       VALUES (?, ?, ?)`,
-      [
-        null,
-        "RESTORE_BACKUP",
-        `Database restored from backup created at ${
-          backupCreatedAt || "unknown time"
-        }`,
-      ]
-    );
+    await writeAuditEvent({
+      connection,
+      userId: userId || null,
+      branchId: branchId || 1,
+      action: "RESTORE_BACKUP",
+      details: `Database restored from backup created at ${
+        backupCreatedAt || "unknown time"
+      }`,
+      workspaceCode: "spare_parts",
+      entityType: "backup",
+      actionType: "RESTORE_BACKUP",
+      outcome: "success",
+      severity: "critical",
+      metadata: {
+        backup_created_at: backupCreatedAt || null,
+      },
+    });
   } catch (error) {
     console.warn("Could not write restore activity log:", error.message);
   }
@@ -402,30 +495,26 @@ async function safeInsertBackupActivity({
   totalRecordCount,
 }) {
   try {
-    if (!(await tableExists(connection, "activity_log"))) {
-      return;
-    }
-
-    const columns = await getTableColumns(connection, "activity_log");
-    const columnSet = new Set(columns);
-
     const details = `Created full system backup at ${backupCreatedAt}. Tables included: ${tableCount}. Skipped tables: ${skippedTableCount}. Total records: ${totalRecordCount}.`;
 
-    if (columnSet.has("branch_id")) {
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [branchId || 1, userId || null, "CREATE_BACKUP", details]
-      );
-
-      return;
-    }
-
-    await connection.query(
-      `INSERT INTO activity_log (user_id, action, details)
-       VALUES (?, ?, ?)`,
-      [userId || null, "CREATE_BACKUP", details]
-    );
+    await writeAuditEvent({
+      connection,
+      userId: userId || null,
+      branchId: branchId || 1,
+      action: "CREATE_BACKUP",
+      details,
+      workspaceCode: "spare_parts",
+      entityType: "backup",
+      actionType: "CREATE_BACKUP",
+      outcome: "success",
+      severity: "critical",
+      metadata: {
+        backup_created_at: backupCreatedAt,
+        table_count: tableCount,
+        skipped_table_count: skippedTableCount,
+        total_record_count: totalRecordCount,
+      },
+    });
   } catch (error) {
     console.warn("Could not write backup activity log:", error.message);
   }
@@ -501,8 +590,8 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
     });
 
     const backup = {
-      app: "Chalin 03 Sales & Inventory Management System",
-      version: "multi-store-stock-ledger",
+      app: "Chalin 03 Group Operations Platform",
+      version: BACKUP_MANIFEST_VERSION,
       backup_type: "full_system_backup",
       selected_branch_id_when_created: branchId,
       created_at: backupCreatedAt,
@@ -529,12 +618,26 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
       backup.tables[tableName] = rows;
     }
 
+    backup.checksum_sha256 = stableBackupChecksum(backup);
+    backup.manifest = {
+      manifest_version: BACKUP_MANIFEST_VERSION,
+      created_at: backupCreatedAt,
+      app_version: BACKUP_MANIFEST_VERSION,
+      canonical_table_count: existingTables.length,
+      canonical_tables: existingTables,
+      table_counts: finalCounts,
+      checksum_algorithm: "sha256",
+      checksum_sha256: backup.checksum_sha256,
+    };
+
     const timestamp = new Date()
       .toISOString()
       .replaceAll(":", "-")
       .replaceAll(".", "-");
 
     res.setHeader("Content-Type", "application/json");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="chalin03-full-system-backup-${timestamp}.json"`
@@ -553,6 +656,44 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
+// POST /api/backups/restore/dry-run
+router.post(
+  "/restore/dry-run",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+      const backup = req.body?.backup || req.body;
+      const report = await validateBackupForRestore(connection, backup);
+
+      return res.status(report.valid ? 200 : 400).json({
+        status: report.valid ? "success" : "error",
+        message: report.valid
+          ? "Backup dry-run validation completed."
+          : "Backup dry-run validation failed.",
+        dry_run: true,
+        valid: report.valid,
+        errors: report.errors,
+        warnings: report.warnings,
+        restore_tables: report.tablesToRestore,
+        missing_tables: report.missingTables,
+        unsupported_tables: report.unsupportedTables,
+        checksum_sha256: backup?.checksum_sha256 || null,
+      });
+    } catch (error) {
+      console.error("Restore dry-run error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "The restore dry run could not be completed safely.",
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
 // POST /api/backups/restore
 router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
@@ -564,6 +705,14 @@ router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
     const confirmation = payload?.confirmation || payload?.restore_confirmation;
     const backup = payload?.backup || payload;
 
+    if (String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() !== "true") {
+      return res.status(403).json({
+        status: "error",
+        message:
+          "Web restore is disabled. Set ALLOW_WEB_RESTORE=true only for an approved local restore window.",
+      });
+    }
+
     if (confirmation !== RESTORE_CONFIRMATION_TEXT) {
       return res.status(400).json({
         status: "error",
@@ -572,32 +721,19 @@ router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    if (
-      !backup ||
-      backup.backup_type !== "full_system_backup" ||
-      !backup.tables ||
-      typeof backup.tables !== "object"
-    ) {
+    const validation = await validateBackupForRestore(connection, backup);
+
+    if (!validation.valid) {
       return res.status(400).json({
         status: "error",
-        message: "Invalid full-system backup file.",
+        message: "Backup validation failed. No restore was started.",
+        errors: validation.errors,
+        warnings: validation.warnings,
       });
     }
 
-    const existingTables = await getExistingTables(connection);
-    const restoreTables = existingTables.filter(
-      (tableName) => tableName !== "schema_migrations"
-    );
-    const backupTablesToInsert = restoreTables.filter((tableName) =>
-      Array.isArray(backup.tables[tableName])
-    );
-
-    if (backupTablesToInsert.length === 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "Backup does not contain any matching canonical tables for this system.",
-      });
-    }
+    const restoreTables = validation.restoreTables;
+    const backupTablesToInsert = validation.tablesToRestore;
 
     await connection.beginTransaction();
     transactionStarted = true;
@@ -615,7 +751,7 @@ router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-    await safeInsertRestoreActivity(connection, branchId, backup.created_at);
+    await safeInsertRestoreActivity(connection, branchId, req.user?.id || null, backup.created_at);
 
     const afterCounts = await getTableCounts(connection, restoreTables);
     const totalRestoredRecords = Object.values(afterCounts).reduce(

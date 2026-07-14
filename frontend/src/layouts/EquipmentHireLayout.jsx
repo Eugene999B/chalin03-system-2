@@ -1,4 +1,5 @@
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
+import { HIRE_VIEW_PERMISSIONS } from "../security/permissionRules";
 
 const navigationSections = [
   {
@@ -8,62 +9,72 @@ const navigationSections = [
         title: "Hire Dashboard",
         description: "Contracts, revenue, balances and availability",
         path: "/equipment-hire-operations",
-        icon: "📊",
+        icon: "HD",
         end: true,
+        anyPermissions: HIRE_VIEW_PERMISSIONS,
       },
       {
         title: "Customers",
         description: "Hire customers, contacts and credit terms",
         path: "/equipment-hire-operations/customers",
-        icon: "👥",
+        icon: "CU",
+        permissions: ["hire.customers.view"],
       },
       {
         title: "Enquiries",
         description: "Customer equipment requests",
         path: "/equipment-hire-operations/enquiries",
-        icon: "📨",
+        icon: "EN",
+        permissions: ["hire.enquiries.view"],
       },
       {
         title: "Availability",
         description: "Machines ready, assigned or unavailable",
         path: "/equipment-hire-operations/availability",
-        icon: "📅",
+        icon: "AV",
+        permissions: ["fleet.assets.view"],
       },
       {
         title: "Quotations",
         description: "Rates, mobilization and commercial terms",
         path: "/equipment-hire-operations/quotations",
-        icon: "📝",
+        icon: "QT",
+        permissions: ["hire.quotations.view"],
       },
       {
         title: "Hire Contracts",
         description: "Approved customer jobs and assignments",
         path: "/equipment-hire-operations/contracts",
-        icon: "🤝",
+        icon: "CT",
+        permissions: ["hire.contracts.view"],
       },
       {
         title: "Dispatch & Job Cards",
         description: "Mobilization, work logs and billable hours",
         path: "/equipment-hire-operations/operations",
-        icon: "🚚",
+        icon: "OP",
+        anyPermissions: ["hire.dispatch.view", "hire.work_logs.view"],
       },
       {
         title: "Invoices & Payments",
         description: "Billing, receipts, balances and debt",
         path: "/equipment-hire-operations/finance",
-        icon: "💳",
+        icon: "FN",
+        anyPermissions: ["hire.invoices.view", "hire.payments.view"],
       },
       {
         title: "Return Inspections",
         description: "Closing meters, condition and equipment release",
         path: "/equipment-hire-operations/returns",
-        icon: "🔍",
+        icon: "RT",
+        permissions: ["hire.returns.view"],
       },
       {
         title: "Reports",
         description: "Outstanding, aging and Fleet utilization",
         path: "/equipment-hire-operations/reports",
-        icon: "📈",
+        icon: "RP",
+        permissions: ["hire.reports.view"],
       },
     ],
   },
@@ -74,13 +85,15 @@ const navigationSections = [
         title: "Fleet & Maintenance",
         description: "Hire equipment, meters and service history",
         path: "/equipment-hire-operations/fleet",
-        icon: "🛠️",
+        icon: "FT",
+        permissions: ["fleet.assets.view"],
       },
       {
         title: "Hire Documents",
         description: "Quotations, agreements, invoices and statements",
         path: "/equipment-hire-operations/documents",
-        icon: "📑",
+        icon: "DC",
+        permissions: ["operations.documents.view"],
       },
     ],
   },
@@ -91,8 +104,8 @@ const navigationSections = [
         title: "Hire Administration",
         description: "Bases, yards and staff workspace access",
         path: "/equipment-hire-operations/administration",
-        icon: "⚙️",
-        roles: ["admin"],
+        icon: "AD",
+        permissions: ["workspace.admin"],
       },
     ],
   },
@@ -103,13 +116,13 @@ const navigationSections = [
         title: "Equipment Hire Help",
         description: "Guide for the Equipment Hire workspace",
         path: "/equipment-hire-operations/help",
-        icon: "📘",
+        icon: "HP",
       },
       {
         title: "Change Password",
         description: "Update your secure account password",
         path: "/equipment-hire-operations/change-password",
-        icon: "🔐",
+        icon: "PW",
       },
     ],
   },
@@ -120,9 +133,9 @@ export default function EquipmentHireLayout() {
     <BusinessWorkspaceLayout
       workspaceCode="equipment_hire"
       workspaceName="Equipment Hire"
-      icon="🚜"
+      icon="EH"
       theme="blue"
-      description="Independent Equipment Hire workspace. Hire bases and yards will be administrator-managed. Spare Parts stores are never used here."
+      description="Independent Equipment Hire workspace. Hire bases and yards are administrator-managed. Spare Parts stores are never used here."
       navigationSections={navigationSections}
     />
   );

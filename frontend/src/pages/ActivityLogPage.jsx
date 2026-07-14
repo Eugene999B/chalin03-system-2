@@ -1,132 +1,140 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
+const emptyFilters = {
+  search: "",
+  action: "",
+  workspace: "",
+  role: "",
+  outcome: "",
+  severity: "",
+  entity_type: "",
+  entity_id: "",
+  request_id: "",
+  from: "",
+  to: "",
+  page: 1,
+  limit: 50,
+};
+
+function label(value) {
+  return String(value || "-")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function downloadBlob(response, fallbackName) {
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] || fallbackName;
+  const url = window.URL.createObjectURL(
+    new Blob([response.data], { type: "text/csv;charset=utf-8" })
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function ActivityLogPage() {
-  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
-  const role = String(user?.role || "").toLowerCase();
-
-  const currentStoreCode =
-    branchCode ||
-    user?.branch_code ||
-    user?.selected_branch?.branch_code ||
-    user?.selected_branch?.code ||
-    "STORE";
-
-  const currentStoreName =
-    branchName ||
-    user?.branch_name ||
-    user?.selected_branch?.branch_name ||
-    user?.selected_branch?.name ||
-    "Selected Store";
-
-  const currentStoreLocation =
-    branchLocation ||
-    user?.branch_location ||
-    user?.selected_branch?.branch_location ||
-    user?.selected_branch?.location ||
-    "";
-
+  const { user, hasPermission } = useAuth();
+  const [filters, setFilters] = useState(emptyFilters);
   const [logs, setLogs] = useState([]);
   const [actions, setActions] = useState([]);
-  const [summary, setSummary] = useState({
-    total_logs: 0,
-    active_users: 0,
-  });
-
-  const [search, setSearch] = useState("");
-  const [action, setAction] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
+  const [summary, setSummary] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, total_pages: 1 });
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadActivityLog(customFilters = null) {
-    setError("");
+  const canView =
+    hasPermission("audit.view") || hasPermission("spare_parts.audit");
+  const canExport = hasPermission("audit.export");
 
-    const filters = customFilters || {
-      search,
-      action,
-      from,
-      to,
-    };
+  const queryParams = useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== "")
+    );
+  }, [filters]);
+
+  async function loadAuditTrail(nextFilters = filters) {
+    setLoading(true);
+    setError("");
 
     try {
       const response = await axiosClient.get("/activity-log", {
-        params: filters,
+        params: Object.fromEntries(
+          Object.entries(nextFilters).filter(([, value]) => value !== "")
+        ),
       });
-
       setLogs(response.data.logs || []);
       setActions(response.data.actions || []);
       setSummary(response.data.summary || {});
-    } catch (error) {
-      setError(
-        error.response?.data?.message ||
-          "Failed to load activity log. Make sure you are logged in as admin."
-      );
+      setPagination(response.data.pagination || { page: 1, total_pages: 1 });
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || "Failed to load audit trail.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    setError("");
+
+    try {
+      const response = await axiosClient.get("/activity-log/export.csv", {
+        params: queryParams,
+        responseType: "blob",
+      });
+      downloadBlob(response, "chalin03-audit-trail.csv");
+    } catch (exportError) {
+      setError(exportError.response?.data?.message || "Failed to export audit trail.");
+    } finally {
+      setExporting(false);
     }
   }
 
   useEffect(() => {
-    loadActivityLog({
-      search: "",
-      action: "",
-      from: "",
-      to: "",
-    });
-    // Reload activity log when the selected store changes.
+    if (canView) {
+      loadAuditTrail(emptyFilters);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId]);
+  }, [canView]);
 
-  function formatAction(actionText) {
-    return String(actionText || "")
-      .replaceAll("_", " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  function updateFilter(name, value) {
+    setFilters((current) => ({ ...current, [name]: value, page: 1 }));
   }
 
-  function getActionClass(actionText) {
-    const text = String(actionText || "").toLowerCase();
-
-    if (text.includes("delete") || text.includes("disable")) {
-      return "activity-danger";
-    }
-
-    if (text.includes("create") || text.includes("record")) {
-      return "activity-success";
-    }
-
-    if (text.includes("update") || text.includes("toggle")) {
-      return "activity-warning";
-    }
-
-    return "activity-neutral";
+  function changePage(nextPage) {
+    const page = Math.max(1, Math.min(nextPage, pagination.total_pages || 1));
+    const nextFilters = { ...filters, page };
+    setFilters(nextFilters);
+    loadAuditTrail(nextFilters);
   }
 
-  function getLogStoreCode(log) {
-    return log?.branch_code || log?.store_code || currentStoreCode;
-  }
-
-  function getLogStoreName(log) {
-    return log?.branch_name || log?.store_name || currentStoreName;
-  }
-
-  if (role !== "admin") {
+  if (!canView) {
     return (
       <div>
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>
-              You are not allowed to open Activity Log for {currentStoreCode} —{" "}
-              {currentStoreName}.
-            </p>
+            <p>Only authorized admin and auditor accounts can view audit records.</p>
           </div>
         </div>
-
-        <div className="error-box">
-          Only admin accounts can view staff activity logs.
-        </div>
+        <div className="error-box">Your account cannot open the audit trail.</div>
       </div>
     );
   }
@@ -135,118 +143,156 @@ export default function ActivityLogPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Activity Log</h1>
-          <p>
-            Track important actions performed inside{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-          </p>
+          <h1>Audit Trail</h1>
+          <p>Search structured user, security and operational activity.</p>
         </div>
-
-        <button onClick={() => loadActivityLog()}>Refresh</button>
-      </div>
-
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          color: "#1e3a8a",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Staff activity logs, action filters and summary counts are filtered to
-          this selected store only.
-        </small>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => loadAuditTrail()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={exportCsv}
+            disabled={!canExport || exporting}
+          >
+            {exporting ? "Exporting..." : "Export CSV"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid activity-summary-grid">
         <div className="stat-card">
-          <span>{currentStoreCode} Total Logs</span>
+          <span>Total records</span>
           <strong>{summary.total_logs || 0}</strong>
         </div>
-
         <div className="stat-card">
-          <span>{currentStoreCode} Users Involved</span>
+          <span>Users involved</span>
           <strong>{summary.active_users || 0}</strong>
         </div>
       </div>
 
       <div className="section-card">
-        <h2>Filter Activity - {currentStoreCode}</h2>
-
+        <h2>Filters</h2>
         <div className="activity-filter-grid">
-          <div>
-            <label>Search</label>
+          <label>
+            Search
             <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search user, username, action or details"
+              value={filters.search}
+              onChange={(event) => updateFilter("search", event.target.value)}
+              placeholder="User, action, request ID or details"
             />
-          </div>
-
-          <div>
-            <label>Action</label>
+          </label>
+          <label>
+            Action
             <select
-              value={action}
-              onChange={(event) => setAction(event.target.value)}
+              value={filters.action}
+              onChange={(event) => updateFilter("action", event.target.value)}
             >
               <option value="">All actions</option>
-
               {actions.map((actionItem) => (
                 <option key={actionItem.action} value={actionItem.action}>
-                  {formatAction(actionItem.action)} ({actionItem.count})
+                  {label(actionItem.action)} ({actionItem.count})
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label>From Date</label>
+          </label>
+          <label>
+            Workspace
+            <select
+              value={filters.workspace}
+              onChange={(event) => updateFilter("workspace", event.target.value)}
+            >
+              <option value="">All workspaces</option>
+              <option value="spare_parts">Spare Parts</option>
+              <option value="mining">Mining Operations</option>
+              <option value="equipment_hire">Equipment Hire</option>
+            </select>
+          </label>
+          <label>
+            Role
+            <input
+              value={filters.role}
+              onChange={(event) => updateFilter("role", event.target.value)}
+              placeholder="admin, auditor, manager"
+            />
+          </label>
+          <label>
+            Outcome
+            <select
+              value={filters.outcome}
+              onChange={(event) => updateFilter("outcome", event.target.value)}
+            >
+              <option value="">All outcomes</option>
+              <option value="success">Success</option>
+              <option value="failure">Failure</option>
+              <option value="blocked">Blocked</option>
+            </select>
+          </label>
+          <label>
+            Severity
+            <select
+              value={filters.severity}
+              onChange={(event) => updateFilter("severity", event.target.value)}
+            >
+              <option value="">All severities</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+          <label>
+            Entity type
+            <input
+              value={filters.entity_type}
+              onChange={(event) => updateFilter("entity_type", event.target.value)}
+              placeholder="sale, user, backup"
+            />
+          </label>
+          <label>
+            Entity ID
+            <input
+              value={filters.entity_id}
+              onChange={(event) => updateFilter("entity_id", event.target.value)}
+              placeholder="Record ID"
+            />
+          </label>
+          <label>
+            Request ID
+            <input
+              value={filters.request_id}
+              onChange={(event) => updateFilter("request_id", event.target.value)}
+              placeholder="Request ID"
+            />
+          </label>
+          <label>
+            From
             <input
               type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
+              value={filters.from}
+              onChange={(event) => updateFilter("from", event.target.value)}
             />
-          </div>
-
-          <div>
-            <label>To Date</label>
+          </label>
+          <label>
+            To
             <input
               type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
+              value={filters.to}
+              onChange={(event) => updateFilter("to", event.target.value)}
             />
-          </div>
-
+          </label>
           <div className="filter-actions">
-            <button type="button" onClick={() => loadActivityLog()}>
+            <button type="button" onClick={() => loadAuditTrail()}>
               Apply
             </button>
-
             <button
               type="button"
               className="secondary-button"
               onClick={() => {
-                setSearch("");
-                setAction("");
-                setFrom("");
-                setTo("");
-                loadActivityLog({
-                  search: "",
-                  action: "",
-                  from: "",
-                  to: "",
-                });
+                setFilters(emptyFilters);
+                loadAuditTrail(emptyFilters);
               }}
             >
               Clear
@@ -256,40 +302,77 @@ export default function ActivityLogPage() {
       </div>
 
       <div className="section-card">
-        <h2>Recent Activities - {currentStoreCode}</h2>
-
+        <h2>Records</h2>
         {logs.length === 0 ? (
-          <p>No activity logs found yet for {currentStoreCode}.</p>
+          <p>No matching audit records found.</p>
         ) : (
           <div className="activity-list">
             {logs.map((log) => (
-              <div className="activity-item" key={log.id}>
+              <button
+                type="button"
+                key={log.id}
+                className="activity-item"
+                style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
+                onClick={() => setSelectedLog(log)}
+              >
                 <div className="activity-top">
-                  <span className={`activity-badge ${getActionClass(log.action)}`}>
-                    {formatAction(log.action)}
+                  <span className="activity-badge activity-neutral">
+                    {label(log.action_type || log.action)}
                   </span>
-
-                  <small>
-                    {getLogStoreCode(log)} •{" "}
-                    {new Date(log.created_at).toLocaleString()}
-                  </small>
+                  <small>{formatDateTime(log.created_at)}</small>
                 </div>
-
                 <p className="activity-details">{log.details}</p>
-
                 <div className="activity-user">
                   <strong>{log.full_name || "System"}</strong>
                   {log.username && <span>@{log.username}</span>}
-                  {log.role && <span>{log.role}</span>}
-                  <span>
-                    {getLogStoreCode(log)} — {getLogStoreName(log)}
-                  </span>
+                  {log.role && <span>{label(log.role)}</span>}
+                  {log.workspace_code && <span>{label(log.workspace_code)}</span>}
+                  {log.request_id && <span>{log.request_id}</span>}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
+
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "16px" }}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => changePage((pagination.page || 1) - 1)}
+            disabled={(pagination.page || 1) <= 1}
+          >
+            Previous
+          </button>
+          <strong>
+            Page {pagination.page || 1} of {pagination.total_pages || 1}
+          </strong>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => changePage((pagination.page || 1) + 1)}
+            disabled={(pagination.page || 1) >= (pagination.total_pages || 1)}
+          >
+            Next
+          </button>
+        </div>
       </div>
+
+      {selectedLog && (
+        <div className="section-card">
+          <div className="page-header">
+            <div>
+              <h2>Audit Details</h2>
+              <p>{selectedLog.request_id || "No request ID recorded"}</p>
+            </div>
+            <button type="button" onClick={() => setSelectedLog(null)}>
+              Close
+            </button>
+          </div>
+          <pre style={{ whiteSpace: "pre-wrap", overflow: "auto" }}>
+            {JSON.stringify(selectedLog, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

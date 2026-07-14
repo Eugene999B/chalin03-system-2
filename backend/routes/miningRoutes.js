@@ -2,7 +2,10 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  requirePermission,
+  requireAnyPermission,
+} = require("../middleware/permissionMiddleware");
 const {
   MiningSiteScopeError,
   assertMiningWorkspace,
@@ -10,11 +13,27 @@ const {
   assertRecordInMiningSite,
   sendMiningSiteScopeError,
 } = require("../services/miningSiteScope");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
-const READ_ROLES = ["admin", "manager", "auditor"];
-const WRITE_ROLES = ["admin", "manager"];
+const READ_ROLES = [
+  "admin",
+  "manager",
+  "auditor",
+  "site_supervisor",
+  "equipment_operator",
+  "site_clerk",
+  "accountant",
+];
+const WRITE_ROLES = [
+  "admin",
+  "manager",
+  "site_supervisor",
+  "equipment_operator",
+  "site_clerk",
+  "accountant",
+];
 
 const SITE_STATUSES = new Set(["active", "paused", "closed"]);
 const LOG_STATUSES = new Set(["draft", "submitted", "approved"]);
@@ -105,11 +124,27 @@ function sendDuplicateError(res, error, message) {
 
 async function logActivity(connectionOrPool, req, action, details) {
   try {
-    await connectionOrPool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [getBranchId(req), req.user?.id || null, action, details]
-    );
+    await writeAuditEvent({
+      connection: connectionOrPool,
+      req,
+      action,
+      details,
+      workspaceCode: "mining",
+      miningSiteId:
+        req.miningSiteScope?.siteId ||
+        req.body?.site_id ||
+        req.params?.siteId ||
+        null,
+      entityType: "mining_operation",
+      entityId: req.params?.id || req.params?.siteId || null,
+      actionType: action,
+      outcome: "success",
+      severity: action.includes("APPROVE") ? "notice" : "info",
+      metadata: {
+        route: req.originalUrl,
+        method: req.method,
+      },
+    });
   } catch (error) {
     console.warn("Mining activity log skipped:", error.message);
   }
@@ -284,7 +319,16 @@ router.use(async (req, res, next) => {
 // GET /api/mining/dashboard
 router.get(
   "/dashboard",
-  requireRole(...READ_ROLES),
+  requireAnyPermission(
+    "mining.sites.view",
+    "mining.daily_logs.view",
+    "mining.production.view",
+    "mining.equipment_logs.view",
+    "mining.fuel.view",
+    "mining.expenses.view",
+    "mining.incidents.view",
+    "mining.reports.view"
+  ),
   async (req, res) => {
     try {
       const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.query.site_id);
@@ -435,7 +479,7 @@ router.get(
 );
 
 // GET /api/mining/sites
-router.get("/sites", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/sites", requirePermission("mining.sites.view"), async (req, res) => {
   try {
     const includeInactive = cleanText(req.query.include_inactive, 10) === "true";
     const search = cleanText(req.query.search, 120);
@@ -487,7 +531,7 @@ router.get("/sites", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/sites
-router.post("/sites", requireRole("admin"), async (req, res) => {
+router.post("/sites", requirePermission("mining.sites.manage"), async (req, res) => {
   try {
     const siteCode = cleanText(req.body.site_code, 50).toUpperCase();
     const siteName = cleanText(req.body.site_name, 150);
@@ -552,7 +596,7 @@ router.post("/sites", requireRole("admin"), async (req, res) => {
 });
 
 // PUT /api/mining/sites/:id
-router.put("/sites/:id", requireRole("admin"), async (req, res) => {
+router.put("/sites/:id", requirePermission("mining.sites.manage"), async (req, res) => {
   try {
     const siteId = toPositiveInt(req.params.id);
     if (!siteId) return res.status(400).json({ status: "error", message: "Invalid site ID." });
@@ -622,7 +666,7 @@ router.put("/sites/:id", requireRole("admin"), async (req, res) => {
 });
 
 // GET /api/mining/daily-logs
-router.get("/daily-logs", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/daily-logs", requirePermission("mining.daily_logs.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "log_date", "mdl");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -656,7 +700,7 @@ router.get("/daily-logs", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/daily-logs
-router.post("/daily-logs", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/daily-logs", requirePermission("mining.daily_logs.create"), async (req, res) => {
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
     const logDate = toDateOnly(req.body.log_date);
@@ -720,7 +764,7 @@ router.post("/daily-logs", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/mining/daily-logs/:id/approve
-router.patch("/daily-logs/:id/approve", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/daily-logs/:id/approve", requirePermission("mining.daily_logs.approve"), async (req, res) => {
   try {
     const logId = toPositiveInt(req.params.id);
     if (!logId) return res.status(400).json({ status: "error", message: "Invalid daily-log ID." });
@@ -763,7 +807,7 @@ router.patch("/daily-logs/:id/approve", requireRole(...WRITE_ROLES), async (req,
 });
 
 // GET /api/mining/production
-router.get("/production", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/production", requirePermission("mining.production.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "production_datetime", "mpr");
     const whereClause = filter.where.length ? `WHERE ${filter.where.join(" AND ")}` : "";
@@ -790,7 +834,7 @@ router.get("/production", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/production
-router.post("/production", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/production", requirePermission("mining.production.create"), async (req, res) => {
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
     const dailyLogId = toPositiveInt(req.body.daily_log_id);
@@ -850,7 +894,7 @@ router.post("/production", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // GET /api/mining/equipment-logs
-router.get("/equipment-logs", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/equipment-logs", requirePermission("mining.equipment_logs.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "work_date", "mel");
     const assetId = toPositiveInt(req.query.asset_id);
@@ -884,7 +928,7 @@ router.get("/equipment-logs", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/equipment-logs
-router.post("/equipment-logs", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/equipment-logs", requirePermission("mining.equipment_logs.create"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
@@ -1024,7 +1068,7 @@ router.post("/equipment-logs", requireRole(...WRITE_ROLES), async (req, res) => 
 });
 
 // GET /api/mining/fuel-logs
-router.get("/fuel-logs", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/fuel-logs", requirePermission("mining.fuel.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "log_datetime", "mfl");
     const transactionType = cleanText(req.query.transaction_type, 30).toLowerCase();
@@ -1057,7 +1101,7 @@ router.get("/fuel-logs", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/fuel-logs
-router.post("/fuel-logs", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/fuel-logs", requirePermission("mining.fuel.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
@@ -1175,7 +1219,7 @@ router.post("/fuel-logs", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // GET /api/mining/expenses
-router.get("/expenses", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/expenses", requirePermission("mining.expenses.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "expense_date", "me");
     const whereClause = filter.where.length ? `WHERE ${filter.where.join(" AND ")}` : "";
@@ -1202,7 +1246,7 @@ router.get("/expenses", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/expenses
-router.post("/expenses", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/expenses", requirePermission("mining.expenses.manage"), async (req, res) => {
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
     const expenseDate = toDateOnly(req.body.expense_date);
@@ -1256,7 +1300,7 @@ router.post("/expenses", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/mining/production/:id/approve
-router.patch("/production/:id/approve", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/production/:id/approve", requirePermission("mining.production.approve"), async (req, res) => {
   try {
     return await approveMiningRecord(req, res, {
       table: "mining_production_records",
@@ -1275,7 +1319,7 @@ router.patch("/production/:id/approve", requireRole(...WRITE_ROLES), async (req,
 });
 
 // PATCH /api/mining/equipment-logs/:id/approve
-router.patch("/equipment-logs/:id/approve", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/equipment-logs/:id/approve", requirePermission("mining.equipment_logs.approve"), async (req, res) => {
   try {
     return await approveMiningRecord(req, res, {
       table: "mining_equipment_logs",
@@ -1294,7 +1338,7 @@ router.patch("/equipment-logs/:id/approve", requireRole(...WRITE_ROLES), async (
 });
 
 // PATCH /api/mining/expenses/:id/approve
-router.patch("/expenses/:id/approve", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/expenses/:id/approve", requirePermission("mining.expenses.approve"), async (req, res) => {
   try {
     return await approveMiningRecord(req, res, {
       table: "mining_expenses",
@@ -1313,7 +1357,7 @@ router.patch("/expenses/:id/approve", requireRole(...WRITE_ROLES), async (req, r
 });
 
 // GET /api/mining/incidents
-router.get("/incidents", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/incidents", requirePermission("mining.incidents.view"), async (req, res) => {
   try {
     const filter = buildSiteDateFilters(req, "incident_datetime", "mi");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -1347,7 +1391,7 @@ router.get("/incidents", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/mining/incidents
-router.post("/incidents", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/incidents", requirePermission("mining.incidents.manage"), async (req, res) => {
   try {
     const siteId = req.miningSiteScope?.siteId || toPositiveInt(req.body.site_id);
     const incidentDateTime = toDateTime(req.body.incident_datetime);
@@ -1409,7 +1453,7 @@ router.post("/incidents", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/mining/incidents/:id/status
-router.patch("/incidents/:id/status", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/incidents/:id/status", requirePermission("mining.incidents.manage"), async (req, res) => {
   try {
     const incidentId = toPositiveInt(req.params.id);
     const status = cleanText(req.body.status, 30).toLowerCase();

@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -49,11 +50,18 @@ function toCountedMoney(value, fallbackValue) {
 }
 
 async function logActivity(connection, userId, branchId, action, details) {
-  await connection.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+  await writeAuditEvent({
+    connection,
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "daily_closing",
+    actionType: action,
+    outcome: "success",
+    severity: "critical",
+  });
 }
 
 async function calculateClosingSummary(branchId, closingDate) {

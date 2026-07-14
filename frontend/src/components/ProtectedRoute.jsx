@@ -1,13 +1,15 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function ProtectedRoute({ children }) {
+  const location = useLocation();
   const {
     isLoggedIn,
     user,
     branchId,
     workspaceCode,
     isSparePartsWorkspace,
+    mustChangePassword,
     loading,
   } = useAuth();
 
@@ -43,6 +45,19 @@ export default function ProtectedRoute({ children }) {
 
   if (isSparePartsWorkspace && !branchId) {
     return <Navigate to="/login" replace />;
+  }
+
+  const isChangePasswordPage = location.pathname.endsWith("/change-password");
+
+  if (mustChangePassword && !isChangePasswordPage) {
+    const changePasswordPath =
+      workspaceCode === "mining"
+        ? "/mining/change-password"
+        : workspaceCode === "equipment_hire"
+        ? "/equipment-hire-operations/change-password"
+        : "/change-password";
+
+    return <Navigate to={changePasswordPath} replace />;
   }
 
   return children;

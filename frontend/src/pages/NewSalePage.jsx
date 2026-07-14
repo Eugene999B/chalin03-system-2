@@ -266,7 +266,9 @@ Subtotal: GHS ${formatMoney(receiptData.subtotal)}
 Discount: GHS ${formatMoney(receiptData.discount_amount)}
 VAT: GHS ${formatMoney(receiptData.tax_amount)}
 Amount Due: GHS ${formatMoney(receiptData.total)}
+Amount Tendered: GHS ${formatMoney(receiptData.amount_tendered)}
 Amount Paid: GHS ${formatMoney(receiptData.amount_paid)}
+Change Due: GHS ${formatMoney(receiptData.change_due)}
 Balance: GHS ${formatMoney(receiptData.balance)}
 
 Served by: ${receiptData.staff?.full_name || "-"}
@@ -392,10 +394,16 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
   const cleanDiscountAmount = Math.max(Number(discountAmount || 0), 0);
   const estimatedAmountDue = Math.max(subtotal - cleanDiscountAmount, 0);
-  const expectedBalance = Math.max(
-    estimatedAmountDue - Number(amountPaid || 0),
-    0
+  const liveAmountTendered = Math.max(Number(amountPaid || 0), 0);
+  const immediatePayment = ["cash", "momo", "bank"].includes(paymentType);
+  const liveAppliedPayment = Math.min(
+    liveAmountTendered,
+    estimatedAmountDue
   );
+  const liveChangeDue = immediatePayment
+    ? Math.max(liveAmountTendered - estimatedAmountDue, 0)
+    : 0;
+  const expectedBalance = Math.max(estimatedAmountDue - liveAppliedPayment, 0);
 
   const saleProgress = useMemo(() => {
     let score = 0;
@@ -602,6 +610,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         customer_location: cleanCustomerLocation,
         payment_type: paymentType,
         discount_amount: discount,
+        amount_tendered: Number(amountPaid || 0),
         amount_paid: Number(amountPaid || 0),
         items: cart.map((item) => ({
           product_id: item.id,
@@ -927,8 +936,18 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
             </div>
 
             <div class="totals-row">
+              <span>Amount Tendered</span>
+              <span>${formatMoney(receipt.amount_tendered)}</span>
+            </div>
+
+            <div class="totals-row">
               <span>Amount Paid</span>
               <span>${formatMoney(receipt.amount_paid)}</span>
+            </div>
+
+            <div class="totals-row ${Number(receipt.change_due || 0) > 0 ? "big" : ""}">
+              <span>Change Due</span>
+              <span>${formatMoney(receipt.change_due)}</span>
             </div>
 
             <div class="totals-row">
@@ -1328,7 +1347,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 placeholder="Enter discount amount"
               />
 
-              <label>Amount Paid</label>
+              <label>
+                {immediatePayment ? "Amount Tendered" : "Amount Paid Now"}
+              </label>
               <input
                 type="number"
                 min="0"
@@ -1368,6 +1389,11 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               <div style={styles.totalDue}>
                 <span>Amount Due</span>
                 <strong>GHS {formatMoney(estimatedAmountDue)}</strong>
+              </div>
+
+              <div style={styles.totalLine}>
+                <span>Change Due</span>
+                <strong>GHS {formatMoney(liveChangeDue)}</strong>
               </div>
 
               <div style={styles.totalLine}>
@@ -1488,8 +1514,18 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               </p>
 
               <p>
+                <span>Amount Tendered</span>
+                <strong>GHS {formatMoney(receipt.amount_tendered)}</strong>
+              </p>
+
+              <p>
                 <span>Amount Paid</span>
                 <strong>GHS {formatMoney(receipt.amount_paid)}</strong>
+              </p>
+
+              <p>
+                <span>Change Due</span>
+                <strong>GHS {formatMoney(receipt.change_due)}</strong>
               </p>
 
               <p>

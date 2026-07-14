@@ -22,6 +22,13 @@ function isAuditor(req) {
   return normalizeRole(req.user?.role) === "auditor";
 }
 
+function userRoles(req) {
+  return [
+    normalizeRole(req.user?.role),
+    normalizeRole(req.user?.workspace_role),
+  ].filter(Boolean);
+}
+
 function canAuditorUseFullAuditRoute(req) {
   if (!isAuditor(req)) {
     return false;
@@ -61,9 +68,9 @@ function requireRole(...allowedRoles) {
       });
     }
 
-    const currentRole = normalizeRole(req.user.role);
+    const currentRoles = userRoles(req);
 
-    if (normalizedAllowedRoles.includes(currentRole)) {
+    if (currentRoles.some((role) => normalizedAllowedRoles.includes(role))) {
       return next();
     }
 

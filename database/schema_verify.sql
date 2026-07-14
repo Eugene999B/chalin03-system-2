@@ -25,6 +25,7 @@ WITH expected_tables AS (
   UNION ALL SELECT 'expenses' AS table_name
   UNION ALL SELECT 'sms_log' AS table_name
   UNION ALL SELECT 'activity_log' AS table_name
+  UNION ALL SELECT 'application_error_log' AS table_name
   UNION ALL SELECT 'settings' AS table_name
   UNION ALL SELECT 'daily_closings' AS table_name
   UNION ALL SELECT 'audit_signoffs' AS table_name
@@ -59,7 +60,7 @@ WITH expected_tables AS (
   UNION ALL SELECT 'hire_return_inspections' AS table_name
 )
 SELECT
-  53 AS expected_application_tables,
+  54 AS expected_application_tables,
   COUNT(t.TABLE_NAME) AS application_tables_found
 FROM expected_tables e
 LEFT JOIN information_schema.TABLES t
@@ -96,6 +97,7 @@ WITH expected_tables AS (
   UNION ALL SELECT 'expenses' AS table_name
   UNION ALL SELECT 'sms_log' AS table_name
   UNION ALL SELECT 'activity_log' AS table_name
+  UNION ALL SELECT 'application_error_log' AS table_name
   UNION ALL SELECT 'settings' AS table_name
   UNION ALL SELECT 'daily_closings' AS table_name
   UNION ALL SELECT 'audit_signoffs' AS table_name
@@ -166,6 +168,11 @@ WITH required_columns AS (
   UNION ALL SELECT 'is_active' AS column_name
   UNION ALL SELECT 'must_change_password' AS column_name
   UNION ALL SELECT 'password_changed_at' AS column_name
+  UNION ALL SELECT 'failed_login_attempts' AS column_name
+  UNION ALL SELECT 'locked_until' AS column_name
+  UNION ALL SELECT 'last_login_at' AS column_name
+  UNION ALL SELECT 'last_login_ip' AS column_name
+  UNION ALL SELECT 'token_version' AS column_name
   UNION ALL SELECT 'created_by' AS column_name
   UNION ALL SELECT 'created_at' AS column_name
   UNION ALL SELECT 'updated_at' AS column_name
@@ -286,6 +293,12 @@ FROM information_schema.STATISTICS
 WHERE TABLE_SCHEMA = DATABASE()
   AND (
     (TABLE_NAME = 'users' AND INDEX_NAME = 'idx_user_must_change_password') OR
+    (TABLE_NAME = 'users' AND INDEX_NAME = 'idx_user_locked_until') OR
+    (TABLE_NAME = 'users' AND INDEX_NAME = 'idx_user_last_login_at') OR
+    (TABLE_NAME = 'users' AND INDEX_NAME = 'idx_user_token_version') OR
+    (TABLE_NAME = 'activity_log' AND INDEX_NAME = 'idx_activity_request') OR
+    (TABLE_NAME = 'activity_log' AND INDEX_NAME = 'idx_activity_entity') OR
+    (TABLE_NAME = 'application_error_log' AND INDEX_NAME = 'idx_application_error_created') OR
     (TABLE_NAME = 'sales' AND INDEX_NAME = 'idx_sale_change_due') OR
     (TABLE_NAME = 'sales' AND INDEX_NAME = 'idx_sale_edited_by') OR
     (TABLE_NAME = 'hire_contracts' AND INDEX_NAME = 'idx_hire_contract_closure') OR
@@ -383,7 +396,7 @@ SELECT 'blocking_problem_count' AS check_name,
   (
     (SELECT COUNT(*) FROM (
       SELECT e.table_name
-      FROM (SELECT 'branches' AS table_name UNION ALL SELECT 'users' AS table_name UNION ALL SELECT 'user_branch_access' AS table_name UNION ALL SELECT 'business_units' AS table_name UNION ALL SELECT 'business_locations' AS table_name UNION ALL SELECT 'user_business_access' AS table_name UNION ALL SELECT 'products' AS table_name UNION ALL SELECT 'stock_adjustments' AS table_name UNION ALL SELECT 'suppliers' AS table_name UNION ALL SELECT 'purchases' AS table_name UNION ALL SELECT 'purchase_items' AS table_name UNION ALL SELECT 'purchase_payments' AS table_name UNION ALL SELECT 'customers' AS table_name UNION ALL SELECT 'sales' AS table_name UNION ALL SELECT 'sale_items' AS table_name UNION ALL SELECT 'debts' AS table_name UNION ALL SELECT 'debt_payments' AS table_name UNION ALL SELECT 'returns' AS table_name UNION ALL SELECT 'expenses' AS table_name UNION ALL SELECT 'sms_log' AS table_name UNION ALL SELECT 'activity_log' AS table_name UNION ALL SELECT 'settings' AS table_name UNION ALL SELECT 'daily_closings' AS table_name UNION ALL SELECT 'audit_signoffs' AS table_name UNION ALL SELECT 'audit_unlock_requests' AS table_name UNION ALL SELECT 'audit_reapproval_log' AS table_name UNION ALL SELECT 'stock_transfers' AS table_name UNION ALL SELECT 'stock_transfer_items' AS table_name UNION ALL SELECT 'fleet_assets' AS table_name UNION ALL SELECT 'fleet_meter_readings' AS table_name UNION ALL SELECT 'fleet_fuel_logs' AS table_name UNION ALL SELECT 'fleet_maintenance_records' AS table_name UNION ALL SELECT 'fleet_inspections' AS table_name UNION ALL SELECT 'mining_sites' AS table_name UNION ALL SELECT 'user_mining_site_access' AS table_name UNION ALL SELECT 'user_hire_location_access' AS table_name UNION ALL SELECT 'mining_daily_logs' AS table_name UNION ALL SELECT 'mining_production_records' AS table_name UNION ALL SELECT 'mining_equipment_logs' AS table_name UNION ALL SELECT 'mining_fuel_logs' AS table_name UNION ALL SELECT 'mining_expenses' AS table_name UNION ALL SELECT 'mining_incidents' AS table_name UNION ALL SELECT 'hire_customers' AS table_name UNION ALL SELECT 'hire_enquiries' AS table_name UNION ALL SELECT 'hire_quotations' AS table_name UNION ALL SELECT 'hire_contracts' AS table_name UNION ALL SELECT 'hire_contract_assets' AS table_name UNION ALL SELECT 'hire_dispatches' AS table_name UNION ALL SELECT 'hire_work_logs' AS table_name UNION ALL SELECT 'hire_invoices' AS table_name UNION ALL SELECT 'hire_invoice_lines' AS table_name UNION ALL SELECT 'hire_payments' AS table_name UNION ALL SELECT 'hire_return_inspections' AS table_name) e
+      FROM (SELECT 'branches' AS table_name UNION ALL SELECT 'users' AS table_name UNION ALL SELECT 'user_branch_access' AS table_name UNION ALL SELECT 'business_units' AS table_name UNION ALL SELECT 'business_locations' AS table_name UNION ALL SELECT 'user_business_access' AS table_name UNION ALL SELECT 'products' AS table_name UNION ALL SELECT 'stock_adjustments' AS table_name UNION ALL SELECT 'suppliers' AS table_name UNION ALL SELECT 'purchases' AS table_name UNION ALL SELECT 'purchase_items' AS table_name UNION ALL SELECT 'purchase_payments' AS table_name UNION ALL SELECT 'customers' AS table_name UNION ALL SELECT 'sales' AS table_name UNION ALL SELECT 'sale_items' AS table_name UNION ALL SELECT 'debts' AS table_name UNION ALL SELECT 'debt_payments' AS table_name UNION ALL SELECT 'returns' AS table_name UNION ALL SELECT 'expenses' AS table_name UNION ALL SELECT 'sms_log' AS table_name UNION ALL SELECT 'activity_log' AS table_name UNION ALL SELECT 'application_error_log' AS table_name UNION ALL SELECT 'settings' AS table_name UNION ALL SELECT 'daily_closings' AS table_name UNION ALL SELECT 'audit_signoffs' AS table_name UNION ALL SELECT 'audit_unlock_requests' AS table_name UNION ALL SELECT 'audit_reapproval_log' AS table_name UNION ALL SELECT 'stock_transfers' AS table_name UNION ALL SELECT 'stock_transfer_items' AS table_name UNION ALL SELECT 'fleet_assets' AS table_name UNION ALL SELECT 'fleet_meter_readings' AS table_name UNION ALL SELECT 'fleet_fuel_logs' AS table_name UNION ALL SELECT 'fleet_maintenance_records' AS table_name UNION ALL SELECT 'fleet_inspections' AS table_name UNION ALL SELECT 'mining_sites' AS table_name UNION ALL SELECT 'user_mining_site_access' AS table_name UNION ALL SELECT 'user_hire_location_access' AS table_name UNION ALL SELECT 'mining_daily_logs' AS table_name UNION ALL SELECT 'mining_production_records' AS table_name UNION ALL SELECT 'mining_equipment_logs' AS table_name UNION ALL SELECT 'mining_fuel_logs' AS table_name UNION ALL SELECT 'mining_expenses' AS table_name UNION ALL SELECT 'mining_incidents' AS table_name UNION ALL SELECT 'hire_customers' AS table_name UNION ALL SELECT 'hire_enquiries' AS table_name UNION ALL SELECT 'hire_quotations' AS table_name UNION ALL SELECT 'hire_contracts' AS table_name UNION ALL SELECT 'hire_contract_assets' AS table_name UNION ALL SELECT 'hire_dispatches' AS table_name UNION ALL SELECT 'hire_work_logs' AS table_name UNION ALL SELECT 'hire_invoices' AS table_name UNION ALL SELECT 'hire_invoice_lines' AS table_name UNION ALL SELECT 'hire_payments' AS table_name UNION ALL SELECT 'hire_return_inspections' AS table_name) e
       LEFT JOIN information_schema.TABLES t
         ON t.TABLE_SCHEMA = DATABASE()
        AND t.TABLE_NAME = e.table_name

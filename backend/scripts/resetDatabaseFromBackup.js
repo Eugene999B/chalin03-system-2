@@ -32,6 +32,7 @@ const CANONICAL_TABLES = [
   "expenses",
   "sms_log",
   "activity_log",
+  "application_error_log",
   "settings",
   "daily_closings",
   "audit_signoffs",
@@ -108,6 +109,23 @@ function getConnectionConfig() {
     timezone: "Z",
     ssl,
   };
+}
+
+function assertGuardedLocalTestDatabase(config) {
+  const host = String(config.host || "").toLowerCase();
+  const database = String(config.database || "").toLowerCase();
+
+  if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
+    throw new Error("Refusing destructive reset unless DB_HOST is localhost, 127.0.0.1 or ::1.");
+  }
+
+  if (host.includes("railway") || database.includes("railway")) {
+    throw new Error("Refusing Railway-like host or database name.");
+  }
+
+  if (!database.endsWith("_test")) {
+    throw new Error("Refusing destructive reset unless DB_NAME ends in _test.");
+  }
 }
 
 function safeIdentifier(value) {
@@ -559,7 +577,7 @@ async function runVerificationSummary(connection) {
 
   return {
     applicationTablesFound: Number(tableRows[0]?.table_count || 0) - 1,
-    schemaMigrationsIncluded: Number(tableRows[0]?.table_count || 0) === 54,
+    schemaMigrationsIncluded: Number(tableRows[0]?.table_count || 0) === 55,
     hireTriggersFound: Number(triggerRows[0]?.trigger_count || 0),
     requiredCoreColumnsFound: Number(coreColumnRows[0]?.core_column_count || 0),
     userRoleSupportsStaff: Number(roleRows[0]?.role_support_count || 0) === 1,
@@ -582,6 +600,8 @@ async function main() {
   if (!config.host || !config.user || !config.database) {
     throw new Error("Missing DB_HOST/MYSQLHOST, DB_USER/MYSQLUSER, or DB_NAME/MYSQLDATABASE.");
   }
+
+  assertGuardedLocalTestDatabase(config);
 
   console.log("Database reset target:");
   console.log(`  host: ${config.host}`);
@@ -615,7 +635,7 @@ async function main() {
     console.log(JSON.stringify(verification, null, 2));
 
     if (
-      verification.applicationTablesFound !== 53 ||
+      verification.applicationTablesFound !== 54 ||
       !verification.schemaMigrationsIncluded ||
       verification.hireTriggersFound !== 16 ||
       verification.requiredCoreColumnsFound !== 5 ||

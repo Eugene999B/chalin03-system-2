@@ -1,4 +1,5 @@
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
+import { MINING_VIEW_PERMISSIONS } from "../security/permissionRules";
 
 const navigationSections = [
   {
@@ -8,50 +9,58 @@ const navigationSections = [
         title: "Mining Dashboard",
         description: "Production, equipment, fuel, costs and safety overview",
         path: "/mining",
-        icon: "📊",
+        icon: "MO",
         end: true,
+        anyPermissions: MINING_VIEW_PERMISSIONS,
       },
       {
         title: "Mining Sites",
         description: "Administrator-created mining sites",
         path: "/mining/sites",
-        icon: "📍",
+        icon: "MS",
+        permissions: ["mining.sites.view"],
       },
       {
         title: "Daily Site Logs",
         description: "Shift work, workforce notes and approvals",
         path: "/mining/daily-logs",
-        icon: "📋",
+        icon: "DL",
+        permissions: ["mining.daily_logs.view"],
       },
       {
         title: "Production",
         description: "Daily material output and results",
         path: "/mining/production",
-        icon: "⛏️",
+        icon: "PR",
+        permissions: ["mining.production.view"],
       },
       {
         title: "Equipment Operations",
         description: "Machine hours, operators and downtime",
         path: "/mining/equipment",
-        icon: "🚜",
+        icon: "EQ",
+        permissions: ["mining.equipment_logs.view"],
       },
       {
         title: "Fuel Management",
         description: "Fuel receipts, issues and consumption",
         path: "/mining/fuel",
-        icon: "⛽",
+        icon: "FL",
+        permissions: ["mining.fuel.view"],
       },
       {
         title: "Mining Expenses",
         description: "Site operating expenditure",
         path: "/mining/expenses",
-        icon: "💳",
+        icon: "EX",
+        permissions: ["mining.expenses.view"],
       },
       {
         title: "Incidents & Safety",
         description: "Safety events, investigation and closure",
         path: "/mining/incidents",
-        icon: "🦺",
+        icon: "IN",
+        permissions: ["mining.incidents.view"],
       },
     ],
   },
@@ -62,13 +71,15 @@ const navigationSections = [
         title: "Fleet & Maintenance",
         description: "Mining equipment, meters and service history",
         path: "/mining/fleet",
-        icon: "🛠️",
+        icon: "FT",
+        permissions: ["fleet.assets.view"],
       },
       {
         title: "Reports & Documents",
         description: "Daily reports, management packs, incident PDFs and workbook",
         path: "/mining/documents",
-        icon: "📑",
+        icon: "RD",
+        permissions: ["operations.documents.view"],
       },
     ],
   },
@@ -79,8 +90,8 @@ const navigationSections = [
         title: "Mining Administration",
         description: "Sites and staff workspace access",
         path: "/mining/administration",
-        icon: "⚙️",
-        roles: ["admin"],
+        icon: "AD",
+        permissions: ["workspace.admin"],
       },
     ],
   },
@@ -91,13 +102,13 @@ const navigationSections = [
         title: "Mining Help",
         description: "Guide for the Mining workspace",
         path: "/mining/help",
-        icon: "📘",
+        icon: "HP",
       },
       {
         title: "Change Password",
         description: "Update your secure account password",
         path: "/mining/change-password",
-        icon: "🔐",
+        icon: "PW",
       },
     ],
   },
@@ -108,7 +119,7 @@ export default function MiningLayout() {
     <BusinessWorkspaceLayout
       workspaceCode="mining"
       workspaceName="Mining Operations"
-      icon="⛏️"
+      icon="MO"
       theme="earth"
       description="Independent Mining workspace. Mining sites are created by an administrator. Spare Parts stores are never used here."
       navigationSections={navigationSections}

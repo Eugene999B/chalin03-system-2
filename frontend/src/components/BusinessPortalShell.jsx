@@ -74,7 +74,7 @@ export default function BusinessPortalShell({ workspace }) {
             <span className="business-preview-status-dot" />
             <p>Current rollout status</p>
             <strong>
-              {workspace.openRoute ? "Local testing enabled" : "Foundation prepared"}
+              {workspace.openRoute ? "Operational workspace" : "Workspace prepared"}
             </strong>
             <span>
               {workspace.rolloutMessage ||

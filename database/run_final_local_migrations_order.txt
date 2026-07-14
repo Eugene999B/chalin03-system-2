@@ -1,0 +1,15 @@
+# Run these files against a confirmed local _test database only.
+# One plain relative path per non-comment line.
+database/stage6a_group_users_staff_migration.sql
+database/spare_parts_sales_hotfix_migration.sql
+database/stage6b_permissions_audit_migration.sql
+database/stage6c_reliability_migration.sql
+database/stage6d_security_migration.sql
+
+# Verification files run after migrations.
+database/stage6a_verify.sql
+database/spare_parts_sales_hotfix_verify.sql
+database/stage6b_verify.sql
+database/stage6c_verify.sql
+database/stage6d_verify.sql
+database/schema_verify.sql

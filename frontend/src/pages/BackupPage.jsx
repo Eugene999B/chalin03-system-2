@@ -35,6 +35,7 @@ export default function BackupPage() {
 
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [dryRunReport, setDryRunReport] = useState(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -138,6 +139,7 @@ export default function BackupPage() {
 
     setSelectedFile(file);
     setSelectedBackupInfo(null);
+    setDryRunReport(null);
     setMessage("");
     setError("");
 
@@ -164,6 +166,8 @@ export default function BackupPage() {
         table_count: tableNames.length,
         total_rows: totalRows,
         skipped_tables: backupData?.skipped_tables || [],
+        checksum_sha256:
+          backupData?.checksum_sha256 || backupData?.manifest?.checksum_sha256 || "",
       });
     } catch (error) {
       setSelectedBackupInfo(null);
@@ -189,22 +193,6 @@ export default function BackupPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "This will replace the current full system database with the backup file. It affects all stores, users, settings, products, sales, debts, stock transfers, stock ledger source records, audit records, SMS logs and reports. Continue?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const secondConfirmed = window.confirm(
-      "Final warning: restore is system-wide, not only the selected store. Current records across MAIN, AJAKAA and any other store will be replaced by the backup. Continue?"
-    );
-
-    if (!secondConfirmed) {
-      return;
-    }
-
     setRestoring(true);
 
     try {
@@ -215,6 +203,11 @@ export default function BackupPage() {
         setError("Invalid backup file. The backup does not contain tables.");
         return;
       }
+
+      const dryRunResponse = await axiosClient.post("/backups/restore/dry-run", {
+        backup: backupData,
+      });
+      setDryRunReport(dryRunResponse.data);
 
       const response = await axiosClient.post("/backups/restore", {
         confirmation: RESTORE_CONFIRMATION_TEXT,
@@ -227,6 +220,7 @@ export default function BackupPage() {
       );
       setSelectedFile(null);
       setSelectedBackupInfo(null);
+      setDryRunReport(null);
       setConfirmText("");
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -381,6 +375,15 @@ export default function BackupPage() {
               {selectedBackupInfo.skipped_tables.length > 0
                 ? selectedBackupInfo.skipped_tables.join(", ")
                 : "None"}
+              <br />
+              Checksum: {selectedBackupInfo.checksum_sha256 || "Not provided"}
+            </div>
+          )}
+
+          {dryRunReport && (
+            <div className="success-box">
+              Restore dry run completed. Restore tables:{" "}
+              {(dryRunReport.restore_tables || []).join(", ") || "None"}
             </div>
           )}
 

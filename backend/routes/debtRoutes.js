@@ -2,6 +2,7 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -55,11 +56,18 @@ function getDebtStatus(balance) {
 }
 
 async function logActivity(connection, branchId, userId, action, details) {
-  await connection.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+  await writeAuditEvent({
+    connection,
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "debt",
+    actionType: action,
+    outcome: "success",
+    severity: "notice",
+  });
 }
 
 function toDateOnly(value) {

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
+import {
+  MINING_ACTION_PERMISSIONS,
+  canUseMiningAction,
+} from "../security/permissionRules";
 import "../styles/mining.css";
 
 const TABS = [
@@ -245,7 +249,7 @@ const createIncidentForm = () => ({
 });
 
 export default function MiningOperationsPage({ section = "overview" }) {
-  const { user } = useAuth();
+  const { effectivePermissions, hasAnyPermission } = useAuth();
   const {
     options: assignedSiteOptions,
     selectedContextId,
@@ -253,9 +257,11 @@ export default function MiningOperationsPage({ section = "overview" }) {
     loading: contextLoading,
     selectContext,
   } = useWorkspaceContext();
-  const role = String(user?.role || "").toLowerCase();
-  const canEdit = role === "admin" || role === "manager";
-  const canManageSites = role === "admin";
+  const miningMutationPermissions = Object.values(MINING_ACTION_PERMISSIONS)
+    .flatMap((actions) => Object.values(actions))
+    .filter(Boolean);
+  const canEdit = hasAnyPermission(miningMutationPermissions);
+  const canManageSites = canUseMiningAction(effectivePermissions, "sites", "edit");
   const requestedSection = TABS.some(([code]) => code === section)
     ? section
     : "overview";
@@ -304,7 +310,16 @@ export default function MiningOperationsPage({ section = "overview" }) {
   );
 
   const exportRows = activeTab === "sites" ? sites : records;
-  const canCreateCurrent = activeTab === "sites" ? canManageSites : canEdit;
+  const canCreateCurrent = canUseMiningAction(
+    effectivePermissions,
+    activeTab,
+    "create"
+  );
+  const canApproveCurrent = canUseMiningAction(
+    effectivePermissions,
+    activeTab,
+    "approve"
+  );
 
   function setNotice(message) {
     setSuccess(message);
@@ -728,7 +743,7 @@ export default function MiningOperationsPage({ section = "overview" }) {
               <RecordsTable
                 tab={activeTab}
                 records={records}
-                canApprove={canEdit && Boolean(selectedSiteId)}
+                canApprove={canApproveCurrent && Boolean(selectedSiteId)}
                 saving={saving}
                 onApproveDaily={approveDailyLog}
                 onApproveRecord={approveOperationalRecord}
@@ -790,7 +805,7 @@ function Overview({ dashboard }) {
 function MiningFormPanel({ title, onClose, children }) {
   return (
     <section className="mining-form-panel">
-      <div className="mining-form-panel-head"><div><p>Local testing entry</p><h3>{title}</h3></div><button type="button" onClick={onClose} aria-label="Close form">×</button></div>
+      <div className="mining-form-panel-head"><div><p>Operational entry</p><h3>{title}</h3></div><button type="button" onClick={onClose} aria-label="Close form">×</button></div>
       {children}
     </section>
   );
@@ -1251,4 +1266,3 @@ function RecordsTable({
     </div>
   );
 }
-

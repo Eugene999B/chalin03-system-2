@@ -1,5 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import {
+  hasAnyPermission as permissionListHasAny,
+  hasEveryPermission as permissionListHasEvery,
+  hasPermission as permissionListHasOne,
+} from "../security/permissionRules";
 
 const AuthContext = createContext(null);
 
@@ -173,6 +178,17 @@ function normalizeUser(rawUser) {
     can_access_all_branches: isSparePartsWorkspace
       ? Boolean(rawUser.can_access_all_branches)
       : false,
+    must_change_password: Boolean(rawUser.must_change_password),
+    password_changed_at: rawUser.password_changed_at || null,
+    workspace_role: String(
+      rawUser.workspace_role || rawUser.access_role || rawUser.role || ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_"),
+    effective_permissions: Array.isArray(rawUser.effective_permissions)
+      ? rawUser.effective_permissions
+      : [],
   };
 }
 
@@ -302,6 +318,12 @@ export function AuthProvider({ children }) {
     const isSparePartsWorkspace = workspaceCode === DEFAULT_WORKSPACE_CODE;
     const isMiningWorkspace = workspaceCode === "mining";
     const isEquipmentHireWorkspace = workspaceCode === "equipment_hire";
+    const workspaceRole = String(
+      user?.workspace_role || user?.access_role || role || ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
 
     const selectedBranch = isSparePartsWorkspace
       ? normalizeBranch(user?.selected_branch, user)
@@ -347,6 +369,7 @@ export function AuthProvider({ children }) {
       workspaceCode,
       workspaceName: user?.business_unit_name || user?.active_workspace?.name || "",
       activeWorkspace: user?.active_workspace || null,
+      workspaceRole,
       isSparePartsWorkspace,
       isMiningWorkspace,
       isEquipmentHireWorkspace,
@@ -360,6 +383,19 @@ export function AuthProvider({ children }) {
       canAccessAllBranches:
         isSparePartsWorkspace && Boolean(user?.can_access_all_branches),
       hasSelectedBranch: isSparePartsWorkspace ? Boolean(branchId) : false,
+      mustChangePassword: Boolean(user?.must_change_password),
+      effectivePermissions: Array.isArray(user?.effective_permissions)
+        ? user.effective_permissions
+        : [],
+      hasPermission(permission) {
+        return permissionListHasOne(user?.effective_permissions, permission);
+      },
+      hasEveryPermission(permissions) {
+        return permissionListHasEvery(user?.effective_permissions, permissions);
+      },
+      hasAnyPermission(permissions) {
+        return permissionListHasAny(user?.effective_permissions, permissions);
+      },
 
       login,
       logout,

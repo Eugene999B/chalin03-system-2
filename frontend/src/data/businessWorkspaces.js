@@ -22,7 +22,7 @@ export const businessWorkspaces = [
     shortName: "Mining",
     icon: "⛏️",
     route: "/mining-operations",
-    status: "Local Testing",
+    status: "Operational",
     statusTone: "live",
     openRoute: "/mining",
     requiresBranch: false,
@@ -30,7 +30,7 @@ export const businessWorkspaces = [
     loginContextMessage:
       "No Spare Parts store is used. Mining sites will be created and managed by an administrator inside Mining Operations.",
     rolloutMessage:
-      "The Mining Operations MVP is now connected for local testing. Login first, then open the protected workspace.",
+      "The Mining Operations workspace is ready. Log in to open the protected workspace.",
     description:
       "Sites, production, fuel, equipment, expenses and safety operations.",
     accent: "earth",
@@ -101,7 +101,7 @@ export const businessWorkspaces = [
     shortName: "Equipment Hire",
     icon: "🚜",
     route: "/equipment-hire",
-    status: "Local Testing",
+    status: "Operational",
     statusTone: "live",
     openRoute: "/equipment-hire-operations",
     requiresBranch: false,
@@ -109,7 +109,7 @@ export const businessWorkspaces = [
     loginContextMessage:
       "No Spare Parts store is used. Hire yards, offices and work locations will be created and managed by an administrator inside Equipment Hire.",
     rolloutMessage:
-      "The Equipment Hire MVP is now connected for local testing. Login first, then open the protected workspace.",
+      "The Equipment Hire workspace is ready. Log in to open the protected workspace.",
     description:
       "Quotations, contracts, dispatch, job cards, invoices, payments and returns.",
     accent: "blue",

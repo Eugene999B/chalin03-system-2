@@ -32,6 +32,18 @@ export default function SalesHistoryPage() {
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [selectedDebt, setSelectedDebt] = useState(null);
+  const [editingSale, setEditingSale] = useState(null);
+  const [editItems, setEditItems] = useState([]);
+  const [editProducts, setEditProducts] = useState([]);
+  const [editForm, setEditForm] = useState({
+    customer_name: "",
+    customer_phone: "",
+    payment_type: "cash",
+    discount_amount: "0",
+    amount_tendered: "0",
+    edit_reason: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const [search, setSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -48,7 +60,7 @@ export default function SalesHistoryPage() {
   const businessPhone = "0249469080 / 0249995510";
   const momoNumber = "0543421127";
   const receiptFooter = "Thank You For Coming";
-  const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
+  const policyText = "IN GOD, WE TRUST";
 
   function getReceiptBusinessName(receiptData) {
     return receiptData?.business_name || businessName;
@@ -232,18 +244,18 @@ export default function SalesHistoryPage() {
     setError("");
 
     const reason = window.prompt(
-      `Why are you voiding receipt ${receiptNumber}? Example: Wrong item entered, customer cancelled, wrong price.`
+      `Why are you deleting receipt ${receiptNumber}? This uses the safe void process and keeps the accounting record.`
     );
 
     if (reason === null) return;
 
     if (!reason.trim()) {
-      setError("Void reason is required.");
+      setError("Delete reason is required.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to void receipt ${receiptNumber}? Stock will be restored and any debt for this sale will be closed.`
+      `Delete sale ${receiptNumber}? Stock will be restored, any debt for this sale will be closed, and the accounting record will remain as Deleted/Voided.`
     );
 
     if (!confirmed) return;
@@ -253,11 +265,161 @@ export default function SalesHistoryPage() {
         reason: reason.trim(),
       });
 
-      setMessage(response.data.message || "Sale voided successfully.");
+      setMessage(response.data.message || "Sale deleted safely.");
       closeReceipt();
       await loadSales();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to void sale.");
+      setError(error.response?.data?.message || "Failed to delete sale.");
+    }
+  }
+
+  async function startEditSale(saleId) {
+    setMessage("");
+    setError("");
+
+    try {
+      const [saleResponse, productsResponse] = await Promise.all([
+        axiosClient.get(`/sales/${saleId}`),
+        axiosClient.get("/products"),
+      ]);
+      const sale = saleResponse.data.sale || {};
+
+      if (isSaleVoided(sale)) {
+        setError("Deleted or voided sales cannot be edited.");
+        return;
+      }
+
+      const availableProducts = productsResponse.data.products || [];
+
+      setEditProducts(availableProducts);
+      setEditingSale(sale);
+      setEditItems(
+        (saleResponse.data.items || []).map((item) => ({
+          product_id: item.product_id,
+          product_name: item.product_name || "",
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        }))
+      );
+      setEditForm({
+        customer_name: sale.customer_name || "",
+        customer_phone: sale.customer_phone || "",
+        payment_type: sale.payment_type || "cash",
+        discount_amount: String(sale.discount_amount || 0),
+        amount_tendered: String(
+          sale.amount_tendered ?? sale.amount_paid ?? sale.total ?? 0
+        ),
+        edit_reason: "",
+      });
+      closeReceipt();
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to load sale for editing.");
+    }
+  }
+
+  function updateEditItem(index, field, value) {
+    setEditItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      )
+    );
+  }
+
+  function selectEditProduct(index, productIdValue) {
+    const productId = Number(productIdValue);
+    const product = editProducts.find(
+      (entry) => Number(entry.id) === productId
+    );
+
+    setEditItems((current) =>
+      current.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        return {
+          ...item,
+          product_id: productIdValue,
+          product_name: product?.name || "",
+          unit_price:
+            productIdValue && product
+              ? String(product.selling_price ?? item.unit_price ?? "")
+              : "",
+        };
+      })
+    );
+  }
+
+  function removeEditItem(index) {
+    setEditItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function addEditItem() {
+    setEditItems((current) => [
+      ...current,
+      { product_id: "", product_name: "", quantity: 1, unit_price: "" },
+    ]);
+  }
+
+  function closeEditSale() {
+    setEditingSale(null);
+    setEditItems([]);
+    setEditProducts([]);
+    setEditForm({
+      customer_name: "",
+      customer_phone: "",
+      payment_type: "cash",
+      discount_amount: "0",
+      amount_tendered: "0",
+      edit_reason: "",
+    });
+  }
+
+  async function saveEditSale(event) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+
+    if (!editingSale) return;
+
+    if (!editForm.edit_reason.trim()) {
+      setError("Edit reason is required.");
+      return;
+    }
+
+    if (editItems.length === 0) {
+      setError("Edited sale must contain at least one item.");
+      return;
+    }
+
+    setSavingEdit(true);
+
+    try {
+      const response = await axiosClient.put(`/sales/${editingSale.id}`, {
+        customer_name: editForm.customer_name,
+        customer_phone: editForm.customer_phone,
+        payment_type: editForm.payment_type,
+        discount_amount: Number(editForm.discount_amount || 0),
+        amount_tendered: Number(editForm.amount_tendered || 0),
+        amount_paid: Number(editForm.amount_tendered || 0),
+        edit_reason: editForm.edit_reason,
+        items: editItems.map((item) => ({
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity),
+          unit_price:
+            item.unit_price === "" || item.unit_price === null
+              ? undefined
+              : Number(item.unit_price),
+        })),
+      });
+
+      setMessage(response.data.message || "Sale edited successfully.");
+      closeEditSale();
+      await loadSales();
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to edit sale.");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -549,8 +711,18 @@ export default function SalesHistoryPage() {
             </div>
 
             <div class="totals-row">
+              <span>Amount Tendered</span>
+              <span>${formatMoney(selectedReceipt.amount_tendered)}</span>
+            </div>
+
+            <div class="totals-row">
               <span>Amount Paid</span>
               <span>${formatMoney(selectedReceipt.amount_paid)}</span>
+            </div>
+
+            <div class="totals-row ${Number(selectedReceipt.change_due || 0) > 0 ? "big" : ""}">
+              <span>Change Due</span>
+              <span>${formatMoney(selectedReceipt.change_due)}</span>
             </div>
 
             <div class="totals-row">
@@ -962,7 +1134,7 @@ export default function SalesHistoryPage() {
                         <strong>{sale.receipt_number}</strong>
 
                         {voided ? (
-                          <span style={styles.voidBadge}>Voided</span>
+                          <span style={styles.voidBadge}>Deleted/Voided</span>
                         ) : (
                           <span style={styles.successBadge}>
                             {sale.sale_status || "completed"}
@@ -1004,14 +1176,23 @@ export default function SalesHistoryPage() {
                       <span>Total</span>
                       <strong>GHS {formatMoney(sale.total)}</strong>
                       <small>
-                        Paid: GHS {formatMoney(sale.amount_paid)} • Bal: GHS{" "}
-                        {formatMoney(sale.balance)}
+                        Tendered: GHS {formatMoney(sale.amount_tendered)} • Paid:
+                        GHS {formatMoney(sale.amount_paid)} • Change: GHS{" "}
+                        {formatMoney(sale.change_due)} • Bal: GHS {formatMoney(sale.balance)}
                       </small>
                     </div>
                   </div>
 
                   <div style={styles.saleMiniGrid}>
                     <MiniStat label="Subtotal" value={`GHS ${formatMoney(sale.subtotal)}`} />
+                    <MiniStat
+                      label="Tendered"
+                      value={`GHS ${formatMoney(sale.amount_tendered)}`}
+                    />
+                    <MiniStat
+                      label="Change"
+                      value={`GHS ${formatMoney(sale.change_due)}`}
+                    />
                     <MiniStat
                       label="Discount"
                       value={`GHS ${formatMoney(sale.discount_amount)}`}
@@ -1034,13 +1215,22 @@ export default function SalesHistoryPage() {
                     </button>
 
                     {isAdmin && !voided && (
-                      <button
-                        type="button"
-                        className="small-danger"
-                        onClick={() => voidSale(sale.id, sale.receipt_number)}
-                      >
-                        Void Sale
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => startEditSale(sale.id)}
+                        >
+                          Edit Sale
+                        </button>
+                        <button
+                          type="button"
+                          className="small-danger"
+                          onClick={() => voidSale(sale.id, sale.receipt_number)}
+                        >
+                          Delete Sale
+                        </button>
+                      </>
                     )}
                   </div>
                 </article>
@@ -1184,10 +1374,22 @@ export default function SalesHistoryPage() {
                 </p>
 
                 <p>
+                  <span>Amount Tendered</span>
+                  <strong>
+                    GHS {formatMoney(selectedReceipt.amount_tendered)}
+                  </strong>
+                </p>
+
+                <p>
                   <span>Amount Paid</span>
                   <strong>
                     GHS {formatMoney(selectedReceipt.amount_paid)}
                   </strong>
+                </p>
+
+                <p>
+                  <span>Change Due</span>
+                  <strong>GHS {formatMoney(selectedReceipt.change_due)}</strong>
                 </p>
 
                 <p>
@@ -1230,17 +1432,245 @@ export default function SalesHistoryPage() {
               </button>
 
               {isAdmin && !isSaleVoided(selectedReceipt) && (
-                <button
-                  type="button"
-                  className="small-danger"
-                  onClick={() =>
-                    voidSale(selectedReceipt.id, selectedReceipt.receipt_number)
-                  }
-                >
-                  Void Sale
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => startEditSale(selectedReceipt.id)}
+                  >
+                    Edit Sale
+                  </button>
+                  <button
+                    type="button"
+                    className="small-danger"
+                    onClick={() =>
+                      voidSale(selectedReceipt.id, selectedReceipt.receipt_number)
+                    }
+                  >
+                    Delete Sale
+                  </button>
+                </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingSale && (
+        <div className="modal-backdrop">
+          <div className="receipt-modal" style={styles.receiptModal}>
+            <div className="modal-header">
+              <div>
+                <h2>Edit Sale - {editingSale.receipt_number}</h2>
+                <p>Admin-only correction. Receipt number and original creation record stay intact.</p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeEditSale}
+                disabled={savingEdit}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={saveEditSale} style={styles.editForm}>
+              <div style={styles.editGrid}>
+                <label>
+                  Customer name
+                  <input
+                    value={editForm.customer_name}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        customer_name: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label>
+                  Customer phone
+                  <input
+                    value={editForm.customer_phone}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        customer_phone: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label>
+                  Payment type
+                  <select
+                    value={editForm.payment_type}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        payment_type: event.target.value,
+                      }))
+                    }
+                  >
+                    {["cash", "momo", "bank", "credit", "mixed"].map((method) => (
+                      <option key={method} value={method}>
+                        {formatPaymentMethod(method)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Discount
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.discount_amount}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        discount_amount: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label>
+                  {["cash", "momo", "bank"].includes(editForm.payment_type)
+                    ? "Amount tendered"
+                    : "Amount paid now"}
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.amount_tendered}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        amount_tendered: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label>
+                  Edit reason
+                  <input
+                    value={editForm.edit_reason}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        edit_reason: event.target.value,
+                      }))
+                    }
+                    required
+                    placeholder="Required"
+                  />
+                </label>
+              </div>
+
+              <div style={styles.editItemsBox}>
+                <strong>Items</strong>
+                {editItems.map((item, index) => (
+                  <div key={`${item.product_id}-${index}`} style={styles.editItemRow}>
+                    <label>
+                      Product
+                      <select
+                        value={item.product_id}
+                        onChange={(event) =>
+                          selectEditProduct(index, event.target.value)
+                        }
+                        required
+                      >
+                        <option value="">Select product</option>
+                        {item.product_id &&
+                          !editProducts.some(
+                            (product) =>
+                              Number(product.id) === Number(item.product_id)
+                          ) && (
+                            <option value={item.product_id}>
+                              {item.product_name || `Product #${item.product_id}`}
+                            </option>
+                          )}
+                        {editProducts
+                          .filter(
+                            (product) =>
+                              Number(product.is_active ?? 1) === 1 &&
+                              !editItems.some(
+                                (otherItem, otherIndex) =>
+                                  otherIndex !== index &&
+                                  Number(otherItem.product_id) ===
+                                    Number(product.id)
+                              )
+                          )
+                          .map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name} — Stock {Number(product.quantity || 0)}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+
+                    <label>
+                      Qty
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={item.quantity}
+                        onChange={(event) =>
+                          updateEditItem(index, "quantity", event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Unit price
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unit_price}
+                        onChange={(event) =>
+                          updateEditItem(index, "unit_price", event.target.value)
+                        }
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="small-danger"
+                      onClick={() => removeEditItem(index)}
+                      disabled={editItems.length === 1}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                <button type="button" className="secondary-button" onClick={addEditItem}>
+                  Add Item
+                </button>
+              </div>
+
+              <div style={{ ...styles.modalActions, ...compactModalActions }}>
+                <button type="submit" disabled={savingEdit}>
+                  {savingEdit ? "Saving..." : "Save Sale Edit"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={closeEditSale}
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1679,6 +2109,33 @@ const styles = {
   tableWrap: {
     width: "100%",
     overflowX: "auto",
+  },
+
+  editForm: {
+    display: "grid",
+    gap: "18px",
+  },
+
+  editGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: "14px",
+  },
+
+  editItemsBox: {
+    display: "grid",
+    gap: "12px",
+    padding: "14px",
+    borderRadius: "16px",
+    border: "1px solid #dbe6ef",
+    background: "#f8fafc",
+  },
+
+  editItemRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(120px, 1fr) minmax(90px, 0.5fr) minmax(120px, 0.8fr) auto",
+    gap: "10px",
+    alignItems: "end",
   },
 
   modalActions: {

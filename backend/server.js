@@ -4,7 +4,17 @@ const express = require("express");
 const cors = require("cors");
 
 const { testDatabaseConnection } = require("./config/db");
-const { getSmsConfig } = require("./services/smsService");
+const { requestContext } = require("./middleware/requestContext");
+const {
+  notFoundHandler,
+  safeErrorResponseMiddleware,
+  errorHandler,
+} = require("./middleware/errorHandler");
+const {
+  buildSecurityMiddleware,
+  loginLimiter,
+  sensitiveAdminLimiter,
+} = require("./middleware/securityMiddleware");
 
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
@@ -36,24 +46,25 @@ const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
 const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
+const systemRoutes = require("./routes/systemRoutes");
 
 const app = express();
 
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
 
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-
-  "https://chalin03.com",
-  "https://www.chalin03.com",
-
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_ALT,
 ]
   .filter(Boolean)
   .map((origin) => String(origin).trim())
   .filter((origin, index, array) => array.indexOf(origin) === index);
+
+app.use(requestContext);
+app.use(buildSecurityMiddleware());
 
 app.use(
   cors({
@@ -72,8 +83,11 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+const bodyLimit = process.env.API_BODY_LIMIT || "10mb";
+
+app.use(express.json({ limit: bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
+app.use(safeErrorResponseMiddleware);
 
 app.get("/", (req, res) => {
   res.json({
@@ -81,39 +95,6 @@ app.get("/", (req, res) => {
     message: "Chalin 03 backend is running",
     environment: process.env.NODE_ENV || "development",
     time: new Date().toISOString(),
-  });
-});
-
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "success",
-    message: "Chalin 03 API is healthy",
-    environment: process.env.NODE_ENV || "development",
-    time: new Date().toISOString(),
-  });
-});
-
-app.get("/api/debug/sms-env", (req, res) => {
-  const config = getSmsConfig();
-
-  res.json({
-    status: "success",
-    message: "SMS environment check. API key value is hidden for safety.",
-    sms: {
-      enabled: config.enabled,
-      provider: config.provider,
-      sender_id: config.senderId,
-      has_arkesel_key: Boolean(config.arkeselApiKey),
-      arkesel_base_url: config.arkeselBaseUrl,
-      timeout_ms: config.timeoutMs,
-    },
-    raw_env: {
-      SMS_ENABLED: process.env.SMS_ENABLED || null,
-      SMS_PROVIDER: process.env.SMS_PROVIDER || null,
-      SMS_SENDER_ID: process.env.SMS_SENDER_ID || null,
-      SMS_ARKESEL_API_KEY_EXISTS: Boolean(process.env.SMS_ARKESEL_API_KEY),
-      SMS_ARKESEL_BASE_URL: process.env.SMS_ARKESEL_BASE_URL || null,
-    },
   });
 });
 
@@ -143,7 +124,6 @@ app.get("/api", (req, res) => {
       "/api/audit-signoffs",
       "/api/audit-unlock-requests",
       "/api/sms",
-      "/api/debug/sms-env",
       "/api/fleet",
       "/api/mining",
       "/api/equipment-hire",
@@ -160,6 +140,11 @@ app.get("/api", (req, res) => {
 */
 app.use("/api/branches", branchRoutes);
 
+app.use("/api/auth/login", loginLimiter);
+app.use("/api/backups/restore", sensitiveAdminLimiter);
+app.use("/api/users", sensitiveAdminLimiter);
+app.use("/api/workspace-admin", sensitiveAdminLimiter);
+app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/sales", saleRoutes);
@@ -191,36 +176,15 @@ app.use("/api/workspace-admin", workspaceAdminRoutes);
 app.use("/api/workspace-context", workspaceContextRoutes);
 
 
-app.use((req, res) => {
-  res.status(404).json({
-    status: "error",
-    message: "API route not found.",
-    path: req.originalUrl,
-  });
-});
-
-app.use((error, req, res, next) => {
-  console.error("Unhandled server error:", error);
-
-  if (error.message && error.message.startsWith("Not allowed by CORS")) {
-    return res.status(403).json({
-      status: "error",
-      message: error.message,
-      allowed_origins: allowedOrigins,
-    });
-  }
-
-  return res.status(500).json({
-    status: "error",
-    message: error.message || "Something went wrong on the server.",
-  });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
     await testDatabaseConnection();
+    await runStartupSelfCheck();
 
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
@@ -233,4 +197,30 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+async function runStartupSelfCheck() {
+  const missing = [];
+
+  if (!process.env.JWT_SECRET) {
+    missing.push("JWT_SECRET");
+  }
+
+  if (allowedOrigins.length === 0) {
+    missing.push("FRONTEND_URL or local frontend origin");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Startup safety check failed. Missing: ${missing.join(", ")}`);
+  }
+
+  console.log("Startup self-check passed: auth secret and CORS origins configured.");
+}
+
+module.exports = {
+  app,
+  startServer,
+  runStartupSelfCheck,
+};

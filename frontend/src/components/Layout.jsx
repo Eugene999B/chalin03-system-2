@@ -353,6 +353,14 @@ export default function Layout() {
           icon: "💾",
           keywords: "backup restore database data safety full system",
         },
+        {
+          title: "System Operations",
+          description: "Health, readiness, diagnostics and local acceptance",
+          path: "/system-operations",
+          icon: "Ops",
+          keywords:
+            "system operations health readiness diagnostics acceptance backup restore",
+        },
       ];
 
       if (isSystemAdministrator) {

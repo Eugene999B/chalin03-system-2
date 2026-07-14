@@ -10,13 +10,14 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { sendSaleReceiptWhatsApp } = require("../services/whatsappService");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
 function toNonNegativeNumber(value) {
   const number = Number(value);
 
-  if (Number.isNaN(number) || number < 0) {
+  if (!Number.isFinite(number) || number < 0) {
     return null;
   }
 
@@ -33,6 +34,25 @@ function toPositiveInt(value) {
   return number;
 }
 
+function findDuplicateProductId(items) {
+  const seen = new Set();
+
+  for (const item of items || []) {
+    const productId = Number(item?.product_id);
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      continue;
+    }
+
+    if (seen.has(productId)) {
+      return productId;
+    }
+
+    seen.add(productId);
+  }
+
+  return null;
+}
 
 function getProductSearchInfo(productSearchValue, productIdValue) {
   const productText = cleanText(productSearchValue);
@@ -131,6 +151,119 @@ function getDebtStatus(balance, amountPaid) {
   }
 
   return "unpaid";
+}
+
+function calculateSalePayment(paymentType, rawTendered, rawPaid, total) {
+  const tenderedInput = toNonNegativeNumber(rawTendered ?? rawPaid ?? 0);
+  const paidInput = toNonNegativeNumber(rawPaid ?? rawTendered ?? 0);
+
+  if (tenderedInput === null || paidInput === null) {
+    return {
+      error: "Amount tendered and amount paid must be valid numbers and cannot be negative.",
+    };
+  }
+
+  const saleTotal = Number(total || 0);
+
+  if (["cash", "momo", "bank"].includes(paymentType)) {
+    if (tenderedInput < saleTotal) {
+      return {
+        error:
+          "For cash, momo, or bank sales, amount tendered must cover the total.",
+      };
+    }
+
+    return {
+      amount_tendered: tenderedInput,
+      amount_paid: Number(Math.min(tenderedInput, saleTotal).toFixed(2)),
+      change_due: Number(Math.max(tenderedInput - saleTotal, 0).toFixed(2)),
+      balance: 0,
+    };
+  }
+
+  const amountPaid = Number(Math.min(paidInput, saleTotal).toFixed(2));
+
+  return {
+    amount_tendered: paidInput,
+    amount_paid: amountPaid,
+    change_due: 0,
+    balance: Number(Math.max(saleTotal - amountPaid, 0).toFixed(2)),
+  };
+}
+
+function buildReceiptPayload({
+  sale,
+  items,
+  debt,
+  settings,
+  branchId,
+  user,
+  customer,
+}) {
+  return {
+    branch_id: branchId,
+    branch_code: settings.branch_code || user?.branch_code || sale.branch_code || null,
+    branch_name:
+      settings.branch_name ||
+      settings.branch_table_name ||
+      user?.branch_name ||
+      sale.branch_name ||
+      null,
+    branch_location:
+      settings.business_address ||
+      settings.branch_location ||
+      user?.branch_location ||
+      sale.branch_location ||
+      null,
+    sale_id: sale.id,
+    id: sale.id,
+    receipt_number: sale.receipt_number,
+    business_name: settings.business_name || "Chalin 03 Company Limited",
+    business_address:
+      settings.business_address ||
+      settings.branch_location ||
+      user?.branch_location ||
+      "",
+    business_phone: settings.business_phone || null,
+    owner_phone: settings.owner_phone || null,
+    staff: {
+      id: sale.staff_id || user?.id || null,
+      full_name: sale.staff_name || user?.full_name || null,
+      username: user?.username || null,
+    },
+    customer: {
+      id: customer?.id || sale.customer_id || null,
+      name: sale.customer_name || "Walk-in Customer",
+      phone: sale.customer_phone || null,
+      location: customer?.location || null,
+    },
+    customer_name: sale.customer_name || "Walk-in Customer",
+    customer_phone: sale.customer_phone || null,
+    items: items.map((item) => ({
+      product_id: item.product_id,
+      product_name: item.product_name,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      line_total: item.line_total,
+    })),
+    subtotal: sale.subtotal,
+    discount_amount: sale.discount_amount,
+    taxable_amount: Number(
+      (Number(sale.subtotal || 0) - Number(sale.discount_amount || 0)).toFixed(2)
+    ),
+    tax_rate: Number(settings.tax_rate || 0),
+    tax_amount: sale.tax_amount,
+    total: sale.total,
+    payment_type: sale.payment_type,
+    amount_tendered: sale.amount_tendered,
+    amount_paid: sale.amount_paid,
+    change_due: sale.change_due,
+    balance: sale.balance,
+    debt,
+    created_at: sale.created_at || new Date().toISOString(),
+    edited_at: sale.edited_at || null,
+    edit_reason: sale.edit_reason || null,
+  };
 }
 
 async function sendSaleVoidedSecuritySmsAlert({
@@ -420,6 +553,7 @@ router.post("/", requireAuth, async (req, res) => {
       customer_phone,
       customer_location,
       payment_type,
+      amount_tendered,
       amount_paid,
       discount_amount,
       items,
@@ -445,12 +579,13 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
-    const paidAmount = toNonNegativeNumber(amount_paid ?? 0);
+    const duplicateProductId = findDuplicateProductId(items);
 
-    if (paidAmount === null) {
+    if (duplicateProductId) {
       return res.status(400).json({
         status: "error",
-        message: "Amount paid must be a valid number and cannot be negative.",
+        message:
+          "The same product cannot appear more than once in one sale. Update its quantity instead.",
       });
     }
 
@@ -572,19 +707,19 @@ router.post("/", requireAuth, async (req, res) => {
     const taxableAmount = Number((subtotal - discountAmount).toFixed(2));
     const taxAmount = Number(((taxableAmount * taxRate) / 100).toFixed(2));
     const total = Number((taxableAmount + taxAmount).toFixed(2));
-    const balance = Number(Math.max(total - paidAmount, 0).toFixed(2));
+    const payment = calculateSalePayment(
+      payment_type,
+      amount_tendered,
+      amount_paid,
+      total
+    );
 
-    if (
-      payment_type !== "credit" &&
-      payment_type !== "mixed" &&
-      paidAmount < total
-    ) {
+    if (payment.error) {
       await connection.rollback();
 
       return res.status(400).json({
         status: "error",
-        message:
-          "For cash, momo, or bank sales, amount paid must cover the total.",
+        message: payment.error,
       });
     }
 
@@ -614,11 +749,13 @@ router.post("/", requireAuth, async (req, res) => {
         tax_amount,
         total,
         payment_type,
+        amount_tendered,
         amount_paid,
+        change_due,
         balance,
         sale_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')`,
       [
         branchId,
         receiptNumber,
@@ -631,8 +768,10 @@ router.post("/", requireAuth, async (req, res) => {
         taxAmount,
         total,
         payment_type,
-        paidAmount,
-        balance,
+        payment.amount_tendered,
+        payment.amount_paid,
+        payment.change_due,
+        payment.balance,
       ]
     );
 
@@ -672,8 +811,8 @@ router.post("/", requireAuth, async (req, res) => {
 
     let debt = null;
 
-    if (balance > 0 || payment_type === "credit" || payment_type === "mixed") {
-      const debtStatus = getDebtStatus(balance, paidAmount);
+    if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
+      const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
       const dueDate = calculateDueDate(settings.debt_reminder_days);
 
       const [debtResult] = await connection.query(
@@ -697,8 +836,8 @@ router.post("/", requireAuth, async (req, res) => {
           finalCustomerName,
           finalCustomerPhone,
           total,
-          paidAmount,
-          balance,
+          payment.amount_paid,
+          payment.balance,
           debtStatus,
           dueDate,
         ]
@@ -711,82 +850,64 @@ router.post("/", requireAuth, async (req, res) => {
         customer_name: finalCustomerName,
         customer_phone: finalCustomerPhone,
         amount_owed: total,
-        amount_paid: paidAmount,
-        balance,
+        amount_paid: payment.amount_paid,
+        balance: payment.balance,
         status: debtStatus,
         due_date: dueDate,
       };
     }
 
-    await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        branchId,
-        req.user.id,
-        "CREATE_SALE",
-        `Created sale ${receiptNumber} for ${finalCustomerName} with total GHS ${total} and discount GHS ${discountAmount}`,
-      ]
-    );
+    await writeAuditEvent({
+      connection,
+      req,
+      branchId,
+      action: "CREATE_SALE",
+      details: `Created sale ${receiptNumber} for ${finalCustomerName} with total GHS ${total} and discount GHS ${discountAmount}`,
+      workspaceCode: "spare_parts",
+      entityType: "sale",
+      entityId: saleId,
+      actionType: "CREATE_SALE",
+      outcome: "success",
+      severity: "notice",
+      metadata: {
+        receipt_number: receiptNumber,
+        total,
+        amount_paid: payment.amount_paid,
+        balance: payment.balance,
+      },
+    });
 
     await connection.commit();
 
     return res.status(201).json({
       status: "success",
       message: "Sale recorded successfully.",
-      receipt: {
-        branch_id: branchId,
-        branch_code: settings.branch_code || req.user.branch_code || null,
-        branch_name:
-          settings.branch_name ||
-          settings.branch_table_name ||
-          req.user.branch_name ||
-          null,
-        branch_location:
-          settings.business_address ||
-          settings.branch_location ||
-          req.user.branch_location ||
-          null,
-        sale_id: saleId,
-        receipt_number: receiptNumber,
-        business_name: settings.business_name || "Chalin 03 Company Limited",
-        business_address:
-          settings.business_address ||
-          settings.branch_location ||
-          req.user.branch_location ||
-          "",
-        business_phone: settings.business_phone || null,
-        owner_phone: settings.owner_phone || null,
-        staff: {
-          id: req.user.id,
-          full_name: req.user.full_name,
-          username: req.user.username,
+      receipt: buildReceiptPayload({
+        sale: {
+          id: saleId,
+          receipt_number: receiptNumber,
+          staff_id: req.user.id,
+          customer_id: customer ? customer.id : null,
+          customer_name: finalCustomerName,
+          customer_phone: finalCustomerPhone,
+          subtotal,
+          discount_amount: discountAmount,
+          tax_amount: taxAmount,
+          total,
+          payment_type,
+          amount_tendered: payment.amount_tendered,
+          amount_paid: payment.amount_paid,
+          change_due: payment.change_due,
+          balance: payment.balance,
+          created_at: new Date().toISOString(),
         },
-        customer: {
-          id: customer ? customer.id : null,
-          name: finalCustomerName,
-          phone: finalCustomerPhone,
-          location: cleanCustomerLocation,
-        },
-        items: saleItems.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          line_total: item.line_total,
-        })),
-        subtotal,
-        discount_amount: discountAmount,
-        taxable_amount: taxableAmount,
-        tax_rate: taxRate,
-        tax_amount: taxAmount,
-        total,
-        payment_type,
-        amount_paid: paidAmount,
-        balance,
+        items: saleItems,
         debt,
-        created_at: new Date().toISOString(),
-      },
+        settings,
+        branchId,
+        user: req.user,
+        customer,
+      }),
     });
   } catch (error) {
     await connection.rollback();
@@ -883,7 +1004,9 @@ router.get("/", requireAuth, async (req, res) => {
         s.tax_amount,
         s.total,
         s.payment_type,
+        s.amount_tendered,
         s.amount_paid,
+        s.change_due,
         s.balance,
         s.sale_status,
         s.is_voided,
@@ -1102,6 +1225,539 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/sales/:id
+router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const branchId = requireSelectedBranch(req, res);
+
+    if (!branchId) {
+      return;
+    }
+
+    const { id } = req.params;
+    const {
+      customer_name,
+      customer_phone,
+      customer_location,
+      payment_type,
+      amount_tendered,
+      amount_paid,
+      discount_amount,
+      items,
+      edit_reason,
+    } = req.body;
+
+    const cleanReason = cleanText(edit_reason);
+
+    if (!cleanReason) {
+      return res.status(400).json({
+        status: "error",
+        message: "Edit reason is required.",
+      });
+    }
+
+    const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed"];
+
+    if (!allowedPaymentTypes.includes(payment_type)) {
+      return res.status(400).json({
+        status: "error",
+        message: "payment_type must be cash, momo, bank, credit, or mixed.",
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Sale must contain at least one item.",
+      });
+    }
+
+    const duplicateProductId = findDuplicateProductId(items);
+
+    if (duplicateProductId) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "The same product cannot appear more than once in one sale. Update its quantity instead.",
+      });
+    }
+
+    const cleanCustomerName = cleanText(customer_name);
+    const cleanCustomerPhone = cleanText(customer_phone);
+    const cleanCustomerLocation = cleanText(customer_location);
+    const discountAmount = toNonNegativeNumber(discount_amount ?? 0);
+
+    if (discountAmount === null) {
+      return res.status(400).json({
+        status: "error",
+        message: "Discount must be a valid number and cannot be negative.",
+      });
+    }
+
+    if (
+      (payment_type === "credit" || payment_type === "mixed") &&
+      !cleanCustomerName &&
+      !cleanCustomerPhone
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Customer name or phone is required for credit/mixed sales.",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const [sales] = await connection.query(
+      `SELECT *
+       FROM sales
+       WHERE id = ?
+       AND branch_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [id, branchId]
+    );
+
+    if (sales.length === 0) {
+      await connection.rollback();
+
+      return res.status(404).json({
+        status: "error",
+        message: "Sale not found in the selected store.",
+      });
+    }
+
+    const sale = sales[0];
+
+    const lockedPeriod = await findApprovedAuditLockForDate(
+      connection,
+      branchId,
+      sale.created_at
+    );
+
+    if (lockedPeriod) {
+      await connection.rollback();
+      return sendAuditLockedResponse(res, lockedPeriod, "edit a sale");
+    }
+
+    if (
+      Number(sale.is_voided) === 1 ||
+      sale.sale_status === "cancelled" ||
+      sale.sale_status === "voided"
+    ) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        status: "error",
+        message: "Voided or deleted sales cannot be edited.",
+      });
+    }
+
+    const [returnRows] = await connection.query(
+      `SELECT COUNT(*) AS return_count
+       FROM returns
+       WHERE sale_id = ?
+       AND branch_id = ?`,
+      [id, branchId]
+    );
+
+    if (Number(returnRows[0]?.return_count || 0) > 0) {
+      await connection.rollback();
+
+      return res.status(409).json({
+        status: "error",
+        message:
+          "This sale already has returns. Edit is blocked to avoid unsafe stock and accounting reconciliation.",
+      });
+    }
+
+    const [existingDebts] = await connection.query(
+      `SELECT id
+       FROM debts
+       WHERE sale_id = ?
+       AND branch_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [id, branchId]
+    );
+
+    if (existingDebts.length > 0) {
+      const [recordedDebtPayments] = await connection.query(
+        `SELECT id
+         FROM debt_payments
+         WHERE debt_id = ?
+         AND branch_id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [existingDebts[0].id, branchId]
+      );
+
+      if (recordedDebtPayments.length > 0) {
+        await connection.rollback();
+
+        return res.status(409).json({
+          status: "error",
+          message:
+            "This sale already has recorded debt payments. Editing is blocked to protect the payment history. Void it through the approved accounting process or contact the system administrator.",
+        });
+      }
+    }
+
+    const [originalItems] = await connection.query(
+      `SELECT *
+       FROM sale_items
+       WHERE sale_id = ?
+       ORDER BY id ASC
+       FOR UPDATE`,
+      [id]
+    );
+
+    for (const item of originalItems) {
+      await connection.query(
+        `UPDATE products
+         SET quantity = quantity + ?
+         WHERE id = ?
+         AND branch_id = ?`,
+        [Number(item.quantity || 0), item.product_id, branchId]
+      );
+    }
+
+    const settings = await getSettings(connection, branchId);
+    const taxRate = Number(settings.tax_rate || 0);
+    const saleItems = [];
+    let subtotal = 0;
+
+    for (const item of items) {
+      const productId = Number(item.product_id);
+      const quantity = toPositiveInt(Number(item.quantity));
+      const requestedUnitPrice = toNonNegativeNumber(item.unit_price);
+
+      if (!productId || quantity === null) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          status: "error",
+          message: "Each item must have a valid product_id and quantity.",
+        });
+      }
+
+      const [products] = await connection.query(
+        `SELECT
+          id,
+          branch_id,
+          name,
+          cost_price,
+          selling_price,
+          quantity,
+          is_active
+         FROM products
+         WHERE id = ?
+         AND branch_id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [productId, branchId]
+      );
+
+      if (products.length === 0 || !products[0].is_active) {
+        await connection.rollback();
+
+        return res.status(404).json({
+          status: "error",
+          message:
+            "Product was not found in the selected store. Please refresh products and try again.",
+        });
+      }
+
+      const product = products[0];
+
+      if (Number(product.quantity) < quantity) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          status: "error",
+          message: `Not enough stock for ${product.name}. Available: ${product.quantity}, requested: ${quantity}.`,
+        });
+      }
+
+      const unitPrice =
+        requestedUnitPrice !== null ? requestedUnitPrice : Number(product.selling_price);
+      const costPriceAtSale = Number(product.cost_price);
+      const lineTotal = Number((unitPrice * quantity).toFixed(2));
+
+      subtotal += lineTotal;
+      saleItems.push({
+        product_id: product.id,
+        product_name: product.name,
+        quantity,
+        unit_price: unitPrice,
+        line_total: lineTotal,
+        cost_price_at_sale: costPriceAtSale,
+      });
+    }
+
+    subtotal = Number(subtotal.toFixed(2));
+
+    if (discountAmount > subtotal) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        status: "error",
+        message: "Discount cannot be greater than subtotal.",
+      });
+    }
+
+    const taxableAmount = Number((subtotal - discountAmount).toFixed(2));
+    const taxAmount = Number(((taxableAmount * taxRate) / 100).toFixed(2));
+    const total = Number((taxableAmount + taxAmount).toFixed(2));
+    const payment = calculateSalePayment(
+      payment_type,
+      amount_tendered,
+      amount_paid,
+      total
+    );
+
+    if (payment.error) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        status: "error",
+        message: payment.error,
+      });
+    }
+
+    const customer = await findOrCreateCustomer(
+      connection,
+      branchId,
+      cleanCustomerName,
+      cleanCustomerPhone,
+      cleanCustomerLocation
+    );
+    const finalCustomerName =
+      cleanCustomerName || customer?.name || sale.customer_name || "Walk-in Customer";
+    const finalCustomerPhone =
+      cleanCustomerPhone || customer?.phone || sale.customer_phone || null;
+
+    await connection.query(`DELETE FROM sale_items WHERE sale_id = ?`, [id]);
+
+    for (const saleItem of saleItems) {
+      await connection.query(
+        `INSERT INTO sale_items (
+          sale_id,
+          product_id,
+          product_name,
+          quantity,
+          unit_price,
+          line_total,
+          cost_price_at_sale
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          saleItem.product_id,
+          saleItem.product_name,
+          saleItem.quantity,
+          saleItem.unit_price,
+          saleItem.line_total,
+          saleItem.cost_price_at_sale,
+        ]
+      );
+
+      await connection.query(
+        `UPDATE products
+         SET quantity = quantity - ?
+         WHERE id = ?
+         AND branch_id = ?`,
+        [saleItem.quantity, saleItem.product_id, branchId]
+      );
+    }
+
+    await connection.query(
+      `UPDATE sales
+       SET customer_id = ?,
+           customer_name = ?,
+           customer_phone = ?,
+           subtotal = ?,
+           discount_amount = ?,
+           tax_amount = ?,
+           total = ?,
+           payment_type = ?,
+           amount_tendered = ?,
+           amount_paid = ?,
+           change_due = ?,
+           balance = ?,
+           edited_by = ?,
+           edited_at = NOW(),
+           edit_reason = ?
+       WHERE id = ?
+       AND branch_id = ?`,
+      [
+        customer ? customer.id : sale.customer_id || null,
+        finalCustomerName,
+        finalCustomerPhone,
+        subtotal,
+        discountAmount,
+        taxAmount,
+        total,
+        payment_type,
+        payment.amount_tendered,
+        payment.amount_paid,
+        payment.change_due,
+        payment.balance,
+        req.user.id,
+        cleanReason,
+        id,
+        branchId,
+      ]
+    );
+
+    if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
+      const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
+      const dueDate = calculateDueDate(settings.debt_reminder_days);
+
+      if (existingDebts.length > 0) {
+        await connection.query(
+          `UPDATE debts
+           SET customer_id = ?,
+               customer_name = ?,
+               customer_phone = ?,
+               amount_owed = ?,
+               amount_paid = ?,
+               balance = ?,
+               status = ?,
+               due_date = ?
+           WHERE id = ?
+           AND branch_id = ?`,
+          [
+            customer ? customer.id : sale.customer_id || null,
+            finalCustomerName,
+            finalCustomerPhone,
+            total,
+            payment.amount_paid,
+            payment.balance,
+            debtStatus,
+            dueDate,
+            existingDebts[0].id,
+            branchId,
+          ]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO debts (
+            branch_id,
+            sale_id,
+            customer_id,
+            customer_name,
+            customer_phone,
+            amount_owed,
+            amount_paid,
+            balance,
+            status,
+            due_date
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            branchId,
+            id,
+            customer ? customer.id : sale.customer_id || null,
+            finalCustomerName,
+            finalCustomerPhone,
+            total,
+            payment.amount_paid,
+            payment.balance,
+            debtStatus,
+            dueDate,
+          ]
+        );
+      }
+    } else {
+      await connection.query(
+        `UPDATE debts
+         SET amount_owed = ?,
+             amount_paid = ?,
+             balance = 0,
+             status = 'paid'
+         WHERE sale_id = ?
+         AND branch_id = ?`,
+        [total, total, id, branchId]
+      );
+    }
+
+    await writeAuditEvent({
+      connection,
+      req,
+      branchId,
+      action: "EDIT_SALE",
+      details: `Edited sale ${sale.receipt_number}. Reason: ${cleanReason}. Before total GHS ${sale.total}, after total GHS ${total}.`,
+      workspaceCode: "spare_parts",
+      entityType: "sale",
+      entityId: id,
+      actionType: "EDIT_SALE",
+      outcome: "success",
+      severity: "critical",
+      metadata: {
+        receipt_number: sale.receipt_number,
+        before_total: sale.total,
+        after_total: total,
+      },
+    });
+
+    const [debts] = await connection.query(
+      `SELECT *
+       FROM debts
+       WHERE sale_id = ?
+       AND branch_id = ?
+       LIMIT 1`,
+      [id, branchId]
+    );
+
+    await connection.commit();
+
+    return res.json({
+      status: "success",
+      message: "Sale edited successfully.",
+      receipt: buildReceiptPayload({
+        sale: {
+          ...sale,
+          id: Number(id),
+          customer_id: customer ? customer.id : sale.customer_id || null,
+          customer_name: finalCustomerName,
+          customer_phone: finalCustomerPhone,
+          subtotal,
+          discount_amount: discountAmount,
+          tax_amount: taxAmount,
+          total,
+          payment_type,
+          amount_tendered: payment.amount_tendered,
+          amount_paid: payment.amount_paid,
+          change_due: payment.change_due,
+          balance: payment.balance,
+          edited_at: new Date().toISOString(),
+          edit_reason: cleanReason,
+        },
+        items: saleItems,
+        debt: debts.length > 0 ? debts[0] : null,
+        settings,
+        branchId,
+        user: req.user,
+        customer,
+      }),
+    });
+  } catch (error) {
+    await connection.rollback();
+
+    console.error("Edit sale error:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message:
+        "Something went wrong while editing the sale. No changes were saved.",
+    });
+  } finally {
+    connection.release();
+  }
+});
+
 // PATCH /api/sales/:id/void
 router.patch(
   "/:id/void",
@@ -1252,16 +1908,23 @@ router.patch(
         [id, branchId]
       );
 
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [
-          branchId,
-          req.user.id,
-          "VOID_SALE",
-          `Voided sale ${sale.receipt_number}. Reason: ${cleanReason}`,
-        ]
-      );
+      await writeAuditEvent({
+        connection,
+        req,
+        branchId,
+        action: "VOID_SALE",
+        details: `Voided sale ${sale.receipt_number}. Reason: ${cleanReason}`,
+        workspaceCode: "spare_parts",
+        entityType: "sale",
+        entityId: id,
+        actionType: "VOID_SALE",
+        outcome: "success",
+        severity: "critical",
+        metadata: {
+          receipt_number: sale.receipt_number,
+          reason: cleanReason,
+        },
+      });
 
       await connection.commit();
 

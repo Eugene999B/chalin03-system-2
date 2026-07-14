@@ -9,6 +9,7 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
@@ -28,11 +29,20 @@ function getBranchId(req) {
 }
 
 async function logActivity(userId, branchId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+  await writeAuditEvent({
+    userId: userId || null,
+    branchId: branchId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "user",
+    actionType: action,
+    outcome: "success",
+    severity:
+      action.includes("PASSWORD") || action.includes("DEACTIVATE")
+        ? "critical"
+        : "notice",
+  });
 }
 
 function cleanText(value) {
@@ -45,6 +55,21 @@ function cleanText(value) {
 
 function cleanBoolean(value) {
   return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Password must include uppercase and lowercase letters.";
+  }
+  if (!/\d/.test(text)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "Password must include at least one symbol.";
+  }
+
+  return "";
 }
 
 function isOriginalSystemAdministrator(user) {
@@ -85,6 +110,19 @@ async function columnExists(connection, tableName, columnName) {
   }
 }
 
+async function activeAdminCountExcluding(connection, userId) {
+  const [rows] = await connection.query(
+    `SELECT COUNT(*) AS active_admins
+     FROM users
+     WHERE role = 'admin'
+       AND is_active = TRUE
+       AND id <> ?`,
+    [userId]
+  );
+
+  return Number(rows[0]?.active_admins || 0);
+}
+
 async function ensureColumn(connection, tableName, columnName, columnDefinition) {
   const exists = await columnExists(connection, tableName, columnName);
 
@@ -104,11 +142,11 @@ async function ensureUserRoleSupportsAuditor(connection = pool) {
   const roleColumn = columns[0];
   const roleType = String(roleColumn.Type || "").toLowerCase();
 
-  // Live MySQL can have older role enums.
-  // If we insert a newer role before expanding the enum, MySQL throws:
+  // Live MySQL can have role as ENUM('admin','manager','cashier').
+  // If we insert "auditor" before expanding the enum, MySQL throws:
   // Data truncated for column 'role'.
   if (roleType.startsWith("enum(")) {
-    if (!roleType.includes("'staff'") || !roleType.includes("'auditor'")) {
+    if (!roleType.includes("'auditor'") || !roleType.includes("'staff'")) {
       await connection.query(`
         ALTER TABLE users
         MODIFY role ENUM('admin', 'manager', 'staff', 'cashier', 'auditor') NOT NULL DEFAULT 'cashier'
@@ -774,7 +812,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       can_access_all_branches,
     } = req.body;
 
-    const allowedRoles = ["admin", "manager", "cashier", "auditor"];
+    const allowedRoles = ["admin", "manager", "staff", "cashier", "auditor"];
 
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
@@ -791,7 +829,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     if (!allowedRoles.includes(cleanRole)) {
       return res.status(400).json({
         status: "error",
-        message: "Role must be admin, manager, cashier, or auditor.",
+        message: "Role must be admin, manager, staff, cashier, or auditor.",
       });
     }
 
@@ -816,12 +854,19 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       }
     }
 
-    const accessAllBranches =
-      cleanBoolean(can_access_all_branches) ||
-      cleanRole === "admin" ||
-      isOriginalSystemAdministrator(existingUser);
+    const preserveExistingBranchAccess = cleanRole === "staff";
+    const accessAllBranches = preserveExistingBranchAccess
+      ? cleanBoolean(existingUser.can_access_all_branches)
+      : cleanBoolean(can_access_all_branches) ||
+        cleanRole === "admin" ||
+        isOriginalSystemAdministrator(existingUser);
 
-    const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
+    const selectedBranchIds = preserveExistingBranchAccess
+      ? []
+      : normalizeBranchIds(branch_ids, branchId);
+    const nextDefaultBranchId = preserveExistingBranchAccess
+      ? existingUser.default_branch_id || null
+      : selectedBranchIds[0] || null;
 
     await connection.beginTransaction();
 
@@ -852,7 +897,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
           cleanFullName,
           cleanUsername,
           cleanRole,
-          selectedBranchIds[0],
+          nextDefaultBranchId,
           accessAllBranches ? 1 : 0,
           cleanPhone || null,
           is_active === false ? false : true,
@@ -875,7 +920,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
           cleanFullName,
           cleanUsername,
           cleanRole,
-          selectedBranchIds[0],
+          nextDefaultBranchId,
           accessAllBranches ? 1 : 0,
           cleanPhone || null,
           is_active === false ? false : true,
@@ -884,12 +929,14 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       );
     }
 
-    await setUserBranchAccess(
-      connection,
-      Number(id),
-      selectedBranchIds,
-      accessAllBranches
-    );
+    if (!preserveExistingBranchAccess) {
+      await setUserBranchAccess(
+        connection,
+        Number(id),
+        selectedBranchIds,
+        accessAllBranches
+      );
+    }
 
     await connection.query(
       `INSERT INTO activity_log (branch_id, user_id, action, details)
@@ -950,10 +997,12 @@ router.patch(
         });
       }
 
-      if (String(password).length < 6) {
+      const passwordPolicyError = strongPasswordError(password);
+
+      if (passwordPolicyError) {
         return res.status(400).json({
           status: "error",
-          message: "New password must be at least 6 characters long.",
+          message: passwordPolicyError,
         });
       }
 
@@ -986,12 +1035,26 @@ router.patch(
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
+      const updateFields = ["password_hash = ?"];
+      const updateParams = [passwordHash];
+
+      if (await columnExists(pool, "users", "must_change_password")) {
+        updateFields.push("must_change_password = TRUE");
+      }
+
+      if (await columnExists(pool, "users", "password_changed_at")) {
+        updateFields.push("password_changed_at = NULL");
+      }
+
+      if (await columnExists(pool, "users", "token_version")) {
+        updateFields.push("token_version = token_version + 1");
+      }
 
       await pool.query(
         `UPDATE users
-         SET password_hash = ?
+         SET ${updateFields.join(", ")}
          WHERE id = ?`,
-        [passwordHash, id]
+        [...updateParams, id]
       );
 
       await logActivity(
@@ -1051,10 +1114,28 @@ router.patch(
 
       const newStatus = !user.is_active;
 
-      await pool.query(`UPDATE users SET is_active = ? WHERE id = ?`, [
-        newStatus,
-        id,
-      ]);
+      if (
+        !newStatus &&
+        String(user.role || "").toLowerCase() === "admin" &&
+        (await activeAdminCountExcluding(pool, user.id)) < 1
+      ) {
+        return res.status(400).json({
+          status: "error",
+          message: "At least one active administrator must remain.",
+        });
+      }
+
+      const updateFields = ["is_active = ?"];
+      const updateParams = [newStatus];
+
+      if (!newStatus && (await columnExists(pool, "users", "token_version"))) {
+        updateFields.push("token_version = token_version + 1");
+      }
+
+      await pool.query(
+        `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+        [...updateParams, id]
+      );
 
       await logActivity(
         req.user.id,
@@ -1127,6 +1208,29 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       return res.status(403).json({
         status: "error",
         message: "The original System Administrator account cannot be deleted.",
+      });
+    }
+
+    const [managedWorkspaceRows] = await connection.query(
+      `SELECT
+         uba.id,
+         bu.code
+       FROM user_business_access uba
+       INNER JOIN business_units bu ON bu.id = uba.business_unit_id
+       WHERE uba.user_id = ?
+         AND bu.code IN ('mining', 'equipment_hire')
+       LIMIT 1`,
+      [targetUserId]
+    );
+
+    if (
+      String(targetUser.role || "").toLowerCase() === "staff" ||
+      managedWorkspaceRows.length > 0
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message:
+          "Mining and Equipment Hire staff accounts must be deactivated or have workspace access revoked. They cannot be permanently deleted because historical records must remain linked.",
       });
     }
 

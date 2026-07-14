@@ -2,17 +2,36 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  requirePermission,
+  requireAnyPermission,
+} = require("../middleware/permissionMiddleware");
 const {
   resolveHireLocationScope,
   appendHireLocationFilter,
   sendHireLocationScopeError,
 } = require("../services/hireLocationScope");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
-const READ_ROLES = ["admin", "manager", "auditor"];
-const WRITE_ROLES = ["admin", "manager"];
+const READ_ROLES = [
+  "admin",
+  "manager",
+  "auditor",
+  "hire_officer",
+  "dispatcher",
+  "fleet_officer",
+  "accountant",
+];
+const WRITE_ROLES = [
+  "admin",
+  "manager",
+  "hire_officer",
+  "dispatcher",
+  "fleet_officer",
+  "accountant",
+];
 
 const CUSTOMER_TYPES = new Set(["individual", "company", "contractor", "government"]);
 const ENQUIRY_STATUSES = new Set(["open", "quoted", "won", "lost", "cancelled"]);
@@ -217,11 +236,33 @@ function calculateHireQuoteTotals({
 
 async function logActivity(connectionOrPool, req, action, details) {
   try {
-    await connectionOrPool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [getBranchId(req), req.user?.id || null, action, details]
-    );
+    await writeAuditEvent({
+      connection: connectionOrPool,
+      req,
+      action,
+      details,
+      workspaceCode: "equipment_hire",
+      hireLocationId:
+        req.hireLocationScope?.locationId ||
+        req.body?.hire_location_id ||
+        req.params?.locationId ||
+        null,
+      entityType: "equipment_hire_operation",
+      entityId: req.params?.id || req.params?.contractAssetId || null,
+      actionType: action,
+      outcome: "success",
+      severity:
+        action.includes("PAYMENT") ||
+        action.includes("VOID") ||
+        action.includes("CLOSE") ||
+        action.includes("APPROVE")
+          ? "notice"
+          : "info",
+      metadata: {
+        route: req.originalUrl,
+        method: req.method,
+      },
+    });
   } catch (error) {
     console.warn("Equipment Hire activity log skipped:", error.message);
   }
@@ -353,7 +394,22 @@ router.use(async (req, res, next) => {
 });
 
 // GET /api/equipment-hire/dashboard
-router.get("/dashboard", requireRole(...READ_ROLES), async (req, res) => {
+router.get(
+  "/dashboard",
+  requireAnyPermission(
+    "hire.customers.view",
+    "hire.enquiries.view",
+    "hire.quotations.view",
+    "hire.contracts.view",
+    "hire.dispatch.view",
+    "hire.work_logs.view",
+    "hire.invoices.view",
+    "hire.payments.view",
+    "hire.returns.view",
+    "hire.reports.view",
+    "fleet.assets.view"
+  ),
+  async (req, res) => {
   try {
     const locationId = selectedHireLocationId(req);
     const locationClause = (alias) =>
@@ -666,7 +722,7 @@ router.get("/dashboard", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/reports
-router.get("/reports", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/reports", requirePermission("hire.reports.view"), async (req, res) => {
   try {
     const from = toDateOnly(req.query.from);
     const to = toDateOnly(req.query.to);
@@ -953,7 +1009,7 @@ router.get("/reports", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/customers
-router.get("/customers", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/customers", requirePermission("hire.customers.view"), async (req, res) => {
   try {
     const search = cleanText(req.query.search, 120);
     const locationId = selectedHireLocationId(req);
@@ -1009,7 +1065,7 @@ router.get("/customers", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/customers
-router.post("/customers", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/customers", requirePermission("hire.customers.manage"), async (req, res) => {
   try {
     const customerName = cleanText(req.body.customer_name, 180);
     const customerType = cleanText(req.body.customer_type, 30).toLowerCase() || "individual";
@@ -1080,7 +1136,7 @@ router.post("/customers", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PUT /api/equipment-hire/customers/:id
-router.put("/customers/:id", requireRole(...WRITE_ROLES), async (req, res) => {
+router.put("/customers/:id", requirePermission("hire.customers.manage"), async (req, res) => {
   try {
     const customerId = toPositiveInt(req.params.id);
     const customerName = cleanText(req.body.customer_name, 180);
@@ -1129,7 +1185,7 @@ router.put("/customers/:id", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/enquiries
-router.get("/enquiries", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/enquiries", requirePermission("hire.enquiries.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "enquiry_date", "he");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -1164,7 +1220,7 @@ router.get("/enquiries", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/enquiries
-router.post("/enquiries", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/enquiries", requirePermission("hire.enquiries.manage"), async (req, res) => {
   try {
     const customerId = toPositiveInt(req.body.customer_id);
     const enquiryDate = toDateOnly(req.body.enquiry_date);
@@ -1239,7 +1295,7 @@ router.post("/enquiries", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PUT /api/equipment-hire/enquiries/:id
-router.put("/enquiries/:id", requireRole(...WRITE_ROLES), async (req, res) => {
+router.put("/enquiries/:id", requirePermission("hire.enquiries.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const enquiryId = toPositiveInt(req.params.id);
@@ -1343,7 +1399,7 @@ router.put("/enquiries/:id", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/enquiries/:id/convert-to-quotation
-router.post("/enquiries/:id/convert-to-quotation", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/enquiries/:id/convert-to-quotation", requirePermission("hire.enquiries.manage", "hire.quotations.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const enquiryId = toPositiveInt(req.params.id);
@@ -1504,7 +1560,7 @@ router.post("/enquiries/:id/convert-to-quotation", requireRole(...WRITE_ROLES), 
 });
 
 // PATCH /api/equipment-hire/enquiries/:id/status
-router.patch("/enquiries/:id/status", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/enquiries/:id/status", requirePermission("hire.enquiries.manage"), async (req, res) => {
   try {
     const enquiryId = toPositiveInt(req.params.id);
     const status = cleanText(req.body.status, 30).toLowerCase();
@@ -1532,7 +1588,7 @@ router.patch("/enquiries/:id/status", requireRole(...WRITE_ROLES), async (req, r
 });
 
 // GET /api/equipment-hire/availability
-router.get("/availability", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/availability", requirePermission("fleet.assets.view"), async (req, res) => {
   try {
     const from = toDateOnly(req.query.from, new Date().toISOString().slice(0, 10));
     const to = toDateOnly(req.query.to, from);
@@ -1594,7 +1650,7 @@ router.get("/availability", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/quotations
-router.get("/quotations", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/quotations", requirePermission("hire.quotations.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "created_at", "hq");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -1634,7 +1690,7 @@ router.get("/quotations", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/quotations
-router.post("/quotations", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/quotations", requirePermission("hire.quotations.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const enquiryId = toPositiveInt(req.body.enquiry_id);
@@ -1843,7 +1899,7 @@ router.post("/quotations", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PUT /api/equipment-hire/quotations/:id
-router.put("/quotations/:id", requireRole(...WRITE_ROLES), async (req, res) => {
+router.put("/quotations/:id", requirePermission("hire.quotations.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const quotationId = toPositiveInt(req.params.id);
@@ -2055,7 +2111,7 @@ router.put("/quotations/:id", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/quotations/:id/convert-to-contract
-router.post("/quotations/:id/convert-to-contract", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/quotations/:id/convert-to-contract", requirePermission("hire.quotations.manage", "hire.contracts.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const quotationId = toPositiveInt(req.params.id);
@@ -2187,7 +2243,7 @@ router.post("/quotations/:id/convert-to-contract", requireRole(...WRITE_ROLES), 
 });
 
 // PATCH /api/equipment-hire/quotations/:id/status
-router.patch("/quotations/:id/status", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/quotations/:id/status", requirePermission("hire.quotations.approve"), async (req, res) => {
   try {
     const quotationId = toPositiveInt(req.params.id);
     const status = cleanText(req.body.status, 30).toLowerCase();
@@ -2231,7 +2287,7 @@ router.patch("/quotations/:id/status", requireRole(...WRITE_ROLES), async (req, 
 });
 
 // GET /api/equipment-hire/contracts
-router.get("/contracts", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/contracts", requirePermission("hire.contracts.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "start_date", "hc");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -2278,7 +2334,7 @@ router.get("/contracts", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/contracts
-router.post("/contracts", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/contracts", requirePermission("hire.contracts.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const quotationId = toPositiveInt(req.body.quotation_id);
@@ -2454,7 +2510,7 @@ router.post("/contracts", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/equipment-hire/contracts/:id/status
-router.patch("/contracts/:id/status", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/contracts/:id/status", requirePermission("hire.contracts.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractId = toPositiveInt(req.params.id);
@@ -2531,7 +2587,7 @@ router.patch("/contracts/:id/status", requireRole(...WRITE_ROLES), async (req, r
 });
 
 // PATCH /api/equipment-hire/contracts/:id/close
-router.patch("/contracts/:id/close", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/contracts/:id/close", requirePermission("hire.contracts.close_operational"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractId = toPositiveInt(req.params.id);
@@ -2676,8 +2732,87 @@ router.patch("/contracts/:id/close", requireRole(...WRITE_ROLES), async (req, re
   }
 });
 
+// PATCH /api/equipment-hire/contracts/:id/financial-close
+router.patch("/contracts/:id/financial-close", requirePermission("hire.contracts.close_financial"), async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const contractId = toPositiveInt(req.params.id);
+    if (!contractId) {
+      return res.status(400).json({ status: "error", message: "A valid contract is required." });
+    }
+
+    await connection.beginTransaction();
+    const contract = await getContract(
+      contractId,
+      connection,
+      true,
+      selectedHireLocationId(req)
+    );
+    if (!contract) {
+      await connection.rollback();
+      return res.status(404).json({ status: "error", message: "Hire contract not found." });
+    }
+
+    if (contract.operational_status !== "closed" && contract.status !== "completed") {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "Close contract operations before financial closure.",
+      });
+    }
+
+    const [[invoiceSummary]] = await connection.query(
+      `SELECT COALESCE(SUM(balance), 0) AS outstanding_balance
+       FROM hire_invoices
+       WHERE contract_id = ?
+         AND status <> 'void'`,
+      [contractId]
+    );
+    const outstandingBalance = Number(invoiceSummary.outstanding_balance || 0);
+    if (outstandingBalance > 0) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "Settle outstanding invoices before financial closure.",
+        outstanding_balance: outstandingBalance,
+      });
+    }
+
+    await connection.query(
+      `UPDATE hire_contracts
+       SET financial_status = 'settled',
+           closure_notes = COALESCE(?, closure_notes),
+           updated_by = ?
+       WHERE id = ?`,
+      [nullableText(req.body.closure_notes, 3000), req.user.id, contractId]
+    );
+
+    await logActivity(
+      connection,
+      req,
+      "FINANCIAL_CLOSE_HIRE_CONTRACT",
+      `Financially closed ${contract.contract_number}; balance GHS ${outstandingBalance.toFixed(2)}`
+    );
+    await connection.commit();
+
+    return res.json({
+      status: "success",
+      message: "Contract financially closed.",
+      financial_status: "settled",
+      outstanding_balance: outstandingBalance,
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Financial close hire contract error:", error);
+    if (sendHireSetupError(res, error)) return;
+    return res.status(500).json({ status: "error", message: "Could not financially close hire contract." });
+  } finally {
+    connection.release();
+  }
+});
+
 // GET /api/equipment-hire/contract-assets
-router.get("/contract-assets", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/contract-assets", requirePermission("hire.contracts.view"), async (req, res) => {
   try {
     const contractId = toPositiveInt(req.query.contract_id);
     const filters = { where: [], params: [] };
@@ -2719,7 +2854,7 @@ router.get("/contract-assets", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/contracts/:id/assets
-router.post("/contracts/:id/assets", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/contracts/:id/assets", requirePermission("hire.contracts.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractId = toPositiveInt(req.params.id);
@@ -2863,7 +2998,7 @@ router.post("/contracts/:id/assets", requireRole(...WRITE_ROLES), async (req, re
 });
 
 // DELETE /api/equipment-hire/contract-assets/:id
-router.delete("/contract-assets/:id", requireRole(...WRITE_ROLES), async (req, res) => {
+router.delete("/contract-assets/:id", requirePermission("hire.contracts.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractAssetId = toPositiveInt(req.params.id);
@@ -2957,7 +3092,7 @@ router.delete("/contract-assets/:id", requireRole(...WRITE_ROLES), async (req, r
 });
 
 // GET /api/equipment-hire/dispatches
-router.get("/dispatches", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/dispatches", requirePermission("hire.dispatch.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "dispatch_datetime", "hd");
     addSelectedHireLocation(filter, req, "hd");
@@ -2987,7 +3122,7 @@ router.get("/dispatches", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/dispatches
-router.post("/dispatches", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/dispatches", requirePermission("hire.dispatch.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractAssetId = toPositiveInt(req.body.contract_asset_id);
@@ -3127,7 +3262,7 @@ router.post("/dispatches", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/work-logs
-router.get("/work-logs", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/work-logs", requirePermission("hire.work_logs.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "work_date", "hwl");
     const contractId = toPositiveInt(req.query.contract_id);
@@ -3172,7 +3307,7 @@ router.get("/work-logs", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/work-logs
-router.post("/work-logs", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/work-logs", requirePermission("hire.work_logs.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractAssetId = toPositiveInt(req.body.contract_asset_id);
@@ -3316,7 +3451,7 @@ router.post("/work-logs", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/equipment-hire/work-logs/:id/approve
-router.patch("/work-logs/:id/approve", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/work-logs/:id/approve", requirePermission("hire.work_logs.approve"), async (req, res) => {
   try {
     const workLogId = toPositiveInt(req.params.id);
     const status = cleanText(req.body.status, 30).toLowerCase() || "approved";
@@ -3345,7 +3480,7 @@ router.patch("/work-logs/:id/approve", requireRole(...WRITE_ROLES), async (req, 
 });
 
 // GET /api/equipment-hire/invoices
-router.get("/finance-summary", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/finance-summary", requirePermission("hire.reports.view"), async (req, res) => {
   try {
     const locationId = selectedHireLocationId(req);
     const invoiceLocation = locationId ? "AND hi.hire_location_id = ?" : "";
@@ -3448,7 +3583,7 @@ router.get("/finance-summary", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/billable-work-logs
-router.get("/billable-work-logs", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/billable-work-logs", requirePermission("hire.work_logs.view"), async (req, res) => {
   try {
     const contractId = toPositiveInt(req.query.contract_id);
     const filter = buildDateFilters(req, "work_date", "hwl");
@@ -3486,7 +3621,7 @@ router.get("/billable-work-logs", requireRole(...READ_ROLES), async (req, res) =
 });
 
 // GET /api/equipment-hire/invoices
-router.get("/invoices", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/invoices", requirePermission("hire.invoices.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "invoice_date", "hi");
     const status = cleanText(req.query.status, 30).toLowerCase();
@@ -3528,7 +3663,7 @@ router.get("/invoices", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/invoices
-router.post("/invoices", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/invoices", requirePermission("hire.invoices.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractId = toPositiveInt(req.body.contract_id);
@@ -3843,7 +3978,7 @@ router.post("/invoices", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // PATCH /api/equipment-hire/invoices/:id/void
-router.patch("/invoices/:id/void", requireRole(...WRITE_ROLES), async (req, res) => {
+router.patch("/invoices/:id/void", requirePermission("hire.invoices.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const invoiceId = toPositiveInt(req.params.id);
@@ -3912,7 +4047,7 @@ router.patch("/invoices/:id/void", requireRole(...WRITE_ROLES), async (req, res)
 });
 
 // GET /api/equipment-hire/payments
-router.get("/payments", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/payments", requirePermission("hire.payments.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "payment_date", "hp");
     addSelectedHireLocation(filter, req, "hp");
@@ -3942,7 +4077,7 @@ router.get("/payments", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/payments
-router.post("/payments", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/payments", requirePermission("hire.payments.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const invoiceId = toPositiveInt(req.body.invoice_id);
@@ -4112,7 +4247,7 @@ router.post("/payments", requireRole(...WRITE_ROLES), async (req, res) => {
 });
 
 // GET /api/equipment-hire/returns
-router.get("/returns", requireRole(...READ_ROLES), async (req, res) => {
+router.get("/returns", requirePermission("hire.returns.view"), async (req, res) => {
   try {
     const filter = buildDateFilters(req, "return_datetime", "hri");
     addSelectedHireLocation(filter, req, "hri");
@@ -4142,7 +4277,7 @@ router.get("/returns", requireRole(...READ_ROLES), async (req, res) => {
 });
 
 // POST /api/equipment-hire/returns
-router.post("/returns", requireRole(...WRITE_ROLES), async (req, res) => {
+router.post("/returns", requirePermission("hire.returns.manage"), async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const contractAssetId = toPositiveInt(req.body.contract_asset_id);

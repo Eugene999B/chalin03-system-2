@@ -18,12 +18,32 @@ function initials(name) {
   );
 }
 
-function canSee(item, role) {
+function canSee(item, role, auth) {
   if (!item.roles || item.roles.length === 0) {
+    if (item.permissions?.length && !auth.hasEveryPermission(item.permissions)) {
+      return false;
+    }
+
+    if (item.anyPermissions?.length && !auth.hasAnyPermission(item.anyPermissions)) {
+      return false;
+    }
+
     return true;
   }
 
-  return item.roles.includes(role);
+  if (!item.roles.includes(role)) {
+    return false;
+  }
+
+  if (item.permissions?.length && !auth.hasEveryPermission(item.permissions)) {
+    return false;
+  }
+
+  if (item.anyPermissions?.length && !auth.hasAnyPermission(item.anyPermissions)) {
+    return false;
+  }
+
+  return true;
 }
 
 export default function BusinessWorkspaceLayout({
@@ -34,7 +54,8 @@ export default function BusinessWorkspaceLayout({
   theme,
   navigationSections,
 }) {
-  const { user, role, logout } = useAuth();
+  const auth = useAuth();
+  const { user, role, workspaceRole, logout } = auth;
   const {
     isManagedWorkspace,
     selectedContext,
@@ -49,10 +70,10 @@ export default function BusinessWorkspaceLayout({
       navigationSections
         .map((section) => ({
           ...section,
-          items: section.items.filter((item) => canSee(item, role)),
+          items: section.items.filter((item) => canSee(item, role, auth)),
         }))
         .filter((section) => section.items.length > 0),
-    [navigationSections, role]
+    [navigationSections, role, auth]
   );
 
   useEffect(() => {
@@ -172,7 +193,7 @@ export default function BusinessWorkspaceLayout({
           <div className="bwl-avatar">{initials(displayName)}</div>
           <div>
             <strong>{displayName}</strong>
-            <span>{String(role || "staff").toUpperCase()}</span>
+            <span>{String(workspaceRole || role || "staff").toUpperCase()}</span>
           </div>
         </div>
 

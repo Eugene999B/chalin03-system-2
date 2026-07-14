@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import {
+  FLEET_ACTION_PERMISSIONS,
+  canUseFleetAction,
+} from "../security/permissionRules";
 import "../styles/fleet.css";
 
 const STATUS_OPTIONS = [
@@ -153,10 +157,15 @@ function EmptyState({ title, description }) {
 }
 
 export default function FleetAssetsPage() {
-  const { user } = useAuth();
-  const role = String(user?.role || "").toLowerCase();
-  const canEdit = role === "admin" || role === "manager";
-  const isAdmin = role === "admin";
+  const { effectivePermissions, hasAnyPermission } = useAuth();
+  const canEdit = hasAnyPermission(Object.values(FLEET_ACTION_PERMISSIONS));
+  const canManageAssets = canUseFleetAction(effectivePermissions, "asset");
+  const canManageStatus = canUseFleetAction(effectivePermissions, "status");
+  const canManageMeter = canUseFleetAction(effectivePermissions, "meter");
+  const canManageFuel = canUseFleetAction(effectivePermissions, "fuel");
+  const canManageMaintenance = canUseFleetAction(effectivePermissions, "maintenance");
+  const canManageInspection = canUseFleetAction(effectivePermissions, "inspection");
+  const isAdmin = canManageAssets;
 
   const [assets, setAssets] = useState([]);
   const [assetTypes, setAssetTypes] = useState([]);
@@ -377,6 +386,10 @@ export default function FleetAssetsPage() {
 
   async function saveAsset(event) {
     event.preventDefault();
+    if (!canManageAssets) {
+      setError("Your account cannot manage Fleet asset records.");
+      return;
+    }
     setSaving(true);
     setError("");
 
@@ -483,6 +496,10 @@ export default function FleetAssetsPage() {
 
   function submitStatus(event) {
     event.preventDefault();
+    if (!canManageStatus) {
+      setError("Your account cannot change equipment status.");
+      return;
+    }
     runDetailAction(
       (assetId) => axiosClient.patch(`/fleet/assets/${assetId}/status`, statusForm),
       "Equipment status updated."
@@ -491,6 +508,10 @@ export default function FleetAssetsPage() {
 
   function submitMeter(event) {
     event.preventDefault();
+    if (!canManageMeter) {
+      setError("Your account cannot record meter readings.");
+      return;
+    }
     runDetailAction(
       (assetId) =>
         axiosClient.post(`/fleet/assets/${assetId}/meter-readings`, {
@@ -503,6 +524,10 @@ export default function FleetAssetsPage() {
 
   async function submitFuel(event) {
     event.preventDefault();
+    if (!canManageFuel) {
+      setError("Your account cannot record Fleet fuel entries.");
+      return;
+    }
     const saved = await runDetailAction(
       (assetId) =>
         axiosClient.post(`/fleet/assets/${assetId}/fuel-logs`, {
@@ -532,6 +557,10 @@ export default function FleetAssetsPage() {
 
   async function submitMaintenance(event) {
     event.preventDefault();
+    if (!canManageMaintenance) {
+      setError("Your account cannot manage maintenance records.");
+      return;
+    }
     const saved = await runDetailAction(
       (assetId) =>
         axiosClient.post(`/fleet/assets/${assetId}/maintenance`, {
@@ -567,6 +596,10 @@ export default function FleetAssetsPage() {
 
   async function submitInspection(event) {
     event.preventDefault();
+    if (!canManageInspection) {
+      setError("Your account cannot record inspections.");
+      return;
+    }
     const saved = await runDetailAction(
       (assetId) =>
         axiosClient.post(`/fleet/assets/${assetId}/inspections`, {
@@ -590,6 +623,10 @@ export default function FleetAssetsPage() {
   }
 
   async function archiveAsset(asset) {
+    if (!canManageAssets) {
+      setError("Your account cannot archive or restore Fleet assets.");
+      return;
+    }
     const reason = window.prompt(
       `${asset.is_active ? "Archive" : "Reactivate"} ${asset.asset_code}. Enter the reason:`
     );
@@ -630,7 +667,7 @@ export default function FleetAssetsPage() {
           <button type="button" className="fleet-button fleet-button-light" onClick={loadFleet}>
             ↻ Refresh
           </button>
-          {canEdit ? (
+          {canManageAssets ? (
             <button type="button" className="fleet-button fleet-button-gold" onClick={openCreateAsset}>
               ＋ Add Equipment
             </button>
@@ -643,8 +680,8 @@ export default function FleetAssetsPage() {
 
       {!canEdit ? (
         <div className="fleet-alert fleet-alert-info">
-          Auditor view: you can review fleet records and histories, but only an
-          administrator or manager can create or change operational fleet records.
+          Read-only view: you can review fleet records and histories, but this
+          account cannot create or change Fleet records.
         </div>
       ) : null}
 
@@ -803,7 +840,7 @@ export default function FleetAssetsPage() {
                           <button type="button" className="fleet-small-button fleet-small-primary" onClick={() => loadAssetDetail(asset.id)}>
                             View
                           </button>
-                          {canEdit ? (
+                          {canManageAssets ? (
                             <button type="button" className="fleet-small-button" onClick={() => openEditAsset(asset)}>
                               Edit
                             </button>
@@ -844,7 +881,7 @@ export default function FleetAssetsPage() {
                   </div>
                   <div className="fleet-action-row">
                     <button type="button" className="fleet-small-button fleet-small-primary" onClick={() => loadAssetDetail(asset.id)}>View</button>
-                    {canEdit ? <button type="button" className="fleet-small-button" onClick={() => openEditAsset(asset)}>Edit</button> : null}
+                    {canManageAssets ? <button type="button" className="fleet-small-button" onClick={() => openEditAsset(asset)}>Edit</button> : null}
                     {isAdmin ? <button type="button" className="fleet-small-button fleet-small-danger" onClick={() => archiveAsset(asset)}>{asset.is_active ? "Archive" : "Restore"}</button> : null}
                   </div>
                 </article>
@@ -979,7 +1016,7 @@ export default function FleetAssetsPage() {
               ) : null}
 
               {detailTab === "status" ? (
-                canEdit ? (
+                canManageStatus ? (
                   <form className="fleet-form fleet-compact-form" onSubmit={submitStatus}>
                     <div className="fleet-form-section-heading"><h3>Change Assignment Status</h3><p>This updates the equipment’s current operational position and creates an activity-log entry.</p></div>
                     <div className="fleet-form-grid fleet-form-grid-2">
@@ -990,11 +1027,11 @@ export default function FleetAssetsPage() {
                     </div>
                     <div className="fleet-form-actions"><button className="fleet-button fleet-button-primary" disabled={saving}>{saving ? "Saving…" : "Update Status"}</button></div>
                   </form>
-                ) : <EmptyState title="Read-only access" description="Only an administrator or manager can change equipment status." />
+                ) : <EmptyState title="Read-only access" description="This account cannot change equipment status." />
               ) : null}
 
               {detailTab === "meter" ? (
-                canEdit ? (
+                canManageMeter ? (
                   <form className="fleet-form fleet-compact-form" onSubmit={submitMeter}>
                     <div className="fleet-form-section-heading"><h3>Record Meter Reading</h3><p>Lower readings are protected. Only an administrator can enter a correction, and a reason is compulsory.</p></div>
                     <div className="fleet-form-grid fleet-form-grid-2">
@@ -1006,11 +1043,11 @@ export default function FleetAssetsPage() {
                     <label className="fleet-field"><span>Notes</span><textarea rows="3" value={meterForm.notes} onChange={(event) => setMeterForm((current) => ({ ...current, notes: event.target.value }))} /></label>
                     <div className="fleet-form-actions"><button className="fleet-button fleet-button-primary" disabled={saving}>{saving ? "Saving…" : "Record Meter"}</button></div>
                   </form>
-                ) : <EmptyState title="Read-only access" description="Only an administrator or manager can record meter readings." />
+                ) : <EmptyState title="Read-only access" description="This account cannot record meter readings." />
               ) : null}
 
               {detailTab === "fuel" ? (
-                canEdit ? (
+                canManageFuel ? (
                   <form className="fleet-form fleet-compact-form" onSubmit={submitFuel}>
                     <div className="fleet-form-section-heading"><h3>Record Fuel Entry</h3><p>Capture litres, meter and cost now; mining-site and hire-contract allocation will be linked in later phases.</p></div>
                     <div className="fleet-form-grid fleet-form-grid-3">
@@ -1024,11 +1061,11 @@ export default function FleetAssetsPage() {
                     <label className="fleet-field"><span>Notes</span><textarea rows="3" value={fuelForm.notes} onChange={(event) => setFuelForm((current) => ({ ...current, notes: event.target.value }))} /></label>
                     <div className="fleet-form-actions"><button className="fleet-button fleet-button-primary" disabled={saving}>{saving ? "Saving…" : "Record Fuel"}</button></div>
                   </form>
-                ) : <EmptyState title="Read-only access" description="Only an administrator or manager can record fuel entries." />
+                ) : <EmptyState title="Read-only access" description="This account cannot record fuel entries." />
               ) : null}
 
               {detailTab === "maintenance" ? (
-                canEdit ? (
+                canManageMaintenance ? (
                   <form className="fleet-form fleet-compact-form" onSubmit={submitMaintenance}>
                     <div className="fleet-form-section-heading"><h3>Maintenance or Breakdown Record</h3><p>Open records automatically place the machine in Maintenance or Breakdown status. Completed records return it to Available.</p></div>
                     <div className="fleet-form-grid fleet-form-grid-3">
@@ -1045,11 +1082,11 @@ export default function FleetAssetsPage() {
                     <label className="fleet-field"><span>Notes</span><textarea rows="3" value={maintenanceForm.notes} onChange={(event) => setMaintenanceForm((current) => ({ ...current, notes: event.target.value }))} /></label>
                     <div className="fleet-form-actions"><button className="fleet-button fleet-button-primary" disabled={saving}>{saving ? "Saving…" : "Save Maintenance"}</button></div>
                   </form>
-                ) : <EmptyState title="Read-only access" description="Only an administrator or manager can record maintenance." />
+                ) : <EmptyState title="Read-only access" description="This account cannot record maintenance." />
               ) : null}
 
               {detailTab === "inspection" ? (
-                canEdit ? (
+                canManageInspection ? (
                   <form className="fleet-form fleet-compact-form" onSubmit={submitInspection}>
                     <div className="fleet-form-section-heading"><h3>Inspection Record</h3><p>An Unsafe or Out of Service condition automatically places the machine in Maintenance status.</p></div>
                     <div className="fleet-form-grid fleet-form-grid-3">
@@ -1063,7 +1100,7 @@ export default function FleetAssetsPage() {
                     <label className="fleet-field"><span>Action required</span><textarea rows="3" value={inspectionForm.action_required} onChange={(event) => setInspectionForm((current) => ({ ...current, action_required: event.target.value }))} /></label>
                     <div className="fleet-form-actions"><button className="fleet-button fleet-button-primary" disabled={saving}>{saving ? "Saving…" : "Save Inspection"}</button></div>
                   </form>
-                ) : <EmptyState title="Read-only access" description="Only an administrator or manager can record inspections." />
+                ) : <EmptyState title="Read-only access" description="This account cannot record inspections." />
               ) : null}
 
               {detailTab === "history" ? (

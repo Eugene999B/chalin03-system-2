@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WorkspaceContextProvider } from "./context/WorkspaceContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PermissionRoute from "./components/PermissionRoute";
 import RoleRoute from "./components/RoleRoute";
 import WorkspaceRoute from "./components/WorkspaceRoute";
 import SparePartsLayout from "./layouts/SparePartsLayout";
@@ -24,6 +25,7 @@ import ReturnsPage from "./pages/ReturnsPage";
 import ExportsPage from "./pages/ExportsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import BackupPage from "./pages/BackupPage";
+import SystemOperationsPage from "./pages/SystemOperationsPage";
 import DailyClosingPage from "./pages/DailyClosingPage";
 import LowStockPage from "./pages/LowStockPage";
 import CustomerStatementPage from "./pages/CustomerStatementPage";
@@ -45,6 +47,10 @@ import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccoun
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
 import WorkspaceHelpPage from "./pages/WorkspaceHelpPage";
 import WorkspaceAdministrationPage from "./pages/WorkspaceAdministrationPage";
+import {
+  HIRE_SECTION_PERMISSIONS,
+  MINING_SECTION_PERMISSIONS,
+} from "./security/permissionRules";
 
 const businessWorkRoles = ["admin", "manager", "cashier"];
 const adminManagerRoles = ["admin", "manager"];
@@ -66,6 +72,23 @@ function safe(page) {
 
 function rolePage(allowedRoles, page) {
   return <RoleRoute allowedRoles={allowedRoles}>{safe(page)}</RoleRoute>;
+}
+
+function permissionPage(rule, page) {
+  return (
+    <PermissionRoute
+      permissions={rule?.all || []}
+      anyPermissions={rule?.any || []}
+    >
+      {safe(page)}
+    </PermissionRoute>
+  );
+}
+
+function permissionOnlyPage(permission, page) {
+  return (
+    <PermissionRoute permissions={[permission]}>{safe(page)}</PermissionRoute>
+  );
 }
 
 function WorkspaceShell({ allowedWorkspaces, children }) {
@@ -208,11 +231,15 @@ export default function App() {
             />
             <Route
               path="activity-log"
-              element={rolePage(adminOnlyRoles, <ActivityLogPage />)}
+              element={permissionOnlyPage("audit.view", <ActivityLogPage />)}
             />
             <Route
               path="backup"
-              element={rolePage(adminOnlyRoles, <BackupPage />)}
+              element={permissionOnlyPage("backup.download", <BackupPage />)}
+            />
+            <Route
+              path="system-operations"
+              element={permissionOnlyPage("system.diagnostics", <SystemOperationsPage />)}
             />
             <Route
               path="backup-restore"
@@ -235,75 +262,75 @@ export default function App() {
           >
             <Route
               index
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.overview,
                 <MiningOperationsPage section="overview" />
               )}
             />
             <Route
               path="sites"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.sites,
                 <MiningOperationsPage section="sites" />
               )}
             />
             <Route
               path="daily-logs"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.daily,
                 <MiningOperationsPage section="daily" />
               )}
             />
             <Route
               path="production"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.production,
                 <MiningOperationsPage section="production" />
               )}
             />
             <Route
               path="equipment"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.equipment,
                 <MiningOperationsPage section="equipment" />
               )}
             />
             <Route
               path="fuel"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.fuel,
                 <MiningOperationsPage section="fuel" />
               )}
             />
             <Route
               path="expenses"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.expenses,
                 <MiningOperationsPage section="expenses" />
               )}
             />
             <Route
               path="incidents"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.incidents,
                 <MiningOperationsPage section="incidents" />
               )}
             />
             <Route
               path="fleet"
-              element={rolePage(auditReadRoles, <FleetAssetsPage />)}
+              element={permissionPage(MINING_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
             />
             <Route
               path="documents"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.documents,
                 <OperationsDocumentsAccountingPage workspaceScope="mining" />
               )}
             />
             <Route
               path="administration"
-              element={rolePage(
-                adminOnlyRoles,
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.administration,
                 <WorkspaceAdministrationPage workspace="mining" />
               )}
             />
@@ -328,89 +355,89 @@ export default function App() {
           >
             <Route
               index
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.overview,
                 <EquipmentHireOperationsPage section="overview" />
               )}
             />
             <Route
               path="customers"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.customers,
                 <EquipmentHireOperationsPage section="customers" />
               )}
             />
             <Route
               path="enquiries"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.enquiries,
                 <EquipmentHireOperationsPage section="enquiries" />
               )}
             />
             <Route
               path="availability"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.availability,
                 <EquipmentHireOperationsPage section="availability" />
               )}
             />
             <Route
               path="quotations"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.quotations,
                 <EquipmentHireOperationsPage section="quotations" />
               )}
             />
             <Route
               path="contracts"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.contracts,
                 <EquipmentHireOperationsPage section="contracts" />
               )}
             />
             <Route
               path="operations"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.operations,
                 <EquipmentHireOperationsPage section="operations" />
               )}
             />
             <Route
               path="finance"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.finance,
                 <EquipmentHireOperationsPage section="finance" />
               )}
             />
             <Route
               path="returns"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.returns,
                 <EquipmentHireOperationsPage section="returns" />
               )}
             />
             <Route
               path="reports"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.reports,
                 <EquipmentHireOperationsPage section="reports" />
               )}
             />
             <Route
               path="fleet"
-              element={rolePage(auditReadRoles, <FleetAssetsPage />)}
+              element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
             />
             <Route
               path="documents"
-              element={rolePage(
-                auditReadRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.documents,
                 <OperationsDocumentsAccountingPage workspaceScope="equipment_hire" />
               )}
             />
             <Route
               path="administration"
-              element={rolePage(
-                adminOnlyRoles,
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.administration,
                 <WorkspaceAdministrationPage workspace="equipment_hire" />
               )}
             />
@@ -429,9 +456,9 @@ export default function App() {
             path="/group-executive-control"
             element={
               <WorkspaceShell allowedWorkspaces={ALL_WORKSPACES}>
-                <RoleRoute allowedRoles={auditReadRoles}>
+                <PermissionRoute permissions={["audit.view"]}>
                   <GroupExecutiveLayout />
-                </RoleRoute>
+                </PermissionRoute>
               </WorkspaceShell>
             }
           >

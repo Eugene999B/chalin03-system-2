@@ -1,13 +1,38 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
 const MANAGED_WORKSPACES = new Set(["mining", "equipment_hire"]);
-const ASSIGNABLE_ROLES = new Set(["manager", "auditor"]);
+const GLOBAL_ROLES = new Set(["admin", "manager", "staff", "auditor", "cashier"]);
+const ASSIGNABLE_ROLES = new Set(["manager", "staff", "auditor"]);
+const WORKSPACE_ROLES = {
+  mining: new Set([
+    "manager",
+    "site_supervisor",
+    "equipment_operator",
+    "site_clerk",
+    "accountant",
+    "auditor",
+  ]),
+  equipment_hire: new Set([
+    "manager",
+    "hire_officer",
+    "dispatcher",
+    "fleet_officer",
+    "accountant",
+    "auditor",
+  ]),
+};
+const WORKSPACE_DEFAULT_ROLE = {
+  mining: "site_clerk",
+  equipment_hire: "hire_officer",
+};
 const LOCATION_TYPES = new Set([
   "office",
   "yard",
@@ -20,6 +45,10 @@ const LOCATION_TYPES = new Set([
 function cleanText(value, maxLength = 255) {
   if (value === undefined || value === null) return "";
   return String(value).trim().slice(0, maxLength);
+}
+
+function normalizeRole(value) {
+  return cleanText(value, 80).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 function nullableText(value, maxLength = 255) {
@@ -36,8 +65,120 @@ function booleanValue(value) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
+function uniquePositiveIds(values) {
+  if (!Array.isArray(values)) return [];
+
+  return [...new Set(values.map((value) => positiveId(value)).filter(Boolean))];
+}
+
+function clientError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Password must include uppercase and lowercase letters.";
+  }
+  if (!/\d/.test(text)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "Password must include at least one symbol.";
+  }
+
+  return "";
+}
+
+async function columnExists(db, tableName, columnName) {
+  const [rows] = await db.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+
+  return rows.length > 0;
+}
+
 function activeWorkspaceCode(req) {
   return cleanText(req.user?.workspace_code, 50).toLowerCase();
+}
+
+function workspaceRoleSet(workspace) {
+  return WORKSPACE_ROLES[workspace.code] || new Set();
+}
+
+function defaultWorkspaceRole(workspace, globalRole) {
+  const role = normalizeRole(globalRole);
+  const roles = workspaceRoleSet(workspace);
+
+  if (roles.has(role)) {
+    return role;
+  }
+
+  return WORKSPACE_DEFAULT_ROLE[workspace.code] || "manager";
+}
+
+function validateGlobalRole(role) {
+  const cleanRole = normalizeRole(role);
+
+  if (!GLOBAL_ROLES.has(cleanRole)) {
+    throw clientError(
+      400,
+      "Global account class must be admin, manager, staff, auditor or cashier."
+    );
+  }
+
+  if (cleanRole === "cashier") {
+    throw clientError(
+      400,
+      "Cashier accounts are Spare Parts-only and cannot be assigned to Mining or Equipment Hire."
+    );
+  }
+
+  return cleanRole;
+}
+
+function validateWorkspaceRole(workspace, requestedRole, globalRole) {
+  const role = normalizeRole(requestedRole);
+  const roles = workspaceRoleSet(workspace);
+
+  if (!role) {
+    return defaultWorkspaceRole(workspace, globalRole);
+  }
+
+  if (!roles.has(role)) {
+    throw clientError(
+      400,
+      workspace.code === "mining"
+        ? "Choose a valid Mining workspace role."
+        : "Choose a valid Equipment Hire workspace role."
+    );
+  }
+
+  return role;
+}
+
+function contextAccessDefinition(workspace) {
+  if (workspace.code === "mining") {
+    return {
+      table: "user_mining_site_access",
+      foreignKey: "site_id",
+      contextName: "Mining site",
+    };
+  }
+
+  return {
+    table: "user_hire_location_access",
+    foreignKey: "location_id",
+    contextName: "Equipment Hire location",
+  };
 }
 
 async function getBusinessUnit(code) {
@@ -79,17 +220,89 @@ async function getActiveWorkspace(req, res) {
 
 async function logActivity(req, action, details) {
   try {
-    await pool.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (NULL, ?, ?, ?)`,
-      [req.user?.id || null, action, details]
-    );
+    await writeAuditEvent({
+      req,
+      action,
+      details,
+      workspaceCode: req.user?.workspace_code || null,
+      entityType: "workspace_access",
+      entityId: req.params?.userId || null,
+      actionType: action,
+      outcome: "success",
+      severity:
+        action.includes("PASSWORD") ||
+        action.includes("STATUS") ||
+        action.includes("REVOKE")
+          ? "critical"
+          : "notice",
+    });
   } catch (error) {
     console.warn("Workspace administration activity log skipped:", error.message);
   }
 }
 
-async function loadWorkspaceUsers(workspaceId) {
+async function getUserById(db, userId) {
+  const [users] = await db.query(
+    `SELECT
+       id,
+       full_name,
+       username,
+       role,
+       phone,
+       default_branch_id,
+       can_access_all_branches,
+       is_active,
+       must_change_password,
+       password_changed_at,
+       created_by,
+       created_at,
+       updated_at
+     FROM users
+     WHERE id = ?
+     LIMIT 1`,
+    [userId]
+  );
+
+  return users[0] || null;
+}
+
+async function ensureAdminChangeIsSafe(db, req, user, nextRole, nextIsActive) {
+  if (
+    Number(user.id) === Number(req.user?.id) &&
+    (!nextIsActive || normalizeRole(nextRole) !== "admin")
+  ) {
+    throw clientError(
+      400,
+      "You cannot deactivate or demote your own current administrator session."
+    );
+  }
+
+  const currentRole = normalizeRole(user.role);
+  const nextCleanRole = normalizeRole(nextRole);
+
+  if (currentRole !== "admin") {
+    return;
+  }
+
+  if (nextCleanRole === "admin" && nextIsActive) {
+    return;
+  }
+
+  const [rows] = await db.query(
+    `SELECT COUNT(*) AS active_admins
+     FROM users
+     WHERE role = 'admin'
+       AND is_active = TRUE
+       AND id <> ?`,
+    [user.id]
+  );
+
+  if (Number(rows[0]?.active_admins || 0) < 1) {
+    throw clientError(400, "At least one active administrator must remain.");
+  }
+}
+
+async function loadWorkspaceUsers(workspace) {
   const [users] = await pool.query(
     `SELECT
        u.id,
@@ -98,6 +311,10 @@ async function loadWorkspaceUsers(workspaceId) {
        u.role,
        u.phone,
        u.is_active,
+       u.must_change_password,
+       u.password_changed_at,
+       u.created_at,
+       u.updated_at,
        uba.id AS access_id,
        uba.access_role,
        uba.can_access,
@@ -107,30 +324,74 @@ async function loadWorkspaceUsers(workspaceId) {
      LEFT JOIN user_business_access uba
        ON uba.user_id = u.id
       AND uba.business_unit_id = ?
+     WHERE u.role <> 'cashier'
+        OR uba.id IS NOT NULL
      ORDER BY
-       FIELD(u.role, 'admin', 'manager', 'auditor', 'cashier'),
+       FIELD(u.role, 'admin', 'manager', 'staff', 'auditor', 'cashier'),
        u.full_name,
        u.username`,
-    [workspaceId]
+    [workspace.id]
   );
 
   return users.map((user) => {
-    const role = cleanText(user.role, 50).toLowerCase();
+    const role = normalizeRole(user.role);
     const automaticAccess = role === "admin";
     const assignable = ASSIGNABLE_ROLES.has(role);
+    const workspaceRole =
+      cleanText(user.access_role, 50) ||
+      (automaticAccess ? "group_admin" : defaultWorkspaceRole(workspace, role));
 
     return {
       ...user,
+      role,
+      workspace_role: workspaceRole,
       automatic_access: automaticAccess,
       assignable,
       effective_access: automaticAccess || booleanValue(user.can_access),
+      can_access: automaticAccess ? true : booleanValue(user.can_access),
+      must_change_password: booleanValue(user.must_change_password),
       access_reason: automaticAccess
         ? "Group administrators have automatic access."
         : assignable
         ? "Access is controlled by the workspace administrator."
-        : "This account role is not supported in operational Mining or Hire workspaces.",
+        : "This global account class is not supported in Mining or Hire workspaces.",
     };
   });
+}
+
+async function loadEligibleCentralUsers(workspace) {
+  const [users] = await pool.query(
+    `SELECT
+       u.id,
+       u.full_name,
+       u.username,
+       u.role,
+       u.phone,
+       u.is_active,
+       u.must_change_password,
+       u.created_at,
+       u.updated_at,
+       uba.can_access,
+       uba.access_role
+     FROM users u
+     LEFT JOIN user_business_access uba
+       ON uba.user_id = u.id
+      AND uba.business_unit_id = ?
+     WHERE u.role IN ('manager', 'staff', 'auditor')
+       AND (uba.id IS NULL OR uba.can_access = FALSE)
+     ORDER BY u.full_name, u.username`,
+    [workspace.id]
+  );
+
+  return users.map((user) => ({
+    ...user,
+    role: normalizeRole(user.role),
+    workspace_role:
+      cleanText(user.access_role, 50) ||
+      defaultWorkspaceRole(workspace, user.role),
+    can_access: booleanValue(user.can_access),
+    must_change_password: booleanValue(user.must_change_password),
+  }));
 }
 
 async function loadHireLocations(workspaceId) {
@@ -178,6 +439,351 @@ async function loadMiningSites() {
   return sites;
 }
 
+async function validateContextSelection(db, workspace, rawContextIds, rawDefaultId) {
+  const contextIds = uniquePositiveIds(rawContextIds);
+  const defaultContextId = positiveId(rawDefaultId);
+
+  if (defaultContextId && !contextIds.includes(defaultContextId)) {
+    throw clientError(
+      400,
+      workspace.code === "mining"
+        ? "The default Mining site must also be assigned."
+        : "The default Hire location must also be assigned."
+    );
+  }
+
+  if (contextIds.length === 0) {
+    if (defaultContextId) {
+      throw clientError(400, "Choose at least one assignment before setting a default.");
+    }
+
+    return { contextIds, defaultContextId: null, contextLabels: new Map() };
+  }
+
+  const placeholders = contextIds.map(() => "?").join(", ");
+  const contextLabels = new Map();
+  let rows = [];
+
+  if (workspace.code === "mining") {
+    [rows] = await db.query(
+      `SELECT id, site_code AS code, site_name AS name
+       FROM mining_sites
+       WHERE id IN (${placeholders})
+         AND is_active = TRUE
+         AND status = 'active'`,
+      contextIds
+    );
+  } else {
+    [rows] = await db.query(
+      `SELECT id, code, name
+       FROM business_locations
+       WHERE id IN (${placeholders})
+         AND business_unit_id = ?
+         AND is_active = TRUE`,
+      [...contextIds, workspace.id]
+    );
+  }
+
+  rows.forEach((row) => {
+    contextLabels.set(Number(row.id), `${row.code || row.id} - ${row.name || "Unnamed"}`);
+  });
+
+  if (rows.length !== contextIds.length) {
+    throw clientError(
+      400,
+      workspace.code === "mining"
+        ? "Only active Mining sites can be assigned."
+        : "Only active Equipment Hire locations can be assigned."
+    );
+  }
+
+  if (defaultContextId && !contextLabels.has(defaultContextId)) {
+    throw clientError(
+      400,
+      workspace.code === "mining"
+        ? "The default Mining site must be active."
+        : "The default Hire location must be active."
+    );
+  }
+
+  return { contextIds, defaultContextId, contextLabels };
+}
+
+async function loadExistingContextAssignments(db, workspace, userId) {
+  if (workspace.code === "mining") {
+    const [assignments] = await db.query(
+      `SELECT
+         uma.site_id AS context_id,
+         uma.can_access,
+         uma.is_default,
+         ms.site_code AS code,
+         ms.site_name AS name
+       FROM user_mining_site_access uma
+       INNER JOIN mining_sites ms ON ms.id = uma.site_id
+       WHERE uma.user_id = ?`,
+      [userId]
+    );
+
+    return assignments;
+  }
+
+  const [assignments] = await db.query(
+    `SELECT
+       uhla.location_id AS context_id,
+       uhla.can_access,
+       uhla.is_default,
+       bl.code,
+       bl.name
+     FROM user_hire_location_access uhla
+     INNER JOIN business_locations bl ON bl.id = uhla.location_id
+     WHERE uhla.user_id = ?
+       AND bl.business_unit_id = ?`,
+    [userId, workspace.id]
+  );
+
+  return assignments;
+}
+
+async function disableWorkspaceContexts(db, workspace, userId) {
+  if (workspace.code === "mining") {
+    await db.query(
+      `UPDATE user_mining_site_access
+       SET can_access = FALSE,
+           is_default = FALSE,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ?`,
+      [userId]
+    );
+    return;
+  }
+
+  await db.query(
+    `UPDATE user_hire_location_access uhla
+     INNER JOIN business_locations bl ON bl.id = uhla.location_id
+     SET uhla.can_access = FALSE,
+         uhla.is_default = FALSE,
+         uhla.updated_at = CURRENT_TIMESTAMP
+     WHERE uhla.user_id = ?
+       AND bl.business_unit_id = ?`,
+    [userId, workspace.id]
+  );
+}
+
+async function syncWorkspaceContexts(
+  db,
+  workspace,
+  userId,
+  rawContextIds,
+  rawDefaultId,
+  actorId
+) {
+  const { contextIds, defaultContextId, contextLabels } =
+    await validateContextSelection(db, workspace, rawContextIds, rawDefaultId);
+  const before = await loadExistingContextAssignments(db, workspace, userId);
+  const beforeActive = new Set(
+    before
+      .filter((assignment) => booleanValue(assignment.can_access))
+      .map((assignment) => Number(assignment.context_id))
+  );
+  const beforeDefault =
+    before.find(
+      (assignment) =>
+        booleanValue(assignment.can_access) && booleanValue(assignment.is_default)
+    )?.context_id || null;
+
+  await disableWorkspaceContexts(db, workspace, userId);
+
+  if (contextIds.length > 0) {
+    const definition = contextAccessDefinition(workspace);
+
+    for (const contextId of contextIds) {
+      await db.query(
+        `INSERT INTO \`${definition.table}\` (
+           user_id,
+           \`${definition.foreignKey}\`,
+           can_access,
+           is_default,
+           created_by
+         ) VALUES (?, ?, TRUE, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           can_access = TRUE,
+           is_default = VALUES(is_default),
+           created_by = VALUES(created_by),
+           updated_at = CURRENT_TIMESTAMP`,
+        [userId, contextId, Number(contextId) === Number(defaultContextId), actorId]
+      );
+    }
+  }
+
+  const nextActive = new Set(contextIds.map(Number));
+
+  return {
+    added: contextIds.filter((contextId) => !beforeActive.has(Number(contextId))),
+    removed: [...beforeActive].filter((contextId) => !nextActive.has(Number(contextId))),
+    default_changed: Number(beforeDefault || 0) !== Number(defaultContextId || 0),
+    default_context_id: defaultContextId,
+    contextLabels,
+  };
+}
+
+async function upsertWorkspaceAccess(
+  db,
+  workspace,
+  userId,
+  workspaceRole,
+  canAccess,
+  actorId
+) {
+  await db.query(
+    `INSERT INTO user_business_access (
+       user_id,
+       business_unit_id,
+       access_role,
+       can_access,
+       is_default,
+       created_by
+     ) VALUES (?, ?, ?, ?, FALSE, ?)
+     ON DUPLICATE KEY UPDATE
+       access_role = VALUES(access_role),
+       can_access = VALUES(can_access),
+       updated_at = CURRENT_TIMESTAMP`,
+    [userId, workspace.id, workspaceRole, canAccess, actorId]
+  );
+}
+
+async function contextBelongsToWorkspace(workspace, contextId, requireActive = false) {
+  if (workspace.code === "mining") {
+    const activeSql = requireActive
+      ? "AND is_active = TRUE AND status = 'active'"
+      : "";
+    const [rows] = await pool.query(
+      `SELECT id
+       FROM mining_sites
+       WHERE id = ?
+       ${activeSql}
+       LIMIT 1`,
+      [contextId]
+    );
+
+    return rows.length > 0;
+  }
+
+  const activeSql = requireActive ? "AND is_active = TRUE" : "";
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM business_locations
+     WHERE id = ?
+       AND business_unit_id = ?
+       ${activeSql}
+     LIMIT 1`,
+    [contextId, workspace.id]
+  );
+
+  return rows.length > 0;
+}
+
+function sendRouteError(res, error, fallbackMessage) {
+  if (error?.statusCode) {
+    return res.status(error.statusCode).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+
+  if (error?.code === "ER_DUP_ENTRY") {
+    return res.status(409).json({
+      status: "error",
+      message: "This username already exists.",
+    });
+  }
+
+  if (error?.code === "ER_NO_SUCH_TABLE" || error?.code === "ER_BAD_FIELD_ERROR") {
+    return res.status(503).json({
+      status: "error",
+      message:
+        "Stage 6A account administration columns are missing. Run the safe Stage 6A migration.",
+    });
+  }
+
+  return res.status(500).json({
+    status: "error",
+    message: fallbackMessage,
+  });
+}
+
+async function loadContextAccessOverview(workspace, users) {
+  if (workspace.code === "mining") {
+    const [contexts] = await pool.query(
+      `SELECT
+         id,
+         site_code AS code,
+         site_name AS name,
+         location,
+         status,
+         is_active
+       FROM mining_sites
+       ORDER BY is_active DESC, site_name, site_code`
+    );
+
+    const [assignments] = await pool.query(
+      `SELECT
+         id,
+         user_id,
+         site_id AS context_id,
+         can_access,
+         is_default,
+         created_by,
+         created_at,
+         updated_at
+       FROM user_mining_site_access`
+    );
+
+    return {
+      context_type: "mining_site",
+      contexts,
+      assignments,
+      users,
+    };
+  }
+
+  const [contexts] = await pool.query(
+    `SELECT
+       id,
+       code,
+       name,
+       address AS location,
+       location_type,
+       is_active
+     FROM business_locations
+     WHERE business_unit_id = ?
+     ORDER BY is_active DESC, name, code`,
+    [workspace.id]
+  );
+
+  const [assignments] = await pool.query(
+    `SELECT
+       uhla.id,
+       uhla.user_id,
+       uhla.location_id AS context_id,
+       uhla.can_access,
+       uhla.is_default,
+       uhla.created_by,
+       uhla.created_at,
+       uhla.updated_at
+     FROM user_hire_location_access uhla
+     INNER JOIN business_locations bl ON bl.id = uhla.location_id
+     WHERE bl.business_unit_id = ?`,
+    [workspace.id]
+  );
+
+  return {
+    context_type: "hire_location",
+    contexts,
+    assignments,
+    users,
+  };
+}
+
 router.use(requireAuth, requireRole("admin"));
 
 // GET /api/workspace-admin/overview
@@ -186,7 +792,8 @@ router.get("/overview", async (req, res) => {
     const workspace = await getActiveWorkspace(req, res);
     if (!workspace) return;
 
-    const users = await loadWorkspaceUsers(workspace.id);
+    const users = await loadWorkspaceUsers(workspace);
+    const eligibleUsers = await loadEligibleCentralUsers(workspace);
     const locations =
       workspace.code === "equipment_hire"
         ? await loadHireLocations(workspace.id)
@@ -197,12 +804,16 @@ router.get("/overview", async (req, res) => {
       status: "success",
       workspace,
       users,
+      eligible_users: eligibleUsers,
+      workspace_roles: [...workspaceRoleSet(workspace)],
+      global_roles: ["admin", "manager", "staff", "auditor"],
       locations,
       sites,
       summary: {
         total_users: users.length,
         assigned_users: users.filter((user) => user.effective_access).length,
         assignable_users: users.filter((user) => user.assignable).length,
+        eligible_users: eligibleUsers.length,
         active_locations: locations.filter((location) =>
           booleanValue(location.is_active)
         ).length,
@@ -213,19 +824,505 @@ router.get("/overview", async (req, res) => {
     });
   } catch (error) {
     console.error("Workspace administration overview error:", error);
+    return sendRouteError(res, error, "Could not load workspace administration.");
+  }
+});
 
-    if (error?.code === "ER_NO_SUCH_TABLE") {
-      return res.status(503).json({
-        status: "error",
-        message:
-          "Workspace administration tables are missing. Run the complete local master schema in chalin03_db.",
-      });
+// POST /api/workspace-admin/staff
+router.post("/staff", async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    const fullName = cleanText(req.body.full_name, 150);
+    const username = cleanText(req.body.username, 80);
+    const phone = nullableText(req.body.phone, 30);
+    const temporaryPassword = String(req.body.temporary_password || "");
+    const globalRole = validateGlobalRole(req.body.global_role || req.body.role || "staff");
+    const workspaceRole = validateWorkspaceRole(
+      workspace,
+      req.body.workspace_role,
+      globalRole
+    );
+    const isActive =
+      req.body.is_active === undefined ? true : booleanValue(req.body.is_active);
+    const mustChangePassword =
+      req.body.force_password_change === undefined
+        ? true
+        : booleanValue(req.body.force_password_change);
+
+    if (!fullName || !username || !temporaryPassword) {
+      throw clientError(400, "Full name, username and temporary password are required.");
     }
 
-    return res.status(500).json({
-      status: "error",
-      message: "Could not load workspace administration.",
+    const temporaryPasswordPolicyError = strongPasswordError(temporaryPassword);
+
+    if (temporaryPasswordPolicyError) {
+      throw clientError(400, temporaryPasswordPolicyError);
+    }
+
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const passwordChangedAt = mustChangePassword ? null : new Date();
+
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
+      `INSERT INTO users (
+         full_name,
+         username,
+         password_hash,
+         role,
+         phone,
+         default_branch_id,
+         can_access_all_branches,
+         is_active,
+         must_change_password,
+         password_changed_at,
+         created_by
+       ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+      [
+        fullName,
+        username,
+        passwordHash,
+        globalRole,
+        phone,
+        globalRole === "admin",
+        isActive,
+        mustChangePassword,
+        passwordChangedAt,
+        req.user.id,
+      ]
+    );
+
+    await upsertWorkspaceAccess(
+      connection,
+      workspace,
+      result.insertId,
+      workspaceRole,
+      true,
+      req.user.id
+    );
+
+    const contextChanges = await syncWorkspaceContexts(
+      connection,
+      workspace,
+      result.insertId,
+      req.body.context_ids,
+      req.body.default_context_id,
+      req.user.id
+    );
+
+    await connection.commit();
+
+    await logActivity(
+      req,
+      "CREATE_WORKSPACE_STAFF_USER",
+      `Created ${workspace.name} account ${username} as ${globalRole}/${workspaceRole}`
+    );
+
+    if (contextChanges.added.length > 0) {
+      await logActivity(
+        req,
+        "ASSIGN_WORKSPACE_CONTEXT_ACCESS",
+        `Assigned ${workspace.name} contexts ${contextChanges.added.join(", ")} to ${username}`
+      );
+    }
+
+    const createdUser = await getUserById(pool, result.insertId);
+
+    return res.status(201).json({
+      status: "success",
+      message: `${workspace.name} staff account created successfully.`,
+      user: {
+        id: createdUser.id,
+        full_name: createdUser.full_name,
+        username: createdUser.username,
+        role: createdUser.role,
+        phone: createdUser.phone,
+        is_active: booleanValue(createdUser.is_active),
+        must_change_password: booleanValue(createdUser.must_change_password),
+      },
     });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failures after a connection error.
+    }
+
+    console.error("Create workspace staff user error:", error);
+    return sendRouteError(res, error, "Could not create workspace staff account.");
+  } finally {
+    connection.release();
+  }
+});
+
+// POST /api/workspace-admin/staff/existing
+router.post("/staff/existing", async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    const userId = positiveId(req.body.user_id || req.body.existing_user_id);
+
+    if (!userId) {
+      throw clientError(400, "Choose an existing central user.");
+    }
+
+    const user = await getUserById(connection, userId);
+
+    if (!user) {
+      throw clientError(404, "User account not found.");
+    }
+
+    if (normalizeRole(user.role) === "admin") {
+      throw clientError(
+        400,
+        "Administrator accounts already have automatic access to every enabled business workspace."
+      );
+    }
+
+    const globalRole = validateGlobalRole(user.role);
+    const workspaceRole = validateWorkspaceRole(
+      workspace,
+      req.body.workspace_role,
+      globalRole
+    );
+
+    await connection.beginTransaction();
+
+    await upsertWorkspaceAccess(
+      connection,
+      workspace,
+      user.id,
+      workspaceRole,
+      true,
+      req.user.id
+    );
+
+    const contextChanges = await syncWorkspaceContexts(
+      connection,
+      workspace,
+      user.id,
+      req.body.context_ids,
+      req.body.default_context_id,
+      req.user.id
+    );
+
+    await connection.commit();
+
+    await logActivity(
+      req,
+      "GRANT_WORKSPACE_ACCESS",
+      `Granted ${workspace.name} access to existing user ${user.username} as ${workspaceRole}`
+    );
+
+    if (contextChanges.added.length > 0) {
+      await logActivity(
+        req,
+        "ASSIGN_WORKSPACE_CONTEXT_ACCESS",
+        `Assigned ${workspace.name} contexts ${contextChanges.added.join(", ")} to ${user.username}`
+      );
+    }
+
+    return res.status(201).json({
+      status: "success",
+      message: `${user.full_name || user.username} added to ${workspace.name}.`,
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failures after a connection error.
+    }
+
+    console.error("Add existing workspace staff user error:", error);
+    return sendRouteError(res, error, "Could not add existing user to workspace.");
+  } finally {
+    connection.release();
+  }
+});
+
+// PUT /api/workspace-admin/staff/:userId
+router.put("/staff/:userId", async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    const userId = positiveId(req.params.userId);
+
+    if (!userId) {
+      throw clientError(400, "Invalid user ID.");
+    }
+
+    const user = await getUserById(connection, userId);
+
+    if (!user) {
+      throw clientError(404, "User account not found.");
+    }
+
+    const fullName = cleanText(req.body.full_name || user.full_name, 150);
+    const username = cleanText(req.body.username || user.username, 80);
+    const phone =
+      req.body.phone === undefined ? user.phone || null : nullableText(req.body.phone, 30);
+    const globalRole = validateGlobalRole(
+      req.body.global_role || req.body.role || user.role
+    );
+    const workspaceRole = validateWorkspaceRole(
+      workspace,
+      req.body.workspace_role,
+      globalRole
+    );
+    const isActive =
+      req.body.is_active === undefined ? booleanValue(user.is_active) : booleanValue(req.body.is_active);
+    const canAccess =
+      req.body.can_access === undefined ? true : booleanValue(req.body.can_access);
+    const mustChangePassword =
+      req.body.must_change_password === undefined
+        ? booleanValue(user.must_change_password)
+        : booleanValue(req.body.must_change_password);
+
+    if (!fullName || !username) {
+      throw clientError(400, "Full name and username are required.");
+    }
+
+    await ensureAdminChangeIsSafe(connection, req, user, globalRole, isActive);
+
+    await connection.beginTransaction();
+
+    await connection.query(
+      `UPDATE users
+       SET full_name = ?,
+           username = ?,
+           role = ?,
+           phone = ?,
+           is_active = ?,
+           must_change_password = ?
+       WHERE id = ?`,
+      [
+        fullName,
+        username,
+        globalRole,
+        phone,
+        isActive,
+        mustChangePassword,
+        user.id,
+      ]
+    );
+
+    await upsertWorkspaceAccess(
+      connection,
+      workspace,
+      user.id,
+      workspaceRole,
+      canAccess,
+      req.user.id
+    );
+
+    let contextChanges = {
+      added: [],
+      removed: [],
+      default_changed: false,
+      default_context_id: null,
+    };
+
+    if (canAccess) {
+      contextChanges = await syncWorkspaceContexts(
+        connection,
+        workspace,
+        user.id,
+        req.body.context_ids,
+        req.body.default_context_id,
+        req.user.id
+      );
+    } else {
+      await disableWorkspaceContexts(connection, workspace, user.id);
+    }
+
+    await connection.commit();
+
+    await logActivity(
+      req,
+      "UPDATE_WORKSPACE_STAFF_USER",
+      `Updated ${workspace.name} account ${username} as ${globalRole}/${workspaceRole}`
+    );
+
+    if (canAccess) {
+      if (contextChanges.added.length > 0) {
+        await logActivity(
+          req,
+          "ASSIGN_WORKSPACE_CONTEXT_ACCESS",
+          `Assigned ${workspace.name} contexts ${contextChanges.added.join(", ")} to ${username}`
+        );
+      }
+
+      if (contextChanges.removed.length > 0) {
+        await logActivity(
+          req,
+          "REVOKE_WORKSPACE_CONTEXT_ACCESS",
+          `Removed ${workspace.name} contexts ${contextChanges.removed.join(", ")} from ${username}`
+        );
+      }
+
+      if (contextChanges.default_changed) {
+        await logActivity(
+          req,
+          "SET_DEFAULT_WORKSPACE_CONTEXT",
+          `Updated ${workspace.name} default context for ${username} to ${
+            contextChanges.default_context_id || "none"
+          }`
+        );
+      }
+    }
+
+    return res.json({
+      status: "success",
+      message: `${workspace.name} staff account updated successfully.`,
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failures after a connection error.
+    }
+
+    console.error("Update workspace staff user error:", error);
+    return sendRouteError(res, error, "Could not update workspace staff account.");
+  } finally {
+    connection.release();
+  }
+});
+
+// PATCH /api/workspace-admin/staff/:userId/password
+router.patch("/staff/:userId/password", async (req, res) => {
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    const userId = positiveId(req.params.userId);
+    const temporaryPassword = String(req.body.temporary_password || "");
+    const forcePasswordChange =
+      req.body.force_password_change === undefined
+        ? true
+        : booleanValue(req.body.force_password_change);
+
+    if (!userId) {
+      throw clientError(400, "Invalid user ID.");
+    }
+
+    if (!temporaryPassword) {
+      throw clientError(400, "Temporary password is required.");
+    }
+
+    const temporaryPasswordPolicyError = strongPasswordError(temporaryPassword);
+
+    if (temporaryPasswordPolicyError) {
+      throw clientError(400, temporaryPasswordPolicyError);
+    }
+
+    const user = await getUserById(pool, userId);
+
+    if (!user) {
+      throw clientError(404, "User account not found.");
+    }
+
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const passwordChangedAt = forcePasswordChange ? null : new Date();
+
+    const updateFields = [
+      "password_hash = ?",
+      "must_change_password = ?",
+      "password_changed_at = ?",
+    ];
+    const updateParams = [passwordHash, forcePasswordChange, passwordChangedAt];
+
+    if (await columnExists(pool, "users", "token_version")) {
+      updateFields.push("token_version = token_version + 1");
+    }
+
+    await pool.query(
+      `UPDATE users
+       SET ${updateFields.join(", ")}
+       WHERE id = ?`,
+      [...updateParams, user.id]
+    );
+
+    await logActivity(
+      req,
+      "RESET_WORKSPACE_STAFF_PASSWORD",
+      `Reset temporary password for ${workspace.name} user ${user.username}`
+    );
+
+    return res.json({
+      status: "success",
+      message: `Temporary password reset for ${user.full_name || user.username}.`,
+      must_change_password: forcePasswordChange,
+    });
+  } catch (error) {
+    console.error("Reset workspace staff password error:", error);
+    return sendRouteError(res, error, "Could not reset temporary password.");
+  }
+});
+
+// PATCH /api/workspace-admin/staff/:userId/status
+router.patch("/staff/:userId/status", async (req, res) => {
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    const userId = positiveId(req.params.userId);
+
+    if (!userId) {
+      throw clientError(400, "Invalid user ID.");
+    }
+
+    const user = await getUserById(pool, userId);
+
+    if (!user) {
+      throw clientError(404, "User account not found.");
+    }
+
+    const isActive =
+      req.body.is_active === undefined
+        ? !booleanValue(user.is_active)
+        : booleanValue(req.body.is_active);
+
+    await ensureAdminChangeIsSafe(pool, req, user, user.role, isActive);
+
+    const updateFields = ["is_active = ?"];
+    const updateParams = [isActive];
+
+    if (!isActive && (await columnExists(pool, "users", "token_version"))) {
+      updateFields.push("token_version = token_version + 1");
+    }
+
+    await pool.query(
+      `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+      [...updateParams, user.id]
+    );
+
+    await logActivity(
+      req,
+      isActive ? "ACTIVATE_WORKSPACE_STAFF_USER" : "DEACTIVATE_WORKSPACE_STAFF_USER",
+      `${isActive ? "Activated" : "Deactivated"} ${workspace.name} user ${user.username}`
+    );
+
+    return res.json({
+      status: "success",
+      message: isActive
+        ? "User account activated successfully."
+        : "User account deactivated successfully.",
+      is_active: isActive,
+    });
+  } catch (error) {
+    console.error("Toggle workspace staff status error:", error);
+    return sendRouteError(res, error, "Could not update user account status.");
   }
 });
 
@@ -241,71 +1338,55 @@ router.put("/users/:userId/access", async (req, res) => {
     const canAccess = booleanValue(req.body.can_access);
 
     if (!userId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid user ID.",
-      });
+      throw clientError(400, "Invalid user ID.");
     }
 
-    const [users] = await connection.query(
-      `SELECT id, full_name, username, role, is_active
-       FROM users
-       WHERE id = ?
-       LIMIT 1`,
-      [userId]
-    );
+    const user = await getUserById(connection, userId);
 
-    if (users.length === 0) {
-      return res.status(404).json({
-        status: "error",
-        message: "User account not found.",
-      });
+    if (!user) {
+      throw clientError(404, "User account not found.");
     }
 
-    const user = users[0];
-    const role = cleanText(user.role, 50).toLowerCase();
+    const role = normalizeRole(user.role);
 
     if (role === "admin") {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Administrator accounts have automatic access to every enabled business workspace.",
-      });
+      throw clientError(
+        400,
+        "Administrator accounts have automatic access to every enabled business workspace."
+      );
     }
 
-    if (!ASSIGNABLE_ROLES.has(role)) {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Only manager and auditor accounts can currently be assigned to Mining or Equipment Hire.",
-      });
-    }
+    validateGlobalRole(role);
 
-    if (!booleanValue(user.is_active) && canAccess) {
-      return res.status(400).json({
-        status: "error",
-        message: "Activate the user account before granting workspace access.",
-      });
-    }
+    const workspaceRole = validateWorkspaceRole(
+      workspace,
+      req.body.workspace_role || req.body.access_role,
+      role
+    );
 
     await connection.beginTransaction();
 
-    await connection.query(
-      `INSERT INTO user_business_access (
-         user_id,
-         business_unit_id,
-         access_role,
-         can_access,
-         is_default,
-         created_by
-       ) VALUES (?, ?, ?, ?, FALSE, ?)
-       ON DUPLICATE KEY UPDATE
-         access_role = VALUES(access_role),
-         can_access = VALUES(can_access),
-         is_default = FALSE,
-         updated_at = CURRENT_TIMESTAMP`,
-      [userId, workspace.id, role, canAccess, req.user.id]
+    await upsertWorkspaceAccess(
+      connection,
+      workspace,
+      user.id,
+      workspaceRole,
+      canAccess,
+      req.user.id
     );
+
+    if (!canAccess) {
+      await disableWorkspaceContexts(connection, workspace, user.id);
+
+      if (await columnExists(connection, "users", "token_version")) {
+        await connection.query(
+          `UPDATE users
+           SET token_version = token_version + 1
+           WHERE id = ?`,
+          [user.id]
+        );
+      }
+    }
 
     await connection.commit();
 
@@ -334,11 +1415,7 @@ router.put("/users/:userId/access", async (req, res) => {
     }
 
     console.error("Update workspace access error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Could not update workspace access.",
-    });
+    return sendRouteError(res, error, "Could not update workspace access.");
   } finally {
     connection.release();
   }
@@ -403,16 +1480,14 @@ router.post("/locations", async (req, res) => {
         locationType,
         nullableText(req.body.address, 255),
         nullableText(req.body.phone, 50),
-        req.body.is_active === undefined
-          ? true
-          : booleanValue(req.body.is_active),
+        req.body.is_active === undefined ? true : booleanValue(req.body.is_active),
       ]
     );
 
     await logActivity(
       req,
       "CREATE_HIRE_LOCATION",
-      `Created Equipment Hire ${locationType} ${code} — ${name}`
+      `Created Equipment Hire ${locationType} ${code} - ${name}`
     );
 
     const [locations] = await pool.query(
@@ -531,7 +1606,7 @@ router.put("/locations/:locationId", async (req, res) => {
     await logActivity(
       req,
       "UPDATE_HIRE_LOCATION",
-      `Updated Equipment Hire ${locationType} ${code} — ${name}`
+      `Updated Equipment Hire ${locationType} ${code} - ${name}`
     );
 
     const [locations] = await pool.query(
@@ -561,124 +1636,13 @@ router.put("/locations/:locationId", async (req, res) => {
   }
 });
 
-async function loadContextAccessOverview(workspace, users) {
-  if (workspace.code === "mining") {
-    const [contexts] = await pool.query(
-      `SELECT
-         id,
-         site_code AS code,
-         site_name AS name,
-         location,
-         status,
-         is_active
-       FROM mining_sites
-       ORDER BY is_active DESC, site_name, site_code`
-    );
-
-    const [assignments] = await pool.query(
-      `SELECT
-         id,
-         user_id,
-         site_id AS context_id,
-         can_access,
-         is_default,
-         created_by,
-         created_at,
-         updated_at
-       FROM user_mining_site_access`
-    );
-
-    return {
-      context_type: "mining_site",
-      contexts,
-      assignments,
-      users,
-    };
-  }
-
-  const [contexts] = await pool.query(
-    `SELECT
-       id,
-       code,
-       name,
-       address AS location,
-       location_type,
-       is_active
-     FROM business_locations
-     WHERE business_unit_id = ?
-     ORDER BY is_active DESC, name, code`,
-    [workspace.id]
-  );
-
-  const [assignments] = await pool.query(
-    `SELECT
-       id,
-       user_id,
-       location_id AS context_id,
-       can_access,
-       is_default,
-       created_by,
-       created_at,
-       updated_at
-     FROM user_hire_location_access`
-  );
-
-  return {
-    context_type: "hire_location",
-    contexts,
-    assignments,
-    users,
-  };
-}
-
-function contextAccessDefinition(workspace) {
-  if (workspace.code === "mining") {
-    return {
-      table: "user_mining_site_access",
-      foreignKey: "site_id",
-      contextName: "Mining site",
-    };
-  }
-
-  return {
-    table: "user_hire_location_access",
-    foreignKey: "location_id",
-    contextName: "Equipment Hire location",
-  };
-}
-
-async function contextBelongsToWorkspace(workspace, contextId) {
-  if (workspace.code === "mining") {
-    const [rows] = await pool.query(
-      `SELECT id
-       FROM mining_sites
-       WHERE id = ?
-       LIMIT 1`,
-      [contextId]
-    );
-
-    return rows.length > 0;
-  }
-
-  const [rows] = await pool.query(
-    `SELECT id
-     FROM business_locations
-     WHERE id = ?
-       AND business_unit_id = ?
-     LIMIT 1`,
-    [contextId, workspace.id]
-  );
-
-  return rows.length > 0;
-}
-
 // GET /api/workspace-admin/context-access
 router.get("/context-access", async (req, res) => {
   try {
     const workspace = await getActiveWorkspace(req, res);
     if (!workspace) return;
 
-    const users = await loadWorkspaceUsers(workspace.id);
+    const users = await loadWorkspaceUsers(workspace);
     const overview = await loadContextAccessOverview(workspace, users);
 
     return res.json({
@@ -688,19 +1652,11 @@ router.get("/context-access", async (req, res) => {
     });
   } catch (error) {
     console.error("Workspace context-access overview error:", error);
-
-    if (error?.code === "ER_NO_SUCH_TABLE") {
-      return res.status(503).json({
-        status: "error",
-        message:
-          "Site/location assignment tables are missing. Run the Part 4A migration in chalin03_db.",
-      });
-    }
-
-    return res.status(500).json({
-      status: "error",
-      message: "Could not load site or location staff assignments.",
-    });
+    return sendRouteError(
+      res,
+      error,
+      "Could not load site or location staff assignments."
+    );
   }
 });
 
@@ -718,44 +1674,25 @@ router.put("/users/:userId/contexts/:contextId", async (req, res) => {
     const isDefault = canAccess && booleanValue(req.body.is_default);
 
     if (!userId || !contextId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid user, site or location ID.",
-      });
+      throw clientError(400, "Invalid user, site or location ID.");
     }
 
-    const [users] = await connection.query(
-      `SELECT id, full_name, username, role, is_active
-       FROM users
-       WHERE id = ?
-       LIMIT 1`,
-      [userId]
-    );
+    const user = await getUserById(connection, userId);
 
-    if (users.length === 0) {
-      return res.status(404).json({
-        status: "error",
-        message: "User account not found.",
-      });
+    if (!user) {
+      throw clientError(404, "User account not found.");
     }
 
-    const user = users[0];
-    const role = cleanText(user.role, 50).toLowerCase();
+    const role = normalizeRole(user.role);
 
-    if (!ASSIGNABLE_ROLES.has(role)) {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Only manager and auditor accounts can receive specific Mining-site or Hire-location assignments.",
-      });
+    if (role === "admin") {
+      throw clientError(
+        400,
+        "Administrator accounts already have automatic access to every active site or location."
+      );
     }
 
-    if (!booleanValue(user.is_active) && canAccess) {
-      return res.status(400).json({
-        status: "error",
-        message: "Activate the account before assigning a site or location.",
-      });
-    }
+    validateGlobalRole(role);
 
     const [businessAccessRows] = await connection.query(
       `SELECT can_access
@@ -771,21 +1708,19 @@ router.put("/users/:userId/contexts/:contextId", async (req, res) => {
       (businessAccessRows.length === 0 ||
         !booleanValue(businessAccessRows[0].can_access))
     ) {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Grant workspace access to this account before assigning a site or location.",
-      });
+      throw clientError(
+        400,
+        "Grant workspace access to this account before assigning a site or location."
+      );
     }
 
-    if (!(await contextBelongsToWorkspace(workspace, contextId))) {
-      return res.status(404).json({
-        status: "error",
-        message:
-          workspace.code === "mining"
-            ? "Mining site not found."
-            : "Equipment Hire location not found.",
-      });
+    if (!(await contextBelongsToWorkspace(workspace, contextId, canAccess))) {
+      throw clientError(
+        404,
+        workspace.code === "mining"
+          ? "Active Mining site not found."
+          : "Active Equipment Hire location not found."
+      );
     }
 
     const definition = contextAccessDefinition(workspace);
@@ -836,8 +1771,7 @@ router.put("/users/:userId/contexts/:contextId", async (req, res) => {
       context_id: contextId,
       can_access: canAccess,
       is_default: isDefault,
-      context_type:
-        workspace.code === "mining" ? "mining_site" : "hire_location",
+      context_type: workspace.code === "mining" ? "mining_site" : "hire_location",
     });
   } catch (error) {
     try {
@@ -847,19 +1781,7 @@ router.put("/users/:userId/contexts/:contextId", async (req, res) => {
     }
 
     console.error("Update workspace context access error:", error);
-
-    if (error?.code === "ER_NO_SUCH_TABLE") {
-      return res.status(503).json({
-        status: "error",
-        message:
-          "Site/location assignment tables are missing. Run the Part 4A migration in chalin03_db.",
-      });
-    }
-
-    return res.status(500).json({
-      status: "error",
-      message: "Could not update site or location access.",
-    });
+    return sendRouteError(res, error, "Could not update site or location access.");
   } finally {
     connection.release();
   }
