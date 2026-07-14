@@ -1,10 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import { useAuth } from "../context/AuthContext";
 
 export default function NewSalePage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
+
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
   const [quantity, setQuantity] = useState(1);
 
   const [customerName, setCustomerName] = useState("");
@@ -17,16 +44,83 @@ export default function NewSalePage() {
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [lockedPeriod, setLockedPeriod] = useState(null);
+  const [sendingReceiptSms, setSendingReceiptSms] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const businessName = "CHALIN 03 COMPANY LIMITED";
   const businessAddress = "Dunkwa Police Barrier";
   const businessPhone = "0249469080 / 0249995510";
   const momoNumber = "0543421127";
   const receiptFooter = "Thank You For Coming";
-  const policyText = "ITEMS SOLD ARE NOT RETURNABLE";
+  const policyText = "IN GOD, WE TRUST";
+
+  function getReceiptBusinessName(receiptData) {
+    return receiptData?.business_name || businessName;
+  }
+
+  function getReceiptBusinessAddress(receiptData) {
+    return (
+      receiptData?.business_address ||
+      receiptData?.branch_location ||
+      currentStoreLocation ||
+      businessAddress
+    );
+  }
+
+  function getReceiptBusinessPhone(receiptData) {
+    return receiptData?.business_phone || businessPhone;
+  }
+
+  function getReceiptMomoNumber(receiptData) {
+    return receiptData?.owner_phone || momoNumber;
+  }
+
+  function getReceiptStoreName(receiptData) {
+    return (
+      receiptData?.branch_name || receiptData?.store_name || currentStoreName
+    );
+  }
+
+  function getReceiptStoreCode(receiptData) {
+    return (
+      receiptData?.branch_code || receiptData?.store_code || currentStoreCode
+    );
+  }
+
+  function cleanText(value) {
+    if (value === undefined || value === null) {
+      return "";
+    }
+
+    return String(value).trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
 
   function formatMoney(value) {
     return Number(value || 0).toFixed(2);
+  }
+
+  function formatCompactMoney(value) {
+    const number = Number(value || 0);
+
+    if (number >= 1000000) {
+      return `GHS ${(number / 1000000).toFixed(1)}M`;
+    }
+
+    if (number >= 1000) {
+      return `GHS ${(number / 1000).toFixed(1)}K`;
+    }
+
+    return `GHS ${formatMoney(number)}`;
   }
 
   function formatReceiptDate(value) {
@@ -58,17 +152,178 @@ export default function NewSalePage() {
     });
   }
 
-
   function formatPaymentMethod(value) {
-  const paymentMethods = {
-    cash: "Cash",
-    momo: "MoMo",
-    bank: "Bank",
-    credit: "Credit",
-    mixed: "Mixed",
-  };
+    const paymentMethods = {
+      cash: "Cash",
+      momo: "MoMo",
+      bank: "Bank",
+      credit: "Credit",
+      mixed: "Mixed",
+    };
 
-  return paymentMethods[String(value || "").toLowerCase()] || value || "-";
+    return paymentMethods[String(value || "").toLowerCase()] || value || "-";
+  }
+
+  function getFriendlyApiError(error, fallbackMessage) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      const lockedPeriod = responseData.locked_period || {};
+      const periodLabel =
+        lockedPeriod.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriod.approved_by_name || "management";
+      const reviewDate = lockedPeriod.review_date || "";
+
+      return [
+        "This sale cannot be recorded because the accounting period is locked.",
+        `Locked Period: ${periodLabel}.`,
+        `Reason: This period has already been approved by ${approvedBy}.`,
+        reviewDate ? `Approval Date: ${reviewDate}.` : "",
+        "Ask the admin or manager to review the audit sign-off before making changes inside this period.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    return responseData?.message || fallbackMessage;
+  }
+
+  function rememberLockedPeriodFromError(error) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      setLockedPeriod(responseData.locked_period || null);
+      return;
+    }
+
+    setLockedPeriod(null);
+  }
+
+  function getReceiptCustomerName(receiptData) {
+    return (
+      receiptData?.customer?.name ||
+      receiptData?.customer_name ||
+      "Walk-in Customer"
+    );
+  }
+
+  function getReceiptCustomerPhone(receiptData) {
+    return receiptData?.customer?.phone || receiptData?.customer_phone || "-";
+  }
+
+  function formatPhoneForWhatsApp(phone) {
+    const rawPhone = String(phone || "").trim();
+
+    if (!rawPhone || rawPhone === "-") {
+      return "";
+    }
+
+    let digits = rawPhone.replace(/\D/g, "");
+
+    if (digits.startsWith("0")) {
+      digits = `233${digits.slice(1)}`;
+    }
+
+    if (digits.startsWith("233")) {
+      return digits;
+    }
+
+    if (digits.length === 9) {
+      return `233${digits}`;
+    }
+
+    return digits;
+  }
+
+  function buildWhatsAppReceiptMessage(receiptData) {
+    const customer = getReceiptCustomerName(receiptData);
+    const phone = getReceiptCustomerPhone(receiptData);
+
+    const itemsText = (receiptData.items || [])
+      .map((item) => {
+        return `- ${item.product_name} x${item.quantity} = GHS ${formatMoney(
+          item.line_total
+        )}`;
+      })
+      .join("\n");
+
+    return `Hello ${customer},
+
+Thank you for buying from ${getReceiptBusinessName(receiptData)}.
+
+RECEIPT DETAILS
+Store: ${getReceiptStoreCode(receiptData)} - ${getReceiptStoreName(receiptData)}
+Receipt No: ${receiptData.receipt_number}
+Customer: ${customer}
+Phone: ${phone}
+Payment: ${formatPaymentMethod(receiptData.payment_type)}
+
+ITEMS
+${itemsText}
+
+TOTALS
+Subtotal: GHS ${formatMoney(receiptData.subtotal)}
+Discount: GHS ${formatMoney(receiptData.discount_amount)}
+VAT: GHS ${formatMoney(receiptData.tax_amount)}
+Amount Due: GHS ${formatMoney(receiptData.total)}
+Amount Tendered: GHS ${formatMoney(receiptData.amount_tendered)}
+Amount Paid: GHS ${formatMoney(receiptData.amount_paid)}
+Change Due: GHS ${formatMoney(receiptData.change_due)}
+Balance: GHS ${formatMoney(receiptData.balance)}
+
+Served by: ${receiptData.staff?.full_name || "-"}
+
+${receiptFooter}
+${policyText}
+
+Note: Your PDF receipt can also be attached manually on WhatsApp.`;
+  }
+
+  async function sendReceiptSms() {
+    setMessage("");
+    setError("");
+
+    if (!receipt?.sale_id) {
+      setError("Receipt ID is missing. Cannot send SMS receipt.");
+      return;
+    }
+
+    setSendingReceiptSms(true);
+
+    try {
+      const response = await axiosClient.post(`/sms/receipt/${receipt.sale_id}`);
+      setMessage(response.data.message || "Receipt SMS sent successfully.");
+    } catch (error) {
+      setError(getFriendlyApiError(error, "Failed to send receipt SMS."));
+    } finally {
+      setSendingReceiptSms(false);
+    }
+  }
+
+  function sendReceiptWhatsApp() {
+    setMessage("");
+    setError("");
+
+    if (!receipt) {
+      setError("No receipt available to send.");
+      return;
+    }
+
+    const customerPhone = getReceiptCustomerPhone(receipt);
+    const whatsappPhone = formatPhoneForWhatsApp(customerPhone);
+
+    if (!whatsappPhone) {
+      setError("Customer phone number is missing. Add customer phone first.");
+      return;
+    }
+
+    const messageText = buildWhatsAppReceiptMessage(receipt);
+
+    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+      messageText
+    )}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   }
 
   async function loadProducts() {
@@ -78,13 +333,58 @@ export default function NewSalePage() {
       const response = await axiosClient.get("/products");
       setProducts(response.data.products || []);
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to load products.");
+      setError(getFriendlyApiError(error, "Failed to load products."));
     }
   }
 
   useEffect(() => {
     loadProducts();
+    // Reload available products when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
+
+  useEffect(() => {
+    function checkScreenSize() {
+      setIsMobile(window.innerWidth <= 760);
+    }
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+
+    return () => {
+      window.removeEventListener("resize", checkScreenSize);
+    };
   }, []);
+
+  const selectedProduct = useMemo(() => {
+    return products.find(
+      (product) => Number(product.id) === Number(selectedProductId)
+    );
+  }, [products, selectedProductId]);
+
+  const filteredProducts = useMemo(() => {
+    const searchText = productSearch.trim().toLowerCase();
+
+    if (!searchText) {
+      return [];
+    }
+
+    return products
+      .filter((product) => {
+        const searchableText = [
+          product.name,
+          product.barcode,
+          product.category,
+          product.size,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(searchText);
+      })
+      .slice(0, 15);
+  }, [products, productSearch]);
 
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
@@ -94,10 +394,58 @@ export default function NewSalePage() {
 
   const cleanDiscountAmount = Math.max(Number(discountAmount || 0), 0);
   const estimatedAmountDue = Math.max(subtotal - cleanDiscountAmount, 0);
-  const expectedBalance = Math.max(
-    estimatedAmountDue - Number(amountPaid || 0),
-    0
+  const liveAmountTendered = Math.max(Number(amountPaid || 0), 0);
+  const immediatePayment = ["cash", "momo", "bank"].includes(paymentType);
+  const liveAppliedPayment = Math.min(
+    liveAmountTendered,
+    estimatedAmountDue
   );
+  const liveChangeDue = immediatePayment
+    ? Math.max(liveAmountTendered - estimatedAmountDue, 0)
+    : 0;
+  const expectedBalance = Math.max(estimatedAmountDue - liveAppliedPayment, 0);
+
+  const saleProgress = useMemo(() => {
+    let score = 0;
+
+    if (cart.length > 0) score += 35;
+    if (paymentType) score += 20;
+    if (Number(amountPaid || 0) >= estimatedAmountDue && estimatedAmountDue > 0) {
+      score += 25;
+    } else if (Number(amountPaid || 0) > 0) {
+      score += 15;
+    }
+
+    if (paymentType === "credit" || paymentType === "mixed") {
+      if (cleanText(customerName) || cleanText(customerPhone)) score += 20;
+    } else {
+      score += 20;
+    }
+
+    return Math.min(score, 100);
+  }, [cart.length, paymentType, amountPaid, estimatedAmountDue, customerName, customerPhone]);
+
+  const lowStockProducts = products.filter(
+    (product) =>
+      Number(product.quantity || 0) <= Number(product.low_stock_threshold || 0)
+  );
+
+  const outOfStockProducts = products.filter(
+    (product) => Number(product.quantity || 0) <= 0
+  );
+
+  function selectProductForSale(product) {
+    setError("");
+    setMessage("");
+    setSelectedProductId(String(product.id));
+    setProductSearch(product.name || "");
+  }
+
+  function clearSelectedProduct() {
+    setSelectedProductId("");
+    setProductSearch("");
+    setQuantity(1);
+  }
 
   function addToCart() {
     setError("");
@@ -108,7 +456,12 @@ export default function NewSalePage() {
     );
 
     if (!product) {
-      setError("Select a product first.");
+      setError("Search and select a product first.");
+      return;
+    }
+
+    if (Number(product.quantity) <= 0) {
+      setError("This product is out of stock.");
       return;
     }
 
@@ -152,11 +505,64 @@ export default function NewSalePage() {
     }
 
     setSelectedProductId("");
+    setProductSearch("");
     setQuantity(1);
   }
 
   function removeFromCart(productId) {
     setCart(cart.filter((item) => item.id !== productId));
+  }
+
+  function updateCartQuantity(productId, newQuantity) {
+    const cleanQuantity = Number(newQuantity);
+
+    if (!Number.isInteger(cleanQuantity) || cleanQuantity <= 0) {
+      return;
+    }
+
+    const product = products.find(
+      (productItem) => Number(productItem.id) === Number(productId)
+    );
+
+    if (product && cleanQuantity > Number(product.quantity || 0)) {
+      setError(`Only ${product.quantity} in stock for ${product.name}.`);
+      return;
+    }
+
+    setError("");
+    setCart(
+      cart.map((item) =>
+        Number(item.id) === Number(productId)
+          ? {
+              ...item,
+              quantity: cleanQuantity,
+            }
+          : item
+      )
+    );
+  }
+
+  function clearSale() {
+    const confirmed = cart.length
+      ? window.confirm("Clear all current sale items and payment details?")
+      : true;
+
+    if (!confirmed) return;
+
+    setCart([]);
+    setSelectedProductId("");
+    setProductSearch("");
+    setQuantity(1);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerLocation("");
+    setPaymentType("cash");
+    setDiscountAmount("");
+    setAmountPaid("");
+    setReceipt(null);
+    setMessage("");
+    setError("");
+    setLockedPeriod(null);
   }
 
   async function completeSale(event) {
@@ -165,6 +571,11 @@ export default function NewSalePage() {
     setError("");
     setMessage("");
     setReceipt(null);
+    setLockedPeriod(null);
+
+    const cleanCustomerName = cleanText(customerName);
+    const cleanCustomerPhone = cleanText(customerPhone);
+    const cleanCustomerLocation = cleanText(customerLocation);
 
     if (cart.length === 0) {
       setError("Add at least one item to the sale.");
@@ -185,8 +596,8 @@ export default function NewSalePage() {
 
     if (
       (paymentType === "credit" || paymentType === "mixed") &&
-      !customerName.trim() &&
-      !customerPhone.trim()
+      !cleanCustomerName &&
+      !cleanCustomerPhone
     ) {
       setError("Customer name or phone is required for credit/mixed sales.");
       return;
@@ -194,11 +605,12 @@ export default function NewSalePage() {
 
     try {
       const response = await axiosClient.post("/sales", {
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_location: customerLocation,
+        customer_name: cleanCustomerName,
+        customer_phone: cleanCustomerPhone,
+        customer_location: cleanCustomerLocation,
         payment_type: paymentType,
         discount_amount: discount,
+        amount_tendered: Number(amountPaid || 0),
         amount_paid: Number(amountPaid || 0),
         items: cart.map((item) => ({
           product_id: item.id,
@@ -206,10 +618,36 @@ export default function NewSalePage() {
         })),
       });
 
-      setReceipt(response.data.receipt);
+      const savedReceipt = response.data.receipt || {};
+
+      setReceipt({
+        ...savedReceipt,
+        branch_id: savedReceipt.branch_id || branchId,
+        branch_code: savedReceipt.branch_code || currentStoreCode,
+        branch_name: savedReceipt.branch_name || currentStoreName,
+        branch_location:
+          savedReceipt.branch_location ||
+          savedReceipt.business_address ||
+          currentStoreLocation,
+        customer: {
+          ...(savedReceipt.customer || {}),
+          name:
+            savedReceipt.customer?.name ||
+            cleanCustomerName ||
+            "Walk-in Customer",
+          phone: savedReceipt.customer?.phone || cleanCustomerPhone || "",
+          location:
+            savedReceipt.customer?.location || cleanCustomerLocation || "",
+        },
+      });
+
       setMessage("Sale recorded successfully.");
+      setLockedPeriod(null);
 
       setCart([]);
+      setSelectedProductId("");
+      setProductSearch("");
+      setQuantity(1);
       setCustomerName("");
       setCustomerPhone("");
       setCustomerLocation("");
@@ -219,7 +657,8 @@ export default function NewSalePage() {
 
       await loadProducts();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to record sale.");
+      rememberLockedPeriodFromError(error);
+      setError(getFriendlyApiError(error, "Failed to record sale."));
     }
   }
 
@@ -262,7 +701,7 @@ export default function NewSalePage() {
       setMessage("Receipt PDF downloaded successfully.");
     } catch (error) {
       console.error("PDF download frontend error:", error);
-      setError("Failed to download receipt PDF.");
+      setError(getFriendlyApiError(error, "Failed to download receipt PDF."));
     }
   }
 
@@ -270,16 +709,24 @@ export default function NewSalePage() {
     if (!receipt) return;
 
     const receiptDiscount = Number(receipt.discount_amount || 0);
+    const receiptCustomerName = getReceiptCustomerName(receipt);
+    const receiptCustomerPhone = getReceiptCustomerPhone(receipt);
+    const receiptBusinessName = getReceiptBusinessName(receipt);
+    const receiptBusinessAddress = getReceiptBusinessAddress(receipt);
+    const receiptBusinessPhone = getReceiptBusinessPhone(receipt);
+    const receiptMomoNumber = getReceiptMomoNumber(receipt);
+    const receiptStoreCode = getReceiptStoreCode(receipt);
+    const receiptStoreName = getReceiptStoreName(receipt);
 
     const itemsHtml = receipt.items
       .map(
         (item) => `
           <tr>
-            <td class="item-name">${String(
-              item.product_name || ""
-            ).toUpperCase()}</td>
+            <td class="item-name">${escapeHtml(
+              String(item.product_name || "").toUpperCase()
+            )}</td>
             <td class="right">${formatMoney(item.unit_price)}</td>
-            <td class="right">${item.quantity}</td>
+            <td class="right">${escapeHtml(item.quantity)}</td>
             <td class="right">${formatMoney(item.line_total)}</td>
           </tr>
         `
@@ -290,7 +737,7 @@ export default function NewSalePage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Receipt ${receipt.receipt_number}</title>
+          <title>Receipt ${escapeHtml(receipt.receipt_number)}</title>
 
           <style>
             @page {
@@ -402,44 +849,52 @@ export default function NewSalePage() {
 
         <body>
           <div class="receipt">
-            <h1>${businessName}</h1>
+            <h1>${escapeHtml(receiptBusinessName)}</h1>
 
             <div class="center">
-              <p>${businessAddress}</p>
-              <p>Tel: ${businessPhone}</p>
-              <p>MOMO #: ${momoNumber}</p>
+              <p>${escapeHtml(receiptBusinessAddress)}</p>
+              <p>Tel: ${escapeHtml(receiptBusinessPhone)}</p>
+              <p>MOMO #: ${escapeHtml(receiptMomoNumber)}</p>
+              <p>Store: ${escapeHtml(receiptStoreCode)} - ${escapeHtml(
+      receiptStoreName
+    )}</p>
             </div>
 
             <div class="dash"></div>
 
             <div class="details-row">
               <span>Customer :</span>
-              <span>${receipt.customer?.name || "Walk-in Customer"}</span>
+              <span>${escapeHtml(receiptCustomerName)}</span>
+            </div>
+
+            <div class="details-row">
+              <span>Phone :</span>
+              <span>${escapeHtml(receiptCustomerPhone)}</span>
             </div>
 
             <div class="details-row">
               <span>Date :</span>
-              <span>${formatReceiptDate(receipt.created_at)}</span>
+              <span>${escapeHtml(formatReceiptDate(receipt.created_at))}</span>
             </div>
 
             <div class="details-row">
               <span>Time :</span>
-              <span>${formatReceiptTime(receipt.created_at)}</span>
+              <span>${escapeHtml(formatReceiptTime(receipt.created_at))}</span>
             </div>
 
             <div class="details-row">
               <span>Receipt No.:</span>
-              <span>${receipt.receipt_number}</span>
+              <span>${escapeHtml(receipt.receipt_number)}</span>
             </div>
 
             <div class="details-row">
               <span>Payment :</span>
-              <span>${formatPaymentMethod(receipt.payment_type)}</span>
+              <span>${escapeHtml(
+                formatPaymentMethod(receipt.payment_type)
+              )}</span>
             </div>
 
             <div class="dash"></div>
-
-            
 
             <table>
               <thead>
@@ -481,8 +936,18 @@ export default function NewSalePage() {
             </div>
 
             <div class="totals-row">
+              <span>Amount Tendered</span>
+              <span>${formatMoney(receipt.amount_tendered)}</span>
+            </div>
+
+            <div class="totals-row">
               <span>Amount Paid</span>
               <span>${formatMoney(receipt.amount_paid)}</span>
+            </div>
+
+            <div class="totals-row ${Number(receipt.change_due || 0) > 0 ? "big" : ""}">
+              <span>Change Due</span>
+              <span>${formatMoney(receipt.change_due)}</span>
             </div>
 
             <div class="totals-row">
@@ -492,11 +957,13 @@ export default function NewSalePage() {
 
             <div class="dash"></div>
 
-            <p>Served by&nbsp;&nbsp; ${receipt.staff?.full_name || "-"}</p>
+            <p>Served by&nbsp;&nbsp; ${escapeHtml(
+              receipt.staff?.full_name || "-"
+            )}</p>
 
-            <div class="footer">${receiptFooter}</div>
+            <div class="footer">${escapeHtml(receiptFooter)}</div>
 
-            <div class="policy">${policyText}</div>
+            <div class="policy">${escapeHtml(policyText)}</div>
 
             <div class="powered">Powered by Chalin 03 System</div>
           </div>
@@ -513,87 +980,297 @@ export default function NewSalePage() {
 
     const printWindow = window.open("", "_blank", "width=420,height=700");
 
+    if (!printWindow) {
+      setError("Popup blocked. Please allow popups to print receipt.");
+      return;
+    }
+
     printWindow.document.open();
     printWindow.document.write(receiptHtml);
     printWindow.document.close();
   }
 
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>New Sale</h1>
-          <p>Record cash, MoMo, bank, mixed or credit sales</p>
-        </div>
+  const pageStyle = isMobile ? { ...styles.page, ...styles.pageMobile } : styles.page;
+  const oneColumn = isMobile ? styles.oneColumn : {};
+  const compactHero = isMobile ? styles.heroMobile : {};
+  const compactHeroTitle = isMobile ? styles.heroTitleMobile : {};
+  const compactHeroActions = isMobile ? styles.heroActionsMobile : {};
+  const compactSearchGrid = isMobile ? styles.searchGridMobile : {};
+  const compactReceiptActions = isMobile ? styles.receiptActionsMobile : {};
 
-        <button type="button" onClick={loadProducts}>
-          Refresh Products
-        </button>
+  return (
+    <div style={pageStyle}>
+      <div style={{ ...styles.hero, ...compactHero }}>
+        <div style={styles.heroGlowOne} />
+        <div style={styles.heroGlowTwo} />
+
+        <div style={styles.heroContent}>
+          <div style={styles.heroTop}>
+            <div>
+              <p style={styles.eyebrow}>Cashier Sales Center • {currentStoreCode}</p>
+              <h1 style={{ ...styles.heroTitle, ...compactHeroTitle }}>
+                New Sale
+              </h1>
+              <p style={styles.heroSubtitle}>
+                Record cash, MoMo, bank, mixed and credit sales for{" "}
+                <strong>{currentStoreName}</strong>
+                {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
+                Stock will reduce immediately after a successful receipt.
+              </p>
+            </div>
+
+            <div style={{ ...styles.heroActions, ...compactHeroActions }}>
+              <button type="button" style={styles.heroButton} onClick={loadProducts}>
+                Refresh Products
+              </button>
+
+              <button type="button" style={styles.heroDangerButton} onClick={clearSale}>
+                Clear Sale
+              </button>
+            </div>
+          </div>
+
+          <div style={{ ...styles.heroMetrics, ...oneColumn }}>
+            <HeroMetric label="Cart Items : " value={cart.length} />
+            <HeroMetric label="Subtotal : " value={formatCompactMoney(subtotal)} />
+            <HeroMetric label="Amount Due : " value={formatCompactMoney(estimatedAmountDue)} />
+            <HeroMetric label="Expected Balance : " value={formatCompactMoney(expectedBalance)} />
+          </div>
+        </div>
       </div>
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <div className="two-column">
-        <div className="section-card">
-          <h2>Select Items</h2>
+      {lockedPeriod && (
+        <AuditUnlockRequestBox
+          lockedPeriod={lockedPeriod}
+          requestArea="sale"
+          requestedAction="Record sale inside locked accounting period"
+          onRequestSent={() => {
+            setMessage(
+              "Unlock request sent successfully. Wait for admin or manager review."
+            );
+          }}
+        />
+      )}
 
-          <label>Product</label>
-          <select
-            value={selectedProductId}
-            onChange={(event) => setSelectedProductId(event.target.value)}
-          >
-            <option value="">Choose product</option>
+      <div style={styles.storeNotice}>
+        <span style={styles.noticeIcon}>🏬</span>
+        <div>
+          <strong>
+            {currentStoreCode} — {currentStoreName}
+          </strong>
+          <p>
+            This sale will reduce stock, create receipt records and create debts
+            only inside this selected store.
+          </p>
+        </div>
+      </div>
 
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name} — GHS {formatMoney(product.selling_price)} —
-                Stock: {product.quantity}
-              </option>
-            ))}
-          </select>
+      <div style={{ ...styles.commandGrid, ...oneColumn }}>
+        <div style={styles.commandCard}>
+          <span>📦</span>
+          <div>
+            <strong>{products.length}</strong>
+            <small>available product records</small>
+          </div>
+        </div>
 
-          <label>Quantity</label>
-          <input
-            type="number"
-            min="1"
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-          />
+        <div style={styles.commandCard}>
+          <span>🚨</span>
+          <div>
+            <strong>{lowStockProducts.length}</strong>
+            <small>low-stock item(s)</small>
+          </div>
+        </div>
 
-          <button type="button" onClick={addToCart}>
-            Add to Sale
-          </button>
+        <div style={styles.commandCard}>
+          <span>⛔</span>
+          <div>
+            <strong>{outOfStockProducts.length}</strong>
+            <small>out-of-stock item(s)</small>
+          </div>
+        </div>
 
-          <h2>Sale Items</h2>
+        <div style={styles.commandCard}>
+          <span>✅</span>
+          <div>
+            <strong>{saleProgress}%</strong>
+            <small>sale readiness</small>
+          </div>
+        </div>
+      </div>
 
-          {cart.length === 0 ? (
-            <p>No items added yet.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Price</th>
-                  <th>Qty</th>
-                  <th>Total</th>
-                  <th></th>
-                </tr>
-              </thead>
+      <form onSubmit={completeSale}>
+        <div style={{ ...styles.mainGrid, ...oneColumn }}>
+          <section style={styles.panelLarge}>
+            <div style={styles.panelHeader}>
+              <div>
+                <p style={styles.eyebrowDark}>Step 1</p>
+                <h2 style={styles.panelTitle}>Find Product & Build Cart</h2>
+                <p style={styles.panelSubtitle}>
+                  Search by product name, barcode, category or excavator type.
+                </p>
+              </div>
 
-              <tbody>
-                {cart.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.name}</td>
-                    <td>GHS {formatMoney(item.selling_price)}</td>
-                    <td>{item.quantity}</td>
-                    <td>
-                      GHS{" "}
-                      {formatMoney(
-                        Number(item.selling_price) * Number(item.quantity)
-                      )}
-                    </td>
-                    <td>
+              <span style={styles.goldBadge}>{currentStoreCode}</span>
+            </div>
+
+            <div style={{ ...styles.searchGrid, ...compactSearchGrid }}>
+              <div>
+                <label>Search Product</label>
+                <input
+                  type="text"
+                  value={productSearch}
+                  onChange={(event) => {
+                    setProductSearch(event.target.value);
+                    setSelectedProductId("");
+                  }}
+                  placeholder="Example: filter, CAT 320, barcode..."
+                />
+              </div>
+
+              <div>
+                <label>Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                />
+              </div>
+
+              <button type="button" style={styles.addButton} onClick={addToCart}>
+                Add to Sale
+              </button>
+            </div>
+
+            {productSearch.trim() && !selectedProduct && (
+              <div style={styles.searchResults}>
+                {filteredProducts.length === 0 ? (
+                  <div style={styles.emptyState}>
+                    No matching product found in this selected store.
+                  </div>
+                ) : (
+                  filteredProducts.map((product) => {
+                    const inStock = Number(product.quantity) > 0;
+                    const lowStock =
+                      Number(product.quantity || 0) <=
+                      Number(product.low_stock_threshold || 0);
+
+                    return (
+                      <div key={product.id} style={styles.productResult}>
+                        <div>
+                          <div style={styles.productTitleRow}>
+                            <strong>{product.name}</strong>
+                            {lowStock && (
+                              <span style={styles.lowBadge}>
+                                {inStock ? "Low Stock" : "Out"}
+                              </span>
+                            )}
+                          </div>
+
+                          <p>
+                            GHS {formatMoney(product.selling_price)} • Stock:{" "}
+                            {product.quantity}
+                            {product.barcode ? ` • Barcode: ${product.barcode}` : ""}
+                            {product.size ? ` • Type: ${product.size}` : ""}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => selectProductForSale(product)}
+                          disabled={!inStock}
+                          style={{
+                            ...styles.selectButton,
+                            ...(inStock ? {} : styles.disabledButton),
+                          }}
+                        >
+                          {inStock ? "Select" : "Out"}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {selectedProduct && (
+              <div style={styles.selectedProduct}>
+                <div>
+                  <p style={styles.eyebrowDark}>Selected Product</p>
+                  <h3>{selectedProduct.name}</h3>
+                  <span>
+                    GHS {formatMoney(selectedProduct.selling_price)} • Stock:{" "}
+                    {selectedProduct.quantity}
+                    {selectedProduct.barcode
+                      ? ` • Barcode: ${selectedProduct.barcode}`
+                      : ""}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={clearSelectedProduct}
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            <div style={styles.cartHeader}>
+              <div>
+                <h2 style={styles.panelTitle}>Sale Items</h2>
+                <p style={styles.panelSubtitle}>
+                  Review quantities before completing the sale.
+                </p>
+              </div>
+
+              <span style={styles.goldBadge}>{cart.length} item(s)</span>
+            </div>
+
+            {cart.length === 0 ? (
+              <div style={styles.emptyCart}>
+                <span>🛒</span>
+                <strong>No items added yet.</strong>
+                <p>Search and select a product, then add it to the sale.</p>
+              </div>
+            ) : (
+              <div style={styles.cartList}>
+                {cart.map((item) => {
+                  const lineTotal =
+                    Number(item.selling_price) * Number(item.quantity);
+
+                  return (
+                    <div key={item.id} style={styles.cartItem}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>
+                          GHS {formatMoney(item.selling_price)} each
+                          {item.size ? ` • ${item.size}` : ""}
+                        </span>
+                      </div>
+
+                      <div style={styles.cartQuantity}>
+                        <label>Qty</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(event) =>
+                            updateCartQuantity(item.id, event.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div style={styles.cartAmount}>
+                        <small>Total</small>
+                        <strong>GHS {formatMoney(lineTotal)}</strong>
+                      </div>
+
                       <button
                         type="button"
                         className="small-danger"
@@ -601,109 +1278,172 @@ export default function NewSalePage() {
                       >
                         Remove
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section style={styles.stickySide}>
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <div>
+                  <p style={styles.eyebrowDark}>Step 2</p>
+                  <h2 style={styles.panelTitle}>Customer & Payment</h2>
+                  <p style={styles.panelSubtitle}>
+                    Credit and mixed sales require customer details.
+                  </p>
+                </div>
+              </div>
+
+              <label>Customer Name</label>
+              <input
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Enter customer name"
+              />
+
+              <label>Customer Phone</label>
+              <input
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+                placeholder="Enter customer phone"
+              />
+
+              <label>Customer Location</label>
+              <input
+                value={customerLocation}
+                onChange={(event) => setCustomerLocation(event.target.value)}
+                placeholder="Enter customer location"
+              />
+
+              <label>Payment Type</label>
+              <div style={styles.paymentTypeGrid}>
+                {["cash", "momo", "bank", "credit", "mixed"].map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    style={{
+                      ...styles.paymentTypeButton,
+                      ...(paymentType === method
+                        ? styles.paymentTypeButtonActive
+                        : {}),
+                    }}
+                    onClick={() => setPaymentType(method)}
+                  >
+                    {formatPaymentMethod(method)}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          )}
+              </div>
 
-          <div className="sale-total">Subtotal: GHS {formatMoney(subtotal)}</div>
-        </div>
+              <label>Discount Amount</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={discountAmount}
+                onChange={(event) => setDiscountAmount(event.target.value)}
+                placeholder="Enter discount amount"
+              />
 
-        <form className="section-card" onSubmit={completeSale}>
-          <h2>Payment Details</h2>
+              <label>
+                {immediatePayment ? "Amount Tendered" : "Amount Paid Now"}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amountPaid}
+                onChange={(event) => setAmountPaid(event.target.value)}
+                placeholder={`Amount due is GHS ${formatMoney(estimatedAmountDue)}`}
+              />
 
-          <label>Customer Name</label>
-          <input
-            value={customerName}
-            onChange={(event) => setCustomerName(event.target.value)}
-          />
+              <div style={styles.quickMoneyRow}>
+                <button
+                  type="button"
+                  onClick={() => setAmountPaid(String(estimatedAmountDue))}
+                >
+                  Exact
+                </button>
 
-          <label>Customer Phone</label>
-          <input
-            value={customerPhone}
-            onChange={(event) => setCustomerPhone(event.target.value)}
-          />
-
-          <label>Customer Location</label>
-          <input
-            value={customerLocation}
-            onChange={(event) => setCustomerLocation(event.target.value)}
-          />
-
-          <label>Payment Type</label>
-          <select
-            value={paymentType}
-            onChange={(event) => setPaymentType(event.target.value)}
-          >
-            <option value="cash">Cash</option>
-            <option value="momo">MoMo</option>
-            <option value="bank">Bank</option>
-            <option value="credit">Credit</option>
-            <option value="mixed">Mixed</option>
-          </select>
-
-          <label>Discount Amount</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={discountAmount}
-            onChange={(event) => setDiscountAmount(event.target.value)}
-            placeholder="Enter discount amount"
-          />
-
-          <label>Amount Paid</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={amountPaid}
-            onChange={(event) => setAmountPaid(event.target.value)}
-            placeholder={`Amount due is GHS ${formatMoney(estimatedAmountDue)}`}
-          />
-
-          <div className="receipt-totals">
-            <p>
-              <span>Subtotal</span>
-              <strong>GHS {formatMoney(subtotal)}</strong>
-            </p>
-
-            <p>
-              <span>Discount</span>
-              <strong>GHS {formatMoney(cleanDiscountAmount)}</strong>
-            </p>
-
-            <p className="receipt-grand-total">
-              <span>Estimated Amount Due</span>
-              <strong>GHS {formatMoney(estimatedAmountDue)}</strong>
-            </p>
-
-            <p>
-              <span>Expected Balance</span>
-              <strong>GHS {formatMoney(expectedBalance)}</strong>
-            </p>
-          </div>
-
-          <button type="submit">Complete Sale</button>
-        </form>
-      </div>
-
-      {receipt && (
-        <div className="section-card receipt-card">
-          <div className="receipt-preview">
-            <div className="receipt-center">
-              <h2>{businessName}</h2>
-              <p>{businessAddress}</p>
-              <p>Tel: {businessPhone}</p>
-              <p>MOMO #: {momoNumber}</p>
+                <button type="button" onClick={() => setAmountPaid("")}>
+                  Clear
+                </button>
+              </div>
             </div>
 
-            <div className="receipt-info-grid">
+            <div style={styles.totalPanel}>
+              <p>Sale Total</p>
+
+              <div style={styles.totalLine}>
+                <span>Subtotal</span>
+                <strong>GHS {formatMoney(subtotal)}</strong>
+              </div>
+
+              <div style={styles.totalLine}>
+                <span>Discount</span>
+                <strong>GHS {formatMoney(cleanDiscountAmount)}</strong>
+              </div>
+
+              <div style={styles.totalDue}>
+                <span>Amount Due</span>
+                <strong>GHS {formatMoney(estimatedAmountDue)}</strong>
+              </div>
+
+              <div style={styles.totalLine}>
+                <span>Change Due</span>
+                <strong>GHS {formatMoney(liveChangeDue)}</strong>
+              </div>
+
+              <div style={styles.totalLine}>
+                <span>Expected Balance</span>
+                <strong>GHS {formatMoney(expectedBalance)}</strong>
+              </div>
+
+              <div style={styles.progressTrack}>
+                <div
+                  style={{
+                    ...styles.progressFill,
+                    width: `${saleProgress}%`,
+                  }}
+                />
+              </div>
+
+              <button type="submit" style={styles.completeButton}>
+                Complete Sale & Generate Receipt
+              </button>
+            </div>
+          </section>
+        </div>
+      </form>
+
+      {receipt && (
+        <section style={styles.receiptPanel}>
+          <div style={styles.receiptPreview}>
+            <div style={styles.receiptCenter}>
+              <h2>{getReceiptBusinessName(receipt)}</h2>
+              <p>{getReceiptBusinessAddress(receipt)}</p>
+              <p>Tel: {getReceiptBusinessPhone(receipt)}</p>
+              <p>MOMO #: {getReceiptMomoNumber(receipt)}</p>
               <p>
-                <strong>Customer:</strong>{" "}
-                {receipt.customer?.name || "Walk-in Customer"}
+                Store: {getReceiptStoreCode(receipt)} —{" "}
+                {getReceiptStoreName(receipt)}
+              </p>
+            </div>
+
+            <div style={{ ...styles.receiptInfoGrid, ...oneColumn }}>
+              <p>
+                <strong>Store:</strong> {getReceiptStoreCode(receipt)} —{" "}
+                {getReceiptStoreName(receipt)}
+              </p>
+
+              <p>
+                <strong>Customer:</strong> {getReceiptCustomerName(receipt)}
+              </p>
+
+              <p>
+                <strong>Phone:</strong> {getReceiptCustomerPhone(receipt)}
               </p>
 
               <p>
@@ -719,7 +1459,8 @@ export default function NewSalePage() {
               </p>
 
               <p>
-                <strong>Payment Method:</strong> {formatPaymentMethod(receipt.payment_type)}
+                <strong>Payment Method:</strong>{" "}
+                {formatPaymentMethod(receipt.payment_type)}
               </p>
 
               <p>
@@ -727,29 +1468,31 @@ export default function NewSalePage() {
               </p>
             </div>
 
-            <table>
-              <thead>
-                <tr>
-                  <th>Item Description</th>
-                  <th>Px</th>
-                  <th>Qty</th>
-                  <th>Amt</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {receipt.items.map((item) => (
-                  <tr key={item.product_id}>
-                    <td>{item.product_name}</td>
-                    <td>GHS {formatMoney(item.unit_price)}</td>
-                    <td>{item.quantity}</td>
-                    <td>GHS {formatMoney(item.line_total)}</td>
+            <div style={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item Description</th>
+                    <th>Px</th>
+                    <th>Qty</th>
+                    <th>Amt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
 
-            <div className="receipt-totals">
+                <tbody>
+                  {receipt.items.map((item) => (
+                    <tr key={item.product_id}>
+                      <td>{item.product_name}</td>
+                      <td>GHS {formatMoney(item.unit_price)}</td>
+                      <td>{item.quantity}</td>
+                      <td>GHS {formatMoney(item.line_total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={styles.receiptTotals}>
               <p>
                 <span>Sub Total</span>
                 <strong>GHS {formatMoney(receipt.subtotal)}</strong>
@@ -765,14 +1508,24 @@ export default function NewSalePage() {
                 <strong>GHS {formatMoney(receipt.tax_amount)}</strong>
               </p>
 
-              <p className="receipt-grand-total">
+              <p style={styles.receiptGrandTotal}>
                 <span>Amount Due</span>
                 <strong>GHS {formatMoney(receipt.total)}</strong>
               </p>
 
               <p>
+                <span>Amount Tendered</span>
+                <strong>GHS {formatMoney(receipt.amount_tendered)}</strong>
+              </p>
+
+              <p>
                 <span>Amount Paid</span>
                 <strong>GHS {formatMoney(receipt.amount_paid)}</strong>
+              </p>
+
+              <p>
+                <span>Change Due</span>
+                <strong>GHS {formatMoney(receipt.change_due)}</strong>
               </p>
 
               <p>
@@ -788,14 +1541,14 @@ export default function NewSalePage() {
               </div>
             )}
 
-            <div className="receipt-center">
+            <div style={styles.receiptCenter}>
               <h3>{receiptFooter}</h3>
               <p>
                 <strong>{policyText}</strong>
               </p>
             </div>
 
-            <div className="modal-actions">
+            <div style={{ ...styles.receiptActions, ...compactReceiptActions }}>
               <button type="button" onClick={printReceipt}>
                 Print Receipt
               </button>
@@ -807,10 +1560,598 @@ export default function NewSalePage() {
               >
                 Download PDF
               </button>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={sendReceiptSms}
+                disabled={sendingReceiptSms}
+              >
+                {sendingReceiptSms ? "Sending SMS..." : "Send SMS Receipt"}
+              </button>
+
+              <button
+                type="button"
+                onClick={sendReceiptWhatsApp}
+                style={{
+                  background: "#16a34a",
+                  color: "#ffffff",
+                  border: "none",
+                }}
+              >
+                Send WhatsApp Message
+              </button>
+            </div>
+
+            <div style={styles.whatsAppHelp}>
+              To send the PDF receipt on WhatsApp, first click{" "}
+              <strong>Download PDF</strong>, then click{" "}
+              <strong>Send WhatsApp Message</strong>, and attach the downloaded
+              PDF manually inside WhatsApp before sending.
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
 }
+
+function HeroMetric({ label, value }) {
+  return (
+    <div style={styles.heroMetric}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+const styles = {
+  page: {
+    width: "100%",
+    maxWidth: "1680px",
+    margin: "0 auto",
+    paddingBottom: "42px",
+  },
+
+  pageMobile: {
+    paddingBottom: "24px",
+  },
+
+  oneColumn: {
+    gridTemplateColumns: "1fr",
+  },
+
+  hero: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: "28px",
+    padding: "26px",
+    marginBottom: "18px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #0d2f55 48%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 24px 60px rgba(7, 24, 44, 0.26)",
+  },
+
+  heroMobile: {
+    padding: "18px 14px",
+    borderRadius: "20px",
+  },
+
+  heroGlowOne: {
+    position: "absolute",
+    width: "260px",
+    height: "260px",
+    right: "-90px",
+    top: "-90px",
+    borderRadius: "50%",
+    background: "rgba(224, 186, 40, 0.30)",
+    filter: "blur(18px)",
+  },
+
+  heroGlowTwo: {
+    position: "absolute",
+    width: "180px",
+    height: "180px",
+    left: "35%",
+    bottom: "-110px",
+    borderRadius: "50%",
+    background: "rgba(37, 99, 235, 0.34)",
+    filter: "blur(18px)",
+  },
+
+  heroContent: {
+    position: "relative",
+    zIndex: 2,
+  },
+
+  heroTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+
+  heroActions: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+
+  heroActionsMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    width: "100%",
+  },
+
+  heroButton: {
+    border: "1px solid rgba(224, 186, 40, 0.62)",
+    background: "rgba(224, 186, 40, 0.16)",
+    color: "#ffffff",
+    borderRadius: "14px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  heroDangerButton: {
+    border: "1px solid rgba(254, 202, 202, 0.42)",
+    background: "rgba(185, 28, 28, 0.72)",
+    color: "#ffffff",
+    borderRadius: "14px",
+    padding: "11px 14px",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  eyebrow: {
+    margin: 0,
+    color: "#e0ba28",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "12px",
+  },
+
+  eyebrowDark: {
+    margin: 0,
+    color: "#b45309",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    fontSize: "11px",
+  },
+
+  heroTitle: {
+    margin: "6px 0 0",
+    fontSize: "clamp(30px, 4vw, 50px)",
+    lineHeight: 1.03,
+    fontWeight: "950",
+  },
+
+  heroTitleMobile: {
+    fontSize: "30px",
+  },
+
+  heroSubtitle: {
+    margin: "10px 0 0",
+    maxWidth: "820px",
+    color: "rgba(255,255,255,0.78)",
+    fontSize: "15px",
+    lineHeight: 1.6,
+  },
+
+  heroMetrics: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "12px",
+    marginTop: "22px",
+  },
+
+  heroMetric: {
+    padding: "14px",
+    borderRadius: "18px",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.15)",
+  },
+
+  storeNotice: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    marginBottom: "18px",
+    padding: "14px 16px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+    border: "1px solid #bfdbfe",
+    color: "#1e3a8a",
+    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
+  },
+
+  noticeIcon: {
+    fontSize: "22px",
+  },
+
+  commandGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "12px",
+    marginBottom: "18px",
+  },
+
+  commandCard: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    background: "#ffffff",
+    borderRadius: "18px",
+    padding: "14px",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 34px rgba(15, 23, 42, 0.07)",
+    minWidth: 0,
+  },
+
+  mainGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.45fr) minmax(340px, 0.75fr)",
+    gap: "18px",
+    alignItems: "start",
+  },
+
+  panelLarge: {
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  panel: {
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    minWidth: 0,
+  },
+
+  stickySide: {
+    display: "grid",
+    gap: "18px",
+    position: "sticky",
+    top: "18px",
+  },
+
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+
+  panelTitle: {
+    margin: "4px 0 0",
+    color: "#0f172a",
+    fontSize: "22px",
+    fontWeight: "950",
+  },
+
+  panelSubtitle: {
+    margin: "5px 0 0",
+    color: "#64748b",
+    fontSize: "13px",
+    lineHeight: 1.5,
+  },
+
+  goldBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    padding: "7px 11px",
+    background: "#fef3c7",
+    color: "#92400e",
+    fontWeight: "950",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  },
+
+  searchGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 110px auto",
+    gap: "12px",
+    alignItems: "end",
+  },
+
+  searchGridMobile: {
+    gridTemplateColumns: "1fr",
+  },
+
+  addButton: {
+    border: "none",
+    borderRadius: "14px",
+    padding: "11px 14px",
+    background: "#e0ba28",
+    color: "#07182c",
+    fontWeight: "950",
+    cursor: "pointer",
+    minHeight: "42px",
+  },
+
+  searchResults: {
+    marginTop: "14px",
+    marginBottom: "16px",
+    border: "1px solid #dbe3ef",
+    borderRadius: "18px",
+    overflow: "hidden",
+    background: "#ffffff",
+  },
+
+  productResult: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "12px",
+    alignItems: "center",
+    padding: "13px",
+    borderBottom: "1px solid #edf1f5",
+  },
+
+  productTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+
+  lowBadge: {
+    borderRadius: "999px",
+    padding: "5px 8px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontSize: "11px",
+    fontWeight: "950",
+  },
+
+  selectButton: {
+    border: "none",
+    borderRadius: "12px",
+    padding: "9px 12px",
+    fontWeight: "900",
+    cursor: "pointer",
+    background: "#2563eb",
+    color: "#ffffff",
+  },
+
+  disabledButton: {
+    background: "#cbd5e1",
+    cursor: "not-allowed",
+  },
+
+  selectedProduct: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "center",
+    marginTop: "14px",
+    marginBottom: "16px",
+    padding: "14px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, #ecfdf3, #ffffff)",
+    border: "1px solid #bbf7d0",
+    color: "#14532d",
+    flexWrap: "wrap",
+  },
+
+  cartHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    marginTop: "20px",
+    marginBottom: "14px",
+  },
+
+  emptyCart: {
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    padding: "28px",
+    borderRadius: "20px",
+    background: "#f8fafc",
+    border: "1px dashed #cbd5e1",
+    color: "#64748b",
+  },
+
+  cartList: {
+    display: "grid",
+    gap: "10px",
+  },
+
+  cartItem: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 92px auto auto",
+    gap: "12px",
+    alignItems: "center",
+    padding: "13px",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+  },
+
+  cartQuantity: {
+    display: "grid",
+    gap: "4px",
+  },
+
+  cartAmount: {
+    display: "grid",
+    textAlign: "right",
+    color: "#0f172a",
+  },
+
+  paymentTypeGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+    marginBottom: "12px",
+  },
+
+  paymentTypeButton: {
+    border: "1px solid #dbe3ef",
+    borderRadius: "13px",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "10px",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  paymentTypeButtonActive: {
+    background: "#07182c",
+    color: "#e0ba28",
+    borderColor: "#07182c",
+  },
+
+  quickMoneyRow: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    marginBottom: "4px",
+  },
+
+  totalPanel: {
+    borderRadius: "24px",
+    padding: "20px",
+    background:
+      "linear-gradient(135deg, #07182c 0%, #0d2f55 58%, #111827 100%)",
+    color: "#ffffff",
+    boxShadow: "0 20px 50px rgba(7, 24, 44, 0.25)",
+  },
+
+  totalLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    padding: "9px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.12)",
+  },
+
+  totalDue: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    margin: "12px 0",
+    padding: "14px",
+    borderRadius: "16px",
+    background: "rgba(224, 186, 40, 0.16)",
+    color: "#ffffff",
+    fontSize: "18px",
+  },
+
+  progressTrack: {
+    height: "12px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.16)",
+    overflow: "hidden",
+    marginTop: "14px",
+  },
+
+  progressFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, #e0ba28, #22c55e)",
+  },
+
+  completeButton: {
+    width: "100%",
+    marginTop: "16px",
+    border: "none",
+    borderRadius: "16px",
+    padding: "14px 16px",
+    background: "#e0ba28",
+    color: "#07182c",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(224, 186, 40, 0.22)",
+  },
+
+  receiptPanel: {
+    marginTop: "20px",
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "20px",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+    maxWidth: "920px",
+  },
+
+  receiptPreview: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "18px",
+    padding: "20px",
+  },
+
+  receiptCenter: {
+    textAlign: "center",
+    borderBottom: "2px solid #07182c",
+    paddingBottom: "14px",
+    marginBottom: "16px",
+  },
+
+  receiptInfoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "8px 20px",
+    marginBottom: "16px",
+  },
+
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+
+  receiptTotals: {
+    maxWidth: "360px",
+    marginLeft: "auto",
+    marginTop: "16px",
+  },
+
+  receiptGrandTotal: {
+    borderTop: "2px solid #07182c",
+    fontSize: "18px",
+  },
+
+  receiptActions: {
+    marginTop: "18px",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+
+  receiptActionsMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+  },
+
+  whatsAppHelp: {
+    marginTop: "12px",
+    padding: "12px",
+    borderRadius: "12px",
+    background: "#ecfdf3",
+    border: "1px solid #bbf7d0",
+    color: "#14532d",
+    fontWeight: "700",
+  },
+
+  emptyState: {
+    padding: "16px",
+    color: "#64748b",
+    fontWeight: "800",
+    textAlign: "center",
+  },
+};

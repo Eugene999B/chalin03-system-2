@@ -3,4 +3,6 @@ node_modules/
 .DS_Store
 dist/
 build/
-.vscode/
+.vscode/PRIVATE_BACKUPS/
+*.sql.bak
+*.json.bak

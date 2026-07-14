@@ -3,8 +3,19 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
+
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -38,15 +49,22 @@ function toCountedMoney(value, fallbackValue) {
   return Number(number.toFixed(2));
 }
 
-async function logActivity(connection, userId, action, details) {
-  await connection.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
-  );
+async function logActivity(connection, userId, branchId, action, details) {
+  await writeAuditEvent({
+    connection,
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "daily_closing",
+    actionType: action,
+    outcome: "success",
+    severity: "critical",
+  });
 }
 
-async function calculateClosingSummary(closingDate) {
+async function calculateClosingSummary(branchId, closingDate) {
   const [salesRows] = await pool.query(
     `SELECT
       COUNT(*) AS sales_count,
@@ -61,10 +79,11 @@ async function calculateClosingSummary(closingDate) {
       COALESCE(SUM(CASE WHEN payment_type = 'credit' THEN total ELSE 0 END), 0) AS credit_sales_total,
       COALESCE(SUM(CASE WHEN payment_type = 'credit' THEN amount_paid ELSE 0 END), 0) AS credit_sales_received
      FROM sales
-     WHERE DATE(created_at) = ?
+     WHERE branch_id = ?
+     AND DATE(created_at) = ?
      AND sale_status = 'completed'
      AND COALESCE(is_voided, 0) = 0`,
-    [closingDate]
+    [branchId, closingDate]
   );
 
   const [debtPaymentRows] = await pool.query(
@@ -77,10 +96,13 @@ async function calculateClosingSummary(closingDate) {
      FROM debt_payments dp
      INNER JOIN debts d ON dp.debt_id = d.id
      INNER JOIN sales s ON d.sale_id = s.id
-     WHERE DATE(dp.paid_at) = ?
+     WHERE dp.branch_id = ?
+     AND d.branch_id = ?
+     AND s.branch_id = ?
+     AND DATE(dp.paid_at) = ?
      AND COALESCE(s.is_voided, 0) = 0
      AND s.sale_status != 'cancelled'`,
-    [closingDate]
+    [branchId, branchId, branchId, closingDate]
   );
 
   const [expenseRows] = await pool.query(
@@ -88,8 +110,9 @@ async function calculateClosingSummary(closingDate) {
       COUNT(*) AS expenses_count,
       COALESCE(SUM(amount), 0) AS expenses_total
      FROM expenses
-     WHERE expense_date = ?`,
-    [closingDate]
+     WHERE branch_id = ?
+     AND expense_date = ?`,
+    [branchId, closingDate]
   );
 
   const sales = salesRows[0] || {};
@@ -126,6 +149,7 @@ async function calculateClosingSummary(closingDate) {
   );
 
   return {
+    branch_id: branchId,
     closing_date: closingDate,
 
     sales_count: salesCount,
@@ -163,6 +187,7 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const closingDate = req.query.date || todayDateString();
 
       if (!isValidDateString(closingDate)) {
@@ -172,18 +197,20 @@ router.get(
         });
       }
 
-      const summary = await calculateClosingSummary(closingDate);
+      const summary = await calculateClosingSummary(branchId, closingDate);
 
       const [existingRows] = await pool.query(
-        `SELECT id, closed_at
+        `SELECT id, branch_id, closing_date, closed_at
          FROM daily_closings
-         WHERE closing_date = ?
+         WHERE branch_id = ?
+         AND closing_date = ?
          LIMIT 1`,
-        [closingDate]
+        [branchId, closingDate]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         already_closed: existingRows.length > 0,
         existing_closing: existingRows[0] || null,
         summary,
@@ -208,18 +235,26 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [closings] = await pool.query(
         `SELECT
           dc.*,
-          u.full_name AS closed_by_name
+          u.full_name AS closed_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN branches b ON dc.branch_id = b.id
+         WHERE dc.branch_id = ?
          ORDER BY dc.closing_date DESC
-         LIMIT 100`
+         LIMIT 100`,
+        [branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: closings.length,
         closings,
       });
@@ -241,28 +276,34 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
 
       const [closings] = await pool.query(
         `SELECT
           dc.*,
-          u.full_name AS closed_by_name
+          u.full_name AS closed_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.id = ?
+         AND dc.branch_id = ?
          LIMIT 1`,
-        [id]
+        [id, branchId]
       );
 
       if (closings.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Daily closing record not found.",
+          message: "Daily closing record not found in the selected store.",
         });
       }
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         closing: closings[0],
       });
     } catch (error) {
@@ -285,6 +326,8 @@ router.post(
     const connection = await pool.getConnection();
 
     try {
+      const branchId = getBranchId(req);
+
       const {
         closing_date,
         cash_counted,
@@ -303,7 +346,7 @@ router.post(
         });
       }
 
-      const summary = await calculateClosingSummary(closingDate);
+      const summary = await calculateClosingSummary(branchId, closingDate);
 
       const countedCash = toCountedMoney(cash_counted, summary.expected_cash);
       const countedMomo = toCountedMoney(momo_counted, summary.expected_momo);
@@ -333,10 +376,11 @@ router.post(
       const [existingRows] = await connection.query(
         `SELECT id
          FROM daily_closings
-         WHERE closing_date = ?
+         WHERE branch_id = ?
+         AND closing_date = ?
          LIMIT 1
          FOR UPDATE`,
-        [closingDate]
+        [branchId, closingDate]
       );
 
       if (existingRows.length > 0) {
@@ -344,12 +388,13 @@ router.post(
 
         return res.status(409).json({
           status: "error",
-          message: "This day has already been closed.",
+          message: "This day has already been closed for the selected store.",
         });
       }
 
       const [result] = await connection.query(
         `INSERT INTO daily_closings (
+          branch_id,
           closing_date,
 
           sales_count,
@@ -389,8 +434,9 @@ router.post(
           notes,
           closed_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           closingDate,
 
           summary.sales_count,
@@ -435,6 +481,7 @@ router.post(
       await logActivity(
         connection,
         req.user.id,
+        branchId,
         "DAILY_CLOSING",
         `Closed business day ${closingDate}. Expected total: GHS ${summary.expected_total.toFixed(
           2
@@ -448,12 +495,16 @@ router.post(
       const [createdRows] = await pool.query(
         `SELECT
           dc.*,
-          u.full_name AS closed_by_name
+          u.full_name AS closed_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.id = ?
+         AND dc.branch_id = ?
          LIMIT 1`,
-        [result.insertId]
+        [result.insertId, branchId]
       );
 
       return res.status(201).json({
@@ -469,7 +520,7 @@ router.post(
       if (error.code === "ER_DUP_ENTRY") {
         return res.status(409).json({
           status: "error",
-          message: "This day has already been closed.",
+          message: "This day has already been closed for the selected store.",
         });
       }
 

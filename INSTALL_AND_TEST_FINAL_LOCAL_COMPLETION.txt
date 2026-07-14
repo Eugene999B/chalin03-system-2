@@ -1,0 +1,20 @@
+Open PowerShell in completed-source.
+
+Install:
+tools\install_final_local_completion.ps1
+
+Static and build verification:
+tools\verify_final_local_completion.ps1
+
+Full guarded local acceptance without MySQL/API database tests:
+tools\run_full_local_acceptance.ps1 -SkipDatabase
+
+Full guarded local acceptance with destructive local _test database/API tests:
+tools\run_full_local_acceptance.ps1 -ConfirmLocalTestDatabase -DatabaseHost localhost -DatabaseName chalin03_full_test -DatabaseUser root
+
+Add -DatabasePassword "your-local-password" only for a local MySQL test account. Do not use production credentials.
+
+The full acceptance tool refuses non-local hosts, Railway-like values and database names not ending in _test. When database testing is requested, missing credentials, failed migrations, failed fixtures or failed API tests fail the run. NOT RUN is used only when -SkipDatabase is supplied.
+
+Restore test for a backup JSON file:
+tools\test_restore_on_local_test_db.ps1 -BackupPath C:\path\to\backup.json -ConfirmLocalTestDatabase -DatabaseHost localhost -DatabaseName chalin03_restore_test

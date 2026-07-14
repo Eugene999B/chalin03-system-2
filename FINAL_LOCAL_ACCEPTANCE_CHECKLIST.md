@@ -1,0 +1,21 @@
+# Final Local Acceptance Checklist
+
+- [x] `completed-source` exists.
+- [x] Current source was patched in place; the original baseline was not restarted.
+- [x] Mining, Equipment Hire and Fleet backend routes use explicit per-route `requirePermission` / `requireAnyPermission` guards instead of broad heuristic route authorization.
+- [x] Conflicting `requireRole(...)` and `requireWorkspaceRoutePermission(...)` guards were removed from the Mining, Equipment Hire and Fleet route trees.
+- [x] Hire operational close and financial close are separated by `hire.contracts.close_operational` and `hire.contracts.close_financial`.
+- [x] Frontend Mining/Hire/Fleet routing and actions use permission codes instead of global role checks.
+- [x] Audit Trail search/export is scoped server-side by authenticated branch/site/location assignment.
+- [x] Structured audit context no longer writes the same context ID to both Mining and Hire columns.
+- [x] Public SMS environment debug route was removed.
+- [x] Public readiness response is sanitized; detailed diagnostics remain admin-only.
+- [x] Legacy JSON error responses are sanitized centrally with request IDs.
+- [x] Backend syntax and unit/security tests passed: 64 syntax-checked files and 34/34 Node tests in the independent v3 review.
+- [x] Frontend permission tests and production build passed.
+- [x] Secret scan passed.
+- [x] Local-only tools guard destructive operations to local database names ending `_test`.
+- [x] Full acceptance database path now uses Node/mysql2, delimiter-aware SQL execution, machine-readable migration order and verification failure checks.
+- [x] Restore test wrapper no longer requires `mysql.exe`; restore validation rejects unsafe/unknown backup tables and checks row counts and foreign-key consistency.
+- [x] Final reports truthfully mark `PASS`, `FAIL` or `NOT RUN`.
+- [x] NOT RUN - destructive MySQL/API acceptance and restore tests were not executed in this Codex run because `-SkipDatabase` was used and no backup file was provided.

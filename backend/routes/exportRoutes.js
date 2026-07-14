@@ -7,6 +7,24 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
 function formatDateTime(value) {
   if (!value) return "";
 
@@ -35,8 +53,112 @@ function buildDateFilter(alias, dateColumn, from, to, params) {
   return filter;
 }
 
+
+function toLedgerNumber(value) {
+  const number = Number(value || 0);
+
+  if (Number.isNaN(number)) {
+    return 0;
+  }
+
+  return number;
+}
+
+function normaliseLedgerDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function isLedgerDateInRange(value, from, to) {
+  const date = normaliseLedgerDate(value);
+
+  if (!date) {
+    return false;
+  }
+
+  if (from) {
+    const fromDate = new Date(`${from}T00:00:00`);
+
+    if (!Number.isNaN(fromDate.getTime()) && date < fromDate) {
+      return false;
+    }
+  }
+
+  if (to) {
+    const toDate = new Date(`${to}T23:59:59.999`);
+
+    if (!Number.isNaN(toDate.getTime()) && date > toDate) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function safeExportQuery(label, sql, params, warnings) {
+  try {
+    const [rows] = await pool.query(sql, params);
+
+    return rows;
+  } catch (error) {
+    const message = `${label} skipped: ${error.message}`;
+    console.warn(message);
+    warnings.push(message);
+
+    return [];
+  }
+}
+
+function getProductNameKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function createLedgerEntry(entry) {
+  return {
+    product_id: entry.product_id,
+    product_name: entry.product_name || "",
+    product_size: entry.product_size || "",
+    product_category: entry.product_category || "",
+    product_barcode: entry.product_barcode || "",
+    date: entry.date || null,
+    movement_type: entry.movement_type || "Movement",
+    reference: entry.reference || "",
+    details: entry.details || "",
+    change_quantity: toLedgerNumber(entry.change_quantity),
+    quantity_before:
+      entry.quantity_before === undefined ? null : entry.quantity_before,
+    quantity_after: entry.quantity_after === undefined ? null : entry.quantity_after,
+    recorded_by: entry.recorded_by || "",
+    source: entry.source || "",
+    sort_id: Number(entry.sort_id || 0),
+  };
+}
+
 function isVoidedSale(sale) {
-  return Number(sale.is_voided || 0) === 1 || sale.sale_status === "cancelled";
+  return (
+    Number(sale.is_voided || 0) === 1 ||
+    sale.sale_status === "cancelled" ||
+    sale.sale_status === "voided"
+  );
+}
+
+function safeFilenamePart(value) {
+  return String(value || "store")
+    .replace(/[^a-z0-9]/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
 }
 
 function styleWorksheet(worksheet) {
@@ -70,6 +192,22 @@ function styleWorksheet(worksheet) {
   });
 }
 
+async function getBranchLabel(branchId) {
+  const [branches] = await pool.query(
+    `SELECT code, name
+     FROM branches
+     WHERE id = ?
+     LIMIT 1`,
+    [branchId]
+  );
+
+  if (branches.length === 0) {
+    return `branch-${branchId}`;
+  }
+
+  return branches[0].code || branches[0].name || `branch-${branchId}`;
+}
+
 async function sendWorkbook(res, workbook, filename) {
   res.setHeader(
     "Content-Type",
@@ -82,16 +220,30 @@ async function sendWorkbook(res, workbook, filename) {
   res.end();
 }
 
+async function sendStoreWorkbook(req, res, workbook, baseName) {
+  const branchId = getBranchId(req);
+  const branchLabel = await getBranchLabel(branchId);
+
+  return sendWorkbook(
+    res,
+    workbook,
+    `chalin03-${baseName}-${safeFilenamePart(branchLabel)}.xlsx`
+  );
+}
+
 // GET /api/exports/products
 router.get(
   "/products",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [products] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           size,
           category,
@@ -103,7 +255,9 @@ router.get(
           is_active,
           created_at
          FROM products
-         ORDER BY name ASC`
+         WHERE branch_id = ?
+         ORDER BY name ASC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -114,6 +268,7 @@ router.get(
 
       worksheet.columns = [
         { header: "ID", key: "id" },
+        { header: "Store ID", key: "branch_id" },
         { header: "Product Name", key: "name" },
         { header: "Size", key: "size" },
         { header: "Category", key: "category" },
@@ -129,6 +284,7 @@ router.get(
       products.forEach((product) => {
         worksheet.addRow({
           id: product.id,
+          branch_id: product.branch_id,
           name: product.name,
           size: product.size || "",
           category: product.category || "",
@@ -144,7 +300,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-products.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "products");
     } catch (error) {
       console.error("Export products error:", error);
 
@@ -161,12 +317,15 @@ router.get(
 router.get(
   "/low-stock",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [products] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           size,
           category,
@@ -183,9 +342,11 @@ router.get(
           GREATEST((low_stock_threshold * 2) - quantity, 0) AS suggested_restock_quantity,
           GREATEST((low_stock_threshold * 2) - quantity, 0) * cost_price AS estimated_restock_cost
          FROM products
-         WHERE is_active = TRUE
+         WHERE branch_id = ?
+         AND is_active = TRUE
          AND quantity <= low_stock_threshold
-         ORDER BY quantity ASC, name ASC`
+         ORDER BY quantity ASC, name ASC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -285,7 +446,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-low-stock-restock.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "low-stock-restock");
     } catch (error) {
       console.error("Export low stock error:", error);
 
@@ -303,17 +464,20 @@ router.get(
 router.get(
   "/stock-adjustments",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("sa", "adjusted_at", from, to, params);
 
       const [adjustments] = await pool.query(
         `SELECT
           sa.id,
+          sa.branch_id,
           sa.adjustment_type,
           sa.quantity,
           sa.old_quantity,
@@ -325,9 +489,11 @@ router.get(
           p.size AS product_size,
           u.full_name AS adjusted_by_name
          FROM stock_adjustments sa
-         INNER JOIN products p ON sa.product_id = p.id
+         INNER JOIN products p
+          ON sa.product_id = p.id
+          AND p.branch_id = sa.branch_id
          LEFT JOIN users u ON sa.adjusted_by = u.id
-         WHERE 1 = 1
+         WHERE sa.branch_id = ?
          ${dateFilter}
          ORDER BY sa.adjusted_at DESC, sa.id DESC`,
         params
@@ -429,7 +595,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-stock-adjustments.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "stock-adjustments");
     } catch (error) {
       console.error("Export stock adjustments error:", error);
 
@@ -447,17 +613,20 @@ router.get(
 router.get(
   "/debt-payments",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("dp", "paid_at", from, to, params);
 
       const [payments] = await pool.query(
         `SELECT
           dp.id,
+          dp.branch_id,
           dp.debt_id,
           dp.amount,
           dp.payment_method,
@@ -472,10 +641,14 @@ router.get(
           s.receipt_number,
           u.full_name AS received_by_name
          FROM debt_payments dp
-         INNER JOIN debts d ON dp.debt_id = d.id
-         LEFT JOIN sales s ON d.sale_id = s.id
+         INNER JOIN debts d
+          ON dp.debt_id = d.id
+          AND d.branch_id = dp.branch_id
+         LEFT JOIN sales s
+          ON d.sale_id = s.id
+          AND s.branch_id = d.branch_id
          LEFT JOIN users u ON dp.received_by = u.id
-         WHERE 1 = 1
+         WHERE dp.branch_id = ?
          ${dateFilter}
          ORDER BY dp.paid_at DESC, dp.id DESC`,
         params
@@ -575,7 +748,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-debt-payments.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "debt-payments");
     } catch (error) {
       console.error("Export debt payments error:", error);
 
@@ -588,18 +761,18 @@ router.get(
   }
 );
 
-
-
 // GET /api/exports/daily-closings
 router.get(
   "/daily-closings",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("dc", "closing_date", from, to, params);
 
       const [closings] = await pool.query(
@@ -608,7 +781,7 @@ router.get(
           u.full_name AS closed_by_name
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
-         WHERE 1 = 1
+         WHERE dc.branch_id = ?
          ${dateFilter}
          ORDER BY dc.closing_date DESC`,
         params
@@ -777,7 +950,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-daily-closings.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "daily-closings");
     } catch (error) {
       console.error("Export daily closings error:", error);
 
@@ -794,11 +967,12 @@ router.get(
 router.get(
   "/customer-statement",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const phone = String(req.query.phone || "").trim();
-      const name = String(req.query.name || "").trim();
+      const branchId = getBranchId(req);
+      const phone = cleanText(req.query.phone);
+      const name = cleanText(req.query.name);
 
       if (!phone && !name) {
         return res.status(400).json({
@@ -808,7 +982,7 @@ router.get(
       }
 
       const conditions = [];
-      const params = [];
+      const params = [branchId];
 
       if (phone) {
         conditions.push("s.customer_phone = ?");
@@ -825,6 +999,7 @@ router.get(
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.customer_name,
           s.customer_phone,
@@ -841,7 +1016,8 @@ router.get(
           u.full_name AS staff_name
          FROM sales s
          LEFT JOIN users u ON s.staff_id = u.id
-         WHERE ${whereCustomer}
+         WHERE s.branch_id = ?
+         AND (${whereCustomer})
          ORDER BY s.created_at DESC`,
         params
       );
@@ -868,10 +1044,13 @@ router.get(
             d.created_at,
             s.receipt_number
            FROM debts d
-           INNER JOIN sales s ON d.sale_id = s.id
-           WHERE d.sale_id IN (${salePlaceholders})
+           INNER JOIN sales s
+            ON d.sale_id = s.id
+            AND s.branch_id = d.branch_id
+           WHERE d.branch_id = ?
+           AND d.sale_id IN (${salePlaceholders})
            ORDER BY d.created_at DESC`,
-          saleIds
+          [branchId, ...saleIds]
         );
 
         debts = debtRows;
@@ -894,12 +1073,17 @@ router.get(
               s.receipt_number,
               u.full_name AS received_by_name
              FROM debt_payments dp
-             INNER JOIN debts d ON dp.debt_id = d.id
-             INNER JOIN sales s ON d.sale_id = s.id
+             INNER JOIN debts d
+              ON dp.debt_id = d.id
+              AND d.branch_id = dp.branch_id
+             INNER JOIN sales s
+              ON d.sale_id = s.id
+              AND s.branch_id = d.branch_id
              LEFT JOIN users u ON dp.received_by = u.id
-             WHERE dp.debt_id IN (${debtPlaceholders})
+             WHERE dp.branch_id = ?
+             AND dp.debt_id IN (${debtPlaceholders})
              ORDER BY dp.paid_at DESC, dp.id DESC`,
-            debtIds
+            [branchId, ...debtIds]
           );
 
           debtPayments = paymentRows;
@@ -931,7 +1115,8 @@ router.get(
         0
       );
 
-      const customerName = sales[0]?.customer_name || debts[0]?.customer_name || name;
+      const customerName =
+        sales[0]?.customer_name || debts[0]?.customer_name || name;
       const customerPhone =
         sales[0]?.customer_phone || debts[0]?.customer_phone || phone;
 
@@ -1101,15 +1286,9 @@ router.get(
       styleWorksheet(debtsWorksheet);
       styleWorksheet(paymentsWorksheet);
 
-      const safeName = String(customerName || "customer")
-        .replace(/[^a-z0-9]/gi, "-")
-        .toLowerCase();
+      const safeName = safeFilenamePart(customerName || "customer");
 
-      return sendWorkbook(
-        res,
-        workbook,
-        `chalin03-customer-statement-${safeName}.xlsx`
-      );
+      return sendStoreWorkbook(req, res, workbook, `customer-statement-${safeName}`);
     } catch (error) {
       console.error("Export customer statement error:", error);
 
@@ -1127,17 +1306,20 @@ router.get(
 router.get(
   "/sales",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("s", "created_at", from, to, params);
 
       const [sales] = await pool.query(
         `SELECT
           s.id,
+          s.branch_id,
           s.receipt_number,
           s.subtotal,
           s.discount_amount,
@@ -1158,7 +1340,7 @@ router.get(
          FROM sales s
          LEFT JOIN users u ON s.staff_id = u.id
          LEFT JOIN users vu ON s.voided_by = vu.id
-         WHERE 1 = 1
+         WHERE s.branch_id = ?
          ${dateFilter}
          ORDER BY s.created_at DESC`,
         params
@@ -1310,7 +1492,7 @@ router.get(
       styleWorksheet(worksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-sales.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "sales");
     } catch (error) {
       console.error("Export sales error:", error);
 
@@ -1326,12 +1508,15 @@ router.get(
 router.get(
   "/debts",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [debts] = await pool.query(
         `SELECT
           d.id,
+          d.branch_id,
           d.amount_owed,
           d.amount_paid,
           d.balance,
@@ -1344,10 +1529,14 @@ router.get(
           s.sale_status,
           s.is_voided
          FROM debts d
-         INNER JOIN sales s ON d.sale_id = s.id
-         WHERE COALESCE(s.is_voided, 0) = 0
+         INNER JOIN sales s
+          ON d.sale_id = s.id
+          AND s.branch_id = d.branch_id
+         WHERE d.branch_id = ?
+         AND COALESCE(s.is_voided, 0) = 0
          AND s.sale_status != 'cancelled'
-         ORDER BY d.created_at DESC`
+         ORDER BY d.created_at DESC`,
+        [branchId]
       );
 
       const workbook = new ExcelJS.Workbook();
@@ -1384,7 +1573,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-debts.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "debts");
     } catch (error) {
       console.error("Export debts error:", error);
 
@@ -1400,17 +1589,20 @@ router.get(
 router.get(
   "/expenses",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("e", "expense_date", from, to, params);
 
       const [expenses] = await pool.query(
         `SELECT
           e.id,
+          e.branch_id,
           e.category,
           e.description,
           e.amount,
@@ -1419,7 +1611,7 @@ router.get(
           u.full_name AS recorded_by_name
          FROM expenses e
          LEFT JOIN users u ON e.recorded_by = u.id
-         WHERE 1 = 1
+         WHERE e.branch_id = ?
          ${dateFilter}
          ORDER BY e.expense_date DESC, e.created_at DESC`,
         params
@@ -1453,7 +1645,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-expenses.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "expenses");
     } catch (error) {
       console.error("Export expenses error:", error);
 
@@ -1470,17 +1662,20 @@ router.get(
 router.get(
   "/purchases",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("p", "purchase_date", from, to, params);
 
       const [purchases] = await pool.query(
         `SELECT
           p.id,
+          p.branch_id,
           p.supplier_id,
           p.invoice_number,
           p.purchase_date,
@@ -1494,9 +1689,11 @@ router.get(
           s.name AS supplier_name,
           u.full_name AS created_by_name
          FROM purchases p
-         LEFT JOIN suppliers s ON p.supplier_id = s.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
          LEFT JOIN users u ON p.created_by = u.id
-         WHERE 1 = 1
+         WHERE p.branch_id = ?
          ${dateFilter}
          ORDER BY p.purchase_date DESC, p.created_at DESC`,
         params
@@ -1524,10 +1721,13 @@ router.get(
             s.name AS supplier_name
            FROM purchase_items pi
            INNER JOIN purchases p ON pi.purchase_id = p.id
-           LEFT JOIN suppliers s ON p.supplier_id = s.id
-           WHERE pi.purchase_id IN (${placeholders})
+           LEFT JOIN suppliers s
+            ON p.supplier_id = s.id
+            AND s.branch_id = p.branch_id
+           WHERE p.branch_id = ?
+           AND pi.purchase_id IN (${placeholders})
            ORDER BY p.purchase_date DESC, pi.id ASC`,
-          purchaseIds
+          [branchId, ...purchaseIds]
         );
 
         purchaseItems = items;
@@ -1535,6 +1735,7 @@ router.get(
         const [payments] = await pool.query(
           `SELECT
             pp.id,
+            pp.branch_id,
             pp.purchase_id,
             pp.amount,
             pp.payment_method,
@@ -1545,12 +1746,17 @@ router.get(
             s.name AS supplier_name,
             u.full_name AS paid_by_name
            FROM purchase_payments pp
-           INNER JOIN purchases p ON pp.purchase_id = p.id
-           LEFT JOIN suppliers s ON p.supplier_id = s.id
+           INNER JOIN purchases p
+            ON pp.purchase_id = p.id
+            AND p.branch_id = pp.branch_id
+           LEFT JOIN suppliers s
+            ON p.supplier_id = s.id
+            AND s.branch_id = p.branch_id
            LEFT JOIN users u ON pp.paid_by = u.id
-           WHERE pp.purchase_id IN (${placeholders})
+           WHERE pp.branch_id = ?
+           AND pp.purchase_id IN (${placeholders})
            ORDER BY p.purchase_date DESC, pp.paid_at ASC, pp.id ASC`,
-          purchaseIds
+          [branchId, ...purchaseIds]
         );
 
         purchasePayments = payments;
@@ -1699,7 +1905,7 @@ router.get(
       styleWorksheet(paymentsWorksheet);
       styleWorksheet(summaryWorksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-purchases.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "purchases");
     } catch (error) {
       console.error("Export purchases error:", error);
 
@@ -1716,17 +1922,20 @@ router.get(
 router.get(
   "/returns",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
-      const { from, to } = req.query;
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
+      const params = [branchId];
       const dateFilter = buildDateFilter("r", "returned_at", from, to, params);
 
       const [returns] = await pool.query(
         `SELECT
           r.id,
+          r.branch_id,
           r.quantity,
           r.reason,
           r.returned_at,
@@ -1735,9 +1944,13 @@ router.get(
           s.customer_phone,
           p.name AS product_name
          FROM returns r
-         LEFT JOIN sales s ON r.sale_id = s.id
-         LEFT JOIN products p ON r.product_id = p.id
-         WHERE 1 = 1
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         LEFT JOIN products p
+          ON r.product_id = p.id
+          AND p.branch_id = r.branch_id
+         WHERE r.branch_id = ?
          ${dateFilter}
          ORDER BY r.returned_at DESC, r.id DESC`,
         params
@@ -1773,7 +1986,7 @@ router.get(
 
       styleWorksheet(worksheet);
 
-      return sendWorkbook(res, workbook, "chalin03-returns.xlsx");
+      return sendStoreWorkbook(req, res, workbook, "returns");
     } catch (error) {
       console.error("Export returns error:", error);
 
@@ -1781,6 +1994,1128 @@ router.get(
         status: "error",
         message:
           error.message || "Something went wrong while exporting returns.",
+      });
+    }
+  }
+);
+
+
+// GET /api/exports/stock-transfers
+router.get(
+  "/stock-transfers",
+  requireAuth,
+  requireRole("admin", "manager", "auditor"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+
+      const transferParams = [branchId, branchId];
+      const transferDateFilter = buildDateFilter(
+        "st",
+        "created_at",
+        from,
+        to,
+        transferParams
+      );
+
+      const [transfers] = await pool.query(
+        `SELECT
+          st.id,
+          st.transfer_number,
+          st.from_branch_id,
+          st.to_branch_id,
+          st.status,
+          st.request_note,
+          st.approval_note AS approve_note,
+          st.dispatch_note,
+          st.receive_note,
+          st.cancel_note,
+          st.reject_note,
+          st.requested_at,
+          st.approved_at,
+          st.dispatched_at,
+          st.received_at,
+          st.cancelled_at,
+          st.rejected_at,
+          st.created_at,
+
+          fb.code AS from_branch_code,
+          fb.name AS from_branch_name,
+          fb.location AS from_branch_location,
+
+          tb.code AS to_branch_code,
+          tb.name AS to_branch_name,
+          tb.location AS to_branch_location,
+
+          rb.full_name AS requested_by_name,
+          ab.full_name AS approved_by_name,
+          db.full_name AS dispatched_by_name,
+          rcb.full_name AS received_by_name,
+          cb.full_name AS cancelled_by_name,
+          rjb.full_name AS rejected_by_name,
+
+          COUNT(sti.id) AS item_count,
+          COALESCE(SUM(sti.requested_quantity), 0) AS total_requested_quantity,
+          COALESCE(SUM(sti.dispatched_quantity), 0) AS total_dispatched_quantity,
+          COALESCE(SUM(sti.received_quantity), 0) AS total_received_quantity
+
+         FROM stock_transfers st
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users rb ON rb.id = st.requested_by
+         LEFT JOIN users ab ON ab.id = st.approved_by
+         LEFT JOIN users db ON db.id = st.dispatched_by
+         LEFT JOIN users rcb ON rcb.id = st.received_by
+         LEFT JOIN users cb ON cb.id = st.cancelled_by
+         LEFT JOIN users rjb ON rjb.id = st.rejected_by
+         LEFT JOIN stock_transfer_items sti ON sti.transfer_id = st.id
+
+         WHERE (st.from_branch_id = ? OR st.to_branch_id = ?)
+         ${transferDateFilter}
+
+         GROUP BY
+          st.id,
+          st.transfer_number,
+          st.from_branch_id,
+          st.to_branch_id,
+          st.status,
+          st.request_note,
+          st.approval_note,
+          st.dispatch_note,
+          st.receive_note,
+          st.cancel_note,
+          st.reject_note,
+          st.requested_at,
+          st.approved_at,
+          st.dispatched_at,
+          st.received_at,
+          st.cancelled_at,
+          st.rejected_at,
+          st.created_at,
+          fb.code,
+          fb.name,
+          fb.location,
+          tb.code,
+          tb.name,
+          tb.location,
+          rb.full_name,
+          ab.full_name,
+          db.full_name,
+          rcb.full_name,
+          cb.full_name,
+          rjb.full_name
+
+         ORDER BY st.created_at DESC, st.id DESC`,
+        transferParams
+      );
+
+      const transferIds = transfers.map((transfer) => transfer.id);
+
+      let transferItems = [];
+
+      if (transferIds.length > 0) {
+        const placeholders = transferIds.map(() => "?").join(",");
+
+        const [items] = await pool.query(
+          `SELECT
+            sti.id,
+            sti.transfer_id,
+            sti.source_product_id,
+            sti.destination_product_id,
+            sti.product_name,
+            sti.barcode,
+            sti.category,
+            sti.size,
+            sti.requested_quantity,
+            sti.dispatched_quantity,
+            sti.received_quantity,
+            sti.source_quantity_before,
+            sti.source_quantity_after,
+            sti.destination_quantity_before,
+            sti.destination_quantity_after,
+            sti.item_note,
+
+            st.transfer_number,
+            st.status,
+            st.created_at,
+
+            fb.code AS from_branch_code,
+            fb.name AS from_branch_name,
+
+            tb.code AS to_branch_code,
+            tb.name AS to_branch_name
+
+           FROM stock_transfer_items sti
+           INNER JOIN stock_transfers st ON st.id = sti.transfer_id
+           LEFT JOIN branches fb ON fb.id = st.from_branch_id
+           LEFT JOIN branches tb ON tb.id = st.to_branch_id
+
+           WHERE sti.transfer_id IN (${placeholders})
+           AND (st.from_branch_id = ? OR st.to_branch_id = ?)
+
+           ORDER BY st.created_at DESC, sti.id ASC`,
+          [...transferIds, branchId, branchId]
+        );
+
+        transferItems = items;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+
+      const transfersWorksheet = workbook.addWorksheet("Stock Transfers");
+
+      transfersWorksheet.columns = [
+        { header: "Transfer Number", key: "transfer_number" },
+        { header: "Direction", key: "direction" },
+        { header: "From Store", key: "from_store" },
+        { header: "To Store", key: "to_store" },
+        { header: "Status", key: "status" },
+        { header: "Item Count", key: "item_count" },
+        { header: "Requested Quantity", key: "total_requested_quantity" },
+        { header: "Dispatched Quantity", key: "total_dispatched_quantity" },
+        { header: "Received Quantity", key: "total_received_quantity" },
+        { header: "Requested By", key: "requested_by_name" },
+        { header: "Approved By", key: "approved_by_name" },
+        { header: "Dispatched By", key: "dispatched_by_name" },
+        { header: "Received By", key: "received_by_name" },
+        { header: "Cancelled By", key: "cancelled_by_name" },
+        { header: "Rejected By", key: "rejected_by_name" },
+        { header: "Request Note", key: "request_note" },
+        { header: "Approve Note", key: "approve_note" },
+        { header: "Dispatch Note", key: "dispatch_note" },
+        { header: "Receive Note", key: "receive_note" },
+        { header: "Cancel Note", key: "cancel_note" },
+        { header: "Reject Note", key: "reject_note" },
+        { header: "Requested At", key: "requested_at" },
+        { header: "Approved At", key: "approved_at" },
+        { header: "Dispatched At", key: "dispatched_at" },
+        { header: "Received At", key: "received_at" },
+        { header: "Cancelled At", key: "cancelled_at" },
+        { header: "Rejected At", key: "rejected_at" },
+        { header: "Created At", key: "created_at" },
+      ];
+
+      transfers.forEach((transfer) => {
+        let direction = "Related";
+
+        if (Number(transfer.from_branch_id) === Number(branchId)) {
+          direction = "Transfer Out";
+        }
+
+        if (Number(transfer.to_branch_id) === Number(branchId)) {
+          direction = "Transfer In";
+        }
+
+        transfersWorksheet.addRow({
+          transfer_number: transfer.transfer_number || "",
+          direction,
+          from_store: `${transfer.from_branch_code || ""} - ${
+            transfer.from_branch_name || ""
+          }`,
+          to_store: `${transfer.to_branch_code || ""} - ${
+            transfer.to_branch_name || ""
+          }`,
+          status: transfer.status || "",
+          item_count: Number(transfer.item_count || 0),
+          total_requested_quantity: Number(
+            transfer.total_requested_quantity || 0
+          ),
+          total_dispatched_quantity: Number(
+            transfer.total_dispatched_quantity || 0
+          ),
+          total_received_quantity: Number(
+            transfer.total_received_quantity || 0
+          ),
+          requested_by_name: transfer.requested_by_name || "",
+          approved_by_name: transfer.approved_by_name || "",
+          dispatched_by_name: transfer.dispatched_by_name || "",
+          received_by_name: transfer.received_by_name || "",
+          cancelled_by_name: transfer.cancelled_by_name || "",
+          rejected_by_name: transfer.rejected_by_name || "",
+          request_note: transfer.request_note || "",
+          approve_note: transfer.approve_note || "",
+          dispatch_note: transfer.dispatch_note || "",
+          receive_note: transfer.receive_note || "",
+          cancel_note: transfer.cancel_note || "",
+          reject_note: transfer.reject_note || "",
+          requested_at: formatDateTime(transfer.requested_at),
+          approved_at: formatDateTime(transfer.approved_at),
+          dispatched_at: formatDateTime(transfer.dispatched_at),
+          received_at: formatDateTime(transfer.received_at),
+          cancelled_at: formatDateTime(transfer.cancelled_at),
+          rejected_at: formatDateTime(transfer.rejected_at),
+          created_at: formatDateTime(transfer.created_at),
+        });
+      });
+
+      const itemsWorksheet = workbook.addWorksheet("Transfer Items");
+
+      itemsWorksheet.columns = [
+        { header: "Transfer Number", key: "transfer_number" },
+        { header: "Status", key: "status" },
+        { header: "From Store", key: "from_store" },
+        { header: "To Store", key: "to_store" },
+        { header: "Product", key: "product_name" },
+        { header: "Category", key: "category" },
+        { header: "Size", key: "size" },
+        { header: "Barcode", key: "barcode" },
+        { header: "Requested Quantity", key: "requested_quantity" },
+        { header: "Dispatched Quantity", key: "dispatched_quantity" },
+        { header: "Received Quantity", key: "received_quantity" },
+        { header: "Source Qty Before", key: "source_quantity_before" },
+        { header: "Source Qty After", key: "source_quantity_after" },
+        {
+          header: "Destination Qty Before",
+          key: "destination_quantity_before",
+        },
+        { header: "Destination Qty After", key: "destination_quantity_after" },
+        { header: "Item Note", key: "item_note" },
+        { header: "Created At", key: "created_at" },
+      ];
+
+      transferItems.forEach((item) => {
+        itemsWorksheet.addRow({
+          transfer_number: item.transfer_number || "",
+          status: item.status || "",
+          from_store: `${item.from_branch_code || ""} - ${
+            item.from_branch_name || ""
+          }`,
+          to_store: `${item.to_branch_code || ""} - ${
+            item.to_branch_name || ""
+          }`,
+          product_name: item.product_name || "",
+          category: item.category || "",
+          size: item.size || "",
+          barcode: item.barcode || "",
+          requested_quantity: Number(item.requested_quantity || 0),
+          dispatched_quantity: Number(item.dispatched_quantity || 0),
+          received_quantity: Number(item.received_quantity || 0),
+          source_quantity_before:
+            item.source_quantity_before === null ||
+            item.source_quantity_before === undefined
+              ? ""
+              : Number(item.source_quantity_before || 0),
+          source_quantity_after:
+            item.source_quantity_after === null ||
+            item.source_quantity_after === undefined
+              ? ""
+              : Number(item.source_quantity_after || 0),
+          destination_quantity_before:
+            item.destination_quantity_before === null ||
+            item.destination_quantity_before === undefined
+              ? ""
+              : Number(item.destination_quantity_before || 0),
+          destination_quantity_after:
+            item.destination_quantity_after === null ||
+            item.destination_quantity_after === undefined
+              ? ""
+              : Number(item.destination_quantity_after || 0),
+          item_note: item.item_note || "",
+          created_at: formatDateTime(item.created_at),
+        });
+      });
+
+      const summaryWorksheet = workbook.addWorksheet("Transfer Summary");
+
+      const transfersOut = transfers.filter(
+        (transfer) => Number(transfer.from_branch_id) === Number(branchId)
+      );
+
+      const transfersIn = transfers.filter(
+        (transfer) => Number(transfer.to_branch_id) === Number(branchId)
+      );
+
+      const requestedTransfers = transfers.filter(
+        (transfer) => transfer.status === "requested"
+      );
+
+      const approvedTransfers = transfers.filter(
+        (transfer) => transfer.status === "approved"
+      );
+
+      const dispatchedTransfers = transfers.filter(
+        (transfer) => transfer.status === "dispatched"
+      );
+
+      const receivedTransfers = transfers.filter(
+        (transfer) => transfer.status === "received"
+      );
+
+      const cancelledTransfers = transfers.filter(
+        (transfer) => transfer.status === "cancelled"
+      );
+
+      const rejectedTransfers = transfers.filter(
+        (transfer) => transfer.status === "rejected"
+      );
+
+      const totalQtyOut = transfersOut.reduce(
+        (sum, transfer) =>
+          sum + Number(transfer.total_dispatched_quantity || 0),
+        0
+      );
+
+      const totalQtyIn = transfersIn.reduce(
+        (sum, transfer) => sum + Number(transfer.total_received_quantity || 0),
+        0
+      );
+
+      summaryWorksheet.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+
+      summaryWorksheet.addRow({
+        metric: "Transfers exported",
+        value: transfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Transfer out records",
+        value: transfersOut.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Transfer in records",
+        value: transfersIn.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Requested transfers",
+        value: requestedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Approved transfers",
+        value: approvedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Dispatched transfers",
+        value: dispatchedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Received transfers",
+        value: receivedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Cancelled transfers",
+        value: cancelledTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Rejected transfers",
+        value: rejectedTransfers.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total quantity transferred out",
+        value: totalQtyOut,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total quantity received in",
+        value: totalQtyIn,
+      });
+
+      styleWorksheet(transfersWorksheet);
+      styleWorksheet(itemsWorksheet);
+      styleWorksheet(summaryWorksheet);
+
+      return sendStoreWorkbook(req, res, workbook, "stock-transfers");
+    } catch (error) {
+      console.error("Export stock transfers error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while exporting stock transfers.",
+      });
+    }
+  }
+);
+
+
+// GET /api/exports/stock-ledger
+router.get(
+  "/stock-ledger",
+  requireAuth,
+  requireRole("admin", "manager", "auditor"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+      const warnings = [];
+
+      const [products] = await pool.query(
+        `SELECT
+          id,
+          branch_id,
+          name,
+          size,
+          category,
+          barcode,
+          quantity,
+          low_stock_threshold,
+          is_active,
+          created_at
+         FROM products
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         ORDER BY name ASC`,
+        [branchId]
+      );
+
+      const productMap = new Map();
+      const productNameMap = new Map();
+      const ledgerMap = new Map();
+
+      products.forEach((product) => {
+        const cleanProduct = {
+          id: product.id,
+          branch_id: product.branch_id,
+          name: product.name || "",
+          size: product.size || "",
+          category: product.category || "",
+          barcode: product.barcode || "",
+          quantity: toLedgerNumber(product.quantity),
+          low_stock_threshold: toLedgerNumber(product.low_stock_threshold),
+          created_at: product.created_at,
+        };
+
+        productMap.set(Number(product.id), cleanProduct);
+        ledgerMap.set(Number(product.id), []);
+
+        const nameKey = getProductNameKey(product.name);
+
+        if (nameKey && !productNameMap.has(nameKey)) {
+          productNameMap.set(nameKey, Number(product.id));
+        }
+      });
+
+      function findProductByName(productName) {
+        const productId = productNameMap.get(getProductNameKey(productName));
+
+        if (!productId) {
+          return null;
+        }
+
+        return productMap.get(productId) || null;
+      }
+
+      function addLedgerEntry(productId, entry) {
+        const numericProductId = Number(productId);
+        const product = productMap.get(numericProductId);
+
+        if (!product || !ledgerMap.has(numericProductId)) {
+          return;
+        }
+
+        ledgerMap.get(numericProductId).push(
+          createLedgerEntry({
+            ...entry,
+            product_id: numericProductId,
+            product_name: product.name,
+            product_size: product.size,
+            product_category: product.category,
+            product_barcode: product.barcode,
+          })
+        );
+      }
+
+      const adjustments = await safeExportQuery(
+        "Stock adjustments",
+        `SELECT
+          sa.id,
+          sa.product_id,
+          sa.adjustment_type,
+          sa.quantity,
+          sa.old_quantity,
+          sa.new_quantity,
+          sa.reason,
+          sa.adjusted_at,
+          u.full_name AS adjusted_by_name
+         FROM stock_adjustments sa
+         LEFT JOIN users u ON sa.adjusted_by = u.id
+         WHERE sa.branch_id = ?
+         ORDER BY sa.adjusted_at ASC, sa.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      adjustments.forEach((adjustment) => {
+        const productId = Number(adjustment.product_id);
+        const oldQuantity = toLedgerNumber(adjustment.old_quantity);
+        const newQuantity = toLedgerNumber(adjustment.new_quantity);
+        const changeQuantity = newQuantity - oldQuantity;
+
+        addLedgerEntry(productId, {
+          date: adjustment.adjusted_at,
+          movement_type: `Stock Adjustment - ${adjustment.adjustment_type || ""}`,
+          reference: `ADJ-${adjustment.id}`,
+          details: adjustment.reason || "",
+          change_quantity: changeQuantity,
+          quantity_before: oldQuantity,
+          quantity_after: newQuantity,
+          recorded_by: adjustment.adjusted_by_name || "",
+          source: "stock_adjustments",
+          sort_id: adjustment.id,
+        });
+      });
+
+      const sales = await safeExportQuery(
+        "Sales movement",
+        `SELECT
+          si.id,
+          si.sale_id,
+          si.product_name,
+          si.quantity,
+          si.unit_price,
+          si.line_total,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone,
+          s.created_at,
+          u.full_name AS staff_name
+         FROM sale_items si
+         INNER JOIN sales s ON si.sale_id = s.id
+         LEFT JOIN users u ON s.staff_id = u.id
+         WHERE s.branch_id = ?
+         AND COALESCE(s.is_voided, 0) = 0
+         AND COALESCE(s.sale_status, 'completed') != 'cancelled'
+         ORDER BY s.created_at ASC, si.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      sales.forEach((saleItem) => {
+        const product = findProductByName(saleItem.product_name);
+
+        if (!product) {
+          return;
+        }
+
+        const quantity = toLedgerNumber(saleItem.quantity);
+
+        addLedgerEntry(product.id, {
+          date: saleItem.created_at,
+          movement_type: "Sale",
+          reference: saleItem.receipt_number || `SALE-${saleItem.sale_id}`,
+          details: `Sold to ${
+            saleItem.customer_name || saleItem.customer_phone || "Walk-in Customer"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: saleItem.staff_name || "",
+          source: "sale_items",
+          sort_id: saleItem.id,
+        });
+      });
+
+      const purchases = await safeExportQuery(
+        "Purchase movement",
+        `SELECT
+          pi.id,
+          pi.purchase_id,
+          pi.product_name,
+          pi.quantity,
+          pi.cost_price,
+          pi.line_total,
+          p.invoice_number,
+          p.purchase_date,
+          p.created_at,
+          s.name AS supplier_name,
+          u.full_name AS created_by_name
+         FROM purchase_items pi
+         INNER JOIN purchases p ON pi.purchase_id = p.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
+         LEFT JOIN users u ON p.created_by = u.id
+         WHERE p.branch_id = ?
+         ORDER BY p.purchase_date ASC, pi.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      purchases.forEach((purchaseItem) => {
+        const product = findProductByName(purchaseItem.product_name);
+
+        if (!product) {
+          return;
+        }
+
+        const quantity = toLedgerNumber(purchaseItem.quantity);
+
+        addLedgerEntry(product.id, {
+          date: purchaseItem.purchase_date || purchaseItem.created_at,
+          movement_type: "Purchase",
+          reference:
+            purchaseItem.invoice_number || `PUR-${purchaseItem.purchase_id}`,
+          details: `Purchased from ${purchaseItem.supplier_name || "Supplier"}`,
+          change_quantity: quantity,
+          recorded_by: purchaseItem.created_by_name || "",
+          source: "purchase_items",
+          sort_id: purchaseItem.id,
+        });
+      });
+
+      const returns = await safeExportQuery(
+        "Returns movement",
+        `SELECT
+          r.id,
+          r.product_id,
+          r.quantity,
+          r.reason,
+          r.returned_at,
+          s.receipt_number,
+          s.customer_name,
+          s.customer_phone
+         FROM returns r
+         LEFT JOIN sales s
+          ON r.sale_id = s.id
+          AND s.branch_id = r.branch_id
+         WHERE r.branch_id = ?
+         ORDER BY r.returned_at ASC, r.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      returns.forEach((returnItem) => {
+        const productId = Number(returnItem.product_id);
+        const quantity = toLedgerNumber(returnItem.quantity);
+
+        addLedgerEntry(productId, {
+          date: returnItem.returned_at,
+          movement_type: "Return",
+          reference: returnItem.receipt_number || `RET-${returnItem.id}`,
+          details:
+            returnItem.reason ||
+            `Returned by ${
+              returnItem.customer_name || returnItem.customer_phone || "Customer"
+            }`,
+          change_quantity: quantity,
+          recorded_by: "",
+          source: "returns",
+          sort_id: returnItem.id,
+        });
+      });
+
+      const transferOut = await safeExportQuery(
+        "Transfer out movement",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.source_product_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          tb.code AS to_branch_code,
+          tb.name AS to_branch_name,
+          u.full_name AS dispatched_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches tb ON tb.id = st.to_branch_id
+         LEFT JOIN users u ON st.dispatched_by = u.id
+         WHERE st.from_branch_id = ?
+         AND st.status IN ('dispatched', 'received')
+         ORDER BY COALESCE(st.dispatched_at, st.created_at) ASC, sti.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      transferOut.forEach((transferItem) => {
+        const productId = Number(transferItem.source_product_id);
+        const quantity =
+          toLedgerNumber(transferItem.dispatched_quantity) ||
+          toLedgerNumber(transferItem.received_quantity);
+
+        addLedgerEntry(productId, {
+          date: transferItem.dispatched_at || transferItem.created_at,
+          movement_type: "Transfer Out",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Transferred to ${
+            transferItem.to_branch_code ||
+            transferItem.to_branch_name ||
+            "another store"
+          }`,
+          change_quantity: -quantity,
+          recorded_by: transferItem.dispatched_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      const transferIn = await safeExportQuery(
+        "Transfer in movement",
+        `SELECT
+          sti.id,
+          sti.transfer_id,
+          sti.destination_product_id,
+          sti.dispatched_quantity,
+          sti.received_quantity,
+          st.transfer_number,
+          st.status,
+          st.dispatched_at,
+          st.received_at,
+          st.created_at,
+          fb.code AS from_branch_code,
+          fb.name AS from_branch_name,
+          u.full_name AS received_by_name
+         FROM stock_transfer_items sti
+         INNER JOIN stock_transfers st ON sti.transfer_id = st.id
+         LEFT JOIN branches fb ON fb.id = st.from_branch_id
+         LEFT JOIN users u ON st.received_by = u.id
+         WHERE st.to_branch_id = ?
+         AND st.status = 'received'
+         ORDER BY COALESCE(st.received_at, st.created_at) ASC, sti.id ASC`,
+        [branchId],
+        warnings
+      );
+
+      transferIn.forEach((transferItem) => {
+        const productId = Number(transferItem.destination_product_id);
+        const quantity =
+          toLedgerNumber(transferItem.received_quantity) ||
+          toLedgerNumber(transferItem.dispatched_quantity);
+
+        addLedgerEntry(productId, {
+          date: transferItem.received_at || transferItem.created_at,
+          movement_type: "Transfer In",
+          reference:
+            transferItem.transfer_number || `TRF-${transferItem.transfer_id}`,
+          details: `Received from ${
+            transferItem.from_branch_code ||
+            transferItem.from_branch_name ||
+            "another store"
+          }`,
+          change_quantity: quantity,
+          recorded_by: transferItem.received_by_name || "",
+          source: "stock_transfer_items",
+          sort_id: transferItem.id,
+        });
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+
+      const ledgerWorksheet = workbook.addWorksheet("Stock Movement Ledger");
+
+      ledgerWorksheet.columns = [
+        { header: "Date", key: "date" },
+        { header: "Product", key: "product_name" },
+        { header: "Size", key: "product_size" },
+        { header: "Category", key: "product_category" },
+        { header: "Barcode", key: "product_barcode" },
+        { header: "Movement Type", key: "movement_type" },
+        { header: "Reference", key: "reference" },
+        { header: "Details", key: "details" },
+        { header: "Change Qty", key: "change_quantity" },
+        { header: "Qty Before", key: "quantity_before" },
+        { header: "Qty After", key: "quantity_after" },
+        { header: "Recorded By", key: "recorded_by" },
+        { header: "Source", key: "source" },
+      ];
+
+      const productSummaryWorksheet = workbook.addWorksheet("Product Summary");
+
+      productSummaryWorksheet.columns = [
+        { header: "Product", key: "product_name" },
+        { header: "Size", key: "product_size" },
+        { header: "Category", key: "product_category" },
+        { header: "Barcode", key: "product_barcode" },
+        { header: "Opening Qty", key: "opening_quantity" },
+        { header: "Purchases", key: "purchase_quantity" },
+        { header: "Sales", key: "sales_quantity" },
+        { header: "Returns", key: "returns_quantity" },
+        { header: "Transfer In", key: "transfer_in_quantity" },
+        { header: "Transfer Out", key: "transfer_out_quantity" },
+        { header: "Adjustment Increase", key: "adjustment_increase_quantity" },
+        { header: "Adjustment Decrease", key: "adjustment_decrease_quantity" },
+        { header: "Current Qty", key: "current_quantity" },
+        { header: "Movement Records", key: "movement_records" },
+      ];
+
+      const summaryWorksheet = workbook.addWorksheet("Ledger Summary");
+
+      summaryWorksheet.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+
+      const allExportedEntries = [];
+      const productSummaries = [];
+
+      products.forEach((product) => {
+        const productId = Number(product.id);
+        const productEntries = ledgerMap.get(productId) || [];
+
+        productEntries.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+
+          if (dateA !== dateB) {
+            return dateA - dateB;
+          }
+
+          return a.sort_id - b.sort_id;
+        });
+
+        const currentQuantity = toLedgerNumber(product.quantity);
+        const totalChange = productEntries.reduce(
+          (sum, entry) => sum + toLedgerNumber(entry.change_quantity),
+          0
+        );
+        const openingQuantity = currentQuantity - totalChange;
+        let runningQuantity = openingQuantity;
+
+        const productEntriesWithRunningStock = productEntries.map((entry) => {
+          const quantityBefore =
+            entry.quantity_before === null
+              ? runningQuantity
+              : toLedgerNumber(entry.quantity_before);
+
+          const quantityAfter =
+            entry.quantity_after === null
+              ? quantityBefore + toLedgerNumber(entry.change_quantity)
+              : toLedgerNumber(entry.quantity_after);
+
+          runningQuantity = quantityAfter;
+
+          return {
+            ...entry,
+            quantity_before: quantityBefore,
+            quantity_after: quantityAfter,
+          };
+        });
+
+        const exportedProductEntries = productEntriesWithRunningStock.filter(
+          (entry) => isLedgerDateInRange(entry.date, from, to)
+        );
+
+        exportedProductEntries.forEach((entry) => {
+          allExportedEntries.push(entry);
+
+          ledgerWorksheet.addRow({
+            date: formatDateTime(entry.date),
+            product_name: entry.product_name,
+            product_size: entry.product_size,
+            product_category: entry.product_category,
+            product_barcode: entry.product_barcode,
+            movement_type: entry.movement_type,
+            reference: entry.reference,
+            details: entry.details,
+            change_quantity: toLedgerNumber(entry.change_quantity),
+            quantity_before: toLedgerNumber(entry.quantity_before),
+            quantity_after: toLedgerNumber(entry.quantity_after),
+            recorded_by: entry.recorded_by,
+            source: entry.source,
+          });
+        });
+
+        const summaryEntries = exportedProductEntries;
+
+        const purchaseQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Purchase")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const salesQuantity = Math.abs(
+          summaryEntries
+            .filter((entry) => entry.movement_type === "Sale")
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const returnsQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Return")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const transferInQuantity = summaryEntries
+          .filter((entry) => entry.movement_type === "Transfer In")
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const transferOutQuantity = Math.abs(
+          summaryEntries
+            .filter((entry) => entry.movement_type === "Transfer Out")
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const adjustmentIncreaseQuantity = summaryEntries
+          .filter(
+            (entry) =>
+              String(entry.movement_type).startsWith("Stock Adjustment") &&
+              toLedgerNumber(entry.change_quantity) > 0
+          )
+          .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0);
+
+        const adjustmentDecreaseQuantity = Math.abs(
+          summaryEntries
+            .filter(
+              (entry) =>
+                String(entry.movement_type).startsWith("Stock Adjustment") &&
+                toLedgerNumber(entry.change_quantity) < 0
+            )
+            .reduce((sum, entry) => sum + toLedgerNumber(entry.change_quantity), 0)
+        );
+
+        const productSummary = {
+          product_name: product.name || "",
+          product_size: product.size || "",
+          product_category: product.category || "",
+          product_barcode: product.barcode || "",
+          opening_quantity: openingQuantity,
+          purchase_quantity: purchaseQuantity,
+          sales_quantity: salesQuantity,
+          returns_quantity: returnsQuantity,
+          transfer_in_quantity: transferInQuantity,
+          transfer_out_quantity: transferOutQuantity,
+          adjustment_increase_quantity: adjustmentIncreaseQuantity,
+          adjustment_decrease_quantity: adjustmentDecreaseQuantity,
+          current_quantity: currentQuantity,
+          movement_records: summaryEntries.length,
+        };
+
+        productSummaries.push(productSummary);
+
+        productSummaryWorksheet.addRow(productSummary);
+      });
+
+      const totalPurchases = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.purchase_quantity),
+        0
+      );
+
+      const totalSales = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.sales_quantity),
+        0
+      );
+
+      const totalReturns = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.returns_quantity),
+        0
+      );
+
+      const totalTransferIn = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.transfer_in_quantity),
+        0
+      );
+
+      const totalTransferOut = productSummaries.reduce(
+        (sum, product) => sum + toLedgerNumber(product.transfer_out_quantity),
+        0
+      );
+
+      const totalAdjustmentIncrease = productSummaries.reduce(
+        (sum, product) =>
+          sum + toLedgerNumber(product.adjustment_increase_quantity),
+        0
+      );
+
+      const totalAdjustmentDecrease = productSummaries.reduce(
+        (sum, product) =>
+          sum + toLedgerNumber(product.adjustment_decrease_quantity),
+        0
+      );
+
+      summaryWorksheet.addRow({
+        metric: "Store ID",
+        value: branchId,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "From Date",
+        value: from || "All time",
+      });
+
+      summaryWorksheet.addRow({
+        metric: "To Date",
+        value: to || "All time",
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Products exported",
+        value: products.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Ledger movement records exported",
+        value: allExportedEntries.length,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total purchases quantity",
+        value: totalPurchases,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total sales quantity",
+        value: totalSales,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total returns quantity",
+        value: totalReturns,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total transfer in quantity",
+        value: totalTransferIn,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total transfer out quantity",
+        value: totalTransferOut,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total adjustment increase quantity",
+        value: totalAdjustmentIncrease,
+      });
+
+      summaryWorksheet.addRow({
+        metric: "Total adjustment decrease quantity",
+        value: totalAdjustmentDecrease,
+      });
+
+      if (warnings.length > 0) {
+        const warningWorksheet = workbook.addWorksheet("Warnings");
+
+        warningWorksheet.columns = [
+          { header: "Warning", key: "warning" },
+        ];
+
+        warnings.forEach((warning) => {
+          warningWorksheet.addRow({ warning });
+        });
+
+        styleWorksheet(warningWorksheet);
+      }
+
+      styleWorksheet(ledgerWorksheet);
+      styleWorksheet(productSummaryWorksheet);
+      styleWorksheet(summaryWorksheet);
+
+      return sendStoreWorkbook(req, res, workbook, "stock-movement-ledger");
+    } catch (error) {
+      console.error("Export stock movement ledger error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while exporting stock movement ledger.",
       });
     }
   }

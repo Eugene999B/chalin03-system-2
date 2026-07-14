@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -12,8 +13,29 @@ const emptyExpenseForm = {
 };
 
 export default function ExpensesPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState({
@@ -26,11 +48,50 @@ export default function ExpensesPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const [lockedPeriod, setLockedPeriod] = useState(null);
+  const [unlockRequestAction, setUnlockRequestAction] = useState(
+    "Record expense inside locked period"
+  );
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
+  }
+
+  function getLockedPeriodFromError(error) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      return responseData.locked_period || null;
+    }
+
+    return null;
+  }
+
+  function getFriendlyApiError(error, fallbackMessage) {
+    const responseData = error?.response?.data;
+
+    if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
+      const lockedPeriodData = responseData.locked_period || {};
+      const periodLabel =
+        lockedPeriodData.period_label || "Approved accounting period";
+      const approvedBy = lockedPeriodData.approved_by_name || "management";
+      const reviewDate = lockedPeriodData.review_date || "";
+
+      return [
+        "This expense cannot be changed because the accounting period is locked.",
+        `Locked Period: ${periodLabel}.`,
+        `Reason: This period has already been approved by ${approvedBy}.`,
+        reviewDate ? `Approval Date: ${reviewDate}.` : "",
+        "Use the unlock request form below if a correction is needed.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    return responseData?.message || fallbackMessage;
   }
 
   async function loadExpenses() {
@@ -49,15 +110,19 @@ export default function ExpensesPage() {
       setSummary(response.data.summary || {});
     } catch (error) {
       setError(
-        error.response?.data?.message ||
+        getFriendlyApiError(
+          error,
           "Failed to load expenses. Make sure you are admin or manager."
+        )
       );
     }
   }
 
   useEffect(() => {
     loadExpenses();
-  }, []);
+    // Reload expenses when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function handleChange(event) {
     setForm({
@@ -71,6 +136,8 @@ export default function ExpensesPage() {
 
     setMessage("");
     setError("");
+    setLockedPeriod(null);
+    setUnlockRequestAction("Record expense inside locked period");
 
     try {
       const response = await axiosClient.post("/expenses", {
@@ -78,11 +145,18 @@ export default function ExpensesPage() {
         amount: Number(form.amount || 0),
       });
 
-      setMessage(response.data.message);
+      setMessage(response.data.message || "Expense recorded successfully.");
       setForm(emptyExpenseForm);
       loadExpenses();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to record expense.");
+      const period = getLockedPeriodFromError(error);
+
+      if (period) {
+        setLockedPeriod(period);
+        setUnlockRequestAction("Record expense inside locked period");
+      }
+
+      setError(getFriendlyApiError(error, "Failed to record expense."));
     }
   }
 
@@ -95,13 +169,22 @@ export default function ExpensesPage() {
 
     setMessage("");
     setError("");
+    setLockedPeriod(null);
+    setUnlockRequestAction("Delete expense inside locked period");
 
     try {
       const response = await axiosClient.delete(`/expenses/${expenseId}`);
-      setMessage(response.data.message);
+      setMessage(response.data.message || "Expense deleted successfully.");
       loadExpenses();
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to delete expense.");
+      const period = getLockedPeriodFromError(error);
+
+      if (period) {
+        setLockedPeriod(period);
+        setUnlockRequestAction("Delete expense inside locked period");
+      }
+
+      setError(getFriendlyApiError(error, "Failed to delete expense."));
     }
   }
 
@@ -111,7 +194,10 @@ export default function ExpensesPage() {
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>You are not allowed to open Expenses.</p>
+            <p>
+              You are not allowed to open Expenses for {currentStoreCode} —{" "}
+              {currentStoreName}.
+            </p>
           </div>
         </div>
 
@@ -127,30 +213,72 @@ export default function ExpensesPage() {
       <div className="page-header">
         <div>
           <h1>Expenses</h1>
-          <p>Record business costs such as transport, rent, repairs and salary</p>
+          <p>
+            Record business costs such as fuel, transport, rent, repairs and
+            salary for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button onClick={loadExpenses}>Refresh</button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Expenses, expense summary, filters and delete actions are filtered to
+          this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
+      <AuditUnlockRequestBox
+        lockedPeriod={lockedPeriod}
+        requestArea="expense"
+        requestedAction={unlockRequestAction}
+        onRequestSent={() => {
+          setMessage(
+            "Unlock request sent successfully. Admin or manager must review it."
+          );
+        }}
+      />
+
       <div className="cards-grid expense-summary-grid">
         <div className="stat-card">
-          <span>Total Expenses</span>
+          <span>{currentStoreCode} Total Expenses</span>
           <strong>{formatMoney(summary.total_expenses)}</strong>
         </div>
 
         <div className="stat-card">
-          <span>Number of Expenses</span>
+          <span>{currentStoreCode} Number of Expenses</span>
           <strong>{summary.expense_count || 0}</strong>
         </div>
       </div>
 
       <div className="two-column expenses-grid">
         <form className="section-card" onSubmit={createExpense}>
-          <h2>Record Expense</h2>
+          <h2>Record Expense - {currentStoreCode}</h2>
+
+          <div className="warning-box">
+            You are working in {currentStoreCode} — {currentStoreName}. This
+            expense will belong to this selected store only.
+          </div>
 
           <label>Category</label>
           <select
@@ -159,6 +287,7 @@ export default function ExpensesPage() {
             onChange={handleChange}
           >
             <option value="">Select category</option>
+            <option value="Fuel">Fuel</option>
             <option value="Transport">Transport</option>
             <option value="Rent">Rent</option>
             <option value="Salary">Salary</option>
@@ -194,14 +323,14 @@ export default function ExpensesPage() {
             name="description"
             value={form.description}
             onChange={handleChange}
-            placeholder="Example: Transport to buy spare parts"
+            placeholder="Example: Fuel for delivery or spare parts pickup"
           />
 
           <button type="submit">Save Expense</button>
         </form>
 
         <div className="section-card">
-          <h2>Filter Expenses</h2>
+          <h2>Filter Expenses - {currentStoreCode}</h2>
 
           <label>Search</label>
           <input
@@ -236,7 +365,11 @@ export default function ExpensesPage() {
                 setSearch("");
                 setFrom("");
                 setTo("");
-                setTimeout(loadExpenses, 0);
+                loadExpenses({
+                  search: "",
+                  from: "",
+                  to: "",
+                });
               }}
             >
               Clear
@@ -246,15 +379,16 @@ export default function ExpensesPage() {
       </div>
 
       <div className="section-card">
-        <h2>Expense Records</h2>
+        <h2>Expense Records - {currentStoreCode}</h2>
 
         {expenses.length === 0 ? (
-          <p>No expenses recorded yet.</p>
+          <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Store</th>
                 <th>Category</th>
                 <th>Description</th>
                 <th>Amount</th>
@@ -267,6 +401,7 @@ export default function ExpensesPage() {
               {expenses.map((expense) => (
                 <tr key={expense.id}>
                   <td>{new Date(expense.expense_date).toLocaleDateString()}</td>
+                  <td>{expense.branch_code || expense.store_code || currentStoreCode}</td>
                   <td>
                     <strong>{expense.category}</strong>
                   </td>

@@ -1,0 +1,127 @@
+CHALIN 03 PROJECT STRUCTURE
+==========================
+
+ROOT FILES
+----------
+.gitignore
+backend
+chalin03-structure.txt
+Chalin_03_Boss_Demo_Plan_and_Presentation_Script.docx
+Chalin_03_Complete_Version_1_Documentation_and_Roadmap.docx
+database
+frontend
+README.md
+{
+
+BACKEND MAIN FILES
+------------------
+.env
+.env.example
+config
+middleware
+node_modules
+package-lock.json
+package.json
+routes
+scripts
+server.js
+
+BACKEND ROUTES
+--------------
+activityRoutes.js
+auditSignoffRoutes.js
+auditUnlockRequestRoutes.js
+authRoutes.js
+backupRoutes.js
+branchRoutes.js
+customerStatementRoutes.js
+dailyClosingRoutes.js
+debtRoutes.js
+expenseRoutes.js
+exportRoutes.js
+maintenanceRoutes.js
+productRoutes.js
+purchaseRoutes.js
+receiptRoutes.js
+reportRoutes.js
+returnRoutes.js
+saleRoutes.js
+settingsRoutes.js
+userRoutes.js
+
+BACKEND MIDDLEWARE
+------------------
+authMiddleware.js
+roleMiddleware.js
+
+BACKEND CONFIG
+--------------
+db.js
+
+BACKEND SCRIPTS
+---------------
+createAdmin.js
+repairBranchColumns.js
+repairMultistoreBase.js
+repairProductBranchIndex.js
+resetAdminPassword.js
+
+FRONTEND SRC
+------------
+api
+App.css
+App.jsx
+assets
+components
+context
+index.css
+main.jsx
+pages
+
+FRONTEND PAGES
+--------------
+ActivityLogPage.jsx
+AuditAccountingPage.jsx
+AuditSignoffHistoryPage.jsx
+AuditUnlockRequestsPage.jsx
+BackupPage.jsx
+ChangePasswordPage.jsx
+CustomerStatementPage.jsx
+DailyClosingPage.jsx
+DashboardPage.jsx
+DebtsPage.jsx
+ExpensesPage.jsx
+ExportsPage.jsx
+HelpPage.jsx
+LoginPage.jsx
+LowStockPage.jsx
+MaintenancePage.jsx
+NewSalePage.jsx
+ProductsPage.jsx
+PurchasesPage.jsx
+ReportsPage.jsx
+ReturnsPage.jsx
+SalesHistoryPage.jsx
+UsersSettingsPage.jsx
+
+FRONTEND COMPONENTS
+-------------------
+AuditUnlockRequestBox.jsx
+InstallAppButton.jsx
+Layout.jsx
+PageErrorBoundary.jsx
+ProtectedRoute.jsx
+RoleRoute.jsx
+
+FRONTEND CONTEXT
+----------------
+AuthContext.jsx
+
+FRONTEND API
+------------
+axiosClient.js
+
+DATABASE FILES
+--------------
+audit_reapproval_log_migration.sql
+schema.sql

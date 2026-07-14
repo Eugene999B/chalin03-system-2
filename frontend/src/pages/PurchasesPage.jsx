@@ -21,8 +21,29 @@ const emptyPurchaseForm = {
 };
 
 export default function PurchasesPage() {
-  const { user } = useAuth();
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
 
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -111,6 +132,22 @@ export default function PurchasesPage() {
     return methods[String(value || "").toLowerCase()] || value || "-";
   }
 
+  function getPurchaseStoreCode(purchase) {
+    return purchase?.branch_code || purchase?.store_code || currentStoreCode;
+  }
+
+  function getPurchaseStoreName(purchase) {
+    return purchase?.branch_name || purchase?.store_name || currentStoreName;
+  }
+
+  function getPurchaseStoreLocation(purchase) {
+    return (
+      purchase?.branch_location ||
+      purchase?.store_location ||
+      currentStoreLocation
+    );
+  }
+
   const purchaseTotal = items.reduce((sum, item) => {
     return sum + Number(item.line_total || 0);
   }, 0);
@@ -161,7 +198,9 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     loadPageData();
-  }, []);
+    // Reload purchases, suppliers and products when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   function handleSupplierChange(event) {
     setSupplierForm({
@@ -298,7 +337,21 @@ export default function PurchasesPage() {
     try {
       const response = await axiosClient.get(`/purchases/${purchaseId}`);
 
-      setSelectedPurchase(response.data.purchase);
+      setSelectedPurchase({
+        ...(response.data.purchase || {}),
+        branch_code:
+          response.data.purchase?.branch_code ||
+          response.data.purchase?.store_code ||
+          currentStoreCode,
+        branch_name:
+          response.data.purchase?.branch_name ||
+          response.data.purchase?.store_name ||
+          currentStoreName,
+        branch_location:
+          response.data.purchase?.branch_location ||
+          response.data.purchase?.store_location ||
+          currentStoreLocation,
+      });
       setSelectedPurchaseItems(response.data.items || []);
       setSelectedPurchasePayments(response.data.payments || []);
     } catch (error) {
@@ -327,7 +380,12 @@ export default function PurchasesPage() {
       return;
     }
 
-    setPaymentPurchase(purchase);
+    setPaymentPurchase({
+      ...purchase,
+      branch_code: getPurchaseStoreCode(purchase),
+      branch_name: getPurchaseStoreName(purchase),
+      branch_location: getPurchaseStoreLocation(purchase),
+    });
     setPaymentAmount("");
     setPaymentMethod("cash");
     setPaymentNotes("");
@@ -407,7 +465,10 @@ export default function PurchasesPage() {
         <div className="page-header">
           <div>
             <h1>Access Denied</h1>
-            <p>You are not allowed to open Purchases.</p>
+            <p>
+              You are not allowed to open Purchases for {currentStoreCode} —{" "}
+              {currentStoreName}.
+            </p>
           </div>
         </div>
 
@@ -425,7 +486,10 @@ export default function PurchasesPage() {
           <h1>Purchases</h1>
           <p>
             Record stock purchases, pay supplier balances and view purchase
-            details
+            details for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
           </p>
         </div>
 
@@ -434,12 +498,32 @@ export default function PurchasesPage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Suppliers, purchases, stock updates, supplier balances and purchase
+          payments are filtered to this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <div className="cards-grid purchase-summary-grid">
         <div className="stat-card">
-          <span>Total Purchases</span>
+          <span>{currentStoreCode} Total Purchases</span>
           <strong>{formatMoney(summary.total_purchases)}</strong>
         </div>
 
@@ -454,14 +538,19 @@ export default function PurchasesPage() {
         </div>
 
         <div className="stat-card">
-          <span>Purchase Count</span>
+          <span>{currentStoreCode} Purchase Count</span>
           <strong>{summary.purchase_count || 0}</strong>
         </div>
       </div>
 
       <div className="two-column purchases-grid">
         <form className="section-card" onSubmit={createSupplier}>
-          <h2>Add Supplier</h2>
+          <h2>Add Supplier - {currentStoreCode}</h2>
+
+          <div className="warning-box">
+            You are working in {currentStoreCode} — {currentStoreName}. This
+            supplier will belong to this selected store only.
+          </div>
 
           <label>Supplier Name</label>
           <input
@@ -507,7 +596,12 @@ export default function PurchasesPage() {
         </form>
 
         <form className="section-card" onSubmit={recordPurchase}>
-          <h2>Record Purchase</h2>
+          <h2>Record Purchase - {currentStoreCode}</h2>
+
+          <div className="warning-box">
+            This purchase will update stock only for {currentStoreCode} —{" "}
+            {currentStoreName}.
+          </div>
 
           <div className="form-grid-2">
             <div>
@@ -563,7 +657,7 @@ export default function PurchasesPage() {
           </div>
 
           <div className="purchase-item-box">
-            <h3>Add Product to Purchase</h3>
+            <h3>Add Product to Purchase - {currentStoreCode}</h3>
 
             <div className="form-grid-3">
               <div>
@@ -680,7 +774,7 @@ export default function PurchasesPage() {
       </div>
 
       <div className="section-card">
-        <h2>Filter Purchases</h2>
+        <h2>Filter Purchases - {currentStoreCode}</h2>
 
         <div className="filter-grid">
           <div>
@@ -727,17 +821,18 @@ export default function PurchasesPage() {
       </div>
 
       <div className="section-card">
-        <h2>Purchase Records</h2>
+        <h2>Purchase Records - {currentStoreCode}</h2>
 
         {detailsLoading && <div className="success-box">Loading details...</div>}
 
         {purchases.length === 0 ? (
-          <p>No purchases recorded yet.</p>
+          <p>No purchases recorded yet for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Store</th>
                 <th>Supplier</th>
                 <th>Invoice</th>
                 <th>Total</th>
@@ -756,6 +851,7 @@ export default function PurchasesPage() {
                 return (
                   <tr key={purchase.id}>
                     <td>{formatDate(purchase.purchase_date)}</td>
+                    <td>{getPurchaseStoreCode(purchase)}</td>
                     <td>{purchase.supplier_name || "-"}</td>
                     <td>{purchase.invoice_number || "-"}</td>
                     <td>{formatMoney(purchase.total_amount)}</td>
@@ -796,10 +892,12 @@ export default function PurchasesPage() {
           <div className="receipt-modal">
             <div className="modal-header">
               <div>
-                <h2>Purchase Details</h2>
+                <h2>Purchase Details - {getPurchaseStoreCode(selectedPurchase)}</h2>
                 <p>
                   Invoice:{" "}
                   <strong>{selectedPurchase.invoice_number || "-"}</strong>
+                  <br />
+                  Store: <strong>{getPurchaseStoreName(selectedPurchase)}</strong>
                 </p>
               </div>
 
@@ -814,6 +912,12 @@ export default function PurchasesPage() {
 
             <div className="receipt-preview">
               <div className="receipt-info-grid">
+                <p>
+                  <strong>Store:</strong>{" "}
+                  {getPurchaseStoreCode(selectedPurchase)} —{" "}
+                  {getPurchaseStoreName(selectedPurchase)}
+                </p>
+
                 <p>
                   <strong>Supplier:</strong>{" "}
                   {selectedPurchase.supplier_name || "-"}
@@ -874,7 +978,7 @@ export default function PurchasesPage() {
               <h3>Items Bought</h3>
 
               {selectedPurchaseItems.length === 0 ? (
-                <p>No items found for this purchase.</p>
+                <p>No items found for this purchase in {currentStoreCode}.</p>
               ) : (
                 <table>
                   <thead>
@@ -902,7 +1006,7 @@ export default function PurchasesPage() {
               <h3>Payment History</h3>
 
               {selectedPurchasePayments.length === 0 ? (
-                <p>No payment history found for this purchase.</p>
+                <p>No payment history found for this purchase in {currentStoreCode}.</p>
               ) : (
                 <table>
                   <thead>
@@ -977,10 +1081,12 @@ export default function PurchasesPage() {
           <div className="receipt-modal">
             <div className="modal-header">
               <div>
-                <h2>Pay Purchase Balance</h2>
+                <h2>Pay Purchase Balance - {getPurchaseStoreCode(paymentPurchase)}</h2>
                 <p>
                   Invoice:{" "}
                   <strong>{paymentPurchase.invoice_number || "-"}</strong>
+                  <br />
+                  Store: <strong>{getPurchaseStoreName(paymentPurchase)}</strong>
                 </p>
               </div>
 
@@ -995,6 +1101,12 @@ export default function PurchasesPage() {
 
             <form className="receipt-preview" onSubmit={payPurchaseBalance}>
               <div className="receipt-info-grid">
+                <p>
+                  <strong>Store:</strong>{" "}
+                  {getPurchaseStoreCode(paymentPurchase)} —{" "}
+                  {getPurchaseStoreName(paymentPurchase)}
+                </p>
+
                 <p>
                   <strong>Supplier:</strong>{" "}
                   {paymentPurchase.supplier_name || "-"}

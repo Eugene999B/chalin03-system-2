@@ -3,15 +3,32 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
 
-async function logActivity(userId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
-  );
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
+
+async function logActivity(userId, branchId, action, details) {
+  await writeAuditEvent({
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "purchase",
+    actionType: action,
+    outcome: "success",
+    severity: "notice",
+  });
 }
 
 function getPaymentStatus(totalAmount, amountPaid) {
@@ -40,6 +57,19 @@ function toPositiveMoney(value) {
   return Number(number.toFixed(2));
 }
 
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function cleanNullableText(value) {
+  const text = cleanText(value);
+  return text || null;
+}
+
 function cleanPurchasePaymentMethod(value) {
   const allowedMethods = ["cash", "momo", "bank", "mixed", "other"];
   const cleanValue = String(value || "cash").toLowerCase();
@@ -58,9 +88,12 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
+
       const [suppliers] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           contact_person,
           phone,
@@ -69,12 +102,15 @@ router.get(
           is_active,
           created_at
          FROM suppliers
-         WHERE is_active = TRUE
-         ORDER BY name ASC`
+         WHERE branch_id = ?
+         AND is_active = TRUE
+         ORDER BY name ASC`,
+        [branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: suppliers.length,
         suppliers,
       });
@@ -96,19 +132,21 @@ router.post(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { name, contact_person, phone, email, address } = req.body;
 
-      if (!name || !name.trim()) {
+      const cleanName = cleanText(name);
+
+      if (!cleanName) {
         return res.status(400).json({
           status: "error",
           message: "Supplier name is required.",
         });
       }
 
-      const cleanName = name.trim();
-
       const [result] = await pool.query(
         `INSERT INTO suppliers (
+          branch_id,
           name,
           contact_person,
           phone,
@@ -116,18 +154,20 @@ router.post(
           address,
           is_active
         )
-        VALUES (?, ?, ?, ?, ?, TRUE)`,
+        VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
         [
+          branchId,
           cleanName,
-          contact_person || null,
-          phone || null,
-          email || null,
-          address || null,
+          cleanNullableText(contact_person),
+          cleanNullableText(phone),
+          cleanNullableText(email),
+          cleanNullableText(address),
         ]
       );
 
       await logActivity(
         req.user.id,
+        branchId,
         "CREATE_SUPPLIER",
         `Created supplier "${cleanName}"`
       );
@@ -135,6 +175,7 @@ router.post(
       const [suppliers] = await pool.query(
         `SELECT
           id,
+          branch_id,
           name,
           contact_person,
           phone,
@@ -144,8 +185,9 @@ router.post(
           created_at
          FROM suppliers
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1`,
-        [result.insertId]
+        [result.insertId, branchId]
       );
 
       return res.status(201).json({
@@ -171,10 +213,13 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
-      const { search, from, to } = req.query;
+      const branchId = getBranchId(req);
+      const search = cleanText(req.query.search);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
 
-      const params = [];
-      let whereClause = "WHERE 1 = 1";
+      const params = [branchId];
+      let whereClause = "WHERE p.branch_id = ?";
 
       if (search) {
         whereClause += ` AND (
@@ -201,6 +246,7 @@ router.get(
       const [purchases] = await pool.query(
         `SELECT
           p.id,
+          p.branch_id,
           p.supplier_id,
           p.invoice_number,
           p.purchase_date,
@@ -212,10 +258,15 @@ router.get(
           p.notes,
           p.created_at,
           s.name AS supplier_name,
-          u.full_name AS created_by_name
+          u.full_name AS created_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM purchases p
-         LEFT JOIN suppliers s ON p.supplier_id = s.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
          LEFT JOIN users u ON p.created_by = u.id
+         LEFT JOIN branches b ON p.branch_id = b.id
          ${whereClause}
          ORDER BY p.purchase_date DESC, p.created_at DESC`,
         params
@@ -228,7 +279,9 @@ router.get(
           COALESCE(SUM(p.balance), 0) AS total_balance,
           COUNT(*) AS purchase_count
          FROM purchases p
-         LEFT JOIN suppliers s ON p.supplier_id = s.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
          LEFT JOIN users u ON p.created_by = u.id
          ${whereClause}`,
         params
@@ -236,6 +289,7 @@ router.get(
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         count: purchases.length,
         summary: {
           total_purchases: Number(summaryRows[0].total_purchases || 0),
@@ -264,11 +318,13 @@ router.get(
   requireRole("admin", "manager"),
   async (req, res) => {
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
 
       const [purchases] = await pool.query(
         `SELECT
           p.id,
+          p.branch_id,
           p.supplier_id,
           p.invoice_number,
           p.purchase_date,
@@ -281,19 +337,25 @@ router.get(
           p.created_at,
           s.name AS supplier_name,
           s.phone AS supplier_phone,
-          u.full_name AS created_by_name
+          u.full_name AS created_by_name,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM purchases p
-         LEFT JOIN suppliers s ON p.supplier_id = s.id
+         LEFT JOIN suppliers s
+          ON p.supplier_id = s.id
+          AND s.branch_id = p.branch_id
          LEFT JOIN users u ON p.created_by = u.id
+         LEFT JOIN branches b ON p.branch_id = b.id
          WHERE p.id = ?
+         AND p.branch_id = ?
          LIMIT 1`,
-        [id]
+        [id, branchId]
       );
 
       if (purchases.length === 0) {
         return res.status(404).json({
           status: "error",
-          message: "Purchase not found.",
+          message: "Purchase not found in the selected store.",
         });
       }
 
@@ -315,6 +377,7 @@ router.get(
       const [payments] = await pool.query(
         `SELECT
           pp.id,
+          pp.branch_id,
           pp.purchase_id,
           pp.amount,
           pp.payment_method,
@@ -324,12 +387,14 @@ router.get(
          FROM purchase_payments pp
          LEFT JOIN users u ON pp.paid_by = u.id
          WHERE pp.purchase_id = ?
+         AND pp.branch_id = ?
          ORDER BY pp.paid_at ASC, pp.id ASC`,
-        [id]
+        [id, branchId]
       );
 
       return res.json({
         status: "success",
+        branch_id: branchId,
         purchase: purchases[0],
         items,
         payments,
@@ -356,6 +421,7 @@ router.patch(
     const connection = await pool.getConnection();
 
     try {
+      const branchId = getBranchId(req);
       const { id } = req.params;
       const { amount, payment_method, notes } = req.body;
 
@@ -374,6 +440,7 @@ router.patch(
       const [purchases] = await connection.query(
         `SELECT
           id,
+          branch_id,
           invoice_number,
           total_amount,
           amount_paid,
@@ -381,9 +448,10 @@ router.patch(
           payment_status
          FROM purchases
          WHERE id = ?
+         AND branch_id = ?
          LIMIT 1
          FOR UPDATE`,
-        [id]
+        [id, branchId]
       );
 
       if (purchases.length === 0) {
@@ -391,7 +459,7 @@ router.patch(
 
         return res.status(404).json({
           status: "error",
-          message: "Purchase not found.",
+          message: "Purchase not found in the selected store.",
         });
       }
 
@@ -432,32 +500,36 @@ router.patch(
          SET amount_paid = ?,
              balance = ?,
              payment_status = ?
-         WHERE id = ?`,
-        [newAmountPaid, newBalance, newPaymentStatus, id]
+         WHERE id = ?
+         AND branch_id = ?`,
+        [newAmountPaid, newBalance, newPaymentStatus, id, branchId]
       );
 
       await connection.query(
         `INSERT INTO purchase_payments (
+          branch_id,
           purchase_id,
           amount,
           payment_method,
           paid_by,
           notes
         )
-        VALUES (?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?)`,
         [
+          branchId,
           id,
           paymentAmount,
           cleanPaymentMethod,
           req.user.id,
-          notes || null,
+          cleanNullableText(notes),
         ]
       );
 
       await connection.query(
-        `INSERT INTO activity_log (user_id, action, details)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
         [
+          branchId,
           req.user.id,
           "PAY_PURCHASE_BALANCE",
           `Paid GHS ${paymentAmount.toFixed(
@@ -475,6 +547,7 @@ router.patch(
         message: "Purchase payment recorded successfully.",
         purchase: {
           id: Number(id),
+          branch_id: branchId,
           total_amount: totalAmount,
           amount_paid: newAmountPaid,
           balance: newBalance,
@@ -507,6 +580,8 @@ router.post(
     const connection = await pool.getConnection();
 
     try {
+      const branchId = getBranchId(req);
+
       const {
         supplier_id,
         invoice_number,
@@ -531,6 +606,29 @@ router.post(
       }
 
       await connection.beginTransaction();
+
+      const supplierId = supplier_id ? Number(supplier_id) : null;
+
+      if (supplierId) {
+        const [suppliers] = await connection.query(
+          `SELECT id
+           FROM suppliers
+           WHERE id = ?
+           AND branch_id = ?
+           AND is_active = TRUE
+           LIMIT 1`,
+          [supplierId, branchId]
+        );
+
+        if (suppliers.length === 0) {
+          await connection.rollback();
+
+          return res.status(404).json({
+            status: "error",
+            message: "Supplier not found in the selected store.",
+          });
+        }
+      }
 
       let totalAmount = 0;
       const cleanItems = [];
@@ -560,12 +658,13 @@ router.post(
         }
 
         const [products] = await connection.query(
-          `SELECT id, name
+          `SELECT id, branch_id, name
            FROM products
            WHERE id = ?
+           AND branch_id = ?
            AND is_active = TRUE
            LIMIT 1`,
-          [productId]
+          [productId, branchId]
         );
 
         if (products.length === 0) {
@@ -573,7 +672,7 @@ router.post(
 
           return res.status(404).json({
             status: "error",
-            message: `Product with ID ${productId} was not found.`,
+            message: `Product with ID ${productId} was not found in the selected store.`,
           });
         }
 
@@ -616,6 +715,7 @@ router.post(
 
       const [purchaseResult] = await connection.query(
         `INSERT INTO purchases (
+          branch_id,
           supplier_id,
           invoice_number,
           purchase_date,
@@ -627,17 +727,18 @@ router.post(
           notes,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          supplier_id || null,
-          invoice_number || null,
+          branchId,
+          supplierId,
+          cleanNullableText(invoice_number),
           purchase_date,
           totalAmount,
           totalAmount,
           cleanAmountPaid,
           balance,
           paymentStatus,
-          notes || null,
+          cleanNullableText(notes),
           req.user.id,
         ]
       );
@@ -647,14 +748,16 @@ router.post(
       if (cleanAmountPaid > 0) {
         await connection.query(
           `INSERT INTO purchase_payments (
+            branch_id,
             purchase_id,
             amount,
             payment_method,
             paid_by,
             notes
           )
-          VALUES (?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?)`,
           [
+            branchId,
             purchaseId,
             cleanAmountPaid,
             "cash",
@@ -689,15 +792,17 @@ router.post(
           `UPDATE products
            SET quantity = quantity + ?,
                cost_price = ?
-           WHERE id = ?`,
-          [item.quantity, item.cost_price, item.product_id]
+           WHERE id = ?
+           AND branch_id = ?`,
+          [item.quantity, item.cost_price, item.product_id, branchId]
         );
       }
 
       await connection.query(
-        `INSERT INTO activity_log (user_id, action, details)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO activity_log (branch_id, user_id, action, details)
+         VALUES (?, ?, ?, ?)`,
         [
+          branchId,
           req.user.id,
           "CREATE_PURCHASE",
           `Recorded purchase worth GHS ${totalAmount.toFixed(2)}`,
@@ -711,6 +816,7 @@ router.post(
         message: "Purchase recorded successfully. Stock has been updated.",
         purchase: {
           id: purchaseId,
+          branch_id: branchId,
           total_cost: totalAmount,
           total_amount: totalAmount,
           amount_paid: cleanAmountPaid,

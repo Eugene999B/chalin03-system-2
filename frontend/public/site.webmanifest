@@ -1,0 +1,21 @@
+{
+  "name": "Chalin 03 System",
+  "short_name": "Chalin 03",
+  "description": "Chalin 03 Company Limited staff portal for sales, inventory, stock transfers, reports, SMS, backups, maintenance and accounting intelligence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07182c",
+  "theme_color": "#07182c",
+  "icons": [
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

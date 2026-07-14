@@ -1,11 +1,35 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
 export default function DailyClosingPage() {
+  const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+
+  const currentStoreCode =
+    branchCode ||
+    user?.branch_code ||
+    user?.selected_branch?.branch_code ||
+    user?.selected_branch?.code ||
+    "STORE";
+
+  const currentStoreName =
+    branchName ||
+    user?.branch_name ||
+    user?.selected_branch?.branch_name ||
+    user?.selected_branch?.name ||
+    "Selected Store";
+
+  const currentStoreLocation =
+    branchLocation ||
+    user?.branch_location ||
+    user?.selected_branch?.branch_location ||
+    user?.selected_branch?.location ||
+    "";
+
   const [closingDate, setClosingDate] = useState(getTodayDate());
   const [summary, setSummary] = useState(null);
   const [closings, setClosings] = useState([]);
@@ -34,6 +58,14 @@ export default function DailyClosingPage() {
   function formatDateTime(value) {
     if (!value) return "-";
     return new Date(value).toLocaleString();
+  }
+
+  function getClosingStoreCode(closing) {
+    return closing?.branch_code || closing?.store_code || currentStoreCode;
+  }
+
+  function getClosingStoreName(closing) {
+    return closing?.branch_name || closing?.store_name || currentStoreName;
   }
 
   function countedTotal() {
@@ -99,7 +131,9 @@ export default function DailyClosingPage() {
   useEffect(() => {
     loadSummary();
     loadClosings();
-  }, []);
+    // Reload daily closing when the selected store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId]);
 
   async function handleDateChange(event) {
     const newDate = event.target.value;
@@ -119,7 +153,7 @@ export default function DailyClosingPage() {
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to close business for ${closingDate}?`
+      `Are you sure you want to close ${currentStoreCode} for ${closingDate}?`
     );
 
     if (!confirmed) return;
@@ -155,7 +189,13 @@ export default function DailyClosingPage() {
       <div className="page-header">
         <div>
           <h1>Daily Closing</h1>
-          <p>Close the business day and compare expected money with counted money</p>
+          <p>
+            Close the business day and compare expected money with counted money
+            for{" "}
+            <strong>
+              {currentStoreCode} — {currentStoreName}
+            </strong>
+          </p>
         </div>
 
         <button type="button" onClick={() => loadSummary(closingDate)}>
@@ -163,11 +203,31 @@ export default function DailyClosingPage() {
         </button>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          padding: "14px",
+          borderRadius: "14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          color: "#1e3a8a",
+          fontWeight: "800",
+        }}
+      >
+        Current selected store: {currentStoreCode} — {currentStoreName}
+        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
+        <br />
+        <small>
+          Daily closing summary, counted money and saved closings are filtered
+          to this selected store only.
+        </small>
+      </div>
+
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <div className="section-card">
-        <h2>Closing Date</h2>
+        <h2>Closing Date - {currentStoreCode}</h2>
 
         <div className="filter-grid export-filter-grid">
           <div>
@@ -184,7 +244,8 @@ export default function DailyClosingPage() {
 
         {alreadyClosed && (
           <div className="error-box">
-            This date has already been closed. You cannot close the same day twice.
+            This date has already been closed for {currentStoreCode}. You
+            cannot close the same store day twice.
           </div>
         )}
       </div>
@@ -199,7 +260,7 @@ export default function DailyClosingPage() {
         <>
           <div className="cards-grid">
             <div className="stat-card">
-              <span>Sales Total</span>
+              <span>{currentStoreCode} Sales Total</span>
               <strong>{formatMoney(summary.sales_total)}</strong>
             </div>
 
@@ -219,7 +280,7 @@ export default function DailyClosingPage() {
             </div>
 
             <div className="stat-card">
-              <span>Expected Total</span>
+              <span>{currentStoreCode} Expected Total</span>
               <strong>{formatMoney(summary.expected_total)}</strong>
             </div>
 
@@ -236,7 +297,7 @@ export default function DailyClosingPage() {
 
           <div className="two-column">
             <div className="section-card">
-              <h2>Expected Money</h2>
+              <h2>Expected Money - {currentStoreCode}</h2>
 
               <table>
                 <tbody>
@@ -285,7 +346,12 @@ export default function DailyClosingPage() {
             </div>
 
             <form className="section-card" onSubmit={saveDailyClosing}>
-              <h2>Counted Money</h2>
+              <h2>Counted Money - {currentStoreCode}</h2>
+
+              <div className="warning-box">
+                You are closing {currentStoreCode} — {currentStoreName}. This
+                closing record belongs to this selected store only.
+              </div>
 
               <label>Cash Counted</label>
               <input
@@ -342,7 +408,7 @@ export default function DailyClosingPage() {
                 {saving
                   ? "Saving..."
                   : alreadyClosed
-                  ? "Already Closed"
+                  ? `Already Closed for ${currentStoreCode}`
                   : "Save Daily Closing"}
               </button>
             </form>
@@ -351,15 +417,16 @@ export default function DailyClosingPage() {
       )}
 
       <div className="section-card">
-        <h2>Saved Daily Closings</h2>
+        <h2>Saved Daily Closings - {currentStoreCode}</h2>
 
         {closings.length === 0 ? (
-          <p>No daily closing records yet.</p>
+          <p>No daily closing records yet for {currentStoreCode}.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Store</th>
                 <th>Expected</th>
                 <th>Counted</th>
                 <th>Difference</th>
@@ -372,6 +439,7 @@ export default function DailyClosingPage() {
               {closings.map((closing) => (
                 <tr key={closing.id}>
                   <td>{formatDate(closing.closing_date)}</td>
+                  <td>{getClosingStoreCode(closing)}</td>
                   <td>{formatMoney(closing.expected_total)}</td>
                   <td>{formatMoney(closing.total_counted)}</td>
                   <td>{formatMoney(closing.difference_total)}</td>

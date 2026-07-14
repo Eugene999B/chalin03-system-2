@@ -2,8 +2,19 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 
 const router = express.Router();
+
+function getBranchId(req) {
+  const branchId = Number(req.user?.branch_id || 0);
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    return 1;
+  }
+
+  return branchId;
+}
 
 function toPositiveMoney(value) {
   const number = Number(value);
@@ -26,6 +37,16 @@ function cleanPaymentMethod(value) {
   return "cash";
 }
 
+function cleanText(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = String(value).trim();
+
+  return text || null;
+}
+
 function getDebtStatus(balance) {
   if (balance <= 0) {
     return "paid";
@@ -34,22 +55,120 @@ function getDebtStatus(balance) {
   return "partial";
 }
 
-async function logActivity(connection, userId, action, details) {
-  await connection.query(
-    `INSERT INTO activity_log (user_id, action, details)
-     VALUES (?, ?, ?)`,
-    [userId || null, action, details]
-  );
+async function logActivity(connection, branchId, userId, action, details) {
+  await writeAuditEvent({
+    connection,
+    branchId: branchId || null,
+    userId: userId || null,
+    action,
+    details,
+    workspaceCode: "spare_parts",
+    entityType: "debt",
+    actionType: action,
+    outcome: "success",
+    severity: "notice",
+  });
+}
+
+function toDateOnly(value) {
+  const date = value ? new Date(value) : new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+async function findApprovedAuditLockForDate(connection, branchId, dateValue) {
+  const dateOnly = toDateOnly(dateValue);
+
+  try {
+    const [locks] = await connection.query(
+      `SELECT
+        id,
+        branch_id,
+        period_type,
+        period_label,
+        period_start,
+        period_end,
+        audit_score,
+        audit_status,
+        period_status,
+        approved_by_name,
+        review_date,
+        updated_at
+       FROM audit_signoffs
+       WHERE branch_id = ?
+       AND period_status = 'approved'
+       AND (
+        period_type = 'all'
+        OR (
+          period_start IS NOT NULL
+          AND period_end IS NOT NULL
+          AND ? BETWEEN period_start AND period_end
+        )
+        OR (
+          period_start IS NOT NULL
+          AND period_end IS NULL
+          AND ? >= period_start
+        )
+        OR (
+          period_start IS NULL
+          AND period_end IS NOT NULL
+          AND ? <= period_end
+        )
+       )
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [branchId, dateOnly, dateOnly, dateOnly]
+    );
+
+    return locks.length > 0 ? locks[0] : null;
+  } catch (error) {
+    if (
+      error.code === "ER_NO_SUCH_TABLE" ||
+      error.code === "ER_BAD_TABLE_ERROR"
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function sendAuditLockedResponse(res, lock, actionText) {
+  return res.status(423).json({
+    status: "error",
+    code: "AUDIT_PERIOD_LOCKED",
+    message: `This accounting period is already approved and locked. You cannot ${actionText} inside this period.`,
+    locked_period: {
+      id: lock.id,
+      branch_id: lock.branch_id,
+      period_type: lock.period_type,
+      period_label: lock.period_label,
+      period_start: lock.period_start,
+      period_end: lock.period_end,
+      audit_score: lock.audit_score,
+      audit_status: lock.audit_status,
+      approved_by_name: lock.approved_by_name,
+      review_date: lock.review_date,
+    },
+  });
 }
 
 // GET /api/debts
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
     const { status, search, overdue } = req.query;
 
     let sql = `
       SELECT
         d.id,
+        d.branch_id,
+        b.name AS branch_name,
+        b.branch_code,
         d.sale_id,
         s.receipt_number,
         d.customer_id,
@@ -64,11 +183,12 @@ router.get("/", requireAuth, async (req, res) => {
         d.updated_at,
         DATEDIFF(CURDATE(), d.due_date) AS overdue_days
       FROM debts d
-      LEFT JOIN sales s ON d.sale_id = s.id
-      WHERE 1 = 1
+      LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
+      LEFT JOIN branches b ON d.branch_id = b.id
+      WHERE d.branch_id = ?
     `;
 
-    const params = [];
+    const params = [branchId];
 
     if (status) {
       sql += ` AND d.status = ?`;
@@ -102,6 +222,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       count: debts.length,
       debts,
     });
@@ -118,6 +239,8 @@ router.get("/", requireAuth, async (req, res) => {
 // GET /api/debts/summary
 router.get("/summary", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
+
     const [rows] = await pool.query(
       `SELECT
         COUNT(*) AS total_debt_records,
@@ -133,11 +256,14 @@ router.get("/summary", requireAuth, async (req, res) => {
             THEN 1
           END
         ) AS overdue_count
-       FROM debts`
+       FROM debts
+       WHERE branch_id = ?`,
+      [branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       summary: rows[0],
     });
   } catch (error) {
@@ -153,32 +279,38 @@ router.get("/summary", requireAuth, async (req, res) => {
 // GET /api/debts/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const branchId = getBranchId(req);
     const { id } = req.params;
 
     const [debts] = await pool.query(
       `SELECT
         d.*,
+        b.name AS branch_name,
+        b.branch_code,
         s.receipt_number,
         s.total AS sale_total,
         s.payment_type,
         s.created_at AS sale_date
        FROM debts d
-       LEFT JOIN sales s ON d.sale_id = s.id
+       LEFT JOIN branches b ON d.branch_id = b.id
+       LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
        WHERE d.id = ?
+       AND d.branch_id = ?
        LIMIT 1`,
-      [id]
+      [id, branchId]
     );
 
     if (debts.length === 0) {
       return res.status(404).json({
         status: "error",
-        message: "Debt not found.",
+        message: "Debt not found in the selected store.",
       });
     }
 
     const [payments] = await pool.query(
       `SELECT
         dp.id,
+        dp.branch_id,
         dp.debt_id,
         dp.amount,
         dp.payment_method,
@@ -188,12 +320,14 @@ router.get("/:id", requireAuth, async (req, res) => {
        FROM debt_payments dp
        LEFT JOIN users u ON dp.received_by = u.id
        WHERE dp.debt_id = ?
+       AND dp.branch_id = ?
        ORDER BY dp.paid_at DESC, dp.id DESC`,
-      [id]
+      [id, branchId]
     );
 
     return res.json({
       status: "success",
+      branch_id: branchId,
       debt: debts[0],
       payments,
     });
@@ -212,11 +346,13 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
+    const branchId = getBranchId(req);
     const { id } = req.params;
     const { amount, payment_method, notes } = req.body;
 
     const paymentAmount = toPositiveMoney(amount);
     const cleanMethod = cleanPaymentMethod(payment_method);
+    const cleanNotes = cleanText(notes);
 
     if (paymentAmount === null) {
       return res.status(400).json({
@@ -227,17 +363,34 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
     await connection.beginTransaction();
 
+    const lockedPeriod = await findApprovedAuditLockForDate(
+      connection,
+      branchId,
+      new Date()
+    );
+
+    if (lockedPeriod) {
+      await connection.rollback();
+
+      return sendAuditLockedResponse(
+        res,
+        lockedPeriod,
+        "record a debt payment"
+      );
+    }
+
     const [debts] = await connection.query(
       `SELECT
         d.*,
         s.receipt_number,
         s.created_at AS sale_date
        FROM debts d
-       LEFT JOIN sales s ON d.sale_id = s.id
+       LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
        WHERE d.id = ?
+       AND d.branch_id = ?
        LIMIT 1
        FOR UPDATE`,
-      [id]
+      [id, branchId]
     );
 
     if (debts.length === 0) {
@@ -245,7 +398,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
       return res.status(404).json({
         status: "error",
-        message: "Debt not found.",
+        message: "Debt not found in the selected store.",
       });
     }
 
@@ -285,14 +438,15 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
 
     const [paymentResult] = await connection.query(
       `INSERT INTO debt_payments (
+        branch_id,
         debt_id,
         amount,
         payment_method,
         received_by,
         notes
       )
-      VALUES (?, ?, ?, ?, ?)`,
-      [id, paymentAmount, cleanMethod, req.user.id, notes || null]
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [branchId, id, paymentAmount, cleanMethod, req.user.id, cleanNotes]
     );
 
     await connection.query(
@@ -300,20 +454,23 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
        SET amount_paid = ?,
            balance = ?,
            status = ?
-       WHERE id = ?`,
-      [newAmountPaid, newBalance, newStatus, id]
+       WHERE id = ?
+       AND branch_id = ?`,
+      [newAmountPaid, newBalance, newStatus, id, branchId]
     );
 
     await connection.query(
       `UPDATE sales
        SET amount_paid = amount_paid + ?,
            balance = GREATEST(balance - ?, 0)
-       WHERE id = ?`,
-      [paymentAmount, paymentAmount, debt.sale_id]
+       WHERE id = ?
+       AND branch_id = ?`,
+      [paymentAmount, paymentAmount, debt.sale_id, branchId]
     );
 
     await logActivity(
       connection,
+      branchId,
       req.user.id,
       "DEBT_PAYMENT",
       `Received GHS ${paymentAmount.toFixed(2)} by ${cleanMethod} from ${
@@ -326,6 +483,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
     const [createdPayments] = await pool.query(
       `SELECT
         dp.id,
+        dp.branch_id,
         dp.debt_id,
         dp.amount,
         dp.payment_method,
@@ -335,8 +493,9 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
        FROM debt_payments dp
        LEFT JOIN users u ON dp.received_by = u.id
        WHERE dp.id = ?
+       AND dp.branch_id = ?
        LIMIT 1`,
-      [paymentResult.insertId]
+      [paymentResult.insertId, branchId]
     );
 
     const createdPayment = createdPayments[0];
@@ -344,10 +503,12 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
     return res.status(201).json({
       status: "success",
       message: "Debt payment recorded successfully.",
+      branch_id: branchId,
       receipt: {
         payment: createdPayment,
         debt: {
           id: debt.id,
+          branch_id: branchId,
           sale_id: debt.sale_id,
           receipt_number: debt.receipt_number,
           customer_name: debt.customer_name,
@@ -363,6 +524,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
       payment: createdPayment,
       debt: {
         id: debt.id,
+        branch_id: branchId,
         customer_name: debt.customer_name,
         customer_phone: debt.customer_phone,
         amount_owed: Number(debt.amount_owed || 0),
