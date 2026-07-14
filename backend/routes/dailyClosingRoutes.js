@@ -1515,6 +1515,317 @@ function createDailyClosingPdf(reportData, res) {
   doc.end();
 }
 
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function wordMoney(value) {
+  return escapeHtml(moneyText(value));
+}
+
+function wordCell(value, className = "") {
+  return `<td${className ? ` class="${className}"` : ""}>${escapeHtml(value)}</td>`;
+}
+
+function createDailyClosingWordHtml(reportData) {
+  const {
+    summary,
+    existing_closing: existingClosing,
+    reconciliation,
+    status,
+    notes,
+    snapshot_difference: snapshotDifference,
+  } = reportData;
+
+  const paymentSections = PAYMENT_GROUPS.map((definition) => {
+    const group = findPaymentGroup(summary.payment_groups, definition.key);
+    const transactions = summary.sales_transactions.filter(
+      (sale) => sale.payment_type === definition.key
+    );
+
+    const rows =
+      transactions.length > 0
+        ? transactions
+            .map(
+              (sale) => `
+                <tr>
+                  ${wordCell(formatTime(sale.created_at))}
+                  ${wordCell(sale.customer_name || "CASH CUSTOMER")}
+                  ${wordCell(sale.receipt_number || "-")}
+                  <td class="money">${wordMoney(sale.gross_before_discount)}</td>
+                  <td class="money">${wordMoney(sale.discount_amount)}</td>
+                  <td class="money">${wordMoney(sale.total)}</td>
+                  <td class="money">${wordMoney(sale.amount_paid)}</td>
+                  <td class="money">${wordMoney(sale.balance)}</td>
+                  ${wordCell(sale.staff_name || "System")}
+                </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="9" class="empty">No transactions in this group.</td></tr>`;
+
+    return `
+      <h2>${escapeHtml(definition.label.toUpperCase())}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Customer</th>
+            <th>Receipt No.</th>
+            <th>Gross</th>
+            <th>Discount</th>
+            <th>Net</th>
+            <th>Received</th>
+            <th>Outstanding</th>
+            <th>Staff</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="subtotal">
+            <td colspan="3">Subtotal (${group.transaction_count} transaction${group.transaction_count === 1 ? "" : "s"})</td>
+            <td class="money">${wordMoney(group.gross_before_discount)}</td>
+            <td class="money">${wordMoney(group.discount_total)}</td>
+            <td class="money">${wordMoney(group.net_sales)}</td>
+            <td class="money">${wordMoney(group.amount_received)}</td>
+            <td class="money">${wordMoney(group.outstanding_created)}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>`;
+  }).join("");
+
+  const debtRows =
+    summary.debt_payments.length > 0
+      ? summary.debt_payments
+          .map(
+            (payment) => `
+              <tr>
+                ${wordCell(formatTime(payment.paid_at))}
+                ${wordCell(payment.customer_name || "-")}
+                ${wordCell(payment.receipt_number || "-")}
+                ${wordCell(String(payment.payment_method || "").toUpperCase())}
+                <td class="money">${wordMoney(payment.amount)}</td>
+                ${wordCell(payment.received_by_name || "System")}
+                ${wordCell(payment.notes || "")}
+              </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="7" class="empty">No debt collections recorded.</td></tr>`;
+
+  const expenseRows =
+    summary.expenses.length > 0
+      ? summary.expenses
+          .map(
+            (expense) => `
+              <tr>
+                ${wordCell(expense.category || "Other")}
+                ${wordCell(expense.description || "")}
+                <td class="money">${wordMoney(expense.amount)}</td>
+                ${wordCell(expense.recorded_by_name || "System")}
+              </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="4" class="empty">No expenses recorded.</td></tr>`;
+
+  const exceptionRows =
+    summary.exceptions.length > 0
+      ? summary.exceptions
+          .map(
+            (item) => `
+              <tr>
+                ${wordCell(formatTime(item.created_at))}
+                ${wordCell(item.customer_name || "-")}
+                ${wordCell(item.receipt_number || "-")}
+                <td class="money">${wordMoney(item.total)}</td>
+                ${wordCell(
+                  item.is_voided
+                    ? "VOIDED"
+                    : String(item.sale_status || "").toUpperCase()
+                )}
+                ${wordCell(item.void_reason || "")}
+              </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="6" class="empty">No voided, returned or cancelled sales.</td></tr>`;
+
+  const reconciliationRows = reconciliation.rows
+    .map(
+      (item) => `
+        <tr>
+          ${wordCell(item.label)}
+          <td class="money">${wordMoney(item.expected)}</td>
+          <td class="money">${wordMoney(item.counted)}</td>
+          <td class="money ${Math.abs(item.difference) >= 0.01 ? "variance" : ""}">${wordMoney(item.difference)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const calculationNotes = summary.calculation_notes
+    .map((note) => `<li>${escapeHtml(note)}</li>`)
+    .join("");
+
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>Chalin 03 Daily Closing ${escapeHtml(summary.closing_date)}</title>
+<!--[if gte mso 9]>
+<xml>
+  <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>90</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+  </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  @page Section1 {
+    size: 841.95pt 595.35pt;
+    mso-page-orientation: landscape;
+    margin: 28pt 28pt 32pt 28pt;
+  }
+  div.Section1 { page: Section1; }
+  body { font-family: Arial, sans-serif; color: #142235; font-size: 9pt; }
+  h1 { margin: 0; font-size: 18pt; color: #0b1f35; text-align: center; }
+  h2 {
+    margin: 14pt 0 4pt;
+    padding: 5pt 7pt;
+    color: #ffffff;
+    background: #173f5f;
+    font-size: 10pt;
+  }
+  h3 { margin: 12pt 0 4pt; color: #173f5f; font-size: 10pt; }
+  .subtitle { text-align: center; margin: 3pt 0; }
+  .status { font-weight: bold; color: #235789; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt; }
+  th {
+    background: #235789;
+    color: #ffffff;
+    border: 1px solid #b9c8d8;
+    padding: 4pt;
+    font-size: 8pt;
+  }
+  td { border: 1px solid #d7e0e8; padding: 4pt; vertical-align: top; }
+  .money { text-align: right; white-space: nowrap; }
+  .subtotal td { background: #edf4fb; font-weight: bold; }
+  .total td { background: #fff3cd; font-weight: bold; }
+  .summary td.label { font-weight: bold; background: #f1f5f9; width: 24%; }
+  .summary td.value { width: 26%; }
+  .empty { text-align: center; font-style: italic; color: #64748b; }
+  .variance { color: #b91c1c; font-weight: bold; }
+  .notes { border: 1px solid #b9c8d8; background: #f8fafc; padding: 8pt; }
+  .signature { margin-top: 26pt; border: 0; }
+  .signature td { border: 0; width: 33%; text-align: center; padding: 0 14pt; }
+  .line { border-top: 1px solid #64748b; padding-top: 4pt; }
+  ul { margin-top: 4pt; }
+</style>
+</head>
+<body>
+<div class="Section1">
+  <h1>CHALIN 03 COMPANY LIMITED</h1>
+  <p class="subtitle"><b>ADVANCED DAILY CLOSING REPORT</b></p>
+  <p class="subtitle">${escapeHtml(summary.branch.code)} — ${escapeHtml(summary.branch.name)}</p>
+  <p class="subtitle">${escapeHtml(summary.branch.location || "")}</p>
+  <p class="subtitle"><b>Closing date:</b> ${escapeHtml(summary.closing_date)} &nbsp; | &nbsp; <span class="status">${escapeHtml(status)}</span></p>
+
+  <h2>EXECUTIVE SUMMARY</h2>
+  <table class="summary">
+    <tr>
+      <td class="label">Sales transactions</td><td class="value">${escapeHtml(summary.sales_count)}</td>
+      <td class="label">Gross before discount</td><td class="value money">${wordMoney(summary.gross_before_discount)}</td>
+    </tr>
+    <tr>
+      <td class="label">Discounts</td><td class="value money">${wordMoney(summary.discount_total)}</td>
+      <td class="label">Net sales</td><td class="value money">${wordMoney(summary.sales_total)}</td>
+    </tr>
+    <tr>
+      <td class="label">Received during sales</td><td class="value money">${wordMoney(summary.sales_received)}</td>
+      <td class="label">Credit created today</td><td class="value money">${wordMoney(summary.credit_created)}</td>
+    </tr>
+    <tr>
+      <td class="label">Debt collections</td><td class="value money">${wordMoney(summary.debt_payments_total)}</td>
+      <td class="label">Expenses</td><td class="value money">${wordMoney(summary.expenses_total)}</td>
+    </tr>
+    <tr>
+      <td class="label">Expected settlement</td><td class="value money">${wordMoney(reconciliation.expected_total)}</td>
+      <td class="label">Counted / confirmed</td><td class="value money">${wordMoney(reconciliation.counted_total)}</td>
+    </tr>
+    <tr>
+      <td class="label">Closing variance</td>
+      <td class="value money ${Math.abs(reconciliation.difference_total) >= 0.01 ? "variance" : ""}">${wordMoney(reconciliation.difference_total)}</td>
+      <td class="label">Exceptions</td><td class="value">${escapeHtml(summary.exception_count)}</td>
+    </tr>
+  </table>
+
+  <h2>PAYMENT RECONCILIATION</h2>
+  <table>
+    <thead><tr><th>Payment channel</th><th>System expected</th><th>Counted / confirmed</th><th>Difference</th></tr></thead>
+    <tbody>
+      ${reconciliationRows}
+      <tr class="total">
+        <td>TOTAL</td>
+        <td class="money">${wordMoney(reconciliation.expected_total)}</td>
+        <td class="money">${wordMoney(reconciliation.counted_total)}</td>
+        <td class="money ${Math.abs(reconciliation.difference_total) >= 0.01 ? "variance" : ""}">${wordMoney(reconciliation.difference_total)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  ${paymentSections}
+
+  <h2>DEBT COLLECTIONS</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Customer</th><th>Original Receipt</th><th>Method</th><th>Amount</th><th>Received By</th><th>Notes</th></tr></thead>
+    <tbody>
+      ${debtRows}
+      <tr class="subtotal"><td colspan="4">Debt collections total</td><td class="money">${wordMoney(summary.debt_payments_total)}</td><td colspan="2"></td></tr>
+    </tbody>
+  </table>
+
+  <h2>EXPENSES</h2>
+  <table>
+    <thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th></tr></thead>
+    <tbody>
+      ${expenseRows}
+      <tr class="subtotal"><td colspan="2">Expenses total</td><td class="money">${wordMoney(summary.expenses_total)}</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <h2>EXCEPTIONS AND CONTROL NOTES</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Customer</th><th>Receipt</th><th>Total</th><th>Status</th><th>Reason</th></tr></thead>
+    <tbody>${exceptionRows}</tbody>
+  </table>
+
+  <div class="notes">
+    <p><b>Closing notes:</b> ${escapeHtml(notes || "No notes recorded.")}</p>
+    <p><b>Closed by:</b> ${escapeHtml(existingClosing?.closed_by_name || "Draft - not closed")}</p>
+    <p><b>Closed at:</b> ${escapeHtml(existingClosing?.closed_at ? formatDateTime(existingClosing.closed_at) : "Not yet closed")}</p>
+    <p><b>Current data vs saved expected:</b> ${wordMoney(snapshotDifference)}</p>
+    <p><b>Calculation notes:</b></p>
+    <ul>${calculationNotes}</ul>
+  </div>
+
+  <table class="signature">
+    <tr>
+      <td><div class="line">Prepared / Closed By</div></td>
+      <td><div class="line">Reviewed By</div></td>
+      <td><div class="line">Management Approval</div></td>
+    </tr>
+  </table>
+</div>
+</body>
+</html>`;
+}
+
 // GET /api/daily-closing/summary?date=YYYY-MM-DD
 router.get(
   "/summary",
@@ -1654,6 +1965,55 @@ router.get(
         message:
           error.message ||
           "Something went wrong while generating the daily closing PDF.",
+      });
+    }
+  }
+);
+
+
+// GET /api/daily-closing/report.doc?date=YYYY-MM-DD
+// This produces a Word-compatible document without adding a new backend package.
+router.get(
+  "/report.doc",
+  requireAuth,
+  requireRole("admin", "manager", "auditor"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const closingDate = req.query.date || todayDateString();
+
+      if (!isValidDateString(closingDate)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Date must be in YYYY-MM-DD format.",
+        });
+      }
+
+      const reportData = await buildClosingReportData(
+        branchId,
+        closingDate,
+        req.query
+      );
+      const branchCode = safeFilePart(reportData.summary.branch.code, "store");
+      const filename = `Chalin03-Daily-Closing-${branchCode}-${closingDate}.doc`;
+      const html = createDailyClosingWordHtml(reportData);
+
+      res.setHeader("Content-Type", "application/msword; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Cache-Control", "no-store");
+
+      return res.send(Buffer.from(`\uFEFF${html}`, "utf8"));
+    } catch (error) {
+      console.error("Daily closing Word report error:", error);
+
+      return res.status(error.statusCode || 500).json({
+        status: "error",
+        message:
+          error.message ||
+          "Something went wrong while generating the daily closing Word report.",
       });
     }
   }

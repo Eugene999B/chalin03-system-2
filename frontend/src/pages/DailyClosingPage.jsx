@@ -605,6 +605,29 @@ export default function DailyClosingPage() {
     }
   }
 
+
+  async function exportWordReport() {
+    setExporting("word");
+    setError("");
+
+    try {
+      const response = await axiosClient.get("/daily-closing/report.doc", {
+        params: reportParams(),
+        responseType: "blob",
+      });
+      const fallback = `Chalin03-Daily-Closing-${currentStoreCode}-${closingDate}.doc`;
+      downloadBlob(response.data, getBlobFilename(response, fallback));
+      setMessage("Daily Closing Word report downloaded successfully.");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Failed to generate the Daily Closing Word report."
+      );
+    } finally {
+      setExporting("");
+    }
+  }
+
   async function saveDailyClosing(event) {
     event.preventDefault();
     setMessage("");
@@ -723,6 +746,14 @@ export default function DailyClosingPage() {
               disabled={!summary || Boolean(exporting)}
             >
               {exporting === "pdf" ? "Generating…" : "🖨 PDF Report"}
+            </button>
+            <button
+              className="dc-secondary-button"
+              type="button"
+              onClick={exportWordReport}
+              disabled={!summary || Boolean(exporting)}
+            >
+              {exporting === "word" ? "Preparing…" : "📝 Word"}
             </button>
           </div>
         </div>
