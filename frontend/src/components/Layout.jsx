@@ -192,38 +192,6 @@ export default function Layout() {
             "reports analytics sales profit business performance stock transfers adjustments audit",
         },
         {
-          title: "Mining Operations",
-          description: "Sites, production, equipment, fuel, expenses and safety",
-          path: "/mining",
-          icon: "⛏️",
-          keywords:
-            "mining sites production shifts excavator equipment fuel expenses incidents safety workforce",
-        },
-        {
-          title: "Equipment Hire",
-          description: "Customers, quotations, contracts, work logs, invoices and returns",
-          path: "/equipment-hire-operations",
-          icon: "🏗️",
-          keywords:
-            "equipment hire excavator rental customer quotation contract booking dispatch work log invoice payment debt return",
-        },
-        {
-          title: "Fleet & Equipment",
-          description: "Shared excavator, machine, meter, fuel and maintenance register",
-          path: "/fleet-assets",
-          icon: "🚜",
-          keywords:
-            "fleet excavator equipment machinery mining hire meter fuel maintenance inspection breakdown service",
-        },
-        {
-          title: "Operations Documents",
-          description: "Hire PDFs, Mining reports, customer statements and accounting workbook",
-          path: "/operations-documents-accounting",
-          icon: "📑",
-          keywords:
-            "operations documents accounting quotation contract invoice receipt statement mining report pdf excel workbook debt aging revenue",
-        },
-        {
           title: "Audit & Accounting",
           description: "Review money, debts, expenses, stock and warnings",
           path: "/audit-accounting",
@@ -268,7 +236,7 @@ export default function Layout() {
         });
 
         auditItems.splice(
-          5,
+          4,
           0,
           {
             title: "Audit Unlock Requests",
