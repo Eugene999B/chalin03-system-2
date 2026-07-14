@@ -1,5 +1,6 @@
 const express = require("express");
 const ExcelJS = require("exceljs");
+const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -192,9 +193,51 @@ function styleWorksheet(worksheet) {
   });
 }
 
-async function getBranchLabel(branchId) {
+function getExportFormat(value) {
+  const format = String(value || "xlsx").trim().toLowerCase();
+
+  if (["pdf"].includes(format)) return "pdf";
+  if (["doc", "word", "msword"].includes(format)) return "doc";
+
+  return "xlsx";
+}
+
+function getReportTitle(baseName) {
+  const titles = {
+    products: "Products and Inventory Register",
+    "low-stock-restock": "Low Stock and Restock Plan",
+    "stock-adjustments": "Stock Adjustments Report",
+    "stock-transfers": "Stock Transfers Report",
+    "stock-movement-ledger": "Stock Movement Ledger",
+    "daily-closings": "Daily Closings Report",
+    sales: "Sales Transactions Report",
+    debts: "Customer Debts Report",
+    "debt-payments": "Debt Payments Report",
+    expenses: "Business Expenses Report",
+    purchases: "Purchases and Supplier Accounts Report",
+    returns: "Customer Returns Report",
+  };
+
+  if (titles[baseName]) return titles[baseName];
+
+  return String(baseName || "Business Report")
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function getDateRangeLabel(from, to) {
+  if (from && to) return `${from} to ${to}`;
+  if (from) return `From ${from}`;
+  if (to) return `Up to ${to}`;
+
+  return "All available records";
+}
+
+async function getBranchDetails(branchId) {
   const [branches] = await pool.query(
-    `SELECT code, name
+    `SELECT code, name, location
      FROM branches
      WHERE id = ?
      LIMIT 1`,
@@ -202,10 +245,907 @@ async function getBranchLabel(branchId) {
   );
 
   if (branches.length === 0) {
-    return `branch-${branchId}`;
+    return {
+      code: `BRANCH-${branchId}`,
+      name: `Branch ${branchId}`,
+      location: "",
+    };
   }
 
-  return branches[0].code || branches[0].name || `branch-${branchId}`;
+  return {
+    code: branches[0].code || `BRANCH-${branchId}`,
+    name: branches[0].name || `Branch ${branchId}`,
+    location: branches[0].location || "",
+  };
+}
+
+function getCellRawValue(cell) {
+  const value = cell?.value;
+
+  if (value === undefined || value === null) return "";
+  if (value instanceof Date) return value;
+
+  if (typeof value === "object") {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text || "").join("");
+    }
+
+    if (value.result !== undefined && value.result !== null) {
+      return value.result;
+    }
+
+    if (value.text !== undefined && value.text !== null) {
+      return value.text;
+    }
+
+    if (value.hyperlink && value.text) {
+      return value.text;
+    }
+
+    return cleanText(value);
+  }
+
+  return value;
+}
+
+function formatExportValue(value) {
+  if (value === undefined || value === null) return "";
+
+  if (value instanceof Date) {
+    return value.toLocaleString("en-GB");
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "0";
+
+    return Number.isInteger(value)
+      ? String(value)
+      : value.toLocaleString("en-GH", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+  }
+
+  return String(value);
+}
+
+function normaliseHeader(value, index) {
+  const header = cleanText(value);
+
+  return header || `Column ${index + 1}`;
+}
+
+function findWorksheetHeaderRow(worksheet) {
+  const maxScan = Math.min(Math.max(worksheet.actualRowCount || 1, 1), 20);
+  let bestRow = 1;
+  let bestScore = -1;
+
+  for (let rowNumber = 1; rowNumber <= maxScan; rowNumber += 1) {
+    const row = worksheet.getRow(rowNumber);
+    let nonEmpty = 0;
+    let textValues = 0;
+
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      const value = getCellRawValue(cell);
+
+      if (value !== "") {
+        nonEmpty += 1;
+
+        if (typeof value === "string") textValues += 1;
+      }
+    });
+
+    if (nonEmpty < 2) continue;
+
+    const score = nonEmpty * 10 + textValues - rowNumber * 0.05;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = rowNumber;
+    }
+  }
+
+  return bestRow;
+}
+
+function analyseWorksheet(worksheet) {
+  const headerRowIndex = findWorksheetHeaderRow(worksheet);
+  const columnCount = Math.max(
+    worksheet.actualColumnCount || 0,
+    worksheet.getRow(headerRowIndex).cellCount || 0,
+    1
+  );
+
+  const headers = [];
+
+  for (let column = 1; column <= columnCount; column += 1) {
+    headers.push(
+      normaliseHeader(
+        formatExportValue(getCellRawValue(worksheet.getCell(headerRowIndex, column))),
+        column - 1
+      )
+    );
+  }
+
+  const rows = [];
+
+  for (
+    let rowNumber = headerRowIndex + 1;
+    rowNumber <= (worksheet.actualRowCount || headerRowIndex);
+    rowNumber += 1
+  ) {
+    const values = [];
+    let hasValue = false;
+
+    for (let column = 1; column <= columnCount; column += 1) {
+      const value = getCellRawValue(worksheet.getCell(rowNumber, column));
+      values.push(value);
+
+      if (value !== "" && value !== null && value !== undefined) {
+        hasValue = true;
+      }
+    }
+
+    if (hasValue) rows.push(values);
+  }
+
+  const numericTotals = [];
+
+  headers.forEach((header, index) => {
+    const normalised = header.toLowerCase();
+    const shouldTotal = /amount|total|balance|cost|price|value|sales|paid|quantity|qty|discount|profit|margin|stock/.test(
+      normalised
+    );
+
+    if (!shouldTotal) return;
+
+    let total = 0;
+    let numericCount = 0;
+
+    rows.forEach((row) => {
+      const value = Number(row[index]);
+
+      if (Number.isFinite(value)) {
+        total += value;
+        numericCount += 1;
+      }
+    });
+
+    if (numericCount > 0) {
+      numericTotals.push({
+        label: header,
+        total,
+        currency: /amount|total|balance|cost|price|value|sales|paid|discount|profit|margin/.test(
+          normalised
+        ),
+      });
+    }
+  });
+
+  return {
+    name: worksheet.name,
+    headerRowIndex,
+    columnCount,
+    headers,
+    rows,
+    recordCount: rows.length,
+    numericTotals: numericTotals.slice(0, 8),
+  };
+}
+
+function analyseWorkbook(workbook) {
+  return workbook.worksheets
+    .filter((worksheet) => worksheet.name !== "00 Executive Summary")
+    .map((worksheet) => analyseWorksheet(worksheet));
+}
+
+function styleProfessionalHeader(row) {
+  row.height = 28;
+  row.font = {
+    bold: true,
+    color: { argb: "FFFFFFFF" },
+    size: 10,
+  };
+  row.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF071529" },
+  };
+  row.alignment = {
+    vertical: "middle",
+    horizontal: "center",
+    wrapText: true,
+  };
+
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.border = {
+      top: { style: "thin", color: { argb: "FF1F3B5B" } },
+      left: { style: "thin", color: { argb: "FF1F3B5B" } },
+      bottom: { style: "thin", color: { argb: "FF1F3B5B" } },
+      right: { style: "thin", color: { argb: "FF1F3B5B" } },
+    };
+  });
+}
+
+function isCurrencyHeader(header) {
+  return /amount|total|balance|cost|price|value|sales|paid|discount|profit|margin|expense/i.test(
+    String(header || "")
+  );
+}
+
+function isQuantityHeader(header) {
+  return /quantity|qty|count|stock|items?/i.test(String(header || ""));
+}
+
+function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
+  const simpleHeader = analysis.headerRowIndex === 1 && analysis.columnCount >= 2;
+  let headerRowIndex = analysis.headerRowIndex;
+
+  if (simpleHeader && baseName !== "daily-closings") {
+    worksheet.insertRows(1, [[], [], [], [], []]);
+    headerRowIndex = 6;
+
+    const lastColumn = Math.max(analysis.columnCount, 1);
+    worksheet.mergeCells(1, 1, 1, lastColumn);
+    worksheet.mergeCells(2, 1, 2, lastColumn);
+    worksheet.mergeCells(3, 1, 3, lastColumn);
+    worksheet.mergeCells(4, 1, 4, lastColumn);
+
+    worksheet.getCell(1, 1).value = "CHALIN 03 COMPANY LIMITED";
+    worksheet.getCell(2, 1).value = meta.reportTitle;
+    worksheet.getCell(3, 1).value = `${meta.branch.code} - ${meta.branch.name}${
+      meta.branch.location ? ` | ${meta.branch.location}` : ""
+    }`;
+    worksheet.getCell(4, 1).value = `Period: ${meta.periodLabel} | Generated: ${meta.generatedLabel} | By: ${meta.generatedBy}`;
+
+    worksheet.getCell(1, 1).font = {
+      bold: true,
+      size: 16,
+      color: { argb: "FFFFFFFF" },
+    };
+    worksheet.getCell(1, 1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF071529" },
+    };
+    worksheet.getCell(1, 1).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+    worksheet.getRow(1).height = 30;
+
+    worksheet.getCell(2, 1).font = {
+      bold: true,
+      size: 14,
+      color: { argb: "FF173B68" },
+    };
+    worksheet.getCell(2, 1).alignment = { horizontal: "center" };
+    worksheet.getRow(2).height = 25;
+
+    [3, 4].forEach((rowNumber) => {
+      worksheet.getCell(rowNumber, 1).font = {
+        bold: rowNumber === 3,
+        size: 10,
+        color: { argb: "FF334155" },
+      };
+      worksheet.getCell(rowNumber, 1).alignment = { horizontal: "center" };
+    });
+  }
+
+  const headerRow = worksheet.getRow(headerRowIndex);
+  styleProfessionalHeader(headerRow);
+
+  worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+  worksheet.autoFilter = {
+    from: { row: headerRowIndex, column: 1 },
+    to: { row: headerRowIndex, column: Math.max(analysis.columnCount, 1) },
+  };
+
+  const startDataRow = headerRowIndex + 1;
+
+  const endDataRow = headerRowIndex + analysis.rows.length;
+
+  for (
+    let rowNumber = startDataRow;
+    rowNumber <= endDataRow;
+    rowNumber += 1
+  ) {
+    const row = worksheet.getRow(rowNumber);
+    row.alignment = { vertical: "top", wrapText: true };
+
+    row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      const header = analysis.headers[columnNumber - 1] || "";
+
+      cell.border = {
+        top: { style: "hair", color: { argb: "FFD8E1EA" } },
+        left: { style: "hair", color: { argb: "FFD8E1EA" } },
+        bottom: { style: "hair", color: { argb: "FFD8E1EA" } },
+        right: { style: "hair", color: { argb: "FFD8E1EA" } },
+      };
+
+      if ((rowNumber - startDataRow) % 2 === 1) {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF4F7FB" },
+        };
+      }
+
+      if (isCurrencyHeader(header) && typeof cell.value === "number") {
+        cell.numFmt = '"GHS" #,##0.00;[Red]-"GHS" #,##0.00';
+        cell.alignment = { vertical: "top", horizontal: "right" };
+      } else if (isQuantityHeader(header) && typeof cell.value === "number") {
+        cell.numFmt = "#,##0.00";
+        cell.alignment = { vertical: "top", horizontal: "right" };
+      }
+
+      if (/status/i.test(header)) {
+        const status = cleanText(getCellRawValue(cell)).toLowerCase();
+
+        if (/paid|active|completed|received|balanced|approved|ok/.test(status)) {
+          cell.font = { color: { argb: "FF166534" }, bold: true };
+        } else if (/pending|partial|low|open|requested|dispatched/.test(status)) {
+          cell.font = { color: { argb: "FF9A6700" }, bold: true };
+        } else if (/void|cancel|out of stock|overdue|rejected|inactive/.test(status)) {
+          cell.font = { color: { argb: "FFB91C1C" }, bold: true };
+        }
+      }
+    });
+  }
+
+  worksheet.columns.forEach((column, index) => {
+    let maxLength = Math.max(analysis.headers[index]?.length || 0, 10);
+
+    analysis.rows.forEach((row) => {
+      const length = formatExportValue(row[index]).length;
+      maxLength = Math.max(maxLength, Math.min(length + 2, 42));
+    });
+
+    const minimumWidth = isCurrencyHeader(analysis.headers[index])
+      ? 18
+      : isQuantityHeader(analysis.headers[index])
+      ? 14
+      : 11;
+
+    column.width = Math.min(Math.max(maxLength, minimumWidth), 42);
+  });
+
+  worksheet.pageSetup = {
+    orientation: analysis.columnCount > 7 ? "landscape" : "portrait",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: {
+      left: 0.25,
+      right: 0.25,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+    printTitlesRow: simpleHeader && baseName !== "daily-closings" ? "1:6" : `${headerRowIndex}:${headerRowIndex}`,
+  };
+
+  worksheet.headerFooter.oddFooter =
+    `&LChalin 03 - ${meta.branch.code}&C${meta.reportTitle}&RPage &P of &N`;
+}
+
+function addExecutiveSummarySheet(workbook, meta, analysis) {
+  const existing = workbook.getWorksheet("00 Executive Summary");
+
+  if (existing) workbook.removeWorksheet(existing.id);
+
+  const summary = workbook.addWorksheet("00 Executive Summary", {
+    properties: { tabColor: { argb: "FFE6B91E" } },
+  });
+
+  summary.columns = [
+    { key: "label", width: 34 },
+    { key: "value", width: 28 },
+    { key: "notes", width: 52 },
+  ];
+
+  summary.mergeCells("A1:C1");
+  summary.getCell("A1").value = "CHALIN 03 COMPANY LIMITED";
+  summary.getCell("A1").font = {
+    bold: true,
+    size: 18,
+    color: { argb: "FFFFFFFF" },
+  };
+  summary.getCell("A1").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF071529" },
+  };
+  summary.getCell("A1").alignment = { horizontal: "center" };
+  summary.getRow(1).height = 34;
+
+  summary.mergeCells("A2:C2");
+  summary.getCell("A2").value = meta.reportTitle;
+  summary.getCell("A2").font = {
+    bold: true,
+    size: 15,
+    color: { argb: "FF173B68" },
+  };
+  summary.getCell("A2").alignment = { horizontal: "center" };
+
+  const information = [
+    ["Selected Store", `${meta.branch.code} - ${meta.branch.name}`, meta.branch.location],
+    ["Report Period", meta.periodLabel, "Date filters apply according to the selected report."],
+    ["Generated", meta.generatedLabel, `Downloaded by ${meta.generatedBy}`],
+    ["Report Sections", analysis.length, "Each worksheet is formatted for screen review and printing."],
+    [
+      "Total Detail Rows",
+      analysis.reduce((sum, sheet) => sum + sheet.recordCount, 0),
+      "Combined rows across all detail worksheets.",
+    ],
+  ];
+
+  let rowNumber = 4;
+  information.forEach(([label, value, notes]) => {
+    summary.getCell(rowNumber, 1).value = label;
+    summary.getCell(rowNumber, 2).value = value;
+    summary.getCell(rowNumber, 3).value = notes || "";
+    summary.getCell(rowNumber, 1).font = { bold: true, color: { argb: "FF173B68" } };
+    rowNumber += 1;
+  });
+
+  rowNumber += 1;
+  summary.getCell(rowNumber, 1).value = "WORKSHEET REGISTER";
+  summary.mergeCells(rowNumber, 1, rowNumber, 3);
+  summary.getCell(rowNumber, 1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  summary.getCell(rowNumber, 1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FF173B68" },
+  };
+  rowNumber += 1;
+
+  const registerHeader = summary.getRow(rowNumber);
+  summary.getCell(rowNumber, 1).value = "Worksheet";
+  summary.getCell(rowNumber, 2).value = "Detail Rows";
+  summary.getCell(rowNumber, 3).value = "Key Totals Detected";
+  styleProfessionalHeader(registerHeader);
+  rowNumber += 1;
+
+  analysis.forEach((sheet, index) => {
+    const totalsText = sheet.numericTotals
+      .slice(0, 4)
+      .map((metric) => {
+        const value = metric.currency
+          ? `GHS ${metric.total.toLocaleString("en-GH", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`
+          : metric.total.toLocaleString("en-GH", { maximumFractionDigits: 2 });
+
+        return `${metric.label}: ${value}`;
+      })
+      .join(" | ");
+
+    summary.getCell(rowNumber, 1).value = sheet.name;
+    summary.getCell(rowNumber, 2).value = sheet.recordCount;
+    summary.getCell(rowNumber, 3).value = totalsText || "See detail worksheet";
+
+    if (index % 2 === 1) {
+      summary.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF4F7FB" },
+        };
+      });
+    }
+
+    rowNumber += 1;
+  });
+
+  summary.eachRow((row, index) => {
+    if (index > 2) {
+      row.alignment = { vertical: "top", wrapText: true };
+    }
+  });
+
+  summary.views = [{ state: "frozen", ySplit: 2 }];
+  summary.pageSetup = {
+    orientation: "landscape",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: {
+      left: 0.35,
+      right: 0.35,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
+  summary.headerFooter.oddFooter =
+    `&LChalin 03 - ${meta.branch.code}&C${meta.reportTitle}&RPage &P of &N`;
+}
+
+function prepareProfessionalWorkbook(workbook, meta, analysis, baseName) {
+  addExecutiveSummarySheet(workbook, meta, analysis);
+
+  workbook.worksheets.forEach((worksheet) => {
+    if (worksheet.name === "00 Executive Summary") return;
+
+    const sheetAnalysis =
+      analysis.find((item) => item.name === worksheet.name) || analyseWorksheet(worksheet);
+
+    applyDataSheetPresentation(worksheet, meta, sheetAnalysis, baseName);
+  });
+
+  workbook.creator = "Chalin 03 Group Operations Platform";
+  workbook.lastModifiedBy = meta.generatedBy;
+  workbook.company = "Chalin 03 Company Limited";
+  workbook.subject = meta.reportTitle;
+  workbook.title = `${meta.reportTitle} - ${meta.branch.code}`;
+  workbook.description = `${meta.reportTitle} for ${meta.branch.code} - ${meta.branch.name}`;
+  workbook.keywords = "Chalin 03, export, business report";
+  workbook.modified = new Date();
+}
+
+function pdfSafeText(value) {
+  return String(value ?? "")
+    .replace(/₵/g, "GHS ")
+    .replace(/[–—]/g, "-")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function buildColumnBands(columnCount, maxColumns = 7) {
+  if (columnCount <= maxColumns) {
+    return [Array.from({ length: columnCount }, (_, index) => index)];
+  }
+
+  const fixed = [0, 1].filter((index) => index < columnCount);
+  const remaining = [];
+
+  for (let index = fixed.length; index < columnCount; index += 1) {
+    remaining.push(index);
+  }
+
+  const chunkSize = Math.max(maxColumns - fixed.length, 1);
+  const bands = [];
+
+  for (let start = 0; start < remaining.length; start += chunkSize) {
+    bands.push([...fixed, ...remaining.slice(start, start + chunkSize)]);
+  }
+
+  return bands;
+}
+
+function drawPdfDocumentHeader(doc, meta, sectionTitle, subtitle = "") {
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  doc.save();
+  doc.rect(left, 34, width, 50).fill("#071529");
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(14);
+  doc.text("CHALIN 03 COMPANY LIMITED", left + 12, 45, {
+    width: width - 24,
+    align: "center",
+  });
+  doc.fontSize(9).font("Helvetica");
+  doc.text(
+    `${pdfSafeText(meta.branch.code)} - ${pdfSafeText(meta.branch.name)}${
+      meta.branch.location ? ` | ${pdfSafeText(meta.branch.location)}` : ""
+    }`,
+    left + 12,
+    65,
+    { width: width - 24, align: "center" }
+  );
+  doc.restore();
+
+  doc.y = 96;
+  doc.fillColor("#173b68").font("Helvetica-Bold").fontSize(15);
+  doc.text(pdfSafeText(sectionTitle), { align: "center" });
+
+  if (subtitle) {
+    doc.moveDown(0.25);
+    doc.fillColor("#475569").font("Helvetica").fontSize(8);
+    doc.text(pdfSafeText(subtitle), { align: "center" });
+  }
+
+  doc.moveDown(0.6);
+}
+
+function drawPdfTable(doc, sheet, columnIndexes) {
+  const left = doc.page.margins.left;
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const columnWidth = availableWidth / Math.max(columnIndexes.length, 1);
+  const headerHeight = 30;
+
+  function drawHeader() {
+    const startY = doc.y;
+
+    columnIndexes.forEach((columnIndex, position) => {
+      const x = left + position * columnWidth;
+      doc.rect(x, startY, columnWidth, headerHeight).fillAndStroke("#173b68", "#d8e1ea");
+      doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(6.7);
+      doc.text(pdfSafeText(sheet.headers[columnIndex]), x + 3, startY + 5, {
+        width: columnWidth - 6,
+        height: headerHeight - 8,
+        align: "center",
+        ellipsis: true,
+      });
+    });
+
+    doc.y = startY + headerHeight;
+  }
+
+  drawHeader();
+
+  if (sheet.rows.length === 0) {
+    doc.fillColor("#475569").font("Helvetica-Oblique").fontSize(9);
+    doc.text("No records found for this report selection.", left, doc.y + 12, {
+      width: availableWidth,
+      align: "center",
+    });
+    doc.y += 40;
+    return;
+  }
+
+  sheet.rows.forEach((row, rowIndex) => {
+    const textValues = columnIndexes.map((columnIndex) =>
+      pdfSafeText(formatExportValue(row[columnIndex]))
+    );
+
+    const lineCounts = textValues.map((value) =>
+      Math.min(Math.max(Math.ceil(value.length / Math.max(columnWidth / 4.5, 8)), 1), 3)
+    );
+    const rowHeight = Math.min(Math.max(...lineCounts) * 8 + 8, 34);
+
+    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom - 28) {
+      doc.addPage({
+        size: "A4",
+        layout: columnIndexes.length > 5 ? "landscape" : "portrait",
+        margins: { top: 34, bottom: 36, left: 28, right: 28 },
+      });
+      drawHeader();
+    }
+
+    const startY = doc.y;
+    const fill = rowIndex % 2 === 0 ? "#ffffff" : "#f4f7fb";
+
+    textValues.forEach((value, position) => {
+      const x = left + position * columnWidth;
+      doc.rect(x, startY, columnWidth, rowHeight).fillAndStroke(fill, "#d8e1ea");
+      doc.fillColor("#172033").font("Helvetica").fontSize(6.5);
+      doc.text(value, x + 3, startY + 4, {
+        width: columnWidth - 6,
+        height: rowHeight - 6,
+        ellipsis: true,
+      });
+    });
+
+    doc.y = startY + rowHeight;
+  });
+}
+
+function sendProfessionalPdf(res, analysis, meta, filename) {
+  const doc = new PDFDocument({
+    size: "A4",
+    layout: "portrait",
+    margins: { top: 34, bottom: 36, left: 28, right: 28 },
+    bufferPages: true,
+    info: {
+      Title: meta.reportTitle,
+      Author: "Chalin 03 Company Limited",
+      Subject: `${meta.reportTitle} - ${meta.branch.code}`,
+    },
+  });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  doc.pipe(res);
+
+  drawPdfDocumentHeader(doc, meta, meta.reportTitle, `Period: ${meta.periodLabel}`);
+
+  doc.fillColor("#172033").font("Helvetica").fontSize(10);
+  doc.text(
+    "This controlled export summarises the selected store records and presents each report section on readable print pages."
+  );
+  doc.moveDown(0.8);
+
+  const coverRows = [
+    ["Selected store", `${meta.branch.code} - ${meta.branch.name}`],
+    ["Location", meta.branch.location || "Not recorded"],
+    ["Report period", meta.periodLabel],
+    ["Generated", meta.generatedLabel],
+    ["Downloaded by", meta.generatedBy],
+    ["Report sections", analysis.length],
+    ["Total detail rows", analysis.reduce((sum, item) => sum + item.recordCount, 0)],
+  ];
+
+  coverRows.forEach(([label, value], index) => {
+    const y = doc.y;
+    const fill = index % 2 === 0 ? "#f4f7fb" : "#ffffff";
+    doc.rect(doc.page.margins.left, y, 260, 24).fillAndStroke(fill, "#d8e1ea");
+    doc.rect(doc.page.margins.left + 260, y, 247, 24).fillAndStroke(fill, "#d8e1ea");
+    doc.fillColor("#173b68").font("Helvetica-Bold").fontSize(8);
+    doc.text(pdfSafeText(label), doc.page.margins.left + 6, y + 7, { width: 248 });
+    doc.fillColor("#172033").font("Helvetica");
+    doc.text(pdfSafeText(formatExportValue(value)), doc.page.margins.left + 266, y + 7, {
+      width: 235,
+    });
+    doc.y = y + 24;
+  });
+
+  analysis.forEach((sheet) => {
+    const bands = buildColumnBands(sheet.columnCount, 7);
+
+    bands.forEach((columnIndexes, bandIndex) => {
+      doc.addPage({
+        size: "A4",
+        layout: columnIndexes.length > 5 ? "landscape" : "portrait",
+        margins: { top: 34, bottom: 36, left: 28, right: 28 },
+      });
+
+      const bandLabel =
+        bands.length > 1 ? ` - Column Group ${bandIndex + 1} of ${bands.length}` : "";
+      drawPdfDocumentHeader(
+        doc,
+        meta,
+        `${sheet.name}${bandLabel}`,
+        `${sheet.recordCount} detail row(s) | Period: ${meta.periodLabel}`
+      );
+      drawPdfTable(doc, sheet, columnIndexes);
+    });
+  });
+
+  const pageRange = doc.bufferedPageRange();
+
+  for (let pageIndex = 0; pageIndex < pageRange.count; pageIndex += 1) {
+    doc.switchToPage(pageIndex);
+    const footerY = doc.page.height - 22;
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.fillColor("#64748b").font("Helvetica").fontSize(7);
+    doc.text(
+      `Chalin 03 | ${pdfSafeText(meta.branch.code)} | ${pdfSafeText(
+        meta.reportTitle
+      )} | Page ${pageIndex + 1} of ${pageRange.count}`,
+      doc.page.margins.left,
+      footerY,
+      {
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        align: "center",
+        lineBreak: false,
+      }
+    );
+    doc.page.margins.bottom = originalBottomMargin;
+  }
+
+  doc.end();
+}
+
+function buildWordTable(sheet, columnIndexes) {
+  const header = columnIndexes
+    .map((columnIndex) => `<th>${escapeHtml(sheet.headers[columnIndex])}</th>`)
+    .join("");
+
+  const rows = sheet.rows.length
+    ? sheet.rows
+        .map(
+          (row) =>
+            `<tr>${columnIndexes
+              .map(
+                (columnIndex) =>
+                  `<td>${escapeHtml(formatExportValue(row[columnIndex]))}</td>`
+              )
+              .join("")}</tr>`
+        )
+        .join("")
+    : `<tr><td colspan="${columnIndexes.length}" class="empty">No records found for this report selection.</td></tr>`;
+
+  return `<table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function sendProfessionalWord(res, analysis, meta, filename) {
+  const sections = [];
+
+  analysis.forEach((sheet) => {
+    const bands = buildColumnBands(sheet.columnCount, 8);
+
+    bands.forEach((columnIndexes, bandIndex) => {
+      const bandLabel =
+        bands.length > 1 ? ` - Column Group ${bandIndex + 1} of ${bands.length}` : "";
+
+      sections.push(`
+        <section class="report-section page-break">
+          <div class="brand">CHALIN 03 COMPANY LIMITED</div>
+          <h2>${escapeHtml(sheet.name + bandLabel)}</h2>
+          <p class="section-meta">${escapeHtml(
+            `${meta.branch.code} - ${meta.branch.name} | ${sheet.recordCount} detail row(s) | ${meta.periodLabel}`
+          )}</p>
+          ${buildWordTable(sheet, columnIndexes)}
+        </section>
+      `);
+    });
+  });
+
+  const registerRows = analysis
+    .map(
+      (sheet) => `<tr><td>${escapeHtml(sheet.name)}</td><td>${sheet.recordCount}</td><td>${escapeHtml(
+        sheet.numericTotals
+          .slice(0, 3)
+          .map((metric) => `${metric.label}: ${formatExportValue(metric.total)}`)
+          .join(" | ") || "See detail section"
+      )}</td></tr>`
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(meta.reportTitle)}</title>
+<style>
+  @page { size: A4 landscape; margin: 0.45in; }
+  body { font-family: Calibri, Arial, sans-serif; color: #172033; font-size: 9pt; }
+  .cover { text-align: center; padding-top: 35px; }
+  .brand { background: #071529; color: #fff; padding: 14px; font-size: 17pt; font-weight: 700; text-align: center; }
+  h1 { color: #173b68; font-size: 21pt; margin: 24px 0 8px; }
+  h2 { color: #173b68; font-size: 15pt; text-align: center; margin: 12px 0 4px; }
+  .subtitle, .section-meta { color: #475569; text-align: center; }
+  .meta { width: 78%; margin: 25px auto; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; }
+  th { background: #173b68; color: #fff; font-weight: 700; padding: 5px; border: 1px solid #9fb0c3; font-size: 8pt; }
+  td { border: 1px solid #ccd7e3; padding: 4px; vertical-align: top; overflow-wrap: anywhere; }
+  tbody tr:nth-child(even) td { background: #f4f7fb; }
+  .meta td:first-child { font-weight: 700; color: #173b68; width: 35%; }
+  .page-break { page-break-before: always; }
+  .empty { text-align: center; color: #64748b; font-style: italic; padding: 18px; }
+  .footer-note { margin-top: 18px; color: #64748b; font-size: 8pt; text-align: center; }
+</style>
+</head>
+<body>
+  <section class="cover">
+    <div class="brand">CHALIN 03 COMPANY LIMITED</div>
+    <h1>${escapeHtml(meta.reportTitle)}</h1>
+    <p class="subtitle">Professional Microsoft Word Export</p>
+    <table class="meta">
+      <tr><td>Selected Store</td><td>${escapeHtml(`${meta.branch.code} - ${meta.branch.name}`)}</td></tr>
+      <tr><td>Location</td><td>${escapeHtml(meta.branch.location || "Not recorded")}</td></tr>
+      <tr><td>Report Period</td><td>${escapeHtml(meta.periodLabel)}</td></tr>
+      <tr><td>Generated</td><td>${escapeHtml(meta.generatedLabel)}</td></tr>
+      <tr><td>Downloaded By</td><td>${escapeHtml(meta.generatedBy)}</td></tr>
+      <tr><td>Total Detail Rows</td><td>${analysis.reduce(
+        (sum, item) => sum + item.recordCount,
+        0
+      )}</td></tr>
+    </table>
+    <h2>Report Section Register</h2>
+    <table>
+      <thead><tr><th>Section</th><th>Rows</th><th>Key Totals</th></tr></thead>
+      <tbody>${registerRows}</tbody>
+    </table>
+  </section>
+  ${sections.join("\n")}
+  <p class="footer-note">Generated by the Chalin 03 Group Operations Platform. Review figures against source records before external submission.</p>
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "application/msword; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(Buffer.from(html, "utf8"));
 }
 
 async function sendWorkbook(res, workbook, filename) {
@@ -222,14 +1162,49 @@ async function sendWorkbook(res, workbook, filename) {
 
 async function sendStoreWorkbook(req, res, workbook, baseName) {
   const branchId = getBranchId(req);
-  const branchLabel = await getBranchLabel(branchId);
+  const branch = await getBranchDetails(branchId);
+  const format = getExportFormat(req.query.format);
+  const reportTitle = getReportTitle(baseName);
+  const analysis = analyseWorkbook(workbook);
+  const generatedBy =
+    req.user?.full_name || req.user?.name || req.user?.username || "Authorized user";
+  const meta = {
+    branch,
+    reportTitle,
+    periodLabel: getDateRangeLabel(cleanText(req.query.from), cleanText(req.query.to)),
+    generatedLabel: new Date().toLocaleString("en-GB"),
+    generatedBy,
+  };
+  const safeBranch = safeFilenamePart(branch.code || branch.name);
+  const safeBase = safeFilenamePart(baseName);
+
+  if (format === "pdf") {
+    return sendProfessionalPdf(
+      res,
+      analysis,
+      meta,
+      `chalin03-${safeBranch}-${safeBase}.pdf`
+    );
+  }
+
+  if (format === "doc") {
+    return sendProfessionalWord(
+      res,
+      analysis,
+      meta,
+      `chalin03-${safeBranch}-${safeBase}.doc`
+    );
+  }
+
+  prepareProfessionalWorkbook(workbook, meta, analysis, baseName);
 
   return sendWorkbook(
     res,
     workbook,
-    `chalin03-${baseName}-${safeFilenamePart(branchLabel)}.xlsx`
+    `chalin03-${safeBranch}-${safeBase}.xlsx`
   );
 }
+
 
 // GET /api/exports/products
 router.get(
