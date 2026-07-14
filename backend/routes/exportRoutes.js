@@ -778,177 +778,581 @@ router.get(
       const [closings] = await pool.query(
         `SELECT
           dc.*,
-          u.full_name AS closed_by_name
+          u.full_name AS closed_by_name,
+          b.code AS branch_code,
+          b.name AS branch_name,
+          b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.branch_id = ?
          ${dateFilter}
-         ORDER BY dc.closing_date DESC`,
+         ORDER BY dc.closing_date ASC`,
         params
       );
 
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = "Chalin 03 System";
+      workbook.creator = "Chalin 03 Group Operations Platform";
+      workbook.company = "Chalin 03 Company Limited";
       workbook.created = new Date();
 
-      const worksheet = workbook.addWorksheet("Daily Closings");
+      const money = (value) => {
+        const number = Number(value || 0);
+        return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
+      };
+      const varianceStatus = (value) => {
+        const difference = money(value);
+        if (Math.abs(difference) < 0.01) return "Balanced";
+        return difference > 0 ? "Over" : "Short";
+      };
+      const creditCreated = (closing) =>
+        Math.max(
+          0,
+          money(closing.credit_sales_total) -
+            money(closing.credit_sales_received)
+        );
+      const moneyFormat = '"GHS" #,##0.00;[Red]-"GHS" #,##0.00';
 
-      worksheet.columns = [
-        { header: "Closing Date", key: "closing_date" },
-        { header: "Sales Count", key: "sales_count" },
-        { header: "Sales Total", key: "sales_total" },
-        { header: "Sales Received", key: "sales_received" },
+      const styleTitle = (sheet, range, value) => {
+        sheet.mergeCells(range);
+        const cell = sheet.getCell(range.split(":")[0]);
+        cell.value = value;
+        cell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF0B1F35" },
+        };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        sheet.getRow(cell.row).height = 30;
+      };
 
-        { header: "Cash Sales", key: "cash_sales" },
-        { header: "MoMo Sales", key: "momo_sales" },
-        { header: "Bank Sales", key: "bank_sales" },
-        { header: "Mixed Sales", key: "mixed_sales" },
-        { header: "Credit Sales Total", key: "credit_sales_total" },
-        { header: "Credit Sales Received", key: "credit_sales_received" },
+      const styleSection = (row, fill = "173F5F") => {
+        row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: `FF${fill}` },
+        };
+        row.alignment = {
+          horizontal: "center",
+          vertical: "middle",
+          wrapText: true,
+        };
+        row.height = 24;
+      };
 
-        { header: "Debt Payment Count", key: "debt_payment_count" },
-        { header: "Debt Payments Total", key: "debt_payments_total" },
-        { header: "Debt Cash", key: "debt_cash" },
-        { header: "Debt MoMo", key: "debt_momo" },
-        { header: "Debt Bank", key: "debt_bank" },
+      const styleHeader = (row) => {
+        row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF235789" },
+        };
+        row.alignment = {
+          horizontal: "center",
+          vertical: "middle",
+          wrapText: true,
+        };
+        row.height = 30;
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFB9C8D8" } },
+            left: { style: "thin", color: { argb: "FFB9C8D8" } },
+            bottom: { style: "thin", color: { argb: "FFB9C8D8" } },
+            right: { style: "thin", color: { argb: "FFB9C8D8" } },
+          };
+        });
+      };
 
-        { header: "Expenses Count", key: "expenses_count" },
-        { header: "Expenses Total", key: "expenses_total" },
+      const styleBody = (sheet, startRow, endRow, startColumn, endColumn) => {
+        if (endRow < startRow) return;
+        for (let rowNumber = startRow; rowNumber <= endRow; rowNumber += 1) {
+          const row = sheet.getRow(rowNumber);
+          for (
+            let columnNumber = startColumn;
+            columnNumber <= endColumn;
+            columnNumber += 1
+          ) {
+            const cell = row.getCell(columnNumber);
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFD7E0E8" } },
+              left: { style: "thin", color: { argb: "FFD7E0E8" } },
+              bottom: { style: "thin", color: { argb: "FFD7E0E8" } },
+              right: { style: "thin", color: { argb: "FFD7E0E8" } },
+            };
+            cell.alignment = { vertical: "top", wrapText: true };
+            if (rowNumber % 2 === 0) {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFF8FAFC" },
+              };
+            }
+          }
+        }
+      };
 
-        { header: "Expected Cash", key: "expected_cash" },
-        { header: "Expected MoMo", key: "expected_momo" },
-        { header: "Expected Bank", key: "expected_bank" },
-        { header: "Expected Other", key: "expected_other" },
-        { header: "Expected Total", key: "expected_total" },
+      const setPrintSetup = (sheet, orientation = "landscape") => {
+        sheet.pageSetup = {
+          orientation,
+          paperSize: 9,
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+          margins: {
+            left: 0.25,
+            right: 0.25,
+            top: 0.5,
+            bottom: 0.5,
+            header: 0.2,
+            footer: 0.2,
+          },
+        };
+        sheet.headerFooter.oddFooter =
+          `Chalin 03 Daily Closings | &D &T | Page &P of &N`;
+      };
 
-        { header: "Cash Counted", key: "cash_counted" },
-        { header: "MoMo Counted", key: "momo_counted" },
-        { header: "Bank Counted", key: "bank_counted" },
-        { header: "Other Counted", key: "other_counted" },
-        { header: "Total Counted", key: "total_counted" },
+      const firstClosing = closings[0] || {};
+      const branchCode =
+        firstClosing.branch_code || (await getBranchLabel(branchId));
+      const branchName = firstClosing.branch_name || branchCode;
+      const branchLocation = firstClosing.branch_location || "";
+      const firstDate = closings.length
+        ? formatDate(closings[0].closing_date)
+        : from || "-";
+      const lastDate = closings.length
+        ? formatDate(closings[closings.length - 1].closing_date)
+        : to || "-";
+      const periodLabel =
+        firstDate === lastDate ? firstDate : `${firstDate} to ${lastDate}`;
 
-        { header: "Difference Total", key: "difference_total" },
-        { header: "Notes", key: "notes" },
-        { header: "Closed By", key: "closed_by_name" },
-        { header: "Closed At", key: "closed_at" },
+      const totals = closings.reduce(
+        (result, closing) => {
+          result.sales_count += Number(closing.sales_count || 0);
+          result.sales_total += money(closing.sales_total);
+          result.sales_received += money(closing.sales_received);
+          result.credit_created += creditCreated(closing);
+          result.debt_payments_total += money(closing.debt_payments_total);
+          result.expenses_total += money(closing.expenses_total);
+          result.expected_total += money(closing.expected_total);
+          result.total_counted += money(closing.total_counted);
+          result.difference_total += money(closing.difference_total);
+          const status = varianceStatus(closing.difference_total);
+          if (status === "Balanced") result.balanced += 1;
+          if (status === "Over") result.over += 1;
+          if (status === "Short") result.short += 1;
+          return result;
+        },
+        {
+          sales_count: 0,
+          sales_total: 0,
+          sales_received: 0,
+          credit_created: 0,
+          debt_payments_total: 0,
+          expenses_total: 0,
+          expected_total: 0,
+          total_counted: 0,
+          difference_total: 0,
+          balanced: 0,
+          over: 0,
+          short: 0,
+        }
+      );
+
+      const summarySheet = workbook.addWorksheet("Period Summary");
+      summarySheet.views = [{ state: "frozen", ySplit: 5 }];
+      summarySheet.columns = [
+        { width: 28 },
+        { width: 20 },
+        { width: 4 },
+        { width: 28 },
+        { width: 20 },
+        { width: 4 },
+      ];
+      setPrintSetup(summarySheet, "portrait");
+      styleTitle(
+        summarySheet,
+        "A1:F1",
+        "CHALIN 03 COMPANY LIMITED - DAILY CLOSING PERIOD REPORT"
+      );
+      summarySheet.mergeCells("A2:F2");
+      summarySheet.getCell("A2").value = `${branchCode} - ${branchName}`;
+      summarySheet.getCell("A2").font = {
+        bold: true,
+        size: 13,
+        color: { argb: "FF0B1F35" },
+      };
+      summarySheet.getCell("A2").alignment = { horizontal: "center" };
+      summarySheet.mergeCells("A3:F3");
+      summarySheet.getCell("A3").value = branchLocation;
+      summarySheet.getCell("A3").alignment = { horizontal: "center" };
+      summarySheet.mergeCells("A4:F4");
+      summarySheet.getCell("A4").value = `Period: ${periodLabel}`;
+      summarySheet.getCell("A4").font = {
+        bold: true,
+        color: { argb: "FF235789" },
+      };
+      summarySheet.getCell("A4").alignment = { horizontal: "center" };
+
+      summarySheet.getRow(6).values = [
+        "Operational Summary",
+        "Value",
+        null,
+        "Financial Summary",
+        "Value",
+      ];
+      styleSection(summarySheet.getRow(6));
+
+      const summaryPairs = [
+        [
+          ["Closing records", closings.length, false],
+          ["Gross sales", totals.sales_total, true],
+        ],
+        [
+          ["Sales transactions", totals.sales_count, false],
+          ["Received during sales", totals.sales_received, true],
+        ],
+        [
+          ["Balanced days", totals.balanced, false],
+          ["Credit created", totals.credit_created, true],
+        ],
+        [
+          ["Over days", totals.over, false],
+          ["Debt collections", totals.debt_payments_total, true],
+        ],
+        [
+          ["Short days", totals.short, false],
+          ["Expenses", totals.expenses_total, true],
+        ],
+        [
+          ["Period result", varianceStatus(totals.difference_total), false],
+          ["Expected settlement", totals.expected_total, true],
+        ],
+        [
+          ["Exported at", formatDateTime(new Date()), false],
+          ["Counted total", totals.total_counted, true],
+        ],
+        [
+          ["Store code", branchCode, false],
+          ["Net variance", totals.difference_total, true],
+        ],
       ];
 
+      summaryPairs.forEach((pair, index) => {
+        const rowNumber = 7 + index;
+        const row = summarySheet.getRow(rowNumber);
+        row.getCell(1).value = pair[0][0];
+        row.getCell(2).value = pair[0][1];
+        row.getCell(4).value = pair[1][0];
+        row.getCell(5).value = pair[1][1];
+        row.getCell(1).font = { bold: true };
+        row.getCell(4).font = { bold: true };
+        if (pair[0][2]) row.getCell(2).numFmt = moneyFormat;
+        if (pair[1][2]) row.getCell(5).numFmt = moneyFormat;
+      });
+      styleBody(summarySheet, 7, 14, 1, 5);
+
+      summarySheet.mergeCells("A17:F17");
+      summarySheet.getCell("A17").value = "HOW TO READ THIS EXPORT";
+      styleSection(summarySheet.getRow(17), "9B6A16");
+      const guidance = [
+        "Closing Register gives one clear management row for each closed day.",
+        "Sales Mix separates cash, mobile money, bank, mixed and credit activity.",
+        "Channel Reconciliation shows expected, counted and variance by payment channel.",
+        "Control Notes contains remarks and closing ownership without making the main report too wide.",
+        "For transaction-by-transaction sales grouped like the previous system, open a date on Daily Closing and use Excel, PDF or Word.",
+      ];
+      guidance.forEach((line, index) => {
+        const rowNumber = 18 + index;
+        summarySheet.mergeCells(rowNumber, 1, rowNumber, 6);
+        summarySheet.getCell(rowNumber, 1).value = `• ${line}`;
+        summarySheet.getCell(rowNumber, 1).alignment = {
+          wrapText: true,
+          vertical: "top",
+        };
+        summarySheet.getRow(rowNumber).height = 26;
+      });
+
+      const registerSheet = workbook.addWorksheet("Closing Register");
+      registerSheet.views = [{ state: "frozen", ySplit: 5 }];
+      registerSheet.columns = [
+        { width: 13 },
+        { width: 13 },
+        { width: 11 },
+        { width: 16 },
+        { width: 18 },
+        { width: 16 },
+        { width: 16 },
+        { width: 14 },
+        { width: 18 },
+        { width: 15 },
+        { width: 14 },
+        { width: 22 },
+        { width: 20 },
+      ];
+      setPrintSetup(registerSheet, "landscape");
+      styleTitle(registerSheet, "A1:M1", "DAILY CLOSING REGISTER");
+      registerSheet.mergeCells("A2:M2");
+      registerSheet.getCell("A2").value = `${branchCode} - ${branchName} | ${periodLabel}`;
+      registerSheet.getCell("A2").alignment = { horizontal: "center" };
+      registerSheet.getCell("A2").font = { bold: true };
+      registerSheet.getRow(4).values = [
+        "Closing Date",
+        "Status",
+        "Sales Count",
+        "Gross Sales",
+        "Received at Sale",
+        "Credit Created",
+        "Debt Collected",
+        "Expenses",
+        "Expected Settlement",
+        "Counted",
+        "Variance",
+        "Closed By",
+        "Closed At",
+      ];
+      styleHeader(registerSheet.getRow(4));
+
+      closings.forEach((closing, index) => {
+        const row = registerSheet.getRow(5 + index);
+        row.values = [
+          formatDate(closing.closing_date),
+          varianceStatus(closing.difference_total),
+          Number(closing.sales_count || 0),
+          money(closing.sales_total),
+          money(closing.sales_received),
+          creditCreated(closing),
+          money(closing.debt_payments_total),
+          money(closing.expenses_total),
+          money(closing.expected_total),
+          money(closing.total_counted),
+          money(closing.difference_total),
+          closing.closed_by_name || "",
+          formatDateTime(closing.closed_at),
+        ];
+        [4, 5, 6, 7, 8, 9, 10, 11].forEach((column) => {
+          row.getCell(column).numFmt = moneyFormat;
+        });
+        const statusCell = row.getCell(2);
+        const status = varianceStatus(closing.difference_total);
+        statusCell.font = {
+          bold: true,
+          color: {
+            argb:
+              status === "Balanced"
+                ? "FF166534"
+                : status === "Over"
+                ? "FF9A3412"
+                : "FFB91C1C",
+          },
+        };
+      });
+      styleBody(registerSheet, 5, 4 + closings.length, 1, 13);
+      registerSheet.autoFilter = `A4:M${Math.max(4, 4 + closings.length)}`;
+
+      const registerTotalRow = registerSheet.getRow(5 + closings.length);
+      registerTotalRow.values = [
+        "PERIOD TOTAL",
+        varianceStatus(totals.difference_total),
+        totals.sales_count,
+        totals.sales_total,
+        totals.sales_received,
+        totals.credit_created,
+        totals.debt_payments_total,
+        totals.expenses_total,
+        totals.expected_total,
+        totals.total_counted,
+        totals.difference_total,
+        "",
+        "",
+      ];
+      registerTotalRow.font = { bold: true };
+      registerTotalRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFFF3CD" },
+      };
+      [4, 5, 6, 7, 8, 9, 10, 11].forEach((column) => {
+        registerTotalRow.getCell(column).numFmt = moneyFormat;
+      });
+
+      const salesMixSheet = workbook.addWorksheet("Sales Mix");
+      salesMixSheet.views = [{ state: "frozen", ySplit: 5 }];
+      salesMixSheet.columns = [
+        { width: 13 },
+        { width: 15 },
+        { width: 15 },
+        { width: 15 },
+        { width: 15 },
+        { width: 16 },
+        { width: 17 },
+        { width: 18 },
+        { width: 16 },
+        { width: 18 },
+      ];
+      setPrintSetup(salesMixSheet, "landscape");
+      styleTitle(salesMixSheet, "A1:J1", "SALES PAYMENT MIX");
+      salesMixSheet.mergeCells("A2:J2");
+      salesMixSheet.getCell("A2").value = `${branchCode} - ${branchName} | ${periodLabel}`;
+      salesMixSheet.getCell("A2").alignment = { horizontal: "center" };
+      salesMixSheet.getCell("A2").font = { bold: true };
+      salesMixSheet.getRow(4).values = [
+        "Closing Date",
+        "Cash Received",
+        "MoMo Received",
+        "Bank Received",
+        "Mixed Received",
+        "Credit Sales",
+        "Credit Received",
+        "Credit Outstanding",
+        "Net Sales",
+        "Received at Sale",
+      ];
+      styleHeader(salesMixSheet.getRow(4));
+
+      closings.forEach((closing, index) => {
+        const row = salesMixSheet.getRow(5 + index);
+        row.values = [
+          formatDate(closing.closing_date),
+          money(closing.cash_sales),
+          money(closing.momo_sales),
+          money(closing.bank_sales),
+          money(closing.mixed_sales),
+          money(closing.credit_sales_total),
+          money(closing.credit_sales_received),
+          creditCreated(closing),
+          money(closing.sales_total),
+          money(closing.sales_received),
+        ];
+        for (let column = 2; column <= 10; column += 1) {
+          row.getCell(column).numFmt = moneyFormat;
+        }
+      });
+      styleBody(salesMixSheet, 5, 4 + closings.length, 1, 10);
+      salesMixSheet.autoFilter = `A4:J${Math.max(4, 4 + closings.length)}`;
+
+      const channelSheet = workbook.addWorksheet("Channel Reconciliation");
+      channelSheet.views = [{ state: "frozen", ySplit: 5 }];
+      channelSheet.columns = [
+        { width: 13 },
+        { width: 20 },
+        { width: 18 },
+        { width: 18 },
+        { width: 16 },
+        { width: 13 },
+      ];
+      setPrintSetup(channelSheet, "portrait");
+      styleTitle(
+        channelSheet,
+        "A1:F1",
+        "PAYMENT CHANNEL RECONCILIATION"
+      );
+      channelSheet.mergeCells("A2:F2");
+      channelSheet.getCell("A2").value = `${branchCode} - ${branchName} | ${periodLabel}`;
+      channelSheet.getCell("A2").alignment = { horizontal: "center" };
+      channelSheet.getCell("A2").font = { bold: true };
+      channelSheet.getRow(4).values = [
+        "Closing Date",
+        "Payment Channel",
+        "System Expected",
+        "Counted / Confirmed",
+        "Difference",
+        "Status",
+      ];
+      styleHeader(channelSheet.getRow(4));
+
+      let channelRowNumber = 5;
+      const channels = [
+        ["Cash", "expected_cash", "cash_counted"],
+        ["Mobile Money", "expected_momo", "momo_counted"],
+        ["Bank", "expected_bank", "bank_counted"],
+        ["Unallocated / Mixed", "expected_other", "other_counted"],
+      ];
       closings.forEach((closing) => {
-        worksheet.addRow({
-          closing_date: formatDate(closing.closing_date),
-          sales_count: Number(closing.sales_count || 0),
-          sales_total: Number(closing.sales_total || 0),
-          sales_received: Number(closing.sales_received || 0),
-
-          cash_sales: Number(closing.cash_sales || 0),
-          momo_sales: Number(closing.momo_sales || 0),
-          bank_sales: Number(closing.bank_sales || 0),
-          mixed_sales: Number(closing.mixed_sales || 0),
-          credit_sales_total: Number(closing.credit_sales_total || 0),
-          credit_sales_received: Number(closing.credit_sales_received || 0),
-
-          debt_payment_count: Number(closing.debt_payment_count || 0),
-          debt_payments_total: Number(closing.debt_payments_total || 0),
-          debt_cash: Number(closing.debt_cash || 0),
-          debt_momo: Number(closing.debt_momo || 0),
-          debt_bank: Number(closing.debt_bank || 0),
-
-          expenses_count: Number(closing.expenses_count || 0),
-          expenses_total: Number(closing.expenses_total || 0),
-
-          expected_cash: Number(closing.expected_cash || 0),
-          expected_momo: Number(closing.expected_momo || 0),
-          expected_bank: Number(closing.expected_bank || 0),
-          expected_other: Number(closing.expected_other || 0),
-          expected_total: Number(closing.expected_total || 0),
-
-          cash_counted: Number(closing.cash_counted || 0),
-          momo_counted: Number(closing.momo_counted || 0),
-          bank_counted: Number(closing.bank_counted || 0),
-          other_counted: Number(closing.other_counted || 0),
-          total_counted: Number(closing.total_counted || 0),
-
-          difference_total: Number(closing.difference_total || 0),
-          notes: closing.notes || "",
-          closed_by_name: closing.closed_by_name || "",
-          closed_at: formatDateTime(closing.closed_at),
+        channels.forEach(([label, expectedKey, countedKey]) => {
+          const expected = money(closing[expectedKey]);
+          const counted = money(closing[countedKey]);
+          const difference = money(counted - expected);
+          const row = channelSheet.getRow(channelRowNumber);
+          row.values = [
+            formatDate(closing.closing_date),
+            label,
+            expected,
+            counted,
+            difference,
+            varianceStatus(difference),
+          ];
+          [3, 4, 5].forEach((column) => {
+            row.getCell(column).numFmt = moneyFormat;
+          });
+          row.getCell(6).font = {
+            bold: true,
+            color: {
+              argb:
+                Math.abs(difference) < 0.01
+                  ? "FF166534"
+                  : difference > 0
+                  ? "FF9A3412"
+                  : "FFB91C1C",
+            },
+          };
+          channelRowNumber += 1;
         });
       });
+      styleBody(channelSheet, 5, channelRowNumber - 1, 1, 6);
+      channelSheet.autoFilter = `A4:F${Math.max(4, channelRowNumber - 1)}`;
 
-      const summaryWorksheet = workbook.addWorksheet("Daily Closing Summary");
-
-      const totalExpected = closings.reduce(
-        (sum, closing) => sum + Number(closing.expected_total || 0),
-        0
-      );
-
-      const totalCounted = closings.reduce(
-        (sum, closing) => sum + Number(closing.total_counted || 0),
-        0
-      );
-
-      const totalDifference = closings.reduce(
-        (sum, closing) => sum + Number(closing.difference_total || 0),
-        0
-      );
-
-      const totalSales = closings.reduce(
-        (sum, closing) => sum + Number(closing.sales_total || 0),
-        0
-      );
-
-      const totalDebtPayments = closings.reduce(
-        (sum, closing) => sum + Number(closing.debt_payments_total || 0),
-        0
-      );
-
-      const totalExpenses = closings.reduce(
-        (sum, closing) => sum + Number(closing.expenses_total || 0),
-        0
-      );
-
-      summaryWorksheet.columns = [
-        { header: "Metric", key: "metric" },
-        { header: "Value", key: "value" },
+      const notesSheet = workbook.addWorksheet("Control Notes");
+      notesSheet.views = [{ state: "frozen", ySplit: 5 }];
+      notesSheet.columns = [
+        { width: 13 },
+        { width: 15 },
+        { width: 18 },
+        { width: 18 },
+        { width: 18 },
+        { width: 55 },
+        { width: 22 },
+        { width: 21 },
       ];
+      setPrintSetup(notesSheet, "landscape");
+      styleTitle(notesSheet, "A1:H1", "CLOSING CONTROL NOTES");
+      notesSheet.mergeCells("A2:H2");
+      notesSheet.getCell("A2").value = `${branchCode} - ${branchName} | ${periodLabel}`;
+      notesSheet.getCell("A2").alignment = { horizontal: "center" };
+      notesSheet.getCell("A2").font = { bold: true };
+      notesSheet.getRow(4).values = [
+        "Closing Date",
+        "Status",
+        "Debt Payments",
+        "Expenses",
+        "Total Variance",
+        "Closing Notes",
+        "Closed By",
+        "Closed At",
+      ];
+      styleHeader(notesSheet.getRow(4));
 
-      summaryWorksheet.addRow({
-        metric: "Daily closing records exported",
-        value: closings.length,
+      closings.forEach((closing, index) => {
+        const row = notesSheet.getRow(5 + index);
+        row.values = [
+          formatDate(closing.closing_date),
+          varianceStatus(closing.difference_total),
+          money(closing.debt_payments_total),
+          money(closing.expenses_total),
+          money(closing.difference_total),
+          closing.notes || "",
+          closing.closed_by_name || "",
+          formatDateTime(closing.closed_at),
+        ];
+        [3, 4, 5].forEach((column) => {
+          row.getCell(column).numFmt = moneyFormat;
+        });
+        row.getCell(6).alignment = { wrapText: true, vertical: "top" };
+        row.height = Math.max(22, Math.min(60, 18 + String(closing.notes || "").length / 3));
       });
-
-      summaryWorksheet.addRow({
-        metric: "Total sales",
-        value: totalSales,
-      });
-
-      summaryWorksheet.addRow({
-        metric: "Total debt payments",
-        value: totalDebtPayments,
-      });
-
-      summaryWorksheet.addRow({
-        metric: "Total expenses",
-        value: totalExpenses,
-      });
-
-      summaryWorksheet.addRow({
-        metric: "Total expected",
-        value: totalExpected,
-      });
-
-      summaryWorksheet.addRow({
-        metric: "Total counted",
-        value: totalCounted,
-      });
-
-      summaryWorksheet.addRow({
-        metric: "Total difference",
-        value: totalDifference,
-      });
-
-      styleWorksheet(worksheet);
-      styleWorksheet(summaryWorksheet);
+      styleBody(notesSheet, 5, 4 + closings.length, 1, 8);
+      notesSheet.autoFilter = `A4:H${Math.max(4, 4 + closings.length)}`;
 
       return sendStoreWorkbook(req, res, workbook, "daily-closings");
     } catch (error) {
