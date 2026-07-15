@@ -637,11 +637,19 @@ export default function SmsPage() {
     try {
       const response = await axiosClient.post("/sms/daily-summary");
 
-      setNotice(response.data.message || "Daily summary SMS sent successfully.");
+      setNotice(
+        response.data.message ||
+          "Official Daily Closing summary SMS sent successfully."
+      );
 
       await loadSmsPageData({ silent: true });
     } catch (error) {
-      setError(getFriendlyError(error, "Failed to send daily summary SMS."));
+      setError(
+        getFriendlyError(
+          error,
+          "Complete Daily Closing first, then resend the official summary SMS."
+        )
+      );
     } finally {
       setSendingDailySummary(false);
     }
@@ -1021,10 +1029,11 @@ export default function SmsPage() {
 
             <section style={styles.summaryPanel}>
               <p style={styles.eyebrowDark}>Owner Alert</p>
-              <h2>Boss Daily Summary</h2>
+              <h2>Boss Daily Closing Summary</h2>
               <p>
-                Sends today&apos;s sales, debts, expenses and low-stock summary
-                to the owner or manager phone number saved in settings.
+                Daily Closing sends the official summary automatically to the
+                owner phone saved in settings. Use this button only to resend
+                the saved closing summary.
               </p>
 
               <button
@@ -1035,7 +1044,7 @@ export default function SmsPage() {
               >
                 {sendingDailySummary
                   ? "Sending Summary..."
-                  : "Send Today's Summary SMS"}
+                  : "Resend Today's Closing SMS"}
               </button>
             </section>
 

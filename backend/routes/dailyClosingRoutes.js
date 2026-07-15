@@ -7,6 +7,7 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { sendOwnerSmsAlert } = require("../services/smsAlertService");
 
 const router = express.Router();
 
@@ -340,10 +341,136 @@ function findPaymentGroup(groups, key) {
   return groups.find((group) => group.key === key) || createEmptyPaymentGroup(key, key);
 }
 
+function normalizeSaleForClosing(sale) {
+  const paymentType = String(sale.payment_type || "").toLowerCase();
+  const total = toMoney(sale.total);
+  const currentAmountPaid = toMoney(sale.amount_paid);
+  const currentBalance = toMoney(sale.balance);
+  const lifetimeAmountPaid = toMoney(
+    sale.debt_lifetime_amount_paid ?? currentAmountPaid
+  );
+  const laterDebtPayments = toMoney(sale.debt_payments_after_sale);
+
+  // sales.amount_paid and sales.balance are current lifetime values. Debt
+  // payments recorded after the sale update those fields, so reconstruct the
+  // immutable amount received and credit created when the sale was first made.
+  const amountReceivedAtSale = toMoney(
+    Math.max(0, Math.min(total, lifetimeAmountPaid - laterDebtPayments))
+  );
+  const outstandingCreatedAtSale = toMoney(
+    Math.max(total - amountReceivedAtSale, 0)
+  );
+
+  const recordedAllocations = {
+    cash: toMoney(sale.allocation_cash),
+    momo: toMoney(sale.allocation_momo),
+    bank: toMoney(sale.allocation_bank),
+    other: toMoney(sale.allocation_other),
+  };
+  const allocationCount = Math.max(0, Number(sale.allocation_count || 0));
+  const recordedAllocationTotal = toMoney(
+    Object.values(recordedAllocations).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0
+    )
+  );
+
+  const normalizedAllocations = {
+    cash: 0,
+    momo: 0,
+    bank: 0,
+    other: 0,
+  };
+
+  let allocationStatus = "exact";
+
+  if (allocationCount > 0) {
+    const allocationDifference = toMoney(
+      recordedAllocationTotal - amountReceivedAtSale
+    );
+
+    if (Math.abs(allocationDifference) < 0.01) {
+      Object.assign(normalizedAllocations, recordedAllocations);
+    } else if (recordedAllocationTotal < amountReceivedAtSale) {
+      // Preserve known channels and keep only the missing portion under Other.
+      Object.assign(normalizedAllocations, recordedAllocations);
+      normalizedAllocations.other = toMoney(
+        normalizedAllocations.other +
+          (amountReceivedAtSale - recordedAllocationTotal)
+      );
+      allocationStatus = "allocation_gap";
+    } else {
+      // An allocation total above the original sale receipt is unsafe to
+      // distribute. Keep the original receipt visible under Other and raise a
+      // review flag instead of double-counting a known channel.
+      normalizedAllocations.other = amountReceivedAtSale;
+      allocationStatus = "allocation_overstated";
+    }
+  } else if (["cash", "momo", "bank"].includes(paymentType)) {
+    normalizedAllocations[paymentType] = amountReceivedAtSale;
+    allocationStatus = "legacy_derived";
+  } else {
+    normalizedAllocations.other = amountReceivedAtSale;
+    allocationStatus =
+      amountReceivedAtSale > 0 ? "legacy_unallocated" : "no_payment";
+  }
+
+  return {
+    ...sale,
+    current_amount_paid: currentAmountPaid,
+    current_balance: currentBalance,
+    lifetime_amount_paid: lifetimeAmountPaid,
+    debt_payments_after_sale: laterDebtPayments,
+    amount_paid: amountReceivedAtSale,
+    balance: outstandingCreatedAtSale,
+    amount_received_at_sale: amountReceivedAtSale,
+    outstanding_created_at_sale: outstandingCreatedAtSale,
+    recorded_allocation_total: recordedAllocationTotal,
+    allocation_count: allocationCount,
+    allocation_status: allocationStatus,
+    allocation_difference: toMoney(
+      recordedAllocationTotal - amountReceivedAtSale
+    ),
+    cash_received: normalizedAllocations.cash,
+    momo_received: normalizedAllocations.momo,
+    bank_received: normalizedAllocations.bank,
+    other_received: normalizedAllocations.other,
+  };
+}
+
+function buildClosingSmsMessage({
+  summary,
+  closingDate,
+  totalCounted,
+  differenceTotal,
+  closedByName,
+}) {
+  const branchName = summary.branch?.name || "Selected Store";
+  const branchCode = summary.branch?.code || "STORE";
+
+  return [
+    `CHALIN03 Daily Closing ${closingDate}`,
+    `${branchName} (${branchCode})`,
+    `Sales GHS ${toMoney(summary.sales_total).toFixed(2)}`,
+    `Received at sale GHS ${toMoney(summary.sales_received).toFixed(2)}`,
+    `Credit created GHS ${toMoney(summary.credit_created).toFixed(2)}`,
+    `Debt collected GHS ${toMoney(summary.debt_payments_total).toFixed(2)}`,
+    `Expenses GHS ${toMoney(summary.expenses_total).toFixed(2)}`,
+    `Expected C ${toMoney(summary.expected_cash).toFixed(2)} M ${toMoney(
+      summary.expected_momo
+    ).toFixed(2)} B ${toMoney(summary.expected_bank).toFixed(
+      2
+    )} O ${toMoney(summary.expected_other).toFixed(2)}`,
+    `Counted GHS ${toMoney(totalCounted).toFixed(2)}`,
+    `Variance GHS ${toMoney(differenceTotal).toFixed(2)}`,
+    `Closed by ${cleanText(closedByName, 80) || "Manager"}`,
+  ].join(". ");
+}
+
 async function calculateClosingSummary(branchId, closingDate, cashControlSource = {}, connection = pool) {
   const branch = await getBranchDetails(branchId, connection);
 
-  const [salesTransactions] = await connection.query(
+  const [rawSalesTransactions] = await connection.query(
     `SELECT
       s.id,
       s.receipt_number,
@@ -358,26 +485,50 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
       s.amount_paid,
       s.change_due,
       s.balance,
-      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'cash'), CASE WHEN s.payment_type = 'cash' THEN s.amount_paid ELSE 0 END) AS cash_received,
-      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'momo'), CASE WHEN s.payment_type = 'momo' THEN s.amount_paid ELSE 0 END) AS momo_received,
-      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'bank'), CASE WHEN s.payment_type = 'bank' THEN s.amount_paid ELSE 0 END) AS bank_received,
-      CASE
-        WHEN EXISTS (
-          SELECT 1
-          FROM sale_payment_allocations spa_any
-          WHERE spa_any.sale_id = s.id
-        )
-          THEN COALESCE((
-            SELECT SUM(spa.amount)
-            FROM sale_payment_allocations spa
-            WHERE spa.sale_id = s.id
-              AND spa.payment_channel = 'other'
-          ), 0)
-        ELSE CASE
-          WHEN s.payment_type IN ('mixed','credit') THEN s.amount_paid
-          ELSE 0
-        END
-      END AS other_received,
+      COALESCE((
+        SELECT SUM(spa.amount)
+        FROM sale_payment_allocations spa
+        WHERE spa.sale_id = s.id
+          AND spa.payment_channel = 'cash'
+      ), 0) AS allocation_cash,
+      COALESCE((
+        SELECT SUM(spa.amount)
+        FROM sale_payment_allocations spa
+        WHERE spa.sale_id = s.id
+          AND spa.payment_channel = 'momo'
+      ), 0) AS allocation_momo,
+      COALESCE((
+        SELECT SUM(spa.amount)
+        FROM sale_payment_allocations spa
+        WHERE spa.sale_id = s.id
+          AND spa.payment_channel = 'bank'
+      ), 0) AS allocation_bank,
+      COALESCE((
+        SELECT SUM(spa.amount)
+        FROM sale_payment_allocations spa
+        WHERE spa.sale_id = s.id
+          AND spa.payment_channel = 'other'
+      ), 0) AS allocation_other,
+      COALESCE((
+        SELECT COUNT(*)
+        FROM sale_payment_allocations spa
+        WHERE spa.sale_id = s.id
+      ), 0) AS allocation_count,
+      COALESCE((
+        SELECT MAX(d_paid.amount_paid)
+        FROM debts d_paid
+        WHERE d_paid.sale_id = s.id
+          AND d_paid.branch_id = s.branch_id
+      ), s.amount_paid) AS debt_lifetime_amount_paid,
+      COALESCE((
+        SELECT SUM(dp_all.amount)
+        FROM debts d_all
+        INNER JOIN debt_payments dp_all
+          ON dp_all.debt_id = d_all.id
+          AND dp_all.branch_id = d_all.branch_id
+        WHERE d_all.sale_id = s.id
+          AND d_all.branch_id = s.branch_id
+      ), 0) AS debt_payments_after_sale,
       s.created_at,
       COALESCE(u.full_name, 'System') AS staff_name
      FROM sales s
@@ -392,6 +543,8 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
        s.id ASC`,
     [branchId, closingDate]
   );
+
+  const salesTransactions = rawSalesTransactions.map(normalizeSaleForClosing);
 
   const [debtPayments] = await connection.query(
     `SELECT
@@ -652,6 +805,30 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
         details: "Sale was recorded outside the normal 6:00 AM to 9:00 PM review window.",
       });
     }
+
+    if (
+      ["allocation_gap", "allocation_overstated"].includes(
+        sale.allocation_status
+      )
+    ) {
+      riskFlags.push({
+        id: `allocation-${sale.id}`,
+        risk_type: "payment_allocation_mismatch",
+        severity:
+          sale.allocation_status === "allocation_overstated"
+            ? "high"
+            : "review",
+        receipt_number: sale.receipt_number,
+        customer_name: sale.customer_name,
+        amount: Math.abs(Number(sale.allocation_difference || 0)),
+        occurred_at: sale.created_at,
+        details: `Recorded payment-channel allocations are GHS ${Number(
+          sale.recorded_allocation_total || 0
+        ).toFixed(2)} while the reconstructed amount received at sale is GHS ${Number(
+          sale.amount_received_at_sale || 0
+        ).toFixed(2)}. The closing used a safe non-duplicating fallback.`,
+      });
+    }
   }
 
   for (const change of saleChanges) {
@@ -773,11 +950,17 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
     exception_count: exceptions.length,
     risk_flags: riskFlags.sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)),
     risk_flag_count: riskFlags.length,
+    allocation_issue_count: salesTransactions.filter((sale) =>
+      ["allocation_gap", "allocation_overstated"].includes(
+        sale.allocation_status
+      )
+    ).length,
     calculation_notes: [
       "Physical cash is calculated separately from MoMo, bank and other channels.",
-      "Mixed and credit-sale payments use their recorded payment-channel allocation. Historical unallocated payments remain under Other / Unallocated.",
+      "Credit and Mixed are sale classifications, not extra settlement channels. Their deposits are distributed only to the recorded Cash, MoMo, Bank or Other channel.",
+      "Later debt payments are removed from the original sale receipt and are counted only on the date the debt payment was actually received.",
+      "Historical payments without exact channel evidence remain under Other / Unallocated instead of being guessed.",
       "Expected physical cash is based on recorded Cash sales, Cash debt collections, Cash expenses and approved Cash refunds.",
-      "Debt collections are separated from new sales so old debt payments are not confused with today's credit created.",
       "Approved return refunds are deducted from the payment channel used for the refund on the date the return was recorded.",
     ],
   };
@@ -3605,13 +3788,54 @@ router.post(
         [result.insertId, branchId]
       );
 
+      const createdClosing = createdRows[0] || {};
+      const baseMessage =
+        Math.abs(differenceTotal) < 0.01
+          ? "Daily closing saved and balanced successfully."
+          : "Daily closing saved with a recorded variance.";
+
+      let closingSms;
+
+      try {
+        closingSms = await sendOwnerSmsAlert({
+          branchId,
+          smsType: "daily_summary",
+          sentBy: req.user.id,
+          message: buildClosingSmsMessage({
+            summary,
+            closingDate,
+            totalCounted,
+            differenceTotal,
+            closedByName:
+              createdClosing.closed_by_name ||
+              req.user.full_name ||
+              req.user.username,
+          }),
+        });
+      } catch (smsError) {
+        console.warn("Daily Closing was saved but owner SMS failed:", smsError.message);
+        closingSms = {
+          ok: false,
+          skipped: false,
+          error: smsError.message || "Unexpected SMS error",
+        };
+      }
+
+      const smsMessage = closingSms.ok
+        ? " Boss daily summary SMS sent."
+        : closingSms.skipped
+          ? ` Boss summary SMS was skipped: ${
+              closingSms.reason || "owner phone or SMS configuration is unavailable"
+            }.`
+          : ` Closing remains saved, but the boss summary SMS failed: ${
+              closingSms.error || "provider error"
+            }.`;
+
       return res.status(201).json({
         status: "success",
-        message:
-          Math.abs(differenceTotal) < 0.01
-            ? "Daily closing saved and balanced successfully."
-            : "Daily closing saved with a recorded variance.",
-        closing: createdRows[0],
+        message: `${baseMessage}${smsMessage}`,
+        closing: createdClosing,
+        closing_sms: closingSms,
       });
     } catch (error) {
       await connection.rollback();
@@ -3638,8 +3862,10 @@ router.post(
 
 module.exports = router;
 module.exports._test = {
+  buildClosingSmsMessage,
   calculateClosingSummary,
   createDailyClosingWorkbook,
   createDailyClosingPdf,
   createDailyClosingWordHtml,
+  normalizeSaleForClosing,
 };
