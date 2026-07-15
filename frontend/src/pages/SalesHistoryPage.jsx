@@ -41,9 +41,17 @@ export default function SalesHistoryPage() {
     payment_type: "cash",
     discount_amount: "0",
     amount_tendered: "0",
+    payment_allocations: { cash: "", momo: "", bank: "", other: "" },
     edit_reason: "",
+    approver_username: "",
+    approver_password: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [voidTarget, setVoidTarget] = useState(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidApproverUsername, setVoidApproverUsername] = useState("");
+  const [voidApproverPassword, setVoidApproverPassword] = useState("");
+  const [voidingSale, setVoidingSale] = useState(false);
 
   const [search, setSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -213,6 +221,8 @@ export default function SalesHistoryPage() {
 
       setSelectedReceipt({
         ...(response.data.sale || {}),
+        payment_allocations: response.data.payment_allocations || {},
+        change_history: response.data.change_history || [],
         branch_code:
           response.data.sale?.branch_code ||
           response.data.sale?.store_code ||
@@ -239,37 +249,62 @@ export default function SalesHistoryPage() {
     setSelectedDebt(null);
   }
 
-  async function voidSale(saleId, receiptNumber) {
+  function beginVoidSale(saleId, receiptNumber) {
+    setMessage("");
+    setError("");
+    setVoidTarget({ saleId, receiptNumber });
+    setVoidReason("");
+    setVoidApproverUsername("");
+    setVoidApproverPassword("");
+  }
+
+  function closeVoidSale() {
+    if (voidingSale) return;
+    setVoidTarget(null);
+    setVoidReason("");
+    setVoidApproverUsername("");
+    setVoidApproverPassword("");
+  }
+
+  async function confirmVoidSale(event) {
+    event.preventDefault();
     setMessage("");
     setError("");
 
-    const reason = window.prompt(
-      `Why are you deleting receipt ${receiptNumber}? This uses the safe void process and keeps the accounting record.`
-    );
-
-    if (reason === null) return;
-
-    if (!reason.trim()) {
-      setError("Delete reason is required.");
+    if (!voidTarget) return;
+    if (!voidReason.trim()) {
+      setError("Delete/void reason is required.");
+      return;
+    }
+    if (!voidApproverUsername.trim() || !voidApproverPassword) {
+      setError("A different manager/admin username and masked password are required.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Delete sale ${receiptNumber}? Stock will be restored, any debt for this sale will be closed, and the accounting record will remain as Deleted/Voided.`
+      `Void sale ${voidTarget.receiptNumber}? Stock will be restored, linked debt will be closed, and the original record will remain in the protected history.`
     );
-
     if (!confirmed) return;
 
+    setVoidingSale(true);
     try {
-      const response = await axiosClient.patch(`/sales/${saleId}/void`, {
-        reason: reason.trim(),
+      const response = await axiosClient.patch(`/sales/${voidTarget.saleId}/void`, {
+        reason: voidReason.trim(),
+        approver_username: voidApproverUsername.trim(),
+        approver_password: voidApproverPassword,
       });
 
-      setMessage(response.data.message || "Sale deleted safely.");
+      setMessage(response.data.message || "Sale voided safely.");
       closeReceipt();
+      setVoidTarget(null);
+      setVoidReason("");
+      setVoidApproverUsername("");
+      setVoidApproverPassword("");
       await loadSales();
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to delete sale.");
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to void sale.");
+    } finally {
+      setVoidingSale(false);
     }
   }
 
@@ -309,7 +344,15 @@ export default function SalesHistoryPage() {
         amount_tendered: String(
           sale.amount_tendered ?? sale.amount_paid ?? sale.total ?? 0
         ),
+        payment_allocations: {
+          cash: String(saleResponse.data.payment_allocations?.cash || ""),
+          momo: String(saleResponse.data.payment_allocations?.momo || ""),
+          bank: String(saleResponse.data.payment_allocations?.bank || ""),
+          other: String(saleResponse.data.payment_allocations?.other || ""),
+        },
         edit_reason: "",
+        approver_username: "",
+        approver_password: "",
       });
       closeReceipt();
     } catch (error) {
@@ -371,7 +414,10 @@ export default function SalesHistoryPage() {
       payment_type: "cash",
       discount_amount: "0",
       amount_tendered: "0",
+      payment_allocations: { cash: "", momo: "", bank: "", other: "" },
       edit_reason: "",
+      approver_username: "",
+      approver_password: "",
     });
   }
 
@@ -392,6 +438,19 @@ export default function SalesHistoryPage() {
       return;
     }
 
+    if (!editForm.approver_username.trim() || !editForm.approver_password) {
+      setError("A different manager/admin username and password are required to approve this correction.");
+      return;
+    }
+
+    const splitTotal = Object.values(editForm.payment_allocations || {}).reduce(
+      (sum, value) => sum + Math.max(Number(value || 0), 0),
+      0
+    );
+    const effectivePaid = ["cash", "momo", "bank"].includes(editForm.payment_type)
+      ? Number(editForm.amount_tendered || 0)
+      : splitTotal;
+
     setSavingEdit(true);
 
     try {
@@ -400,9 +459,12 @@ export default function SalesHistoryPage() {
         customer_phone: editForm.customer_phone,
         payment_type: editForm.payment_type,
         discount_amount: Number(editForm.discount_amount || 0),
-        amount_tendered: Number(editForm.amount_tendered || 0),
-        amount_paid: Number(editForm.amount_tendered || 0),
+        amount_tendered: effectivePaid,
+        amount_paid: effectivePaid,
+        payment_allocations: editForm.payment_allocations,
         edit_reason: editForm.edit_reason,
+        approver_username: editForm.approver_username,
+        approver_password: editForm.approver_password,
         items: editItems.map((item) => ({
           product_id: Number(item.product_id),
           quantity: Number(item.quantity),
@@ -1226,7 +1288,7 @@ export default function SalesHistoryPage() {
                         <button
                           type="button"
                           className="small-danger"
-                          onClick={() => voidSale(sale.id, sale.receipt_number)}
+                          onClick={() => beginVoidSale(sale.id, sale.receipt_number)}
                         >
                           Delete Sale
                         </button>
@@ -1324,6 +1386,10 @@ export default function SalesHistoryPage() {
                   <strong>Payment Method:</strong>{" "}
                   {formatPaymentMethod(selectedReceipt.payment_type)}
                 </p>
+                <p>
+                  <strong>Channel allocation:</strong>{" "}
+                  Cash GHS {formatMoney(selectedReceipt.payment_allocations?.cash)} · MoMo GHS {formatMoney(selectedReceipt.payment_allocations?.momo)} · Bank GHS {formatMoney(selectedReceipt.payment_allocations?.bank)} · Other GHS {formatMoney(selectedReceipt.payment_allocations?.other)}
+                </p>
               </div>
 
               <div style={styles.tableWrap}>
@@ -1405,6 +1471,31 @@ export default function SalesHistoryPage() {
                 </div>
               )}
 
+              {Array.isArray(selectedReceipt.change_history) && selectedReceipt.change_history.length > 0 && (
+                <div className="warning-box">
+                  <strong>Protected Sale Change History</strong>
+                  {selectedReceipt.change_history.map((change) => {
+                    let before = {};
+                    let after = {};
+                    try { before = JSON.parse(change.before_snapshot_json || "{}"); } catch { before = {}; }
+                    try { after = JSON.parse(change.after_snapshot_json || "{}"); } catch { after = {}; }
+                    return (
+                      <div key={change.id} style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #d8c584" }}>
+                        <div><strong>{String(change.change_type || "change").toUpperCase()}</strong> · {formatDateTime(change.created_at)}</div>
+                        <div>Reason: {change.reason || "-"}</div>
+                        <div>Changed by: {change.changed_by_name || "-"} · Approved by: {change.approved_by_name || "-"}</div>
+                        <div>
+                          Before: {formatPaymentMethod(before?.sale?.payment_type)} · GHS {formatMoney(before?.sale?.total)} · Paid GHS {formatMoney(before?.sale?.amount_paid)}
+                        </div>
+                        <div>
+                          After: {formatPaymentMethod(after?.sale?.payment_type)} · GHS {formatMoney(after?.sale?.total)} · Paid GHS {formatMoney(after?.sale?.amount_paid)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="receipt-center">
                 <h3>{receiptFooter}</h3>
                 <p>
@@ -1444,7 +1535,7 @@ export default function SalesHistoryPage() {
                     type="button"
                     className="small-danger"
                     onClick={() =>
-                      voidSale(selectedReceipt.id, selectedReceipt.receipt_number)
+                      beginVoidSale(selectedReceipt.id, selectedReceipt.receipt_number)
                     }
                   >
                     Delete Sale
@@ -1456,13 +1547,73 @@ export default function SalesHistoryPage() {
         </div>
       )}
 
+      {voidTarget && (
+        <div className="modal-backdrop">
+          <div className="receipt-modal" style={styles.receiptModal}>
+            <div className="modal-header">
+              <div>
+                <h2>Protected Void - {voidTarget.receiptNumber}</h2>
+                <p>The original transaction and complete before/after evidence will remain preserved.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={closeVoidSale} disabled={voidingSale}>
+                Close
+              </button>
+            </div>
+            <form onSubmit={confirmVoidSale} style={styles.editForm}>
+              <div className="warning-box">
+                This action restores stock and closes linked debt. It requires approval by a different active manager or administrator.
+              </div>
+              <label>
+                Void reason
+                <textarea
+                  value={voidReason}
+                  onChange={(event) => setVoidReason(event.target.value)}
+                  rows="3"
+                  placeholder="Give the exact business reason for voiding this completed sale"
+                  required
+                />
+              </label>
+              <div style={styles.editGrid}>
+                <label>
+                  Independent approver username
+                  <input
+                    value={voidApproverUsername}
+                    onChange={(event) => setVoidApproverUsername(event.target.value)}
+                    autoComplete="username"
+                    required
+                  />
+                </label>
+                <label>
+                  Independent approver password
+                  <input
+                    type="password"
+                    value={voidApproverPassword}
+                    onChange={(event) => setVoidApproverPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
+              </div>
+              <div style={styles.modalActions}>
+                <button type="button" className="secondary-button" onClick={closeVoidSale} disabled={voidingSale}>
+                  Cancel
+                </button>
+                <button type="submit" className="small-danger" disabled={voidingSale}>
+                  {voidingSale ? "Voiding…" : "Approve and Void Sale"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {editingSale && (
         <div className="modal-backdrop">
           <div className="receipt-modal" style={styles.receiptModal}>
             <div className="modal-header">
               <div>
                 <h2>Edit Sale - {editingSale.receipt_number}</h2>
-                <p>Admin-only correction. Receipt number and original creation record stay intact.</p>
+                <p>Protected correction. The original snapshot stays in history and a different manager/admin must approve.</p>
               </div>
 
               <button
@@ -1538,23 +1689,54 @@ export default function SalesHistoryPage() {
                   />
                 </label>
 
-                <label>
-                  {["cash", "momo", "bank"].includes(editForm.payment_type)
-                    ? "Amount tendered"
-                    : "Amount paid now"}
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editForm.amount_tendered}
-                    onChange={(event) =>
-                      setEditForm((current) => ({
-                        ...current,
-                        amount_tendered: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                {["cash", "momo", "bank"].includes(editForm.payment_type) ? (
+                  <label>
+                    Amount tendered
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.amount_tendered}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          amount_tendered: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ) : (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <strong>Payment channel split for amount paid now</strong>
+                    <div style={{ ...styles.editGrid, marginTop: "8px" }}>
+                      {[
+                        ["cash", "Cash"],
+                        ["momo", "MoMo"],
+                        ["bank", "Bank"],
+                        ["other", "Other / Unallocated"],
+                      ].map(([channel, label]) => (
+                        <label key={channel}>
+                          {label}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editForm.payment_allocations?.[channel] || ""}
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                payment_allocations: {
+                                  ...(current.payment_allocations || {}),
+                                  [channel]: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <label>
                   Edit reason
@@ -1568,6 +1750,39 @@ export default function SalesHistoryPage() {
                     }
                     required
                     placeholder="Required"
+                  />
+                </label>
+
+                <label>
+                  Independent approver username
+                  <input
+                    value={editForm.approver_username}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        approver_username: event.target.value,
+                      }))
+                    }
+                    required
+                    autoComplete="off"
+                    placeholder="Different manager/admin"
+                  />
+                </label>
+
+                <label>
+                  Independent approver password
+                  <input
+                    type="password"
+                    value={editForm.approver_password}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        approver_password: event.target.value,
+                      }))
+                    }
+                    required
+                    autoComplete="new-password"
+                    placeholder="Approval password"
                   />
                 </label>
               </div>

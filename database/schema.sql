@@ -390,6 +390,27 @@ CREATE TABLE sale_items (
     INDEX idx_sale_items_product (product_id)
 );
 
+-- sale_payment_allocations
+CREATE TABLE sale_payment_allocations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL,
+    sale_id INT NOT NULL,
+    payment_channel ENUM('cash', 'momo', 'bank', 'other') NOT NULL,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    recorded_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+    FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+    FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    UNIQUE KEY unique_sale_payment_channel (sale_id, payment_channel),
+    INDEX idx_sale_allocation_branch (branch_id),
+    INDEX idx_sale_allocation_sale (sale_id),
+    INDEX idx_sale_allocation_channel (payment_channel)
+);
+
 -- debts
 CREATE TABLE debts (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -448,19 +469,28 @@ CREATE TABLE returns (
     product_id INT NOT NULL,
     quantity INT NOT NULL,
     reason TEXT,
+    return_type ENUM('stock_only', 'refund', 'exchange', 'store_credit') NOT NULL DEFAULT 'stock_only',
+    refund_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    refund_method ENUM('none', 'cash', 'momo', 'bank', 'other') NOT NULL DEFAULT 'none',
+    refund_reference VARCHAR(180) NULL,
     returned_by INT,
+    approved_by INT NULL,
+    approved_at DATETIME NULL,
     returned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
     FOREIGN KEY (returned_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
 
     INDEX idx_returns_branch (branch_id),
     INDEX idx_returns_sale (sale_id),
     INDEX idx_returns_product (product_id),
     INDEX idx_returns_date (returned_at),
-    INDEX idx_returns_user (returned_by)
+    INDEX idx_returns_user (returned_by),
+    INDEX idx_return_refund_method (refund_method),
+    INDEX idx_return_approved_by (approved_by)
 );
 
 -- expenses
@@ -469,6 +499,7 @@ CREATE TABLE expenses (
     branch_id INT NOT NULL DEFAULT 1,
     category VARCHAR(100) NOT NULL,
     amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    payment_method ENUM('cash', 'momo', 'bank', 'other') NOT NULL DEFAULT 'cash',
     description TEXT,
     expense_date DATE NOT NULL,
     recorded_by INT,
@@ -480,6 +511,7 @@ CREATE TABLE expenses (
     INDEX idx_expense_branch (branch_id),
     INDEX idx_expense_date (expense_date),
     INDEX idx_expense_category (category),
+    INDEX idx_expense_payment_method (payment_method),
     INDEX idx_expense_user (recorded_by)
 );
 
@@ -603,6 +635,12 @@ CREATE TABLE daily_closings (
     branch_id INT NOT NULL DEFAULT 1,
     closing_date DATE NOT NULL,
 
+    opening_cash_float DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    cash_deposits DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    cash_withdrawals DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    other_cash_in DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    other_cash_out DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+
     sales_count INT NOT NULL DEFAULT 0,
     sales_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     sales_received DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -634,20 +672,86 @@ CREATE TABLE daily_closings (
     bank_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     other_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     total_counted DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    denomination_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    denomination_json LONGTEXT NULL,
+    counted_confirmed TINYINT(1) NOT NULL DEFAULT 0,
 
     difference_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
 
     notes TEXT,
+    stale_after_close TINYINT(1) NOT NULL DEFAULT 0,
+    stale_detected_at DATETIME NULL,
+    latest_revision_number INT NOT NULL DEFAULT 1,
     closed_by INT,
+    verified_by INT NULL,
+    verified_at DATETIME NULL,
+    verification_status ENUM('submitted', 'verified', 'variance_review', 'revised') NOT NULL DEFAULT 'submitted',
     closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL,
 
     UNIQUE KEY unique_daily_closing_branch_date (branch_id, closing_date),
     INDEX idx_daily_closing_branch (branch_id),
     INDEX idx_daily_closing_date (closing_date),
-    INDEX idx_daily_closing_user (closed_by)
+    INDEX idx_daily_closing_user (closed_by),
+    INDEX idx_daily_closing_stale (stale_after_close),
+    INDEX idx_daily_closing_verified_by (verified_by)
+);
+
+-- sale_change_history
+CREATE TABLE sale_change_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id INT NOT NULL,
+    sale_id INT NOT NULL,
+    change_type ENUM('edit', 'void', 'restore', 'correction') NOT NULL DEFAULT 'edit',
+    reason TEXT NOT NULL,
+    before_snapshot_json LONGTEXT NOT NULL,
+    after_snapshot_json LONGTEXT NULL,
+    changed_by INT NOT NULL,
+    approved_by INT NOT NULL,
+    affected_closing_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+    FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+    FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE RESTRICT,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE RESTRICT,
+    FOREIGN KEY (affected_closing_id) REFERENCES daily_closings(id) ON DELETE SET NULL,
+
+    INDEX idx_sale_change_branch (branch_id),
+    INDEX idx_sale_change_sale (sale_id),
+    INDEX idx_sale_change_created (created_at),
+    INDEX idx_sale_change_closing (affected_closing_id)
+);
+
+-- daily_closing_revisions
+CREATE TABLE daily_closing_revisions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    daily_closing_id INT NOT NULL,
+    branch_id INT NOT NULL,
+    closing_date DATE NOT NULL,
+    revision_number INT NOT NULL,
+    revision_type ENUM('original', 'post_closing_change', 'manager_revision') NOT NULL DEFAULT 'original',
+    reason TEXT NULL,
+    expected_snapshot_json LONGTEXT NOT NULL,
+    counted_snapshot_json LONGTEXT NOT NULL,
+    difference_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    source_entity_type VARCHAR(80) NULL,
+    source_entity_id VARCHAR(80) NULL,
+    changed_by INT NULL,
+    approved_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (daily_closing_id) REFERENCES daily_closings(id) ON DELETE CASCADE,
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+    FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+
+    UNIQUE KEY unique_closing_revision (daily_closing_id, revision_number),
+    INDEX idx_closing_revision_branch_date (branch_id, closing_date),
+    INDEX idx_closing_revision_source (source_entity_type, source_entity_id)
 );
 
 -- audit_signoffs

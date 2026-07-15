@@ -1,9 +1,11 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { markClosingStale } = require("../services/dailyClosingSecurityService");
 
 const router = express.Router();
 
@@ -23,6 +25,63 @@ function cleanText(value) {
   }
 
   return String(value).trim();
+}
+
+
+async function verifyIndependentReturnApprover(
+  connection,
+  { currentUserId, branchId, approverUsername, approverPassword }
+) {
+  const username = cleanText(approverUsername);
+  const password = String(approverPassword || "");
+
+  if (!username || !password) {
+    return { error: "Independent manager username and password are required for a financial refund." };
+  }
+
+  const [rows] = await connection.query(
+    `SELECT id, full_name, username, role, password_hash, is_active,
+            default_branch_id, can_access_all_branches
+     FROM users
+     WHERE username = ?
+     LIMIT 1
+     FOR UPDATE`,
+    [username]
+  );
+  const approver = rows[0];
+
+  if (!approver || Number(approver.is_active) !== 1) {
+    return { error: "Independent refund approver was not found or is inactive." };
+  }
+  if (!["admin", "manager"].includes(String(approver.role || "").toLowerCase())) {
+    return { error: "Refund approver must be an active administrator or manager." };
+  }
+  if (Number(approver.id) === Number(currentUserId)) {
+    return { error: "The person recording the return cannot approve the same financial refund." };
+  }
+
+  if (
+    !Number(approver.can_access_all_branches || 0) &&
+    Number(approver.default_branch_id || 0) !== Number(branchId)
+  ) {
+    const [accessRows] = await connection.query(
+      `SELECT 1
+       FROM user_branch_access
+       WHERE user_id = ? AND branch_id = ? AND can_access = 1
+       LIMIT 1`,
+      [approver.id, branchId]
+    );
+    if (accessRows.length === 0) {
+      return { error: "Refund approver is not authorized for the selected store." };
+    }
+  }
+
+  const passwordMatches = await bcrypt.compare(password, approver.password_hash);
+  if (!passwordMatches) {
+    return { error: "Independent refund approver password is incorrect." };
+  }
+
+  return { approver };
 }
 
 async function logActivity(userId, branchId, action, details) {
@@ -262,11 +321,20 @@ router.get(
           r.product_id,
           r.quantity,
           r.reason,
+          r.return_type,
+          r.refund_amount,
+          r.refund_method,
+          r.refund_reference,
+          r.returned_by,
+          r.approved_by,
+          r.approved_at,
           r.returned_at,
           s.receipt_number,
           COALESCE(s.customer_name, c.name) AS customer_name,
           COALESCE(s.customer_phone, c.phone) AS customer_phone,
           p.name AS product_name,
+          returned_user.full_name AS returned_by_name,
+          approved_user.full_name AS approved_by_name,
           b.name AS branch_name,
           b.location AS branch_location
          FROM returns r
@@ -279,6 +347,8 @@ router.get(
          LEFT JOIN products p
           ON r.product_id = p.id
           AND p.branch_id = r.branch_id
+         LEFT JOIN users returned_user ON r.returned_by = returned_user.id
+         LEFT JOIN users approved_user ON r.approved_by = approved_user.id
          LEFT JOIN branches b ON r.branch_id = b.id
          ${whereClause}
          ORDER BY r.returned_at DESC, r.id DESC`,
@@ -288,7 +358,8 @@ router.get(
       const [summaryRows] = await pool.query(
         `SELECT
           COUNT(*) AS return_count,
-          COALESCE(SUM(r.quantity), 0) AS total_quantity_returned
+          COALESCE(SUM(r.quantity), 0) AS total_quantity_returned,
+          COALESCE(SUM(r.refund_amount), 0) AS total_refunded
          FROM returns r
          LEFT JOIN sales s
           ON r.sale_id = s.id
@@ -312,6 +383,7 @@ router.get(
           total_quantity_returned: Number(
             summaryRows[0].total_quantity_returned || 0
           ),
+          total_refunded: Number(summaryRows[0].total_refunded || 0),
         },
         returns,
       });
@@ -336,7 +408,18 @@ router.post(
 
     try {
       const branchId = getBranchId(req);
-      const { sale_id, product_id, quantity, reason } = req.body;
+      const {
+        sale_id,
+        product_id,
+        quantity,
+        reason,
+        return_type,
+        refund_amount,
+        refund_method,
+        refund_reference,
+        approver_username,
+        approver_password,
+      } = req.body;
 
       if (!sale_id || !product_id || !quantity || !cleanText(reason)) {
         return res.status(400).json({
@@ -349,6 +432,36 @@ router.post(
       const cleanProductId = Number(product_id);
       const cleanQuantity = Number(quantity);
       const cleanReason = cleanText(reason);
+      const allowedReturnTypes = new Set(["stock_only", "refund"]);
+      const cleanReturnType = allowedReturnTypes.has(String(return_type || "stock_only").toLowerCase())
+        ? String(return_type || "stock_only").toLowerCase()
+        : "stock_only";
+      const allowedRefundMethods = new Set(["cash", "momo", "bank", "other"]);
+      const requestedRefundMethod = String(refund_method || "none").toLowerCase();
+      const cleanRefundAmount = Number(refund_amount || 0);
+      const cleanRefundReference = cleanText(refund_reference).slice(0, 180);
+
+      if (!Number.isFinite(cleanRefundAmount) || cleanRefundAmount < 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Refund amount must be a valid non-negative number.",
+        });
+      }
+
+      if (cleanReturnType === "refund") {
+        if (cleanRefundAmount <= 0 || !allowedRefundMethods.has(requestedRefundMethod)) {
+          return res.status(400).json({
+            status: "error",
+            message: "A financial refund requires a positive refund amount and Cash, MoMo, Bank or Other refund method.",
+          });
+        }
+        if (["momo", "bank", "other"].includes(requestedRefundMethod) && !cleanRefundReference) {
+          return res.status(400).json({
+            status: "error",
+            message: "A transaction/reference number is required for MoMo, Bank or Other refunds.",
+          });
+        }
+      }
 
       if (
         !cleanSaleId ||
@@ -370,7 +483,8 @@ router.post(
           branch_id,
           receipt_number,
           sale_status,
-          is_voided
+          is_voided,
+          created_at
          FROM sales
          WHERE id = ?
          AND branch_id = ?
@@ -471,24 +585,67 @@ router.post(
         });
       }
 
-      await connection.query(
+      const estimatedReturnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
+      const finalRefundAmount = cleanReturnType === "refund"
+        ? Number(cleanRefundAmount.toFixed(2))
+        : 0;
+      const finalRefundMethod = cleanReturnType === "refund"
+        ? requestedRefundMethod
+        : "none";
+
+      if (finalRefundAmount - estimatedReturnAmount > 0.009) {
+        await connection.rollback();
+        return res.status(400).json({
+          status: "error",
+          message: `Refund amount cannot exceed the returned item value of GHS ${estimatedReturnAmount.toFixed(2)}.`,
+        });
+      }
+
+      let approver = null;
+      if (cleanReturnType === "refund") {
+        const approvalResult = await verifyIndependentReturnApprover(connection, {
+          currentUserId: req.user.id,
+          branchId,
+          approverUsername: approver_username,
+          approverPassword: approver_password,
+        });
+        if (approvalResult.error) {
+          await connection.rollback();
+          return res.status(403).json({ status: "error", message: approvalResult.error });
+        }
+        approver = approvalResult.approver;
+      }
+
+      const [returnResult] = await connection.query(
         `INSERT INTO returns (
           branch_id,
           sale_id,
           product_id,
           quantity,
           reason,
+          return_type,
+          refund_amount,
+          refund_method,
+          refund_reference,
           returned_by,
+          approved_by,
+          approved_at,
           returned_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           branchId,
           cleanSaleId,
           cleanProductId,
           cleanQuantity,
           cleanReason,
+          cleanReturnType,
+          finalRefundAmount,
+          finalRefundMethod,
+          cleanRefundReference || null,
           req.user.id,
+          approver?.id || null,
+          approver ? new Date() : null,
         ]
       );
 
@@ -500,7 +657,7 @@ router.post(
         [cleanQuantity, cleanProductId, branchId]
       );
 
-      const returnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
+      const returnAmount = estimatedReturnAmount;
 
       await connection.query(
         `INSERT INTO activity_log (branch_id, user_id, action, details)
@@ -509,9 +666,19 @@ router.post(
           branchId,
           req.user.id,
           "CREATE_RETURN",
-          `Returned ${cleanQuantity} x ${saleItem.product_name} from receipt ${sales[0].receipt_number}`,
+          `Returned ${cleanQuantity} x ${saleItem.product_name} from receipt ${sales[0].receipt_number}. Type: ${cleanReturnType}. Refund: GHS ${finalRefundAmount.toFixed(2)} by ${finalRefundMethod}${approver ? ` approved by ${approver.full_name}` : ""}`,
         ]
       );
+
+      const affectedClosing = await markClosingStale(connection, {
+        branchId,
+        transactionDate: new Date(),
+        reason: `A ${cleanReturnType} return was recorded after closing for receipt ${sales[0].receipt_number}: ${cleanQuantity} x ${saleItem.product_name}. Refund GHS ${finalRefundAmount.toFixed(2)} by ${finalRefundMethod}.`,
+        sourceEntityType: "return",
+        sourceEntityId: returnResult.insertId,
+        changedBy: req.user.id,
+        approvedBy: approver?.id || null,
+      });
 
       await connection.commit();
 
@@ -525,8 +692,14 @@ router.post(
           product_name: saleItem.product_name,
           quantity: cleanQuantity,
           reason: cleanReason,
+          return_type: cleanReturnType,
           estimated_return_amount: returnAmount,
+          refund_amount: finalRefundAmount,
+          refund_method: finalRefundMethod,
+          refund_reference: cleanRefundReference || null,
+          approved_by: approver?.full_name || null,
         },
+        affected_closing: affectedClosing,
       });
     } catch (error) {
       await connection.rollback();

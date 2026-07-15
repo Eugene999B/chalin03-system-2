@@ -1,4 +1,6 @@
 const express = require("express");
+const ExcelJS = require("exceljs");
+const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -38,6 +40,83 @@ function addFilter({ where, params }, condition, value) {
   if (!cleanValue) return;
   where.push(condition);
   params.push(cleanValue);
+}
+
+
+const ACTIVITY_CATEGORIES = [
+  ["authentication", "Logins & Account Security"],
+  ["sales", "Sales & Receipts"],
+  ["products_inventory", "Products, Stock & Transfers"],
+  ["daily_closing", "Daily Closing & Cash Control"],
+  ["debts_payments", "Debts & Payments"],
+  ["expenses_purchases", "Expenses & Purchases"],
+  ["returns", "Returns & Refunds"],
+  ["users_access", "Users, Roles & Access"],
+  ["audit_security", "Audit, Approvals & Security"],
+  ["backup_export", "Backups, Restores & Exports"],
+  ["mining", "Mining Operations"],
+  ["equipment_hire", "Equipment Hire"],
+  ["system_other", "Other System Activity"],
+];
+
+function activityCategorySql(columns = new Set()) {
+  const workspaceSql = columns.has("workspace_code")
+    ? "LOWER(COALESCE(al.workspace_code, ''))"
+    : "''";
+  const entitySql = columns.has("entity_type")
+    ? "LOWER(COALESCE(al.entity_type, ''))"
+    : "''";
+
+  return `CASE
+    WHEN UPPER(COALESCE(al.action, '')) REGEXP 'LOGIN|LOGOUT|PASSWORD|TOKEN|AUTH' THEN 'authentication'
+    WHEN ${workspaceSql} = 'mining' THEN 'mining'
+    WHEN ${workspaceSql} = 'equipment_hire' THEN 'equipment_hire'
+    WHEN ${entitySql} IN ('daily_closing','cash_control')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'DAILY_CLOSING|CLOSING|CASH_COUNT' THEN 'daily_closing'
+    WHEN ${entitySql} IN ('audit','audit_signoff','audit_unlock_request','security')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'AUDIT|APPROV|SECURITY|VOID|EDIT_SALE|CORRECTION|UNLOCK' THEN 'audit_security'
+    WHEN ${entitySql} IN ('return','refund')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'RETURN|REFUND' THEN 'returns'
+    WHEN ${entitySql} IN ('sale','receipt')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'SALE|RECEIPT' THEN 'sales'
+    WHEN ${entitySql} IN ('product','stock','stock_transfer','stock_adjustment')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'PRODUCT|STOCK|TRANSFER|ADJUSTMENT' THEN 'products_inventory'
+    WHEN ${entitySql} IN ('debt','debt_payment','customer_statement')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'DEBT|PAYMENT|STATEMENT' THEN 'debts_payments'
+    WHEN ${entitySql} IN ('expense','purchase','supplier')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'EXPENSE|PURCHASE|SUPPLIER' THEN 'expenses_purchases'
+    WHEN ${entitySql} IN ('user','role','permission','workspace_access')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'USER|ROLE|PERMISSION|ACCESS' THEN 'users_access'
+    WHEN ${entitySql} IN ('backup','restore','export')
+      OR UPPER(COALESCE(al.action, '')) REGEXP 'BACKUP|RESTORE|EXPORT' THEN 'backup_export'
+    ELSE 'system_other'
+  END`;
+}
+
+function categoryLabel(value) {
+  return ACTIVITY_CATEGORIES.find(([key]) => key === value)?.[1] || "Other System Activity";
+}
+
+function safeSheetName(value) {
+  return String(value || "Activity").replace(/[\\/*?:\[\]]/g, " ").slice(0, 31) || "Activity";
+}
+
+function safeFilePart(value) {
+  return String(value || "all").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "all";
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatAuditDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value || "") : date.toLocaleString("en-GB", { hour12: false });
 }
 
 async function loadUserScope(req, columns) {
@@ -157,6 +236,11 @@ function buildAuditFilters(req, columns, scope) {
   addFilter({ where, params }, "DATE(al.created_at) >= ?", req.query.from);
   addFilter({ where, params }, "DATE(al.created_at) <= ?", req.query.to);
   addFilter({ where, params }, "al.action = ?", req.query.action);
+  const category = cleanText(req.query.category);
+  if (category) {
+    where.push(`(${activityCategorySql(columns)}) = ?`);
+    params.push(category);
+  }
   addFilter({ where, params }, "u.role = ?", req.query.role);
   addFilter({ where, params }, "al.user_id = ?", positiveInt(req.query.user_id));
 
@@ -253,6 +337,7 @@ function buildAuditSelect(columns) {
     ${selectColumn(columns, "user_id")},
     al.action,
     al.details,
+    ${activityCategorySql(columns)} AS activity_category,
     ${selectColumn(columns, "ip_address")},
     al.created_at,
     ${selectColumn(columns, "workspace_code")},
@@ -317,9 +402,23 @@ async function loadAuditRows(req, { exportMode = false } = {}) {
     params
   );
 
+  const [categoryRows] = await pool.query(
+    `SELECT ${activityCategorySql(columns)} AS category, COUNT(*) AS count
+     FROM activity_log al
+     LEFT JOIN users u ON al.user_id = u.id
+     LEFT JOIN branches b ON al.branch_id = b.id
+     ${whereSql}
+     GROUP BY category
+     ORDER BY category ASC`,
+    params
+  );
+
   return {
     logs,
     actions,
+    categories: ACTIVITY_CATEGORIES.map(([key, label]) => ({
+      key, label, count: Number(categoryRows.find((row) => row.category === key)?.count || 0),
+    })),
     summary: {
       total_logs: Number(summary?.total_logs || 0),
       active_users: Number(summary?.active_users || 0),
@@ -338,6 +437,195 @@ async function loadAuditRows(req, { exportMode = false } = {}) {
 
 router.use(requireAuth);
 
+
+function styleAuditWorksheet(worksheet, title, periodText, generatedBy) {
+  worksheet.mergeCells("A1:M1");
+  worksheet.getCell("A1").value = "CHALIN 03 COMPANY LIMITED";
+  worksheet.getCell("A1").font = { bold: true, size: 18, color: { argb: "FFFFFFFF" } };
+  worksheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B1F36" } };
+  worksheet.getCell("A1").alignment = { horizontal: "center" };
+  worksheet.mergeCells("A2:M2");
+  worksheet.getCell("A2").value = title;
+  worksheet.getCell("A2").font = { bold: true, size: 14, color: { argb: "FF92400E" } };
+  worksheet.getCell("A2").alignment = { horizontal: "center" };
+  worksheet.mergeCells("A3:M3");
+  worksheet.getCell("A3").value = `${periodText} | Generated by ${generatedBy}`;
+  worksheet.getCell("A3").alignment = { horizontal: "center" };
+  worksheet.getRow(5).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  worksheet.getRow(5).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
+  worksheet.views = [{ state: "frozen", ySplit: 5 }];
+  worksheet.autoFilter = { from: "A5", to: "M5" };
+  worksheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+  worksheet.headerFooter.oddFooter = "Chalin 03 Audit Evidence | Page &P of &N";
+}
+
+function addAuditRowsToWorksheet(worksheet, rows, startRow = 5) {
+  const columns = [
+    ["Date & Time", "created_at", 22], ["Category", "activity_category", 22],
+    ["User", "full_name", 22], ["Username", "username", 18], ["Role", "role", 14],
+    ["Action", "action", 24], ["Outcome", "outcome", 12], ["Severity", "severity", 12],
+    ["Entity", "entity_type", 16], ["Entity ID", "entity_id", 14], ["Branch", "branch_code", 12],
+    ["Request ID", "request_id", 18], ["Details", "details", 60],
+  ];
+  const header = worksheet.getRow(startRow);
+  columns.forEach(([label, , width], index) => {
+    worksheet.getColumn(index + 1).width = width;
+    header.getCell(index + 1).value = label;
+  });
+  rows.forEach((row, rowIndex) => {
+    const target = worksheet.getRow(startRow + 1 + rowIndex);
+    columns.forEach(([, key], index) => {
+      target.getCell(index + 1).value = key === "created_at" ? formatAuditDate(row[key]) : key === "activity_category" ? categoryLabel(row[key]) : row[key] ?? null;
+    });
+    target.alignment = { vertical: "top", wrapText: true };
+    if (rowIndex % 2 === 1) target.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+  });
+}
+
+function createAuditWorkbook(logs, req) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Chalin 03 Company Limited";
+  workbook.created = new Date();
+  const generatedBy = req.user?.full_name || req.user?.username || "Authorized user";
+  const periodText = `${req.query.from || "All dates"} to ${req.query.to || "Current"}`;
+
+  const summary = workbook.addWorksheet("Executive Summary");
+  summary.mergeCells("A1:F1");
+  summary.getCell("A1").value = "CHALIN 03 COMPANY LIMITED - AUDIT ACTIVITY CONTROL REPORT";
+  summary.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  summary.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B1F36" } };
+  summary.getCell("A1").alignment = { horizontal: "center" };
+  summary.addRow([]);
+  summary.addRow(["Period", periodText]);
+  summary.addRow(["Generated by", generatedBy]);
+  summary.addRow(["Total records", logs.length]);
+  summary.addRow([]);
+  summary.addRow(["Category", "Records"]);
+  ACTIVITY_CATEGORIES.forEach(([key, label]) => summary.addRow([label, logs.filter((row) => row.activity_category === key).length]));
+  summary.columns = [{ width: 40 }, { width: 18 }];
+  summary.getRow(7).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  summary.getRow(7).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1D4ED8" } };
+  summary.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1 };
+
+  const all = workbook.addWorksheet("All Activity");
+  styleAuditWorksheet(all, "All Audit Activity", periodText, generatedBy);
+  addAuditRowsToWorksheet(all, logs);
+
+  for (const [key, label] of ACTIVITY_CATEGORIES) {
+    const rows = logs.filter((row) => row.activity_category === key);
+    if (!rows.length) continue;
+    const sheet = workbook.addWorksheet(safeSheetName(label));
+    styleAuditWorksheet(sheet, label, periodText, generatedBy);
+    addAuditRowsToWorksheet(sheet, rows);
+  }
+  return workbook;
+}
+
+function createAuditPdf(logs, req, stream) {
+  const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 32, bufferPages: true });
+  doc.pipe(stream);
+  const generatedBy = req.user?.full_name || req.user?.username || "Authorized user";
+  const periodText = `${req.query.from || "All dates"} to ${req.query.to || "Current"}`;
+
+  function pageHeader(title) {
+    doc.font("Helvetica-Bold").fontSize(16).fillColor("#0B1F36").text("CHALIN 03 COMPANY LIMITED", { align: "center" });
+    doc.fontSize(12).fillColor("#92400E").text(title, { align: "center" });
+    doc.font("Helvetica").fontSize(8).fillColor("#475569").text(`${periodText} | Generated by ${generatedBy}`, { align: "center" });
+    doc.moveDown(0.5);
+  }
+
+  pageHeader("AUDIT ACTIVITY CONTROL REPORT");
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#0F172A").text(`Total records: ${logs.length}`);
+  doc.moveDown(0.4);
+  for (const [key, label] of ACTIVITY_CATEGORIES) {
+    const rows = logs.filter((row) => row.activity_category === key);
+    if (!rows.length) continue;
+    if (doc.y > 500) { doc.addPage(); pageHeader("AUDIT ACTIVITY CONTROL REPORT"); }
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#1D4ED8").text(`${label} (${rows.length})`);
+    for (const row of rows) {
+      if (doc.y > 525) { doc.addPage(); pageHeader(label); }
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#0F172A").text(`${formatAuditDate(row.created_at)} | ${row.full_name || row.username || "System"} | ${row.action || "Activity"}`);
+      doc.font("Helvetica").fontSize(7.5).fillColor("#334155").text(`${row.details || "No details"} | Outcome: ${row.outcome || "success"} | Severity: ${row.severity || "info"}`, { width: 770 });
+      doc.moveDown(0.25);
+    }
+    doc.moveDown(0.4);
+  }
+  const pages = doc.bufferedPageRange();
+  for (let i = 0; i < pages.count; i += 1) {
+    doc.switchToPage(i);
+    const footerY = doc.page.height - 20;
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.font("Helvetica").fontSize(7).fillColor("#64748B").text(
+      `Page ${i + 1} of ${pages.count}`,
+      32,
+      footerY,
+      { width: doc.page.width - 64, align: "right", lineBreak: false }
+    );
+    doc.page.margins.bottom = originalBottomMargin;
+  }
+  doc.end();
+}
+
+function createAuditWordHtml(logs, req) {
+  const generatedBy = req.user?.full_name || req.user?.username || "Authorized user";
+  const periodText = `${req.query.from || "All dates"} to ${req.query.to || "Current"}`;
+  const sections = ACTIVITY_CATEGORIES.map(([key, label]) => {
+    const rows = logs.filter((row) => row.activity_category === key);
+    if (!rows.length) return "";
+    const body = rows.map((row) => `<tr><td>${htmlEscape(formatAuditDate(row.created_at))}</td><td>${htmlEscape(row.full_name || row.username || "System")}</td><td>${htmlEscape(row.action)}</td><td>${htmlEscape(row.details)}</td><td>${htmlEscape(row.outcome || "success")}</td></tr>`).join("");
+    return `<h2>${htmlEscape(label)} (${rows.length})</h2><table><thead><tr><th>Date & Time</th><th>User</th><th>Action</th><th>Details</th><th>Outcome</th></tr></thead><tbody>${body}</tbody></table>`;
+  }).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#0f172a}h1{text-align:center;color:#0b1f36}h2{color:#1d4ed8;border-bottom:2px solid #dbeafe;padding-bottom:4px}p.meta{text-align:center;color:#475569}table{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:9pt}th{background:#0b1f36;color:white}th,td{border:1px solid #cbd5e1;padding:5px;vertical-align:top}tr:nth-child(even){background:#f8fafc}</style></head><body><h1>CHALIN 03 COMPANY LIMITED<br>AUDIT ACTIVITY CONTROL REPORT</h1><p class="meta">${htmlEscape(periodText)} | Generated by ${htmlEscape(generatedBy)} | ${logs.length} record(s)</p>${sections || "<p>No matching activity records.</p>"}</body></html>`;
+}
+
+router.get(
+  "/export.xlsx",
+  requirePermission("audit.export"),
+  async (req, res, next) => {
+    try {
+      const { logs } = await loadAuditRows(req, { exportMode: true });
+      const workbook = createAuditWorkbook(logs, req);
+      const category = safeFilePart(req.query.category || "all");
+      const filename = `chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    } catch (error) { return next(error); }
+  }
+);
+
+router.get(
+  "/export.pdf",
+  requirePermission("audit.export"),
+  async (req, res, next) => {
+    try {
+      const { logs } = await loadAuditRows(req, { exportMode: true });
+      const category = safeFilePart(req.query.category || "all");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.pdf"`);
+      createAuditPdf(logs, req, res);
+      return undefined;
+    } catch (error) { return next(error); }
+  }
+);
+
+router.get(
+  "/export.doc",
+  requirePermission("audit.export"),
+  async (req, res, next) => {
+    try {
+      const { logs } = await loadAuditRows(req, { exportMode: true });
+      const category = safeFilePart(req.query.category || "all");
+      const html = createAuditWordHtml(logs, req);
+      res.setHeader("Content-Type", "application/msword; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.doc"`);
+      return res.send(Buffer.from(`\uFEFF${html}`, "utf8"));
+    } catch (error) { return next(error); }
+  }
+);
+
 router.get(
   "/export.csv",
   requirePermission("audit.export"),
@@ -347,6 +635,7 @@ router.get(
       const csv = rowsToCsv(
         [
           { key: "created_at", label: "Created At" },
+          { key: "activity_category", label: "Category" },
           { key: "workspace_code", label: "Workspace" },
           { key: "branch_code", label: "Branch" },
           { key: "username", label: "Username" },
@@ -398,6 +687,10 @@ router.get(
 router.__private = {
   buildAuditFilters,
   loadUserScope,
+  createAuditWorkbook,
+  createAuditPdf,
+  createAuditWordHtml,
+  categoryLabel,
 };
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const express = require("express");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
+const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -49,6 +50,9 @@ function toMoney(value) {
 
 function toCountedMoney(value, fallbackValue) {
   if (value === undefined || value === null || value === "") {
+    if (fallbackValue === undefined || fallbackValue === null || fallbackValue === "") {
+      return null;
+    }
     return Math.max(0, toMoney(fallbackValue));
   }
 
@@ -59,6 +63,65 @@ function toCountedMoney(value, fallbackValue) {
   }
 
   return Number(number.toFixed(2));
+}
+
+function getCashControls(source = {}) {
+  const fields = [
+    "opening_cash_float",
+    "cash_deposits",
+    "cash_withdrawals",
+    "other_cash_in",
+    "other_cash_out",
+  ];
+  const result = {};
+  for (const field of fields) {
+    const value = toCountedMoney(source[field], 0);
+    result[field] = value === null ? 0 : value;
+  }
+  return result;
+}
+
+function parseDenominations(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseSnapshotJson(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function revisionSnapshotValue(snapshot, key, fallback = 0) {
+  const value = snapshot?.[key];
+  return value === undefined || value === null || value === ""
+    ? fallback
+    : value;
+}
+
+function calculateDenominationTotal(denominations = {}) {
+  const values = {
+    note_200: 200, note_100: 100, note_50: 50, note_20: 20,
+    note_10: 10, note_5: 5, note_2: 2, note_1: 1, coins: 1,
+  };
+  let total = 0;
+  for (const [key, faceValue] of Object.entries(values)) {
+    const quantity = Number(denominations[key] || 0);
+    if (!Number.isFinite(quantity) || quantity < 0) return null;
+    total += key === "coins" ? quantity : Math.floor(quantity) * faceValue;
+  }
+  return toMoney(total);
 }
 
 function cleanText(value, maxLength = 5000) {
@@ -136,8 +199,8 @@ async function logActivity(connection, userId, branchId, action, details) {
   });
 }
 
-async function getBranchDetails(branchId) {
-  const [rows] = await pool.query(
+async function getBranchDetails(branchId, connection = pool) {
+  const [rows] = await connection.query(
     `SELECT id, code, name, location
      FROM branches
      WHERE id = ?
@@ -160,11 +223,13 @@ async function getExistingClosing(branchId, closingDate) {
     `SELECT
       dc.*,
       u.full_name AS closed_by_name,
+      vu.full_name AS verified_by_name,
       b.code AS branch_code,
       b.name AS branch_name,
       b.location AS branch_location
      FROM daily_closings dc
      LEFT JOIN users u ON dc.closed_by = u.id
+     LEFT JOIN users vu ON dc.verified_by = vu.id
      LEFT JOIN branches b ON dc.branch_id = b.id
      WHERE dc.branch_id = ?
      AND dc.closing_date = ?
@@ -173,6 +238,30 @@ async function getExistingClosing(branchId, closingDate) {
   );
 
   return rows[0] || null;
+}
+
+
+async function getClosingRevisions(existingClosing, branchId) {
+  if (!existingClosing?.id) return [];
+
+  const [rows] = await pool.query(
+    `SELECT
+      dcr.*,
+      changer.full_name AS changed_by_name,
+      approver.full_name AS approved_by_name
+     FROM daily_closing_revisions dcr
+     LEFT JOIN users changer ON dcr.changed_by = changer.id
+     LEFT JOIN users approver ON dcr.approved_by = approver.id
+     WHERE dcr.daily_closing_id = ? AND dcr.branch_id = ?
+     ORDER BY dcr.revision_number ASC`,
+    [existingClosing.id, branchId]
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    expected_snapshot: parseSnapshotJson(row.expected_snapshot_json),
+    counted_snapshot: parseSnapshotJson(row.counted_snapshot_json),
+  }));
 }
 
 function createEmptyPaymentGroup(key, label) {
@@ -231,10 +320,10 @@ function findPaymentGroup(groups, key) {
   return groups.find((group) => group.key === key) || createEmptyPaymentGroup(key, key);
 }
 
-async function calculateClosingSummary(branchId, closingDate) {
-  const branch = await getBranchDetails(branchId);
+async function calculateClosingSummary(branchId, closingDate, cashControlSource = {}, connection = pool) {
+  const branch = await getBranchDetails(branchId, connection);
 
-  const [salesTransactions] = await pool.query(
+  const [salesTransactions] = await connection.query(
     `SELECT
       s.id,
       s.receipt_number,
@@ -249,6 +338,10 @@ async function calculateClosingSummary(branchId, closingDate) {
       s.amount_paid,
       s.change_due,
       s.balance,
+      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'cash'), CASE WHEN s.payment_type = 'cash' THEN s.amount_paid ELSE 0 END) AS cash_received,
+      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'momo'), CASE WHEN s.payment_type = 'momo' THEN s.amount_paid ELSE 0 END) AS momo_received,
+      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'bank'), CASE WHEN s.payment_type = 'bank' THEN s.amount_paid ELSE 0 END) AS bank_received,
+      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'other'), CASE WHEN s.payment_type IN ('mixed','credit') THEN s.amount_paid ELSE 0 END) AS other_received,
       s.created_at,
       COALESCE(u.full_name, 'System') AS staff_name
      FROM sales s
@@ -264,7 +357,7 @@ async function calculateClosingSummary(branchId, closingDate) {
     [branchId, closingDate]
   );
 
-  const [debtPayments] = await pool.query(
+  const [debtPayments] = await connection.query(
     `SELECT
       dp.id,
       dp.amount,
@@ -289,11 +382,12 @@ async function calculateClosingSummary(branchId, closingDate) {
     [branchId, branchId, branchId, closingDate]
   );
 
-  const [expenses] = await pool.query(
+  const [expenses] = await connection.query(
     `SELECT
       e.id,
       e.category,
       e.amount,
+      e.payment_method,
       e.description,
       e.expense_date,
       e.created_at,
@@ -306,7 +400,35 @@ async function calculateClosingSummary(branchId, closingDate) {
     [branchId, closingDate]
   );
 
-  const [exceptions] = await pool.query(
+  const [returns] = await connection.query(
+    `SELECT
+      r.id,
+      r.sale_id,
+      r.product_id,
+      r.quantity,
+      r.reason,
+      r.return_type,
+      r.refund_amount,
+      r.refund_method,
+      r.refund_reference,
+      r.returned_at,
+      s.receipt_number,
+      COALESCE(NULLIF(s.customer_name, ''), 'CASH CUSTOMER') AS customer_name,
+      p.name AS product_name,
+      returned_user.full_name AS returned_by_name,
+      approved_user.full_name AS approved_by_name
+     FROM returns r
+     INNER JOIN sales s ON r.sale_id = s.id AND r.branch_id = s.branch_id
+     LEFT JOIN products p ON r.product_id = p.id AND r.branch_id = p.branch_id
+     LEFT JOIN users returned_user ON r.returned_by = returned_user.id
+     LEFT JOIN users approved_user ON r.approved_by = approved_user.id
+     WHERE r.branch_id = ?
+     AND DATE(r.returned_at) = ?
+     ORDER BY r.returned_at ASC, r.id ASC`,
+    [branchId, closingDate]
+  );
+
+  const [exceptions] = await connection.query(
     `SELECT
       s.id,
       s.receipt_number,
@@ -332,6 +454,31 @@ async function calculateClosingSummary(branchId, closingDate) {
      ORDER BY s.created_at ASC, s.id ASC`,
     [branchId, closingDate]
   );
+
+  const [saleChanges] = await connection.query(
+    `SELECT
+      sch.id,
+      sch.change_type,
+      sch.reason,
+      sch.created_at,
+      sch.affected_closing_id,
+      s.id AS sale_id,
+      s.receipt_number,
+      s.customer_name,
+      s.total,
+      s.created_at AS sale_created_at,
+      changer.full_name AS changed_by_name,
+      approver.full_name AS approved_by_name
+     FROM sale_change_history sch
+     INNER JOIN sales s ON sch.sale_id = s.id AND sch.branch_id = s.branch_id
+     LEFT JOIN users changer ON sch.changed_by = changer.id
+     LEFT JOIN users approver ON sch.approved_by = approver.id
+     WHERE sch.branch_id = ?
+     AND DATE(s.created_at) = ?
+     ORDER BY sch.created_at ASC, sch.id ASC`,
+    [branchId, closingDate]
+  );
+
 
   const paymentGroups = buildPaymentGroups(salesTransactions);
   const cashGroup = findPaymentGroup(paymentGroups, "cash");
@@ -389,24 +536,116 @@ async function calculateClosingSummary(branchId, closingDate) {
       .filter((payment) => payment.payment_method === "bank")
       .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
   );
+  const debtOther = toMoney(
+    debtPayments
+      .filter((payment) => !["cash", "momo", "bank"].includes(payment.payment_method))
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+  );
 
   const expensesCount = expenses.length;
   const expensesTotal = toMoney(
     expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
   );
 
-  // The current schema does not record a payment method for expenses, so the
-  // closing treats expenses as cash deductions. Mixed-sale and initial credit
-  // receipts also have no channel split, so they remain in Unallocated / Mixed.
-  const expectedCash = toMoney(cashGroup.amount_received + debtCash - expensesTotal);
-  const expectedMomo = toMoney(momoGroup.amount_received + debtMomo);
-  const expectedBank = toMoney(bankGroup.amount_received + debtBank);
-  const expectedOther = toMoney(
-    mixedGroup.amount_received + creditGroup.amount_received
+  const returnCount = returns.length;
+  const returnQuantity = returns.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const refundTotal = toMoney(
+    returns.reduce((sum, item) => sum + Number(item.refund_amount || 0), 0)
   );
-  const expectedTotal = toMoney(
-    salesReceived + debtPaymentsTotal - expensesTotal
+  const refundCash = toMoney(returns.filter((item) => item.refund_method === "cash").reduce((sum, item) => sum + Number(item.refund_amount || 0), 0));
+  const refundMomo = toMoney(returns.filter((item) => item.refund_method === "momo").reduce((sum, item) => sum + Number(item.refund_amount || 0), 0));
+  const refundBank = toMoney(returns.filter((item) => item.refund_method === "bank").reduce((sum, item) => sum + Number(item.refund_amount || 0), 0));
+  const refundOther = toMoney(returns.filter((item) => item.refund_method === "other").reduce((sum, item) => sum + Number(item.refund_amount || 0), 0));
+
+  const saleCashReceived = toMoney(
+    salesTransactions.reduce((sum, sale) => sum + Number(sale.cash_received || 0), 0)
   );
+  const saleMomoReceived = toMoney(
+    salesTransactions.reduce((sum, sale) => sum + Number(sale.momo_received || 0), 0)
+  );
+  const saleBankReceived = toMoney(
+    salesTransactions.reduce((sum, sale) => sum + Number(sale.bank_received || 0), 0)
+  );
+  const saleOtherReceived = toMoney(
+    salesTransactions.reduce((sum, sale) => sum + Number(sale.other_received || 0), 0)
+  );
+
+  const expenseCash = toMoney(expenses.filter((item) => item.payment_method === "cash").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseMomo = toMoney(expenses.filter((item) => item.payment_method === "momo").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseBank = toMoney(expenses.filter((item) => item.payment_method === "bank").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseOther = toMoney(expenses.filter((item) => !["cash", "momo", "bank"].includes(item.payment_method)).reduce((sum, item) => sum + Number(item.amount || 0), 0));
+
+  const cashControls = getCashControls(cashControlSource);
+  const expectedCash = toMoney(
+    cashControls.opening_cash_float + saleCashReceived + debtCash + cashControls.other_cash_in
+      - expenseCash - refundCash - cashControls.cash_deposits - cashControls.cash_withdrawals - cashControls.other_cash_out
+  );
+  const expectedMomo = toMoney(saleMomoReceived + debtMomo - expenseMomo - refundMomo);
+  const expectedBank = toMoney(saleBankReceived + debtBank - expenseBank - refundBank);
+  const expectedOther = toMoney(saleOtherReceived + debtOther - expenseOther - refundOther);
+  const expectedTotal = toMoney(expectedCash + expectedMomo + expectedBank + expectedOther);
+
+  const riskFlags = [];
+  for (const sale of salesTransactions) {
+    const subtotalValue = Number(sale.subtotal || 0);
+    const discountValue = Number(sale.discount_amount || 0);
+    const discountRate = subtotalValue > 0 ? discountValue / subtotalValue : 0;
+    if (discountValue >= 100 || discountRate >= 0.1) {
+      riskFlags.push({
+        id: `discount-${sale.id}`,
+        risk_type: "large_discount",
+        severity: discountRate >= 0.2 || discountValue >= 500 ? "high" : "review",
+        receipt_number: sale.receipt_number,
+        customer_name: sale.customer_name,
+        amount: discountValue,
+        occurred_at: sale.created_at,
+        details: `Discount GHS ${discountValue.toFixed(2)} (${(discountRate * 100).toFixed(1)}% of subtotal).`,
+      });
+    }
+
+    const saleHour = new Date(sale.created_at).getHours();
+    if (saleHour < 6 || saleHour >= 21) {
+      riskFlags.push({
+        id: `after-hours-${sale.id}`,
+        risk_type: "after_hours_sale",
+        severity: "review",
+        receipt_number: sale.receipt_number,
+        customer_name: sale.customer_name,
+        amount: Number(sale.total || 0),
+        occurred_at: sale.created_at,
+        details: "Sale was recorded outside the normal 6:00 AM to 9:00 PM review window.",
+      });
+    }
+  }
+
+  for (const change of saleChanges) {
+    riskFlags.push({
+      id: `sale-change-${change.id}`,
+      risk_type: `sale_${change.change_type || "change"}`,
+      severity: "high",
+      receipt_number: change.receipt_number,
+      customer_name: change.customer_name,
+      amount: Number(change.total || 0),
+      occurred_at: change.created_at,
+      details: `${String(change.change_type || "change").toUpperCase()} approved by ${change.approved_by_name || "unknown approver"}. Reason: ${change.reason || "No reason recorded"}`,
+      changed_by_name: change.changed_by_name,
+      approved_by_name: change.approved_by_name,
+      affected_closing_id: change.affected_closing_id,
+    });
+  }
+
+  for (const item of returns) {
+    riskFlags.push({
+      id: `return-${item.id}`,
+      risk_type: Number(item.refund_amount || 0) > 0 ? "approved_refund" : `return_${item.return_type || "stock_only"}`,
+      severity: Number(item.refund_amount || 0) > 0 ? "high" : "review",
+      receipt_number: item.receipt_number,
+      customer_name: item.customer_name,
+      amount: Number(item.refund_amount || 0),
+      occurred_at: item.returned_at,
+      details: `${String(item.return_type || "stock_only").replaceAll("_", " ").toUpperCase()} return: ${item.quantity} x ${item.product_name || "item"}. Refund ${item.refund_method || "none"} GHS ${Number(item.refund_amount || 0).toFixed(2)}. Approved by ${item.approved_by_name || "not required"}.`,
+    });
+  }
 
   const expenseGroupsMap = new Map();
   for (const expense of expenses) {
@@ -446,16 +685,35 @@ async function calculateClosingSummary(branchId, closingDate) {
     mixed_sales: mixedGroup.amount_received,
     credit_sales_total: creditGroup.net_sales,
     credit_sales_received: creditGroup.amount_received,
+    sale_cash_received: saleCashReceived,
+    sale_momo_received: saleMomoReceived,
+    sale_bank_received: saleBankReceived,
+    sale_other_received: saleOtherReceived,
 
     debt_payment_count: debtPaymentCount,
     debt_payments_total: debtPaymentsTotal,
     debt_cash: debtCash,
     debt_momo: debtMomo,
     debt_bank: debtBank,
+    debt_other: debtOther,
 
     expenses_count: expensesCount,
     expenses_total: expensesTotal,
+    expense_cash: expenseCash,
+    expense_momo: expenseMomo,
+    expense_bank: expenseBank,
+    expense_other: expenseOther,
 
+    return_count: returnCount,
+    return_quantity: returnQuantity,
+    refund_total: refundTotal,
+    refund_cash: refundCash,
+    refund_momo: refundMomo,
+    refund_bank: refundBank,
+    refund_other: refundOther,
+    returns,
+
+    ...cashControls,
     expected_cash: expectedCash,
     expected_momo: expectedMomo,
     expected_bank: expectedBank,
@@ -477,10 +735,14 @@ async function calculateClosingSummary(branchId, closingDate) {
     ),
     exceptions,
     exception_count: exceptions.length,
+    risk_flags: riskFlags.sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at)),
+    risk_flag_count: riskFlags.length,
     calculation_notes: [
-      "Expenses are deducted from expected cash because expense records currently do not store a payment method.",
-      "Mixed-sale receipts and money received at the time of a credit sale are shown under Unallocated / Mixed because the current sales table does not store a channel split.",
+      "Physical cash is calculated separately from MoMo, bank and other channels.",
+      "Mixed and credit-sale payments use their recorded payment-channel allocation. Historical unallocated payments remain under Other / Unallocated.",
+      "Opening float, deposits, withdrawals and other cash movements are included in expected physical cash.",
       "Debt collections are separated from new sales so old debt payments are not confused with today's credit created.",
+      "Approved return refunds are deducted from the payment channel used for the refund on the date the return was recorded.",
     ],
   };
 }
@@ -488,19 +750,19 @@ async function calculateClosingSummary(branchId, closingDate) {
 function getCountedSnapshot(summary, existingClosing, source = {}) {
   const cash = toCountedMoney(
     source.cash_counted,
-    existingClosing?.cash_counted ?? summary.expected_cash
+    existingClosing?.cash_counted ?? 0
   );
   const momo = toCountedMoney(
     source.momo_counted,
-    existingClosing?.momo_counted ?? summary.expected_momo
+    existingClosing?.momo_counted ?? 0
   );
   const bank = toCountedMoney(
     source.bank_counted,
-    existingClosing?.bank_counted ?? summary.expected_bank
+    existingClosing?.bank_counted ?? 0
   );
   const other = toCountedMoney(
     source.other_counted,
-    existingClosing?.other_counted ?? summary.expected_other
+    existingClosing?.other_counted ?? 0
   );
 
   if ([cash, momo, bank, other].some((value) => value === null)) {
@@ -522,7 +784,7 @@ function buildReconciliation(summary, counted) {
   const rows = [
     {
       key: "cash",
-      label: "Cash",
+      label: "Physical Cash",
       expected: toMoney(summary.expected_cash),
       counted: toMoney(counted.cash),
     },
@@ -561,15 +823,25 @@ function getClosingStatus(existingClosing, differenceTotal) {
   const balanced = Math.abs(Number(differenceTotal || 0)) < 0.01;
 
   if (existingClosing) {
-    return balanced ? "Closed - Balanced" : "Closed - Variance";
+    if (Number(existingClosing.stale_after_close || 0) === 1) {
+      return "Closed - Changed After Closing";
+    }
+    if (Number(existingClosing.counted_confirmed || 0) !== 1) {
+      return "Closed - Legacy Count Unconfirmed";
+    }
+    if (existingClosing.verification_status === "verified") {
+      return balanced ? "Closed - Independently Verified" : "Closed - Verified Variance";
+    }
+    return balanced ? "Closed - Awaiting Verification" : "Closed - Variance Review";
   }
 
-  return balanced ? "Ready to Close" : "Draft - Variance";
+  return balanced ? "Draft - Count Required" : "Draft - Variance";
 }
 
 async function buildClosingReportData(branchId, closingDate, countedSource = {}) {
-  const summary = await calculateClosingSummary(branchId, closingDate);
+  const summary = await calculateClosingSummary(branchId, closingDate, countedSource);
   const existingClosing = await getExistingClosing(branchId, closingDate);
+  const revisions = await getClosingRevisions(existingClosing, branchId);
   const counted = getCountedSnapshot(summary, existingClosing, countedSource);
 
   if (!counted) {
@@ -607,7 +879,11 @@ async function buildClosingReportData(branchId, closingDate, countedSource = {})
       existingClosing?.notes || countedSource.notes || "",
       5000
     ),
+    cash_controls: getCashControls(existingClosing || countedSource),
+    denominations: parseDenominations(existingClosing?.denomination_json || countedSource.denominations),
+    denomination_total: toMoney(existingClosing?.denomination_total ?? calculateDenominationTotal(parseDenominations(countedSource.denominations)) ?? 0),
     snapshot_difference: snapshotDifference,
+    revisions,
   };
 }
 
@@ -690,7 +966,11 @@ function createDailyClosingWorkbook(reportData) {
     reconciliation,
     status,
     notes,
+    cash_controls: cashControls,
+    denominations,
+    denomination_total: denominationTotal,
     snapshot_difference: snapshotDifference,
+    revisions,
   } = reportData;
 
   const workbook = new ExcelJS.Workbook();
@@ -727,7 +1007,7 @@ function createDailyClosingWorkbook(reportData) {
   summarySheet.getCell("A2").font = { bold: true, size: 13, color: { argb: "FF0B1F35" } };
   summarySheet.getCell("A2").alignment = { horizontal: "center" };
   summarySheet.mergeCells("A3:E3");
-  summarySheet.getCell("A3").value = summary.branch.location || "";
+  summarySheet.getCell("A3").value = summary.branch.location || null;
   summarySheet.getCell("A3").alignment = { horizontal: "center" };
   summarySheet.mergeCells("A4:E4");
   summarySheet.getCell("A4").value = `Closing date: ${summary.closing_date}   |   Status: ${status}`;
@@ -746,6 +1026,7 @@ function createDailyClosingWorkbook(reportData) {
     ["Credit created today", summary.credit_created, true],
     ["Debt collections", summary.debt_payments_total, true],
     ["Expenses", summary.expenses_total, true],
+    ["Return refunds", summary.refund_total, true],
     ["Expected net settlement", reconciliation.expected_total, true],
     ["Counted total", reconciliation.counted_total, true],
     ["Closing variance", reconciliation.difference_total, true],
@@ -805,6 +1086,17 @@ function createDailyClosingWorkbook(reportData) {
   const controlRows = [
     ["Prepared / closed by", existingClosing?.closed_by_name || "Draft - not closed"],
     ["Closed at", existingClosing?.closed_at ? formatDateTime(existingClosing.closed_at) : "Not yet closed"],
+    ["Verification status", existingClosing?.verification_status || "submitted"],
+    ["Verified by", existingClosing?.verified_by_name || "Pending"],
+    ["Verified at", existingClosing?.verified_at ? formatDateTime(existingClosing.verified_at) : "-"],
+    ["Opening cash float", cashControls.opening_cash_float, true],
+    ["Cash deposits", cashControls.cash_deposits, true],
+    ["Cash withdrawals", cashControls.cash_withdrawals, true],
+    ["Other cash in", cashControls.other_cash_in, true],
+    ["Other cash out", cashControls.other_cash_out, true],
+    ["Denomination-counted cash", denominationTotal, true],
+    ["Count independently confirmed", existingClosing ? (Number(existingClosing.counted_confirmed || 0) === 1 ? "Yes" : "No") : "Draft"],
+    ["Changed after closing", existingClosing ? (Number(existingClosing.stale_after_close || 0) === 1 ? "YES - MANAGEMENT REVIEW REQUIRED" : "No") : "Not closed"],
     ["Notes", notes || "No notes recorded"],
     ["Current data vs saved expected", snapshotDifference, true],
   ];
@@ -815,6 +1107,20 @@ function createDailyClosingWorkbook(reportData) {
     summarySheet.getCell(notesRow, 2).value = value;
     summarySheet.getCell(notesRow, 2).alignment = { wrapText: true, vertical: "top" };
     if (isMoney) applyMoneyFormat(summarySheet.getCell(notesRow, 2));
+    notesRow += 1;
+  }
+
+  notesRow += 1;
+  summarySheet.mergeCells(`A${notesRow}:E${notesRow}`);
+  summarySheet.getCell(`A${notesRow}`).value = "CASH DENOMINATION EVIDENCE";
+  styleSectionRow(summarySheet.getRow(notesRow), "166534");
+  notesRow += 1;
+  const denominationLabels = { note_200: "GHS 200 notes", note_100: "GHS 100 notes", note_50: "GHS 50 notes", note_20: "GHS 20 notes", note_10: "GHS 10 notes", note_5: "GHS 5 notes", note_2: "GHS 2 notes", note_1: "GHS 1 notes", coins: "Coins total value" };
+  for (const [key, label] of Object.entries(denominationLabels)) {
+    summarySheet.getCell(notesRow, 1).value = label;
+    summarySheet.getCell(notesRow, 1).font = { bold: true };
+    summarySheet.getCell(notesRow, 2).value = Number(denominations?.[key] || 0);
+    if (key === "coins") applyMoneyFormat(summarySheet.getCell(notesRow, 2));
     notesRow += 1;
   }
 
@@ -1009,10 +1315,10 @@ function createDailyClosingWorkbook(reportData) {
       formatTime(payment.paid_at),
       payment.customer_name,
       payment.receipt_number,
-      String(payment.payment_method || "").toUpperCase(),
+      String(payment.payment_method || "other").toUpperCase(),
       Number(payment.amount || 0),
       payment.received_by_name,
-      payment.notes || "",
+      payment.notes || null,
     ];
     applyMoneyFormat(row.getCell(6));
     collectionRow += 1;
@@ -1035,16 +1341,17 @@ function createDailyClosingWorkbook(reportData) {
     { width: 13 },
     { width: 24 },
     { width: 18 },
+    { width: 17 },
     { width: 46 },
     { width: 23 },
   ];
-  styleWorkbookTitle(expensesSheet, "A1:E1", "DAILY EXPENSES");
-  expensesSheet.mergeCells("A2:E2");
+  styleWorkbookTitle(expensesSheet, "A1:F1", "DAILY EXPENSES");
+  expensesSheet.mergeCells("A2:F2");
   expensesSheet.getCell("A2").value = `${summary.branch.code} - ${summary.branch.name} | ${summary.closing_date}`;
   expensesSheet.getCell("A2").alignment = { horizontal: "center" };
   expensesSheet.getCell("A2").font = { bold: true };
   const expensesHeader = expensesSheet.getRow(4);
-  expensesHeader.values = ["Date", "Category", "Amount", "Description", "Recorded By"];
+  expensesHeader.values = ["Date", "Category", "Amount", "Payment Method", "Description", "Recorded By"];
   styleHeaderRow(expensesHeader);
   let expenseRow = 5;
   for (const expense of summary.expenses) {
@@ -1053,24 +1360,90 @@ function createDailyClosingWorkbook(reportData) {
       formatDate(expense.expense_date),
       expense.category,
       Number(expense.amount || 0),
-      expense.description || "",
+      String(expense.payment_method || "cash").toUpperCase(),
+      expense.description || null,
       expense.recorded_by_name,
     ];
     applyMoneyFormat(row.getCell(3));
     expenseRow += 1;
   }
   if (expenseRow === 5) {
-    expensesSheet.mergeCells("A5:E5");
+    expensesSheet.mergeCells("A5:F5");
     expensesSheet.getCell("A5").value = "No expenses were recorded for this date.";
     expenseRow = 6;
   } else {
-    styleDataRange(expensesSheet, 5, expenseRow - 1, 1, 5);
+    styleDataRange(expensesSheet, 5, expenseRow - 1, 1, 6);
   }
   const expenseTotalRow = expensesSheet.getRow(expenseRow);
-  expenseTotalRow.values = ["TOTAL", null, summary.expenses_total, null, null];
+  expenseTotalRow.values = ["TOTAL", null, summary.expenses_total, null, null, null];
   expenseTotalRow.font = { bold: true };
   expenseTotalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF5" } };
   applyMoneyFormat(expenseTotalRow.getCell(3));
+
+  const returnsSheet = workbook.addWorksheet("Returns & Refunds");
+  returnsSheet.columns = [
+    { width: 15 },
+    { width: 10 },
+    { width: 18 },
+    { width: 24 },
+    { width: 28 },
+    { width: 10 },
+    { width: 18 },
+    { width: 16 },
+    { width: 18 },
+    { width: 24 },
+    { width: 22 },
+    { width: 22 },
+  ];
+  styleWorkbookTitle(returnsSheet, "A1:L1", "RETURNS AND APPROVED REFUNDS");
+  returnsSheet.mergeCells("A2:L2");
+  returnsSheet.getCell("A2").value = `${summary.branch.code} - ${summary.branch.name} | ${summary.closing_date}`;
+  returnsSheet.getCell("A2").alignment = { horizontal: "center" };
+  returnsSheet.getCell("A2").font = { bold: true };
+  const returnHeader = returnsSheet.getRow(4);
+  returnHeader.values = [
+    "Date", "Time", "Receipt", "Customer", "Product", "Quantity",
+    "Return Type", "Refund Method", "Refund Amount", "Reference",
+    "Recorded By", "Approved By",
+  ];
+  styleHeaderRow(returnHeader);
+  let returnRow = 5;
+  for (const item of summary.returns || []) {
+    const row = returnsSheet.getRow(returnRow);
+    row.values = [
+      formatDate(item.returned_at),
+      formatTime(item.returned_at),
+      item.receipt_number || null,
+      item.customer_name || null,
+      item.product_name || null,
+      Number(item.quantity || 0),
+      String(item.return_type || "stock_only").replaceAll("_", " ").toUpperCase(),
+      String(item.refund_method || "none").toUpperCase(),
+      Number(item.refund_amount || 0),
+      item.refund_reference || null,
+      item.returned_by_name || "System",
+      item.approved_by_name || "-",
+    ];
+    applyMoneyFormat(row.getCell(9));
+    returnRow += 1;
+  }
+  if (returnRow === 5) {
+    returnsSheet.mergeCells("A5:L5");
+    returnsSheet.getCell("A5").value = "No returns or refunds were recorded for this date.";
+  } else {
+    styleDataRange(returnsSheet, 5, returnRow - 1, 1, 12);
+  }
+  const returnTotalRow = returnsSheet.getRow(returnRow);
+  returnTotalRow.values = ["TOTAL REFUNDS", null, null, null, null, summary.return_quantity || 0, null, null, summary.refund_total || 0, null, null, null];
+  returnTotalRow.font = { bold: true };
+  returnTotalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF3CD" } };
+  applyMoneyFormat(returnTotalRow.getCell(9));
+  returnsSheet.pageSetup = {
+    orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.2, right: 0.2, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
+  returnsSheet.views = [{ state: "frozen", ySplit: 4 }];
+  returnsSheet.autoFilter = { from: "A4", to: "L4" };
 
   const exceptionsSheet = workbook.addWorksheet("Exceptions");
   exceptionsSheet.columns = [
@@ -1110,10 +1483,10 @@ function createDailyClosingWorkbook(reportData) {
       formatTime(item.created_at),
       item.customer_name,
       item.receipt_number,
-      String(item.payment_type || "").toUpperCase(),
+      String(item.payment_type || "unknown").toUpperCase(),
       Number(item.total || 0),
-      item.is_voided ? "VOIDED" : String(item.sale_status || "").toUpperCase(),
-      item.void_reason || "",
+      item.is_voided ? "VOIDED" : String(item.sale_status || "unknown").toUpperCase(),
+      item.void_reason || null,
       item.staff_name,
     ];
     applyMoneyFormat(row.getCell(6));
@@ -1126,7 +1499,127 @@ function createDailyClosingWorkbook(reportData) {
     styleDataRange(exceptionsSheet, 5, exceptionRow - 1, 1, 9);
   }
 
-  [summarySheet, groupedSheet, collectionsSheet, expensesSheet, exceptionsSheet].forEach((sheet) => {
+  const riskSheet = workbook.addWorksheet("Security Flags");
+  riskSheet.columns = [
+    { width: 15 },
+    { width: 10 },
+    { width: 24 },
+    { width: 19 },
+    { width: 24 },
+    { width: 18 },
+    { width: 70 },
+  ];
+  styleWorkbookTitle(riskSheet, "A1:G1", "CLEAN-HANDS SECURITY AND ERROR INDICATORS");
+  riskSheet.mergeCells("A2:G2");
+  riskSheet.getCell("A2").value = `${summary.branch.code} - ${summary.branch.name} | ${summary.closing_date}`;
+  riskSheet.getCell("A2").alignment = { horizontal: "center" };
+  riskSheet.getCell("A2").font = { bold: true };
+  const riskHeader = riskSheet.getRow(4);
+  riskHeader.values = ["Date", "Time", "Risk Type", "Severity", "Receipt", "Amount", "Details"];
+  styleHeaderRow(riskHeader);
+  let riskRow = 5;
+  for (const item of summary.risk_flags || []) {
+    const row = riskSheet.getRow(riskRow);
+    row.values = [
+      formatDate(item.occurred_at),
+      formatTime(item.occurred_at),
+      String(item.risk_type || "review").replaceAll("_", " "),
+      String(item.severity || "review").toUpperCase(),
+      item.receipt_number || null,
+      Number(item.amount || 0),
+      item.details || null,
+    ];
+    applyMoneyFormat(row.getCell(6));
+    riskRow += 1;
+  }
+  if (riskRow === 5) {
+    riskSheet.mergeCells("A5:G5");
+    riskSheet.getCell("A5").value = "No configured security or error indicators were detected for this date.";
+  } else {
+    styleDataRange(riskSheet, 5, riskRow - 1, 1, 7);
+  }
+
+  const revisionSheet = workbook.addWorksheet("Closing Revisions");
+  revisionSheet.columns = [
+    { width: 10 },
+    { width: 23 },
+    { width: 24 },
+    { width: 48 },
+    { width: 19 },
+    { width: 19 },
+    { width: 19 },
+    { width: 20 },
+    { width: 20 },
+    { width: 22 },
+  ];
+  styleWorkbookTitle(revisionSheet, "A1:J1", "IMMUTABLE DAILY CLOSING REVISION HISTORY");
+  revisionSheet.mergeCells("A2:J2");
+  revisionSheet.getCell("A2").value = `${summary.branch.code} - ${summary.branch.name} | ${summary.closing_date}`;
+  revisionSheet.getCell("A2").alignment = { horizontal: "center" };
+  revisionSheet.getCell("A2").font = { bold: true };
+  const revisionHeader = revisionSheet.getRow(4);
+  revisionHeader.values = [
+    "Version",
+    "Revision Type",
+    "Created At",
+    "Reason",
+    "Expected Cash",
+    "Expected Total",
+    "Counted Total",
+    "Difference",
+    "Changed By",
+    "Approved By",
+  ];
+  styleHeaderRow(revisionHeader);
+  let revisionRow = 5;
+  for (const item of revisions || []) {
+    const expected = item.expected_snapshot || {};
+    const countedSnapshot = item.counted_snapshot || {};
+    const expectedTotal = toMoney(
+      revisionSnapshotValue(expected, "expected_total", revisionSnapshotValue(expected, "total", 0))
+    );
+    const expectedCash = toMoney(
+      revisionSnapshotValue(expected, "expected_cash", revisionSnapshotValue(expected, "cash", 0))
+    );
+    const countedTotal = toMoney(
+      revisionSnapshotValue(countedSnapshot, "counted_total", revisionSnapshotValue(countedSnapshot, "total", 0))
+    );
+    const row = revisionSheet.getRow(revisionRow);
+    row.values = [
+      Number(item.revision_number || 0),
+      String(item.revision_type || "review").replaceAll("_", " ").toUpperCase(),
+      formatDateTime(item.created_at),
+      item.reason || null,
+      expectedCash,
+      expectedTotal,
+      countedTotal,
+      Number(item.difference_total || countedTotal - expectedTotal || 0),
+      item.changed_by_name || "System",
+      item.approved_by_name || "-",
+    ];
+    [5, 6, 7, 8].forEach((column) => applyMoneyFormat(row.getCell(column)));
+    revisionRow += 1;
+  }
+  if (revisionRow === 5) {
+    revisionSheet.mergeCells("A5:J5");
+    revisionSheet.getCell("A5").value = existingClosing
+      ? "No revision history was found. Run the cash-control migration verification before relying on this report."
+      : "Draft report - revision history begins when the closing is submitted.";
+  } else {
+    styleDataRange(revisionSheet, 5, revisionRow - 1, 1, 10);
+  }
+  revisionSheet.pageSetup = {
+    orientation: "landscape",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
+  revisionSheet.views = [{ state: "frozen", ySplit: 4 }];
+  revisionSheet.autoFilter = { from: "A4", to: "J4" };
+
+  [summarySheet, groupedSheet, collectionsSheet, expensesSheet, returnsSheet, exceptionsSheet, riskSheet, revisionSheet].forEach((sheet) => {
     sheet.properties.defaultRowHeight = 18;
     sheet.headerFooter.oddFooter = "Chalin 03 Daily Closing | Page &P of &N";
   });
@@ -1283,6 +1776,7 @@ function createDailyClosingPdf(reportData, res) {
     status,
     notes,
     snapshot_difference: snapshotDifference,
+    revisions,
   } = reportData;
 
   const doc = new PDFDocument({
@@ -1309,6 +1803,7 @@ function createDailyClosingPdf(reportData, res) {
     ["Credit created today", moneyText(summary.credit_created)],
     ["Debt collections", moneyText(summary.debt_payments_total)],
     ["Expenses", moneyText(summary.expenses_total)],
+    ["Return refunds", moneyText(summary.refund_total)],
     ["Expected net settlement", moneyText(reconciliation.expected_total)],
     ["Counted total", moneyText(reconciliation.counted_total)],
     ["Closing variance", moneyText(reconciliation.difference_total)],
@@ -1404,10 +1899,11 @@ function createDailyClosingPdf(reportData, res) {
   drawPdfTable(
     doc,
     [
-      { key: "category", label: "Category", width: 140, maxLength: 25 },
-      { key: "description", label: "Description", width: 280, maxLength: 56 },
-      { key: "amount", label: "Amount", width: 100, align: "right", format: moneyText, maxLength: 18 },
-      { key: "recorded_by_name", label: "Recorded By", width: 140, maxLength: 25 },
+      { key: "category", label: "Category", width: 120, maxLength: 22 },
+      { key: "description", label: "Description", width: 245, maxLength: 48 },
+      { key: "payment_method", label: "Method", width: 80, format: (value) => String(value || "other").toUpperCase(), maxLength: 12 },
+      { key: "amount", label: "Amount", width: 95, align: "right", format: moneyText, maxLength: 18 },
+      { key: "recorded_by_name", label: "Recorded By", width: 120, maxLength: 22 },
     ],
     summary.expenses,
     { emptyText: "No expenses recorded.", rowHeight: 20, fontSize: 7 }
@@ -1426,6 +1922,34 @@ function createDailyClosingPdf(reportData, res) {
   );
   doc.moveDown(0.6);
 
+  drawPdfSectionTitle(doc, "RETURNS AND APPROVED REFUNDS");
+  drawPdfTable(
+    doc,
+    [
+      { key: "returned_at", label: "Time", width: 48, format: formatTime, maxLength: 8 },
+      { key: "receipt_number", label: "Receipt", width: 85, maxLength: 16 },
+      { key: "customer_name", label: "Customer", width: 115, maxLength: 22 },
+      { key: "product_name", label: "Product", width: 135, maxLength: 26 },
+      { key: "quantity", label: "Qty", width: 42, align: "right", maxLength: 8 },
+      { key: "return_type", label: "Type", width: 82, format: (value) => String(value || "stock_only").replaceAll("_", " ").toUpperCase(), maxLength: 16 },
+      { key: "refund_method", label: "Refund Method", width: 78, format: (value) => String(value || "none").toUpperCase(), maxLength: 12 },
+      { key: "refund_amount", label: "Refund", width: 78, align: "right", format: moneyText, maxLength: 18 },
+      { key: "approved_by_name", label: "Approved By", width: 100, maxLength: 20 },
+    ],
+    summary.returns || [],
+    { emptyText: "No returns or refunds were recorded for this date.", rowHeight: 20, fontSize: 6.5 }
+  );
+  doc.font("Helvetica-Bold").fontSize(8).text(
+    `Return quantity: ${Number(summary.return_quantity || 0)} | Approved refunds: ${moneyText(summary.refund_total)}`,
+    doc.page.margins.left,
+    doc.y,
+    {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      align: "right",
+    }
+  );
+  doc.moveDown(0.6);
+
   drawPdfSectionTitle(doc, "EXCEPTIONS AND CONTROL NOTES");
   drawPdfTable(
     doc,
@@ -1438,12 +1962,57 @@ function createDailyClosingPdf(reportData, res) {
         key: "status",
         label: "Status",
         width: 90,
-        value: (item) => (item.is_voided ? "VOIDED" : String(item.sale_status || "").toUpperCase()),
+        value: (item) => (item.is_voided ? "VOIDED" : String(item.sale_status || "unknown").toUpperCase()),
       },
       { key: "void_reason", label: "Reason", width: 235, maxLength: 50 },
     ],
     summary.exceptions,
     { emptyText: "No voided, returned or cancelled sales.", rowHeight: 20, fontSize: 7 }
+  );
+
+  drawPdfSectionTitle(doc, "CLEAN-HANDS SECURITY AND ERROR INDICATORS");
+  drawPdfTable(
+    doc,
+    [
+      { key: "occurred_at", label: "Time", width: 60, format: formatTime, maxLength: 8 },
+      { key: "risk_type", label: "Risk Type", width: 135, format: (value) => String(value || "review").replaceAll("_", " ").toUpperCase(), maxLength: 28 },
+      { key: "severity", label: "Severity", width: 78, format: (value) => String(value || "review").toUpperCase(), maxLength: 12 },
+      { key: "receipt_number", label: "Receipt", width: 90, maxLength: 16 },
+      { key: "amount", label: "Amount", width: 90, align: "right", format: moneyText, maxLength: 18 },
+      { key: "details", label: "Details", width: 268, maxLength: 58 },
+    ],
+    summary.risk_flags || [],
+    { emptyText: "No configured security or error indicators were detected for this date.", rowHeight: 21, fontSize: 6.8 }
+  );
+
+  drawPdfSectionTitle(doc, "IMMUTABLE DAILY CLOSING REVISION HISTORY");
+  const revisionRows = (revisions || []).map((item) => {
+    const expected = item.expected_snapshot || {};
+    const countedSnapshot = item.counted_snapshot || {};
+    const expectedTotal = toMoney(revisionSnapshotValue(expected, "expected_total", revisionSnapshotValue(expected, "total", 0)));
+    const countedTotal = toMoney(revisionSnapshotValue(countedSnapshot, "counted_total", revisionSnapshotValue(countedSnapshot, "total", 0)));
+    return {
+      ...item,
+      revision_label: `V${Number(item.revision_number || 0)}`,
+      revision_type_label: String(item.revision_type || "review").replaceAll("_", " ").toUpperCase(),
+      expected_total_report: expectedTotal,
+      counted_total_report: countedTotal,
+      difference_total_report: toMoney(item.difference_total ?? countedTotal - expectedTotal),
+    };
+  });
+  drawPdfTable(
+    doc,
+    [
+      { key: "revision_label", label: "Version", width: 48, maxLength: 8 },
+      { key: "revision_type_label", label: "Type", width: 115, maxLength: 24 },
+      { key: "created_at", label: "Created", width: 105, format: formatDateTime, maxLength: 20 },
+      { key: "reason", label: "Reason", width: 210, maxLength: 44 },
+      { key: "expected_total_report", label: "Expected", width: 82, align: "right", format: moneyText, maxLength: 18 },
+      { key: "counted_total_report", label: "Counted", width: 82, align: "right", format: moneyText, maxLength: 18 },
+      { key: "difference_total_report", label: "Difference", width: 82, align: "right", format: moneyText, maxLength: 18 },
+    ],
+    revisionRows,
+    { emptyText: existingClosing ? "No revision history found - migration verification is required." : "Draft report - no revisions yet.", rowHeight: 21, fontSize: 6.5 }
   );
 
   ensurePdfSpace(doc, 145);
@@ -1453,6 +2022,9 @@ function createDailyClosingPdf(reportData, res) {
   if (existingClosing) {
     doc.font("Helvetica").fontSize(8).text(
       `Closed by: ${existingClosing.closed_by_name || "-"} | Closed at: ${formatDateTime(existingClosing.closed_at)}`
+    );
+    doc.font("Helvetica").fontSize(8).text(
+      `Verification: ${existingClosing.verification_status || "submitted"} | Verified by: ${existingClosing.verified_by_name || "Pending"} | Verified at: ${existingClosing.verified_at ? formatDateTime(existingClosing.verified_at) : "-"}`
     );
   } else {
     doc.font("Helvetica-Oblique").fontSize(8).text("Draft report - the day has not been closed yet.");
@@ -1475,7 +2047,7 @@ function createDailyClosingPdf(reportData, res) {
   const signatureX = doc.page.margins.left;
   [
     ["Prepared / Closed By", existingClosing?.closed_by_name || ""],
-    ["Reviewed By", ""],
+    ["Reviewed By", existingClosing?.verified_by_name || ""],
     ["Management Approval", ""],
   ].forEach(([label, name], index) => {
     const x = signatureX + index * (signatureWidth + signatureGap);
@@ -1541,6 +2113,7 @@ function createDailyClosingWordHtml(reportData) {
     status,
     notes,
     snapshot_difference: snapshotDifference,
+    revisions,
   } = reportData;
 
   const paymentSections = PAYMENT_GROUPS.map((definition) => {
@@ -1609,10 +2182,10 @@ function createDailyClosingWordHtml(reportData) {
                 ${wordCell(formatTime(payment.paid_at))}
                 ${wordCell(payment.customer_name || "-")}
                 ${wordCell(payment.receipt_number || "-")}
-                ${wordCell(String(payment.payment_method || "").toUpperCase())}
+                ${wordCell(String(payment.payment_method || "other").toUpperCase())}
                 <td class="money">${wordMoney(payment.amount)}</td>
                 ${wordCell(payment.received_by_name || "System")}
-                ${wordCell(payment.notes || "")}
+                ${wordCell(payment.notes || null)}
               </tr>`
           )
           .join("")
@@ -1625,13 +2198,36 @@ function createDailyClosingWordHtml(reportData) {
             (expense) => `
               <tr>
                 ${wordCell(expense.category || "Other")}
-                ${wordCell(expense.description || "")}
+                ${wordCell(expense.description || null)}
+                ${wordCell(String(expense.payment_method || "other").toUpperCase())}
                 <td class="money">${wordMoney(expense.amount)}</td>
                 ${wordCell(expense.recorded_by_name || "System")}
               </tr>`
           )
           .join("")
-      : `<tr><td colspan="4" class="empty">No expenses recorded.</td></tr>`;
+      : `<tr><td colspan="5" class="empty">No expenses recorded.</td></tr>`;
+
+  const returnRows =
+    (summary.returns || []).length > 0
+      ? summary.returns
+          .map(
+            (item) => `
+              <tr>
+                ${wordCell(formatTime(item.returned_at))}
+                ${wordCell(item.receipt_number || "-")}
+                ${wordCell(item.customer_name || "-")}
+                ${wordCell(item.product_name || "-")}
+                ${wordCell(item.quantity || 0)}
+                ${wordCell(String(item.return_type || "stock_only").replaceAll("_", " ").toUpperCase())}
+                ${wordCell(String(item.refund_method || "none").toUpperCase())}
+                <td class="money">${wordMoney(item.refund_amount || 0)}</td>
+                ${wordCell(item.refund_reference || null)}
+                ${wordCell(item.returned_by_name || "System")}
+                ${wordCell(item.approved_by_name || "-")}
+              </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="11" class="empty">No returns or refunds were recorded for this date.</td></tr>`;
 
   const exceptionRows =
     summary.exceptions.length > 0
@@ -1646,13 +2242,54 @@ function createDailyClosingWordHtml(reportData) {
                 ${wordCell(
                   item.is_voided
                     ? "VOIDED"
-                    : String(item.sale_status || "").toUpperCase()
+                    : String(item.sale_status || "unknown").toUpperCase()
                 )}
-                ${wordCell(item.void_reason || "")}
+                ${wordCell(item.void_reason || null)}
               </tr>`
           )
           .join("")
       : `<tr><td colspan="6" class="empty">No voided, returned or cancelled sales.</td></tr>`;
+
+  const riskRows =
+    (summary.risk_flags || []).length > 0
+      ? summary.risk_flags
+          .map(
+            (item) => `
+              <tr>
+                ${wordCell(formatTime(item.occurred_at))}
+                ${wordCell(String(item.risk_type || "review").replaceAll("_", " ").toUpperCase())}
+                ${wordCell(String(item.severity || "review").toUpperCase())}
+                ${wordCell(item.receipt_number || "-")}
+                <td class="money">${wordMoney(item.amount || 0)}</td>
+                ${wordCell(item.details || null)}
+              </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="6" class="empty">No configured security or error indicators were detected for this date.</td></tr>`;
+
+  const revisionRows =
+    (revisions || []).length > 0
+      ? revisions
+          .map((item) => {
+            const expected = item.expected_snapshot || {};
+            const countedSnapshot = item.counted_snapshot || {};
+            const expectedTotal = toMoney(revisionSnapshotValue(expected, "expected_total", revisionSnapshotValue(expected, "total", 0)));
+            const countedTotal = toMoney(revisionSnapshotValue(countedSnapshot, "counted_total", revisionSnapshotValue(countedSnapshot, "total", 0)));
+            return `
+              <tr>
+                ${wordCell(`V${Number(item.revision_number || 0)}`)}
+                ${wordCell(String(item.revision_type || "review").replaceAll("_", " ").toUpperCase())}
+                ${wordCell(formatDateTime(item.created_at))}
+                ${wordCell(item.reason || null)}
+                <td class="money">${wordMoney(expectedTotal)}</td>
+                <td class="money">${wordMoney(countedTotal)}</td>
+                <td class="money">${wordMoney(item.difference_total ?? countedTotal - expectedTotal)}</td>
+                ${wordCell(item.changed_by_name || "System")}
+                ${wordCell(item.approved_by_name || "-")}
+              </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="9" class="empty">${existingClosing ? "No revision history found - migration verification is required." : "Draft report - no revisions yet."}</td></tr>`;
 
   const reconciliationRows = reconciliation.rows
     .map(
@@ -1733,7 +2370,7 @@ function createDailyClosingWordHtml(reportData) {
   <h1>CHALIN 03 COMPANY LIMITED</h1>
   <p class="subtitle"><b>ADVANCED DAILY CLOSING REPORT</b></p>
   <p class="subtitle">${escapeHtml(summary.branch.code)} — ${escapeHtml(summary.branch.name)}</p>
-  <p class="subtitle">${escapeHtml(summary.branch.location || "")}</p>
+  <p class="subtitle">${escapeHtml(summary.branch.location || null)}</p>
   <p class="subtitle"><b>Closing date:</b> ${escapeHtml(summary.closing_date)} &nbsp; | &nbsp; <span class="status">${escapeHtml(status)}</span></p>
 
   <h2>EXECUTIVE SUMMARY</h2>
@@ -1753,6 +2390,10 @@ function createDailyClosingWordHtml(reportData) {
     <tr>
       <td class="label">Debt collections</td><td class="value money">${wordMoney(summary.debt_payments_total)}</td>
       <td class="label">Expenses</td><td class="value money">${wordMoney(summary.expenses_total)}</td>
+    </tr>
+    <tr>
+      <td class="label">Return records</td><td class="value">${escapeHtml(summary.return_count || 0)}</td>
+      <td class="label">Approved refunds</td><td class="value money">${wordMoney(summary.refund_total)}</td>
     </tr>
     <tr>
       <td class="label">Expected settlement</td><td class="value money">${wordMoney(reconciliation.expected_total)}</td>
@@ -1792,10 +2433,19 @@ function createDailyClosingWordHtml(reportData) {
 
   <h2>EXPENSES</h2>
   <table>
-    <thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th></tr></thead>
+    <thead><tr><th>Category</th><th>Description</th><th>Method</th><th>Amount</th><th>Recorded By</th></tr></thead>
     <tbody>
       ${expenseRows}
-      <tr class="subtotal"><td colspan="2">Expenses total</td><td class="money">${wordMoney(summary.expenses_total)}</td><td></td></tr>
+      <tr class="subtotal"><td colspan="3">Expenses total</td><td class="money">${wordMoney(summary.expenses_total)}</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <h2>RETURNS AND APPROVED REFUNDS</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Receipt</th><th>Customer</th><th>Product</th><th>Qty</th><th>Type</th><th>Refund Method</th><th>Refund</th><th>Reference</th><th>Recorded By</th><th>Approved By</th></tr></thead>
+    <tbody>
+      ${returnRows}
+      <tr class="subtotal"><td colspan="5">Total returned quantity: ${escapeHtml(summary.return_quantity || 0)}</td><td colspan="2">Approved refunds</td><td class="money">${wordMoney(summary.refund_total)}</td><td colspan="3"></td></tr>
     </tbody>
   </table>
 
@@ -1805,10 +2455,25 @@ function createDailyClosingWordHtml(reportData) {
     <tbody>${exceptionRows}</tbody>
   </table>
 
+  <h2>CLEAN-HANDS SECURITY AND ERROR INDICATORS</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Risk Type</th><th>Severity</th><th>Receipt</th><th>Amount</th><th>Details</th></tr></thead>
+    <tbody>${riskRows}</tbody>
+  </table>
+
+  <h2>IMMUTABLE DAILY CLOSING REVISION HISTORY</h2>
+  <table>
+    <thead><tr><th>Version</th><th>Type</th><th>Created</th><th>Reason</th><th>Expected</th><th>Counted</th><th>Difference</th><th>Changed By</th><th>Approved By</th></tr></thead>
+    <tbody>${revisionRows}</tbody>
+  </table>
+
   <div class="notes">
     <p><b>Closing notes:</b> ${escapeHtml(notes || "No notes recorded.")}</p>
     <p><b>Closed by:</b> ${escapeHtml(existingClosing?.closed_by_name || "Draft - not closed")}</p>
     <p><b>Closed at:</b> ${escapeHtml(existingClosing?.closed_at ? formatDateTime(existingClosing.closed_at) : "Not yet closed")}</p>
+    <p><b>Verification status:</b> ${escapeHtml(existingClosing?.verification_status || "submitted")}</p>
+    <p><b>Verified by:</b> ${escapeHtml(existingClosing?.verified_by_name || "Pending")}</p>
+    <p><b>Verified at:</b> ${escapeHtml(existingClosing?.verified_at ? formatDateTime(existingClosing.verified_at) : "-")}</p>
     <p><b>Current data vs saved expected:</b> ${wordMoney(snapshotDifference)}</p>
     <p><b>Calculation notes:</b></p>
     <ul>${calculationNotes}</ul>
@@ -1843,8 +2508,9 @@ router.get(
         });
       }
 
-      const summary = await calculateClosingSummary(branchId, closingDate);
       const existingClosing = await getExistingClosing(branchId, closingDate);
+      const controlSource = existingClosing || req.query;
+      const summary = await calculateClosingSummary(branchId, closingDate, controlSource);
       const currentVsSavedDifference = existingClosing
         ? toMoney(summary.expected_total - Number(existingClosing.expected_total || 0))
         : 0;
@@ -2032,15 +2698,42 @@ router.get(
         `SELECT
           dc.*,
           u.full_name AS closed_by_name,
+          vu.full_name AS verified_by_name,
           b.code AS branch_code,
           b.name AS branch_name,
           b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN users vu ON dc.verified_by = vu.id
          LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.branch_id = ?
          ORDER BY dc.closing_date DESC
          LIMIT 100`,
+        [branchId]
+      );
+
+      const [controlRows] = await pool.query(
+        `SELECT
+          COUNT(*) AS closing_count,
+          SUM(CASE WHEN difference_total < -0.009 THEN 1 ELSE 0 END) AS shortage_count,
+          COALESCE(SUM(CASE WHEN difference_total < -0.009 THEN ABS(difference_total) ELSE 0 END), 0) AS shortage_total,
+          SUM(CASE WHEN ABS(difference_total) >= 0.01 THEN 1 ELSE 0 END) AS variance_count,
+          SUM(CASE WHEN stale_after_close = 1 THEN 1 ELSE 0 END) AS changed_after_close_count,
+          SUM(CASE WHEN counted_confirmed = 0 THEN 1 ELSE 0 END) AS legacy_unconfirmed_count,
+          SUM(CASE WHEN counted_confirmed = 1 AND verification_status <> 'verified' THEN 1 ELSE 0 END) AS awaiting_verification_count
+         FROM daily_closings
+         WHERE branch_id = ?
+         AND closing_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`,
+        [branchId]
+      );
+
+      const [changeRows] = await pool.query(
+        `SELECT
+          COUNT(*) AS protected_sale_change_count,
+          SUM(CASE WHEN change_type = 'void' THEN 1 ELSE 0 END) AS protected_void_count
+         FROM sale_change_history
+         WHERE branch_id = ?
+         AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`,
         [branchId]
       );
 
@@ -2049,6 +2742,18 @@ router.get(
         branch_id: branchId,
         count: closings.length,
         closings,
+        control_summary: {
+          period_days: 30,
+          closing_count: Number(controlRows[0]?.closing_count || 0),
+          shortage_count: Number(controlRows[0]?.shortage_count || 0),
+          shortage_total: Number(controlRows[0]?.shortage_total || 0),
+          variance_count: Number(controlRows[0]?.variance_count || 0),
+          changed_after_close_count: Number(controlRows[0]?.changed_after_close_count || 0),
+          legacy_unconfirmed_count: Number(controlRows[0]?.legacy_unconfirmed_count || 0),
+          awaiting_verification_count: Number(controlRows[0]?.awaiting_verification_count || 0),
+          protected_sale_change_count: Number(changeRows[0]?.protected_sale_change_count || 0),
+          protected_void_count: Number(changeRows[0]?.protected_void_count || 0),
+        },
       });
     } catch (error) {
       console.error("Get daily closings error:", error);
@@ -2057,6 +2762,478 @@ router.get(
         status: "error",
         message: "Something went wrong while fetching daily closings.",
       });
+    }
+  }
+);
+
+// GET /api/daily-closing/:id/revisions
+router.get(
+  "/:id/revisions",
+  requireAuth,
+  requireRole("admin", "manager", "auditor"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ status: "error", message: "Daily closing ID must be a positive number." });
+      }
+      const [rows] = await pool.query(
+        `SELECT
+          dcr.*,
+          changer.full_name AS changed_by_name,
+          approver.full_name AS approved_by_name
+         FROM daily_closing_revisions dcr
+         LEFT JOIN users changer ON dcr.changed_by = changer.id
+         LEFT JOIN users approver ON dcr.approved_by = approver.id
+         WHERE dcr.daily_closing_id = ? AND dcr.branch_id = ?
+         ORDER BY dcr.revision_number ASC`,
+        [id, branchId]
+      );
+      return res.json({ status: "success", revisions: rows });
+    } catch (error) {
+      console.error("Get daily closing revisions error:", error);
+      return res.status(500).json({ status: "error", message: "Failed to load closing revision history." });
+    }
+  }
+);
+
+// POST /api/daily-closing/:id/reconcile
+// Rebuilds the expected snapshot after an approved post-closing change while
+// preserving the original count and every earlier revision. It never erases
+// the original closing or silently certifies the revised result.
+router.post(
+  "/:id/reconcile",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+      const branchId = getBranchId(req);
+      const id = Number(req.params.id);
+      const password = String(req.body.password || "");
+      const revisionNotes = cleanText(req.body.revision_notes, 5000);
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Daily closing ID must be a positive number.",
+        });
+      }
+
+      if (!revisionNotes) {
+        return res.status(400).json({
+          status: "error",
+          message: "Management revision notes are required. State which approved transaction changed and what was reviewed.",
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({
+          status: "error",
+          message: "Your password is required to reconcile the revised closing.",
+        });
+      }
+
+      await connection.beginTransaction();
+
+      const [closings] = await connection.query(
+        `SELECT *
+         FROM daily_closings
+         WHERE id = ? AND branch_id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [id, branchId]
+      );
+      const closing = closings[0];
+
+      if (!closing) {
+        await connection.rollback();
+        return res.status(404).json({
+          status: "error",
+          message: "Daily closing record was not found in the selected store.",
+        });
+      }
+
+      if (Number(closing.stale_after_close || 0) !== 1) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This closing is not marked as changed after closing, so no reconciliation revision is required.",
+        });
+      }
+
+      if (Number(closing.closed_by) === Number(req.user.id)) {
+        await connection.rollback();
+        return res.status(403).json({
+          status: "error",
+          message: "The person who submitted the closing cannot reconcile its post-closing revision. A different manager or administrator must review it.",
+        });
+      }
+
+      const [users] = await connection.query(
+        `SELECT id, password_hash, is_active
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [req.user.id]
+      );
+      const reviewer = users[0];
+      if (!reviewer || Number(reviewer.is_active) !== 1) {
+        await connection.rollback();
+        return res.status(403).json({
+          status: "error",
+          message: "Reviewer account is inactive or unavailable.",
+        });
+      }
+
+      const passwordMatches = await bcrypt.compare(password, reviewer.password_hash);
+      if (!passwordMatches) {
+        await connection.rollback();
+        return res.status(401).json({
+          status: "error",
+          message: "Reviewer password is incorrect.",
+        });
+      }
+
+      const summary = await calculateClosingSummary(
+        branchId,
+        formatDate(closing.closing_date),
+        closing,
+        connection
+      );
+      const revisedDifference = toMoney(
+        Number(closing.total_counted || 0) - Number(summary.expected_total || 0)
+      );
+      const nextRevision = Number(closing.latest_revision_number || 1) + 1;
+
+      await connection.query(
+        `INSERT INTO daily_closing_revisions (
+          daily_closing_id, branch_id, closing_date, revision_number,
+          revision_type, reason, expected_snapshot_json, counted_snapshot_json,
+          difference_total, source_entity_type, source_entity_id,
+          changed_by, approved_by
+        ) VALUES (?, ?, ?, ?, 'manager_revision', ?, ?, ?, ?, 'daily_closing_reconciliation', ?, ?, ?)`,
+        [
+          closing.id,
+          branchId,
+          closing.closing_date,
+          nextRevision,
+          revisionNotes,
+          JSON.stringify({
+            cash: Number(summary.expected_cash || 0),
+            momo: Number(summary.expected_momo || 0),
+            bank: Number(summary.expected_bank || 0),
+            other: Number(summary.expected_other || 0),
+            total: Number(summary.expected_total || 0),
+          }),
+          JSON.stringify({
+            cash: Number(closing.cash_counted || 0),
+            momo: Number(closing.momo_counted || 0),
+            bank: Number(closing.bank_counted || 0),
+            other: Number(closing.other_counted || 0),
+            total: Number(closing.total_counted || 0),
+            denominations: parseDenominations(closing.denomination_json),
+          }),
+          revisedDifference,
+          String(closing.id),
+          req.user.id,
+          req.user.id,
+        ]
+      );
+
+      await connection.query(
+        `UPDATE daily_closings
+         SET sales_count = ?,
+             sales_total = ?,
+             sales_received = ?,
+             cash_sales = ?,
+             momo_sales = ?,
+             bank_sales = ?,
+             mixed_sales = ?,
+             credit_sales_total = ?,
+             credit_sales_received = ?,
+             debt_payment_count = ?,
+             debt_payments_total = ?,
+             debt_cash = ?,
+             debt_momo = ?,
+             debt_bank = ?,
+             expenses_count = ?,
+             expenses_total = ?,
+             expected_cash = ?,
+             expected_momo = ?,
+             expected_bank = ?,
+             expected_other = ?,
+             expected_total = ?,
+             difference_total = ?,
+             stale_after_close = 0,
+             stale_detected_at = NULL,
+             latest_revision_number = ?,
+             verification_status = 'revised',
+             verified_by = NULL,
+             verified_at = NULL
+         WHERE id = ? AND branch_id = ?`,
+        [
+          summary.sales_count,
+          summary.sales_total,
+          summary.sales_received,
+          summary.cash_sales,
+          summary.momo_sales,
+          summary.bank_sales,
+          summary.mixed_sales,
+          summary.credit_sales_total,
+          summary.credit_sales_received,
+          summary.debt_payment_count,
+          summary.debt_payments_total,
+          summary.debt_cash,
+          summary.debt_momo,
+          summary.debt_bank,
+          summary.expenses_count,
+          summary.expenses_total,
+          summary.expected_cash,
+          summary.expected_momo,
+          summary.expected_bank,
+          summary.expected_other,
+          summary.expected_total,
+          revisedDifference,
+          nextRevision,
+          id,
+          branchId,
+        ]
+      );
+
+      await logActivity(
+        connection,
+        req.user.id,
+        branchId,
+        "DAILY_CLOSING_RECONCILED",
+        `Reconciled changed Daily Closing ${formatDate(closing.closing_date)}. Revised expected: GHS ${Number(summary.expected_total || 0).toFixed(2)}. Original counted: GHS ${Number(closing.total_counted || 0).toFixed(2)}. Revised variance: GHS ${revisedDifference.toFixed(2)}. Reason: ${revisionNotes}`
+      );
+
+      await connection.commit();
+
+      const [updatedRows] = await pool.query(
+        `SELECT dc.*, closer.full_name AS closed_by_name, verifier.full_name AS verified_by_name
+         FROM daily_closings dc
+         LEFT JOIN users closer ON dc.closed_by = closer.id
+         LEFT JOIN users verifier ON dc.verified_by = verifier.id
+         WHERE dc.id = ? AND dc.branch_id = ?
+         LIMIT 1`,
+        [id, branchId]
+      );
+
+      return res.json({
+        status: "success",
+        message: "Post-closing changes reconciled. The original count remains preserved and independent verification is required again.",
+        closing: updatedRows[0],
+        revised_expected_total: Number(summary.expected_total || 0),
+        revised_difference_total: revisedDifference,
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Reconcile daily closing error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Failed to reconcile the revised Daily Closing.",
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// POST /api/daily-closing/:id/verify
+router.post(
+  "/:id/verify",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+      const branchId = getBranchId(req);
+      const id = Number(req.params.id);
+      const password = String(req.body.password || "");
+      const verificationNotes = cleanText(req.body.verification_notes, 5000);
+
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Daily closing ID must be a positive number.",
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({
+          status: "error",
+          message: "Your password is required to verify the closing.",
+        });
+      }
+
+      await connection.beginTransaction();
+
+      const [closings] = await connection.query(
+        `SELECT *
+         FROM daily_closings
+         WHERE id = ? AND branch_id = ?
+         LIMIT 1
+         FOR UPDATE`,
+        [id, branchId]
+      );
+
+      const closing = closings[0];
+      if (!closing) {
+        await connection.rollback();
+        return res.status(404).json({
+          status: "error",
+          message: "Daily closing record was not found in the selected store.",
+        });
+      }
+
+      if (closing.verification_status === "verified") {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This Daily Closing has already been independently verified.",
+        });
+      }
+
+      if (Number(closing.counted_confirmed || 0) !== 1) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This is a legacy or unconfirmed closing. It cannot be certified as independently counted; keep it for history and use the new manual count process for future closings.",
+        });
+      }
+
+      if (Number(closing.closed_by) === Number(req.user.id)) {
+        await connection.rollback();
+        return res.status(403).json({
+          status: "error",
+          message: "The person who submitted the closing cannot verify the same closing. A different manager or administrator must verify it.",
+        });
+      }
+
+      if (Number(closing.stale_after_close || 0) === 1) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This closing changed after submission and cannot be verified until the variance and revision history are reviewed.",
+        });
+      }
+
+      if (Math.abs(Number(closing.difference_total || 0)) >= 0.01 && !verificationNotes) {
+        await connection.rollback();
+        return res.status(400).json({
+          status: "error",
+          message: "Manager verification notes are required when the closing contains a variance.",
+        });
+      }
+
+      const [users] = await connection.query(
+        `SELECT id, password_hash, is_active
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [req.user.id]
+      );
+      const verifier = users[0];
+      if (!verifier || Number(verifier.is_active) !== 1) {
+        await connection.rollback();
+        return res.status(403).json({
+          status: "error",
+          message: "Verifier account is inactive or unavailable.",
+        });
+      }
+
+      const passwordMatches = await bcrypt.compare(password, verifier.password_hash);
+      if (!passwordMatches) {
+        await connection.rollback();
+        return res.status(401).json({
+          status: "error",
+          message: "Verifier password is incorrect.",
+        });
+      }
+
+      const nextRevision = Number(closing.latest_revision_number || 1) + 1;
+      await connection.query(
+        `INSERT INTO daily_closing_revisions (
+          daily_closing_id, branch_id, closing_date, revision_number,
+          revision_type, reason, expected_snapshot_json, counted_snapshot_json,
+          difference_total, changed_by, approved_by
+        ) VALUES (?, ?, ?, ?, 'manager_revision', ?, ?, ?, ?, ?, ?)`,
+        [
+          closing.id,
+          branchId,
+          closing.closing_date,
+          nextRevision,
+          verificationNotes || "Independently recounted and verified by management.",
+          JSON.stringify({
+            cash: Number(closing.expected_cash || 0),
+            momo: Number(closing.expected_momo || 0),
+            bank: Number(closing.expected_bank || 0),
+            other: Number(closing.expected_other || 0),
+            total: Number(closing.expected_total || 0),
+          }),
+          JSON.stringify({
+            cash: Number(closing.cash_counted || 0),
+            momo: Number(closing.momo_counted || 0),
+            bank: Number(closing.bank_counted || 0),
+            other: Number(closing.other_counted || 0),
+            total: Number(closing.total_counted || 0),
+            denominations: parseDenominations(closing.denomination_json),
+          }),
+          Number(closing.difference_total || 0),
+          req.user.id,
+          req.user.id,
+        ]
+      );
+
+      await connection.query(
+        `UPDATE daily_closings
+         SET verified_by = ?,
+             verified_at = NOW(),
+             verification_status = 'verified',
+             latest_revision_number = ?
+         WHERE id = ? AND branch_id = ?`,
+        [req.user.id, nextRevision, id, branchId]
+      );
+
+      await logActivity(
+        connection,
+        req.user.id,
+        branchId,
+        "DAILY_CLOSING_VERIFIED",
+        `Independently verified daily closing ${closing.closing_date}. Difference: GHS ${Number(closing.difference_total || 0).toFixed(2)}`
+      );
+
+      await connection.commit();
+
+      const [updatedRows] = await pool.query(
+        `SELECT dc.*, closer.full_name AS closed_by_name, verifier.full_name AS verified_by_name
+         FROM daily_closings dc
+         LEFT JOIN users closer ON dc.closed_by = closer.id
+         LEFT JOIN users verifier ON dc.verified_by = verifier.id
+         WHERE dc.id = ? AND dc.branch_id = ?
+         LIMIT 1`,
+        [id, branchId]
+      );
+
+      return res.json({
+        status: "success",
+        message: "Daily closing independently verified and locked for management review.",
+        closing: updatedRows[0],
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Verify daily closing error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Something went wrong while verifying the daily closing.",
+      });
+    } finally {
+      connection.release();
     }
   }
 );
@@ -2082,11 +3259,13 @@ router.get(
         `SELECT
           dc.*,
           u.full_name AS closed_by_name,
+          vu.full_name AS verified_by_name,
           b.code AS branch_code,
           b.name AS branch_name,
           b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN users vu ON dc.verified_by = vu.id
          LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.id = ?
          AND dc.branch_id = ?
@@ -2133,6 +3312,13 @@ router.post(
         momo_counted,
         bank_counted,
         other_counted,
+        opening_cash_float,
+        cash_deposits,
+        cash_withdrawals,
+        other_cash_in,
+        other_cash_out,
+        denominations,
+        counted_confirmed,
         notes,
       } = req.body;
 
@@ -2145,11 +3331,13 @@ router.post(
         });
       }
 
-      const summary = await calculateClosingSummary(branchId, closingDate);
-      const countedCash = toCountedMoney(cash_counted, summary.expected_cash);
-      const countedMomo = toCountedMoney(momo_counted, summary.expected_momo);
-      const countedBank = toCountedMoney(bank_counted, summary.expected_bank);
-      const countedOther = toCountedMoney(other_counted, summary.expected_other);
+      const cashControls = getCashControls({
+        opening_cash_float, cash_deposits, cash_withdrawals, other_cash_in, other_cash_out,
+      });
+      const countedCash = toCountedMoney(cash_counted);
+      const countedMomo = toCountedMoney(momo_counted);
+      const countedBank = toCountedMoney(bank_counted);
+      const countedOther = toCountedMoney(other_counted);
 
       if (
         countedCash === null ||
@@ -2159,25 +3347,55 @@ router.post(
       ) {
         return res.status(400).json({
           status: "error",
-          message: "Counted amounts must be valid numbers and cannot be negative.",
+          message: "Every counted/confirmed channel must be entered manually as a valid non-negative number.",
+        });
+      }
+
+      if (!(counted_confirmed === true || Number(counted_confirmed) === 1)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Confirm that the cash was physically counted and MoMo/bank balances were independently checked.",
+        });
+      }
+
+      const parsedDenominations = parseDenominations(denominations);
+      const denominationTotal = calculateDenominationTotal(parsedDenominations);
+      if (denominationTotal === null) {
+        return res.status(400).json({ status: "error", message: "Cash denomination quantities are invalid." });
+      }
+      if (Math.abs(denominationTotal - countedCash) >= 0.01) {
+        return res.status(400).json({
+          status: "error",
+          message: `Cash denomination total GHS ${denominationTotal.toFixed(2)} must equal cash counted GHS ${countedCash.toFixed(2)}.`,
         });
       }
 
       const totalCounted = toMoney(
         countedCash + countedMomo + countedBank + countedOther
       );
-      const differenceTotal = toMoney(totalCounted - summary.expected_total);
       const cleanedNotes = cleanText(notes, 5000);
+      const hasManualCashMovement = [
+        cashControls.cash_deposits,
+        cashControls.cash_withdrawals,
+        cashControls.other_cash_in,
+        cashControls.other_cash_out,
+      ].some((value) => Number(value || 0) > 0);
 
-      if (Math.abs(differenceTotal) >= 0.01 && !cleanedNotes) {
+      if (hasManualCashMovement && !cleanedNotes) {
         return res.status(400).json({
           status: "error",
-          message:
-            "A closing note is required when counted money does not match the expected total.",
+          message: "Closing notes are required whenever a cash deposit, withdrawal, other cash-in, or other cash-out amount is entered.",
         });
       }
 
       await connection.beginTransaction();
+
+      // Lock the selected store row so a new sale and a Daily Closing cannot
+      // be committed at the same time for the same store/day.
+      await connection.query(
+        `SELECT id FROM branches WHERE id = ? LIMIT 1 FOR UPDATE`,
+        [branchId]
+      );
 
       const [existingRows] = await connection.query(
         `SELECT id
@@ -2198,10 +3416,32 @@ router.post(
         });
       }
 
+      const summary = await calculateClosingSummary(
+        branchId,
+        closingDate,
+        cashControls,
+        connection
+      );
+      const differenceTotal = toMoney(totalCounted - summary.expected_total);
+
+      if (Math.abs(differenceTotal) >= 0.01 && !cleanedNotes) {
+        await connection.rollback();
+        return res.status(400).json({
+          status: "error",
+          message:
+            "A closing note is required when counted money does not match the expected total.",
+        });
+      }
+
       const [result] = await connection.query(
         `INSERT INTO daily_closings (
           branch_id,
           closing_date,
+          opening_cash_float,
+          cash_deposits,
+          cash_withdrawals,
+          other_cash_in,
+          other_cash_out,
           sales_count,
           sales_total,
           sales_received,
@@ -2228,14 +3468,22 @@ router.post(
           bank_counted,
           other_counted,
           total_counted,
+          denomination_total,
+          denomination_json,
+          counted_confirmed,
           difference_total,
           notes,
           closed_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           branchId,
           closingDate,
+          cashControls.opening_cash_float,
+          cashControls.cash_deposits,
+          cashControls.cash_withdrawals,
+          cashControls.other_cash_in,
+          cashControls.other_cash_out,
           summary.sales_count,
           summary.sales_total,
           summary.sales_received,
@@ -2262,8 +3510,29 @@ router.post(
           countedBank,
           countedOther,
           totalCounted,
+          denominationTotal,
+          JSON.stringify(parsedDenominations),
+          1,
           differenceTotal,
           cleanedNotes || null,
+          req.user.id,
+        ]
+      );
+
+      await connection.query(
+        `INSERT INTO daily_closing_revisions (
+          daily_closing_id, branch_id, closing_date, revision_number, revision_type, reason,
+          expected_snapshot_json, counted_snapshot_json, difference_total, changed_by, approved_by
+        ) VALUES (?, ?, ?, 1, 'original', ?, ?, ?, ?, ?, ?)`,
+        [
+          result.insertId,
+          branchId,
+          closingDate,
+          cleanedNotes || "Original submitted closing",
+          JSON.stringify({ cash: summary.expected_cash, momo: summary.expected_momo, bank: summary.expected_bank, other: summary.expected_other, total: summary.expected_total }),
+          JSON.stringify({ cash: countedCash, momo: countedMomo, bank: countedBank, other: countedOther, total: totalCounted, denominations: parsedDenominations }),
+          differenceTotal,
+          req.user.id,
           req.user.id,
         ]
       );
@@ -2286,11 +3555,13 @@ router.post(
         `SELECT
           dc.*,
           u.full_name AS closed_by_name,
+          vu.full_name AS verified_by_name,
           b.code AS branch_code,
           b.name AS branch_name,
           b.location AS branch_location
          FROM daily_closings dc
          LEFT JOIN users u ON dc.closed_by = u.id
+         LEFT JOIN users vu ON dc.verified_by = vu.id
          LEFT JOIN branches b ON dc.branch_id = b.id
          WHERE dc.id = ?
          AND dc.branch_id = ?
@@ -2330,3 +3601,9 @@ router.post(
 );
 
 module.exports = router;
+module.exports._test = {
+  calculateClosingSummary,
+  createDailyClosingWorkbook,
+  createDailyClosingPdf,
+  createDailyClosingWordHtml,
+};

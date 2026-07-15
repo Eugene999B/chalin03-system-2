@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { markClosingStale } = require("../services/dailyClosingSecurityService");
 
 const router = express.Router();
 
@@ -478,6 +479,15 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
       }. New balance: GHS ${newBalance.toFixed(2)}`
     );
 
+    const affectedClosing = await markClosingStale(connection, {
+      branchId,
+      transactionDate: new Date(),
+      reason: `Debt payment of GHS ${paymentAmount.toFixed(2)} by ${cleanMethod} was recorded after the business day had already been closed.`,
+      sourceEntityType: "debt_payment",
+      sourceEntityId: paymentResult.insertId,
+      changedBy: req.user.id,
+    });
+
     await connection.commit();
 
     const [createdPayments] = await pool.query(
@@ -521,6 +531,7 @@ router.post("/:id/payments", requireAuth, async (req, res) => {
           status: newStatus,
         },
       },
+      affected_closing: affectedClosing,
       payment: createdPayment,
       debt: {
         id: debt.id,
