@@ -1,4 +1,5 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -191,6 +192,248 @@ function calculateSalePayment(paymentType, rawTendered, rawPaid, total) {
   };
 }
 
+
+function normalizePaymentAllocations(paymentType, payment, rawAllocations = {}) {
+  const channels = ["cash", "momo", "bank", "other"];
+  const normalized = Object.fromEntries(channels.map((channel) => [channel, 0]));
+
+  if (["cash", "momo", "bank"].includes(paymentType)) {
+    normalized[paymentType] = Number(payment.amount_paid || 0);
+    return { allocations: normalized };
+  }
+
+  const source = Array.isArray(rawAllocations)
+    ? Object.fromEntries(
+        rawAllocations.map((item) => [item?.payment_channel || item?.channel, item?.amount])
+      )
+    : rawAllocations || {};
+
+  for (const channel of channels) {
+    const value = toNonNegativeNumber(source[channel] ?? 0);
+    if (value === null) {
+      return { error: `Payment allocation for ${channel} must be a valid non-negative number.` };
+    }
+    normalized[channel] = value;
+  }
+
+  const allocatedTotal = Number(
+    channels.reduce((sum, channel) => sum + normalized[channel], 0).toFixed(2)
+  );
+  const paidTotal = Number(payment.amount_paid || 0);
+
+  if (Math.abs(allocatedTotal - paidTotal) >= 0.01) {
+    return {
+      error: `Payment channel allocation must equal the amount paid now. Allocated GHS ${allocatedTotal.toFixed(2)}, paid GHS ${paidTotal.toFixed(2)}.`,
+    };
+  }
+
+  return { allocations: normalized };
+}
+
+async function replaceSalePaymentAllocations(
+  connection,
+  { branchId, saleId, userId, allocations }
+) {
+  await connection.query(`DELETE FROM sale_payment_allocations WHERE sale_id = ?`, [
+    saleId,
+  ]);
+
+  for (const [paymentChannel, amount] of Object.entries(allocations || {})) {
+    const cleanAmount = Number(amount || 0);
+    if (cleanAmount <= 0) continue;
+
+    await connection.query(
+      `INSERT INTO sale_payment_allocations (
+        branch_id,
+        sale_id,
+        payment_channel,
+        amount,
+        recorded_by
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [branchId, saleId, paymentChannel, cleanAmount, userId || null]
+    );
+  }
+}
+
+async function getSalePaymentAllocations(connection, saleId) {
+  const [rows] = await connection.query(
+    `SELECT payment_channel, amount
+     FROM sale_payment_allocations
+     WHERE sale_id = ?
+     ORDER BY FIELD(payment_channel, 'cash', 'momo', 'bank', 'other')`,
+    [saleId]
+  );
+
+  const allocations = { cash: 0, momo: 0, bank: 0, other: 0 };
+  for (const row of rows) {
+    if (Object.prototype.hasOwnProperty.call(allocations, row.payment_channel)) {
+      allocations[row.payment_channel] = Number(row.amount || 0);
+    }
+  }
+  return allocations;
+}
+
+async function verifyIndependentApprover(
+  connection,
+  { currentUserId, branchId, approverUsername, approverPassword }
+) {
+  const username = cleanText(approverUsername);
+  const password = String(approverPassword || "");
+
+  if (!username || !password) {
+    return { error: "Independent manager username and password are required." };
+  }
+
+  const [rows] = await connection.query(
+    `SELECT id, full_name, username, role, password_hash, is_active,
+            default_branch_id, can_access_all_branches
+     FROM users
+     WHERE username = ?
+     LIMIT 1
+     FOR UPDATE`,
+    [username]
+  );
+
+  const approver = rows[0];
+  if (!approver || Number(approver.is_active) !== 1) {
+    return { error: "Independent approver account was not found or is inactive." };
+  }
+
+  if (!["admin", "manager"].includes(String(approver.role || "").toLowerCase())) {
+    return { error: "Independent approver must be an active admin or manager." };
+  }
+
+  if (Number(approver.id) === Number(currentUserId)) {
+    return { error: "The person changing the sale cannot approve the same change." };
+  }
+
+  if (!Number(approver.can_access_all_branches || 0) && Number(approver.default_branch_id || 0) !== Number(branchId)) {
+    const [accessRows] = await connection.query(
+      `SELECT 1
+       FROM user_branch_access
+       WHERE user_id = ? AND branch_id = ? AND can_access = 1
+       LIMIT 1`,
+      [approver.id, branchId]
+    );
+    if (accessRows.length === 0) {
+      return { error: "Independent approver is not authorized for the selected store." };
+    }
+  }
+
+  const passwordMatches = await bcrypt.compare(password, approver.password_hash);
+  if (!passwordMatches) {
+    return { error: "Independent approver password is incorrect." };
+  }
+
+  return { approver };
+}
+
+async function loadCompleteSaleSnapshot(connection, saleId, branchId) {
+  const [sales] = await connection.query(
+    `SELECT * FROM sales WHERE id = ? AND branch_id = ? LIMIT 1`,
+    [saleId, branchId]
+  );
+  if (!sales[0]) return null;
+
+  const [items] = await connection.query(
+    `SELECT id, product_id, product_name, quantity, unit_price, line_total, cost_price_at_sale
+     FROM sale_items WHERE sale_id = ? ORDER BY id ASC`,
+    [saleId]
+  );
+  const [debts] = await connection.query(
+    `SELECT * FROM debts WHERE sale_id = ? AND branch_id = ? LIMIT 1`,
+    [saleId, branchId]
+  );
+  const allocations = await getSalePaymentAllocations(connection, saleId);
+
+  return {
+    sale: sales[0],
+    items,
+    debt: debts[0] || null,
+    payment_allocations: allocations,
+  };
+}
+
+async function markAffectedClosingStale(
+  connection,
+  { branchId, transactionDate, reason, sourceEntityType, sourceEntityId, changedBy, approvedBy }
+) {
+  const closingDate = toDateOnly(transactionDate);
+  const [rows] = await connection.query(
+    `SELECT *
+     FROM daily_closings
+     WHERE branch_id = ? AND closing_date = ?
+     LIMIT 1
+     FOR UPDATE`,
+    [branchId, closingDate]
+  );
+
+  const closing = rows[0];
+  if (!closing) return null;
+
+  const nextRevision = Number(closing.latest_revision_number || 1) + 1;
+  const expectedSnapshot = JSON.stringify({
+    cash: Number(closing.expected_cash || 0),
+    momo: Number(closing.expected_momo || 0),
+    bank: Number(closing.expected_bank || 0),
+    other: Number(closing.expected_other || 0),
+    total: Number(closing.expected_total || 0),
+  });
+  const countedSnapshot = JSON.stringify({
+    cash: Number(closing.cash_counted || 0),
+    momo: Number(closing.momo_counted || 0),
+    bank: Number(closing.bank_counted || 0),
+    other: Number(closing.other_counted || 0),
+    total: Number(closing.total_counted || 0),
+  });
+
+  await connection.query(
+    `INSERT INTO daily_closing_revisions (
+      daily_closing_id,
+      branch_id,
+      closing_date,
+      revision_number,
+      revision_type,
+      reason,
+      expected_snapshot_json,
+      counted_snapshot_json,
+      difference_total,
+      source_entity_type,
+      source_entity_id,
+      changed_by,
+      approved_by
+    ) VALUES (?, ?, ?, ?, 'post_closing_change', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      closing.id,
+      branchId,
+      closingDate,
+      nextRevision,
+      reason,
+      expectedSnapshot,
+      countedSnapshot,
+      Number(closing.difference_total || 0),
+      sourceEntityType || null,
+      sourceEntityId ? String(sourceEntityId) : null,
+      changedBy || null,
+      approvedBy || null,
+    ]
+  );
+
+  await connection.query(
+    `UPDATE daily_closings
+     SET stale_after_close = 1,
+         stale_detected_at = NOW(),
+         latest_revision_number = ?,
+         verification_status = 'variance_review',
+         verified_by = NULL,
+         verified_at = NULL
+     WHERE id = ?`,
+    [nextRevision, closing.id]
+  );
+
+  return { id: closing.id, closing_date: closingDate, revision_number: nextRevision };
+}
+
 function buildReceiptPayload({
   sale,
   items,
@@ -199,6 +442,7 @@ function buildReceiptPayload({
   branchId,
   user,
   customer,
+  paymentAllocations,
 }) {
   return {
     branch_id: branchId,
@@ -255,6 +499,7 @@ function buildReceiptPayload({
     tax_amount: sale.tax_amount,
     total: sale.total,
     payment_type: sale.payment_type,
+    payment_allocations: paymentAllocations || sale.payment_allocations || { cash: 0, momo: 0, bank: 0, other: 0 },
     amount_tendered: sale.amount_tendered,
     amount_paid: sale.amount_paid,
     change_due: sale.change_due,
@@ -556,6 +801,7 @@ router.post("/", requireAuth, async (req, res) => {
       amount_tendered,
       amount_paid,
       discount_amount,
+      payment_allocations,
       items,
     } = req.body;
 
@@ -598,14 +844,25 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
-    if (payment_type === "credit" && !cleanCustomerName && !cleanCustomerPhone) {
+    if (
+      (payment_type === "credit" || payment_type === "mixed") &&
+      !cleanCustomerName &&
+      !cleanCustomerPhone
+    ) {
       return res.status(400).json({
         status: "error",
-        message: "Customer name or phone is required for credit sales.",
+        message: "Customer name or phone is required for credit or mixed sales.",
       });
     }
 
     await connection.beginTransaction();
+
+    // Serialize new sales against Daily Closing for this store so a sale
+    // cannot slip in while the closing snapshot is being committed.
+    await connection.query(
+      `SELECT id FROM branches WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [branchId]
+    );
 
     const lockedPeriod = await findApprovedAuditLockForDate(
       connection,
@@ -617,6 +874,25 @@ router.post("/", requireAuth, async (req, res) => {
       await connection.rollback();
 
       return sendAuditLockedResponse(res, lockedPeriod, "record a sale");
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const [closedDayRows] = await connection.query(
+      `SELECT id, verification_status
+       FROM daily_closings
+       WHERE branch_id = ? AND closing_date = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [branchId, today]
+    );
+
+    if (closedDayRows.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "Today has already been closed for this store. A new sale cannot be added after Daily Closing. Ask a manager to review the closing before recording any further transaction.",
+        closing_id: closedDayRows[0].id,
+      });
     }
 
     const settings = await getSettings(connection, branchId);
@@ -723,6 +999,17 @@ router.post("/", requireAuth, async (req, res) => {
       });
     }
 
+    const allocationResult = normalizePaymentAllocations(
+      payment_type,
+      payment,
+      payment_allocations
+    );
+
+    if (allocationResult.error) {
+      await connection.rollback();
+      return res.status(400).json({ status: "error", message: allocationResult.error });
+    }
+
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
@@ -776,6 +1063,13 @@ router.post("/", requireAuth, async (req, res) => {
     );
 
     const saleId = saleResult.insertId;
+
+    await replaceSalePaymentAllocations(connection, {
+      branchId,
+      saleId,
+      userId: req.user.id,
+      allocations: allocationResult.allocations,
+    });
 
     for (const saleItem of saleItems) {
       await connection.query(
@@ -874,6 +1168,7 @@ router.post("/", requireAuth, async (req, res) => {
         total,
         amount_paid: payment.amount_paid,
         balance: payment.balance,
+        payment_allocations: allocationResult.allocations,
       },
     });
 
@@ -907,6 +1202,7 @@ router.post("/", requireAuth, async (req, res) => {
         branchId,
         user: req.user,
         customer,
+        paymentAllocations: allocationResult.allocations,
       }),
     });
   } catch (error) {
@@ -1208,12 +1504,34 @@ router.get("/:id", requireAuth, async (req, res) => {
       [id, branchId]
     );
 
+    const paymentAllocations = await getSalePaymentAllocations(pool, id);
+    const [changeHistory] = await pool.query(
+      `SELECT
+        sch.id,
+        sch.change_type,
+        sch.reason,
+        sch.before_snapshot_json,
+        sch.after_snapshot_json,
+        sch.created_at,
+        changer.full_name AS changed_by_name,
+        approver.full_name AS approved_by_name,
+        sch.affected_closing_id
+       FROM sale_change_history sch
+       LEFT JOIN users changer ON sch.changed_by = changer.id
+       LEFT JOIN users approver ON sch.approved_by = approver.id
+       WHERE sch.sale_id = ? AND sch.branch_id = ?
+       ORDER BY sch.created_at DESC, sch.id DESC`,
+      [id, branchId]
+    );
+
     return res.json({
       status: "success",
       branch_id: branchId,
       sale: sales[0],
       items,
       debt: debts.length > 0 ? debts[0] : null,
+      payment_allocations: paymentAllocations,
+      change_history: changeHistory,
     });
   } catch (error) {
     console.error("Get single sale error:", error);
@@ -1245,8 +1563,11 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       amount_tendered,
       amount_paid,
       discount_amount,
+      payment_allocations,
       items,
       edit_reason,
+      approver_username,
+      approver_password,
     } = req.body;
 
     const cleanReason = cleanText(edit_reason);
@@ -1309,6 +1630,20 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
     await connection.beginTransaction();
 
+    const approvalResult = await verifyIndependentApprover(connection, {
+      currentUserId: req.user.id,
+      branchId,
+      approverUsername: approver_username,
+      approverPassword: approver_password,
+    });
+
+    if (approvalResult.error) {
+      await connection.rollback();
+      return res.status(403).json({ status: "error", message: approvalResult.error });
+    }
+
+    const approver = approvalResult.approver;
+
     const [sales] = await connection.query(
       `SELECT *
        FROM sales
@@ -1329,6 +1664,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const sale = sales[0];
+    const beforeSnapshot = await loadCompleteSaleSnapshot(connection, id, branchId);
 
     const lockedPeriod = await findApprovedAuditLockForDate(
       connection,
@@ -1526,6 +1862,16 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    const allocationResult = normalizePaymentAllocations(
+      payment_type,
+      payment,
+      payment_allocations
+    );
+    if (allocationResult.error) {
+      await connection.rollback();
+      return res.status(400).json({ status: "error", message: allocationResult.error });
+    }
+
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
@@ -1611,6 +1957,13 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       ]
     );
 
+    await replaceSalePaymentAllocations(connection, {
+      branchId,
+      saleId: Number(id),
+      userId: req.user.id,
+      allocations: allocationResult.allocations,
+    });
+
     if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
       const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
       const dueDate = calculateDueDate(settings.debt_reminder_days);
@@ -1683,12 +2036,40 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       );
     }
 
+    const afterSnapshot = await loadCompleteSaleSnapshot(connection, id, branchId);
+    const affectedClosing = await markAffectedClosingStale(connection, {
+      branchId,
+      transactionDate: sale.created_at,
+      reason: `Sale ${sale.receipt_number} changed after completion. ${cleanReason}`,
+      sourceEntityType: "sale",
+      sourceEntityId: id,
+      changedBy: req.user.id,
+      approvedBy: approver.id,
+    });
+
+    await connection.query(
+      `INSERT INTO sale_change_history (
+        branch_id, sale_id, change_type, reason, before_snapshot_json,
+        after_snapshot_json, changed_by, approved_by, affected_closing_id
+      ) VALUES (?, ?, 'edit', ?, ?, ?, ?, ?, ?)`,
+      [
+        branchId,
+        id,
+        cleanReason,
+        JSON.stringify(beforeSnapshot),
+        JSON.stringify(afterSnapshot),
+        req.user.id,
+        approver.id,
+        affectedClosing?.id || null,
+      ]
+    );
+
     await writeAuditEvent({
       connection,
       req,
       branchId,
       action: "EDIT_SALE",
-      details: `Edited sale ${sale.receipt_number}. Reason: ${cleanReason}. Before total GHS ${sale.total}, after total GHS ${total}.`,
+      details: `Edited sale ${sale.receipt_number} under dual approval. Reason: ${cleanReason}. Before total GHS ${sale.total}, after total GHS ${total}. Approved by ${approver.full_name || approver.username}.`,
       workspaceCode: "spare_parts",
       entityType: "sale",
       entityId: id,
@@ -1699,6 +2080,10 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
         receipt_number: sale.receipt_number,
         before_total: sale.total,
         after_total: total,
+        payment_allocations: allocationResult.allocations,
+        approved_by_user_id: approver.id,
+        approved_by_username: approver.username,
+        affected_closing_id: affectedClosing?.id || null,
       },
     });
 
@@ -1741,7 +2126,9 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
         branchId,
         user: req.user,
         customer,
+        paymentAllocations: allocationResult.allocations,
       }),
+      affected_closing: affectedClosing,
     });
   } catch (error) {
     await connection.rollback();
@@ -1774,7 +2161,7 @@ router.patch(
       }
 
       const { id } = req.params;
-      const { reason } = req.body;
+      const { reason, approver_username, approver_password } = req.body;
       const cleanReason = cleanText(reason);
 
       if (!cleanReason) {
@@ -1785,6 +2172,18 @@ router.patch(
       }
 
       await connection.beginTransaction();
+
+      const approvalResult = await verifyIndependentApprover(connection, {
+        currentUserId: req.user.id,
+        branchId,
+        approverUsername: approver_username,
+        approverPassword: approver_password,
+      });
+      if (approvalResult.error) {
+        await connection.rollback();
+        return res.status(403).json({ status: "error", message: approvalResult.error });
+      }
+      const approver = approvalResult.approver;
 
       const [sales] = await connection.query(
         `SELECT
@@ -1821,6 +2220,7 @@ router.patch(
       }
 
       const sale = sales[0];
+      const beforeSnapshot = await loadCompleteSaleSnapshot(connection, id, branchId);
 
       const lockedPeriod = await findApprovedAuditLockForDate(
         connection,
@@ -1844,6 +2244,35 @@ router.patch(
         return res.status(400).json({
           status: "error",
           message: "This sale has already been voided.",
+        });
+      }
+
+      const [returnRows] = await connection.query(
+        `SELECT COUNT(*) AS return_count
+         FROM returns
+         WHERE sale_id = ? AND branch_id = ?`,
+        [id, branchId]
+      );
+      if (Number(returnRows[0]?.return_count || 0) > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This sale already has a protected return or refund. Voiding is blocked to prevent double stock or cash adjustment.",
+        });
+      }
+
+      const [debtPaymentRows] = await connection.query(
+        `SELECT COUNT(*) AS payment_count
+         FROM debt_payments dp
+         INNER JOIN debts d ON dp.debt_id = d.id AND dp.branch_id = d.branch_id
+         WHERE d.sale_id = ? AND d.branch_id = ?`,
+        [id, branchId]
+      );
+      if (Number(debtPaymentRows[0]?.payment_count || 0) > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "This sale already has debt-payment history. Voiding is blocked to preserve the collection trail.",
         });
       }
 
@@ -1908,12 +2337,40 @@ router.patch(
         [id, branchId]
       );
 
+      const afterSnapshot = await loadCompleteSaleSnapshot(connection, id, branchId);
+      const affectedClosing = await markAffectedClosingStale(connection, {
+        branchId,
+        transactionDate: sale.created_at,
+        reason: `Sale ${sale.receipt_number} was voided after completion. ${cleanReason}`,
+        sourceEntityType: "sale",
+        sourceEntityId: id,
+        changedBy: req.user.id,
+        approvedBy: approver.id,
+      });
+
+      await connection.query(
+        `INSERT INTO sale_change_history (
+          branch_id, sale_id, change_type, reason, before_snapshot_json,
+          after_snapshot_json, changed_by, approved_by, affected_closing_id
+        ) VALUES (?, ?, 'void', ?, ?, ?, ?, ?, ?)`,
+        [
+          branchId,
+          id,
+          cleanReason,
+          JSON.stringify(beforeSnapshot),
+          JSON.stringify(afterSnapshot),
+          req.user.id,
+          approver.id,
+          affectedClosing?.id || null,
+        ]
+      );
+
       await writeAuditEvent({
         connection,
         req,
         branchId,
         action: "VOID_SALE",
-        details: `Voided sale ${sale.receipt_number}. Reason: ${cleanReason}`,
+        details: `Voided sale ${sale.receipt_number} under dual approval. Reason: ${cleanReason}. Approved by ${approver.full_name || approver.username}.`,
         workspaceCode: "spare_parts",
         entityType: "sale",
         entityId: id,
@@ -1923,6 +2380,9 @@ router.patch(
         metadata: {
           receipt_number: sale.receipt_number,
           reason: cleanReason,
+          approved_by_user_id: approver.id,
+          approved_by_username: approver.username,
+          affected_closing_id: affectedClosing?.id || null,
         },
       });
 
@@ -1937,7 +2397,8 @@ router.patch(
 
       return res.json({
         status: "success",
-        message: "Sale voided successfully. Stock has been restored.",
+        message: "Sale voided successfully under independent approval. Stock has been restored.",
+        affected_closing: affectedClosing,
       });
     } catch (error) {
       await connection.rollback();

@@ -40,6 +40,12 @@ export default function NewSalePage() {
   const [paymentType, setPaymentType] = useState("cash");
   const [discountAmount, setDiscountAmount] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
+  const [paymentAllocations, setPaymentAllocations] = useState({
+    cash: "",
+    momo: "",
+    bank: "",
+    other: "",
+  });
 
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
@@ -394,12 +400,15 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
   const cleanDiscountAmount = Math.max(Number(discountAmount || 0), 0);
   const estimatedAmountDue = Math.max(subtotal - cleanDiscountAmount, 0);
-  const liveAmountTendered = Math.max(Number(amountPaid || 0), 0);
   const immediatePayment = ["cash", "momo", "bank"].includes(paymentType);
-  const liveAppliedPayment = Math.min(
-    liveAmountTendered,
-    estimatedAmountDue
+  const allocationTotal = Object.values(paymentAllocations).reduce(
+    (sum, value) => sum + Math.max(Number(value || 0), 0),
+    0
   );
+  const liveAmountTendered = immediatePayment
+    ? Math.max(Number(amountPaid || 0), 0)
+    : allocationTotal;
+  const liveAppliedPayment = Math.min(liveAmountTendered, estimatedAmountDue);
   const liveChangeDue = immediatePayment
     ? Math.max(liveAmountTendered - estimatedAmountDue, 0)
     : 0;
@@ -410,9 +419,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     if (cart.length > 0) score += 35;
     if (paymentType) score += 20;
-    if (Number(amountPaid || 0) >= estimatedAmountDue && estimatedAmountDue > 0) {
+    if (liveAmountTendered >= estimatedAmountDue && estimatedAmountDue > 0) {
       score += 25;
-    } else if (Number(amountPaid || 0) > 0) {
+    } else if (liveAmountTendered > 0) {
       score += 15;
     }
 
@@ -423,7 +432,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }
 
     return Math.min(score, 100);
-  }, [cart.length, paymentType, amountPaid, estimatedAmountDue, customerName, customerPhone]);
+  }, [cart.length, paymentType, liveAmountTendered, estimatedAmountDue, customerName, customerPhone]);
 
   const lowStockProducts = products.filter(
     (product) =>
@@ -559,6 +568,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setPaymentType("cash");
     setDiscountAmount("");
     setAmountPaid("");
+    setPaymentAllocations({ cash: "", momo: "", bank: "", other: "" });
     setReceipt(null);
     setMessage("");
     setError("");
@@ -610,8 +620,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         customer_location: cleanCustomerLocation,
         payment_type: paymentType,
         discount_amount: discount,
-        amount_tendered: Number(amountPaid || 0),
-        amount_paid: Number(amountPaid || 0),
+        amount_tendered: Number(liveAmountTendered || 0),
+        amount_paid: Number(liveAmountTendered || 0),
+        payment_allocations: paymentAllocations,
         items: cart.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
@@ -654,6 +665,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       setPaymentType("cash");
       setDiscountAmount("");
       setAmountPaid("");
+      setPaymentAllocations({ cash: "", momo: "", bank: "", other: "" });
 
       await loadProducts();
     } catch (error) {
@@ -1347,30 +1359,67 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 placeholder="Enter discount amount"
               />
 
-              <label>
-                {immediatePayment ? "Amount Tendered" : "Amount Paid Now"}
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={amountPaid}
-                onChange={(event) => setAmountPaid(event.target.value)}
-                placeholder={`Amount due is GHS ${formatMoney(estimatedAmountDue)}`}
-              />
+              {immediatePayment ? (
+                <>
+                  <label>Amount Tendered</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amountPaid}
+                    onChange={(event) => setAmountPaid(event.target.value)}
+                    placeholder={`Amount due is GHS ${formatMoney(estimatedAmountDue)}`}
+                  />
 
-              <div style={styles.quickMoneyRow}>
-                <button
-                  type="button"
-                  onClick={() => setAmountPaid(String(estimatedAmountDue))}
-                >
-                  Exact
-                </button>
+                  <div style={styles.quickMoneyRow}>
+                    <button
+                      type="button"
+                      onClick={() => setAmountPaid(String(estimatedAmountDue))}
+                    >
+                      Exact
+                    </button>
 
-                <button type="button" onClick={() => setAmountPaid("")}>
-                  Clear
-                </button>
-              </div>
+                    <button type="button" onClick={() => setAmountPaid("")}>
+                      Clear
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ marginTop: "12px" }}>
+                  <label>Amount Paid Now — Payment Channel Split</label>
+                  <p style={{ margin: "4px 0 10px", color: "#64748b", fontSize: "13px" }}>
+                    Record exactly how the customer paid. The channel total must equal the amount paid now.
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "10px" }}>
+                    {[
+                      ["cash", "Cash"],
+                      ["momo", "MoMo"],
+                      ["bank", "Bank"],
+                      ["other", "Other / Unallocated"],
+                    ].map(([channel, label]) => (
+                      <label key={channel} style={{ display: "grid", gap: "4px" }}>
+                        {label}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={paymentAllocations[channel]}
+                          onChange={(event) =>
+                            setPaymentAllocations((current) => ({
+                              ...current,
+                              [channel]: event.target.value,
+                            }))
+                          }
+                          placeholder="0.00"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: "10px", fontWeight: 800 }}>
+                    Paid now: GHS {formatMoney(allocationTotal)}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={styles.totalPanel}>
@@ -1521,6 +1570,13 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               <p>
                 <span>Amount Paid</span>
                 <strong>GHS {formatMoney(receipt.amount_paid)}</strong>
+              </p>
+
+              <p>
+                <span>Payment Channels</span>
+                <strong>
+                  Cash {formatMoney(receipt.payment_allocations?.cash)} · MoMo {formatMoney(receipt.payment_allocations?.momo)} · Bank {formatMoney(receipt.payment_allocations?.bank)} · Other {formatMoney(receipt.payment_allocations?.other)}
+                </strong>
               </p>
 
               <p>

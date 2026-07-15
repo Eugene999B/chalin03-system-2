@@ -11,6 +11,21 @@ const PAYMENT_ICONS = {
   credit: "🧾",
 };
 
+const DENOMINATIONS = [
+  ["note_200", "GHS 200", 200],
+  ["note_100", "GHS 100", 100],
+  ["note_50", "GHS 50", 50],
+  ["note_20", "GHS 20", 20],
+  ["note_10", "GHS 10", 10],
+  ["note_5", "GHS 5", 5],
+  ["note_2", "GHS 2", 2],
+  ["note_1", "GHS 1", 1],
+];
+
+const EMPTY_DENOMINATIONS = Object.fromEntries(
+  DENOMINATIONS.map(([key]) => [key, ""]).concat([["coins", ""]])
+);
+
 function getTodayDate() {
   const now = new Date();
   const offset = now.getTimezoneOffset();
@@ -86,22 +101,36 @@ function downloadBlob(blob, filename) {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
 }
 
-function StatusPill({ alreadyClosed, difference }) {
+function StatusPill({ closing, difference }) {
+  const alreadyClosed = Boolean(closing);
   const balanced = Math.abs(safeNumber(difference)) < 0.01;
-  const className = alreadyClosed
-    ? balanced
-      ? "dc-status dc-status-closed"
-      : "dc-status dc-status-variance"
-    : balanced
-      ? "dc-status dc-status-ready"
-      : "dc-status dc-status-draft";
-  const text = alreadyClosed
-    ? balanced
-      ? "Closed · Balanced"
-      : "Closed · Variance"
-    : balanced
-      ? "Ready to Close"
-      : "Draft · Variance";
+  const stale = Number(closing?.stale_after_close || 0) === 1;
+  const verified = closing?.verification_status === "verified";
+  const legacyUnconfirmed = alreadyClosed && Number(closing?.counted_confirmed || 0) !== 1;
+
+  const className = stale || legacyUnconfirmed
+    ? "dc-status dc-status-variance"
+    : alreadyClosed
+      ? verified && balanced
+        ? "dc-status dc-status-closed"
+        : "dc-status dc-status-ready"
+      : balanced
+        ? "dc-status dc-status-draft"
+        : "dc-status dc-status-variance";
+
+  const text = stale
+    ? "Closed · Changed After Closing"
+    : legacyUnconfirmed
+      ? "Closed · Legacy Count Unconfirmed"
+      : alreadyClosed
+      ? verified
+        ? balanced
+          ? "Closed · Independently Verified"
+          : "Closed · Verified Variance"
+        : balanced
+          ? "Closed · Awaiting Verification"
+          : "Closed · Variance Review"
+      : "Draft · Manual Count Required";
 
   return <span className={className}>{text}</span>;
 }
@@ -368,7 +397,9 @@ export default function DailyClosingPage() {
   const [closingDate, setClosingDate] = useState(getTodayDate());
   const [summary, setSummary] = useState(null);
   const [closings, setClosings] = useState([]);
+  const [controlSummary, setControlSummary] = useState(null);
   const [existingClosing, setExistingClosing] = useState(null);
+  const [closingRevisions, setClosingRevisions] = useState([]);
   const [currentVsSavedDifference, setCurrentVsSavedDifference] = useState(0);
 
   const [cashCounted, setCashCounted] = useState("");
@@ -376,7 +407,19 @@ export default function DailyClosingPage() {
   const [bankCounted, setBankCounted] = useState("");
   const [otherCounted, setOtherCounted] = useState("");
   const [notes, setNotes] = useState("");
-  const [manualCountConfirmed, setManualCountConfirmed] = useState(false);
+  const [openingCashFloat, setOpeningCashFloat] = useState("0");
+  const [cashDeposits, setCashDeposits] = useState("0");
+  const [cashWithdrawals, setCashWithdrawals] = useState("0");
+  const [otherCashIn, setOtherCashIn] = useState("0");
+  const [otherCashOut, setOtherCashOut] = useState("0");
+  const [denominations, setDenominations] = useState(EMPTY_DENOMINATIONS);
+  const [countedConfirmed, setCountedConfirmed] = useState(false);
+  const [verificationPassword, setVerificationPassword] = useState("");
+  const [verificationNotes, setVerificationNotes] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [reconcilePassword, setReconcilePassword] = useState("");
+  const [reconcileNotes, setReconcileNotes] = useState("");
+  const [reconciling, setReconciling] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -385,6 +428,20 @@ export default function DailyClosingPage() {
   const [error, setError] = useState("");
 
   const alreadyClosed = Boolean(existingClosing);
+
+  const denominationTotal = useMemo(() => {
+    const notesTotal = DENOMINATIONS.reduce(
+      (sum, [key, , value]) => sum + Math.max(Math.floor(Number(denominations[key] || 0)), 0) * value,
+      0
+    );
+    return notesTotal + Math.max(Number(denominations.coins || 0), 0);
+  }, [denominations]);
+
+  useEffect(() => {
+    if (!alreadyClosed) {
+      setCashCounted(denominationTotal.toFixed(2));
+    }
+  }, [denominationTotal, alreadyClosed]);
 
   const counted = useMemo(
     () => ({
@@ -401,26 +458,32 @@ export default function DailyClosingPage() {
     [counted]
   );
 
-  const expectedSnapshot = useMemo(
-    () => ({
-      cash: safeNumber(
-        existingClosing?.expected_cash ?? summary?.expected_cash
-      ),
-      momo: safeNumber(
-        existingClosing?.expected_momo ?? summary?.expected_momo
-      ),
-      bank: safeNumber(
-        existingClosing?.expected_bank ?? summary?.expected_bank
-      ),
-      other: safeNumber(
-        existingClosing?.expected_other ?? summary?.expected_other
-      ),
-      total: safeNumber(
-        existingClosing?.expected_total ?? summary?.expected_total
-      ),
-    }),
-    [existingClosing, summary]
-  );
+  const expectedSnapshot = useMemo(() => {
+    if (existingClosing) {
+      return {
+        cash: safeNumber(existingClosing.expected_cash),
+        momo: safeNumber(existingClosing.expected_momo),
+        bank: safeNumber(existingClosing.expected_bank),
+        other: safeNumber(existingClosing.expected_other),
+        total: safeNumber(existingClosing.expected_total),
+      };
+    }
+
+    const adjustedCash =
+      safeNumber(summary?.expected_cash) +
+      safeNumber(openingCashFloat) +
+      safeNumber(otherCashIn) -
+      safeNumber(cashDeposits) -
+      safeNumber(cashWithdrawals) -
+      safeNumber(otherCashOut);
+    const momo = safeNumber(summary?.expected_momo);
+    const bank = safeNumber(summary?.expected_bank);
+    const other = safeNumber(summary?.expected_other);
+    return { cash: adjustedCash, momo, bank, other, total: adjustedCash + momo + bank + other };
+  }, [
+    existingClosing, summary, openingCashFloat, cashDeposits, cashWithdrawals,
+    otherCashIn, otherCashOut,
+  ]);
 
   const differenceTotal = useMemo(
     () => countedTotal - expectedSnapshot.total,
@@ -469,8 +532,18 @@ export default function DailyClosingPage() {
     setMomoCounted(safeNumber(closing.momo_counted).toFixed(2));
     setBankCounted(safeNumber(closing.bank_counted).toFixed(2));
     setOtherCounted(safeNumber(closing.other_counted).toFixed(2));
+    setOpeningCashFloat(String(closing.opening_cash_float || 0));
+    setCashDeposits(String(closing.cash_deposits || 0));
+    setCashWithdrawals(String(closing.cash_withdrawals || 0));
+    setOtherCashIn(String(closing.other_cash_in || 0));
+    setOtherCashOut(String(closing.other_cash_out || 0));
+    try {
+      setDenominations({ ...EMPTY_DENOMINATIONS, ...JSON.parse(closing.denomination_json || "{}") });
+    } catch {
+      setDenominations(EMPTY_DENOMINATIONS);
+    }
+    setCountedConfirmed(Boolean(Number(closing.counted_confirmed || 0)));
     setNotes(closing.notes || "");
-    setManualCountConfirmed(true);
   }
 
   async function loadSummary(dateValue = closingDate) {
@@ -493,13 +566,28 @@ export default function DailyClosingPage() {
 
       if (savedClosing) {
         fillClosingAmounts(savedClosing);
+        try {
+          const revisionsResponse = await axiosClient.get(
+            `/daily-closing/${savedClosing.id}/revisions`
+          );
+          setClosingRevisions(revisionsResponse.data.revisions || []);
+        } catch {
+          setClosingRevisions([]);
+        }
       } else {
-        setCashCounted("");
+        setClosingRevisions([]);
+        setCashCounted("0.00");
         setMomoCounted("");
         setBankCounted("");
         setOtherCounted("");
+        setOpeningCashFloat("0");
+        setCashDeposits("0");
+        setCashWithdrawals("0");
+        setOtherCashIn("0");
+        setOtherCashOut("0");
+        setDenominations(EMPTY_DENOMINATIONS);
+        setCountedConfirmed(false);
         setNotes("");
-        setManualCountConfirmed(false);
       }
     } catch (requestError) {
       setError(
@@ -515,6 +603,7 @@ export default function DailyClosingPage() {
     try {
       const response = await axiosClient.get("/daily-closing");
       setClosings(response.data.closings || []);
+      setControlSummary(response.data.control_summary || null);
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
@@ -549,6 +638,13 @@ export default function DailyClosingPage() {
       momo_counted: counted.momo,
       bank_counted: counted.bank,
       other_counted: counted.other,
+      opening_cash_float: openingCashFloat,
+      cash_deposits: cashDeposits,
+      cash_withdrawals: cashWithdrawals,
+      other_cash_in: otherCashIn,
+      other_cash_out: otherCashOut,
+      denominations: JSON.stringify(denominations),
+      counted_confirmed: countedConfirmed ? 1 : 0,
       notes,
     };
   }
@@ -637,24 +733,26 @@ export default function DailyClosingPage() {
       return;
     }
 
-    const missingCountedChannel = [
-      cashCounted,
-      momoCounted,
-      bankCounted,
-      otherCounted,
-    ].some((value) => value === "");
-
-    if (missingCountedChannel) {
-      setError(
-        "Enter Cash, Mobile Money, Bank and Other counted amounts manually. Enter 0.00 where a channel has no money."
-      );
+    if ([cashCounted, momoCounted, bankCounted, otherCounted].some((value) => value === "")) {
+      setError("Enter every counted/confirmed channel manually. Blank values are not allowed.");
       return;
     }
 
-    if (!manualCountConfirmed) {
-      setError(
-        "Confirm that the amounts were counted or independently checked before saving."
-      );
+    if (!countedConfirmed) {
+      setError("Confirm that physical cash was counted and MoMo/bank balances were checked independently.");
+      return;
+    }
+
+    if (Math.abs(denominationTotal - safeNumber(cashCounted)) >= 0.01) {
+      setError("The cash denomination total must equal the physical cash counted amount.");
+      return;
+    }
+
+    const hasManualCashMovement = [cashDeposits, cashWithdrawals, otherCashIn, otherCashOut]
+      .some((value) => safeNumber(value) > 0);
+
+    if (hasManualCashMovement && !notes.trim()) {
+      setError("Explain every cash deposit, withdrawal, other cash-in, or other cash-out in Closing Notes.");
       return;
     }
 
@@ -684,6 +782,13 @@ export default function DailyClosingPage() {
         momo_counted: counted.momo,
         bank_counted: counted.bank,
         other_counted: counted.other,
+        opening_cash_float: Number(openingCashFloat || 0),
+        cash_deposits: Number(cashDeposits || 0),
+        cash_withdrawals: Number(cashWithdrawals || 0),
+        other_cash_in: Number(otherCashIn || 0),
+        other_cash_out: Number(otherCashOut || 0),
+        denominations,
+        counted_confirmed: true,
         notes,
       });
 
@@ -697,6 +802,94 @@ export default function DailyClosingPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function reconcileDailyClosing(event) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+
+    if (!existingClosing?.id) {
+      setError("Open a saved Daily Closing before reconciling changes.");
+      return;
+    }
+
+    if (!reconcileNotes.trim()) {
+      setError("Enter management revision notes explaining which approved transaction changed and what was checked.");
+      return;
+    }
+
+    if (!reconcilePassword) {
+      setError("Enter your own password to confirm management reconciliation.");
+      return;
+    }
+
+    setReconciling(true);
+    try {
+      const response = await axiosClient.post(
+        `/daily-closing/${existingClosing.id}/reconcile`,
+        {
+          password: reconcilePassword,
+          revision_notes: reconcileNotes,
+        }
+      );
+      setReconcilePassword("");
+      setReconcileNotes("");
+      setMessage(response.data.message || "Post-closing changes reconciled successfully.");
+      await loadSummary(closingDate);
+      await loadClosings();
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Failed to reconcile the changed Daily Closing."
+      );
+    } finally {
+      setReconciling(false);
+    }
+  }
+
+  async function verifyDailyClosing(event) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+
+    if (!existingClosing?.id) {
+      setError("Open a saved Daily Closing before verification.");
+      return;
+    }
+
+    if (!verificationPassword) {
+      setError("Enter your own password to confirm independent management verification.");
+      return;
+    }
+
+    if (Math.abs(safeNumber(existingClosing.difference_total)) >= 0.01 && !verificationNotes.trim()) {
+      setError("Verification notes are required because this closing contains a variance.");
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const response = await axiosClient.post(
+        `/daily-closing/${existingClosing.id}/verify`,
+        {
+          password: verificationPassword,
+          verification_notes: verificationNotes,
+        }
+      );
+      setVerificationPassword("");
+      setVerificationNotes("");
+      setMessage(response.data.message || "Daily Closing verified successfully.");
+      await loadSummary(closingDate);
+      await loadClosings();
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Failed to verify the Daily Closing."
+      );
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -739,7 +932,7 @@ export default function DailyClosingPage() {
             />
           </div>
           <StatusPill
-            alreadyClosed={alreadyClosed}
+            closing={existingClosing}
             difference={differenceTotal}
           />
           <div className="dc-hero-actions">
@@ -782,6 +975,26 @@ export default function DailyClosingPage() {
       {message && <div className="dc-alert dc-alert-success">{message}</div>}
       {error && <div className="dc-alert dc-alert-error">{error}</div>}
 
+      {controlSummary && (
+        <section className="dc-panel dc-control-centre">
+          <div className="dc-section-heading">
+            <div>
+              <span className="dc-section-kicker">Owner and auditor watch</span>
+              <h2>30-day cash-control exceptions</h2>
+              <p>These indicators flag records for review. They do not automatically accuse any staff member.</p>
+            </div>
+          </div>
+          <div className="dc-control-centre-grid">
+            <div><span>Shortage days</span><strong>{controlSummary.shortage_count || 0}</strong><small>{formatMoney(controlSummary.shortage_total)} total shortage</small></div>
+            <div><span>Variance closings</span><strong>{controlSummary.variance_count || 0}</strong><small>Counted did not equal expected</small></div>
+            <div><span>Changed after closing</span><strong>{controlSummary.changed_after_close_count || 0}</strong><small>Revision review required</small></div>
+            <div><span>Legacy count unconfirmed</span><strong>{controlSummary.legacy_unconfirmed_count || 0}</strong><small>Historical closings were not independently counted</small></div>
+            <div><span>Awaiting verification</span><strong>{controlSummary.awaiting_verification_count || 0}</strong><small>Independent manager check pending</small></div>
+            <div><span>Protected sale changes</span><strong>{controlSummary.protected_sale_change_count || 0}</strong><small>{controlSummary.protected_void_count || 0} approved void(s)</small></div>
+          </div>
+        </section>
+      )}
+
       {loading && !summary && (
         <section className="dc-panel dc-loading-panel">
           <span className="dc-spinner" aria-hidden="true" />
@@ -802,13 +1015,143 @@ export default function DailyClosingPage() {
                   Closed by {existingClosing?.closed_by_name || "System"} on{" "}
                   {formatDateTime(existingClosing?.closed_at)}.
                 </span>
+                <span>
+                  Verification: {existingClosing?.verification_status || "submitted"}
+                  {existingClosing?.verified_by_name
+                    ? ` · Verified by ${existingClosing.verified_by_name} on ${formatDateTime(existingClosing.verified_at)}`
+                    : " · Independent manager verification pending"}
+                </span>
+                {Number(existingClosing?.counted_confirmed || 0) !== 1 && (
+                  <b>Legacy closing: the saved counted amounts were not independently confirmed with denomination evidence. Preserve it for history, but do not treat it as proof of physical cash counted.</b>
+                )}
               </div>
-              {Math.abs(currentVsSavedDifference) >= 0.01 && (
+              {(Boolean(Number(existingClosing?.stale_after_close || 0)) || Math.abs(currentVsSavedDifference) >= 0.01) && (
                 <b>
-                  Current data differs from the saved expected snapshot by{" "}
-                  {formatMoney(currentVsSavedDifference)}.
+                  ⚠ Changed after closing — current records differ from the original saved snapshot by{" "}
+                  {formatMoney(currentVsSavedDifference)}. Management review is required; the original closing remains preserved.
                 </b>
               )}
+            </section>
+          )}
+
+          {alreadyClosed &&
+            Boolean(Number(existingClosing?.stale_after_close || 0)) &&
+            Number(existingClosing?.closed_by || 0) !== Number(user?.id || 0) && (
+              <section className="dc-panel dc-reconciliation-panel">
+                <div className="dc-section-heading">
+                  <div>
+                    <span className="dc-section-kicker">Post-closing revision control</span>
+                    <h2>Reconcile changed closing</h2>
+                    <p>
+                      Review the approved sale edit, void, return, expense or debt payment. The system will recalculate the expected channels, preserve the original count, add a new immutable version and require independent verification again.
+                    </p>
+                  </div>
+                </div>
+                <form className="dc-verification-form" onSubmit={reconcileDailyClosing}>
+                  <label>
+                    Management revision notes
+                    <textarea
+                      value={reconcileNotes}
+                      onChange={(event) => setReconcileNotes(event.target.value)}
+                      placeholder="Example: Receipt 2678594 was approved from Cash to MoMo. Compared the receipt, MoMo statement and sale change history."
+                      rows="3"
+                    />
+                  </label>
+                  <label>
+                    Your password
+                    <input
+                      type="password"
+                      value={reconcilePassword}
+                      onChange={(event) => setReconcilePassword(event.target.value)}
+                      autoComplete="current-password"
+                      placeholder="Enter your own account password"
+                    />
+                  </label>
+                  <button className="dc-primary-button" type="submit" disabled={reconciling}>
+                    {reconciling ? "Reconciling…" : "↻ Create Revised Version"}
+                  </button>
+                </form>
+              </section>
+            )}
+
+          {alreadyClosed &&
+            existingClosing?.verification_status !== "verified" &&
+            Number(existingClosing?.counted_confirmed || 0) === 1 &&
+            Number(existingClosing?.closed_by || 0) !== Number(user?.id || 0) &&
+            !Boolean(Number(existingClosing?.stale_after_close || 0)) && (
+              <section className="dc-panel dc-verification-panel">
+                <div className="dc-section-heading">
+                  <div>
+                    <span className="dc-section-kicker">Independent control</span>
+                    <h2>Manager verification</h2>
+                    <p>
+                      A different manager or administrator must recount the cash, confirm MoMo and bank balances, and enter their own password.
+                    </p>
+                  </div>
+                </div>
+                <form className="dc-verification-form" onSubmit={verifyDailyClosing}>
+                  <label>
+                    Verification notes
+                    <textarea
+                      value={verificationNotes}
+                      onChange={(event) => setVerificationNotes(event.target.value)}
+                      placeholder="State what was recounted, checked, or explained. Required when there is a variance."
+                      rows="3"
+                    />
+                  </label>
+                  <label>
+                    Your password
+                    <input
+                      type="password"
+                      value={verificationPassword}
+                      onChange={(event) => setVerificationPassword(event.target.value)}
+                      autoComplete="current-password"
+                      placeholder="Enter your own account password"
+                    />
+                  </label>
+                  <button className="dc-primary-button" type="submit" disabled={verifying}>
+                    {verifying ? "Verifying…" : "✓ Verify Closing"}
+                  </button>
+                </form>
+              </section>
+            )}
+
+          {alreadyClosed && closingRevisions.length > 0 && (
+            <section className="dc-panel dc-revision-panel">
+              <div className="dc-section-heading">
+                <div>
+                  <span className="dc-section-kicker">Immutable evidence</span>
+                  <h2>Closing revision history</h2>
+                  <p>The original submission remains visible. Later sale edits, voids, expenses, debt payments, returns and manager verification create new evidence entries instead of erasing history.</p>
+                </div>
+              </div>
+              <div className="dc-revision-list">
+                {closingRevisions.map((revision) => {
+                  let expected = {};
+                  let countedSnapshot = {};
+                  try { expected = JSON.parse(revision.expected_snapshot_json || "{}"); } catch { expected = {}; }
+                  try { countedSnapshot = JSON.parse(revision.counted_snapshot_json || "{}"); } catch { countedSnapshot = {}; }
+                  return (
+                    <article key={revision.id} className="dc-revision-item">
+                      <div className="dc-revision-head">
+                        <strong>Version {revision.revision_number}</strong>
+                        <span>{String(revision.revision_type || "revision").replaceAll("_", " ")}</span>
+                        <time>{formatDateTime(revision.created_at)}</time>
+                      </div>
+                      <p>{revision.reason || "No reason recorded."}</p>
+                      <div className="dc-revision-values">
+                        <span>Saved expected <b>{formatMoney(expected.total)}</b></span>
+                        <span>Counted <b>{formatMoney(countedSnapshot.total)}</b></span>
+                        <span>Variance <b>{formatMoney(revision.difference_total)}</b></span>
+                      </div>
+                      <small>
+                        Changed by {revision.changed_by_name || "System"} · Approved by {revision.approved_by_name || "Pending"}
+                        {revision.source_entity_type ? ` · Source: ${revision.source_entity_type} ${revision.source_entity_id || ""}` : ""}
+                      </small>
+                    </article>
+                  );
+                })}
+              </div>
             </section>
           )}
 
@@ -1080,6 +1423,55 @@ export default function DailyClosingPage() {
             </article>
           </section>
 
+          <section className="dc-panel dc-cash-control-panel">
+            <div className="dc-section-heading">
+              <div>
+                <span className="dc-section-kicker">Physical cash movement</span>
+                <h2>Cash Drawer Control</h2>
+                <p>Record cash that entered or left the drawer outside normal sale and debt-payment receipts.</p>
+              </div>
+              <strong className="dc-heading-total">Expected cash {formatMoney(expectedSnapshot.cash)}</strong>
+            </div>
+            <div className="dc-cash-control-grid">
+              {[
+                ["Opening cash float", openingCashFloat, setOpeningCashFloat, "Cash placed in drawer before trading"],
+                ["Cash deposited", cashDeposits, setCashDeposits, "Cash removed and deposited to bank"],
+                ["Cash withdrawals", cashWithdrawals, setCashWithdrawals, "Approved owner/operational withdrawal"],
+                ["Other cash in", otherCashIn, setOtherCashIn, "Approved non-sale cash received"],
+                ["Other cash out", otherCashOut, setOtherCashOut, "Approved cash out not recorded as expense"],
+              ].map(([label, value, setter, helper]) => (
+                <label key={label}>
+                  <span>{label}</span>
+                  <small>{helper}</small>
+                  <div className="dc-money-input"><span>GHS</span><input type="number" min="0" step="0.01" value={value} disabled={alreadyClosed} onChange={(event) => setter(event.target.value)} /></div>
+                </label>
+              ))}
+            </div>
+
+            <div className="dc-denomination-section">
+              <div>
+                <span className="dc-section-kicker">Independent physical count</span>
+                <h3>Cash Denomination Counter</h3>
+                <p>Enter the number of notes. Enter the total value of coins in the Coins field.</p>
+              </div>
+              <div className="dc-denomination-grid">
+                {DENOMINATIONS.map(([key, label, faceValue]) => (
+                  <label key={key}>
+                    <span>{label}</span>
+                    <input type="number" min="0" step="1" value={denominations[key]} disabled={alreadyClosed} onChange={(event) => setDenominations((current) => ({ ...current, [key]: event.target.value }))} />
+                    <small>{formatMoney(Math.max(Math.floor(Number(denominations[key] || 0)), 0) * faceValue)}</small>
+                  </label>
+                ))}
+                <label>
+                  <span>Coins total</span>
+                  <input type="number" min="0" step="0.01" value={denominations.coins} disabled={alreadyClosed} onChange={(event) => setDenominations((current) => ({ ...current, coins: event.target.value }))} />
+                  <small>Enter total coin value</small>
+                </label>
+              </div>
+              <div className="dc-denomination-total">Physical cash counted <strong>{formatMoney(denominationTotal)}</strong></div>
+            </div>
+          </section>
+
           <section className="dc-panel dc-reconciliation-panel">
             <div className="dc-section-heading">
               <div>
@@ -1090,9 +1482,7 @@ export default function DailyClosingPage() {
                   confirmed for each payment channel.
                 </p>
               </div>
-              <div className="dc-manual-count-badge">
-                Manual entry required · Expected values cannot be copied
-              </div>
+              <div className="dc-security-badge">Manual count required · No automatic balancing</div>
             </div>
 
             <form onSubmit={saveDailyClosing}>
@@ -1127,6 +1517,7 @@ export default function DailyClosingPage() {
                                 : otherCounted
                         }
                         disabled={alreadyClosed}
+                        readOnly={row.key === "cash"}
                         onChange={(event) => {
                           const value = event.target.value;
                           if (row.key === "cash") setCashCounted(value);
@@ -1171,6 +1562,18 @@ export default function DailyClosingPage() {
                 </div>
               </div>
 
+              <label className="dc-count-confirmation">
+                <input
+                  type="checkbox"
+                  checked={countedConfirmed}
+                  disabled={alreadyClosed}
+                  onChange={(event) => setCountedConfirmed(event.target.checked)}
+                />
+                <span>
+                  I confirm that physical cash was counted by denomination and MoMo/bank/other balances were checked independently. I did not copy the system expected amounts.
+                </span>
+              </label>
+
               <div className="dc-notes-area">
                 <label htmlFor="dc-closing-notes">
                   Closing notes
@@ -1187,22 +1590,6 @@ export default function DailyClosingPage() {
                   rows={4}
                 />
               </div>
-
-              <label className="dc-manual-confirmation">
-                <input
-                  type="checkbox"
-                  checked={manualCountConfirmed}
-                  disabled={alreadyClosed}
-                  onChange={(event) =>
-                    setManualCountConfirmed(event.target.checked)
-                  }
-                />
-                <span>
-                  I confirm that Cash was physically counted and that Mobile
-                  Money, Bank and Other balances were independently checked.
-                  These figures were not copied from the expected amounts.
-                </span>
-              </label>
 
               <div className="dc-submit-row">
                 <div className="dc-submit-guidance">
@@ -1267,6 +1654,34 @@ export default function DailyClosingPage() {
                     <div className="dc-simple-row-value">
                       <b>{formatMoney(item.total)}</b>
                       <small>{formatTime(item.created_at)}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {(summary.risk_flags || []).length > 0 && (
+            <section className="dc-panel dc-risk-panel">
+              <div className="dc-section-heading">
+                <div>
+                  <span className="dc-section-kicker">Clean-hands review</span>
+                  <h2>Security and error indicators</h2>
+                  <p>These indicators require review but do not automatically prove theft or wrongdoing.</p>
+                </div>
+                <span className="dc-exception-count">{summary.risk_flag_count} flag(s)</span>
+              </div>
+              <div className="dc-simple-list">
+                {summary.risk_flags.map((item) => (
+                  <div className="dc-simple-row" key={item.id}>
+                    <div className="dc-simple-row-icon">{item.severity === "high" ? "🚨" : "🔎"}</div>
+                    <div className="dc-simple-row-main">
+                      <strong>{String(item.risk_type || "review").replaceAll("_", " ")} · {item.receipt_number || "No receipt"}</strong>
+                      <span>{item.details}</span>
+                    </div>
+                    <div className="dc-simple-row-value">
+                      <b>{formatMoney(item.amount)}</b>
+                      <small>{formatDateTime(item.occurred_at)}</small>
                     </div>
                   </div>
                 ))}

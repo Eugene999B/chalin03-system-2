@@ -4,6 +4,7 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { markClosingStale } = require("../services/dailyClosingSecurityService");
 
 const router = express.Router();
 
@@ -35,8 +36,9 @@ function toDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
-async function logActivity(userId, branchId, action, details) {
+async function logActivity(userId, branchId, action, details, connection = pool) {
   await writeAuditEvent({
+    connection,
     branchId: branchId || null,
     userId: userId || null,
     action,
@@ -169,6 +171,7 @@ router.get(
           e.category,
           e.description,
           e.amount,
+          e.payment_method,
           e.expense_date,
           e.recorded_by,
           e.created_at,
@@ -220,12 +223,15 @@ router.post(
   requireAuth,
   requireRole("admin", "manager"),
   async (req, res) => {
+    const connection = await pool.getConnection();
+
     try {
       const branchId = getBranchId(req);
 
       const category = cleanText(req.body.category);
       const description = cleanText(req.body.description);
       const expenseDate = cleanText(req.body.expense_date);
+      const paymentMethod = cleanText(req.body.payment_method || "cash").toLowerCase();
       const cleanAmount = Number(req.body.amount);
 
       if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {
@@ -242,6 +248,13 @@ router.post(
         });
       }
 
+      if (!["cash", "momo", "bank", "other"].includes(paymentMethod)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Expense payment method must be cash, momo, bank, or other.",
+        });
+      }
+
       const lockedPeriod = await findApprovedAuditLockForDate(
         expenseDate,
         branchId
@@ -255,21 +268,25 @@ router.post(
         );
       }
 
-      const [result] = await pool.query(
+      await connection.beginTransaction();
+
+      const [result] = await connection.query(
         `INSERT INTO expenses (
           branch_id,
           category,
           description,
           amount,
+          payment_method,
           expense_date,
           recorded_by
         )
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           branchId,
           category,
           description || null,
           cleanAmount,
+          paymentMethod,
           expenseDate,
           req.user.id,
         ]
@@ -279,8 +296,20 @@ router.post(
         req.user.id,
         branchId,
         "CREATE_EXPENSE",
-        `Recorded expense "${category}" worth GHS ${cleanAmount.toFixed(2)}`
+        `Recorded ${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(2)}`,
+        connection
       );
+
+      const affectedClosing = await markClosingStale(connection, {
+        branchId,
+        transactionDate: expenseDate,
+        reason: `${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(2)} was recorded after the business day had already been closed.`,
+        sourceEntityType: "expense",
+        sourceEntityId: result.insertId,
+        changedBy: req.user.id,
+      });
+
+      await connection.commit();
 
       const [expenses] = await pool.query(
         `SELECT
@@ -289,6 +318,7 @@ router.post(
           e.category,
           e.description,
           e.amount,
+          e.payment_method,
           e.expense_date,
           e.recorded_by,
           e.created_at,
@@ -308,14 +338,18 @@ router.post(
         status: "success",
         message: "Expense recorded successfully.",
         expense: expenses[0],
+        affected_closing: affectedClosing,
       });
     } catch (error) {
+      await connection.rollback();
       console.error("Create expense error:", error);
 
       return res.status(500).json({
         status: "error",
         message: "Something went wrong while recording expense.",
       });
+    } finally {
+      connection.release();
     }
   }
 );
@@ -326,11 +360,13 @@ router.delete(
   requireAuth,
   requireRole("admin", "manager"),
   async (req, res) => {
+    const connection = await pool.getConnection();
+
     try {
       const branchId = getBranchId(req);
       const { id } = req.params;
 
-      const [expenses] = await pool.query(
+      const [expenses] = await connection.query(
         `SELECT id, branch_id, category, amount, expense_date
          FROM expenses
          WHERE id = ?
@@ -361,7 +397,9 @@ router.delete(
         );
       }
 
-      await pool.query(
+      await connection.beginTransaction();
+
+      await connection.query(
         `DELETE FROM expenses
          WHERE id = ?
          AND branch_id = ?`,
@@ -374,20 +412,36 @@ router.delete(
         "DELETE_EXPENSE",
         `Deleted expense "${expense.category}" worth GHS ${Number(
           expense.amount
-        ).toFixed(2)}`
+        ).toFixed(2)}`,
+        connection
       );
+
+      const affectedClosing = await markClosingStale(connection, {
+        branchId,
+        transactionDate: expense.expense_date,
+        reason: `Expense "${expense.category}" worth GHS ${Number(expense.amount).toFixed(2)} was deleted after the business day had already been closed.`,
+        sourceEntityType: "expense_delete",
+        sourceEntityId: expense.id,
+        changedBy: req.user.id,
+      });
+
+      await connection.commit();
 
       return res.json({
         status: "success",
         message: "Expense deleted successfully.",
+        affected_closing: affectedClosing,
       });
     } catch (error) {
+      await connection.rollback();
       console.error("Delete expense error:", error);
 
       return res.status(500).json({
         status: "error",
         message: "Something went wrong while deleting expense.",
       });
+    } finally {
+      connection.release();
     }
   }
 );
