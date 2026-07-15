@@ -181,6 +181,36 @@ function buildRecommendations(summary) {
     );
   }
 
+  if (summary.cash_control.changed_after_close_count > 0) {
+    add(
+      "critical",
+      "Cash Control",
+      "Reconcile records changed after closing",
+      `${summary.cash_control.changed_after_close_count} Daily Closing record(s) changed after submission and require management reconciliation.`,
+      "/daily-closing"
+    );
+  }
+
+  if (summary.cash_control.awaiting_verification_count > 0) {
+    add(
+      "high",
+      "Cash Control",
+      "Complete independent closing verification",
+      `${summary.cash_control.awaiting_verification_count} submitted closing(s) are awaiting an independent manager check.`,
+      "/daily-closing"
+    );
+  }
+
+  if (summary.cash_control.variance_count > 0) {
+    add(
+      "high",
+      "Cash Control",
+      "Review Daily Closing variances",
+      `${summary.cash_control.variance_count} closing(s) contain a shortage or excess. Total absolute variance is GHS ${summary.cash_control.absolute_variance.toFixed(2)}.`,
+      "/daily-closing"
+    );
+  }
+
   if (summary.hire.overdue_balance > 0) {
     add(
       "high",
@@ -306,6 +336,9 @@ async function loadGroupSummary(req) {
     [seriousIncidentRows],
     [pendingDailyLogRows],
     [pendingWorkLogRows],
+    [cashControlRows],
+    [closingAlertRows],
+    [financialTrendRows],
   ] = await Promise.all([
     pool.query(
       `SELECT id, branch_code, name, location
@@ -647,6 +680,178 @@ async function loadGroupSummary(req) {
        ORDER BY wl.work_date ASC
        LIMIT 20`
     ),
+    pool.query(
+      `SELECT
+         SUM(closing_count) AS closing_count,
+         SUM(variance_count) AS variance_count,
+         SUM(shortage_count) AS shortage_count,
+         COALESCE(SUM(shortage_total), 0) AS shortage_total,
+         COALESCE(SUM(absolute_variance), 0) AS absolute_variance,
+         SUM(awaiting_verification_count) AS awaiting_verification_count,
+         SUM(changed_after_close_count) AS changed_after_close_count,
+         SUM(legacy_unconfirmed_count) AS legacy_unconfirmed_count,
+         SUM(protected_sale_change_count) AS protected_sale_change_count,
+         SUM(protected_void_count) AS protected_void_count,
+         SUM(refund_count) AS refund_count,
+         COALESCE(SUM(refund_total), 0) AS refund_total,
+         MAX(latest_closing_date) AS latest_closing_date
+       FROM (
+         SELECT
+           COUNT(*) AS closing_count,
+           SUM(CASE WHEN ABS(dc.difference_total) >= 0.01 THEN 1 ELSE 0 END) AS variance_count,
+           SUM(CASE WHEN dc.difference_total < -0.009 THEN 1 ELSE 0 END) AS shortage_count,
+           COALESCE(SUM(CASE WHEN dc.difference_total < -0.009 THEN ABS(dc.difference_total) ELSE 0 END), 0) AS shortage_total,
+           COALESCE(SUM(ABS(dc.difference_total)), 0) AS absolute_variance,
+           SUM(CASE WHEN dc.counted_confirmed = 1 AND dc.verification_status <> 'verified' THEN 1 ELSE 0 END) AS awaiting_verification_count,
+           SUM(CASE WHEN dc.stale_after_close = 1 THEN 1 ELSE 0 END) AS changed_after_close_count,
+           SUM(CASE WHEN dc.counted_confirmed = 0 THEN 1 ELSE 0 END) AS legacy_unconfirmed_count,
+           0 AS protected_sale_change_count,
+           0 AS protected_void_count,
+           0 AS refund_count,
+           0 AS refund_total,
+           MAX(dc.closing_date) AS latest_closing_date
+         FROM daily_closings dc
+         WHERE dc.closing_date BETWEEN ? AND ?
+           ${scope.all ? "" : "AND dc.branch_id = ?"}
+
+         UNION ALL
+
+         SELECT
+           0, 0, 0, 0, 0, 0, 0, 0,
+           COUNT(*) AS protected_sale_change_count,
+           SUM(CASE WHEN sch.change_type = 'void' THEN 1 ELSE 0 END) AS protected_void_count,
+           0, 0, NULL
+         FROM sale_change_history sch
+         WHERE DATE(sch.created_at) BETWEEN ? AND ?
+           ${scope.all ? "" : "AND sch.branch_id = ?"}
+
+         UNION ALL
+
+         SELECT
+           0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+           SUM(CASE WHEN r.refund_amount > 0 THEN 1 ELSE 0 END) AS refund_count,
+           COALESCE(SUM(CASE WHEN r.refund_amount > 0 THEN r.refund_amount ELSE 0 END), 0) AS refund_total,
+           NULL
+         FROM returns r
+         WHERE DATE(r.returned_at) BETWEEN ? AND ?
+           ${scope.all ? "" : "AND r.branch_id = ?"}
+       ) control_totals`,
+      [
+        from,
+        to,
+        ...branchParams,
+        from,
+        to,
+        ...branchParams,
+        from,
+        to,
+        ...branchParams,
+      ]
+    ),
+    pool.query(
+      `SELECT
+         dc.id,
+         dc.closing_date,
+         dc.difference_total,
+         dc.verification_status,
+         dc.stale_after_close,
+         dc.counted_confirmed,
+         b.branch_code,
+         b.name AS branch_name
+       FROM daily_closings dc
+       INNER JOIN branches b ON b.id = dc.branch_id
+       WHERE dc.closing_date BETWEEN ? AND ?
+         AND (
+           ABS(dc.difference_total) >= 0.01
+           OR dc.stale_after_close = 1
+           OR dc.verification_status <> 'verified'
+           OR dc.counted_confirmed = 0
+         )
+         ${scope.all ? "" : "AND dc.branch_id = ?"}
+       ORDER BY
+         dc.stale_after_close DESC,
+         ABS(dc.difference_total) DESC,
+         dc.closing_date DESC
+       LIMIT 25`,
+      [from, to, ...branchParams]
+    ),
+    pool.query(
+      `SELECT
+         activity_date,
+         COALESCE(SUM(spare_sales), 0) AS spare_sales,
+         COALESCE(SUM(spare_received), 0) AS spare_received,
+         COALESCE(SUM(spare_expenses), 0) AS spare_expenses,
+         COALESCE(SUM(hire_invoiced), 0) AS hire_invoiced,
+         COALESCE(SUM(hire_received), 0) AS hire_received,
+         COALESCE(SUM(mining_cost), 0) AS mining_cost
+       FROM (
+         SELECT DATE(s.created_at) AS activity_date,
+                SUM(s.total) AS spare_sales,
+                SUM(s.amount_paid) AS spare_received,
+                0 AS spare_expenses, 0 AS hire_invoiced, 0 AS hire_received, 0 AS mining_cost
+         FROM sales s
+         WHERE DATE(s.created_at) BETWEEN ? AND ?
+           AND s.is_voided = 0
+           AND s.sale_status = 'completed'
+           ${scope.all ? "" : "AND s.branch_id = ?"}
+         GROUP BY DATE(s.created_at)
+
+         UNION ALL
+
+         SELECT e.expense_date, 0, 0, SUM(e.amount), 0, 0, 0
+         FROM expenses e
+         WHERE e.expense_date BETWEEN ? AND ?
+           ${scope.all ? "" : "AND e.branch_id = ?"}
+         GROUP BY e.expense_date
+
+         UNION ALL
+
+         SELECT hi.invoice_date, 0, 0, 0, SUM(hi.total_amount), 0, 0
+         FROM hire_invoices hi
+         WHERE hi.invoice_date BETWEEN ? AND ?
+         GROUP BY hi.invoice_date
+
+         UNION ALL
+
+         SELECT DATE(hp.payment_date), 0, 0, 0, 0, SUM(hp.amount), 0
+         FROM hire_payments hp
+         WHERE DATE(hp.payment_date) BETWEEN ? AND ?
+         GROUP BY DATE(hp.payment_date)
+
+         UNION ALL
+
+         SELECT me.expense_date, 0, 0, 0, 0, 0, SUM(me.amount)
+         FROM mining_expenses me
+         WHERE me.expense_date BETWEEN ? AND ?
+         GROUP BY me.expense_date
+
+         UNION ALL
+
+         SELECT DATE(mf.log_datetime), 0, 0, 0, 0, 0, SUM(mf.total_cost)
+         FROM mining_fuel_logs mf
+         WHERE DATE(mf.log_datetime) BETWEEN ? AND ?
+           AND LOWER(mf.transaction_type) = 'issue'
+         GROUP BY DATE(mf.log_datetime)
+       ) daily_activity
+       GROUP BY activity_date
+       ORDER BY activity_date ASC`,
+      [
+        from,
+        to,
+        ...branchParams,
+        from,
+        to,
+        ...branchParams,
+        from,
+        to,
+        from,
+        to,
+        from,
+        to,
+        from,
+        to,
+      ]
+    ),
   ]);
 
   const branchComparison = mergeRowsByBranch(
@@ -733,7 +938,80 @@ async function loadGroupSummary(req) {
     })),
   };
 
+  const cashControlSource = cashControlRows[0] || {};
+  const cashControl = {
+    closing_count: numeric(cashControlSource.closing_count),
+    variance_count: numeric(cashControlSource.variance_count),
+    shortage_count: numeric(cashControlSource.shortage_count),
+    shortage_total: numeric(cashControlSource.shortage_total),
+    absolute_variance: numeric(cashControlSource.absolute_variance),
+    awaiting_verification_count: numeric(
+      cashControlSource.awaiting_verification_count
+    ),
+    changed_after_close_count: numeric(
+      cashControlSource.changed_after_close_count
+    ),
+    legacy_unconfirmed_count: numeric(
+      cashControlSource.legacy_unconfirmed_count
+    ),
+    protected_sale_change_count: numeric(
+      cashControlSource.protected_sale_change_count
+    ),
+    protected_void_count: numeric(cashControlSource.protected_void_count),
+    refund_count: numeric(cashControlSource.refund_count),
+    refund_total: numeric(cashControlSource.refund_total),
+    latest_closing_date: cashControlSource.latest_closing_date || null,
+  };
+
+  const financialTrend = financialTrendRows.map((row) => {
+    const spareSales = numeric(row.spare_sales);
+    const spareReceived = numeric(row.spare_received);
+    const spareExpenses = numeric(row.spare_expenses);
+    const hireInvoiced = numeric(row.hire_invoiced);
+    const hireReceived = numeric(row.hire_received);
+    const miningCost = numeric(row.mining_cost);
+    const recordedRevenue = spareSales + hireInvoiced;
+    const cashReceived = spareReceived + hireReceived;
+    const operatingCost = spareExpenses + miningCost;
+
+    return {
+      date: row.activity_date,
+      spare_sales: spareSales,
+      spare_received: spareReceived,
+      spare_expenses: spareExpenses,
+      hire_invoiced: hireInvoiced,
+      hire_received: hireReceived,
+      mining_cost: miningCost,
+      recorded_revenue: recordedRevenue,
+      cash_received: cashReceived,
+      operating_cost: operatingCost,
+      indicative_result: recordedRevenue - operatingCost,
+    };
+  });
+
   const alertItems = [
+    ...closingAlertRows.map((row) => {
+      const stale = Number(row.stale_after_close || 0) === 1;
+      const legacy = Number(row.counted_confirmed || 0) !== 1;
+      const difference = numeric(row.difference_total);
+      const hasVariance = Math.abs(difference) >= 0.01;
+      const severity = stale ? "critical" : hasVariance ? "high" : "medium";
+      const reasons = [];
+      if (stale) reasons.push("changed after closing");
+      if (hasVariance) reasons.push(`variance GHS ${difference.toFixed(2)}`);
+      if (legacy) reasons.push("legacy count not confirmed");
+      if (row.verification_status !== "verified") {
+        reasons.push(`verification ${row.verification_status || "submitted"}`);
+      }
+
+      return {
+        severity,
+        category: "Daily Closing",
+        title: `${row.branch_code} — ${String(row.closing_date || "").slice(0, 10)}`,
+        detail: reasons.join(" • "),
+        path: "/daily-closing",
+      };
+    }),
     ...seriousIncidentRows.map((row) => ({
       severity: ["critical", "serious", "high"].includes(
         String(row.severity || "").toLowerCase()
@@ -820,6 +1098,8 @@ async function loadGroupSummary(req) {
     mining,
     hire,
     fleet,
+    cash_control: cashControl,
+    financial_trend: financialTrend,
     branch_comparison: branchComparison,
     mining_sites: miningSiteRows.map((row) => ({
       ...row,
@@ -853,20 +1133,29 @@ async function loadGroupSummary(req) {
     ),
   };
 
+  const recordedRevenue =
+    summary.spare_parts.sales_total + summary.hire.invoiced_total;
+  const cashReceived =
+    summary.spare_parts.sales_received + summary.hire.payments_total;
+  const operatingCost =
+    summary.spare_parts.expenses_total + summary.mining.operating_cost;
+  const outstandingReceivables =
+    summary.spare_parts.debt_balance + summary.hire.invoice_balance;
+
   summary.group = {
-    recorded_revenue:
-      summary.spare_parts.sales_total + summary.hire.invoiced_total,
-    cash_received:
-      summary.spare_parts.sales_received + summary.hire.payments_total,
-    operating_cost:
-      summary.spare_parts.expenses_total + summary.mining.operating_cost,
-    outstanding_receivables:
-      summary.spare_parts.debt_balance + summary.hire.invoice_balance,
-    indicative_balance:
-      summary.spare_parts.sales_total +
-      summary.hire.invoiced_total -
-      summary.spare_parts.expenses_total -
-      summary.mining.operating_cost,
+    recorded_revenue: recordedRevenue,
+    cash_received: cashReceived,
+    operating_cost: operatingCost,
+    outstanding_receivables: outstandingReceivables,
+    indicative_balance: recordedRevenue - operatingCost,
+    collection_rate:
+      recordedRevenue > 0 ? (cashReceived / recordedRevenue) * 100 : 0,
+    cost_ratio:
+      recordedRevenue > 0 ? (operatingCost / recordedRevenue) * 100 : 0,
+    receivable_ratio:
+      recordedRevenue > 0
+        ? (outstandingReceivables / recordedRevenue) * 100
+        : 0,
   };
 
   summary.recommendations = buildRecommendations(summary);
@@ -984,10 +1273,18 @@ router.get("/workbook.xlsx", async (req, res) => {
 
     const executiveRows = [
       ["Group", "Recorded revenue", summary.group.recorded_revenue],
-      ["Group", "Cash received", summary.group.cash_received],
+      ["Group", "Payments received", summary.group.cash_received],
       ["Group", "Operating cost", summary.group.operating_cost],
       ["Group", "Outstanding receivables", summary.group.outstanding_receivables],
       ["Group", "Indicative balance", summary.group.indicative_balance],
+      ["Group", "Payment-to-revenue rate (%)", summary.group.collection_rate],
+      ["Group", "Operating cost ratio (%)", summary.group.cost_ratio],
+      ["Cash Control", "Closings completed", summary.cash_control.closing_count],
+      ["Cash Control", "Closings with variance", summary.cash_control.variance_count],
+      ["Cash Control", "Awaiting verification", summary.cash_control.awaiting_verification_count],
+      ["Cash Control", "Changed after closing", summary.cash_control.changed_after_close_count],
+      ["Cash Control", "Absolute variance", summary.cash_control.absolute_variance],
+      ["Cash Control", "Protected sale changes", summary.cash_control.protected_sale_change_count],
       ["Spare Parts", "Sales total", summary.spare_parts.sales_total],
       ["Spare Parts", "Expenses", summary.spare_parts.expenses_total],
       ["Spare Parts", "Current debt", summary.spare_parts.debt_balance],
@@ -1013,6 +1310,28 @@ router.get("/workbook.xlsx", async (req, res) => {
     });
     executive.getColumn("value").numFmt = '#,##0.00';
     styleRows(executive);
+
+    const trend = workbook.addWorksheet("Financial Trend");
+    configureSheet(trend, "Daily Group Financial Trend", [
+      { header: "Date", key: "date", width: 16 },
+      { header: "Recorded Revenue", key: "recorded_revenue", width: 20 },
+      { header: "Payments Received", key: "cash_received", width: 20 },
+      { header: "Operating Cost", key: "operating_cost", width: 20 },
+      { header: "Indicative Result", key: "indicative_result", width: 20 },
+      { header: "Spare Parts Sales", key: "spare_sales", width: 20 },
+      { header: "Hire Invoiced", key: "hire_invoiced", width: 20 },
+      { header: "Mining Cost", key: "mining_cost", width: 18 },
+    ]);
+    summary.financial_trend.forEach((row) => trend.addRow(row));
+    styleRows(trend, [
+      "recorded_revenue",
+      "cash_received",
+      "operating_cost",
+      "indicative_result",
+      "spare_sales",
+      "hire_invoiced",
+      "mining_cost",
+    ]);
 
     const branches = workbook.addWorksheet("Spare Parts Branches");
     configureSheet(branches, "Spare Parts Branch Comparison", [

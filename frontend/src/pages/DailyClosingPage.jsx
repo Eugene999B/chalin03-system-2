@@ -26,6 +26,13 @@ const EMPTY_DENOMINATIONS = Object.fromEntries(
   DENOMINATIONS.map(([key]) => [key, ""]).concat([["coins", ""]])
 );
 
+function denominationCounterHasEntries(values = {}) {
+  return [...DENOMINATIONS.map(([key]) => key), "coins"].some((key) => {
+    const value = values?.[key];
+    return value !== undefined && value !== null && String(value).trim() !== "";
+  });
+}
+
 function getTodayDate() {
   const now = new Date();
   const offset = now.getTimezoneOffset();
@@ -407,12 +414,8 @@ export default function DailyClosingPage() {
   const [bankCounted, setBankCounted] = useState("");
   const [otherCounted, setOtherCounted] = useState("");
   const [notes, setNotes] = useState("");
-  const [openingCashFloat, setOpeningCashFloat] = useState("0");
-  const [cashDeposits, setCashDeposits] = useState("0");
-  const [cashWithdrawals, setCashWithdrawals] = useState("0");
-  const [otherCashIn, setOtherCashIn] = useState("0");
-  const [otherCashOut, setOtherCashOut] = useState("0");
-  const [denominations, setDenominations] = useState(EMPTY_DENOMINATIONS);
+  const [denominations, setDenominations] = useState({ ...EMPTY_DENOMINATIONS });
+  const [useDenominationCounter, setUseDenominationCounter] = useState(false);
   const [countedConfirmed, setCountedConfirmed] = useState(false);
   const [verificationPassword, setVerificationPassword] = useState("");
   const [verificationNotes, setVerificationNotes] = useState("");
@@ -438,10 +441,10 @@ export default function DailyClosingPage() {
   }, [denominations]);
 
   useEffect(() => {
-    if (!alreadyClosed) {
+    if (useDenominationCounter && !alreadyClosed) {
       setCashCounted(denominationTotal.toFixed(2));
     }
-  }, [denominationTotal, alreadyClosed]);
+  }, [denominationTotal, useDenominationCounter, alreadyClosed]);
 
   const counted = useMemo(
     () => ({
@@ -469,21 +472,12 @@ export default function DailyClosingPage() {
       };
     }
 
-    const adjustedCash =
-      safeNumber(summary?.expected_cash) +
-      safeNumber(openingCashFloat) +
-      safeNumber(otherCashIn) -
-      safeNumber(cashDeposits) -
-      safeNumber(cashWithdrawals) -
-      safeNumber(otherCashOut);
+    const cash = safeNumber(summary?.expected_cash);
     const momo = safeNumber(summary?.expected_momo);
     const bank = safeNumber(summary?.expected_bank);
     const other = safeNumber(summary?.expected_other);
-    return { cash: adjustedCash, momo, bank, other, total: adjustedCash + momo + bank + other };
-  }, [
-    existingClosing, summary, openingCashFloat, cashDeposits, cashWithdrawals,
-    otherCashIn, otherCashOut,
-  ]);
+    return { cash, momo, bank, other, total: cash + momo + bank + other };
+  }, [existingClosing, summary]);
 
   const differenceTotal = useMemo(
     () => countedTotal - expectedSnapshot.total,
@@ -532,15 +526,15 @@ export default function DailyClosingPage() {
     setMomoCounted(safeNumber(closing.momo_counted).toFixed(2));
     setBankCounted(safeNumber(closing.bank_counted).toFixed(2));
     setOtherCounted(safeNumber(closing.other_counted).toFixed(2));
-    setOpeningCashFloat(String(closing.opening_cash_float || 0));
-    setCashDeposits(String(closing.cash_deposits || 0));
-    setCashWithdrawals(String(closing.cash_withdrawals || 0));
-    setOtherCashIn(String(closing.other_cash_in || 0));
-    setOtherCashOut(String(closing.other_cash_out || 0));
     try {
-      setDenominations({ ...EMPTY_DENOMINATIONS, ...JSON.parse(closing.denomination_json || "{}") });
+      const savedDenominations = JSON.parse(closing.denomination_json || "{}");
+      setDenominations({ ...EMPTY_DENOMINATIONS, ...savedDenominations });
+      setUseDenominationCounter(
+        denominationCounterHasEntries(savedDenominations)
+      );
     } catch {
-      setDenominations(EMPTY_DENOMINATIONS);
+      setDenominations({ ...EMPTY_DENOMINATIONS });
+      setUseDenominationCounter(false);
     }
     setCountedConfirmed(Boolean(Number(closing.counted_confirmed || 0)));
     setNotes(closing.notes || "");
@@ -576,16 +570,12 @@ export default function DailyClosingPage() {
         }
       } else {
         setClosingRevisions([]);
-        setCashCounted("0.00");
+        setCashCounted("");
         setMomoCounted("");
         setBankCounted("");
         setOtherCounted("");
-        setOpeningCashFloat("0");
-        setCashDeposits("0");
-        setCashWithdrawals("0");
-        setOtherCashIn("0");
-        setOtherCashOut("0");
-        setDenominations(EMPTY_DENOMINATIONS);
+        setDenominations({ ...EMPTY_DENOMINATIONS });
+        setUseDenominationCounter(false);
         setCountedConfirmed(false);
         setNotes("");
       }
@@ -638,12 +628,9 @@ export default function DailyClosingPage() {
       momo_counted: counted.momo,
       bank_counted: counted.bank,
       other_counted: counted.other,
-      opening_cash_float: openingCashFloat,
-      cash_deposits: cashDeposits,
-      cash_withdrawals: cashWithdrawals,
-      other_cash_in: otherCashIn,
-      other_cash_out: otherCashOut,
-      denominations: JSON.stringify(denominations),
+      denominations: JSON.stringify(
+        useDenominationCounter ? denominations : {}
+      ),
       counted_confirmed: countedConfirmed ? 1 : 0,
       notes,
     };
@@ -743,16 +730,13 @@ export default function DailyClosingPage() {
       return;
     }
 
-    if (Math.abs(denominationTotal - safeNumber(cashCounted)) >= 0.01) {
-      setError("The cash denomination total must equal the physical cash counted amount.");
-      return;
-    }
-
-    const hasManualCashMovement = [cashDeposits, cashWithdrawals, otherCashIn, otherCashOut]
-      .some((value) => safeNumber(value) > 0);
-
-    if (hasManualCashMovement && !notes.trim()) {
-      setError("Explain every cash deposit, withdrawal, other cash-in, or other cash-out in Closing Notes.");
+    if (
+      useDenominationCounter &&
+      Math.abs(denominationTotal - safeNumber(cashCounted)) >= 0.01
+    ) {
+      setError(
+        "The optional denomination total must equal the physical Cash counted amount."
+      );
       return;
     }
 
@@ -782,12 +766,7 @@ export default function DailyClosingPage() {
         momo_counted: counted.momo,
         bank_counted: counted.bank,
         other_counted: counted.other,
-        opening_cash_float: Number(openingCashFloat || 0),
-        cash_deposits: Number(cashDeposits || 0),
-        cash_withdrawals: Number(cashWithdrawals || 0),
-        other_cash_in: Number(otherCashIn || 0),
-        other_cash_out: Number(otherCashOut || 0),
-        denominations,
+        denominations: useDenominationCounter ? denominations : {},
         counted_confirmed: true,
         notes,
       });
@@ -1022,7 +1001,7 @@ export default function DailyClosingPage() {
                     : " · Independent manager verification pending"}
                 </span>
                 {Number(existingClosing?.counted_confirmed || 0) !== 1 && (
-                  <b>Legacy closing: the saved counted amounts were not independently confirmed with denomination evidence. Preserve it for history, but do not treat it as proof of physical cash counted.</b>
+                  <b>Legacy closing: the saved counted amounts were not independently confirmed under the current control process. Preserve it for history, but do not treat it as proof of an independent physical count.</b>
                 )}
               </div>
               {(Boolean(Number(existingClosing?.stale_after_close || 0)) || Math.abs(currentVsSavedDifference) >= 0.01) && (
@@ -1423,55 +1402,6 @@ export default function DailyClosingPage() {
             </article>
           </section>
 
-          <section className="dc-panel dc-cash-control-panel">
-            <div className="dc-section-heading">
-              <div>
-                <span className="dc-section-kicker">Physical cash movement</span>
-                <h2>Cash Drawer Control</h2>
-                <p>Record cash that entered or left the drawer outside normal sale and debt-payment receipts.</p>
-              </div>
-              <strong className="dc-heading-total">Expected cash {formatMoney(expectedSnapshot.cash)}</strong>
-            </div>
-            <div className="dc-cash-control-grid">
-              {[
-                ["Opening cash float", openingCashFloat, setOpeningCashFloat, "Cash placed in drawer before trading"],
-                ["Cash deposited", cashDeposits, setCashDeposits, "Cash removed and deposited to bank"],
-                ["Cash withdrawals", cashWithdrawals, setCashWithdrawals, "Approved owner/operational withdrawal"],
-                ["Other cash in", otherCashIn, setOtherCashIn, "Approved non-sale cash received"],
-                ["Other cash out", otherCashOut, setOtherCashOut, "Approved cash out not recorded as expense"],
-              ].map(([label, value, setter, helper]) => (
-                <label key={label}>
-                  <span>{label}</span>
-                  <small>{helper}</small>
-                  <div className="dc-money-input"><span>GHS</span><input type="number" min="0" step="0.01" value={value} disabled={alreadyClosed} onChange={(event) => setter(event.target.value)} /></div>
-                </label>
-              ))}
-            </div>
-
-            <div className="dc-denomination-section">
-              <div>
-                <span className="dc-section-kicker">Independent physical count</span>
-                <h3>Cash Denomination Counter</h3>
-                <p>Enter the number of notes. Enter the total value of coins in the Coins field.</p>
-              </div>
-              <div className="dc-denomination-grid">
-                {DENOMINATIONS.map(([key, label, faceValue]) => (
-                  <label key={key}>
-                    <span>{label}</span>
-                    <input type="number" min="0" step="1" value={denominations[key]} disabled={alreadyClosed} onChange={(event) => setDenominations((current) => ({ ...current, [key]: event.target.value }))} />
-                    <small>{formatMoney(Math.max(Math.floor(Number(denominations[key] || 0)), 0) * faceValue)}</small>
-                  </label>
-                ))}
-                <label>
-                  <span>Coins total</span>
-                  <input type="number" min="0" step="0.01" value={denominations.coins} disabled={alreadyClosed} onChange={(event) => setDenominations((current) => ({ ...current, coins: event.target.value }))} />
-                  <small>Enter total coin value</small>
-                </label>
-              </div>
-              <div className="dc-denomination-total">Physical cash counted <strong>{formatMoney(denominationTotal)}</strong></div>
-            </div>
-          </section>
-
           <section className="dc-panel dc-reconciliation-panel">
             <div className="dc-section-heading">
               <div>
@@ -1517,7 +1447,7 @@ export default function DailyClosingPage() {
                                 : otherCounted
                         }
                         disabled={alreadyClosed}
-                        readOnly={row.key === "cash"}
+                        readOnly={row.key === "cash" && useDenominationCounter}
                         onChange={(event) => {
                           const value = event.target.value;
                           if (row.key === "cash") setCashCounted(value);
@@ -1539,6 +1469,95 @@ export default function DailyClosingPage() {
                     </div>
                   </article>
                 ))}
+              </div>
+
+              <div className="dc-optional-counter">
+                <div className="dc-optional-counter-head">
+                  <div>
+                    <span className="dc-section-kicker">Optional counting aid</span>
+                    <h3>Cash Denomination Counter</h3>
+                    <p>
+                      Enter Cash directly above, or use this optional note-and-coin
+                      counter to calculate it. Daily Closing can be saved without
+                      using this tool.
+                    </p>
+                  </div>
+                  <label className="dc-counter-switch">
+                    <input
+                      type="checkbox"
+                      checked={useDenominationCounter}
+                      disabled={alreadyClosed}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        if (!enabled) {
+                          setCashCounted(denominationTotal.toFixed(2));
+                          setDenominations({ ...EMPTY_DENOMINATIONS });
+                        }
+                        setUseDenominationCounter(enabled);
+                      }}
+                    />
+                    <span>Use denomination counter</span>
+                  </label>
+                </div>
+
+                {useDenominationCounter ? (
+                  <div className="dc-denomination-section dc-denomination-section-optional">
+                    <div className="dc-denomination-grid">
+                      {DENOMINATIONS.map(([key, label, faceValue]) => (
+                        <label key={key}>
+                          <span>{label}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={denominations[key]}
+                            disabled={alreadyClosed}
+                            onChange={(event) =>
+                              setDenominations((current) => ({
+                                ...current,
+                                [key]: event.target.value,
+                              }))
+                            }
+                          />
+                          <small>
+                            {formatMoney(
+                              Math.max(
+                                Math.floor(Number(denominations[key] || 0)),
+                                0
+                              ) * faceValue
+                            )}
+                          </small>
+                        </label>
+                      ))}
+                      <label>
+                        <span>Coins total</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={denominations.coins}
+                          disabled={alreadyClosed}
+                          onChange={(event) =>
+                            setDenominations((current) => ({
+                              ...current,
+                              coins: event.target.value,
+                            }))
+                          }
+                        />
+                        <small>Enter the combined coin value</small>
+                      </label>
+                    </div>
+                    <div className="dc-denomination-total">
+                      Optional denomination total
+                      <strong>{formatMoney(denominationTotal)}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="dc-counter-disabled-note">
+                    Cash is being entered manually. The denomination counter is not
+                    required for this closing.
+                  </div>
+                )}
               </div>
 
               <div className="dc-closing-total-bar">
@@ -1570,7 +1589,7 @@ export default function DailyClosingPage() {
                   onChange={(event) => setCountedConfirmed(event.target.checked)}
                 />
                 <span>
-                  I confirm that physical cash was counted by denomination and MoMo/bank/other balances were checked independently. I did not copy the system expected amounts.
+                  I confirm that physical cash was counted and the MoMo, bank and other balances were checked independently. I entered the actual figures and did not copy the system expected amounts.
                 </span>
               </label>
 

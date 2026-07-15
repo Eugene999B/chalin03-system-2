@@ -124,6 +124,26 @@ function calculateDenominationTotal(denominations = {}) {
   return toMoney(total);
 }
 
+function hasDenominationEvidence(denominations = {}) {
+  const supportedKeys = [
+    "note_200",
+    "note_100",
+    "note_50",
+    "note_20",
+    "note_10",
+    "note_5",
+    "note_2",
+    "note_1",
+    "coins",
+  ];
+
+  return supportedKeys.some((key) => {
+    if (!Object.prototype.hasOwnProperty.call(denominations, key)) return false;
+    const value = denominations[key];
+    return value !== undefined && value !== null && String(value).trim() !== "";
+  });
+}
+
 function cleanText(value, maxLength = 5000) {
   return String(value || "").trim().slice(0, maxLength);
 }
@@ -740,7 +760,7 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
     calculation_notes: [
       "Physical cash is calculated separately from MoMo, bank and other channels.",
       "Mixed and credit-sale payments use their recorded payment-channel allocation. Historical unallocated payments remain under Other / Unallocated.",
-      "Opening float, deposits, withdrawals and other cash movements are included in expected physical cash.",
+      "Expected physical cash is based on recorded Cash sales, Cash debt collections, Cash expenses and approved Cash refunds.",
       "Debt collections are separated from new sales so old debt payments are not confused with today's credit created.",
       "Approved return refunds are deducted from the payment channel used for the refund on the date the return was recorded.",
     ],
@@ -1089,12 +1109,8 @@ function createDailyClosingWorkbook(reportData) {
     ["Verification status", existingClosing?.verification_status || "submitted"],
     ["Verified by", existingClosing?.verified_by_name || "Pending"],
     ["Verified at", existingClosing?.verified_at ? formatDateTime(existingClosing.verified_at) : "-"],
-    ["Opening cash float", cashControls.opening_cash_float, true],
-    ["Cash deposits", cashControls.cash_deposits, true],
-    ["Cash withdrawals", cashControls.cash_withdrawals, true],
-    ["Other cash in", cashControls.other_cash_in, true],
-    ["Other cash out", cashControls.other_cash_out, true],
-    ["Denomination-counted cash", denominationTotal, true],
+    ["Optional denomination counter used", hasDenominationEvidence(denominations) ? "Yes" : "No"],
+    ["Optional denomination total", hasDenominationEvidence(denominations) ? denominationTotal : 0, true],
     ["Count independently confirmed", existingClosing ? (Number(existingClosing.counted_confirmed || 0) === 1 ? "Yes" : "No") : "Draft"],
     ["Changed after closing", existingClosing ? (Number(existingClosing.stale_after_close || 0) === 1 ? "YES - MANAGEMENT REVIEW REQUIRED" : "No") : "Not closed"],
     ["Notes", notes || "No notes recorded"],
@@ -1112,15 +1128,23 @@ function createDailyClosingWorkbook(reportData) {
 
   notesRow += 1;
   summarySheet.mergeCells(`A${notesRow}:E${notesRow}`);
-  summarySheet.getCell(`A${notesRow}`).value = "CASH DENOMINATION EVIDENCE";
+  summarySheet.getCell(`A${notesRow}`).value = "OPTIONAL CASH DENOMINATION COUNTER";
   styleSectionRow(summarySheet.getRow(notesRow), "166534");
   notesRow += 1;
-  const denominationLabels = { note_200: "GHS 200 notes", note_100: "GHS 100 notes", note_50: "GHS 50 notes", note_20: "GHS 20 notes", note_10: "GHS 10 notes", note_5: "GHS 5 notes", note_2: "GHS 2 notes", note_1: "GHS 1 notes", coins: "Coins total value" };
-  for (const [key, label] of Object.entries(denominationLabels)) {
-    summarySheet.getCell(notesRow, 1).value = label;
-    summarySheet.getCell(notesRow, 1).font = { bold: true };
-    summarySheet.getCell(notesRow, 2).value = Number(denominations?.[key] || 0);
-    if (key === "coins") applyMoneyFormat(summarySheet.getCell(notesRow, 2));
+  if (hasDenominationEvidence(denominations)) {
+    const denominationLabels = { note_200: "GHS 200 notes", note_100: "GHS 100 notes", note_50: "GHS 50 notes", note_20: "GHS 20 notes", note_10: "GHS 10 notes", note_5: "GHS 5 notes", note_2: "GHS 2 notes", note_1: "GHS 1 notes", coins: "Coins total value" };
+    for (const [key, label] of Object.entries(denominationLabels)) {
+      summarySheet.getCell(notesRow, 1).value = label;
+      summarySheet.getCell(notesRow, 1).font = { bold: true };
+      summarySheet.getCell(notesRow, 2).value = Number(denominations?.[key] || 0);
+      if (key === "coins") applyMoneyFormat(summarySheet.getCell(notesRow, 2));
+      notesRow += 1;
+    }
+  } else {
+    summarySheet.mergeCells(`A${notesRow}:E${notesRow}`);
+    summarySheet.getCell(`A${notesRow}`).value =
+      "Not used. Cash was entered directly as the physical counted amount.";
+    summarySheet.getCell(`A${notesRow}`).alignment = { wrapText: true };
     notesRow += 1;
   }
 
@@ -3312,11 +3336,6 @@ router.post(
         momo_counted,
         bank_counted,
         other_counted,
-        opening_cash_float,
-        cash_deposits,
-        cash_withdrawals,
-        other_cash_in,
-        other_cash_out,
         denominations,
         counted_confirmed,
         notes,
@@ -3331,9 +3350,10 @@ router.post(
         });
       }
 
-      const cashControls = getCashControls({
-        opening_cash_float, cash_deposits, cash_withdrawals, other_cash_in, other_cash_out,
-      });
+      // Cash Drawer Control was removed from the current business workflow by
+      // management. Keep the existing database columns for historical records,
+      // but every new closing stores neutral zero values.
+      const cashControls = getCashControls({});
       const countedCash = toCountedMoney(cash_counted);
       const countedMomo = toCountedMoney(momo_counted);
       const countedBank = toCountedMoney(bank_counted);
@@ -3359,34 +3379,34 @@ router.post(
       }
 
       const parsedDenominations = parseDenominations(denominations);
-      const denominationTotal = calculateDenominationTotal(parsedDenominations);
-      if (denominationTotal === null) {
-        return res.status(400).json({ status: "error", message: "Cash denomination quantities are invalid." });
-      }
-      if (Math.abs(denominationTotal - countedCash) >= 0.01) {
+      const denominationEvidenceUsed = hasDenominationEvidence(parsedDenominations);
+      const calculatedDenominationTotal = calculateDenominationTotal(parsedDenominations);
+      if (calculatedDenominationTotal === null) {
         return res.status(400).json({
           status: "error",
-          message: `Cash denomination total GHS ${denominationTotal.toFixed(2)} must equal cash counted GHS ${countedCash.toFixed(2)}.`,
+          message: "Cash denomination quantities are invalid.",
         });
       }
+      if (
+        denominationEvidenceUsed &&
+        Math.abs(calculatedDenominationTotal - countedCash) >= 0.01
+      ) {
+        return res.status(400).json({
+          status: "error",
+          message: `Optional cash denomination total GHS ${calculatedDenominationTotal.toFixed(2)} must equal cash counted GHS ${countedCash.toFixed(2)}.`,
+        });
+      }
+      const denominationTotal = denominationEvidenceUsed
+        ? calculatedDenominationTotal
+        : 0;
+      const storedDenominations = denominationEvidenceUsed
+        ? parsedDenominations
+        : {};
 
       const totalCounted = toMoney(
         countedCash + countedMomo + countedBank + countedOther
       );
       const cleanedNotes = cleanText(notes, 5000);
-      const hasManualCashMovement = [
-        cashControls.cash_deposits,
-        cashControls.cash_withdrawals,
-        cashControls.other_cash_in,
-        cashControls.other_cash_out,
-      ].some((value) => Number(value || 0) > 0);
-
-      if (hasManualCashMovement && !cleanedNotes) {
-        return res.status(400).json({
-          status: "error",
-          message: "Closing notes are required whenever a cash deposit, withdrawal, other cash-in, or other cash-out amount is entered.",
-        });
-      }
 
       await connection.beginTransaction();
 
@@ -3511,7 +3531,7 @@ router.post(
           countedOther,
           totalCounted,
           denominationTotal,
-          JSON.stringify(parsedDenominations),
+          JSON.stringify(storedDenominations),
           1,
           differenceTotal,
           cleanedNotes || null,
@@ -3530,7 +3550,7 @@ router.post(
           closingDate,
           cleanedNotes || "Original submitted closing",
           JSON.stringify({ cash: summary.expected_cash, momo: summary.expected_momo, bank: summary.expected_bank, other: summary.expected_other, total: summary.expected_total }),
-          JSON.stringify({ cash: countedCash, momo: countedMomo, bank: countedBank, other: countedOther, total: totalCounted, denominations: parsedDenominations }),
+          JSON.stringify({ cash: countedCash, momo: countedMomo, bank: countedBank, other: countedOther, total: totalCounted, denominations: storedDenominations }),
           differenceTotal,
           req.user.id,
           req.user.id,
