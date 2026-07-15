@@ -28,6 +28,10 @@ const helpContent = {
         "5. Review safety and reports",
         "Record incidents immediately, assign corrective action and close them only after review. Use Mining Documents for site reports and the Mining workbook.",
       ],
+      [
+        "6. Preserve audit evidence",
+        "Use your own account, keep records under the correct site, review Activity Log entries, and never delete or rewrite approved operational history merely to hide an error.",
+      ],
     ],
   },
   equipment_hire: {
@@ -54,6 +58,10 @@ const helpContent = {
       [
         "5. Invoice, receive payment and return",
         "Create invoices from approved work, record deposits and payments, then complete a return inspection before releasing the machine.",
+      ],
+      [
+        "6. Preserve audit evidence",
+        "Use your own account, keep records under the correct Hire location, review Activity Log entries, and do not let the same person create and approve every sensitive action.",
       ],
     ],
   },
@@ -91,7 +99,7 @@ export default function WorkspaceHelpPage({ workspace }) {
       <footer>
         <Link to={content.home}>← Return to workspace dashboard</Link>
         <span>
-          Contact the system administrator before changing controlled records.
+          Use controlled corrections and contact the system administrator before changing approved records.
         </span>
       </footer>
     </section>

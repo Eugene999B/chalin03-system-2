@@ -1,61 +1,504 @@
-# Chalin 03 Sales & Inventory Management System
+# Chalin 03 Group Operations Platform
 
-A full-stack sales, inventory, debt, purchase, expense, reporting, stock transfer, SMS, audit, and business management system for **Chalin 03 Company Limited**.
+Production business-control platform for **Chalin 03 Company Limited**, prepared by **Eugene Amankwah Appiah**.
 
-The system is built with:
+The platform combines:
 
-* React + Vite frontend
-* Node.js + Express backend
-* MySQL database
-* JWT authentication
-* Excel exports
-* PDF receipts
-* PDF stock transfer notes
-* Role-based access control
-* SMS integration
-* Store-based records
-* PWA install support
+- Spare Parts sales and inventory for two stores
+- Mining Operations
+- Equipment Hire
+- Shared Fleet and equipment control
+- Operations documents and reports
+- Group Executive management
+- Cash Control and Audit Security
+- SMS communication
+- Backup, export and recovery tools
 
-## Main Features
+## Current Production Status
 
-* User login and authentication
-* Store selection during login
-* Admin, Manager, Cashier, and System Administrator roles
-* Product and inventory management
-* Store-based product records
-* Stock adjustment history
-* Recent stock adjustment records
-* Damaged, lost, wrong entry, and physical count stock corrections
-* Low stock / restock list
-* Two-store stock transfer workflow
-* Stock transfer approval, dispatch, and receiving
-* Stock transfer history
-* Stock transfer PDF / Transfer Note
-* Sales and receipt generation
-* Sales history
-* Sale discount support
-* Void/cancel sales
-* Customer debts
-* Debt payment tracking
-* Debt payment receipts
-* Customer statement / account history
-* Purchases and supplier payment tracking
-* Purchase payment history
-* Returns
-* Expenses
-* Reports and dashboard summaries
-* Daily closing
-* Advanced Accounting Intelligence
-* Excel exports
-* Activity log
-* Backup support
-* Restore support
-* System settings
-* SMS Center
-* Owner SMS alerts
-* WhatsApp receipt readiness
-* Help / User Guide inside the app
-* PWA install support
+| Item | Current value |
+|---|---|
+| Frontend | `https://chalin03.com` and `https://www.chalin03.com` |
+| Backend API | `https://api.chalin03.com/api` |
+| Frontend hosting | Cloudflare Pages |
+| Backend hosting | Railway |
+| Database | Railway MySQL |
+| Production branch | `main` |
+| Verified live release | `9024281` — Release advanced cash control and audit security |
+| Verified release tag | `cash-control-security-v2-live-20260715` |
+| Cash-control migration | `database/20260714_cash_control_security_migration.sql` |
+| Migration verification | `database/20260714_cash_control_security_verify.sql` |
+| Migration status | Applied successfully to production and verified |
+| WhatsApp receipts | Code ready; keep disabled until Meta Cloud API setup is approved |
+
+The application is in real business use. Treat production data as more important than code because code can be restored from GitHub, while lost business records may be difficult to reconstruct.
+
+## Technology Stack
+
+### Frontend
+
+- React
+- Vite
+- React Router
+- Axios
+- CSS
+- PWA/install support
+
+### Backend
+
+- Node.js
+- Express
+- MySQL / `mysql2`
+- JWT authentication
+- bcrypt password hashing
+- PDFKit
+- ExcelJS
+- SMS provider integration
+
+### Hosting
+
+```text
+Browser
+  → Cloudflare Pages frontend
+  → https://api.chalin03.com/api
+  → Railway Express backend
+  → Railway MySQL
+  → Arkesel SMS
+```
+
+## Business Workspaces
+
+### Spare Parts
+
+Spare Parts operates with two independent stores. Store selection controls:
+
+- Products and quantities
+- Sales and receipts
+- Customers and debts
+- Purchases and suppliers
+- Expenses
+- Returns and refunds
+- Daily Closing
+- Reports and exports
+- Stock adjustments
+- Stock transfers
+- Activity Log scope
+
+Always confirm the active store before saving a transaction.
+
+### Mining Operations
+
+Mining sites are created by administrators and are not Spare Parts stores.
+
+Mining includes:
+
+- Site administration
+- Daily site logs
+- Production
+- Equipment shifts
+- Fuel
+- Expenses
+- Incidents
+- Reports and documents
+- Role and site access
+- Shared Fleet context
+
+### Equipment Hire
+
+Hire locations, yards and bases are created by administrators and are separate from Spare Parts stores.
+
+Equipment Hire includes:
+
+- Customers and enquiries
+- Quotations
+- Contracts
+- Equipment assignment
+- Dispatch
+- Job cards
+- Invoices
+- Deposits and payments
+- Return inspection
+- Statements and documents
+- Role and location access
+- Shared Fleet context
+
+### Shared Fleet
+
+Each excavator or machine should be registered once. Fleet records cover:
+
+- Availability
+- Assignment
+- Current location
+- Operator
+- Meter readings
+- Fuel
+- Inspections
+- Maintenance
+- Breakdown
+- Service due
+- Document expiry
+- Archive history
+
+### Group Executive and Operations Documents
+
+Management can review permitted records across Spare Parts, Mining, Equipment Hire and Fleet, then download operational and executive reports.
+
+## User and Permission Model
+
+The platform uses one central user-account foundation. Users may receive access to one or more workspaces and then receive authorized stores, Mining sites or Hire locations.
+
+Common roles include:
+
+- Group Administrator
+- Administrator
+- Manager
+- Cashier
+- Accountant
+- Auditor
+- Mining site roles
+- Equipment Hire operational roles
+- Fleet roles
+- System Administrator
+
+Important controls:
+
+- Staff must use their own account.
+- Cashiers remain Spare Parts-specific.
+- Mining and Hire permissions are workspace-specific.
+- Auditors remain controlled or read-only where required.
+- The creator or submitter should not approve or verify their own sensitive action.
+- A different manager or administrator is required for protected corrections, financial refunds and Daily Closing verification.
+
+## Cash Control and Audit Security V2
+
+Cash Control V2 is part of the verified live release.
+
+### Why it exists
+
+A total received amount is not always the same as physical cash in hand. The system now separates:
+
+- Cash
+- Mobile Money
+- Bank
+- Other / unallocated
+
+It also preserves evidence when a completed transaction is corrected after submission or closing.
+
+### Daily Closing calculation
+
+Expected physical cash is based on:
+
+```text
+Opening cash float
++ Cash sales
++ Cash part of Mixed sales
++ Cash part-payments on Credit sales
++ Cash debt collections
++ Other approved cash received
+- Cash expenses
+- Cash refunds
+- Cash deposits removed from the drawer
+- Cash withdrawals
+- Other approved cash out
+= Expected physical cash
+```
+
+MoMo, Bank and Other balances are reconciled separately.
+
+### Manual count rule
+
+The system must not automatically copy expected values into counted values.
+
+Staff must:
+
+1. Enter the real physical Cash count.
+2. Confirm the actual MoMo balance.
+3. Confirm the actual Bank balance.
+4. Confirm Other where applicable.
+5. Explain every shortage or excess.
+6. Confirm that the figures were independently checked.
+7. Submit the closing.
+8. Allow a different manager or administrator to verify it.
+
+Never force a difference to zero merely to make the closing appear balanced.
+
+### Denomination counting
+
+The physical-cash count supports:
+
+- GHS 200 notes
+- GHS 100 notes
+- GHS 50 notes
+- GHS 20 notes
+- GHS 10 notes
+- GHS 5 notes
+- GHS 2 notes
+- GHS 1 notes
+- Coins total value
+
+The denomination total must equal Cash Counted.
+
+### Opening float and drawer movements
+
+Daily Closing can store:
+
+- Opening cash float
+- Cash deposits
+- Cash withdrawals
+- Other cash in
+- Other cash out
+
+Closing notes are required when controlled drawer movements are entered.
+
+### Payment allocations
+
+New sales preserve the exact amount received through:
+
+- Cash
+- MoMo
+- Bank
+- Other
+
+This is especially important for:
+
+- Mixed sales
+- Part-paid Credit sales
+- Initial payments that create a remaining debt
+
+Only the Cash allocation should enter expected physical cash.
+
+### Protected completed-sale changes
+
+Completed sales must not be silently rewritten.
+
+The protected workflow preserves:
+
+- Original sale header
+- Original items
+- Corrected sale header
+- Corrected items
+- Products
+- Quantities
+- Prices
+- Discount
+- Customer
+- Payment type
+- Payment allocations
+- Amount paid
+- Debt effect
+- Stock effect
+- Reason
+- Requesting user
+- Approving user
+- Date and time
+
+A different active manager or administrator authorizes the change with their own credentials.
+
+### Returns and refunds
+
+Returns distinguish:
+
+- Stock-only return
+- Financial refund
+
+A financial refund requires:
+
+- Exact amount
+- Exact refund channel
+- Reference for electronic refunds
+- Clear reason
+- Independent manager or administrator approval
+
+Approved refunds reduce the matching Daily Closing channel.
+
+### Closing revisions
+
+The system preserves Daily Closing evidence through revision history.
+
+- Revision 1 preserves the original or historical closing.
+- A later approved change may mark the closing `Changed After Closing`.
+- The original closing is not silently overwritten.
+- A different manager or administrator enters reconciliation notes.
+- Later revisions preserve revised expected figures and review evidence.
+- Historical closings created before Cash Control V2 remain legacy records and must not be described as independently verified.
+
+### Manager verification
+
+Daily Closing verification requires:
+
+- An active manager or administrator
+- Their own password
+- A verifier different from the original submitter
+- Review of changes and variance
+- Reconciliation first when the closing changed after submission
+
+Verification confirms that management reviewed the evidence. It does not erase a genuine shortage or excess.
+
+## Activity Log and Security Exports
+
+Activity Log supports grouped review and downloads.
+
+Categories include:
+
+- Logins & Account Security
+- Sales & Receipts
+- Products, Stock & Transfers
+- Daily Closing & Cash Control
+- Debts & Payments
+- Expenses & Purchases
+- Returns & Refunds
+- Users, Roles & Access
+- Audit, Approvals & Security
+- Backups, Restores & Exports
+- Mining Operations
+- Equipment Hire
+- Other System Activity
+
+Filters include:
+
+- Date range
+- Store or branch
+- User
+- Action
+- Category
+
+Download formats:
+
+- Excel
+- PDF
+- Word
+- CSV
+
+Use Activity Log evidence when investigating:
+
+- Login access
+- Sale corrections
+- Voids
+- Refunds
+- Post-closing changes
+- Repeated adjustments
+- Closing shortages or excesses
+- Sensitive administration
+
+## Reports and Export Centre
+
+Professional exports are available for major record groups, including:
+
+- Products and Inventory
+- Low Stock / Restock
+- Stock Adjustments
+- Stock Transfers
+- Stock Movement Ledger
+- Sales
+- Debts
+- Debt Payments
+- Expenses
+- Purchases
+- Returns
+- Daily Closings
+- Activity Logs
+
+Supported report formats include:
+
+- Excel for analysis
+- PDF for fixed management presentation
+- Word for editable notes and reports
+- CSV where supported
+
+Daily Closing reports include:
+
+- Store and date
+- Payment-channel summary
+- Opening float and cash movements
+- Expected versus counted
+- Denominations
+- Variance
+- Exceptions
+- Returns and refunds
+- Verification
+- Revision history
+- Changed-after-closing evidence
+- Clean-hands status
+
+## Stock Control
+
+### Stock adjustments
+
+Use stock adjustment only for a genuine manual correction such as:
+
+- Damage
+- Loss
+- Physical count difference
+- Wrong entry
+- Approved count correction
+
+The system keeps:
+
+- Old quantity
+- New quantity
+- Adjustment type
+- Reason
+- User
+- Store
+- Date and time
+
+Do not use stock adjustment to imitate a sale, purchase, return or transfer.
+
+### Stock transfers
+
+Transfer workflow:
+
+```text
+Request → Approve → Dispatch → Receive
+```
+
+Meaning:
+
+- Request creates the transfer.
+- Approve authorizes it.
+- Dispatch reduces source-store stock.
+- Receive increases destination-store stock.
+
+Approval alone does not move stock.
+
+### Product stock ledger
+
+Use the product ledger to review:
+
+- Opening stock
+- Purchases
+- Sales
+- Returns
+- Adjustments
+- Transfers in
+- Transfers out
+- Running balance
+
+## SMS and WhatsApp
+
+### SMS
+
+Arkesel SMS support includes:
+
+- SMS Center
+- Custom messages
+- Receipt SMS
+- Debt reminders
+- Low-stock alerts
+- Daily summary
+- Logs and retry
+
+Keep provider credentials private.
+
+### WhatsApp
+
+WhatsApp receipt code is prepared but should remain disabled until Meta setup is complete:
+
+```env
+WHATSAPP_RECEIPT_ENABLED=false
+```
+
+A failed SMS or WhatsApp attempt must never cancel a valid sale.
 
 ## Project Structure
 
@@ -66,545 +509,486 @@ chalin03-system/
 │   ├── middleware/
 │   ├── routes/
 │   ├── scripts/
+│   ├── security/
 │   ├── services/
+│   ├── tests/
+│   ├── utils/
 │   ├── server.js
-│   ├── package.json
-│   └── .env.example
-│
+│   └── package.json
+├── database/
+│   ├── migrations/
+│   ├── schema.sql
+│   ├── schema_verify.sql
+│   ├── 20260714_cash_control_security_migration.sql
+│   └── 20260714_cash_control_security_verify.sql
+├── docs/
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
 │   │   ├── components/
 │   │   ├── context/
 │   │   ├── pages/
-│   │   └── App.jsx
+│   │   ├── security/
+│   │   └── styles/
 │   ├── package.json
-│   └── .env.example
-│
-├── database/
-│   ├── schema.sql
-│   └── migration files
-│
+│   └── vite.config.js
 ├── README.md
 └── .gitignore
 ```
 
-## Requirements
+## Local Requirements
 
-Install these before running the project:
+Install:
 
-* Node.js 20 or newer
-* MySQL Server
-* MySQL Workbench
-* Git
-* VS Code
+- Git for Windows
+- Node.js LTS
+- MySQL Server
+- MySQL Workbench
+- VS Code
+- Chrome or Edge
 
-## Backend Setup
+## Current Windows Working Folder
 
-Open terminal:
+Current controlled working folder:
 
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\backend
+```text
+C:\Users\DDK\Desktop\chalin03-daily-closing-development
+```
+
+Use a fresh GitHub clone on another device rather than copying `node_modules`.
+
+## New Device Setup
+
+Clone:
+
+```bat
+cd /d C:\Users\DDK\Desktop
+
+git clone https://github.com/Eugene999B/chalin03-system-2.git chalin03-system
+
+cd /d C:\Users\DDK\Desktop\chalin03-system
+git switch main
+git pull --ff-only origin main
+```
+
+Install backend:
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\backend
 npm install
 ```
 
-Create a backend environment file:
+Install frontend:
 
-```text
-backend/.env
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
+npm install
 ```
 
-Use this structure:
+Do not copy `node_modules` from another computer.
+
+## Environment Variables
+
+Never commit real `.env` files.
+
+### Backend local template
 
 ```env
 NODE_ENV=development
 PORT=5000
 FRONTEND_URL=http://localhost:5173
+FRONTEND_URL_ALT=http://localhost:3000
 
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=chalin03_user
-DB_PASSWORD=your_mysql_password_here
+DB_USER=root
+DB_PASSWORD=your_local_mysql_password
 DB_NAME=chalin03_db
 DB_CONNECTION_LIMIT=10
 DB_SSL=false
 
-JWT_SECRET=change_this_to_a_very_long_secret_key
+JWT_SECRET=generate_a_long_private_secret
+
+SYSTEM_ADMIN_USER_ID=1
+SYSTEM_ADMIN_USERNAME=admin
+ALLOW_CLEAR_BUSINESS_DATA=true
 
 SMS_ENABLED=false
-SMS_PROVIDER=arkesel
+SMS_PROVIDER=mock
 SMS_SENDER_ID=CHALIN03
-SMS_ARKESEL_API_KEY=your_arkesel_api_key_here
-SMS_ARKESEL_BASE_URL=https://sms.arkesel.com/api/v2/sms/send
+SMS_ARKESEL_API_KEY=
 SMS_TIMEOUT_MS=15000
-SMS_MAX_BULK_RECIPIENTS=200
 
 WHATSAPP_RECEIPT_ENABLED=false
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_TEMPLATE_NAME=receipt_notification
 WHATSAPP_TEMPLATE_LANGUAGE=en
-WHATSAPP_GRAPH_VERSION=v20.0
 ```
 
-Do not upload the real `.env` file to GitHub.
-
-## Database Setup
-
-Open MySQL Workbench and run:
-
-```text
-database/schema.sql
-```
-
-Important: the schema recreates the database from scratch. It deletes existing data before creating fresh tables.
-
-Do **not** run `schema.sql` on production after real business data has started.
-
-After creating the database, create the admin account:
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\backend
-npm run create-admin
-```
-
-## Database Migrations
-
-For new features added after the first schema, use migration files instead of resetting the whole database.
-
-Examples:
-
-```text
-database/stock_transfer_migration.sql
-database/stock_adjustment_migration.sql
-```
-
-For local database:
-
-```sql
-USE chalin03_db;
-```
-
-For Railway production database:
-
-```sql
-USE railway;
-```
-
-## Start Backend Locally
-
-For development:
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\backend
-npm run dev
-```
-
-For production-style local testing:
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\backend
-npm start
-```
-
-Backend health check:
-
-```text
-http://localhost:5000/api/health
-```
-
-## Frontend Setup
-
-Open another terminal:
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\frontend
-npm install
-```
-
-Create a frontend environment file:
-
-```text
-frontend/.env
-```
-
-Use this:
+### Frontend local template
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
 
-## Start Frontend Locally
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\frontend
-npm run dev
-```
-
-Frontend local address:
-
-```text
-http://localhost:5173
-```
-
-## Build Frontend for Production
-
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\frontend
-npm run build
-```
-
-The production build will be created in:
-
-```text
-frontend/dist
-```
-
-## Important Local URLs
-
-```text
-Frontend:
-http://localhost:5173
-
-Backend:
-http://localhost:5000
-
-Backend health:
-http://localhost:5000/api/health
-```
-
-## Important Live URLs
-
-```text
-Frontend:
-https://www.chalin03.com
-
-Backend API:
-https://api.chalin03.com/api
-```
-
-## Store-Based Workflow
-
-The system supports multiple stores.
-
-Most daily records are connected to the selected store, including:
-
-* Products
-* Sales
-* Debts
-* Purchases
-* Expenses
-* Returns
-* Reports
-* Daily closing
-* Stock adjustments
-* Stock transfers
-
-To work in another store:
-
-```text
-Logout → choose correct store on login page → login again
-```
-
-Always confirm the selected store before recording sales, purchases, expenses, stock adjustments, or transfers.
-
-## Stock Adjustment Workflow
-
-Stock adjustment is used for:
-
-* Damaged stock
-* Lost stock
-* Physical count correction
-* Wrong entry correction
-* Stock count update
-* Other manual corrections
-
-Workflow:
-
-```text
-Products → Adjust Stock → choose Increase, Decrease, or Set Exact Stock → enter quantity → enter reason → Save Adjustment
-```
-
-The system records:
-
-* Product
-* Store
-* Adjustment type
-* Quantity
-* Old stock
-* New stock
-* Reason
-* User
-* Date and time
-
-Recent adjustment records show at the bottom of the Products page.
-
-## Stock Transfer Workflow
-
-Stock transfer is used to move stock between stores.
-
-Workflow:
-
-```text
-Request → Approve → Dispatch → Receive
-```
-
-Meaning:
-
-```text
-Request:
-Creates a transfer request.
-
-Approve:
-Management approves the transfer.
-
-Dispatch:
-Source store stock is reduced.
-
-Receive:
-Destination store stock is increased.
-```
-
-The system keeps full transfer history and can generate a PDF Transfer Note.
-
-## Important API Routes
-
-Examples of important backend routes:
-
-```text
-GET    /api/health
-
-POST   /api/auth/login
-
-GET    /api/products
-POST   /api/products
-PUT    /api/products/:id
-DELETE /api/products/:id
-
-PATCH  /api/products/:id/stock-adjustment
-GET    /api/products/:id/stock-adjustments
-GET    /api/products/stock-adjustments/recent
-
-GET    /api/stock-transfers
-POST   /api/stock-transfers
-GET    /api/stock-transfers/:id
-GET    /api/stock-transfers/:id/pdf
-POST   /api/stock-transfers/:id/approve
-POST   /api/stock-transfers/:id/dispatch
-POST   /api/stock-transfers/:id/receive
-POST   /api/stock-transfers/:id/cancel
-POST   /api/stock-transfers/:id/reject
-```
-
-## SMS Setup
-
-The system supports SMS through Arkesel.
-
-Backend SMS environment example:
-
-```env
-SMS_ENABLED=true
-SMS_PROVIDER=arkesel
-SMS_SENDER_ID=your_approved_sender_id
-SMS_ARKESEL_API_KEY=your_real_arkesel_api_key
-SMS_ARKESEL_BASE_URL=https://sms.arkesel.com/api/v2/sms/send
-SMS_TIMEOUT_MS=15000
-SMS_MAX_BULK_RECIPIENTS=200
-```
-
-Keep SMS keys private.
-
-Do not commit SMS API keys to GitHub.
-
-## WhatsApp Receipt Status
-
-WhatsApp receipt support is prepared but should stay disabled until Meta Cloud API setup is complete.
-
-Recommended setting for now:
-
-```env
-WHATSAPP_RECEIPT_ENABLED=false
-```
-
-When Meta setup is ready:
-
-```env
-WHATSAPP_RECEIPT_ENABLED=true
-WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
-WHATSAPP_ACCESS_TOKEN=your_whatsapp_access_token
-WHATSAPP_TEMPLATE_NAME=receipt_notification
-WHATSAPP_TEMPLATE_LANGUAGE=en
-WHATSAPP_GRAPH_VERSION=v20.0
-```
-
-Do not commit WhatsApp tokens to GitHub.
-
-## Deployment Plan
-
-The deployment process follows this order:
-
-1. Push the project to GitHub
-2. Create or connect Railway MySQL database
-3. Run required database schema or migration files
-4. Deploy the backend API on Railway
-5. Add backend production environment variables
-6. Deploy the frontend on Cloudflare
-7. Add frontend production environment variable
-8. Connect domain to frontend
-9. Connect API subdomain to backend
-10. Enable HTTPS/SSL
-11. Create the real admin account
-12. Test the full online system
-
-## Example Production Environment
-
-Backend production `.env` example:
-
-```env
-NODE_ENV=production
-PORT=5000
-FRONTEND_URL=https://www.chalin03.com
-
-DB_HOST=your_railway_mysql_host
-DB_PORT=3306
-DB_USER=your_railway_mysql_user
-DB_PASSWORD=your_railway_mysql_password
-DB_NAME=railway
-DB_CONNECTION_LIMIT=10
-DB_SSL=false
-
-JWT_SECRET=use_a_very_long_random_secret_key_here
-
-SMS_ENABLED=true
-SMS_PROVIDER=arkesel
-SMS_SENDER_ID=your_approved_sender_id
-SMS_ARKESEL_API_KEY=your_arkesel_api_key
-SMS_ARKESEL_BASE_URL=https://sms.arkesel.com/api/v2/sms/send
-SMS_TIMEOUT_MS=15000
-SMS_MAX_BULK_RECIPIENTS=200
-
-WHATSAPP_RECEIPT_ENABLED=false
-```
-
-Frontend production `.env` example:
+### Production frontend
 
 ```env
 VITE_API_URL=https://api.chalin03.com/api
 ```
 
-Important: `VITE_API_URL` is used at build time. After changing it, rebuild and redeploy the frontend.
+### Production backend CORS
 
-## Git Safety Notes
-
-Never commit these files:
-
-```text
-.env
-.env.*
-node_modules
-dist
-backups
-private files
-real passwords
-API keys
-SMS keys
-WhatsApp tokens
-database dumps with real business data
-temporary updater files
+```env
+FRONTEND_URL=https://www.chalin03.com
+FRONTEND_URL_ALT=https://chalin03.com
 ```
 
-Safe files to commit:
+Railway MySQL variables must remain in Railway and must not be copied into README, documents, screenshots or GitHub.
+
+## Fresh Local Database
+
+For a new blank local installation only, use:
 
 ```text
-.env.example
 database/schema.sql
-database/migration files
-source code
-README.md
-.gitignore
 ```
 
-## Useful Commands
+Warning:
 
-Check Git status:
+> `database/schema.sql` is a fresh-install/reset schema. Do not execute it against the live Railway database.
 
-```bash
-git status
+After creating a fresh local schema, create the administrator account using the supported backend administration script.
+
+## Production Migrations
+
+Production database changes must use reviewed additive migrations.
+
+General order:
+
+1. Confirm the correct production database.
+2. Download a current system backup and export important reports.
+3. Run the reviewed migration.
+4. Run its verification SQL immediately.
+5. Confirm all problem counts are zero.
+6. Deploy the backend/frontend code that depends on the migration.
+7. Test existing data and new workflows.
+8. Create a release tag.
+
+### Cash Control V2 migration
+
+Files:
+
+```text
+database/20260714_cash_control_security_migration.sql
+database/20260714_cash_control_security_verify.sql
 ```
 
-Add and commit selected files:
+Production status:
 
-```bash
-git add path/to/file
-git commit -m "Your commit message"
+```text
+Applied successfully and verified on 2026-07-15.
 ```
 
-Push to GitHub:
+Do not rerun it casually. Do not run `schema.sql` to repair a migration problem.
 
-```bash
-git push
-```
+## Run Locally
 
-Start backend:
+Backend:
 
-```bash
-cd backend
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\backend
 npm run dev
 ```
 
-Start frontend:
+Frontend:
 
-```bash
-cd frontend
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
 npm run dev
 ```
 
-Build frontend:
+Addresses:
 
-```bash
-cd frontend
+```text
+Frontend: http://localhost:5173
+Backend:  http://localhost:5000
+Health:   http://localhost:5000/api/health
+```
+
+## Tests
+
+### Backend
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\backend
+
+npm run syntax-check
+npm test
+```
+
+Current Cash Control V2 acceptance result:
+
+```text
+Syntax: 72 backend JavaScript files passed
+Tests: 48 passed, 0 failed
+```
+
+### Frontend
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
+
+npm test
 npm run build
 ```
 
-Check backend JavaScript files:
+The Vite chunk-size warning is non-blocking when the build ends successfully.
 
-```bash
-cd backend
-node --check server.js
-node --check routes/productRoutes.js
-node --check routes/stockTransferRoutes.js
+### Git quality check
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system
+
+git diff --check
+git status --short
 ```
 
-## Recommended Test Before Every Push
+LF-to-CRLF warnings on Windows are not failures when no real whitespace error is reported.
 
-Run backend checks:
+## Production Deployment
 
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\backend
-node --check server.js
+Production code is deployed from `main`.
+
+Safe release pattern:
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system
+
+git switch main
+git pull --ff-only origin main
+git status --short
 ```
 
-Run frontend build:
+Create a feature branch:
 
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system\frontend
-npm run build
+```bat
+git switch -c feature/clear-feature-name
 ```
 
-Then commit safely:
+After implementation and successful tests:
 
-```bash
-cd C:\Users\DDK\Desktop\chalin03-system
-git status
-git add README.md
-git commit -m "Update README with latest system features"
-git push
+```bat
+git add exact\file\paths
+git commit -m "Clear release description"
+git push -u origin feature/clear-feature-name
 ```
 
-Before using `git add .`, check carefully that `.env`, backups, database dumps, and private files are not included.
+Merge after acceptance:
 
-## Author
+```bat
+git switch main
+git pull --ff-only origin main
+git merge --no-ff feature/clear-feature-name -m "Release clear feature name"
+git push origin main
+```
 
-Developed for **Chalin 03 Company Limited**.
+Then verify:
 
-Project owner: **Eugene Amankwah Appiah**
+- Railway backend deployment
+- Cloudflare frontend deployment
+- API health
+- Login
+- Correct store/workspace
+- Existing records
+- New feature
+- Reports
+- Mobile layout
+- Browser console
+
+Use Incognito or hard refresh when an old PWA/cache version remains visible.
+
+## Git Tags and Rollback
+
+Verified release:
+
+```text
+9024281 — Release advanced cash control and audit security
+cash-control-security-v2-live-20260715
+```
+
+A Git tag protects application code, not database contents.
+
+To revert a merge commit:
+
+```bat
+git switch main
+git pull --ff-only origin main
+git log --oneline -5
+git revert -m 1 ACTUAL_MERGE_COMMIT_HASH
+git push origin main
+```
+
+Do not type placeholder brackets such as `<MERGE_COMMIT_HASH>` in Windows Command Prompt.
+
+Database recovery requires a database backup or controlled repair; Git cannot reverse MySQL data changes.
+
+## Backup and Recovery
+
+Keep separate copies of:
+
+- Pre-migration system backup
+- Post-migration system backup
+- Important Excel/PDF/Word exports
+- Database SQL export when available
+- Clean GitHub clone
+- Controlled documentation set
+- Migration and verification files
+- Release notes and tags
+
+Do not store secrets inside documentation or source backups.
+
+### Pen-drive structure
+
+Recommended final structure:
+
+```text
+D:\Chalin03_Final_Backup_2026-07-15\
+├── 01_Production_Source\
+├── 02_Clean_GitHub_Clone\
+├── 03_Database_Backups\
+├── 04_Complete_Documentation\
+├── 05_Installers_and_Migrations\
+├── 06_Reports_and_Release_Notes\
+└── 07_New_Device_Recovery\
+```
+
+Exclude from the production-source copy:
+
+```text
+node_modules
+frontend\dist
+.env
+temporary extraction folders
+real secrets
+```
+
+The clean GitHub clone should keep its `.git` folder so it remains an independent repository backup.
+
+## Production Operating Rules
+
+1. Use individual accounts.
+2. Confirm the active store, site or Hire location.
+3. Record transactions when they happen.
+4. Separate Cash, MoMo, Bank and Other.
+5. Count physical cash using denominations.
+6. Never force a closing to balance.
+7. Explain shortages, excesses and cash movements.
+8. Use protected correction workflows.
+9. Preserve original evidence.
+10. Require independent approval.
+11. Review Activity Logs.
+12. Back up before migrations or major releases.
+13. Do not reset production to fix a normal application error.
+14. Investigate evidence before accusing staff of theft.
+
+## Troubleshooting
+
+### Old frontend after deployment
+
+- Open Incognito.
+- Use `Ctrl + Shift + R`.
+- Wait for Cloudflare deployment.
+- Confirm the latest commit.
+- Clear PWA/browser cache when needed.
+
+### API route not found
+
+- Confirm Railway deployed the latest `main`.
+- Check route registration in `backend/server.js`.
+- Review Railway logs.
+
+### Database connection error
+
+- Check Railway MySQL environment variables.
+- Confirm the live backend is connected to the intended production service.
+- Do not reset the database.
+
+### Export failure
+
+- Check the browser Network response.
+- Check Railway logs.
+- Verify required migration columns/tables exist.
+- Hard refresh after frontend deployment.
+
+### Daily Closing mismatch
+
+Review:
+
+- Physical denomination count
+- Opening float
+- Cash sales
+- Mixed/Credit cash allocations
+- Debt collections
+- Expenses
+- Refunds
+- Deposits
+- Withdrawals
+- Post-closing changes
+- Activity Logs
+- Manager verification
+- Revision history
+
+A mismatch may be caused by a recording error, counting error, unrecorded cash movement or genuine loss. The system preserves evidence; management determines the cause.
+
+## Security
+
+Never commit or publish:
+
+- `.env` files
+- JWT secrets
+- Railway MySQL passwords
+- SMS API keys
+- WhatsApp access tokens
+- Admin passwords
+- Customer private data
+- Production database dumps
+- Real business backups
+
+Rotate credentials immediately when exposed.
+
+## Documentation
+
+The in-app Help/User Guide is designed for:
+
+- Cashiers
+- Managers
+- Administrators
+- Auditors
+- Mining staff
+- Equipment Hire staff
+- Fleet staff
+
+This README is designed for:
+
+- Developers
+- System administrators
+- Support technicians
+- Future maintainers
+
+Keep both updated after every major production release.
+
+## Author and Ownership
+
+Prepared by:
+
+**Eugene Amankwah Appiah**
+
+For:
+
+**Chalin 03 Company Limited**
+
+Location reference:
+
+**Dunkwa Police Barrier**

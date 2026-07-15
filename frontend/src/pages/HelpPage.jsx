@@ -64,10 +64,10 @@ export default function HelpPage() {
             <h1 style={styles.heroTitle}>Help / User Guide</h1>
 
             <p style={styles.heroSubtitle}>
-              Simple daily guide for using the Chalin 03 Group Operations
-              Platform from <strong>{currentStoreCode} — {currentStoreName}</strong>.
-              Use this page to train staff, support managers and remind users how
-              each part of the system works.
+              Current operating guide for the Chalin 03 Group Operations Platform from
+              <strong> {currentStoreCode} — {currentStoreName}</strong>. It includes
+              Cash Control and Audit Security V2, protected corrections, grouped
+              Activity Logs, Spare Parts, Mining, Equipment Hire and shared Fleet.
             </p>
           </div>
 
@@ -101,10 +101,10 @@ export default function HelpPage() {
       <div style={styles.successPanel}>
         <strong>What this system does</strong>
         <p>
-          This system helps Chalin 03 manage spare-parts stores, sales, stock,
-          debts, purchases, expenses, Fleet equipment, Mining Operations,
-          Equipment Hire, operational documents, audit controls, SMS alerts and
-          group management records.
+          This system manages sales, stock, debts, purchases, expenses, Daily Closing,
+          protected corrections, refunds, audit evidence, Fleet equipment,
+          Mining Operations, Equipment Hire, operational documents, SMS alerts
+          and group-management records. Never force a shortage or excess to zero.
         </p>
       </div>
 
@@ -112,7 +112,13 @@ export default function HelpPage() {
         <QuickGuideCard
           icon="🛒"
           title="Cashier Daily Flow"
-          items={["Login", "Confirm store", "Record sale", "Print receipt"]}
+          items={["Confirm store", "Record payment channels", "Print receipt", "Count drawer"]}
+        />
+
+        <QuickGuideCard
+          icon="💵"
+          title="Cash Control V2"
+          items={["Opening float", "Denominations", "Variance notes", "Manager verification"]}
         />
 
         <QuickGuideCard
@@ -130,7 +136,7 @@ export default function HelpPage() {
         <QuickGuideCard
           icon="🔐"
           title="Safety"
-          items={["Passwords", "Backups", "Permissions", "Maintenance"]}
+          items={["Own login", "Protected changes", "Activity Log", "Backups"]}
         />
       </div>
 
@@ -139,7 +145,7 @@ export default function HelpPage() {
           <p style={styles.eyebrowDark}>Find Help Quickly</p>
           <h2 style={styles.panelTitle}>Search the user guide</h2>
           <p style={styles.panelSubtitle}>
-            Type a word like sale, stock, mining, fleet, hire, invoice, audit, backup or SMS.
+            Type a word like closing, cash, denomination, correction, refund, activity, sale, stock, mining, hire, audit or backup.
           </p>
         </div>
 
@@ -193,34 +199,35 @@ export default function HelpPage() {
 
       <section style={styles.footerPanel}>
         <div>
-          <p style={styles.eyebrow}>Boss Reminder</p>
-          <h2>Production and group-module rollout</h2>
+          <p style={styles.eyebrow}>Management Reminder</p>
+          <h2>Cash Control and Audit Security V2 is live</h2>
           <p>
-            The Spare Parts system is already in real use. Protect its data, test
-            Fleet, Mining and Equipment Hire locally, verify backups, and deploy
-            group modules only after the complete regression checklist passes.
+            Record the real figures, preserve the original evidence and review every
+            shortage, excess, correction, refund and post-closing change. A closing
+            is trustworthy because it was independently counted and verified, not
+            because somebody forced the difference to zero.
           </p>
         </div>
 
         <div style={styles.footerMiniGrid}>
           <div>
-            <span>Most Important</span>
+            <span>First Check</span>
             <strong>Correct Store</strong>
           </div>
 
           <div>
             <span>Daily Control</span>
-            <strong>Daily Closing</strong>
+            <strong>Real Count</strong>
           </div>
 
           <div>
-            <span>Stock Audit</span>
-            <strong>Movement Ledger</strong>
+            <span>Security Review</span>
+            <strong>Activity Log</strong>
           </div>
 
           <div>
-            <span>Safety</span>
-            <strong>Backup First</strong>
+            <span>Approval Rule</span>
+            <strong>Different Manager</strong>
           </div>
         </div>
       </section>
@@ -272,337 +279,473 @@ function GuideCard({ section, index }) {
 }
 
 const guideCategories = [
-  { key: "all", label: "All" },
-  { key: "daily", label: "Daily Work" },
-  { key: "stock", label: "Stock" },
-  { key: "sales", label: "Sales & Debts" },
-  { key: "management", label: "Management" },
-  { key: "group", label: "Group Operations" },
-  { key: "safety", label: "Safety" },
+  {
+    "key": "all",
+    "label": "All"
+  },
+  {
+    "key": "daily",
+    "label": "Daily Work"
+  },
+  {
+    "key": "cash",
+    "label": "Cash Control"
+  },
+  {
+    "key": "stock",
+    "label": "Stock"
+  },
+  {
+    "key": "sales",
+    "label": "Sales & Debts"
+  },
+  {
+    "key": "management",
+    "label": "Management"
+  },
+  {
+    "key": "group",
+    "label": "Group Operations"
+  },
+  {
+    "key": "safety",
+    "label": "Safety"
+  }
 ];
 
 const guideSections = [
   {
-    category: "daily",
-    badge: "Store Control",
-    title: "1. Store Selection",
-    items: [
-      "Choose the correct store on the login page before logging in.",
+    "category": "daily",
+    "badge": "Store Control",
+    "title": "1. Store Selection",
+    "items": [
+      "Choose the correct Spare Parts store on the login page before logging in.",
       "Always check the selected store name at the top of the system.",
-      "Sales, debts, stock, purchases, expenses, returns and reports belong to the selected store.",
-      "To switch store, logout, select another store, and login again.",
-      "Do not record a sale, purchase, transfer, return or stock adjustment until the selected store is correct.",
-    ],
+      "Sales, debts, stock, purchases, expenses, returns, reports and Daily Closing belong to the selected store.",
+      "Mining sites and Equipment Hire locations are separate workspaces and do not use Spare Parts stores.",
+      "To change a Spare Parts store, logout, select the correct store, and login again.",
+      "Do not save a business record until the active store, site or hire location is correct."
+    ]
   },
   {
-    category: "daily",
-    badge: "Daily Work",
-    title: "2. Daily Workflow",
-    items: [
-      "Login with your username, password and selected store.",
-      "Check Dashboard for sales, debts, stock value and low stock.",
-      "Add or update products if stock arrives.",
-      "Use New Sale to sell products from the selected store.",
-      "Print or download receipt after sale.",
-      "Record debt payment when customer pays later.",
-      "Record expenses, purchases and returns when needed.",
-      "Use stock transfers when moving items between stores.",
-      "Use Daily Closing for the selected store at the end of the day.",
+    "category": "daily",
+    "badge": "Daily Work",
+    "title": "2. Daily Workflow",
+    "items": [
+      "Login with your own username and password. Do not share an account.",
+      "Confirm the active store before recording any Spare Parts work.",
+      "Check Dashboard, low stock, debts and unfinished management tasks.",
+      "Record sales with the correct payment channel and print or download the receipt.",
+      "Record debt payments, purchases, expenses, returns and stock transfers when they happen.",
+      "Do not wait until the end of the week to enter expenses or cash movements.",
+      "At closing time, independently count Cash and confirm MoMo, Bank and Other.",
+      "Enter explanations for every shortage, excess, deposit, withdrawal or unusual movement.",
+      "Submit the closing and allow a different manager or administrator to verify it."
     ],
+    "warning": "Never change a figure only to make the Daily Closing show Balanced."
   },
   {
-    category: "stock",
-    badge: "Inventory",
-    title: "3. Products",
-    items: [
-      "Go to Products.",
-      "Add product name, category, excavator type, price and quantity.",
-      "Use low-stock level to know when to restock.",
-      "Search products by name, barcode, category or excavator type.",
-      "Product stock is separated by store.",
-      "Admin or manager can edit products and adjust stock.",
-      "Admin can delete or disable products when necessary.",
-    ],
+    "category": "stock",
+    "badge": "Inventory",
+    "title": "3. Products",
+    "items": [
+      "Go to Products and confirm the selected store.",
+      "Add product name, category, excavator type, price, cost, quantity and low-stock level.",
+      "Search by name, barcode, category or excavator type.",
+      "Product quantities and prices are separated by store.",
+      "Use the product stock ledger when a quantity is questioned.",
+      "Only authorized staff should edit prices, adjust stock, disable or delete products."
+    ]
   },
   {
-    category: "stock",
-    badge: "Stock Control",
-    title: "4. Stock Adjustment",
-    items: [
-      "Go to Products.",
-      "Click Adjust Stock on the product.",
+    "category": "stock",
+    "badge": "Stock Control",
+    "title": "4. Stock Adjustment",
+    "items": [
+      "Open Products and choose Adjust Stock on the correct product.",
       "Choose Increase Stock, Decrease Stock or Set Exact Stock.",
-      "Enter the quantity and the reason.",
-      "Use this for damaged items, lost items, physical count correction, wrong entry correction or stock count update.",
-      "The system records old stock, new stock, reason, date and user.",
-      "Recent Stock Adjustment Records show at the bottom of the Products page.",
+      "Enter the quantity and a clear business reason.",
+      "Use this for damaged items, losses, physical-count corrections or wrong entries.",
+      "The system records old stock, new stock, reason, date, user and store.",
+      "Review frequent adjustments because they may indicate training problems, recording mistakes or stock loss."
     ],
+    "warning": "Do not use stock adjustment to imitate a sale, purchase, return or transfer."
   },
   {
-    category: "stock",
-    badge: "Stock Audit",
-    title: "5. Product Stock Movement Ledger",
-    items: [
-      "Go to Products.",
-      "Find the product you want to inspect.",
-      "Click View Ledger.",
-      "The ledger shows how the product stock moved from opening stock to current stock.",
-      "It includes purchases, sales, returns, stock adjustments, transfers in and transfers out.",
-      "Use the running balance to understand why the current stock is what it is.",
-      "This is useful when stock quantity is questioned during audit or physical counting.",
-    ],
+    "category": "stock",
+    "badge": "Stock Audit",
+    "title": "5. Product Stock Movement Ledger",
+    "items": [
+      "Open Products, find the item and click View Ledger.",
+      "Review opening stock, purchases, sales, returns, adjustments and transfers.",
+      "Follow the running balance to explain the current quantity.",
+      "Use the ledger before deciding that stock was stolen or the system is wrong.",
+      "Download the full Stock Movement Ledger from Exports for management review."
+    ]
   },
   {
-    category: "stock",
-    badge: "Two Stores",
-    title: "6. Stock Transfers Between Stores",
-    items: [
-      "Go to Stock Transfers.",
-      "Select the source store and destination store.",
-      "Add products and quantities to transfer.",
-      "Create the transfer request.",
-      "Approve the transfer when management agrees.",
-      "Dispatch the transfer to reduce stock from the source store.",
-      "Receive the transfer to add stock to the destination store.",
-      "Download the Transfer Note PDF for printing or physical signing.",
+    "category": "stock",
+    "badge": "Two Stores",
+    "title": "6. Stock Transfers Between Stores",
+    "items": [
+      "Open Stock Transfers and choose the source and destination stores.",
+      "Add the products and requested quantities.",
+      "Create the request, obtain approval, dispatch from the source and receive at the destination.",
+      "Approval alone does not move stock.",
+      "Dispatch reduces the source store; Receive increases the destination store.",
+      "Download and sign the Transfer Note when physical goods move."
     ],
-    warning:
-      "Approval does not move stock. Dispatch reduces the source store. Receive increases the destination store.",
+    "warning": "Never reduce one store and manually increase another to imitate a transfer."
   },
   {
-    category: "sales",
-    badge: "Sales",
-    title: "7. New Sale",
-    items: [
-      "Go to New Sale.",
-      "Confirm the selected store before selling.",
-      "Search and select product.",
-      "Enter quantity.",
-      "Add customer details if needed.",
-      "Select payment type: cash, MoMo, bank, credit or mixed.",
-      "Save sale and print or download receipt.",
-      "For credit sales, debt is created automatically.",
+    "category": "sales",
+    "badge": "Sales",
+    "title": "7. New Sale and Payment Channels",
+    "items": [
+      "Open New Sale and confirm the selected store.",
+      "Select the correct product, quantity, customer and discount.",
+      "Choose Cash, MoMo, Bank, Credit or Mixed.",
+      "For a Mixed or part-paid Credit sale, allocate the received amount to the exact channels.",
+      "The payment allocations must equal the amount received.",
+      "Only the Cash allocation enters expected physical cash; MoMo and Bank are confirmed separately.",
+      "Save the sale, check the receipt and give it to the customer."
     ],
+    "warning": "Do not put MoMo, Bank or an unknown part-payment into Cash merely to complete the sale."
   },
   {
-    category: "sales",
-    badge: "Customers",
-    title: "8. Debts",
-    items: [
-      "Credit sales automatically create debt records.",
-      "Go to Debts to see unpaid customers for the selected store.",
-      "Record payment when the customer pays.",
-      "The balance reduces automatically.",
-      "Paid debts will show as completed or paid.",
-      "Debt records help management follow customers who owe money.",
+    "category": "sales",
+    "badge": "Protected Change",
+    "title": "8. Completed-Sale Corrections",
+    "items": [
+      "Do not casually edit a completed sale from Sales History.",
+      "Open the controlled correction action and enter a clear reason.",
+      "A different active manager or administrator must authorize the change with their own credentials.",
+      "The system preserves the original and corrected sale evidence.",
+      "Product, quantity, price, discount, customer, amount paid, payment allocation, debt and stock effects are retained.",
+      "A change affecting a closed date marks that Daily Closing for reconciliation.",
+      "Do not use a shared manager account because it destroys accountability."
     ],
+    "warning": "Never delete or hide the original transaction to make the records look clean."
   },
   {
-    category: "stock",
-    badge: "Purchasing",
-    title: "9. Purchases & Suppliers",
-    items: [
-      "Use Purchases when buying stock from suppliers.",
-      "Confirm the selected store before saving a purchase.",
-      "Purchase items increase stock only in the selected store.",
-      "Supplier records are also separated by store.",
-      "Record supplier balance payments when paying later.",
-      "Use purchase history to track how stock entered the business.",
-    ],
+    "category": "sales",
+    "badge": "Customers",
+    "title": "9. Debts and Debt Payments",
+    "items": [
+      "Credit and Mixed sales create debt when a balance remains.",
+      "Open Debts to review unpaid customers for the selected store.",
+      "Record each later payment with the correct Cash, MoMo, Bank or Other channel.",
+      "The debt balance reduces and payment history remains available.",
+      "Debt collections affect the matching Daily Closing payment channel.",
+      "Review old debts and repeated part-payments with management."
+    ]
   },
   {
-    category: "management",
-    badge: "Shop Costs",
-    title: "10. Expenses & Returns",
-    items: [
-      "Use Expenses for shop costs like transport, rent and repairs.",
-      "Expenses are saved under the selected store.",
-      "Use Returns when a customer returns an item.",
-      "Returns increase stock only in the selected store.",
-      "Managers and admins should review returns carefully.",
-      "Returns and expenses affect business reports.",
-    ],
+    "category": "stock",
+    "badge": "Purchasing",
+    "title": "10. Purchases and Suppliers",
+    "items": [
+      "Use Purchases when stock is received from a supplier.",
+      "Confirm the selected store before saving.",
+      "Purchase items increase stock in that store.",
+      "Record supplier balances and later purchase payments.",
+      "Use purchase history to explain stock increases and cost changes.",
+      "Do not manually increase products when a purchase record should be created."
+    ]
   },
   {
-    category: "management",
-    badge: "Reports",
-    title: "11. Reports, Exports & Daily Closing",
-    items: [
-      "Managers and admins can view Reports.",
-      "Use date filters to check sales performance.",
-      "Reports show data for the selected store only.",
-      "Use Exports to download selected-store business records.",
-      "Export Stock Movement Ledger to download a full product stock audit workbook.",
-      "Use Daily Closing to confirm end-of-day money for a store.",
-      "Daily Closing helps compare system sales and cash available.",
-    ],
+    "category": "management",
+    "badge": "Business Costs",
+    "title": "11. Expenses",
+    "items": [
+      "Record shop expenses when they happen, not later from memory.",
+      "Choose the correct store, category, date and payment method.",
+      "Cash expenses reduce expected physical cash; MoMo and Bank expenses reduce their own channels.",
+      "Add notes or references for unusual expenses.",
+      "An expense entered after closing may mark the closing for management review.",
+      "Managers should review repeated, late or unusually large expenses."
+    ]
   },
   {
-    category: "management",
-    badge: "Export Files",
-    title: "12. Excel Exports",
-    items: [
-      "Go to Exports.",
-      "Use the date filter if you want records within a date range.",
-      "Products, Low Stock and Debts export all records for the store.",
-      "Sales, Expenses, Purchases, Returns, Stock Adjustments, Stock Transfers, Stock Movement Ledger, Debt Payments and Daily Closings can use the date filter.",
-      "Use Stock Movement Ledger export when management wants to review stock movements for all products.",
-      "Use Stock Transfers export when management wants to review movements between stores.",
+    "category": "management",
+    "badge": "Returns",
+    "title": "12. Returns and Financial Refunds",
+    "items": [
+      "Use a Stock-Only Return when goods return to stock but no money is refunded.",
+      "Use a Financial Refund only when money is actually returned to the customer.",
+      "Enter the exact refund amount and Cash, MoMo, Bank or Other refund channel.",
+      "Add a reference for electronic refunds and a clear reason.",
+      "A different manager or administrator must approve a financial refund.",
+      "Approved refunds reduce the matching Daily Closing channel.",
+      "A refund after closing marks the affected closing for reconciliation."
     ],
+    "warning": "Returning stock and refunding money are different actions. Select the correct return type."
   },
   {
-    category: "management",
-    badge: "Accounting",
-    title: "13. Advanced Accounting Intelligence",
-    items: [
-      "Use this page to review advanced accounting signals.",
-      "Check profit, loss, stock movement and suspicious changes.",
-      "Review sales, expenses, debts, purchases and returns together.",
-      "Managers should use it to detect business mistakes early.",
-      "The page helps management understand whether the store is healthy.",
-    ],
+    "category": "cash",
+    "badge": "Preparation",
+    "title": "13. Daily Closing Preparation",
+    "items": [
+      "Finish recording all sales, debt payments, expenses, returns and cash movements for the store.",
+      "Confirm that no customer payment or expense is still waiting to be entered.",
+      "Separate physical Cash from MoMo, Bank and Other.",
+      "Use the actual business date and active store.",
+      "After a date is closed, do not create additional transactions for that date without management review."
+    ]
   },
   {
-    category: "management",
-    badge: "SMS",
-    title: "14. SMS Center",
-    items: [
-      "Use SMS Center to send business messages to customers.",
-      "Use templates for debt reminders and customer notices.",
-      "Confirm recipient numbers carefully before sending live SMS.",
-      "Check SMS status to see successful and failed messages.",
-      "Retry failed SMS only after confirming the phone number.",
-      "Only approved users should send bulk SMS.",
-    ],
+    "category": "cash",
+    "badge": "Cash Drawer",
+    "title": "14. Opening Float and Cash Movements",
+    "items": [
+      "Opening cash float is the physical cash already in the drawer before sales begin.",
+      "Cash deposits are amounts removed from the drawer and deposited elsewhere.",
+      "Cash withdrawals are approved amounts taken from the drawer.",
+      "Other cash-in and other cash-out cover approved movements not represented by sales, debt collections, expenses or refunds.",
+      "Enter notes whenever a deposit, withdrawal, other cash-in or other cash-out is used.",
+      "Do not record MoMo or Bank balances as opening physical cash."
+    ]
   },
   {
-    category: "management",
-    badge: "Audit",
-    title: "15. Audit Controls",
-    items: [
+    "category": "cash",
+    "badge": "Physical Count",
+    "title": "15. Denomination Counting",
+    "items": [
+      "Count GHS 200, 100, 50, 20, 10, 5, 2 and 1 notes separately.",
+      "Enter the quantity of each note.",
+      "Enter the total value of coins.",
+      "The denomination total must equal Cash Counted.",
+      "Recount when the denomination total and Cash Counted do not agree.",
+      "Do not enter the system-expected cash as the count unless the physical notes and coins truly equal it."
+    ]
+  },
+  {
+    "category": "cash",
+    "badge": "Reconciliation",
+    "title": "16. Expected Versus Counted",
+    "items": [
+      "Expected Cash is calculated from opening float, cash receipts and approved cash outflows.",
+      "Expected MoMo, Bank and Other are calculated separately.",
+      "Counted Cash is the physical denomination count.",
+      "Confirmed MoMo and Bank should be checked against the actual account or transaction history.",
+      "A negative difference is a shortage; a positive difference is an excess.",
+      "Enter a clear explanation whenever any channel differs.",
+      "Submit the real difference. Do not adjust the count to manufacture a zero variance."
+    ]
+  },
+  {
+    "category": "cash",
+    "badge": "Independent Check",
+    "title": "17. Manager Verification",
+    "items": [
+      "The cashier or submitter completes and submits the Daily Closing.",
+      "A different active manager or administrator reviews the records and recounts or verifies the balances.",
+      "The verifier uses their own password.",
+      "The person who submitted the closing cannot verify the same closing.",
+      "A closing changed after submission cannot be verified until its revision is reviewed.",
+      "Verification confirms review; it does not erase a genuine shortage or excess."
+    ]
+  },
+  {
+    "category": "cash",
+    "badge": "Evidence History",
+    "title": "18. Revisions and Changed-After-Closing Review",
+    "items": [
+      "Revision 1 preserves the original submitted or historical closing.",
+      "A later approved sale change, void, refund, expense or debt-payment change may mark the closing Changed After Closing.",
+      "The original closing is not silently overwritten.",
+      "A different manager or administrator enters revision notes and reconciles the changed expected figures.",
+      "The revision history shows what changed, why it changed, who reviewed it and when.",
+      "Historical closings created before Cash Control V2 remain legacy records and must not be described as independently verified."
+    ]
+  },
+  {
+    "category": "management",
+    "badge": "Reports",
+    "title": "19. Reports, Exports and Clean-Hands Closing Reports",
+    "items": [
+      "Use Reports and Exports with the correct store and date range.",
+      "Products, Low Stock, Stock Adjustments, Transfers, Stock Movement, Sales, Debts, Debt Payments, Expenses, Purchases, Returns and Daily Closings are available.",
+      "Use Excel for analysis, PDF for fixed presentation and Word for editable management notes.",
+      "Daily Closing reports include payment channels, cash movements, denominations, exceptions, verification and revision evidence.",
+      "Review the report before presenting it to the boss or accountant.",
+      "A report showing a difference is evidence for investigation, not a reason to alter the figures."
+    ]
+  },
+  {
+    "category": "management",
+    "badge": "Security Timeline",
+    "title": "20. Activity Log Categories and Downloads",
+    "items": [
+      "Open Activity Log to review who performed important actions and when.",
+      "Filter by date, store, user, action and category.",
+      "Categories include Logins, Sales, Products and Stock, Daily Closing, Debts, Expenses and Purchases, Returns, Users and Access, Audit and Security, Backups and Exports, Mining, Equipment Hire and Other.",
+      "Download the selected category as Excel, PDF, Word or CSV.",
+      "Use the Login category when reviewing account access.",
+      "Use Sales and Daily Closing categories when investigating shortages, corrections or post-closing changes.",
+      "Preserve downloaded logs during an investigation; do not edit the exported evidence."
+    ]
+  },
+  {
+    "category": "management",
+    "badge": "Accounting",
+    "title": "21. Advanced Accounting Intelligence",
+    "items": [
+      "Review sales, cost, profit, expenses, debt movement, returns and stock together.",
+      "Investigate unusual discounts, voids, refunds, adjustments and closing variances.",
+      "Compare stores only when the user has authorized all-store access.",
+      "Use the signals as management warnings, not automatic accusations.",
+      "Confirm findings with source records, receipts, Activity Logs and staff explanations."
+    ]
+  },
+  {
+    "category": "management",
+    "badge": "SMS",
+    "title": "22. SMS Center",
+    "items": [
+      "Use SMS Center for approved customer messages, receipts, reminders and alerts.",
+      "Confirm recipient numbers before sending.",
+      "Check the SMS log for successful and failed messages.",
+      "Retry only after correcting the cause of failure.",
+      "Only authorized users should send bulk SMS.",
+      "SMS failures must never cancel a valid sale."
+    ]
+  },
+  {
+    "category": "management",
+    "badge": "Audit",
+    "title": "23. Audit Controls",
+    "items": [
       "Audit Sign-Off locks approved accounting periods.",
-      "Locked periods stop changes inside approved records.",
-      "Staff can request unlock when a correction is needed.",
-      "Admin or manager must review unlock requests.",
-      "Audit history and unlock requests are separated by store.",
-      "Use audit controls before presenting final reports.",
-    ],
+      "Locked periods block unauthorized changes.",
+      "Use an unlock request when a legitimate correction is required.",
+      "Management reviews the request, correction evidence and reapproval history.",
+      "Daily Closing revisions and protected-sale evidence support the audit trail.",
+      "Approve a period only after reviewing cash, stock, debts, expenses, returns and exceptions."
+    ]
   },
   {
-    category: "safety",
-    badge: "System Safety",
-    title: "16. Backup, Restore & Maintenance",
-    items: [
-      "Backup and Restore are full-system actions.",
-      "Maintenance clear test data is also a full-system action.",
-      "These actions are not limited to the selected store.",
-      "Backup before clearing test data.",
-      "Only use Maintenance before real operation starts.",
-      "Do not reset or clear real business data without approval.",
+    "category": "safety",
+    "badge": "System Safety",
+    "title": "24. Backup, Restore and Maintenance",
+    "items": [
+      "Website backup and restore are full-system actions.",
+      "Download a fresh backup before migrations, major deployments or investigations.",
+      "Do not run database/schema.sql on production because it is a fresh-install/reset schema.",
+      "Use reviewed additive migration files for live database upgrades.",
+      "Do not rerun an already successful migration unless the verification procedure specifically requires it.",
+      "Maintenance clear-data actions are for authorized emergency or test use only.",
+      "Never clear real business data merely to fix a display or login problem."
     ],
+    "warning": "Git rollback restores code; it does not automatically reverse database changes."
   },
   {
-    category: "safety",
-    badge: "Permissions",
-    title: "17. User Roles",
-    type: "unordered",
-    items: [
-      "Cashier: Can sell, view products, debts and basic records.",
-      "Manager: Can access reports, purchases, expenses, returns, exports, stock adjustments, stock transfers, daily closing and audit review areas.",
-      "Admin: Can manage users, settings, backups, activity logs and sensitive system areas.",
-      "Auditor: Can review and work in approved audit, accounting, operations-document and executive-control areas.",
-      "System Administrator: Can access System Maintenance and full reset actions.",
-    ],
+    "category": "safety",
+    "badge": "Permissions",
+    "title": "25. User Roles and Separation of Duties",
+    "type": "unordered",
+    "items": [
+      "Cashier: Daily sales, receipts and allowed customer/debt actions for Spare Parts.",
+      "Manager: Operational review, corrections, refunds, Daily Closing verification, reports and approved management actions.",
+      "Admin: Users, settings, permissions, backups, Activity Logs and sensitive administration.",
+      "Auditor: Read-only or controlled audit, accounting, document and executive-review work.",
+      "System Administrator: Emergency system maintenance and technical administration.",
+      "Mining and Equipment Hire staff receive workspace-specific roles and assigned sites or locations.",
+      "The creator or submitter should not approve or verify their own sensitive transaction."
+    ]
   },
   {
-    category: "daily",
-    badge: "PWA",
-    title: "18. Install App",
-    items: [
-      "Click Install App in the sidebar.",
-      "Accept the browser install prompt.",
-      "The system will appear like an app on the phone or computer.",
+    "category": "daily",
+    "badge": "PWA",
+    "title": "26. Install the App",
+    "items": [
+      "Click Install App in the sidebar when the browser offers it.",
       "On iPhone, use Share then Add to Home Screen.",
-      "Always use the official Chalin 03 link when opening the app.",
-    ],
+      "Always use https://chalin03.com or https://www.chalin03.com.",
+      "After a deployment, use Incognito or hard refresh when an old cached interface remains.",
+      "Do not install from an unofficial link."
+    ]
   },
   {
-    category: "safety",
-    badge: "Security",
-    title: "19. Important Safety Notes",
-    type: "unordered",
-    items: [
-      "Do not share admin password.",
-      "Change password regularly.",
-      "Always confirm the selected store before recording sales.",
-      "Always enter clear reasons for stock adjustments.",
-      "Use stock transfers instead of manually reducing one store and increasing another.",
-      "Use stock movement ledger when product quantity does not look correct.",
-      "Backup before clearing test data.",
-      "Only use System Maintenance before real operation starts.",
-      "Do not delete data after real business starts unless approved.",
-    ],
+    "category": "safety",
+    "badge": "Security",
+    "title": "27. Important Safety Rules",
+    "type": "unordered",
+    "items": [
+      "Use your own account and keep the password private.",
+      "Confirm the active business workspace and location before saving.",
+      "Never force a closing to balance.",
+      "Never erase original sale, return, refund or closing evidence.",
+      "Use protected correction and approval workflows.",
+      "Enter clear reasons for adjustments, corrections, refunds and cash movements.",
+      "Review Activity Logs when records are questioned.",
+      "Back up before migrations and major releases.",
+      "Do not expose Railway passwords, JWT secrets, SMS keys or customer data.",
+      "Report unexplained shortages to management without automatically accusing a person."
+    ]
   },
   {
-    category: "group",
-    badge: "Executive",
-    title: "20. Group Executive Control",
-    items: [
-      "Open Group Executive Control to review Spare Parts, Mining, Equipment Hire and Fleet together.",
-      "Choose the date period before reviewing revenue, costs, debt, production and utilization.",
-      "Admins with all-store access can compare both spare-parts stores; other users see the selected store.",
-      "Review critical alerts and management recommendations before approving a period.",
+    "category": "group",
+    "badge": "Executive",
+    "title": "28. Group Executive Control",
+    "items": [
+      "Review Spare Parts, Mining, Equipment Hire and Fleet from the Group Executive workspace.",
+      "Choose the reporting period and authorized business scope.",
+      "Review revenue, costs, debts, production, utilization, incidents and critical alerts.",
       "Download the executive workbook for the boss, accountant or auditor.",
-    ],
+      "Use recommendations as review prompts and confirm them against source records."
+    ]
   },
   {
-    category: "group",
-    badge: "Shared Fleet",
-    title: "21. Fleet & Equipment",
-    items: [
-      "Register each excavator or machine only once in Fleet & Equipment.",
-      "Record the current meter, location, operator, fuel, inspection and maintenance history.",
-      "A machine assigned to Mining, Hire, maintenance or breakdown should not be booked elsewhere.",
-      "Review service-due and document-expiry warnings regularly.",
-      "Use Archive for retired records instead of deleting operational history.",
-    ],
+    "category": "group",
+    "badge": "Shared Fleet",
+    "title": "29. Fleet and Equipment",
+    "items": [
+      "Register each excavator or machine once in the shared Fleet register.",
+      "Record meter readings, location, operator, fuel, inspections and maintenance.",
+      "A machine assigned to Mining, Hire, maintenance or breakdown must not be double-booked.",
+      "Review service-due, breakdown and document-expiry alerts.",
+      "Archive retired assets rather than deleting operational history."
+    ]
   },
   {
-    category: "group",
-    badge: "Mining",
-    title: "22. Mining Operations",
-    items: [
-      "Create each mining site with its production unit and daily target.",
-      "Record and approve daily logs, production, equipment shifts, fuel, expenses and incidents.",
-      "Equipment shift meters update the shared Fleet register.",
-      "Investigate fuel, downtime, unapproved logs and safety incidents before closing a period.",
-      "Use Operations Documents for daily site reports and management packs.",
-    ],
+    "category": "group",
+    "badge": "Mining",
+    "title": "30. Mining Operations",
+    "items": [
+      "Administrators create Mining sites; they are separate from Spare Parts stores.",
+      "Record daily logs, production, equipment shifts, fuel, expenses and incidents under the active site.",
+      "Approve operational records using the assigned Mining roles.",
+      "Equipment meter records update the shared Fleet context.",
+      "Review fuel, downtime, unapproved logs and safety incidents before closing a period.",
+      "Use Mining Documents for daily reports and management packs."
+    ]
   },
   {
-    category: "group",
-    badge: "Equipment Hire",
-    title: "23. Equipment Hire Operations",
-    items: [
-      "Register the customer, create an enquiry and prepare an approved quotation.",
-      "Confirm equipment availability before creating the contract and assignment.",
-      "Record dispatch, opening meter, daily job cards, billable hours and customer confirmation.",
-      "Create invoices, record deposits and payments, then follow overdue balances.",
-      "Complete the return inspection so the machine becomes available in Fleet again.",
-    ],
+    "category": "group",
+    "badge": "Equipment Hire",
+    "title": "31. Equipment Hire Operations",
+    "items": [
+      "Administrators create Hire bases or locations; they are separate from Spare Parts stores.",
+      "Register customers and enquiries, then prepare and approve quotations.",
+      "Confirm Fleet availability before contract, assignment and dispatch.",
+      "Record opening meter, job cards, billable hours, invoices, deposits and payments.",
+      "Complete the return inspection before the machine becomes available again.",
+      "Use the correct Hire role for dispatch, accounting and closure actions."
+    ]
   },
   {
-    category: "group",
-    badge: "Documents",
-    title: "24. Operations Documents & Accounting",
-    items: [
+    "category": "group",
+    "badge": "Documents",
+    "title": "32. Operations Documents",
+    "items": [
       "Download Hire quotations, agreements, dispatch notes, job cards, invoices, receipts and statements.",
       "Download Mining daily reports, site management packs and incident reports.",
-      "Use the date and customer/site filters before downloading documents or workbooks.",
-      "Auditors can review and download operational accounting documents without entering normal sales work.",
-      "A direct protected link requires an active login; login first if the page returns to Staff Login.",
-    ],
-  },
+      "Use the correct date, customer, site or location filters.",
+      "Auditors may review and download authorized documents without entering ordinary sales work.",
+      "Protected direct links require an active login."
+    ]
+  }
 ];
 
 const styles = {
