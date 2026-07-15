@@ -259,6 +259,18 @@ async function getBranchDetails(branchId) {
   };
 }
 
+function removeBlankStringCells(workbook) {
+  workbook.eachSheet((worksheet) => {
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      row.eachCell({ includeEmpty: false }, (cell) => {
+        if (cell.value === "") {
+          cell.value = null;
+        }
+      });
+    });
+  });
+}
+
 function getCellRawValue(cell) {
   const value = cell?.value;
 
@@ -1165,6 +1177,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
   const branch = await getBranchDetails(branchId);
   const format = getExportFormat(req.query.format);
   const reportTitle = getReportTitle(baseName);
+  removeBlankStringCells(workbook);
   const analysis = analyseWorkbook(workbook);
   const generatedBy =
     req.user?.full_name || req.user?.name || req.user?.username || "Authorized user";
@@ -2388,6 +2401,10 @@ router.get(
           s.total,
           s.payment_type,
           s.amount_paid,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'cash'), 0) AS cash_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'momo'), 0) AS momo_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'bank'), 0) AS bank_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'other'), 0) AS other_received,
           s.balance,
           s.sale_status,
           s.is_voided,
@@ -2578,6 +2595,10 @@ router.get(
         { header: "Total", key: "total" },
         { header: "Payment Type", key: "payment_type" },
         { header: "Amount Paid", key: "amount_paid" },
+        { header: "Cash Received", key: "cash_received" },
+        { header: "MoMo Received", key: "momo_received" },
+        { header: "Bank Received", key: "bank_received" },
+        { header: "Other / Unallocated", key: "other_received" },
         { header: "Balance", key: "balance" },
         { header: "Sale Status", key: "sale_status" },
         { header: "Voided?", key: "voided_text" },
@@ -2599,6 +2620,10 @@ router.get(
           total: voided ? 0 : Number(sale.total || 0),
           payment_type: sale.payment_type || "",
           amount_paid: voided ? 0 : Number(sale.amount_paid || 0),
+          cash_received: voided ? 0 : Number(sale.cash_received || 0),
+          momo_received: voided ? 0 : Number(sale.momo_received || 0),
+          bank_received: voided ? 0 : Number(sale.bank_received || 0),
+          other_received: voided ? 0 : Number(sale.other_received || 0),
           balance: voided ? 0 : Number(sale.balance || 0),
           sale_status: sale.sale_status || "",
           voided_text: voided ? "Yes" : "No",
@@ -2706,6 +2731,10 @@ router.get(
           s.total,
           s.payment_type,
           s.amount_paid,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'cash'), 0) AS cash_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'momo'), 0) AS momo_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'bank'), 0) AS bank_received,
+          COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'other'), 0) AS other_received,
           s.balance,
           s.sale_status,
           s.is_voided,
@@ -2742,6 +2771,10 @@ router.get(
         { header: "Amount Due", key: "total" },
         { header: "Payment Type", key: "payment_type" },
         { header: "Amount Paid", key: "amount_paid" },
+        { header: "Cash Received", key: "cash_received" },
+        { header: "MoMo Received", key: "momo_received" },
+        { header: "Bank Received", key: "bank_received" },
+        { header: "Other / Unallocated", key: "other_received" },
         { header: "Balance", key: "balance" },
         { header: "Sale Status", key: "sale_status" },
         { header: "Voided?", key: "voided_text" },
@@ -2769,6 +2802,10 @@ router.get(
           total: Number(sale.total || 0),
           payment_type: sale.payment_type,
           amount_paid: Number(sale.amount_paid || 0),
+          cash_received: Number(sale.cash_received || 0),
+          momo_received: Number(sale.momo_received || 0),
+          bank_received: Number(sale.bank_received || 0),
+          other_received: Number(sale.other_received || 0),
           balance: Number(sale.balance || 0),
           sale_status: sale.sale_status,
           voided_text: voided ? "Yes" : "No",
@@ -2985,6 +3022,7 @@ router.get(
           e.category,
           e.description,
           e.amount,
+          e.payment_method,
           e.expense_date,
           e.created_at,
           u.full_name AS recorded_by_name
@@ -3007,6 +3045,7 @@ router.get(
         { header: "Category", key: "category" },
         { header: "Description", key: "description" },
         { header: "Amount", key: "amount" },
+        { header: "Payment Method", key: "payment_method" },
         { header: "Recorded By", key: "recorded_by_name" },
         { header: "Created At", key: "created_at" },
       ];
@@ -3017,6 +3056,7 @@ router.get(
           category: expense.category,
           description: expense.description || "",
           amount: Number(expense.amount || 0),
+          payment_method: expense.payment_method || "cash",
           recorded_by_name: expense.recorded_by_name || "",
           created_at: formatDateTime(expense.created_at),
         });
@@ -3317,18 +3357,32 @@ router.get(
           r.branch_id,
           r.quantity,
           r.reason,
+          r.return_type,
+          r.refund_amount,
+          r.refund_method,
+          r.refund_reference,
           r.returned_at,
+          r.approved_at,
           s.receipt_number,
-          s.customer_name,
-          s.customer_phone,
-          p.name AS product_name
+          COALESCE(s.customer_name, c.name) AS customer_name,
+          COALESCE(s.customer_phone, c.phone) AS customer_phone,
+          p.name AS product_name,
+          returned_user.full_name AS returned_by_name,
+          approved_user.full_name AS approved_by_name
          FROM returns r
          LEFT JOIN sales s
           ON r.sale_id = s.id
           AND s.branch_id = r.branch_id
+         LEFT JOIN customers c
+          ON s.customer_id = c.id
+          AND c.branch_id = r.branch_id
          LEFT JOIN products p
           ON r.product_id = p.id
           AND p.branch_id = r.branch_id
+         LEFT JOIN users returned_user
+          ON r.returned_by = returned_user.id
+         LEFT JOIN users approved_user
+          ON r.approved_by = approved_user.id
          WHERE r.branch_id = ?
          ${dateFilter}
          ORDER BY r.returned_at DESC, r.id DESC`,
@@ -3339,7 +3393,72 @@ router.get(
       workbook.creator = "Chalin 03 System";
       workbook.created = new Date();
 
-      const worksheet = workbook.addWorksheet("Returns");
+      const summaryWorksheet = workbook.addWorksheet("Returns Summary");
+      summaryWorksheet.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+
+      const totalQuantity = returns.reduce(
+        (sum, returnItem) => sum + Number(returnItem.quantity || 0),
+        0
+      );
+      const totalRefunded = returns.reduce(
+        (sum, returnItem) => sum + Number(returnItem.refund_amount || 0),
+        0
+      );
+      const refundCount = returns.filter(
+        (returnItem) => String(returnItem.return_type || "") === "refund"
+      ).length;
+
+      [
+        ["Return records", returns.length],
+        ["Quantity returned", totalQuantity],
+        ["Financial refund records", refundCount],
+        ["Total refunded", totalRefunded],
+        [
+          "Cash refunds",
+          returns
+            .filter((returnItem) => returnItem.refund_method === "cash")
+            .reduce(
+              (sum, returnItem) => sum + Number(returnItem.refund_amount || 0),
+              0
+            ),
+        ],
+        [
+          "Mobile Money refunds",
+          returns
+            .filter((returnItem) => returnItem.refund_method === "momo")
+            .reduce(
+              (sum, returnItem) => sum + Number(returnItem.refund_amount || 0),
+              0
+            ),
+        ],
+        [
+          "Bank refunds",
+          returns
+            .filter((returnItem) => returnItem.refund_method === "bank")
+            .reduce(
+              (sum, returnItem) => sum + Number(returnItem.refund_amount || 0),
+              0
+            ),
+        ],
+        [
+          "Other refunds",
+          returns
+            .filter((returnItem) => returnItem.refund_method === "other")
+            .reduce(
+              (sum, returnItem) => sum + Number(returnItem.refund_amount || 0),
+              0
+            ),
+        ],
+      ].forEach(([metric, value]) => {
+        summaryWorksheet.addRow({ metric, value });
+      });
+      summaryWorksheet.getColumn("B").numFmt = "#,##0.00";
+      styleWorksheet(summaryWorksheet);
+
+      const worksheet = workbook.addWorksheet("Returns Detail");
 
       worksheet.columns = [
         { header: "Date", key: "returned_at" },
@@ -3348,6 +3467,13 @@ router.get(
         { header: "Phone", key: "customer_phone" },
         { header: "Product", key: "product_name" },
         { header: "Quantity", key: "quantity" },
+        { header: "Outcome", key: "return_type" },
+        { header: "Refund Amount", key: "refund_amount" },
+        { header: "Refund Channel", key: "refund_method" },
+        { header: "Refund Reference", key: "refund_reference" },
+        { header: "Recorded By", key: "returned_by_name" },
+        { header: "Approved By", key: "approved_by_name" },
+        { header: "Approved At", key: "approved_at" },
         { header: "Reason", key: "reason" },
       ];
 
@@ -3359,10 +3485,19 @@ router.get(
           customer_phone: returnItem.customer_phone || "",
           product_name: returnItem.product_name || "",
           quantity: Number(returnItem.quantity || 0),
+          return_type: String(returnItem.return_type || "stock_only")
+            .replaceAll("_", " "),
+          refund_amount: Number(returnItem.refund_amount || 0),
+          refund_method: String(returnItem.refund_method || "none").toUpperCase(),
+          refund_reference: returnItem.refund_reference || "",
+          returned_by_name: returnItem.returned_by_name || "System",
+          approved_by_name: returnItem.approved_by_name || "",
+          approved_at: formatDateTime(returnItem.approved_at),
           reason: returnItem.reason || "",
         });
       });
 
+      worksheet.getColumn("H").numFmt = "#,##0.00";
       styleWorksheet(worksheet);
 
       return sendStoreWorkbook(req, res, workbook, "returns");

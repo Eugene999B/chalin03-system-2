@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import "./ReturnsPage.css";
 
 export default function ReturnsPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
@@ -47,6 +48,12 @@ export default function ReturnsPage() {
     product_id: "",
     quantity: "",
     reason: "",
+    return_type: "stock_only",
+    refund_amount: "0",
+    refund_method: "none",
+    refund_reference: "",
+    approver_username: "",
+    approver_password: "",
   });
 
   const [message, setMessage] = useState("");
@@ -141,6 +148,12 @@ export default function ReturnsPage() {
         product_id: "",
         quantity: "",
         reason: "",
+        return_type: "stock_only",
+        refund_amount: "0",
+        refund_method: "none",
+        refund_reference: "",
+        approver_username: "",
+        approver_password: "",
       });
     } catch (error) {
       setError(error.response?.data?.message || "Failed to load sale items.");
@@ -192,12 +205,42 @@ export default function ReturnsPage() {
       return;
     }
 
+    if (form.return_type === "refund") {
+      const refundAmount = Number(form.refund_amount || 0);
+      if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+        setError("Enter the actual amount refunded to the customer.");
+        return;
+      }
+      if (refundAmount - estimatedReturnAmount > 0.009) {
+        setError(`Refund cannot exceed ${formatMoney(estimatedReturnAmount)} for the returned quantity.`);
+        return;
+      }
+      if (!["cash", "momo", "bank", "other"].includes(form.refund_method)) {
+        setError("Choose the exact payment channel used for the refund.");
+        return;
+      }
+      if (["momo", "bank", "other"].includes(form.refund_method) && !form.refund_reference.trim()) {
+        setError("Enter the transaction/reference number for this refund.");
+        return;
+      }
+      if (!form.approver_username.trim() || !form.approver_password) {
+        setError("A different manager or administrator must enter their username and password to approve the refund.");
+        return;
+      }
+    }
+
     try {
       const response = await axiosClient.post("/returns", {
         sale_id: Number(selectedSaleId),
         product_id: Number(form.product_id),
         quantity: Number(form.quantity),
         reason: form.reason,
+        return_type: form.return_type,
+        refund_amount: form.return_type === "refund" ? Number(form.refund_amount || 0) : 0,
+        refund_method: form.return_type === "refund" ? form.refund_method : "none",
+        refund_reference: form.return_type === "refund" ? form.refund_reference : "",
+        approver_username: form.return_type === "refund" ? form.approver_username : "",
+        approver_password: form.return_type === "refund" ? form.approver_password : "",
       });
 
       setMessage(response.data.message);
@@ -206,6 +249,12 @@ export default function ReturnsPage() {
         product_id: "",
         quantity: "",
         reason: "",
+        return_type: "stock_only",
+        refund_amount: "0",
+        refund_method: "none",
+        refund_reference: "",
+        approver_username: "",
+        approver_password: "",
       });
 
       await Promise.all([
@@ -246,7 +295,7 @@ export default function ReturnsPage() {
   }
 
   return (
-    <div>
+    <div className="returns-security-page">
       <div className="page-header">
         <div>
           <h1>Returns</h1>
@@ -293,6 +342,11 @@ export default function ReturnsPage() {
         <div className="stat-card">
           <span>{currentStoreCode} Total Quantity Returned</span>
           <strong>{summary.total_quantity_returned || 0}</strong>
+        </div>
+
+        <div className="stat-card">
+          <span>{currentStoreCode} Approved Refunds</span>
+          <strong>{formatMoney(summary.total_refunded || 0)}</strong>
         </div>
       </div>
 
@@ -356,8 +410,7 @@ export default function ReturnsPage() {
           <h2>Record Return - {currentStoreCode}</h2>
 
           <div className="warning-box">
-            This return will increase stock only for {currentStoreCode} —{" "}
-            {currentStoreName}.
+            This return increases stock only for {currentStoreCode} — {currentStoreName}. Any money given back must be recorded using the exact refund channel and approved by a different manager or administrator.
           </div>
 
           <label>Returned Product</label>
@@ -398,12 +451,80 @@ export default function ReturnsPage() {
             placeholder="Example: Wrong size / damaged / customer changed mind"
           />
 
+          <div className="returns-control-grid">
+            <label>
+              Return Outcome
+              <select name="return_type" value={form.return_type} onChange={handleFormChange}>
+                <option value="stock_only">Stock only — no money returned</option>
+                <option value="refund">Financial refund</option>
+              </select>
+            </label>
+
+            {form.return_type === "refund" && (
+              <>
+                <label>
+                  Actual Refund Amount
+                  <input
+                    type="number"
+                    name="refund_amount"
+                    value={form.refund_amount}
+                    onChange={handleFormChange}
+                    min="0.01"
+                    max={estimatedReturnAmount || undefined}
+                    step="0.01"
+                    placeholder="0.00"
+                  />
+                </label>
+                <label>
+                  Refund Channel
+                  <select name="refund_method" value={form.refund_method} onChange={handleFormChange}>
+                    <option value="none">Select refund channel</option>
+                    <option value="cash">Cash</option>
+                    <option value="momo">Mobile Money</option>
+                    <option value="bank">Bank</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>
+                  Refund Reference
+                  <input
+                    name="refund_reference"
+                    value={form.refund_reference}
+                    onChange={handleFormChange}
+                    placeholder="MoMo, bank or written reference"
+                  />
+                </label>
+                <label>
+                  Independent Approver Username
+                  <input
+                    name="approver_username"
+                    value={form.approver_username}
+                    onChange={handleFormChange}
+                    autoComplete="off"
+                    placeholder="Different manager/admin username"
+                  />
+                </label>
+                <label>
+                  Independent Approver Password
+                  <input
+                    type="password"
+                    name="approver_password"
+                    value={form.approver_password}
+                    onChange={handleFormChange}
+                    autoComplete="new-password"
+                    placeholder="Approver enters password privately"
+                  />
+                </label>
+              </>
+            )}
+          </div>
+
           <div className="return-amount-box">
             <span>Estimated return amount</span>
             <strong>{formatMoney(estimatedReturnAmount)}</strong>
           </div>
 
-          <button type="submit">Save Return and Increase Stock</button>
+          <button type="submit">Save Protected Return</button>
         </form>
       </div>
 
@@ -411,6 +532,7 @@ export default function ReturnsPage() {
         <div className="section-card">
           <h2>Items in Selected Sale - {currentStoreCode}</h2>
 
+          <div className="returns-table-wrap">
           <table>
             <thead>
               <tr>
@@ -441,6 +563,7 @@ export default function ReturnsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -487,11 +610,7 @@ export default function ReturnsPage() {
                 setReturnSearch("");
                 setFrom("");
                 setTo("");
-                loadReturns({
-                  search: "",
-                  from: "",
-                  to: "",
-                });
+                window.setTimeout(() => loadReturns(), 0);
               }}
             >
               Clear
@@ -506,6 +625,7 @@ export default function ReturnsPage() {
         {returnsList.length === 0 ? (
           <p>No returns recorded yet for {currentStoreCode}.</p>
         ) : (
+          <div className="returns-table-wrap">
           <table>
             <thead>
               <tr>
@@ -515,6 +635,9 @@ export default function ReturnsPage() {
                 <th>Customer</th>
                 <th>Product</th>
                 <th>Quantity</th>
+                <th>Outcome</th>
+                <th>Refund</th>
+                <th>Recorded / Approved</th>
                 <th>Reason</th>
               </tr>
             </thead>
@@ -534,11 +657,23 @@ export default function ReturnsPage() {
                     <strong>{returnItem.product_name || "-"}</strong>
                   </td>
                   <td>{returnItem.quantity}</td>
+                  <td>{String(returnItem.return_type || "stock_only").replaceAll("_", " ")}</td>
+                  <td>
+                    <strong>{formatMoney(returnItem.refund_amount)}</strong>
+                    <br />
+                    <small>{String(returnItem.refund_method || "none").toUpperCase()} {returnItem.refund_reference ? `· ${returnItem.refund_reference}` : ""}</small>
+                  </td>
+                  <td>
+                    {returnItem.returned_by_name || "System"}
+                    <br />
+                    <small>Approved: {returnItem.approved_by_name || "Not required"}</small>
+                  </td>
                   <td>{returnItem.reason}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

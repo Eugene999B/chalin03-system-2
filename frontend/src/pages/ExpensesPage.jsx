@@ -9,6 +9,7 @@ const emptyExpenseForm = {
   category: "",
   description: "",
   amount: "",
+  payment_method: "cash",
   expense_date: today,
 };
 
@@ -310,6 +311,18 @@ export default function ExpensesPage() {
             step="0.01"
           />
 
+          <label>Payment Method</label>
+          <select
+            name="payment_method"
+            value={form.payment_method}
+            onChange={handleChange}
+          >
+            <option value="cash">Cash</option>
+            <option value="momo">Mobile Money</option>
+            <option value="bank">Bank</option>
+            <option value="other">Other</option>
+          </select>
+
           <label>Expense Date</label>
           <input
             type="date"
@@ -391,7 +404,8 @@ export default function ExpensesPage() {
                 <th>Store</th>
                 <th>Category</th>
                 <th>Description</th>
-                <th>Amount</th>
+                <th>Payment</th>
+              <th>Amount</th>
                 <th>Recorded By</th>
                 <th></th>
               </tr>
@@ -406,7 +420,8 @@ export default function ExpensesPage() {
                     <strong>{expense.category}</strong>
                   </td>
                   <td>{expense.description || "-"}</td>
-                  <td>{formatMoney(expense.amount)}</td>
+                  <td>{String(expense.payment_method || "cash").toUpperCase()}</td>
+                <td>{formatMoney(expense.amount)}</td>
                   <td>{expense.recorded_by_name || "-"}</td>
                   <td>
                     <button
