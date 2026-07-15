@@ -25,7 +25,7 @@ assert.match(app, /HIRE_SECTION_PERMISSIONS/);
 assert.match(authContext, /effective_permissions/);
 assert.match(authContext, /hasPermission/);
 assert.match(authContext, /workspaceRole/);
-assert.match(newSale, /IN GOD, WE TRUST/);
-assert.match(salesHistory, /IN GOD, WE TRUST/);
+assert.match(newSale, /QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST./);
+assert.match(salesHistory, /QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST./);
 
 console.log("PASS - frontend static source checks completed.");
