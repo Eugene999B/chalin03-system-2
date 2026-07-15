@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 const emptyFilters = {
   search: "",
   action: "",
+  category: "",
   workspace: "",
   role: "",
   outcome: "",
@@ -35,9 +36,7 @@ function downloadBlob(response, fallbackName) {
   const disposition = response.headers?.["content-disposition"] || "";
   const match = disposition.match(/filename="?([^";]+)"?/i);
   const filename = match?.[1] || fallbackName;
-  const url = window.URL.createObjectURL(
-    new Blob([response.data], { type: "text/csv;charset=utf-8" })
-  );
+  const url = window.URL.createObjectURL(response.data instanceof Blob ? response.data : new Blob([response.data]));
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
@@ -52,11 +51,12 @@ export default function ActivityLogPage() {
   const [filters, setFilters] = useState(emptyFilters);
   const [logs, setLogs] = useState([]);
   const [actions, setActions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState({});
   const [pagination, setPagination] = useState({ page: 1, total_pages: 1 });
   const [selectedLog, setSelectedLog] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState("");
   const [error, setError] = useState("");
 
   const canView =
@@ -81,6 +81,7 @@ export default function ActivityLogPage() {
       });
       setLogs(response.data.logs || []);
       setActions(response.data.actions || []);
+      setCategories(response.data.categories || []);
       setSummary(response.data.summary || {});
       setPagination(response.data.pagination || { page: 1, total_pages: 1 });
     } catch (loadError) {
@@ -90,20 +91,21 @@ export default function ActivityLogPage() {
     }
   }
 
-  async function exportCsv() {
-    setExporting(true);
+  async function exportActivity(format) {
+    setExporting(format);
     setError("");
 
     try {
-      const response = await axiosClient.get("/activity-log/export.csv", {
+      const response = await axiosClient.get(`/activity-log/export.${format}`, {
         params: queryParams,
         responseType: "blob",
       });
-      downloadBlob(response, "chalin03-audit-trail.csv");
+      const fallback = `chalin03-audit-${filters.category || "all"}.${format}`;
+      downloadBlob(response, fallback);
     } catch (exportError) {
-      setError(exportError.response?.data?.message || "Failed to export audit trail.");
+      setError(exportError.response?.data?.message || `Failed to export audit trail as ${format.toUpperCase()}.`);
     } finally {
-      setExporting(false);
+      setExporting("");
     }
   }
 
@@ -150,14 +152,22 @@ export default function ActivityLogPage() {
           <button type="button" onClick={() => loadAuditTrail()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={exportCsv}
-            disabled={!canExport || exporting}
-          >
-            {exporting ? "Exporting..." : "Export CSV"}
-          </button>
+          {[
+            ["xlsx", "📊 Excel"],
+            ["pdf", "📄 PDF"],
+            ["doc", "📝 Word"],
+            ["csv", "CSV"],
+          ].map(([format, text]) => (
+            <button
+              key={format}
+              type="button"
+              className="secondary-button"
+              onClick={() => exportActivity(format)}
+              disabled={!canExport || Boolean(exporting)}
+            >
+              {exporting === format ? "Preparing..." : text}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -171,6 +181,30 @@ export default function ActivityLogPage() {
         <div className="stat-card">
           <span>Users involved</span>
           <strong>{summary.active_users || 0}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Selected category</span>
+          <strong>{filters.category ? label(filters.category) : "All"}</strong>
+        </div>
+      </div>
+
+      <div className="section-card">
+        <h2>Activity Categories</h2>
+        <p>Choose one category to review or download separately, or keep All Categories for a complete control report.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "10px" }}>
+          <button type="button" className={!filters.category ? "" : "secondary-button"} onClick={() => updateFilter("category", "")}>
+            All Categories
+          </button>
+          {categories.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={filters.category === item.key ? "" : "secondary-button"}
+              onClick={() => updateFilter("category", item.key)}
+            >
+              {item.label} ({item.count})
+            </button>
+          ))}
         </div>
       </div>
 
@@ -195,6 +229,20 @@ export default function ActivityLogPage() {
               {actions.map((actionItem) => (
                 <option key={actionItem.action} value={actionItem.action}>
                   {label(actionItem.action)} ({actionItem.count})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Category
+            <select
+              value={filters.category}
+              onChange={(event) => updateFilter("category", event.target.value)}
+            >
+              <option value="">All categories</option>
+              {categories.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label} ({item.count})
                 </option>
               ))}
             </select>
@@ -317,7 +365,7 @@ export default function ActivityLogPage() {
               >
                 <div className="activity-top">
                   <span className="activity-badge activity-neutral">
-                    {label(log.action_type || log.action)}
+                    {label(log.activity_category)} · {label(log.action_type || log.action)}
                   </span>
                   <small>{formatDateTime(log.created_at)}</small>
                 </div>

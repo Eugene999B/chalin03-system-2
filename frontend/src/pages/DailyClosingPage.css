@@ -1277,3 +1277,52 @@
     break-inside: avoid;
   }
 }
+
+
+/* Phase 1 cash-control safety: scoped to Daily Closing only. */
+.dc-manual-count-badge {
+  max-width: 420px;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 247, 237, 0.95);
+  color: #9a3412;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.dc-manual-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  border-radius: 16px;
+  background: rgba(240, 253, 250, 0.94);
+  color: #134e4a;
+  padding: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.dc-manual-confirmation input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.18rem;
+  flex: 0 0 auto;
+  accent-color: #0f766e;
+}
+
+@media (max-width: 720px) {
+  .dc-manual-count-badge {
+    width: 100%;
+    max-width: none;
+    border-radius: 14px;
+  }
+
+  .dc-manual-confirmation {
+    font-size: 0.9rem;
+  }
+}

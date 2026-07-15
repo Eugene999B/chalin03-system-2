@@ -376,6 +376,7 @@ export default function DailyClosingPage() {
   const [bankCounted, setBankCounted] = useState("");
   const [otherCounted, setOtherCounted] = useState("");
   const [notes, setNotes] = useState("");
+  const [manualCountConfirmed, setManualCountConfirmed] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -463,19 +464,13 @@ export default function DailyClosingPage() {
     [expectedSnapshot, counted]
   );
 
-  function fillExpectedAmounts(summaryData) {
-    setCashCounted(safeNumber(summaryData.expected_cash).toFixed(2));
-    setMomoCounted(safeNumber(summaryData.expected_momo).toFixed(2));
-    setBankCounted(safeNumber(summaryData.expected_bank).toFixed(2));
-    setOtherCounted(safeNumber(summaryData.expected_other).toFixed(2));
-  }
-
   function fillClosingAmounts(closing) {
     setCashCounted(safeNumber(closing.cash_counted).toFixed(2));
     setMomoCounted(safeNumber(closing.momo_counted).toFixed(2));
     setBankCounted(safeNumber(closing.bank_counted).toFixed(2));
     setOtherCounted(safeNumber(closing.other_counted).toFixed(2));
     setNotes(closing.notes || "");
+    setManualCountConfirmed(true);
   }
 
   async function loadSummary(dateValue = closingDate) {
@@ -499,8 +494,12 @@ export default function DailyClosingPage() {
       if (savedClosing) {
         fillClosingAmounts(savedClosing);
       } else {
-        fillExpectedAmounts(summaryData);
+        setCashCounted("");
+        setMomoCounted("");
+        setBankCounted("");
+        setOtherCounted("");
         setNotes("");
+        setManualCountConfirmed(false);
       }
     } catch (requestError) {
       setError(
@@ -635,6 +634,27 @@ export default function DailyClosingPage() {
 
     if (!summary) {
       setError("Load the summary before closing the day.");
+      return;
+    }
+
+    const missingCountedChannel = [
+      cashCounted,
+      momoCounted,
+      bankCounted,
+      otherCounted,
+    ].some((value) => value === "");
+
+    if (missingCountedChannel) {
+      setError(
+        "Enter Cash, Mobile Money, Bank and Other counted amounts manually. Enter 0.00 where a channel has no money."
+      );
+      return;
+    }
+
+    if (!manualCountConfirmed) {
+      setError(
+        "Confirm that the amounts were counted or independently checked before saving."
+      );
       return;
     }
 
@@ -1070,14 +1090,9 @@ export default function DailyClosingPage() {
                   confirmed for each payment channel.
                 </p>
               </div>
-              <button
-                className="dc-secondary-button"
-                type="button"
-                onClick={() => fillExpectedAmounts(summary)}
-                disabled={alreadyClosed}
-              >
-                Use Expected Amounts
-              </button>
+              <div className="dc-manual-count-badge">
+                Manual entry required · Expected values cannot be copied
+              </div>
             </div>
 
             <form onSubmit={saveDailyClosing}>
@@ -1172,6 +1187,22 @@ export default function DailyClosingPage() {
                   rows={4}
                 />
               </div>
+
+              <label className="dc-manual-confirmation">
+                <input
+                  type="checkbox"
+                  checked={manualCountConfirmed}
+                  disabled={alreadyClosed}
+                  onChange={(event) =>
+                    setManualCountConfirmed(event.target.checked)
+                  }
+                />
+                <span>
+                  I confirm that Cash was physically counted and that Mobile
+                  Money, Bank and Other balances were independently checked.
+                  These figures were not copied from the expected amounts.
+                </span>
+              </label>
 
               <div className="dc-submit-row">
                 <div className="dc-submit-guidance">

@@ -49,6 +49,14 @@ function toMoney(value) {
 
 function toCountedMoney(value, fallbackValue) {
   if (value === undefined || value === null || value === "") {
+    if (
+      fallbackValue === undefined ||
+      fallbackValue === null ||
+      fallbackValue === ""
+    ) {
+      return null;
+    }
+
     return Math.max(0, toMoney(fallbackValue));
   }
 
@@ -2146,10 +2154,10 @@ router.post(
       }
 
       const summary = await calculateClosingSummary(branchId, closingDate);
-      const countedCash = toCountedMoney(cash_counted, summary.expected_cash);
-      const countedMomo = toCountedMoney(momo_counted, summary.expected_momo);
-      const countedBank = toCountedMoney(bank_counted, summary.expected_bank);
-      const countedOther = toCountedMoney(other_counted, summary.expected_other);
+      const countedCash = toCountedMoney(cash_counted, null);
+      const countedMomo = toCountedMoney(momo_counted, null);
+      const countedBank = toCountedMoney(bank_counted, null);
+      const countedOther = toCountedMoney(other_counted, null);
 
       if (
         countedCash === null ||
@@ -2159,7 +2167,8 @@ router.post(
       ) {
         return res.status(400).json({
           status: "error",
-          message: "Counted amounts must be valid numbers and cannot be negative.",
+          message:
+            "Enter and independently confirm Cash, Mobile Money, Bank and Other counted amounts. Blank values are not accepted.",
         });
       }
 
