@@ -448,7 +448,7 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
     doc
       .font("Helvetica-BoldOblique")
       .fontSize(8)
-      .text("IN GOD, WE TRUST", 15, y, {
+      .text("QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST.", 15, y, {
         width: 197,
         align: "center",
       });
