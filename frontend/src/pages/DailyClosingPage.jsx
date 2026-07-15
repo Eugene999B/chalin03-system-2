@@ -167,6 +167,23 @@ function EmptyState({ title, text }) {
   );
 }
 
+function formatSaleChannels(sale) {
+  const channels = [
+    ["Cash", sale.cash_received],
+    ["MoMo", sale.momo_received],
+    ["Bank", sale.bank_received],
+    ["Other", sale.other_received],
+  ]
+    .filter(([, value]) => safeNumber(value) > 0)
+    .map(([label, value]) => `${label} ${formatMoney(value)}`);
+
+  return channels.length > 0 ? channels.join(" + ") : "No payment at sale";
+}
+
+function isCreditArrangement(groupKey) {
+  return ["credit", "mixed"].includes(String(groupKey || "").toLowerCase());
+}
+
 function TransactionTable({ transactions }) {
   if (!transactions.length) {
     return (
@@ -189,8 +206,9 @@ function TransactionTable({ transactions }) {
               <th className="dc-number">Gross</th>
               <th className="dc-number">Discount</th>
               <th className="dc-number">Net</th>
-              <th className="dc-number">Received</th>
-              <th className="dc-number">Outstanding</th>
+              <th className="dc-number">Received at Sale</th>
+              <th>Received Via</th>
+              <th className="dc-number">Credit Created</th>
               <th>Staff</th>
             </tr>
           </thead>
@@ -212,6 +230,7 @@ function TransactionTable({ transactions }) {
                 <td className="dc-number">
                   {formatMoney(sale.amount_paid)}
                 </td>
+                <td>{formatSaleChannels(sale)}</td>
                 <td className="dc-number">{formatMoney(sale.balance)}</td>
                 <td>{sale.staff_name || "-"}</td>
               </tr>
@@ -240,10 +259,13 @@ function TransactionTable({ transactions }) {
                 Discount <b>{formatMoney(sale.discount_amount)}</b>
               </span>
               <span>
-                Received <b>{formatMoney(sale.amount_paid)}</b>
+                Received at sale <b>{formatMoney(sale.amount_paid)}</b>
               </span>
               <span>
-                Outstanding <b>{formatMoney(sale.balance)}</b>
+                Received via <b>{formatSaleChannels(sale)}</b>
+              </span>
+              <span>
+                Credit created <b>{formatMoney(sale.balance)}</b>
               </span>
             </div>
             <small>Recorded by {sale.staff_name || "System"}</small>
@@ -1201,10 +1223,12 @@ export default function DailyClosingPage() {
             <div className="dc-section-heading">
               <div>
                 <span className="dc-section-kicker">Payment analysis</span>
-                <h2>Sales grouped by payment type</h2>
+                <h2>Sales grouped by sale classification</h2>
                 <p>
-                  Each group shows gross value, discounts, net sales, money
-                  received and new outstanding credit.
+                  Cash, MoMo and Bank identify direct sales. Credit and Mixed
+                  are informational sale arrangements; any deposit is counted
+                  only in its recorded Cash, MoMo, Bank or Other settlement
+                  channel.
                 </p>
               </div>
             </div>
@@ -1235,11 +1259,19 @@ export default function DailyClosingPage() {
                       <dd>{formatMoney(group.net_sales)}</dd>
                     </div>
                     <div>
-                      <dt>Received</dt>
+                      <dt>
+                        {isCreditArrangement(group.key)
+                          ? "Deposit received"
+                          : "Received"}
+                      </dt>
                       <dd>{formatMoney(group.amount_received)}</dd>
                     </div>
                     <div>
-                      <dt>Outstanding</dt>
+                      <dt>
+                        {isCreditArrangement(group.key)
+                          ? "Credit created"
+                          : "Outstanding"}
+                      </dt>
                       <dd>{formatMoney(group.outstanding_created)}</dd>
                     </div>
                   </dl>
@@ -1255,7 +1287,8 @@ export default function DailyClosingPage() {
                 <h2>Grouped sales detail</h2>
                 <p>
                   Open any group to review receipts, customers, discounts,
-                  receipts collected and outstanding balances.
+                  the amount received when the sale was created, its exact
+                  settlement channel and the credit created.
                 </p>
               </div>
             </div>
@@ -1302,10 +1335,15 @@ export default function DailyClosingPage() {
                           Net <b>{formatMoney(group.net_sales)}</b>
                         </span>
                         <span>
-                          Received <b>{formatMoney(group.amount_received)}</b>
+                          {isCreditArrangement(group.key)
+                            ? "Deposit received"
+                            : "Received"}{" "}
+                          <b>{formatMoney(group.amount_received)}</b>
                         </span>
                         <span>
-                          Outstanding{" "}
+                          {isCreditArrangement(group.key)
+                            ? "Credit created"
+                            : "Outstanding"}{" "}
                           <b>{formatMoney(group.outstanding_created)}</b>
                         </span>
                       </div>
@@ -1368,8 +1406,8 @@ export default function DailyClosingPage() {
                   <span className="dc-section-kicker">Cash outflow</span>
                   <h2>Expenses</h2>
                   <p>
-                    Current records do not store an expense payment method, so
-                    expenses reduce expected cash.
+                    Each expense reduces the payment channel recorded for that
+                    expense: Cash, MoMo, Bank or Other.
                   </p>
                 </div>
                 <strong className="dc-heading-total">

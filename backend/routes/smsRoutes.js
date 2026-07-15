@@ -1042,10 +1042,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const branchId = getBranchId(req);
     const sentBy = getUserId(req);
-
-    const { dateText, nextDateText, startDateTime, endDateTime } = getDateRange(
-      req.body.date || req.query.date
-    );
+    const { dateText } = getDateRange(req.body.date || req.query.date);
 
     const [branchSettings] = await runQuery(
       `
@@ -1054,7 +1051,6 @@ router.post(
           b.branch_code,
           b.name AS branch_name,
           b.location AS branch_location,
-
           st.business_name,
           st.business_phone,
           st.owner_phone
@@ -1067,7 +1063,6 @@ router.post(
     );
 
     const settings = branchSettings[0] || {};
-
     const alertPhone = firstValidGhanaPhone(
       req.body.phone,
       settings.owner_phone,
@@ -1082,188 +1077,74 @@ router.post(
       });
     }
 
-    const salesColumns = await getTableColumns("sales");
-    const saleStatusFilter = salesColumns.includes("sale_status")
-      ? "AND (s.sale_status IS NULL OR LOWER(s.sale_status) NOT IN ('voided', 'cancelled', 'canceled'))"
-      : "";
-
-    const [salesRows] = await runQuery(
+    const [closingRows] = await runQuery(
       `
         SELECT
-          COUNT(*) AS transaction_count,
-          COALESCE(SUM(s.total), 0) AS total_sales,
-          COALESCE(SUM(s.amount_paid), 0) AS total_paid,
-          COALESCE(SUM(s.balance), 0) AS total_balance,
-
-          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'cash' THEN s.total ELSE 0 END), 0) AS cash_total,
-          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'momo' THEN s.total ELSE 0 END), 0) AS momo_total,
-          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'bank' THEN s.total ELSE 0 END), 0) AS bank_total,
-          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'credit' THEN s.total ELSE 0 END), 0) AS credit_total,
-          COALESCE(SUM(CASE WHEN LOWER(s.payment_type) = 'mixed' THEN s.total ELSE 0 END), 0) AS mixed_total
-        FROM sales s
-        WHERE s.branch_id = ?
-          AND s.created_at >= ?
-          AND s.created_at < ?
-          ${saleStatusFilter}
+          dc.id,
+          dc.closing_date,
+          dc.sales_count,
+          dc.sales_total,
+          dc.sales_received,
+          dc.debt_payment_count,
+          dc.debt_payments_total,
+          dc.expenses_count,
+          dc.expenses_total,
+          dc.expected_cash,
+          dc.expected_momo,
+          dc.expected_bank,
+          dc.expected_other,
+          dc.expected_total,
+          dc.cash_counted,
+          dc.momo_counted,
+          dc.bank_counted,
+          dc.other_counted,
+          dc.total_counted,
+          dc.difference_total,
+          dc.verification_status,
+          dc.stale_after_close,
+          dc.closed_at,
+          u.full_name AS closed_by_name
+        FROM daily_closings dc
+        LEFT JOIN users u ON dc.closed_by = u.id
+        WHERE dc.branch_id = ?
+          AND dc.closing_date = ?
+        LIMIT 1
       `,
-      [branchId, startDateTime, endDateTime]
+      [branchId, dateText]
     );
 
-    const salesSummary = salesRows[0] || {};
-
-    let expenseSummary = {
-      expense_count: 0,
-      total_expenses: 0,
-    };
-
-    try {
-      const expenseColumns = await getTableColumns("expenses");
-      const expenseDateColumn = ["expense_date", "date", "created_at"].find(
-        (column) => expenseColumns.includes(column)
-      );
-
-      if (expenseColumns.includes("amount") && expenseDateColumn) {
-        const dateParams =
-          expenseDateColumn === "created_at"
-            ? [startDateTime, endDateTime]
-            : [dateText, nextDateText];
-
-        const [expenseRows] = await runQuery(
-          `
-            SELECT
-              COUNT(*) AS expense_count,
-              COALESCE(SUM(amount), 0) AS total_expenses
-            FROM expenses
-            WHERE branch_id = ?
-              AND \`${expenseDateColumn}\` >= ?
-              AND \`${expenseDateColumn}\` < ?
-          `,
-          [branchId, ...dateParams]
-        );
-
-        expenseSummary = expenseRows[0] || expenseSummary;
-      }
-    } catch (error) {
-      console.warn("Daily summary expense calculation skipped:", error.message);
+    if (closingRows.length === 0) {
+      return res.status(409).json({
+        status: "error",
+        message:
+          "Complete Daily Closing for this store and date before sending the official boss summary SMS.",
+      });
     }
 
-    let debtSummary = {
-      debt_count: 0,
-      total_new_debt: 0,
-      total_debt_balance: 0,
-    };
-
-    try {
-      const debtColumns = await getTableColumns("debts");
-
-      if (
-        debtColumns.includes("created_at") &&
-        debtColumns.includes("amount_owed") &&
-        debtColumns.includes("balance")
-      ) {
-        const [debtRows] = await runQuery(
-          `
-            SELECT
-              COUNT(*) AS debt_count,
-              COALESCE(SUM(amount_owed), 0) AS total_new_debt,
-              COALESCE(SUM(balance), 0) AS total_debt_balance
-            FROM debts
-            WHERE branch_id = ?
-              AND created_at >= ?
-              AND created_at < ?
-          `,
-          [branchId, startDateTime, endDateTime]
-        );
-
-        debtSummary = debtRows[0] || debtSummary;
-      }
-    } catch (error) {
-      console.warn("Daily summary debt calculation skipped:", error.message);
-    }
-
-    let debtPaymentSummary = {
-      debt_payment_count: 0,
-      total_debt_payments: 0,
-    };
-
-    try {
-      const debtPaymentColumns = await getTableColumns("debt_payments");
-      const debtPaymentDateColumn = ["paid_at", "created_at"].find((column) =>
-        debtPaymentColumns.includes(column)
-      );
-
-      if (
-        debtPaymentColumns.includes("amount") &&
-        debtPaymentColumns.includes("debt_id") &&
-        debtPaymentDateColumn
-      ) {
-        const [debtPaymentRows] = await runQuery(
-          `
-            SELECT
-              COUNT(*) AS debt_payment_count,
-              COALESCE(SUM(dp.amount), 0) AS total_debt_payments
-            FROM debt_payments dp
-            INNER JOIN debts d ON dp.debt_id = d.id
-            WHERE d.branch_id = ?
-              AND dp.\`${debtPaymentDateColumn}\` >= ?
-              AND dp.\`${debtPaymentDateColumn}\` < ?
-          `,
-          [branchId, startDateTime, endDateTime]
-        );
-
-        debtPaymentSummary = debtPaymentRows[0] || debtPaymentSummary;
-      }
-    } catch (error) {
-      console.warn(
-        "Daily summary debt payment calculation skipped:",
-        error.message
-      );
-    }
-
-    const [lowStockRows] = await runQuery(
-      `
-        SELECT COUNT(*) AS low_stock_count
-        FROM products
-        WHERE branch_id = ?
-          AND low_stock_threshold IS NOT NULL
-          AND quantity <= low_stock_threshold
-      `,
-      [branchId]
-    );
-
-    const lowStockSummary = lowStockRows[0] || {
-      low_stock_count: 0,
-    };
-
+    const closing = closingRows[0];
     const businessName = settings.business_name || "Chalin 03 Company Limited";
     const branchCode = settings.branch_code || "MAIN";
     const branchName = settings.branch_name || "Chalin 03";
 
-    const cashTotal = Number(salesSummary.cash_total || 0);
-    const momoTotal = Number(salesSummary.momo_total || 0);
-    const bankTotal = Number(salesSummary.bank_total || 0);
-    const creditMixedTotal =
-      Number(salesSummary.credit_total || 0) +
-      Number(salesSummary.mixed_total || 0);
-
-    const dailySummaryMessage = `${businessName}: Daily Summary ${branchName} (${branchCode}) ${dateText}. Sales: GHS ${formatMoney(
-      salesSummary.total_sales
-    )}. Transactions: ${
-      salesSummary.transaction_count || 0
-    }. Paid: GHS ${formatMoney(salesSummary.total_paid)}. Cash: GHS ${formatMoney(
-      cashTotal
-    )}. MoMo: GHS ${formatMoney(momoTotal)}. Bank: GHS ${formatMoney(
-      bankTotal
-    )}. Credit/Mixed: GHS ${formatMoney(creditMixedTotal)}. New Debt: GHS ${formatMoney(
-      debtSummary.total_new_debt
-    )}. Debt Collected: GHS ${formatMoney(
-      debtPaymentSummary.total_debt_payments
-    )}. Expenses: GHS ${formatMoney(
-      expenseSummary.total_expenses
-    )}. Low Stock: ${lowStockSummary.low_stock_count || 0}.`;
+    const dailySummaryMessage = `${businessName}: Official Daily Closing ${branchName} (${branchCode}) ${dateText}. Sales GHS ${formatMoney(
+      closing.sales_total
+    )}; received at sale GHS ${formatMoney(
+      closing.sales_received
+    )}; debt collected GHS ${formatMoney(
+      closing.debt_payments_total
+    )}; expenses GHS ${formatMoney(
+      closing.expenses_total
+    )}. Expected C ${formatMoney(closing.expected_cash)}, M ${formatMoney(
+      closing.expected_momo
+    )}, B ${formatMoney(closing.expected_bank)}, O ${formatMoney(
+      closing.expected_other
+    )}; counted GHS ${formatMoney(
+      closing.total_counted
+    )}; variance GHS ${formatMoney(
+      closing.difference_total
+    )}. Closed by ${closing.closed_by_name || "Manager"}.`;
 
     const finalMessage = truncateMessage(dailySummaryMessage, 480);
-
     const result = await sendAndLogSms({
       branchId,
       phone: alertPhone,
@@ -1274,37 +1155,19 @@ router.post(
 
     const statusCode = result.status === "sent" ? 200 : 400;
 
-    res.status(statusCode).json({
+    return res.status(statusCode).json({
       status: result.status === "sent" ? "success" : "error",
       message:
         result.status === "sent"
-          ? "Daily summary SMS sent successfully."
-          : result.message || "Daily summary SMS failed.",
+          ? "Official Daily Closing summary SMS sent successfully."
+          : result.message || "Daily Closing summary SMS failed.",
       result,
       sms_message: finalMessage,
       summary: {
-        date: dateText,
+        ...closing,
         branch_id: branchId,
         branch_code: branchCode,
         branch_name: branchName,
-        transaction_count: Number(salesSummary.transaction_count || 0),
-        total_sales: Number(salesSummary.total_sales || 0),
-        total_paid: Number(salesSummary.total_paid || 0),
-        total_balance: Number(salesSummary.total_balance || 0),
-        cash_total: cashTotal,
-        momo_total: momoTotal,
-        bank_total: bankTotal,
-        credit_mixed_total: creditMixedTotal,
-        debt_count: Number(debtSummary.debt_count || 0),
-        total_new_debt: Number(debtSummary.total_new_debt || 0),
-        total_debt_balance: Number(debtSummary.total_debt_balance || 0),
-        debt_payment_count: Number(debtPaymentSummary.debt_payment_count || 0),
-        total_debt_payments: Number(
-          debtPaymentSummary.total_debt_payments || 0
-        ),
-        expense_count: Number(expenseSummary.expense_count || 0),
-        total_expenses: Number(expenseSummary.total_expenses || 0),
-        low_stock_count: Number(lowStockSummary.low_stock_count || 0),
       },
     });
   })

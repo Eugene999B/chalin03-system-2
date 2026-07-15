@@ -10,6 +10,7 @@ const dailyClosingSource = read("routes/dailyClosingRoutes.js");
 const salesSource = read("routes/saleRoutes.js");
 const activitySource = read("routes/activityRoutes.js");
 const backupSource = read("routes/backupRoutes.js");
+const smsSource = read("routes/smsRoutes.js");
 const migrationSource = fs.readFileSync(
   path.resolve(root, "..", "database", "20260714_cash_control_security_migration.sql"),
   "utf8"
@@ -129,13 +130,15 @@ test("Daily Closing calculation subtracts approved refunds from exact channels",
           total: 200,
           payment_type: "mixed",
           amount_tendered: 150,
-          amount_paid: 150,
+          amount_paid: 180,
           change_due: 0,
-          balance: 50,
-          cash_received: 100,
-          momo_received: 30,
-          bank_received: 20,
-          other_received: 0,
+          balance: 20,
+          allocation_cash: 100,
+          allocation_momo: 30,
+          allocation_bank: 20,
+          allocation_other: 0,
+          allocation_count: 3,
+          debt_payments_after_sale: 30,
           created_at: "2026-07-14T12:00:00Z",
           staff_name: "Cashier",
         }]];
@@ -183,6 +186,46 @@ test("Daily Closing calculation subtracts approved refunds from exact channels",
   assert.equal(summary.expected_other, 0);
   assert.equal(summary.expected_total, 188);
   assert.equal(summary.refund_total, 7);
+  assert.equal(summary.sales_received, 150);
+  assert.equal(summary.credit_created, 50);
+  assert.equal(summary.mixed_sales, 150);
+  assert.equal(summary.sales_transactions[0].current_amount_paid, 180);
+  assert.equal(summary.sales_transactions[0].debt_payments_after_sale, 30);
+  assert.equal(summary.sales_transactions[0].amount_paid, 150);
+  assert.equal(summary.sales_transactions[0].balance, 50);
+});
+
+test("Daily Closing treats Credit and Mixed as classifications and sends owner summary after commit", () => {
+  assert.match(
+    dailyClosingSource,
+    /Credit and Mixed are sale classifications, not extra settlement channels/
+  );
+  assert.match(
+    dailyClosingSource,
+    /Later debt payments are removed from the original sale receipt/
+  );
+  assert.match(dailyClosingSource, /sendOwnerSmsAlert/);
+  assert.match(dailyClosingSource, /smsType: "daily_summary"/);
+  assert.match(
+    dailyClosingSource,
+    /Closing remains saved, but the boss summary SMS failed/
+  );
+});
+
+test("Manual boss summary uses the official saved Daily Closing snapshot", () => {
+  assert.match(
+    smsSource,
+    /Complete Daily Closing for this store and date before sending the official boss summary SMS/
+  );
+  assert.match(smsSource, /FROM daily_closings dc/);
+  assert.match(smsSource, /Official Daily Closing/);
+  assert.doesNotMatch(
+    smsSource.slice(
+      smsSource.indexOf('"/daily-summary"'),
+      smsSource.indexOf('"/custom"')
+    ),
+    /SUM\(s\.amount_paid\)/
+  );
 });
 
 test("Daily Closing and new sales serialize on the selected store row", () => {
