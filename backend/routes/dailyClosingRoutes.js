@@ -361,7 +361,23 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
       COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'cash'), CASE WHEN s.payment_type = 'cash' THEN s.amount_paid ELSE 0 END) AS cash_received,
       COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'momo'), CASE WHEN s.payment_type = 'momo' THEN s.amount_paid ELSE 0 END) AS momo_received,
       COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'bank'), CASE WHEN s.payment_type = 'bank' THEN s.amount_paid ELSE 0 END) AS bank_received,
-      COALESCE((SELECT SUM(spa.amount) FROM sale_payment_allocations spa WHERE spa.sale_id = s.id AND spa.payment_channel = 'other'), CASE WHEN s.payment_type IN ('mixed','credit') THEN s.amount_paid ELSE 0 END) AS other_received,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM sale_payment_allocations spa_any
+          WHERE spa_any.sale_id = s.id
+        )
+          THEN COALESCE((
+            SELECT SUM(spa.amount)
+            FROM sale_payment_allocations spa
+            WHERE spa.sale_id = s.id
+              AND spa.payment_channel = 'other'
+          ), 0)
+        ELSE CASE
+          WHEN s.payment_type IN ('mixed','credit') THEN s.amount_paid
+          ELSE 0
+        END
+      END AS other_received,
       s.created_at,
       COALESCE(u.full_name, 'System') AS staff_name
      FROM sales s
