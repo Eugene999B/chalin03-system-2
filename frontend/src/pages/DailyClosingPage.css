@@ -1279,6 +1279,81 @@
 }
 
 /* Cash-control security additions */
+.dc-optional-counter {
+  background: linear-gradient(135deg, #f8fbff 0%, #fffdf5 100%);
+  border: 1px solid #cbdbea;
+  border-radius: 18px;
+  margin-top: 16px;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.dc-optional-counter-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.dc-optional-counter-head h3 {
+  color: #0b1f36;
+  margin: 4px 0 5px;
+}
+
+.dc-optional-counter-head p {
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 720px;
+}
+
+.dc-counter-switch {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c7d7e6;
+  border-radius: 999px;
+  color: #153a5c;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 900;
+  gap: 9px;
+  min-height: 42px;
+  padding: 9px 13px;
+}
+
+.dc-counter-switch input {
+  accent-color: #235789;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.dc-counter-disabled-note {
+  background: #eef6ff;
+  border: 1px dashed #a9c9e6;
+  border-radius: 13px;
+  color: #315675;
+  font-size: 0.84rem;
+  font-weight: 750;
+  line-height: 1.45;
+  margin-top: 13px;
+  padding: 12px 14px;
+}
+
+.dc-denomination-section-optional {
+  border-top-color: #cbdbea;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.dc-money-input input[readonly] {
+  background: #eef4fa;
+  color: #173f5f;
+  cursor: default;
+}
+
 .dc-security-badge {
   border: 1px solid #f59e0b;
   background: #fffbeb;
@@ -1413,6 +1488,18 @@
   .dc-cash-control-grid,
   .dc-denomination-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .dc-optional-counter-head {
+    flex-direction: column;
+  }
+
+  .dc-counter-switch {
+    justify-content: center;
+    width: 100%;
   }
 }
 

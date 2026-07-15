@@ -15,13 +15,13 @@ const migrationSource = fs.readFileSync(
   "utf8"
 );
 
-test("Daily Closing requires independently entered counts and denomination evidence", () => {
+test("Daily Closing requires independent counts and keeps denominations optional", () => {
   assert.match(dailyClosingSource, /Every counted\/confirmed channel must be entered manually/);
   assert.match(dailyClosingSource, /counted_confirmed/);
-  assert.match(dailyClosingSource, /Cash denomination total GHS/);
-  assert.match(dailyClosingSource, /opening_cash_float/);
-  assert.match(dailyClosingSource, /cash_deposits/);
-  assert.match(dailyClosingSource, /cash_withdrawals/);
+  assert.match(dailyClosingSource, /hasDenominationEvidence/);
+  assert.match(dailyClosingSource, /Optional cash denomination total GHS/);
+  assert.match(dailyClosingSource, /Cash Drawer Control was removed from the current business workflow/);
+  assert.match(dailyClosingSource, /const cashControls = getCashControls\(\{\}\)/);
 });
 
 test("Daily Closing supports independent manager verification and revision history", () => {

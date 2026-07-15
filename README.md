@@ -141,7 +141,7 @@ Each excavator or machine should be registered once. Fleet records cover:
 
 ### Group Executive and Operations Documents
 
-Management can review permitted records across Spare Parts, Mining, Equipment Hire and Fleet, then download operational and executive reports.
+Group Executive Control is a read-only management command view. It presents group revenue, payments received, captured operating cost, receivables, an indicative operating position, business-unit scorecards, Daily Closing exceptions, financial trends, store comparison, Mining incidents, overdue Hire invoices, Fleet risks and a prioritized management action queue. Operational editing remains inside Spare Parts, Mining, Equipment Hire and Fleet. Authorized management can download the professional executive workbook.
 
 ## User and Permission Model
 
@@ -189,19 +189,16 @@ It also preserves evidence when a completed transaction is corrected after submi
 Expected physical cash is based on:
 
 ```text
-Opening cash float
-+ Cash sales
+Cash sales
 + Cash part of Mixed sales
 + Cash part-payments on Credit sales
 + Cash debt collections
-+ Other approved cash received
 - Cash expenses
 - Cash refunds
-- Cash deposits removed from the drawer
-- Cash withdrawals
-- Other approved cash out
 = Expected physical cash
 ```
+
+The former Cash Drawer Control fields are retained only for historical database compatibility. They are not part of the current Daily Closing form or new closing calculation.
 
 MoMo, Bank and Other balances are reconciled separately.
 
@@ -236,19 +233,11 @@ The physical-cash count supports:
 - GHS 1 notes
 - Coins total value
 
-The denomination total must equal Cash Counted.
+Denomination counting is optional. Staff may enter Cash Counted directly and save without note-and-coin quantities. When the optional counter is enabled, it calculates Cash Counted and its total must match the submitted cash figure.
 
-### Opening float and drawer movements
+### Simplified closing workflow
 
-Daily Closing can store:
-
-- Opening cash float
-- Cash deposits
-- Cash withdrawals
-- Other cash in
-- Other cash out
-
-Closing notes are required when controlled drawer movements are entered.
+The current boss-approved workflow does not display Cash Drawer Control, opening float, deposits, withdrawals or other drawer-movement fields. New closings store neutral compatibility values for those historical columns. Cash, MoMo, Bank and Other reconciliation, variance notes, independent verification, revisions and changed-after-closing evidence remain active.
 
 ### Payment allocations
 
@@ -409,9 +398,8 @@ Daily Closing reports include:
 
 - Store and date
 - Payment-channel summary
-- Opening float and cash movements
 - Expected versus counted
-- Denominations
+- Optional denomination evidence
 - Variance
 - Exceptions
 - Returns and refunds
@@ -882,9 +870,9 @@ The clean GitHub clone should keep its `.git` folder so it remains an independen
 2. Confirm the active store, site or Hire location.
 3. Record transactions when they happen.
 4. Separate Cash, MoMo, Bank and Other.
-5. Count physical cash using denominations.
+5. Enter the physical Cash count directly or use the optional denomination counter.
 6. Never force a closing to balance.
-7. Explain shortages, excesses and cash movements.
+7. Explain every shortage or excess.
 8. Use protected correction workflows.
 9. Preserve original evidence.
 10. Require independent approval.
@@ -926,21 +914,19 @@ The clean GitHub clone should keep its `.git` folder so it remains an independen
 
 Review:
 
-- Physical denomination count
-- Opening float
+- Physical Cash count
+- Optional denomination evidence, when used
 - Cash sales
 - Mixed/Credit cash allocations
 - Debt collections
 - Expenses
 - Refunds
-- Deposits
-- Withdrawals
 - Post-closing changes
 - Activity Logs
 - Manager verification
 - Revision history
 
-A mismatch may be caused by a recording error, counting error, unrecorded cash movement or genuine loss. The system preserves evidence; management determines the cause.
+A mismatch may be caused by a recording error, counting error, missing transaction or genuine loss. The system preserves evidence; management determines the cause.
 
 ## Security
 

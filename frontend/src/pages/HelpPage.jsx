@@ -112,13 +112,13 @@ export default function HelpPage() {
         <QuickGuideCard
           icon="🛒"
           title="Cashier Daily Flow"
-          items={["Confirm store", "Record payment channels", "Print receipt", "Count drawer"]}
+          items={["Confirm store", "Record payment channels", "Print receipt", "Enter actual closing counts"]}
         />
 
         <QuickGuideCard
           icon="💵"
           title="Cash Control V2"
-          items={["Opening float", "Denominations", "Variance notes", "Manager verification"]}
+          items={["Manual channel counts", "Optional denominations", "Variance notes", "Manager verification"]}
         />
 
         <QuickGuideCard
@@ -337,7 +337,7 @@ const guideSections = [
       "Check Dashboard, low stock, debts and unfinished management tasks.",
       "Record sales with the correct payment channel and print or download the receipt.",
       "Record debt payments, purchases, expenses, returns and stock transfers when they happen.",
-      "Do not wait until the end of the week to enter expenses or cash movements.",
+      "Do not wait until the end of the week to enter expenses, refunds or customer payments.",
       "At closing time, independently count Cash and confirm MoMo, Bank and Other.",
       "Enter explanations for every shortage, excess, deposit, withdrawal or unusual movement.",
       "Submit the closing and allow a different manager or administrator to verify it."
@@ -486,7 +486,7 @@ const guideSections = [
     "badge": "Preparation",
     "title": "13. Daily Closing Preparation",
     "items": [
-      "Finish recording all sales, debt payments, expenses, returns and cash movements for the store.",
+      "Finish recording all sales, debt payments, expenses and returns for the store.",
       "Confirm that no customer payment or expense is still waiting to be entered.",
       "Separate physical Cash from MoMo, Bank and Other.",
       "Use the actual business date and active store.",
@@ -495,15 +495,15 @@ const guideSections = [
   },
   {
     "category": "cash",
-    "badge": "Cash Drawer",
-    "title": "14. Opening Float and Cash Movements",
+    "badge": "Manual Entry",
+    "title": "14. Enter Actual Closing Balances",
     "items": [
-      "Opening cash float is the physical cash already in the drawer before sales begin.",
-      "Cash deposits are amounts removed from the drawer and deposited elsewhere.",
-      "Cash withdrawals are approved amounts taken from the drawer.",
-      "Other cash-in and other cash-out cover approved movements not represented by sales, debt collections, expenses or refunds.",
-      "Enter notes whenever a deposit, withdrawal, other cash-in or other cash-out is used.",
-      "Do not record MoMo or Bank balances as opening physical cash."
+      "Enter the actual physical Cash counted for the selected store and business date.",
+      "Confirm the actual MoMo and Bank balances from the relevant account or transaction history.",
+      "Enter Other only when a genuine amount belongs outside Cash, MoMo or Bank.",
+      "The system does not automatically copy expected figures into counted figures.",
+      "Closing notes are required whenever the counted total differs from the expected total.",
+      "The old Cash Drawer Control fields are no longer part of the current closing workflow."
     ]
   },
   {
@@ -511,12 +511,12 @@ const guideSections = [
     "badge": "Physical Count",
     "title": "15. Denomination Counting",
     "items": [
-      "Count GHS 200, 100, 50, 20, 10, 5, 2 and 1 notes separately.",
-      "Enter the quantity of each note.",
-      "Enter the total value of coins.",
-      "The denomination total must equal Cash Counted.",
-      "Recount when the denomination total and Cash Counted do not agree.",
-      "Do not enter the system-expected cash as the count unless the physical notes and coins truly equal it."
+      "The denomination counter is optional. Daily Closing can be saved without using it.",
+      "When used, count GHS 200, 100, 50, 20, 10, 5, 2 and 1 notes separately and enter the combined coin value.",
+      "The system calculates Cash Counted from the optional denomination entries.",
+      "When the counter is not used, type the physical Cash counted directly.",
+      "Recount when the optional denomination total does not agree with the physical cash.",
+      "Do not enter the system-expected cash as the count unless the physical money truly equals it."
     ]
   },
   {
@@ -524,9 +524,9 @@ const guideSections = [
     "badge": "Reconciliation",
     "title": "16. Expected Versus Counted",
     "items": [
-      "Expected Cash is calculated from opening float, cash receipts and approved cash outflows.",
+      "Expected Cash is calculated from recorded Cash sales and collections, less recorded Cash expenses and refunds.",
       "Expected MoMo, Bank and Other are calculated separately.",
-      "Counted Cash is the physical denomination count.",
+      "Counted Cash is the physical amount entered manually or calculated with the optional denomination counter.",
       "Confirmed MoMo and Bank should be checked against the actual account or transaction history.",
       "A negative difference is a shortage; a positive difference is an excess.",
       "Enter a clear explanation whenever any channel differs.",
@@ -567,7 +567,7 @@ const guideSections = [
       "Use Reports and Exports with the correct store and date range.",
       "Products, Low Stock, Stock Adjustments, Transfers, Stock Movement, Sales, Debts, Debt Payments, Expenses, Purchases, Returns and Daily Closings are available.",
       "Use Excel for analysis, PDF for fixed presentation and Word for editable management notes.",
-      "Daily Closing reports include payment channels, cash movements, denominations, exceptions, verification and revision evidence.",
+      "Daily Closing reports include payment channels, optional denomination evidence, exceptions, verification and revision history.",
       "Review the report before presenting it to the boss or accountant.",
       "A report showing a difference is evidence for investigation, not a reason to alter the figures."
     ]
@@ -677,7 +677,7 @@ const guideSections = [
       "Never force a closing to balance.",
       "Never erase original sale, return, refund or closing evidence.",
       "Use protected correction and approval workflows.",
-      "Enter clear reasons for adjustments, corrections, refunds and cash movements.",
+      "Enter clear reasons for adjustments, corrections, refunds and closing variances.",
       "Review Activity Logs when records are questioned.",
       "Back up before migrations and major releases.",
       "Do not expose Railway passwords, JWT secrets, SMS keys or customer data.",
@@ -691,9 +691,13 @@ const guideSections = [
     "items": [
       "Review Spare Parts, Mining, Equipment Hire and Fleet from the Group Executive workspace.",
       "Choose the reporting period and authorized business scope.",
-      "Review revenue, costs, debts, production, utilization, incidents and critical alerts.",
-      "Download the executive workbook for the boss, accountant or auditor.",
-      "Use recommendations as review prompts and confirm them against source records."
+      "Review group revenue, collections, operating cost, receivables and the indicative operating position.",
+      "Compare Spare Parts, Mining, Equipment Hire and Fleet through focused business scorecards.",
+      "Review Daily Closing variances, unverified closings, changed-after-closing records and protected corrections.",
+      "Use the Risk Command Centre and Management Action Queue to prioritize follow-up.",
+      "Review daily financial trends, store comparison, Mining incidents, overdue Hire invoices and Fleet service risks.",
+      "Download the executive workbook for the boss, accountant or auditor and confirm recommendations against source records.",
+      "Group Executive Control is read-only oversight; operational records remain inside their own workspaces."
     ]
   },
   {

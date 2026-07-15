@@ -16,10 +16,10 @@ export default function GroupExecutiveLayout() {
       title: "Group Management",
       items: [
         {
-          title: "Executive Control",
-          description: "Spare Parts, Mining, Hire and Fleet overview",
+          title: "Executive Intelligence",
+          description: "Group performance, cash control, risk and action priorities",
           path: "/group-executive-control",
-          icon: "🏢",
+          icon: "📊",
           end: true,
         },
         {
@@ -36,9 +36,9 @@ export default function GroupExecutiveLayout() {
     <BusinessWorkspaceLayout
       workspaceCode={workspaceCode}
       workspaceName="Group Executive Control"
-      icon="🏢"
+      icon="📊"
       theme="navy"
-      description="This cross-business management area summarizes the independent Chalin 03 businesses without merging their operational records."
+      description="Read-only executive intelligence for group finance, operations, cash control, risk and management action without merging business records."
       navigationSections={navigationSections}
     />
   );
