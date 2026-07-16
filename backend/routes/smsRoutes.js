@@ -9,6 +9,11 @@ const {
   sendSms,
 } = require("../services/smsService");
 const {
+  buildArkeselDeliveryCallbackUrl,
+  getSmsDeliverySyncConfig,
+  getSmsDeliverySyncState,
+} = require("../services/smsDeliveryStatusService");
+const {
   applySmsStatusTransition,
   estimateSmsSegments,
   extractProviderMessageId,
@@ -606,85 +611,106 @@ async function sendAndLogSms({
   };
 }
 
+async function handleDeliveryReport(req, res) {
+  const config = getSmsConfig();
+
+  if (!config.deliveryWebhookSecret) {
+    return res.status(503).json({
+      status: "error",
+      message:
+        "SMS delivery callback is not enabled. Automatic provider polling remains available.",
+    });
+  }
+
+  const suppliedToken =
+    req.headers["x-sms-webhook-secret"] || req.query.token || req.body?.token;
+
+  if (!secureTokenMatches(config.deliveryWebhookSecret, suppliedToken)) {
+    return res.status(401).json({
+      status: "error",
+      message: "Invalid delivery-report token.",
+    });
+  }
+
+  const deliveryPayload = {
+    ...(req.query || {}),
+    ...(req.body && typeof req.body === "object" ? req.body : {}),
+  };
+  delete deliveryPayload.token;
+
+  const providerMessageId = extractProviderMessageId(deliveryPayload);
+  const providerStatus = extractProviderStatus(deliveryPayload);
+  const normalizedStatus = normalizeSmsDeliveryStatus(
+    providerStatus,
+    "delivery_unknown"
+  );
+
+  if (!providerMessageId) {
+    return res.status(400).json({
+      status: "error",
+      message: "Delivery report does not contain sms_id or a message UUID.",
+    });
+  }
+
+  const [matchingLogs] = await runQuery(
+    `SELECT id, status
+     FROM sms_log
+     WHERE provider_message_id = ?`,
+    [providerMessageId]
+  );
+
+  let updatedRecords = 0;
+  let finalStatus = normalizedStatus;
+
+  for (const log of matchingLogs) {
+    finalStatus = applySmsStatusTransition(log.status, normalizedStatus);
+    const [result] = await runQuery(
+      `UPDATE sms_log
+       SET status = ?,
+           provider_status = ?,
+           status_reason = ?,
+           delivery_report_response = ?,
+           delivery_confirmed_at =
+             CASE
+               WHEN ? = 'delivered' THEN COALESCE(delivery_confirmed_at, NOW())
+               ELSE delivery_confirmed_at
+             END,
+           last_status_at = NOW()
+       WHERE id = ?`,
+      [
+        finalStatus,
+        providerStatus || null,
+        `Automatic Arkesel delivery callback: ${humanizeSmsStatus(
+          finalStatus
+        )}${providerStatus ? ` (${providerStatus})` : ""}.`,
+        safeJson(deliveryPayload).slice(0, 12000),
+        finalStatus,
+        log.id,
+      ]
+    );
+    updatedRecords += Number(result?.affectedRows || 0);
+  }
+
+  return res.json({
+    status: "success",
+    provider_message_id: providerMessageId,
+    delivery_status: finalStatus,
+    provider_report_status: normalizedStatus,
+    updated_records: updatedRecords,
+    matched: matchingLogs.length > 0,
+  });
+}
+
+router.get(
+  "/delivery-report",
+  deliveryReportLimiter,
+  asyncHandler(handleDeliveryReport)
+);
+
 router.post(
   "/delivery-report",
   deliveryReportLimiter,
-  asyncHandler(async (req, res) => {
-    const config = getSmsConfig();
-
-    if (!config.deliveryWebhookSecret) {
-      return res.status(503).json({
-        status: "error",
-        message: "SMS delivery-report webhook is not enabled.",
-      });
-    }
-
-    const suppliedToken =
-      req.headers["x-sms-webhook-secret"] || req.query.token || req.body?.token;
-
-    if (!secureTokenMatches(config.deliveryWebhookSecret, suppliedToken)) {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid delivery-report token.",
-      });
-    }
-
-    const providerMessageId = extractProviderMessageId(req.body);
-    const providerStatus = extractProviderStatus(req.body);
-    const normalizedStatus = normalizeSmsDeliveryStatus(
-      providerStatus,
-      "delivery_unknown"
-    );
-
-    if (!providerMessageId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Delivery report does not contain a provider message ID.",
-      });
-    }
-
-    const [matchingLogs] = await runQuery(
-      `SELECT id, status
-       FROM sms_log
-       WHERE provider_message_id = ?`,
-      [providerMessageId]
-    );
-
-    let updatedRecords = 0;
-    let finalStatus = normalizedStatus;
-
-    for (const log of matchingLogs) {
-      finalStatus = applySmsStatusTransition(log.status, normalizedStatus);
-      const [result] = await runQuery(
-        `UPDATE sms_log
-         SET status = ?,
-             provider_status = ?,
-             status_reason = ?,
-             delivery_report_response = ?,
-             delivery_confirmed_at = CASE WHEN ? = 'delivered' THEN NOW() ELSE delivery_confirmed_at END,
-             last_status_at = NOW()
-         WHERE id = ?`,
-        [
-          finalStatus,
-          providerStatus || null,
-          `Provider delivery report: ${humanizeSmsStatus(finalStatus)}`,
-          safeJson(req.body).slice(0, 12000),
-          finalStatus,
-          log.id,
-        ]
-      );
-      updatedRecords += Number(result?.affectedRows || 0);
-    }
-
-    return res.json({
-      status: "success",
-      provider_message_id: providerMessageId,
-      delivery_status: finalStatus,
-      provider_report_status: normalizedStatus,
-      updated_records: updatedRecords,
-      matched: matchingLogs.length > 0,
-    });
-  })
+  asyncHandler(handleDeliveryReport)
 );
 
 router.get(
@@ -692,6 +718,11 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const config = getSmsConfig();
+    const deliverySyncConfig = getSmsDeliverySyncConfig(config);
+    const deliverySyncState = getSmsDeliverySyncState(deliverySyncConfig);
+    const callbackReady = Boolean(
+      buildArkeselDeliveryCallbackUrl(deliverySyncConfig)
+    );
 
     const provider = String(config.provider || "mock").toLowerCase();
     const smsEnabled = Boolean(config.enabled);
@@ -755,10 +786,22 @@ router.get(
         hubtel_ready: hubtelReady,
         supported_providers: ["mock", "arkesel", "hubtel"],
         live_bulk_confirmation_text: LIVE_BULK_CONFIRMATION_TEXT,
-        delivery_tracking_enabled: Boolean(config.deliveryWebhookSecret),
-        delivery_callback_ready: Boolean(config.deliveryWebhookSecret),
+        delivery_tracking_enabled:
+          callbackReady || deliverySyncState.ready,
+        delivery_callback_ready: callbackReady,
+        delivery_polling_ready: deliverySyncState.ready,
+        delivery_poll_interval_seconds:
+          deliverySyncState.poll_interval_seconds,
+        delivery_sync_started: deliverySyncState.started,
+        delivery_last_checked_at:
+          deliverySyncState.last_completed_at,
+        delivery_last_error: deliverySyncState.last_error,
         delivery_status_notice:
-          "Accepted by provider is not the same as delivered. Delivery is confirmed only after the provider is configured to send delivery reports to this system.",
+          callbackReady && deliverySyncState.ready
+            ? "Automatic delivery tracking is active through Arkesel callbacks and provider status checks."
+            : deliverySyncState.ready
+              ? "Automatic delivery tracking is active through Arkesel provider status checks."
+              : "Accepted by provider is not the same as delivered. Automatic delivery tracking is not ready.",
       },
     });
   })

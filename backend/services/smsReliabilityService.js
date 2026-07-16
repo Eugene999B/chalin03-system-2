@@ -40,6 +40,7 @@ const UNDELIVERED_STATUSES = new Set([
   "rejected",
   "bounced",
   "blocked",
+  "prohibited",
 ]);
 
 const EXPIRED_STATUSES = new Set(["expired", "ttl_expired", "timed_out", "timeout"]);

@@ -589,6 +589,12 @@ export default function SmsPage() {
 
   useEffect(() => {
     loadSmsPageData();
+
+    const automaticRefresh = window.setInterval(() => {
+      loadSmsPageData({ silent: true });
+    }, 30000);
+
+    return () => window.clearInterval(automaticRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
@@ -817,16 +823,30 @@ export default function SmsPage() {
           <span>Real SMS: {smsStatus?.live_sending ? "YES" : "NO"}</span>
           <span>
             Delivery Tracking:{" "}
-            {smsStatus?.delivery_callback_ready ? "Callback ready" : "Provider dashboard only"}
+            {smsStatus?.delivery_callback_ready &&
+            smsStatus?.delivery_polling_ready
+              ? "Automatic callback + status checks"
+              : smsStatus?.delivery_polling_ready
+                ? "Automatic provider status checks"
+                : smsStatus?.delivery_callback_ready
+                  ? "Automatic callback"
+                  : "Not ready"}
+          </span>
+          <span>
+            Status Check:{" "}
+            {smsStatus?.delivery_polling_ready
+              ? `Every ${smsStatus?.delivery_poll_interval_seconds || 60} seconds`
+              : "Unavailable"}
           </span>
         </div>
       </div>
 
       <div className="warning-box">
         Provider acceptance can use SMS credit, but it does not prove that the
-        recipient's phone received the message. Only a Delivered status is
-        confirmed delivery. Do not retry Accepted or Delivery Unknown messages
-        until the provider dashboard has been checked.
+        recipient's phone received the message. Chalin 03 now checks Arkesel
+        automatically and updates Delivered, Undelivered or Expired without
+        staff calling customers or ticking a confirmation. Do not resend while
+        a message is Awaiting Delivery.
       </div>
 
       <div style={styles.metricsGrid}>
@@ -1137,7 +1157,7 @@ export default function SmsPage() {
             <p style={styles.eyebrowDark}>Message History</p>
             <h2 style={styles.panelTitle}>Recent SMS History</h2>
             <p style={styles.panelSubtitle}>
-              Filter delivery evidence, retry only confirmed failures and export SMS history as CSV.
+              Delivery evidence updates automatically from Arkesel. Retry only confirmed failures and export SMS history as CSV.
             </p>
           </div>
 
@@ -1263,6 +1283,10 @@ export default function SmsPage() {
                         {log.provider_status || "Not returned"}
                       </small>
                       <small>
+                        <strong>Last automatic check:</strong>{" "}
+                        {formatDateTime(log.last_status_at)}
+                      </small>
+                      <small>
                         <strong>Segments / estimated credits:</strong>{" "}
                         {log.segment_count || 1} / {log.estimated_credits || 0}
                       </small>
@@ -1300,7 +1324,7 @@ export default function SmsPage() {
                         {normalizedStatus === "delivered"
                           ? "Confirmed"
                           : normalizedStatus === "accepted"
-                            ? "Awaiting delivery"
+                            ? "Updates automatically"
                             : "Do not retry yet"}
                       </span>
                     )}

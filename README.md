@@ -1011,3 +1011,22 @@ For:
 Location reference:
 
 **Dunkwa Police Barrier**
+
+
+## Release 1.1 — Automatic Arkesel Delivery Confirmation
+
+SMS delivery evidence is now updated automatically without staff calling customers
+or ticking a manual confirmation.
+
+- Every Arkesel send includes the protected `callback_url` when
+  `SMS_DELIVERY_WEBHOOK_SECRET` is configured.
+- The public callback accepts Arkesel's documented `sms_id` and `status` query
+  parameters.
+- The backend also polls Arkesel's official batch message-report endpoint every
+  minute as a fallback.
+- Accepted, Submitted and Queued remain awaiting delivery.
+- Delivered, Not Delivered, Prohibited and Expired update to explicit final
+  evidence.
+- Existing accepted messages with provider UUIDs are backfilled automatically
+  after deployment.
+- The process never resends an SMS and therefore does not spend another credit.
