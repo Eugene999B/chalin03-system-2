@@ -113,8 +113,13 @@ axiosClient.interceptors.response.use(
     const statusCode = error.response?.status;
     const errorCode = String(error.response?.data?.code || "");
     const errorMessage = String(error.response?.data?.message || "");
+    const requestUrl = String(error.config?.url || "");
+    const isOwnerRecoveryRequest = requestUrl.includes(
+      "/release2-final/owner/"
+    );
+    const isOwnerRecoveryPage = window.location.pathname === "/owner-recovery";
 
-    if (statusCode === 401) {
+    if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage) {
       if (errorCode === "SESSION_REPLACED") {
         sessionStorage.setItem(
           "chalin03_login_notice",

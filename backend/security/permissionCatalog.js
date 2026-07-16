@@ -15,6 +15,14 @@ const CORE_PERMISSIONS = Object.freeze([
   "backup.restore",
   "system.diagnostics",
   "security.admin",
+  "security.view",
+  "workers.view",
+  "workers.sensitive.view",
+  "workers.manage",
+  "workers.documents.view",
+  "workers.documents.manage",
+  "workers.deactivate",
+  "executive.operations.view",
   "spare_parts.read",
   "spare_parts.sell",
   "spare_parts.manage",
@@ -90,6 +98,16 @@ const ALL_PERMISSIONS = Object.freeze([
 ]);
 
 const ADMIN_GRANTS = Object.freeze([...ALL_PERMISSIONS]);
+
+const CROSS_CUTTING_GRANTS = Object.freeze({
+  manager: ["workers.view"],
+  auditor: [
+    "security.view",
+    "workers.view",
+    "executive.operations.view",
+    "backup.validate",
+  ],
+});
 
 const SPARE_PARTS_GRANTS = Object.freeze({
   admin: [
@@ -402,7 +420,10 @@ function getEffectivePermissions(session = {}) {
   }
 
   if (workspaceCode === WORKSPACES.SPARE_PARTS) {
-    return uniquePermissions(SPARE_PARTS_GRANTS[globalRole] || []);
+    return uniquePermissions([
+      ...(SPARE_PARTS_GRANTS[globalRole] || []),
+      ...(CROSS_CUTTING_GRANTS[globalRole] || []),
+    ]);
   }
 
   if (globalRole === "cashier") {
@@ -415,7 +436,10 @@ function getEffectivePermissions(session = {}) {
     (globalRole === "auditor" ? roleGrants.auditor : []) ||
     [];
 
-  return uniquePermissions(grants);
+  return uniquePermissions([
+    ...grants,
+    ...(CROSS_CUTTING_GRANTS[globalRole] || []),
+  ]);
 }
 
 function hasPermission(session, permission) {

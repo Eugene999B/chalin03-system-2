@@ -23,6 +23,13 @@ export default function GroupExecutiveLayout() {
           end: true,
         },
         {
+          title: "Security, Backups & Workforce",
+          description: "Read-only group security, backup and worker oversight",
+          path: "/group-executive-control/operations",
+          icon: "🛡️",
+          permissions: ["executive.operations.view"],
+        },
+        {
           title: "Return to Current Business",
           description: "Go back to the workspace used for this login",
           path: returnPath,

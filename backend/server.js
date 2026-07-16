@@ -44,6 +44,9 @@ const miningRoutes = require("./routes/miningRoutes");
 const equipmentHireRoutes = require("./routes/equipmentHireRoutes");
 const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
 const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
+const release2FinalRoutes = require("./routes/release2FinalRoutes");
+const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
+const workerPrintRoutes = require("./routes/workerPrintRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
@@ -132,6 +135,7 @@ app.get("/api", (req, res) => {
       "/api/equipment-hire",
       "/api/operations-documents",
       "/api/group-executive",
+      "/api/release2-final",
       "/api/workspace-admin",
     ],
   });
@@ -147,6 +151,10 @@ app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/forgot-password", loginLimiter);
 app.use("/api/auth/recovery", loginLimiter);
 app.use("/api/backups/restore", sensitiveAdminLimiter);
+app.use("/api/release2-final/owner", loginLimiter);
+app.use("/api/release2-final/security", sensitiveAdminLimiter);
+app.use("/api/release2-final/backups", sensitiveAdminLimiter);
+app.use("/api/release2-final/workers", sensitiveAdminLimiter);
 app.use("/api/users", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api", systemRoutes);
@@ -177,6 +185,9 @@ app.use("/api/mining", miningRoutes);
 app.use("/api/equipment-hire", equipmentHireRoutes);
 app.use("/api/operations-documents", operationsDocumentRoutes);
 app.use("/api/group-executive", groupExecutiveRoutes);
+app.use("/api/release2-final", workerProfileExpansionRoutes);
+app.use("/api/release2-final", workerPrintRoutes);
+app.use("/api/release2-final", release2FinalRoutes);
 app.use("/api/workspace-admin", workspaceAdminRoutes);
 app.use("/api/workspace-context", workspaceContextRoutes);
 

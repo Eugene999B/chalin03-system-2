@@ -45,6 +45,8 @@ import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
 import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
+import OwnerRecoveryPage from "./pages/OwnerRecoveryPage";
+import Release2FinalControlPage from "./pages/Release2FinalControlPage";
 import WorkspaceHelpPage from "./pages/WorkspaceHelpPage";
 import WorkspaceAdministrationPage from "./pages/WorkspaceAdministrationPage";
 import {
@@ -133,6 +135,7 @@ export default function App() {
         <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
           <Route path="/equipment-hire" element={<EquipmentHirePortalPage />} />
 
@@ -238,6 +241,27 @@ export default function App() {
               element={permissionOnlyPage("backup.download", <BackupPage />)}
             />
             <Route
+              path="security-centre"
+              element={permissionOnlyPage(
+                "security.view",
+                <Release2FinalControlPage mode="security" />
+              )}
+            />
+            <Route
+              path="professional-backups"
+              element={permissionOnlyPage(
+                "backup.download",
+                <Release2FinalControlPage mode="backups" />
+              )}
+            />
+            <Route
+              path="workers"
+              element={permissionOnlyPage(
+                "workers.view",
+                <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
               path="system-operations"
               element={permissionOnlyPage("system.diagnostics", <SystemOperationsPage />)}
             />
@@ -325,6 +349,13 @@ export default function App() {
               element={permissionPage(
                 MINING_SECTION_PERMISSIONS.documents,
                 <OperationsDocumentsAccountingPage workspaceScope="mining" />
+              )}
+            />
+            <Route
+              path="workers"
+              element={permissionOnlyPage(
+                "workers.view",
+                <Release2FinalControlPage mode="workers" />
               )}
             />
             <Route
@@ -435,6 +466,13 @@ export default function App() {
               )}
             />
             <Route
+              path="workers"
+              element={permissionOnlyPage(
+                "workers.view",
+                <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
               path="administration"
               element={permissionPage(
                 HIRE_SECTION_PERMISSIONS.administration,
@@ -463,6 +501,13 @@ export default function App() {
             }
           >
             <Route index element={safe(<GroupExecutiveControlPage />)} />
+            <Route
+              path="operations"
+              element={permissionOnlyPage(
+                "executive.operations.view",
+                <Release2FinalControlPage mode="executive" />
+              )}
+            />
           </Route>
 
           {/* Old shared links now redirect into the active business workspace. */}

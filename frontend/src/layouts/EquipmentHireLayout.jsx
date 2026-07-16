@@ -95,6 +95,13 @@ const navigationSections = [
         icon: "\u{1F4C4}",
         permissions: ["operations.documents.view"],
       },
+      {
+        title: "Hire Workforce",
+        description: "Worker profiles, location assignments, licences and expiries",
+        path: "/equipment-hire-operations/workers",
+        icon: "\u{1F477}",
+        permissions: ["workers.view"],
+      },
     ],
   },
   {
