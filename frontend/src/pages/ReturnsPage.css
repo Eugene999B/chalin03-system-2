@@ -37,3 +37,148 @@
     grid-template-columns: 1fr;
   }
 }
+/* RETURNS MULTI-ITEM HOTFIX */
+.returns-batch-panel {
+  border: 2px solid #bfdbfe;
+  background: linear-gradient(
+    145deg,
+    #eff6ff,
+    #ffffff 55%
+  );
+}
+
+.returns-batch-badge {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 950;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.returns-batch-intro {
+  color: #475569;
+  line-height: 1.6;
+}
+
+.returns-batch-lines {
+  display: grid;
+  gap: 11px;
+  margin: 16px 0;
+}
+
+.returns-batch-line {
+  border: 1px solid #dbe3ef;
+  border-radius: 15px;
+  background: #ffffff;
+  padding: 13px;
+}
+
+.returns-batch-line.is-selected {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px
+    rgba(96, 165, 250, 0.14);
+}
+
+.returns-batch-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.returns-batch-check input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.returns-batch-check span {
+  display: grid;
+  gap: 3px;
+}
+
+.returns-batch-check small {
+  color: #64748b;
+}
+
+.returns-batch-item-fields {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.returns-batch-item-fields label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.returns-batch-item-fields input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.returns-batch-approval {
+  margin: 16px 0;
+  border: 1px solid #fde68a;
+  border-radius: 15px;
+  background: #fffbeb;
+  padding: 15px;
+}
+
+.returns-batch-approval h3 {
+  margin: 0 0 10px;
+  color: #92400e;
+}
+
+.returns-batch-summary {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.returns-batch-summary div {
+  display: grid;
+  gap: 4px;
+  border-radius: 13px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px;
+}
+
+.returns-batch-summary span {
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+.returns-single-fallback {
+  align-self: start;
+}
+
+.returns-single-fallback > summary {
+  cursor: pointer;
+  color: #475569;
+  font-weight: 900;
+}
+
+.returns-single-form {
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .returns-batch-item-fields,
+  .returns-batch-summary {
+    grid-template-columns: 1fr;
+  }
+}
