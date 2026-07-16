@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import MultiItemReturnPanel from "../components/MultiItemReturnPanel";
 import "./ReturnsPage.css";
 
 export default function ReturnsPage() {
@@ -267,6 +268,16 @@ export default function ReturnsPage() {
     }
   }
 
+  async function handleMultiReturnResult(result) {
+    setMessage(result?.message || "");
+    setError(result?.error || "");
+
+    await Promise.all([
+      loadSaleItems(selectedSaleId),
+      loadReturns(),
+      loadSales(),
+    ]);
+  }
   const selectedReturnItem = saleItems.find(
     (item) => Number(item.product_id) === Number(form.product_id)
   );
@@ -406,7 +417,23 @@ export default function ReturnsPage() {
           )}
         </div>
 
-        <form className="section-card" onSubmit={recordReturn}>
+        <MultiItemReturnPanel
+          saleId={selectedSaleId}
+          saleItems={saleItems}
+          storeCode={currentStoreCode}
+          storeName={currentStoreName}
+          onResult={handleMultiReturnResult}
+        />
+
+        <details className="section-card returns-single-fallback">
+          <summary>
+            Single Item Return — optional fallback
+          </summary>
+
+          <form
+            className="returns-single-form"
+            onSubmit={recordReturn}
+          >
           <h2>Record Return - {currentStoreCode}</h2>
 
           <div className="warning-box">
@@ -525,7 +552,8 @@ export default function ReturnsPage() {
           </div>
 
           <button type="submit">Save Protected Return</button>
-        </form>
+          </form>
+        </details>
       </div>
 
       {saleItems.length > 0 && (
