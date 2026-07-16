@@ -3801,6 +3801,7 @@ router.post(
           branchId,
           smsType: "daily_summary",
           sentBy: req.user.id,
+          sourceReference: `daily-closing:${result.insertId}`,
           message: buildClosingSmsMessage({
             summary,
             closingDate,
@@ -3822,13 +3823,17 @@ router.post(
       }
 
       const smsMessage = closingSms.ok
-        ? " Boss daily summary SMS sent."
+        ? closingSms.status === "delivered"
+          ? " Boss daily summary SMS delivery was confirmed."
+          : closingSms.status === "accepted"
+            ? " Boss daily summary SMS was accepted by the provider; phone delivery is still pending confirmation."
+            : " Boss daily summary SMS submission completed, but phone delivery could not be confirmed. Check the SMS Center before retrying."
         : closingSms.skipped
           ? ` Boss summary SMS was skipped: ${
               closingSms.reason || "owner phone or SMS configuration is unavailable"
             }.`
           : ` Closing remains saved, but the boss summary SMS failed: ${
-              closingSms.error || "provider error"
+              closingSms.error || "provider acceptance was not confirmed"
             }.`;
 
       return res.status(201).json({

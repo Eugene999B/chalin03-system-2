@@ -148,6 +148,14 @@ function MobilePageFix() {
           font-size: 16px !important;
         }
 
+        .boss-mobile-fix input.restock-cost-checkbox {
+          width: 18px !important;
+          min-width: 18px !important;
+          max-width: 18px !important;
+          flex: 0 0 18px !important;
+          min-height: 18px !important;
+        }
+
         .boss-mobile-fix button {
           max-width: 100% !important;
           white-space: normal !important;
@@ -250,10 +258,28 @@ export default function ProductsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
 
+  const [restockProduct, setRestockProduct] = useState(null);
+  const [restockQuantity, setRestockQuantity] = useState("");
+  const [restockSource, setRestockSource] = useState("");
+  const [restockReference, setRestockReference] = useState("");
+  const [restockUnitCost, setRestockUnitCost] = useState("");
+  const [restockDate, setRestockDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [restockNotes, setRestockNotes] = useState("");
+  const [restockUpdateCost, setRestockUpdateCost] = useState(false);
+  const [restockSaving, setRestockSaving] = useState(false);
+
   const [stockProduct, setStockProduct] = useState(null);
   const [stockAdjustmentType, setStockAdjustmentType] = useState("increase");
+  const [stockMovementType, setStockMovementType] = useState("correction_increase");
   const [stockAdjustmentQuantity, setStockAdjustmentQuantity] = useState("");
   const [stockAdjustmentReason, setStockAdjustmentReason] = useState("");
+  const [stockAdjustmentReference, setStockAdjustmentReference] = useState("");
+  const [stockAdjustmentDate, setStockAdjustmentDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [stockAdjustmentNotes, setStockAdjustmentNotes] = useState("");
   const [stockAdjustments, setStockAdjustments] = useState([]);
   const [stockHistoryLoading, setStockHistoryLoading] = useState(false);
   const [stockSaving, setStockSaving] = useState(false);
@@ -313,6 +339,47 @@ export default function ProductsPage() {
     };
 
     return types[String(value || "").toLowerCase()] || value || "-";
+  }
+
+  function formatMovementType(value, adjustmentType = "") {
+    const types = {
+      quick_restock: "Receive / Restock",
+      correction_increase: "Correction Increase",
+      correction_decrease: "Correction Decrease",
+      damaged: "Damaged Stock",
+      lost_missing: "Lost / Missing Stock",
+      physical_count: "Physical Count",
+      opening_balance: "Opening Balance",
+      other: "Other Stock Movement",
+    };
+
+    return (
+      types[String(value || "").toLowerCase()] ||
+      formatAdjustmentType(adjustmentType)
+    );
+  }
+
+  function getMovementOptions(adjustmentType) {
+    if (adjustmentType === "increase") {
+      return [
+        ["correction_increase", "Correction Increase"],
+        ["other", "Other Authorized Increase"],
+      ];
+    }
+
+    if (adjustmentType === "decrease") {
+      return [
+        ["correction_decrease", "Correction Decrease"],
+        ["damaged", "Damaged Stock"],
+        ["lost_missing", "Lost / Missing Stock"],
+        ["other", "Other Authorized Decrease"],
+      ];
+    }
+
+    return [
+      ["physical_count", "Authorized Physical Count"],
+      ["other", "Other Exact Stock Update"],
+    ];
   }
 
   function formatNumber(value) {
@@ -570,14 +637,25 @@ export default function ProductsPage() {
       ...form,
       cost_price: Number(form.cost_price),
       selling_price: Number(form.selling_price),
-      quantity: Number(form.quantity),
       low_stock_threshold: Number(form.low_stock_threshold),
     };
 
+    if (!isEditing) {
+      productData.quantity = Number(form.quantity || 0);
+    } else {
+      delete productData.quantity;
+    }
+
     try {
       if (isEditing) {
-        await axiosClient.put(`/products/${editingProductId}`, productData);
-        setMessage("Product updated successfully.");
+        const response = await axiosClient.put(
+          `/products/${editingProductId}`,
+          productData
+        );
+        setMessage(
+          response.data.message ||
+            "Product details updated successfully. Stock was not changed."
+        );
       } else {
         await axiosClient.post("/products", productData);
         setMessage("Product added successfully.");
@@ -595,13 +673,96 @@ export default function ProductsPage() {
     }
   }
 
+  function openRestock(product) {
+    setMessage("");
+    setError("");
+    setRestockProduct(product);
+    setRestockQuantity("");
+    setRestockSource("");
+    setRestockReference("");
+    setRestockUnitCost(product.cost_price || "");
+    setRestockDate(new Date().toISOString().slice(0, 10));
+    setRestockNotes("");
+    setRestockUpdateCost(false);
+  }
+
+  function closeRestock() {
+    setRestockProduct(null);
+    setRestockQuantity("");
+    setRestockSource("");
+    setRestockReference("");
+    setRestockUnitCost("");
+    setRestockDate(new Date().toISOString().slice(0, 10));
+    setRestockNotes("");
+    setRestockUpdateCost(false);
+    setRestockSaving(false);
+  }
+
+  async function saveRestock(event) {
+    event.preventDefault();
+
+    if (!restockProduct) return;
+
+    setMessage("");
+    setError("");
+
+    const quantity = Number(restockQuantity);
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setError("Restock quantity must be a whole number greater than zero.");
+      return;
+    }
+
+    if (!restockSource.trim()) {
+      setError("Supplier or stock source is required.");
+      return;
+    }
+
+    if (!restockDate) {
+      setError("Date received is required.");
+      return;
+    }
+
+    setRestockSaving(true);
+
+    try {
+      const response = await axiosClient.post(
+        `/products/${restockProduct.id}/restock`,
+        {
+          quantity,
+          source_name: restockSource.trim(),
+          reference_number: restockReference.trim(),
+          unit_cost:
+            restockUnitCost === "" ? null : Number(restockUnitCost),
+          movement_date: restockDate,
+          notes: restockNotes.trim(),
+          update_cost_price: restockUpdateCost,
+        }
+      );
+
+      setMessage(
+        response.data.message || "Stock received and recorded successfully."
+      );
+      closeRestock();
+      await refreshPageData();
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to receive stock.");
+    } finally {
+      setRestockSaving(false);
+    }
+  }
+
   async function openStockAdjustment(product) {
     setMessage("");
     setError("");
     setStockProduct(product);
     setStockAdjustmentType("increase");
+    setStockMovementType("correction_increase");
     setStockAdjustmentQuantity("");
     setStockAdjustmentReason("");
+    setStockAdjustmentReference("");
+    setStockAdjustmentDate(new Date().toISOString().slice(0, 10));
+    setStockAdjustmentNotes("");
     setStockAdjustments([]);
     setStockHistoryLoading(true);
 
@@ -621,8 +782,12 @@ export default function ProductsPage() {
   function closeStockAdjustment() {
     setStockProduct(null);
     setStockAdjustmentType("increase");
+    setStockMovementType("correction_increase");
     setStockAdjustmentQuantity("");
     setStockAdjustmentReason("");
+    setStockAdjustmentReference("");
+    setStockAdjustmentDate(new Date().toISOString().slice(0, 10));
+    setStockAdjustmentNotes("");
     setStockAdjustments([]);
     setStockHistoryLoading(false);
     setStockSaving(false);
@@ -705,8 +870,12 @@ export default function ProductsPage() {
         `/products/${stockProduct.id}/stock-adjustment`,
         {
           adjustment_type: stockAdjustmentType,
+          movement_type: stockMovementType,
           quantity,
           reason: stockAdjustmentReason,
+          reference_number: stockAdjustmentReference,
+          movement_date: stockAdjustmentDate,
+          notes: stockAdjustmentNotes,
         }
       );
 
@@ -717,6 +886,8 @@ export default function ProductsPage() {
       setStockProduct(updatedProduct);
       setStockAdjustmentQuantity("");
       setStockAdjustmentReason("");
+      setStockAdjustmentReference("");
+      setStockAdjustmentNotes("");
 
       const historyResponse = await axiosClient.get(
         `/products/${stockProduct.id}/stock-adjustments`
@@ -967,8 +1138,9 @@ export default function ProductsPage() {
 
             {isEditing && (
               <div className="warning-box">
-                You are editing an existing product. Click Cancel Edit if this
-                was a mistake.
+                Edit Product changes the name, category, prices and settings only.
+                Stock stays at <strong>{form.quantity || 0}</strong>. Use Receive /
+                Restock for new stock or Adjust / Correct for a verified correction.
               </div>
             )}
 
@@ -1034,17 +1206,29 @@ export default function ProductsPage() {
             </div>
 
             <div style={styles.formGridTwo}>
-              <label>
-                Quantity
-                <input
-                  name="quantity"
-                  type="number"
-                  min="0"
-                  value={form.quantity}
-                  onChange={handleChange}
-                  required
-                />
-              </label>
+              {!isEditing ? (
+                <label>
+                  Opening Quantity
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="0"
+                    value={form.quantity}
+                    onChange={handleChange}
+                    required
+                  />
+                  <small>
+                    Used only when creating the product. It will be recorded as an
+                    opening-balance stock movement.
+                  </small>
+                </label>
+              ) : (
+                <label>
+                  Current Stock (read only)
+                  <input type="number" value={form.quantity || 0} readOnly />
+                  <small>Stock cannot be changed from Edit Product.</small>
+                </label>
+              )}
 
               <label>
                 Low Stock Level
@@ -1227,6 +1411,7 @@ export default function ProductsPage() {
                 getProductStockStatus={getProductStockStatus}
                 getProfitMarginPercent={getProfitMarginPercent}
                 startEdit={startEdit}
+                openRestock={openRestock}
                 openStockAdjustment={openStockAdjustment}
                 openStockLedger={openStockLedger}
                 deleteProduct={deleteProduct}
@@ -1272,7 +1457,8 @@ export default function ProductsPage() {
                   <tr>
                     <th>Date</th>
                     <th>Product</th>
-                    <th>Type</th>
+                    <th>Movement</th>
+                    <th>Reference / Source</th>
                     <th>Qty</th>
                     <th>Old</th>
                     <th>New</th>
@@ -1298,7 +1484,17 @@ export default function ProductsPage() {
                             .join(" • ") || "-"}
                         </small>
                       </td>
-                      <td>{formatAdjustmentType(adjustment.adjustment_type)}</td>
+                      <td>
+                        {formatMovementType(
+                          adjustment.movement_type,
+                          adjustment.adjustment_type
+                        )}
+                      </td>
+                      <td>
+                        <strong>{adjustment.reference_number || "-"}</strong>
+                        <br />
+                        <small>{adjustment.source_name || "-"}</small>
+                      </td>
                       <td>{adjustment.quantity}</td>
                       <td>{adjustment.old_quantity}</td>
                       <td>{adjustment.new_quantity}</td>
@@ -1311,6 +1507,147 @@ export default function ProductsPage() {
             </div>
           )}
         </section>
+      )}
+
+      {restockProduct && (
+        <div className="modal-backdrop">
+          <div className="receipt-modal" style={styles.modalWide}>
+            <div className="modal-header">
+              <div>
+                <h2>Receive / Restock Product - {currentStoreCode}</h2>
+                <p>
+                  Product: <strong>{restockProduct.name}</strong>
+                  <br />
+                  Current stock: <strong>{restockProduct.quantity}</strong> • Store:{" "}
+                  <strong>{currentStoreName}</strong>
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={closeRestock}
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="receipt-preview" onSubmit={saveRestock}>
+              <div className="warning-box">
+                Use this for genuine stock received. A supplier purchase with an
+                invoice should still use the Purchases page; this Quick Restock is
+                for legitimate stock receipts that do not need a full purchase record.
+              </div>
+
+              <div className="receipt-info-grid">
+                <p>
+                  <strong>Current Stock:</strong> {restockProduct.quantity}
+                </p>
+                <p>
+                  <strong>New Stock:</strong>{" "}
+                  {Number(restockProduct.quantity || 0) + Number(restockQuantity || 0)}
+                </p>
+                <p>
+                  <strong>Current Cost:</strong>{" "}
+                  {formatMoney(restockProduct.cost_price)}
+                </p>
+                <p>
+                  <strong>Category:</strong> {restockProduct.category || "-"}
+                </p>
+              </div>
+
+              <div style={styles.formGridTwo}>
+                <label>
+                  Quantity Received
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={restockQuantity}
+                    onChange={(event) => setRestockQuantity(event.target.value)}
+                    placeholder="Example: 20"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Date Received
+                  <input
+                    type="date"
+                    value={restockDate}
+                    onChange={(event) => setRestockDate(event.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div style={styles.formGridTwo}>
+                <label>
+                  Supplier or Stock Source
+                  <input
+                    value={restockSource}
+                    onChange={(event) => setRestockSource(event.target.value)}
+                    placeholder="Example: K. Boateng Parts Supplier"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Invoice / Reference Number
+                  <input
+                    value={restockReference}
+                    onChange={(event) => setRestockReference(event.target.value)}
+                    placeholder="Optional invoice, delivery note or reference"
+                  />
+                </label>
+              </div>
+
+              <label>
+                Unit Cost
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={restockUnitCost}
+                  onChange={(event) => setRestockUnitCost(event.target.value)}
+                  placeholder="Optional received unit cost"
+                />
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input
+                  className="restock-cost-checkbox"
+                  type="checkbox"
+                  checked={restockUpdateCost}
+                  onChange={(event) => setRestockUpdateCost(event.target.checked)}
+                />
+                Update the product cost price to this received unit cost
+              </label>
+
+              <label>
+                Notes
+                <textarea
+                  value={restockNotes}
+                  onChange={(event) => setRestockNotes(event.target.value)}
+                  placeholder="Condition, delivery details or management note"
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="submit" disabled={restockSaving}>
+                  {restockSaving ? "Recording..." : "Record Stock Receipt"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={closeRestock}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {stockProduct && (
@@ -1355,41 +1692,118 @@ export default function ProductsPage() {
                 </p>
               </div>
 
-              <label>Adjustment Type</label>
-              <select
-                value={stockAdjustmentType}
-                onChange={(event) => setStockAdjustmentType(event.target.value)}
-              >
-                <option value="increase">Increase Stock</option>
-                <option value="decrease">Decrease Stock</option>
-                <option value="set">Set Exact Stock</option>
-              </select>
+              <div className="warning-box">
+                This form is for corrections, damage, loss and authorized stock
+                counts. New stock received must use Receive / Restock.
+              </div>
+
+              <div style={styles.formGridTwo}>
+                <label>
+                  Adjustment Direction
+                  <select
+                    value={stockAdjustmentType}
+                    onChange={(event) => {
+                      const nextType = event.target.value;
+                      setStockAdjustmentType(nextType);
+                      setStockMovementType(
+                        nextType === "increase"
+                          ? "correction_increase"
+                          : nextType === "decrease"
+                            ? "correction_decrease"
+                            : "physical_count"
+                      );
+                    }}
+                  >
+                    <option value="increase">Increase Stock</option>
+                    <option value="decrease">Decrease Stock</option>
+                    <option value="set">Set Exact Stock</option>
+                  </select>
+                </label>
+
+                <label>
+                  Movement Category
+                  <select
+                    value={stockMovementType}
+                    onChange={(event) => setStockMovementType(event.target.value)}
+                  >
+                    {getMovementOptions(stockAdjustmentType).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+              </div>
+
+              <div style={styles.formGridTwo}>
+                <label>
+                  {stockAdjustmentType === "set"
+                    ? "New Exact Quantity"
+                    : "Adjustment Quantity"}
+                  <input
+                    type="number"
+                    min={stockAdjustmentType === "set" ? "0" : "1"}
+                    value={stockAdjustmentQuantity}
+                    onChange={(event) =>
+                      setStockAdjustmentQuantity(event.target.value)
+                    }
+                    placeholder={
+                      stockAdjustmentType === "set"
+                        ? "Example: 50"
+                        : "Example: 5"
+                    }
+                    required
+                  />
+                </label>
+
+                <label>
+                  Movement Date
+                  <input
+                    type="date"
+                    value={stockAdjustmentDate}
+                    onChange={(event) =>
+                      setStockAdjustmentDate(event.target.value)
+                    }
+                    required
+                  />
+                </label>
+              </div>
 
               <label>
-                {stockAdjustmentType === "set"
-                  ? "New Exact Quantity"
-                  : "Adjustment Quantity"}
+                Reference Number
+                <input
+                  value={stockAdjustmentReference}
+                  onChange={(event) =>
+                    setStockAdjustmentReference(event.target.value)
+                  }
+                  placeholder="Optional count sheet, incident or approval reference"
+                />
               </label>
-              <input
-                type="number"
-                min={stockAdjustmentType === "set" ? "0" : "1"}
-                value={stockAdjustmentQuantity}
-                onChange={(event) =>
-                  setStockAdjustmentQuantity(event.target.value)
-                }
-                placeholder={
-                  stockAdjustmentType === "set" ? "Example: 50" : "Example: 5"
-                }
-              />
 
-              <label>Reason</label>
-              <textarea
-                value={stockAdjustmentReason}
-                onChange={(event) =>
-                  setStockAdjustmentReason(event.target.value)
-                }
-                placeholder="Example: Physical stock count correction, damaged item, lost item, wrong entry"
-              />
+              <label>
+                Reason
+                <textarea
+                  value={stockAdjustmentReason}
+                  onChange={(event) =>
+                    setStockAdjustmentReason(event.target.value)
+                  }
+                  placeholder="Explain exactly why stock is changing"
+                  required
+                />
+              </label>
+
+              <label>
+                Additional Notes
+                <textarea
+                  value={stockAdjustmentNotes}
+                  onChange={(event) =>
+                    setStockAdjustmentNotes(event.target.value)
+                  }
+                  placeholder="Optional verification, damaged-item condition or authorization note"
+                />
+              </label>
 
               <div className="modal-actions">
                 <button type="submit" disabled={stockSaving}>
@@ -1419,7 +1833,8 @@ export default function ProductsPage() {
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>Type</th>
+                        <th>Movement</th>
+                        <th>Reference / Source</th>
                         <th>Qty</th>
                         <th>Old</th>
                         <th>New</th>
@@ -1431,9 +1846,21 @@ export default function ProductsPage() {
                     <tbody>
                       {stockAdjustments.map((adjustment) => (
                         <tr key={adjustment.id}>
-                          <td>{formatDateTime(adjustment.adjusted_at)}</td>
                           <td>
-                            {formatAdjustmentType(adjustment.adjustment_type)}
+                            {formatDateTime(
+                              adjustment.movement_date || adjustment.adjusted_at
+                            )}
+                          </td>
+                          <td>
+                            {formatMovementType(
+                              adjustment.movement_type,
+                              adjustment.adjustment_type
+                            )}
+                          </td>
+                          <td>
+                            <strong>{adjustment.reference_number || "-"}</strong>
+                            <br />
+                            <small>{adjustment.source_name || "-"}</small>
                           </td>
                           <td>{adjustment.quantity}</td>
                           <td>{adjustment.old_quantity}</td>
@@ -1658,6 +2085,7 @@ function ProductCard({
   getProductStockStatus,
   getProfitMarginPercent,
   startEdit,
+  openRestock,
   openStockAdjustment,
   openStockLedger,
   deleteProduct,
@@ -1727,9 +2155,17 @@ function ProductCard({
               <button
                 type="button"
                 style={styles.smallPrimaryButton}
+                onClick={() => openRestock(product)}
+              >
+                Receive / Restock
+              </button>
+
+              <button
+                type="button"
+                style={styles.smallSecondaryButton}
                 onClick={() => openStockAdjustment(product)}
               >
-                Adjust Stock
+                Adjust / Correct
               </button>
 
               <button

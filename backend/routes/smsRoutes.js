@@ -1,15 +1,31 @@
+const crypto = require("crypto");
 const express = require("express");
 const db = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { buildRateLimiter } = require("../middleware/securityMiddleware");
 const {
   getSmsConfig,
   normalizeGhanaPhone,
   sendSms,
 } = require("../services/smsService");
+const {
+  applySmsStatusTransition,
+  estimateSmsSegments,
+  extractProviderMessageId,
+  extractProviderStatus,
+  humanizeSmsStatus,
+  isSubmissionAccepted,
+  normalizeSmsDeliveryStatus,
+} = require("../services/smsReliabilityService");
 
 const router = express.Router();
 
 const LIVE_BULK_CONFIRMATION_TEXT = "SEND LIVE BULK SMS";
+const deliveryReportLimiter = buildRateLimiter({
+  windowMinutes: 15,
+  max: Number(process.env.SMS_DELIVERY_REPORT_RATE_LIMIT_MAX || 300),
+  message: "Too many SMS delivery-report requests.",
+});
 
 /**
  * This project database config may expose execute(), query(), pool.execute(),
@@ -256,12 +272,23 @@ async function writeSmsLog({
   message,
   smsType,
   status,
+  provider,
+  senderId,
+  providerMessageId,
+  providerStatus,
+  statusReason,
+  segmentCount,
+  estimatedCredits,
+  retryCount = 0,
+  originalLogId = null,
+  sourceReference = null,
   providerResponse,
   sentBy,
+  submittedAt = null,
+  deliveryConfirmedAt = null,
 }) {
-  const sentAt = status === "sent" ? new Date() : null;
-
-  await runQuery(
+  const sentAt = isSubmissionAccepted(status) ? submittedAt || new Date() : null;
+  const [result] = await runQuery(
     `
       INSERT INTO sms_log (
         branch_id,
@@ -269,11 +296,24 @@ async function writeSmsLog({
         message,
         sms_type,
         status,
+        provider,
+        sender_id,
+        provider_message_id,
+        provider_status,
+        status_reason,
+        segment_count,
+        estimated_credits,
+        retry_count,
+        original_log_id,
+        source_reference,
         provider_response,
         sent_by,
-        sent_at
+        sent_at,
+        submitted_at,
+        delivery_confirmed_at,
+        last_status_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       branchId || null,
@@ -281,99 +321,372 @@ async function writeSmsLog({
       message,
       smsType || "other",
       status,
-      safeJson(providerResponse).slice(0, 6000),
+      provider || null,
+      senderId || null,
+      providerMessageId || null,
+      providerStatus || null,
+      statusReason || null,
+      Math.max(Number(segmentCount || 1), 1),
+      Math.max(Number(estimatedCredits ?? segmentCount ?? 1), 0),
+      Math.max(Number(retryCount || 0), 0),
+      originalLogId || null,
+      sourceReference || null,
+      safeJson(providerResponse).slice(0, 12000),
       sentBy || null,
       sentAt,
+      submittedAt,
+      deliveryConfirmedAt,
+      new Date(),
+    ]
+  );
+
+  return Number(result?.insertId || 0) || null;
+}
+
+async function updateSmsLog(logId, updates) {
+  if (!logId) return;
+
+  await runQuery(
+    `UPDATE sms_log
+     SET status = ?,
+         provider = ?,
+         sender_id = ?,
+         provider_message_id = ?,
+         provider_status = ?,
+         status_reason = ?,
+         segment_count = ?,
+         estimated_credits = ?,
+         provider_response = ?,
+         sent_at = ?,
+         submitted_at = ?,
+         delivery_confirmed_at = ?,
+         last_status_at = ?
+     WHERE id = ?`,
+    [
+      updates.status,
+      updates.provider || null,
+      updates.senderId || null,
+      updates.providerMessageId || null,
+      updates.providerStatus || null,
+      updates.statusReason || null,
+      Math.max(Number(updates.segmentCount || 1), 1),
+      Math.max(Number(updates.estimatedCredits ?? updates.segmentCount ?? 1), 0),
+      safeJson(updates.providerResponse).slice(0, 12000),
+      isSubmissionAccepted(updates.status)
+        ? updates.submittedAt || new Date()
+        : null,
+      updates.submittedAt || null,
+      updates.status === "delivered"
+        ? updates.deliveryConfirmedAt || new Date()
+        : null,
+      new Date(),
+      logId,
     ]
   );
 }
 
-async function sendAndLogSms({ branchId, phone, message, smsType, sentBy }) {
+async function updateSmsLogSafely(logId, updates) {
+  try {
+    await updateSmsLog(logId, updates);
+    return null;
+  } catch (error) {
+    console.error("SMS evidence update failed:", error);
+    return error.message || "SMS evidence could not be updated.";
+  }
+}
+
+function smsResultHttpStatus(result) {
+  if (result?.status === "delivered") return 200;
+  if (isSubmissionAccepted(result?.status)) return 202;
+  return 400;
+}
+
+function smsResultApiStatus(result) {
+  if (result?.status === "delivered") return "success";
+  if (isSubmissionAccepted(result?.status)) return "accepted";
+  return "error";
+}
+
+function smsResultMessage(result) {
+  if (result?.message) return result.message;
+  if (result?.status === "delivered") return "SMS delivery confirmed.";
+  if (result?.status === "accepted") {
+    return "SMS accepted by the provider. Delivery has not yet been confirmed.";
+  }
+  if (result?.status === "delivery_unknown") {
+    return "SMS submission recorded, but delivery confirmation is unavailable.";
+  }
+  return "SMS submission failed.";
+}
+
+function secureTokenMatches(expected, actual) {
+  const expectedBuffer = Buffer.from(String(expected || ""));
+  const actualBuffer = Buffer.from(String(actual || ""));
+  return (
+    expectedBuffer.length > 0 &&
+    expectedBuffer.length === actualBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, actualBuffer)
+  );
+}
+
+async function sendAndLogSms({
+  branchId,
+  phone,
+  message,
+  smsType,
+  sentBy,
+  sourceReference = null,
+  originalLogId = null,
+  retryCount = 0,
+}) {
+  const config = getSmsConfig();
   const normalizedPhone = normalizeGhanaPhone(phone);
+  const metrics = estimateSmsSegments(message);
 
   if (!normalizedPhone) {
     const failureMessage = "Invalid Ghana phone number.";
-
-    await writeSmsLog({
+    const logId = await writeSmsLog({
       branchId,
       phone: phone || "",
       message,
       smsType,
       status: "failed",
-      providerResponse: {
-        error: failureMessage,
-      },
+      provider: config.provider,
+      senderId: config.senderId,
+      statusReason: failureMessage,
+      segmentCount: metrics.segment_count,
+      estimatedCredits: 0,
+      retryCount,
+      originalLogId,
+      sourceReference,
+      providerResponse: { error: failureMessage },
       sentBy,
     });
 
     return {
+      log_id: logId,
       phone,
       normalized_phone: "",
       status: "failed",
+      status_label: humanizeSmsStatus("failed"),
       message: failureMessage,
       status_code: null,
-      provider: null,
-      provider_response: {
-        error: failureMessage,
-      },
+      provider: config.provider,
+      sender_id: config.senderId,
+      provider_message_id: null,
+      provider_status: null,
+      segment_count: metrics.segment_count,
+      estimated_credits: 0,
+      provider_response: { error: failureMessage },
     };
   }
 
+  const pendingLogId = await writeSmsLog({
+    branchId,
+    phone: normalizedPhone,
+    message,
+    smsType,
+    status: "pending",
+    provider: config.provider,
+    senderId: config.senderId,
+    segmentCount: metrics.segment_count,
+    estimatedCredits: config.provider === "mock" ? 0 : metrics.estimated_credits,
+    retryCount,
+    originalLogId,
+    sourceReference,
+    providerResponse: { message: "Preparing provider submission." },
+    sentBy,
+  });
+
+  let result;
+
   try {
-    const result = await sendSms({
-      to: normalizedPhone,
-      message,
-    });
-
-    await writeSmsLog({
-      branchId,
-      phone: normalizedPhone,
-      message,
-      smsType,
-      status: "sent",
-      providerResponse: result.providerResponse,
-      sentBy,
-    });
-
-    return {
-      phone,
-      normalized_phone: normalizedPhone,
-      status: "sent",
-      message: "SMS sent successfully.",
-      provider: result.provider,
-      status_code: null,
-      provider_response: result.providerResponse || null,
-    };
+    result = await sendSms({ to: normalizedPhone, message });
   } catch (error) {
     const providerResponse = error.providerResponse || null;
     const failureMessage = error.message || "SMS failed.";
+    const submissionUncertain =
+      !error.statusCode ||
+      Number(error.statusCode) === 408 ||
+      /delivery is unknown|timed out|network error/i.test(
+        `${failureMessage} ${safeJson(providerResponse)}`
+      );
+    const finalStatus = submissionUncertain ? "delivery_unknown" : "failed";
+    const statusReason = submissionUncertain
+      ? `${failureMessage} Provider acceptance could not be confirmed. Check the provider dashboard before retrying.`
+      : failureMessage;
 
-    await writeSmsLog({
-      branchId,
-      phone: normalizedPhone,
-      message,
-      smsType,
-      status: "failed",
+    const logUpdateWarning = await updateSmsLogSafely(pendingLogId, {
+      status: finalStatus,
+      provider: error.provider || config.provider,
+      senderId: config.senderId,
+      providerMessageId: error.providerMessageId || null,
+      providerStatus: error.providerStatus || null,
+      statusReason,
+      segmentCount: metrics.segment_count,
+      estimatedCredits: submissionUncertain ? metrics.estimated_credits : 0,
       providerResponse: {
         error: failureMessage,
         statusCode: error.statusCode || null,
         provider: error.provider || null,
         providerResponse,
+        submissionUncertain,
       },
-      sentBy,
+      submittedAt: submissionUncertain ? new Date() : null,
     });
 
     return {
+      log_id: pendingLogId,
       phone,
       normalized_phone: normalizedPhone,
-      status: "failed",
-      message: failureMessage,
+      status: finalStatus,
+      status_label: humanizeSmsStatus(finalStatus),
+      message: submissionUncertain
+        ? "Provider acceptance could not be confirmed. Delivery is unknown; check the provider dashboard before retrying."
+        : failureMessage,
       status_code: error.statusCode || null,
-      provider: error.provider || null,
+      provider: error.provider || config.provider,
+      sender_id: config.senderId,
+      provider_message_id: error.providerMessageId || null,
+      provider_status: error.providerStatus || null,
+      segment_count: metrics.segment_count,
+      estimated_credits: submissionUncertain ? metrics.estimated_credits : 0,
       provider_response: providerResponse,
+      log_update_warning: logUpdateWarning,
     };
   }
+
+  const status = result.status || "delivery_unknown";
+  const statusReason =
+    status === "delivered"
+      ? "Provider reported delivery."
+      : status === "accepted"
+      ? "Provider accepted the SMS. Delivery has not yet been confirmed."
+      : "Delivery confirmation is unavailable.";
+
+  const logUpdateWarning = await updateSmsLogSafely(pendingLogId, {
+    status,
+    provider: result.provider,
+    senderId: result.senderId || config.senderId,
+    providerMessageId: result.providerMessageId,
+    providerStatus: result.providerStatus,
+    statusReason,
+    segmentCount: result.segmentCount || metrics.segment_count,
+    estimatedCredits:
+      result.estimatedCredits ??
+      (config.provider === "mock" ? 0 : metrics.estimated_credits),
+    providerResponse: result.providerResponse,
+    submittedAt: result.submittedAt || new Date(),
+    deliveryConfirmedAt: status === "delivered" ? new Date() : null,
+  });
+
+  return {
+    log_id: pendingLogId,
+    phone,
+    normalized_phone: normalizedPhone,
+    status,
+    status_label: humanizeSmsStatus(status),
+    message:
+      status === "delivered"
+        ? "SMS delivery confirmed."
+        : status === "accepted"
+        ? "SMS accepted by the provider. Delivery has not yet been confirmed."
+        : "SMS recorded, but delivery confirmation is unavailable.",
+    provider: result.provider,
+    sender_id: result.senderId || config.senderId,
+    provider_message_id: result.providerMessageId || null,
+    provider_status: result.providerStatus || null,
+    status_code: null,
+    segment_count: result.segmentCount || metrics.segment_count,
+    estimated_credits:
+      result.estimatedCredits ??
+      (config.provider === "mock" ? 0 : metrics.estimated_credits),
+    provider_response: result.providerResponse || null,
+    log_update_warning: logUpdateWarning,
+  };
 }
+
+router.post(
+  "/delivery-report",
+  deliveryReportLimiter,
+  asyncHandler(async (req, res) => {
+    const config = getSmsConfig();
+
+    if (!config.deliveryWebhookSecret) {
+      return res.status(503).json({
+        status: "error",
+        message: "SMS delivery-report webhook is not enabled.",
+      });
+    }
+
+    const suppliedToken =
+      req.headers["x-sms-webhook-secret"] || req.query.token || req.body?.token;
+
+    if (!secureTokenMatches(config.deliveryWebhookSecret, suppliedToken)) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid delivery-report token.",
+      });
+    }
+
+    const providerMessageId = extractProviderMessageId(req.body);
+    const providerStatus = extractProviderStatus(req.body);
+    const normalizedStatus = normalizeSmsDeliveryStatus(
+      providerStatus,
+      "delivery_unknown"
+    );
+
+    if (!providerMessageId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Delivery report does not contain a provider message ID.",
+      });
+    }
+
+    const [matchingLogs] = await runQuery(
+      `SELECT id, status
+       FROM sms_log
+       WHERE provider_message_id = ?`,
+      [providerMessageId]
+    );
+
+    let updatedRecords = 0;
+    let finalStatus = normalizedStatus;
+
+    for (const log of matchingLogs) {
+      finalStatus = applySmsStatusTransition(log.status, normalizedStatus);
+      const [result] = await runQuery(
+        `UPDATE sms_log
+         SET status = ?,
+             provider_status = ?,
+             status_reason = ?,
+             delivery_report_response = ?,
+             delivery_confirmed_at = CASE WHEN ? = 'delivered' THEN NOW() ELSE delivery_confirmed_at END,
+             last_status_at = NOW()
+         WHERE id = ?`,
+        [
+          finalStatus,
+          providerStatus || null,
+          `Provider delivery report: ${humanizeSmsStatus(finalStatus)}`,
+          safeJson(req.body).slice(0, 12000),
+          finalStatus,
+          log.id,
+        ]
+      );
+      updatedRecords += Number(result?.affectedRows || 0);
+    }
+
+    return res.json({
+      status: "success",
+      provider_message_id: providerMessageId,
+      delivery_status: finalStatus,
+      provider_report_status: normalizedStatus,
+      updated_records: updatedRecords,
+      matched: matchingLogs.length > 0,
+    });
+  })
+);
+
 router.get(
   "/status",
   requireAuth,
@@ -410,14 +723,14 @@ router.get(
       providerLabel = "Arkesel";
       modeTitle = "SMS MODE: ARKESEL LIVE";
       modeMessage = arkeselReady
-        ? "Live SMS is active. Real SMS will be sent and SMS credit will be used."
+        ? "Live SMS is active. Provider acceptance spends credit, but acceptance does not prove delivery to the phone."
         : "Arkesel is selected, but the API key or Sender ID is missing. Live SMS will fail until configured.";
       safetyLevel = arkeselReady ? "live" : "warning";
     } else if (isHubtel) {
       providerLabel = "Hubtel";
       modeTitle = "SMS MODE: HUBTEL LIVE";
       modeMessage = hubtelReady
-        ? "Live SMS is active. Real SMS will be sent and SMS credit will be used."
+        ? "Live SMS is active. Provider acceptance spends credit, but acceptance does not prove delivery to the phone."
         : "Hubtel is selected, but Client ID, Client Secret, or Sender ID is missing. Live SMS will fail until configured.";
       safetyLevel = hubtelReady ? "live" : "warning";
     } else if (!isMock) {
@@ -442,6 +755,10 @@ router.get(
         hubtel_ready: hubtelReady,
         supported_providers: ["mock", "arkesel", "hubtel"],
         live_bulk_confirmation_text: LIVE_BULK_CONFIRMATION_TEXT,
+        delivery_tracking_enabled: Boolean(config.deliveryWebhookSecret),
+        delivery_callback_ready: Boolean(config.deliveryWebhookSecret),
+        delivery_status_notice:
+          "Accepted by provider is not the same as delivered. Delivery is confirmed only after the provider is configured to send delivery reports to this system.",
       },
     });
   })
@@ -485,7 +802,7 @@ router.get(
 
     const [logs] = await runQuery(
       `
-        SELECT 
+        SELECT
           sl.id,
           sl.branch_id,
           b.branch_code,
@@ -494,8 +811,22 @@ router.get(
           sl.message,
           sl.sms_type,
           sl.status,
+          sl.provider,
+          sl.sender_id,
+          sl.provider_message_id,
+          sl.provider_status,
+          sl.status_reason,
+          sl.segment_count,
+          sl.estimated_credits,
+          sl.retry_count,
+          sl.original_log_id,
+          sl.source_reference,
           sl.provider_response,
+          sl.delivery_report_response,
           sl.sent_at,
+          sl.submitted_at,
+          sl.delivery_confirmed_at,
+          sl.last_status_at,
           sl.created_at,
           u.full_name AS sent_by_name,
           u.username AS sent_by_username
@@ -537,12 +868,14 @@ router.post(
       message,
       smsType: "other",
       sentBy,
+      sourceReference: "sms-test",
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
     });
   })
@@ -661,16 +994,14 @@ router.post(
       message: finalMessage,
       smsType: "receipt",
       sentBy,
+      sourceReference: `sale:${saleId}`,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "Receipt SMS sent successfully."
-          : result.message || "Receipt SMS failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
       sms_message: finalMessage,
     });
@@ -783,16 +1114,14 @@ router.post(
       message: finalMessage,
       smsType: "debt_reminder",
       sentBy,
+      sourceReference: `debt:${debtId}`,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "Debt reminder SMS sent successfully."
-          : result.message || "Debt reminder SMS failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
       sms_message: finalMessage,
     });
@@ -899,16 +1228,14 @@ router.post(
       message: finalMessage,
       smsType: "low_stock",
       sentBy,
+      sourceReference: `product:${productId}`,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "Low stock SMS alert sent successfully."
-          : result.message || "Low stock SMS alert failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
       sms_message: finalMessage,
       product,
@@ -1016,16 +1343,14 @@ router.post(
       message: finalMessage,
       smsType: "low_stock",
       sentBy,
+      sourceReference: `low-stock-all:${branchId}:${getTodayDateText()}`,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "All low stock SMS alert sent successfully."
-          : result.message || "Low stock SMS alert failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
       sms_message: finalMessage,
       branch_id: branchId,
@@ -1151,16 +1476,14 @@ router.post(
       message: finalMessage,
       smsType: "daily_summary",
       sentBy,
+      sourceReference: `daily-closing:${closing.id}`,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     return res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "Official Daily Closing summary SMS sent successfully."
-          : result.message || "Daily Closing summary SMS failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       result,
       sms_message: finalMessage,
       summary: {
@@ -1337,6 +1660,9 @@ router.post(
         message,
         smsType,
         sentBy,
+        sourceReference: recipient.id
+          ? `customer:${recipient.id}`
+          : `manual:${Date.now()}`,
       });
 
       results.push({
@@ -1346,21 +1672,45 @@ router.post(
       });
     }
 
-    const sentCount = results.filter(
-      (result) => result.status === "sent"
+    const deliveredCount = results.filter(
+      (result) => result.status === "delivered"
     ).length;
-
+    const acceptedCount = results.filter(
+      (result) => result.status === "accepted"
+    ).length;
+    const unknownCount = results.filter(
+      (result) => result.status === "delivery_unknown"
+    ).length;
     const failedCount = results.filter(
       (result) => result.status === "failed"
     ).length;
+    const submittedCount = deliveredCount + acceptedCount + unknownCount;
+    const estimatedCredits = results.reduce(
+      (total, result) => total + Number(result.estimated_credits || 0),
+      0
+    );
 
-    res.json({
-      status: failedCount === 0 ? "success" : "partial",
-      message: `SMS sending completed. Sent: ${sentCount}. Failed: ${failedCount}.`,
+    const responseStatus =
+      failedCount === results.length
+        ? "error"
+        : failedCount > 0
+        ? "partial"
+        : deliveredCount === results.length
+        ? "success"
+        : "accepted";
+
+    res.status(failedCount === results.length ? 400 : deliveredCount === results.length ? 200 : 202).json({
+      status: responseStatus,
+      message: `SMS submission completed. Accepted: ${acceptedCount}. Delivered: ${deliveredCount}. Delivery unknown: ${unknownCount}. Failed: ${failedCount}.`,
       branch_id: branchId,
       total_recipients: results.length,
-      sent_count: sentCount,
+      submitted_count: submittedCount,
+      sent_count: submittedCount,
+      accepted_count: acceptedCount,
+      delivered_count: deliveredCount,
+      delivery_unknown_count: unknownCount,
       failed_count: failedCount,
+      estimated_credits: estimatedCredits,
       results,
     });
   })
@@ -1391,6 +1741,9 @@ router.post(
           message,
           sms_type,
           status,
+          provider_message_id,
+          retry_count,
+          original_log_id,
           created_at
         FROM sms_log
         WHERE id = ?
@@ -1409,10 +1762,16 @@ router.post(
 
     const originalLog = logs[0];
 
-    if (String(originalLog.status || "").toLowerCase() !== "failed") {
+    const retryableStatuses = new Set(["failed", "undelivered", "expired"]);
+    const originalStatus = String(originalLog.status || "").toLowerCase();
+
+    if (!retryableStatuses.has(originalStatus)) {
       return res.status(400).json({
         status: "error",
-        message: "Only failed SMS messages can be retried.",
+        message:
+          originalStatus === "accepted" || originalStatus === "delivery_unknown"
+            ? "This SMS may already have used credit. Check the provider dashboard before retrying; accepted or unknown submissions are blocked from automatic resend."
+            : "Only failed, undelivered, or expired SMS messages can be retried.",
       });
     }
 
@@ -1436,16 +1795,16 @@ router.post(
       message: originalLog.message,
       smsType: originalLog.sms_type || "other",
       sentBy,
+      sourceReference: `retry:${originalLog.id}`,
+      originalLogId: originalLog.original_log_id || originalLog.id,
+      retryCount: Number(originalLog.retry_count || 0) + 1,
     });
 
-    const statusCode = result.status === "sent" ? 200 : 400;
+    const statusCode = smsResultHttpStatus(result);
 
     res.status(statusCode).json({
-      status: result.status === "sent" ? "success" : "error",
-      message:
-        result.status === "sent"
-          ? "SMS retry sent successfully."
-          : result.message || "SMS retry failed.",
+      status: smsResultApiStatus(result),
+      message: smsResultMessage(result),
       original_log_id: originalLog.id,
       result,
     });
