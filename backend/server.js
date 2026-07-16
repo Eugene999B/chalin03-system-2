@@ -47,6 +47,9 @@ const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
+const {
+  startSmsDeliveryStatusSync,
+} = require("./services/smsDeliveryStatusService");
 
 const app = express();
 
@@ -190,6 +193,7 @@ async function startServer() {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`🔐 Allowed frontend origins: ${allowedOrigins.join(", ")}`);
+      startSmsDeliveryStatusSync();
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);

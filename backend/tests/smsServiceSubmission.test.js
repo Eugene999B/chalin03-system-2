@@ -10,6 +10,8 @@ function withSmsEnvironment(callback) {
     "SMS_SENDER_ID",
     "SMS_ARKESEL_API_KEY",
     "SMS_ARKESEL_BASE_URL",
+    "SMS_DELIVERY_CALLBACK_URL",
+    "SMS_DELIVERY_WEBHOOK_SECRET",
     "SMS_TIMEOUT_MS",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -20,6 +22,9 @@ function withSmsEnvironment(callback) {
   process.env.SMS_SENDER_ID = "CHALIN 03";
   process.env.SMS_ARKESEL_API_KEY = "test-key";
   process.env.SMS_ARKESEL_BASE_URL = "https://example.test/sms";
+  process.env.SMS_DELIVERY_CALLBACK_URL =
+    "https://api.example.test/api/sms/delivery-report";
+  process.env.SMS_DELIVERY_WEBHOOK_SECRET = "test-webhook-secret";
   process.env.SMS_TIMEOUT_MS = "1000";
 
   return Promise.resolve()
@@ -55,6 +60,14 @@ test("Arkesel HTTP success is recorded as accepted, not delivered", async () => 
     assert.equal(result.providerMessageId, "ark-789");
     assert.deepEqual(requestBody.recipients, ["233241234567"]);
     assert.equal(requestBody.sender, "CHALIN 03");
+    assert.match(
+      requestBody.callback_url,
+      /^https:\/\/api\.example\.test\/api\/sms\/delivery-report\?token=/
+    );
+    assert.equal(
+      new URL(requestBody.callback_url).searchParams.get("token"),
+      "test-webhook-secret"
+    );
   });
 });
 

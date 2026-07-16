@@ -45,6 +45,7 @@ test("delivery report statuses remain explicit", () => {
   assert.equal(normalizeSmsDeliveryStatus("undelivered"), "undelivered");
   assert.equal(normalizeSmsDeliveryStatus("expired"), "expired");
   assert.equal(normalizeSmsDeliveryStatus("queued"), "accepted");
+  assert.equal(normalizeSmsDeliveryStatus("prohibited"), "undelivered");
   assert.equal(normalizeSmsDeliveryStatus("mystery"), "delivery_unknown");
 });
 

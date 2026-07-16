@@ -7,6 +7,8 @@ const {
 const DEFAULT_HUBTEL_BASE_URL = "https://smsc.hubtel.com/v1/messages/send";
 const DEFAULT_ARKESEL_BASE_URL = "https://sms.arkesel.com/api/v2/sms/send";
 const DEFAULT_SMS_TIMEOUT_MS = 15000;
+const DEFAULT_SMS_DELIVERY_CALLBACK_URL =
+  "https://api.chalin03.com/api/sms/delivery-report";
 
 function getSmsConfig() {
   return {
@@ -25,6 +27,10 @@ function getSmsConfig() {
     // Optional delivery-report callback protection.
     deliveryWebhookSecret: String(
       process.env.SMS_DELIVERY_WEBHOOK_SECRET || ""
+    ).trim(),
+    deliveryCallbackUrl: String(
+      process.env.SMS_DELIVERY_CALLBACK_URL ||
+        DEFAULT_SMS_DELIVERY_CALLBACK_URL
     ).trim(),
 
     // Hubtel kept as optional backup
@@ -265,6 +271,18 @@ async function postWithTimeout({ url, headers, payload, timeoutMs, provider }) {
   }
 }
 
+
+function buildArkeselCallbackUrl(config) {
+  if (!config.deliveryWebhookSecret || !config.deliveryCallbackUrl) {
+    return "";
+  }
+
+  const callbackUrl = new URL(config.deliveryCallbackUrl);
+  callbackUrl.searchParams.set("token", config.deliveryWebhookSecret);
+
+  return callbackUrl.toString();
+}
+
 async function sendArkeselSms({ config, to, message }) {
   validateArkeselConfig(config);
 
@@ -275,6 +293,11 @@ async function sendArkeselSms({ config, to, message }) {
     message,
     recipients: [providerRecipient],
   };
+  const callbackUrl = buildArkeselCallbackUrl(config);
+
+  if (callbackUrl) {
+    payload.callback_url = callbackUrl;
+  }
 
   const response = await postWithTimeout({
     url: config.arkeselBaseUrl,
