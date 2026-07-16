@@ -322,6 +322,30 @@ export default function Layout() {
           keywords: "backup restore database data safety full system",
         },
         {
+          title: "Security Centre",
+          description: "Sessions, locks, Break-Glass and privileged audit evidence",
+          path: "/security-centre",
+          icon: "🛡️",
+          keywords:
+            "security centre sessions locks login break glass privileged ledger recovery",
+        },
+        {
+          title: "Professional Backups",
+          description: "Module packages, manifests, checksums and verification",
+          path: "/professional-backups",
+          icon: "🔐",
+          keywords:
+            "professional backup manifest checksum verify full mining hire fleet workforce",
+        },
+        {
+          title: "Worker Profiles",
+          description: "Employees, assignments, licences, documents and property",
+          path: "/workers",
+          icon: "👷",
+          keywords:
+            "workers employees staff profiles assignments licences documents property workforce",
+        },
+        {
           title: "System Operations",
           description: "Health, readiness, diagnostics and local acceptance",
           path: "/system-operations",

@@ -81,6 +81,13 @@ const navigationSections = [
         icon: "\u{1F4CA}",
         permissions: ["operations.documents.view"],
       },
+      {
+        title: "Mining Workforce",
+        description: "Worker profiles, site assignments, licences and expiries",
+        path: "/mining/workers",
+        icon: "\u{1F477}",
+        permissions: ["workers.view"],
+      },
     ],
   },
   {

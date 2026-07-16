@@ -22,6 +22,17 @@ const newSale = read("src/pages/NewSalePage.jsx");
 const salesHistory = read("src/pages/SalesHistoryPage.jsx");
 const productsPage = read("src/pages/ProductsPage.jsx");
 const smsPage = read("src/pages/SmsPage.jsx");
+const ownerRecoveryPage = read("src/pages/OwnerRecoveryPage.jsx");
+const release2FinalControlPage = read(
+  "src/pages/Release2FinalControlPage.jsx"
+);
+const release2FinalCss = read("src/styles/release2Final.css");
+const expandedWorkerPage = read(
+  "src/pages/ExpandedWorkerProfilePage.jsx"
+);
+const expandedWorkerCss = read(
+  "src/styles/expandedWorkerProfile.css"
+);
 
 assert.match(indexHtml, /Chalin 03 Group Operations Platform/);
 assert.doesNotMatch(indexHtml, /https:\/\/chalin03\.com/);
@@ -35,6 +46,8 @@ assert.match(authContext, /hasPermission/);
 assert.match(authContext, /workspaceRole/);
 assert.match(authContext, /\/auth\/logout/);
 assert.match(axiosClient, /SESSION_REPLACED/);
+assert.match(axiosClient, /isOwnerRecoveryRequest/);
+assert.match(axiosClient, /\/owner-recovery/);
 assert.match(loginPage, /chalin03_login_notice/);
 assert.match(loginPage, /\/auth\/recovery\/request-otp/);
 assert.match(loginPage, /\/auth\/recovery\/reset-password/);
@@ -65,5 +78,38 @@ assert.match(smsPage, /\/sms\/logs\/archive/);
 assert.match(smsPage, /\/sms\/logs\/restore/);
 assert.match(smsPage, /\/sms\/logs\/delete-archived/);
 assert.doesNotMatch(smsPage, /"Updates automatically"/);
+assert.match(app, /OwnerRecoveryPage/);
+assert.match(app, /Release2FinalControlPage/);
+assert.match(app, /owner-recovery/);
+assert.match(app, /security-centre/);
+assert.match(app, /professional-backups/);
+assert.match(app, /executive\.operations\.view/);
+assert.match(ownerRecoveryPage, /Owner Break-Glass Recovery/);
+assert.match(ownerRecoveryPage, /reset-system-admin/);
+assert.match(release2FinalControlPage, /Protected Action Unlock/);
+assert.match(release2FinalControlPage, /Professional Backup Centre/);
+assert.match(release2FinalControlPage, /Worker Profile Foundation/);
+assert.match(release2FinalControlPage, /Executive Security, Backup &/);
+assert.match(release2FinalControlPage, /X-Protected-Action-Token/);
+assert.match(release2FinalControlPage, /Release 2 Final does not perform/);
+assert.match(release2FinalCss, /\.r2-owner-page/);
+assert.match(release2FinalCss, /\.r2-worker-shell/);
+assert.match(release2FinalControlPage, /ExpandedWorkerProfilePage/);
+assert.match(expandedWorkerPage, /Upload Photo/);
+assert.match(expandedWorkerPage, /Personal & National ID/);
+assert.match(expandedWorkerPage, /Family & Emergency/);
+assert.match(expandedWorkerPage, /GhanaPost digital address/);
+assert.match(expandedWorkerPage, /SSNIT number/);
+assert.match(expandedWorkerPage, /Private Worker Document/);
+assert.match(expandedWorkerPage, /X-Protected-Action-Token/);
+assert.match(expandedWorkerPage, /Print Full Profile/);
+assert.match(expandedWorkerPage, /Exact Card Size/);
+assert.match(expandedWorkerPage, /A4 Print Sheet/);
+assert.match(expandedWorkerPage, /id-card-pdf\?layout=card/);
+assert.match(expandedWorkerPage, /id-card-pdf\?layout=a4/);
+assert.match(expandedWorkerCss, /\.worker-print-pack-actions/);
+assert.match(expandedWorkerCss, /\.worker-print-choice-overlay/);
+assert.match(expandedWorkerCss, /\.expanded-worker-layout/);
+assert.match(expandedWorkerCss, /\.worker-profile-tabs/);
 
 console.log("PASS - frontend static source checks completed.");

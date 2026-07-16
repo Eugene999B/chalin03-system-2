@@ -1,0 +1,402 @@
+.r2-page {
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.r2-hero,
+.r2-owner-header {
+  position: relative;
+  overflow: hidden;
+  padding: 28px;
+  border-radius: 26px;
+  background:
+    linear-gradient(
+      135deg,
+      #07182c,
+      #123c66 55%,
+      #111827
+    );
+  color: #fff;
+  box-shadow:
+    0 24px 60px
+    rgba(7, 24, 44, 0.24);
+}
+
+.r2-hero {
+  margin-bottom: 18px;
+}
+
+.r2-hero p,
+.r2-owner-header p {
+  margin: 0;
+  color: #e0ba28;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.r2-hero h1,
+.r2-owner-header h1 {
+  margin: 7px 0;
+  font-size:
+    clamp(28px, 4vw, 48px);
+  line-height: 1.05;
+}
+
+.r2-hero span,
+.r2-owner-header span {
+  display: block;
+  max-width: 900px;
+  color:
+    rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+}
+
+.r2-alert {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.r2-alert.success {
+  background: #ecfdf3;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.r2-alert.error {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.r2-alert.warning {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.r2-metric-grid,
+.r2-detail-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(190px, 1fr)
+    );
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.r2-metric,
+.r2-detail-grid > div {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 14px 34px
+    rgba(15, 23, 42, 0.07);
+}
+
+.r2-metric span,
+.r2-detail-grid span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.r2-metric strong,
+.r2-detail-grid strong {
+  display: block;
+  margin: 7px 0;
+  color: #0f172a;
+  font-size: 25px;
+}
+
+.r2-metric small {
+  color: #64748b;
+}
+
+.r2-card {
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow:
+    0 16px 40px
+    rgba(15, 23, 42, 0.07);
+}
+
+.r2-card h2 {
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.r2-card p {
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.r2-card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.r2-form,
+.r2-form-grid,
+.r2-inline-form {
+  display: grid;
+  gap: 12px;
+}
+
+.r2-form-grid {
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(230px, 1fr)
+    );
+}
+
+.r2-inline-form {
+  grid-template-columns:
+    minmax(180px, 1fr)
+    auto;
+  align-items: end;
+}
+
+.r2-form label,
+.r2-form-grid label {
+  color: #334155;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.r2-form input,
+.r2-form-grid input,
+.r2-form-grid select,
+.r2-form-grid textarea,
+.r2-inline-form input {
+  margin-top: 6px;
+}
+
+.r2-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.r2-table-wrap table {
+  min-width: 760px;
+}
+
+.r2-table-wrap th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.r2-table-wrap td {
+  vertical-align: top;
+  border-bottom:
+    1px solid #e2e8f0;
+}
+
+.r2-table-wrap td small {
+  display: block;
+  margin-top: 4px;
+  max-width: 520px;
+  color: #64748b;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.r2-hash {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  font-family:
+    Consolas,
+    monospace;
+  font-size: 11px;
+}
+
+.r2-code {
+  max-height: 360px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #dbeafe;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.r2-loading {
+  padding: 34px;
+  border-radius: 20px;
+  background: #fff;
+  color: #334155;
+  font-weight: 900;
+  text-align: center;
+}
+
+.r2-owner-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(
+      circle at top right,
+      #1e3a5f,
+      transparent 45%
+    ),
+    #07111f;
+}
+
+.r2-owner-card {
+  width: min(920px, 100%);
+  padding: 20px;
+  border-radius: 28px;
+  background: #fff;
+  box-shadow:
+    0 30px 90px
+    rgba(0, 0, 0, 0.35);
+}
+
+.r2-owner-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.r2-owner-shield {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 18px;
+  background:
+    rgba(224, 186, 40, 0.16);
+  font-size: 32px;
+}
+
+.r2-worker-shell {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 320px)
+    minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.r2-worker-list {
+  position: sticky;
+  top: 20px;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.r2-worker-button {
+  width: 100%;
+  display: block;
+  margin-bottom: 8px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.r2-worker-button:hover,
+.r2-worker-button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  opacity: 1;
+}
+
+.r2-worker-button strong,
+.r2-worker-button span,
+.r2-worker-button small {
+  display: block;
+}
+
+.r2-worker-button small {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.r2-worker-main {
+  min-width: 0;
+}
+
+@media (
+  max-width: 900px
+) {
+  .r2-worker-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .r2-worker-list {
+    position: static;
+    max-height: 420px;
+  }
+}
+
+@media (
+  max-width: 640px
+) {
+  .r2-page {
+    padding-bottom: 24px;
+  }
+
+  .r2-hero,
+  .r2-owner-header,
+  .r2-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .r2-inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .r2-owner-page {
+    padding: 10px;
+  }
+
+  .r2-owner-card {
+    padding: 10px;
+    border-radius: 20px;
+  }
+
+  .r2-owner-header {
+    display: block;
+  }
+
+  .r2-owner-shield {
+    margin-bottom: 12px;
+  }
+}
