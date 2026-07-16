@@ -155,6 +155,98 @@ function requireSmsPermission(req, res, next) {
   next();
 }
 
+function requireSmsHistoryAdmin(req, res, next) {
+  const role = getUserRole(req);
+
+  if (role !== "admin") {
+    return res.status(403).json({
+      status: "error",
+      message: "Only an administrator can clear or restore SMS history.",
+    });
+  }
+
+  next();
+}
+
+function cleanSmsHistoryView(value) {
+  const view = String(value || "active").trim().toLowerCase();
+  return ["active", "archived", "all"].includes(view) ? view : "active";
+}
+
+async function updateSmsHistoryArchiveState({
+  branchId,
+  userId,
+  archive,
+  reason,
+}) {
+  const pool = db?.pool;
+
+  if (!pool || typeof pool.getConnection !== "function") {
+    throw new Error("Database transaction support is unavailable.");
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const whereSql = archive
+      ? "branch_id = ? AND archived_at IS NULL"
+      : "branch_id = ? AND archived_at IS NOT NULL";
+
+    const [result] = archive
+      ? await connection.execute(
+          `UPDATE sms_log
+           SET archived_at = NOW(),
+               archived_by = ?,
+               archive_reason = ?
+           WHERE ${whereSql}`,
+          [userId, reason, branchId]
+        )
+      : await connection.execute(
+          `UPDATE sms_log
+           SET archived_at = NULL,
+               archived_by = NULL,
+               archive_reason = NULL
+           WHERE ${whereSql}`,
+          [branchId]
+        );
+
+    const action = archive ? "SMS_HISTORY_ARCHIVED" : "SMS_HISTORY_RESTORED";
+    const details = JSON.stringify({
+      branch_id: branchId,
+      record_count: Number(result?.affectedRows || 0),
+      reason,
+    });
+
+    const affectedRows = Number(result?.affectedRows || 0);
+
+    if (affectedRows === 0) {
+      await connection.rollback();
+      return { affectedRows: 0 };
+    }
+
+    await connection.execute(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [branchId, userId, action, details]
+    );
+
+    await connection.commit();
+
+    return { affectedRows };
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Preserve the original transaction error.
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 function safeJson(value) {
   try {
     return JSON.stringify(value || {});
@@ -842,6 +934,22 @@ router.get(
   asyncHandler(async (req, res) => {
     const branchId = getBranchId(req);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const view = cleanSmsHistoryView(req.query.view);
+    const isAdmin = getUserRole(req) === "admin";
+
+    if (["archived", "all"].includes(view) && !isAdmin) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only an administrator can view archived SMS history.",
+      });
+    }
+
+    const archiveCondition =
+      view === "archived"
+        ? "sl.archived_at IS NOT NULL"
+        : view === "all"
+          ? "1 = 1"
+          : "sl.archived_at IS NULL";
 
     const [logs] = await runQuery(
       `
@@ -870,13 +978,20 @@ router.get(
           sl.submitted_at,
           sl.delivery_confirmed_at,
           sl.last_status_at,
+          sl.archived_at,
+          sl.archived_by,
+          sl.archive_reason,
           sl.created_at,
           u.full_name AS sent_by_name,
-          u.username AS sent_by_username
+          u.username AS sent_by_username,
+          archive_user.full_name AS archived_by_name,
+          archive_user.username AS archived_by_username
         FROM sms_log sl
         LEFT JOIN branches b ON sl.branch_id = b.id
         LEFT JOIN users u ON sl.sent_by = u.id
+        LEFT JOIN users archive_user ON sl.archived_by = archive_user.id
         WHERE sl.branch_id = ?
+          AND ${archiveCondition}
         ORDER BY sl.id DESC
         LIMIT ${limit}
       `,
@@ -886,8 +1001,88 @@ router.get(
     res.json({
       status: "success",
       branch_id: branchId,
+      view,
       count: logs.length,
       logs,
+    });
+  })
+);
+
+router.post(
+  "/logs/archive",
+  requireAuth,
+  requireSmsHistoryAdmin,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const userId = getUserId(req);
+    const confirmation = String(req.body?.confirmation || "")
+      .trim()
+      .toUpperCase();
+
+    if (confirmation !== "CLEAR SMS HISTORY") {
+      return res.status(400).json({
+        status: "error",
+        message: 'Type "CLEAR SMS HISTORY" to confirm.',
+      });
+    }
+
+    const reason =
+      String(req.body?.reason || "Cleared from the SMS Center")
+        .trim()
+        .slice(0, 255) || "Cleared from the SMS Center";
+
+    const result = await updateSmsHistoryArchiveState({
+      branchId,
+      userId,
+      archive: true,
+      reason,
+    });
+
+    res.json({
+      status: "success",
+      branch_id: branchId,
+      archived_count: result.affectedRows,
+      message:
+        result.affectedRows > 0
+          ? `${result.affectedRows} SMS record(s) cleared from the active history and preserved in Archived History.`
+          : "There are no active SMS records to clear.",
+    });
+  })
+);
+
+router.post(
+  "/logs/restore",
+  requireAuth,
+  requireSmsHistoryAdmin,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const userId = getUserId(req);
+    const confirmation = String(req.body?.confirmation || "")
+      .trim()
+      .toUpperCase();
+
+    if (confirmation !== "RESTORE SMS HISTORY") {
+      return res.status(400).json({
+        status: "error",
+        message: 'Type "RESTORE SMS HISTORY" to confirm.',
+      });
+    }
+
+    const result = await updateSmsHistoryArchiveState({
+      branchId,
+      userId,
+      archive: false,
+      reason: "Restored from Archived SMS History",
+    });
+
+    res.json({
+      status: "success",
+      branch_id: branchId,
+      restored_count: result.affectedRows,
+      message:
+        result.affectedRows > 0
+          ? `${result.affectedRows} archived SMS record(s) restored to active history.`
+          : "There are no archived SMS records to restore.",
     });
   })
 );

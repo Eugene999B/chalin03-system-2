@@ -1,3 +1,13 @@
+
+## Release 1.2 — SMS Delivery Report and Safe History Clearing
+
+- Recognizes Arkesel's live `message_status` field (`DELIVERED`, `SUBMITTED`, `NOT_DELIVERED`, and related states) during automatic status checks.
+- Keeps provider polling and callbacks automatic; staff do not confirm delivery manually.
+- Adds administrator-only **Clear SMS History**, which archives records from the active page rather than deleting audit evidence.
+- Adds **Archived History** viewing and controlled restoration.
+- Records clear and restore operations in the activity log.
+- Requires the additive `database/20260716_sms_report_and_history_archive_migration.sql` migration before deploying the Release 1.2 code.
+
 # Chalin 03 Group Operations Platform
 
 Production business-control platform for **Chalin 03 Company Limited**, prepared by **Eugene Amankwah Appiah**.

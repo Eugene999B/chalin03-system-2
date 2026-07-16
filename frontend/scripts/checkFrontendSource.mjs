@@ -37,5 +37,10 @@ assert.match(smsPage, /Accepted by provider/);
 assert.match(smsPage, /Delivery unknown/);
 assert.match(smsPage, /Do not retry/);
 assert.doesNotMatch(smsPage, /Sent SMS/);
+assert.match(smsPage, /Clear SMS History/);
+assert.match(smsPage, /View Archived/);
+assert.match(smsPage, /Restore Archived History/);
+assert.match(smsPage, /\/sms\/logs\/archive/);
+assert.match(smsPage, /\/sms\/logs\/restore/);
 
 console.log("PASS - frontend static source checks completed.");

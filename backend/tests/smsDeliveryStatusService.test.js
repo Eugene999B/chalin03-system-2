@@ -87,6 +87,24 @@ test("Arkesel report statuses are normalized without false delivery claims", () 
   );
 });
 
+test("live Arkesel message_status values are normalized correctly", () => {
+  assert.equal(
+    interpretArkeselReport("sms-live-1", { message_status: "DELIVERED" })
+      .normalized_status,
+    "delivered"
+  );
+  assert.equal(
+    interpretArkeselReport("sms-live-2", { message_status: "SUBMITTED" })
+      .normalized_status,
+    "accepted"
+  );
+  assert.equal(
+    interpretArkeselReport("sms-live-3", { message_status: "NOT_DELIVERED" })
+      .normalized_status,
+    "undelivered"
+  );
+});
+
 test("automatic polling is ready without requiring staff confirmation", () => {
   assert.equal(
     isAutomaticDeliveryReady({
