@@ -12,6 +12,8 @@ function read(relativePath) {
 const indexHtml = read("index.html");
 const app = read("src/App.jsx");
 const authContext = read("src/context/AuthContext.jsx");
+const axiosClient = read("src/api/axiosClient.js");
+const loginPage = read("src/pages/LoginPage.jsx");
 const newSale = read("src/pages/NewSalePage.jsx");
 const salesHistory = read("src/pages/SalesHistoryPage.jsx");
 const productsPage = read("src/pages/ProductsPage.jsx");
@@ -27,6 +29,9 @@ assert.match(app, /HIRE_SECTION_PERMISSIONS/);
 assert.match(authContext, /effective_permissions/);
 assert.match(authContext, /hasPermission/);
 assert.match(authContext, /workspaceRole/);
+assert.match(authContext, /\/auth\/logout/);
+assert.match(axiosClient, /SESSION_REPLACED/);
+assert.match(loginPage, /chalin03_login_notice/);
 assert.match(newSale, /QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST./);
 assert.match(salesHistory, /QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST./);
 assert.match(productsPage, /\/products\/\$\{restockProduct\.id\}\/restock/);

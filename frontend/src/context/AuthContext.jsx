@@ -213,13 +213,25 @@ export function AuthProvider({ children }) {
     setUser(normalizedUser);
   }
 
-  function logout() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+  async function logout() {
+    const hadToken = Boolean(localStorage.getItem(TOKEN_KEY));
 
-    setToken(null);
-    setUser(null);
-    setLoading(false);
+    try {
+      if (hadToken) {
+        await axiosClient.post("/auth/logout");
+      }
+    } catch {
+      // Local logout must still complete when the server session already ended.
+    } finally {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem("chalin03_active_context_mining");
+      localStorage.removeItem("chalin03_active_context_equipment_hire");
+
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+    }
   }
 
   async function login(credentialsOrUsername, password, branchId) {
