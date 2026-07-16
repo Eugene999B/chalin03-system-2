@@ -1021,7 +1021,7 @@ function buildReconciliation(summary, counted) {
     },
     {
       key: "other",
-      label: "Unallocated / Mixed",
+      label: "Other / Unallocated",
       expected: toMoney(summary.expected_other),
       counted: toMoney(counted.other),
     },

@@ -531,7 +531,7 @@ export default function DailyClosingPage() {
       },
       {
         key: "other",
-        label: "Unallocated / Mixed",
+        label: "Other / Unallocated",
         icon: "🔀",
         expected: expectedSnapshot.other,
         counted: counted.other,
