@@ -316,11 +316,11 @@ function isSubmissionAccepted(status) {
 function humanizeSmsStatus(status) {
   const labels = {
     pending: "Pending submission",
-    accepted: "Accepted by provider",
+    accepted: "Sent",
     delivered: "Delivered",
     undelivered: "Undelivered",
     expired: "Expired",
-    failed: "Failed",
+    failed: "Not sent",
     delivery_unknown: "Delivery unknown",
   };
 

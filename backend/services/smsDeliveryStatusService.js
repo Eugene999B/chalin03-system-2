@@ -12,7 +12,7 @@ const DEFAULT_CALLBACK_URL =
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const DEFAULT_INITIAL_DELAY_MS = 8_000;
 const DEFAULT_BATCH_SIZE = 200;
-const DEFAULT_LOOKBACK_HOURS = 720;
+const DEFAULT_LOOKBACK_HOURS = 24;
 const DEFAULT_MIN_STATUS_AGE_SECONDS = 30;
 const MAX_PROVIDER_RESPONSE_LENGTH = 12_000;
 
@@ -264,25 +264,39 @@ function interpretArkeselReport(providerMessageId, reportEntry) {
       entry.state ||
       ""
   ).trim();
+
+  const providerMessage = String(
+    entry.response || entry.message || entry.error || ""
+  ).trim();
+
+  const terminalLookupFailure =
+    /does not exist|not found/i.test(providerMessage);
+
   const lookupError =
     providerStatus.toLowerCase() === "error" ||
     Boolean(entry.error) ||
-    /does not exist|not found/i.test(String(entry.response || entry.message || ""));
+    terminalLookupFailure;
 
   if (lookupError) {
     return {
       provider_message_id: providerMessageId,
       has_report: true,
       lookup_error: true,
+      terminal_lookup_failure: terminalLookupFailure,
       provider_status: providerStatus || "error",
-      normalized_status: "delivery_unknown",
-      status_reason: `Automatic Arkesel status check could not confirm delivery: ${
-        entry.response || entry.message || entry.error || "message record unavailable"
-      }`,
+      normalized_status: terminalLookupFailure
+        ? "failed"
+        : "delivery_unknown",
+      status_reason: terminalLookupFailure
+        ? `Automatic Arkesel status check: Not sent (${
+            providerMessage || "message does not exist"
+          }).`
+        : `Automatic Arkesel status check could not confirm delivery: ${
+            providerMessage || "message record unavailable"
+          }`,
       provider_response: entry,
     };
   }
-
   const normalizedStatus = normalizeSmsDeliveryStatus(
     providerStatus,
     "delivery_unknown"
@@ -321,6 +335,7 @@ async function loadPendingArkeselLogs(config, database = null) {
      FROM sms_log
      WHERE LOWER(COALESCE(provider, '')) = 'arkesel'
        AND status IN ('pending', 'accepted', 'delivery_unknown')
+       AND archived_at IS NULL
        AND provider_message_id IS NOT NULL
        AND TRIM(provider_message_id) <> ''
        AND COALESCE(submitted_at, created_at) >= ?
@@ -339,7 +354,9 @@ async function updateAutomaticStatus({
   interpretation,
 }) {
   const finalStatus =
-    interpretation.lookup_error || !interpretation.has_report
+    !interpretation.has_report ||
+    (interpretation.lookup_error &&
+      !interpretation.terminal_lookup_failure)
       ? String(log.status || "delivery_unknown").toLowerCase()
       : applySmsStatusTransition(
           log.status,
