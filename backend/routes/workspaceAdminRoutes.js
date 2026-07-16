@@ -5,6 +5,9 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  resetAccountBySystemAdministrator,
+} = require("../services/accountRecoveryService");
 
 const router = express.Router();
 
@@ -254,6 +257,12 @@ async function getUserById(db, userId) {
        is_active,
        must_change_password,
        password_changed_at,
+       failed_login_attempts,
+       is_login_locked,
+       login_locked_at,
+       login_lock_reason,
+       last_failed_login_at,
+       last_failed_login_ip,
        created_by,
        created_at,
        updated_at
@@ -313,6 +322,12 @@ async function loadWorkspaceUsers(workspace) {
        u.is_active,
        u.must_change_password,
        u.password_changed_at,
+       u.failed_login_attempts,
+       u.is_login_locked,
+       u.login_locked_at,
+       u.login_lock_reason,
+       u.last_failed_login_at,
+       u.last_failed_login_ip,
        u.created_at,
        u.updated_at,
        uba.id AS access_id,
@@ -349,7 +364,20 @@ async function loadWorkspaceUsers(workspace) {
       assignable,
       effective_access: automaticAccess || booleanValue(user.can_access),
       can_access: automaticAccess ? true : booleanValue(user.can_access),
-      must_change_password: booleanValue(user.must_change_password),
+      must_change_password:
+        booleanValue(user.must_change_password),
+      failed_login_attempts:
+        Number(user.failed_login_attempts || 0),
+      is_login_locked:
+        booleanValue(user.is_login_locked),
+      login_locked_at:
+        user.login_locked_at || null,
+      login_lock_reason:
+        user.login_lock_reason || null,
+      last_failed_login_at:
+        user.last_failed_login_at || null,
+      last_failed_login_ip:
+        user.last_failed_login_ip || null,
       access_reason: automaticAccess
         ? "Group administrators have automatic access."
         : assignable
@@ -1200,76 +1228,65 @@ router.put("/staff/:userId", async (req, res) => {
 });
 
 // PATCH /api/workspace-admin/staff/:userId/password
-router.patch("/staff/:userId/password", async (req, res) => {
-  try {
-    const workspace = await getActiveWorkspace(req, res);
-    if (!workspace) return;
+router.patch(
+  "/staff/:userId/password",
+  async (req, res) => {
+    try {
+      const userId = positiveId(
+        req.params.userId
+      );
 
-    const userId = positiveId(req.params.userId);
-    const temporaryPassword = String(req.body.temporary_password || "");
-    const forcePasswordChange =
-      req.body.force_password_change === undefined
-        ? true
-        : booleanValue(req.body.force_password_change);
+      const temporaryPassword = String(
+        req.body.temporary_password || ""
+      );
 
-    if (!userId) {
-      throw clientError(400, "Invalid user ID.");
+      if (!userId) {
+        throw clientError(
+          400,
+          "Invalid user ID."
+        );
+      }
+
+      if (!temporaryPassword) {
+        throw clientError(
+          400,
+          "Temporary password is required."
+        );
+      }
+
+      const result =
+        await resetAccountBySystemAdministrator({
+          req,
+          targetUserId: userId,
+          newPassword: temporaryPassword,
+        });
+
+      return res.json({
+        status: "success",
+        message: result.message,
+        must_change_password: true,
+      });
+    } catch (error) {
+      console.error(
+        "Reset workspace staff password error:",
+        error.code || error.message
+      );
+
+      return res
+        .status(error.statusCode || 500)
+        .json({
+          status: "error",
+          code:
+            error.code ||
+            "ACCOUNT_RESET_FAILED",
+          message:
+            error.statusCode && error.statusCode < 500
+              ? error.message
+              : "Could not reset the user account.",
+        });
     }
-
-    if (!temporaryPassword) {
-      throw clientError(400, "Temporary password is required.");
-    }
-
-    const temporaryPasswordPolicyError = strongPasswordError(temporaryPassword);
-
-    if (temporaryPasswordPolicyError) {
-      throw clientError(400, temporaryPasswordPolicyError);
-    }
-
-    const user = await getUserById(pool, userId);
-
-    if (!user) {
-      throw clientError(404, "User account not found.");
-    }
-
-    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-    const passwordChangedAt = forcePasswordChange ? null : new Date();
-
-    const updateFields = [
-      "password_hash = ?",
-      "must_change_password = ?",
-      "password_changed_at = ?",
-    ];
-    const updateParams = [passwordHash, forcePasswordChange, passwordChangedAt];
-
-    if (await columnExists(pool, "users", "token_version")) {
-      updateFields.push("token_version = token_version + 1");
-    }
-
-    await pool.query(
-      `UPDATE users
-       SET ${updateFields.join(", ")}
-       WHERE id = ?`,
-      [...updateParams, user.id]
-    );
-
-    await logActivity(
-      req,
-      "RESET_WORKSPACE_STAFF_PASSWORD",
-      `Reset temporary password for ${workspace.name} user ${user.username}`
-    );
-
-    return res.json({
-      status: "success",
-      message: `Temporary password reset for ${user.full_name || user.username}.`,
-      must_change_password: forcePasswordChange,
-    });
-  } catch (error) {
-    console.error("Reset workspace staff password error:", error);
-    return sendRouteError(res, error, "Could not reset temporary password.");
   }
-});
-
+);
 // PATCH /api/workspace-admin/staff/:userId/status
 router.patch("/staff/:userId/status", async (req, res) => {
   try {

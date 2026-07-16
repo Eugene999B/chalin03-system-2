@@ -135,6 +135,28 @@ function getRoleLabel(role) {
   return getRoleCard(role).title;
 }
 
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) {
+    return "Temporary password must be at least 8 characters long.";
+  }
+
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Temporary password must include uppercase and lowercase letters.";
+  }
+
+  if (!/\d/.test(text)) {
+    return "Temporary password must include at least one number.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "Temporary password must include at least one symbol.";
+  }
+
+  return "";
+}
+
 export default function UsersSettingsPage() {
   const { user: currentUser } = useAuth();
 
@@ -206,6 +228,10 @@ export default function UsersSettingsPage() {
   }
 
   function canCurrentUserDeleteAccounts() {
+    return isOriginalSystemAdministrator(currentUser);
+  }
+
+  function canCurrentUserResetAccounts() {
     return isOriginalSystemAdministrator(currentUser);
   }
 
@@ -407,6 +433,21 @@ export default function UsersSettingsPage() {
   function openResetPassword(user) {
     setMessage("");
     setError("");
+
+    if (!canCurrentUserResetAccounts()) {
+      setError(
+        "Only the original System Administrator can unlock or reset user accounts."
+      );
+      return;
+    }
+
+    if (isOriginalSystemAdministrator(user)) {
+      setError(
+        "The original System Administrator requires Owner Break-Glass recovery in Release 2B."
+      );
+      return;
+    }
+
     setActivePanel("users");
 
     setResetPasswordForm({
@@ -558,8 +599,12 @@ export default function UsersSettingsPage() {
       return;
     }
 
-    if (resetPasswordForm.password.length < 6) {
-      setError("New password must be at least 6 characters long.");
+    const passwordPolicyError = strongPasswordError(
+      resetPasswordForm.password
+    );
+
+    if (passwordPolicyError) {
+      setError(passwordPolicyError);
       return;
     }
 
@@ -1819,11 +1864,11 @@ export default function UsersSettingsPage() {
       {resetPasswordForm.userId && (
         <div className="users-card users-reset-card">
           <div className="users-card-header">
-            <h2>Reset User Password</h2>
+            <h2>Unlock and Reset User Account</h2>
             <p>
-              Resetting password for {" "}
+              Resetting the account for{" "}
               <strong>{resetPasswordForm.fullName}</strong> (
-              {resetPasswordForm.username})
+              {resetPasswordForm.username}). Existing sessions will be revoked.
             </p>
           </div>
 
@@ -1835,6 +1880,7 @@ export default function UsersSettingsPage() {
                   <input
                     type="password"
                     name="password"
+                    minLength={8}
                     value={resetPasswordForm.password}
                     onChange={handleResetPasswordChange}
                     placeholder="Enter new temporary password"
@@ -1846,6 +1892,7 @@ export default function UsersSettingsPage() {
                   <input
                     type="password"
                     name="confirmPassword"
+                    minLength={8}
                     value={resetPasswordForm.confirmPassword}
                     onChange={handleResetPasswordChange}
                     placeholder="Confirm new temporary password"
@@ -1873,8 +1920,10 @@ export default function UsersSettingsPage() {
             </form>
 
             <div className="users-reset-warning">
-              After resetting, give the user this temporary password. Tell the
-              user to login and use <strong>Change Password</strong> immediately.
+              Only the original System Administrator may perform this action.
+              The account lock is cleared, all previous sessions are revoked,
+              and the user must change the temporary password immediately after
+              login. Never send the temporary password by SMS.
             </div>
           </div>
         </div>
@@ -1950,26 +1999,44 @@ export default function UsersSettingsPage() {
                           <td>{user.phone || "-"}</td>
 
                           <td>
-                            <span
-                              className={`users-status-badge ${
-                                user.is_active ? "active" : "disabled"
-                              }`}
-                            >
-                              {user.is_active ? "Active" : "Disabled"}
-                            </span>
+                            {user.is_login_locked ? (
+                              <>
+                                <span className="users-status-badge disabled">
+                                  Account Locked
+                                </span>
+                                <br />
+                                <small className="users-protected-note">
+                                  {Number(user.failed_login_attempts || 0)} failed
+                                  attempts
+                                </small>
+                              </>
+                            ) : (
+                              <span
+                                className={`users-status-badge ${
+                                  user.is_active ? "active" : "disabled"
+                                }`}
+                              >
+                                {user.is_active ? "Active" : "Disabled"}
+                              </span>
+                            )}
                           </td>
 
                           <td>{formatDate(user.created_at)}</td>
 
                           <td>
                             <div className="users-actions-row">
-                              <button
-                                type="button"
-                                className="users-small-button neutral"
-                                onClick={() => openResetPassword(user)}
-                              >
-                                Reset Password
-                              </button>
+                              {canCurrentUserResetAccounts() &&
+                                !protectedAdmin && (
+                                  <button
+                                    type="button"
+                                    className="users-small-button neutral"
+                                    onClick={() => openResetPassword(user)}
+                                  >
+                                    {user.is_login_locked
+                                      ? "Unlock & Reset"
+                                      : "Reset Password"}
+                                  </button>
+                                )}
 
                               <button
                                 type="button"

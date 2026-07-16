@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 import "../styles/workspaceAdministration.css";
 
 function apiMessage(error, fallback) {
@@ -34,6 +35,36 @@ function toPositiveNumber(value) {
 function activeContext(context, isMining) {
   if (!Number(context?.is_active)) return false;
   return isMining ? context.status === "active" : true;
+}
+
+function isOriginalSystemAdministrator(user) {
+  return (
+    Number(user?.id) === 1 &&
+    String(user?.username || "").toLowerCase() === "admin" &&
+    String(user?.role || "").toLowerCase() === "admin"
+  );
+}
+
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) {
+    return "Temporary password must be at least 8 characters.";
+  }
+
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Temporary password must include uppercase and lowercase letters.";
+  }
+
+  if (!/\d/.test(text)) {
+    return "Temporary password must include at least one number.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "Temporary password must include at least one symbol.";
+  }
+
+  return "";
 }
 
 function contextLabel(context) {
@@ -549,7 +580,8 @@ function StaffEditorForm({
                   temporary_password: event.target.value,
                 }))
               }
-              placeholder="Minimum 6 characters"
+              placeholder="8+ chars, upper/lower, number and symbol"
+              minLength={8}
               autoComplete="new-password"
               required
             />
@@ -813,7 +845,7 @@ function PasswordResetModal({
                   temporary_password: event.target.value,
                 }))
               }
-              minLength={6}
+              minLength={8}
               autoComplete="new-password"
               required
               autoFocus
@@ -831,7 +863,7 @@ function PasswordResetModal({
                   confirm_password: event.target.value,
                 }))
               }
-              minLength={6}
+              minLength={8}
               autoComplete="new-password"
               required
             />
@@ -922,6 +954,7 @@ function StaffDirectory({
   onResetPassword,
   onStatusChange,
   onWorkspaceAccess,
+  canResetAccounts,
 }) {
   const filteredUsers = users.filter((user) => {
     const query = filters.query.trim().toLowerCase();
@@ -1038,6 +1071,12 @@ function StaffDirectory({
                       Password change required
                     </span>
                   ) : null}
+
+                  {user.is_login_locked ? (
+                    <span className="workspace-admin-status is-inactive">
+                      Account locked
+                    </span>
+                  ) : null}
                 </div>
 
                 <dl className="workspace-staff-detail-list">
@@ -1091,14 +1130,19 @@ function StaffDirectory({
                   >
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    className="workspace-admin-btn workspace-admin-btn--ghost"
-                    onClick={() => onResetPassword(user)}
-                    disabled={actionSaving}
-                  >
-                    Reset password
-                  </button>
+                  {canResetAccounts &&
+                    !isOriginalSystemAdministrator(user) && (
+                      <button
+                        type="button"
+                        className="workspace-admin-btn workspace-admin-btn--ghost"
+                        onClick={() => onResetPassword(user)}
+                        disabled={actionSaving}
+                      >
+                        {user.is_login_locked
+                          ? "Unlock & reset"
+                          : "Reset password"}
+                      </button>
+                    )}
                   <button
                     type="button"
                     className="workspace-admin-btn workspace-admin-btn--ghost"
@@ -1264,7 +1308,10 @@ function ContextAccessMatrix({
 }
 
 export default function WorkspaceAdministrationPage({ workspace }) {
+  const { user: currentUser } = useAuth();
   const isMining = workspace === "mining";
+  const canResetAccounts =
+    isOriginalSystemAdministrator(currentUser);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1480,9 +1527,24 @@ export default function WorkspaceAdministrationPage({ workspace }) {
   }
 
   function openPasswordReset(user) {
+    setError("");
+
+    if (!canResetAccounts) {
+      setError(
+        "Only the original System Administrator can unlock or reset user accounts."
+      );
+      return;
+    }
+
+    if (isOriginalSystemAdministrator(user)) {
+      setError(
+        "The original System Administrator requires Owner Break-Glass recovery in Release 2B."
+      );
+      return;
+    }
+
     setPasswordResetUser(user);
     setPasswordResetForm(emptyPasswordResetForm);
-    setError("");
   }
 
   function closePasswordReset() {
@@ -1497,8 +1559,12 @@ export default function WorkspaceAdministrationPage({ workspace }) {
 
     if (!passwordResetUser) return;
 
-    if (passwordResetForm.temporary_password.length < 6) {
-      setError("Temporary password must be at least 6 characters.");
+    const passwordPolicyError = strongPasswordError(
+      passwordResetForm.temporary_password
+    );
+
+    if (passwordPolicyError) {
+      setError(passwordPolicyError);
       return;
     }
 
@@ -1780,21 +1846,24 @@ export default function WorkspaceAdministrationPage({ workspace }) {
           onResetPassword={openPasswordReset}
           onStatusChange={changeStatus}
           onWorkspaceAccess={toggleAccess}
+          canResetAccounts={canResetAccounts}
         />
       </section>
 
-      <PasswordResetModal
-        user={passwordResetUser}
-        form={passwordResetForm}
-        setForm={setPasswordResetForm}
-        saving={
-          Boolean(passwordResetUser) &&
-          Number(savingUserId) === Number(passwordResetUser?.id)
-        }
-        error={passwordResetUser ? error : ""}
-        onSubmit={submitPasswordReset}
-        onClose={closePasswordReset}
-      />
+      {canResetAccounts ? (
+        <PasswordResetModal
+          user={passwordResetUser}
+          form={passwordResetForm}
+          setForm={setPasswordResetForm}
+          saving={
+            Boolean(passwordResetUser) &&
+            Number(savingUserId) === Number(passwordResetUser?.id)
+          }
+          error={passwordResetUser ? error : ""}
+          onSubmit={submitPasswordReset}
+          onClose={closePasswordReset}
+        />
+      ) : null}
 
       {isMining ? (
         <MiningAdministration sites={sites} />

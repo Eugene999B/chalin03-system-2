@@ -144,6 +144,8 @@ app.get("/api", (req, res) => {
 app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/forgot-password", loginLimiter);
+app.use("/api/auth/recovery", loginLimiter);
 app.use("/api/backups/restore", sensitiveAdminLimiter);
 app.use("/api/users", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
