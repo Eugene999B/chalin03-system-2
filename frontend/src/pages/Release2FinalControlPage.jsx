@@ -232,6 +232,19 @@ function SecurityCentre() {
       confirm_password: "",
     });
 
+  const [
+    mfaEnrollment,
+    setMfaEnrollment,
+  ] = useState(null);
+
+  const [mfaCode, setMfaCode] =
+    useState("");
+
+  const [
+    recoveryCodes,
+    setRecoveryCodes,
+  ] = useState([]);
+
   const originalAdmin =
     Number(user?.id) === 1 &&
     String(
@@ -243,19 +256,68 @@ function SecurityCentre() {
     ).toLowerCase() ===
       "admin";
 
+  function protectedTokenReady() {
+    return Boolean(
+      token?.value &&
+        token.expiresAt >
+          Date.now()
+    );
+  }
+
+  function requireProtectedToken(
+    actionDescription
+  ) {
+    if (
+      protectedTokenReady()
+    ) {
+      return true;
+    }
+
+    setError(
+      "Unlock protected actions before " +
+        actionDescription +
+        "."
+    );
+
+    return false;
+  }
+
   async function load() {
     setLoading(true);
     setError("");
 
     try {
-      const response =
-        await axiosClient.get(
+      const [
+        overviewResponse,
+        ownerResponse,
+        historyResponse,
+      ] = await Promise.all([
+        axiosClient.get(
           "/release2-final/security/overview"
-        );
+        ),
+        axiosClient.get(
+          "/release2-final/security/owner-readiness"
+        ),
+        axiosClient.get(
+          "/release2-final/security/owner-login-history"
+        ),
+      ]);
 
-      setData(
-        response.data
-      );
+      setData({
+        ...overviewResponse.data,
+        break_glass:
+          ownerResponse.data
+            .owner ||
+          overviewResponse.data
+            .break_glass,
+        owner_security_readiness:
+          ownerResponse.data
+            .readiness,
+        owner_login_history:
+          historyResponse.data
+            .login_history ||
+          [],
+      });
     } catch (requestError) {
       setError(
         requestError.response
@@ -293,9 +355,9 @@ function SecurityCentre() {
         requestError.response
           ?.data?.verification
           ?.reason ||
-          requestError.response
-            ?.data?.message ||
-          "Privileged ledger verification failed."
+        requestError.response
+          ?.data?.message ||
+        "Privileged ledger verification failed."
       );
     }
   }
@@ -306,15 +368,13 @@ function SecurityCentre() {
     event.preventDefault();
     setError("");
     setMessage("");
+    setRecoveryCodes([]);
 
     if (
-      !token?.value ||
-      token.expiresAt <=
-        Date.now()
+      !requireProtectedToken(
+        "configuring Owner Break-Glass"
+      )
     ) {
-      setError(
-        "Unlock protected actions before configuring Owner Break-Glass."
-      );
       return;
     }
 
@@ -353,14 +413,255 @@ function SecurityCentre() {
         confirm_password: "",
       });
 
+      setMfaEnrollment(null);
+      setMfaCode("");
+
       await load();
     } catch (requestError) {
       setError(
         requestError.response
           ?.data?.message ||
-          "Owner Break-Glass configuration failed."
+        "Owner Break-Glass configuration failed."
       );
     }
+  }
+
+  async function startOwnerMfa() {
+    setError("");
+    setMessage("");
+    setRecoveryCodes([]);
+
+    if (
+      !requireProtectedToken(
+        "starting Owner MFA enrolment"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const response =
+        await axiosClient.post(
+          "/release2-final/security/break-glass/mfa/start",
+          {},
+          {
+            headers: {
+              "X-Protected-Action-Token":
+                token.value,
+            },
+          }
+        );
+
+      setMfaEnrollment({
+        token:
+          response.data
+            .enrollment_token,
+        manualSecret:
+          response.data
+            .manual_secret,
+        otpAuthUri:
+          response.data
+            .otpauth_uri,
+        ownerUsername:
+          response.data
+            .owner_username,
+        expiresInMinutes:
+          response.data
+            .expires_in_minutes,
+      });
+
+      setMfaCode("");
+
+      setMessage(
+        response.data.message
+      );
+    } catch (requestError) {
+      setError(
+        requestError.response
+          ?.data?.message ||
+        "Owner MFA enrolment could not be started."
+      );
+    }
+  }
+
+  async function confirmOwnerMfa(
+    event
+  ) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    if (
+      !requireProtectedToken(
+        "confirming Owner MFA"
+      )
+    ) {
+      return;
+    }
+
+    if (
+      !mfaEnrollment?.token
+    ) {
+      setError(
+        "Start Owner MFA enrolment first."
+      );
+      return;
+    }
+
+    if (
+      !/^\d{6}$/.test(
+        mfaCode
+      )
+    ) {
+      setError(
+        "Enter the current 6-digit authenticator code."
+      );
+      return;
+    }
+
+    try {
+      const response =
+        await axiosClient.post(
+          "/release2-final/security/break-glass/mfa/confirm",
+          {
+            enrollment_token:
+              mfaEnrollment.token,
+            mfa_code:
+              mfaCode,
+          },
+          {
+            headers: {
+              "X-Protected-Action-Token":
+                token.value,
+            },
+          }
+        );
+
+      setRecoveryCodes(
+        response.data
+          .recovery_codes ||
+        []
+      );
+
+      setMfaEnrollment(null);
+      setMfaCode("");
+
+      setMessage(
+        response.data.message
+      );
+
+      await load();
+    } catch (requestError) {
+      setError(
+        requestError.response
+          ?.data?.message ||
+        "Owner MFA confirmation failed."
+      );
+    }
+  }
+
+  async function rotateRecoveryCodes() {
+    setError("");
+    setMessage("");
+
+    if (
+      !requireProtectedToken(
+        "rotating recovery codes"
+      )
+    ) {
+      return;
+    }
+
+    const approved =
+      window.confirm(
+        "Generate new Owner recovery codes? All previous unused codes will become invalid."
+      );
+
+    if (!approved) {
+      return;
+    }
+
+    try {
+      const response =
+        await axiosClient.post(
+          "/release2-final/security/break-glass/recovery-codes/rotate",
+          {},
+          {
+            headers: {
+              "X-Protected-Action-Token":
+                token.value,
+            },
+          }
+        );
+
+      setRecoveryCodes(
+        response.data
+          .recovery_codes ||
+        []
+      );
+
+      setMessage(
+        response.data.message
+      );
+
+      await load();
+    } catch (requestError) {
+      setError(
+        requestError.response
+          ?.data?.message ||
+        "Recovery-code rotation failed."
+      );
+    }
+  }
+
+  function downloadRecoveryCodes() {
+    if (!recoveryCodes.length) {
+      return;
+    }
+
+    const content = [
+      "CHALIN 03 OWNER BREAK-GLASS RECOVERY CODES",
+      "Store securely outside the ordinary system.",
+      "Each code works only once.",
+      "",
+      ...recoveryCodes,
+    ].join("\n");
+
+    const blob =
+      new Blob(
+        [content],
+        {
+          type:
+            "text/plain;charset=utf-8",
+        }
+      );
+
+    const url =
+      window.URL
+        .createObjectURL(
+          blob
+        );
+
+    const link =
+      document.createElement(
+        "a"
+      );
+
+    link.href = url;
+    link.download =
+      "chalin03-owner-recovery-codes.txt";
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+    link.remove();
+
+    window.URL
+      .revokeObjectURL(
+        url
+      );
   }
 
   if (loading) {
@@ -371,11 +672,18 @@ function SecurityCentre() {
     );
   }
 
+  const readiness =
+    data
+      ?.owner_security_readiness;
+
+  const owner =
+    data?.break_glass;
+
   return (
     <div className="r2-page">
       <header className="r2-hero">
         <p>
-          Release 2B
+          Group Security
         </p>
 
         <h1>
@@ -384,9 +692,9 @@ function SecurityCentre() {
 
         <span>
           Sessions, account locks,
-          recovery evidence, security SMS
-          and tamper-evident privileged
-          actions.
+          Owner MFA, recovery evidence,
+          security SMS and tamper-evident
+          privileged actions.
         </span>
       </header>
 
@@ -456,14 +764,24 @@ function SecurityCentre() {
         />
 
         <Metric
-          label="Break-Glass"
+          label="Owner protection"
           value={
-            data?.break_glass
-              ?.id
-              ? "Ready"
-              : "Not configured"
+            readiness?.label ||
+            "Not configured"
           }
-          note="Separate owner recovery"
+          note={
+            readiness?.detail ||
+            "Separate owner emergency recovery"
+          }
+        />
+
+        <Metric
+          label="Unused recovery codes"
+          value={formatNumber(
+            readiness
+              ?.unused_recovery_codes
+          )}
+          note="One-time emergency codes"
         />
       </div>
 
@@ -473,119 +791,351 @@ function SecurityCentre() {
       />
 
       {originalAdmin ? (
-        <section className="r2-card">
-          <h2>
-            Owner Break-Glass Setup
-          </h2>
+        <>
+          <section className="r2-card">
+            <h2>
+              Owner Break-Glass Setup
+            </h2>
 
-          <p>
-            Configure a separate owner
-            credential. It must not reuse the
-            System Administrator username or
-            password.
-          </p>
+            <p>
+              Configure a separate owner
+              credential. Rotating the
+              credential disables its previous
+              MFA setup and invalidates previous
+              recovery codes.
+            </p>
 
-          <form
-            className="r2-form-grid"
-            onSubmit={setupOwner}
-          >
-            <label>
-              Separate owner username
-              <input
-                value={
-                  ownerForm.username
-                }
-                onChange={(event) =>
-                  setOwnerForm(
-                    (current) => ({
-                      ...current,
-                      username:
+            <form
+              className="r2-form-grid"
+              onSubmit={setupOwner}
+            >
+              <label>
+                Separate owner username
+                <input
+                  value={
+                    ownerForm.username
+                  }
+                  onChange={(event) =>
+                    setOwnerForm(
+                      (current) => ({
+                        ...current,
+                        username:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                Owner recovery phone
+                <input
+                  value={
+                    ownerForm.phone
+                  }
+                  onChange={(event) =>
+                    setOwnerForm(
+                      (current) => ({
+                        ...current,
+                        phone:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  required
+                />
+              </label>
+
+              <label>
+                Owner password
+                <input
+                  type="password"
+                  minLength={8}
+                  value={
+                    ownerForm.password
+                  }
+                  onChange={(event) =>
+                    setOwnerForm(
+                      (current) => ({
+                        ...current,
+                        password:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+
+              <label>
+                Confirm owner password
+                <input
+                  type="password"
+                  minLength={8}
+                  value={
+                    ownerForm
+                      .confirm_password
+                  }
+                  onChange={(event) =>
+                    setOwnerForm(
+                      (current) => ({
+                        ...current,
+                        confirm_password:
+                          event.target
+                            .value,
+                      })
+                    )
+                  }
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+
+              <button type="submit">
+                Configure / Rotate Break-Glass
+              </button>
+            </form>
+
+            <small>
+              Emergency page:
+              /owner-recovery. It is
+              intentionally absent from
+              ordinary staff navigation.
+            </small>
+          </section>
+
+          <section className="r2-card">
+            <div className="r2-card-heading">
+              <div>
+                <h2>
+                  Authenticator MFA Enrollment
+                </h2>
+
+                <p>
+                  Owner emergency login requires
+                  the owner password and either
+                  a current authenticator code
+                  or one unused recovery code.
+                </p>
+              </div>
+            </div>
+
+            <Alert
+              type={
+                readiness
+                  ?.fully_protected
+                  ? "success"
+                  : "warning"
+              }
+            >
+              {readiness?.detail ||
+                "Configure Owner Break-Glass first."}
+            </Alert>
+
+            {owner?.id ? (
+              <div
+                className="r2-inline-form"
+                style={{
+                  marginTop: "14px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={startOwnerMfa}
+                >
+                  {owner?.mfa_enabled
+                    ? "Restart Authenticator Enrollment"
+                    : "Start Authenticator Enrollment"}
+                </button>
+
+                {owner?.mfa_enabled ? (
+                  <button
+                    type="button"
+                    onClick={
+                      rotateRecoveryCodes
+                    }
+                  >
+                    Rotate Recovery Codes
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <Alert type="warning">
+                Configure the separate Owner
+                Break-Glass account first.
+              </Alert>
+            )}
+
+            {mfaEnrollment ? (
+              <div
+                className="r2-card"
+                style={{
+                  marginTop: "16px",
+                }}
+              >
+                <h3>
+                  Add account to authenticator
+                </h3>
+
+                <p>
+                  Add this account in Google
+                  Authenticator, Microsoft
+                  Authenticator, Authy or another
+                  standards-compatible TOTP app.
+                  This enrolment expires in{" "}
+                  {
+                    mfaEnrollment
+                      .expiresInMinutes
+                  }{" "}
+                  minutes.
+                </p>
+
+                <label>
+                  Account
+                  <input
+                    readOnly
+                    value={
+                      mfaEnrollment
+                        .ownerUsername ||
+                      ""
+                    }
+                  />
+                </label>
+
+                <label>
+                  Manual setup secret
+                  <input
+                    readOnly
+                    value={
+                      mfaEnrollment
+                        .manualSecret ||
+                      ""
+                    }
+                    style={{
+                      fontFamily:
+                        "monospace",
+                    }}
+                  />
+                </label>
+
+                <label>
+                  Authenticator setup URI
+                  <textarea
+                    readOnly
+                    rows={4}
+                    value={
+                      mfaEnrollment
+                        .otpAuthUri ||
+                      ""
+                    }
+                    style={{
+                      width: "100%",
+                      fontFamily:
+                        "monospace",
+                    }}
+                  />
+                </label>
+
+                <form
+                  className="r2-inline-form"
+                  onSubmit={
+                    confirmOwnerMfa
+                  }
+                >
+                  <input
+                    value={mfaCode}
+                    onChange={(event) =>
+                      setMfaCode(
                         event.target
-                          .value,
-                    })
-                  )
-                }
-                required
-              />
-            </label>
+                          .value
+                          .replace(
+                            /\D/g,
+                            ""
+                          )
+                          .slice(0, 6)
+                      )
+                    }
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="Current 6-digit code"
+                    maxLength={6}
+                    required
+                  />
 
-            <label>
-              Owner recovery phone
-              <input
-                value={
-                  ownerForm.phone
-                }
-                onChange={(event) =>
-                  setOwnerForm(
-                    (current) => ({
-                      ...current,
-                      phone:
-                        event.target
-                          .value,
-                    })
-                  )
-                }
-                required
-              />
-            </label>
+                  <button type="submit">
+                    Confirm and Enable MFA
+                  </button>
+                </form>
+              </div>
+            ) : null}
 
-            <label>
-              Owner password
-              <input
-                type="password"
-                minLength={8}
-                value={
-                  ownerForm.password
-                }
-                onChange={(event) =>
-                  setOwnerForm(
-                    (current) => ({
-                      ...current,
-                      password:
-                        event.target
-                          .value,
-                    })
-                  )
-                }
-                required
-              />
-            </label>
+            {recoveryCodes.length ? (
+              <div
+                className="r2-card"
+                style={{
+                  marginTop: "16px",
+                }}
+              >
+                <h3>
+                  Save Recovery Codes Now
+                </h3>
 
-            <label>
-              Confirm owner password
-              <input
-                type="password"
-                minLength={8}
-                value={
-                  ownerForm
-                    .confirm_password
-                }
-                onChange={(event) =>
-                  setOwnerForm(
-                    (current) => ({
-                      ...current,
-                      confirm_password:
-                        event.target
-                          .value,
-                    })
-                  )
-                }
-                required
-              />
-            </label>
+                <Alert type="warning">
+                  These one-time codes will not
+                  be displayed again after this
+                  page is closed. Store them
+                  securely outside the ordinary
+                  system.
+                </Alert>
 
-            <button type="submit">
-              Configure / Rotate Break-Glass
-            </button>
-          </form>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(150px, 1fr))",
+                    gap: "8px",
+                    margin:
+                      "14px 0",
+                  }}
+                >
+                  {recoveryCodes.map(
+                    (code) => (
+                      <code
+                        key={code}
+                        style={{
+                          padding:
+                            "10px",
+                          border:
+                            "1px solid rgba(127, 127, 127, 0.35)",
+                          borderRadius:
+                            "8px",
+                          textAlign:
+                            "center",
+                        }}
+                      >
+                        {code}
+                      </code>
+                    )
+                  )}
+                </div>
 
-          <small>
-            Emergency page:
-            /owner-recovery. It is
-            intentionally absent from
-            ordinary navigation.
-          </small>
-        </section>
+                <button
+                  type="button"
+                  onClick={
+                    downloadRecoveryCodes
+                  }
+                >
+                  Download Recovery Codes
+                </button>
+              </div>
+            ) : null}
+          </section>
+        </>
       ) : null}
 
       <section className="r2-card">
@@ -627,9 +1177,7 @@ function SecurityCentre() {
                 []
               ).map(
                 (item) => (
-                  <tr
-                    key={item.id}
-                  >
+                  <tr key={item.id}>
                     <td>
                       {formatDate(
                         item.created_at
@@ -650,6 +1198,86 @@ function SecurityCentre() {
                       {
                         item.event_hash
                       }
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="r2-card">
+        <h2>
+          Owner Login History
+        </h2>
+
+        <p>
+          Dedicated emergency-login evidence,
+          including outcome, factor method,
+          network address and device information.
+          Passwords and codes are never recorded.
+        </p>
+
+        <div className="r2-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Username attempted</th>
+                <th>Outcome</th>
+                <th>Second factor</th>
+                <th>Reason</th>
+                <th>Device evidence</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {(
+                data
+                  ?.owner_login_history ||
+                []
+              ).map(
+                (item) => (
+                  <tr key={item.id}>
+                    <td>
+                      {formatDate(
+                        item.created_at
+                      )}
+                    </td>
+
+                    <td>
+                      {item
+                        .username_attempted ||
+                        "-"}
+                    </td>
+
+                    <td>
+                      {item.outcome}
+                    </td>
+
+                    <td>
+                      {item
+                        .mfa_method ||
+                        "-"}
+                    </td>
+
+                    <td>
+                      {item
+                        .failure_reason ||
+                        "-"}
+                    </td>
+
+                    <td>
+                      <small>
+                        {item
+                          .ip_address ||
+                          "-"}
+                        <br />
+                        {item
+                          .user_agent ||
+                          "-"}
+                      </small>
                     </td>
                   </tr>
                 )
@@ -683,9 +1311,7 @@ function SecurityCentre() {
                 []
               ).map(
                 (item) => (
-                  <tr
-                    key={item.id}
-                  >
+                  <tr key={item.id}>
                     <td>
                       {item.full_name ||
                         item.username}
@@ -750,9 +1376,7 @@ function SecurityCentre() {
                 []
               ).map(
                 (item) => (
-                  <tr
-                    key={item.id}
-                  >
+                  <tr key={item.id}>
                     <td>
                       {formatDate(
                         item.created_at

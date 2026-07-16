@@ -54,20 +54,33 @@ function formatDate(value) {
 }
 
 export default function OwnerRecoveryPage() {
-  const [loginForm, setLoginForm] =
-    useState({
-      username: "",
-      password: "",
-    });
+  const [
+    loginForm,
+    setLoginForm,
+  ] = useState({
+    username: "",
+    password: "",
+    mfa_code: "",
+    recovery_code: "",
+  });
 
-  const [resetForm, setResetForm] =
-    useState({
-      temporary_password: "",
-      confirm_password: "",
-    });
+  const [
+    useRecoveryCode,
+    setUseRecoveryCode,
+  ] = useState(false);
 
-  const [ownerToken, setOwnerToken] =
-    useState("");
+  const [
+    resetForm,
+    setResetForm,
+  ] = useState({
+    temporary_password: "",
+    confirm_password: "",
+  });
+
+  const [
+    ownerToken,
+    setOwnerToken,
+  ] = useState("");
 
   const [events, setEvents] =
     useState(null);
@@ -84,8 +97,11 @@ export default function OwnerRecoveryPage() {
   async function loadEvents(
     token
   ) {
-    const response =
-      await axiosClient.get(
+    const [
+      eventsResponse,
+      historyResponse,
+    ] = await Promise.all([
+      axiosClient.get(
         "/release2-final/owner/events",
         {
           headers: {
@@ -93,11 +109,25 @@ export default function OwnerRecoveryPage() {
               token,
           },
         }
-      );
+      ),
+      axiosClient.get(
+        "/release2-final/owner/login-history",
+        {
+          headers: {
+            "X-Owner-Recovery-Token":
+              token,
+          },
+        }
+      ),
+    ]);
 
-    setEvents(
-      response.data
-    );
+    setEvents({
+      ...eventsResponse.data,
+      login_history:
+        historyResponse.data
+          .login_history ||
+        [],
+    });
   }
 
   async function loginOwner(
@@ -108,11 +138,52 @@ export default function OwnerRecoveryPage() {
     setError("");
     setMessage("");
 
+    if (
+      useRecoveryCode &&
+      !loginForm.recovery_code
+        .trim()
+    ) {
+      setLoading(false);
+      setError(
+        "Enter one unused emergency recovery code."
+      );
+      return;
+    }
+
+    if (
+      !useRecoveryCode &&
+      !/^\d{6}$/.test(
+        loginForm.mfa_code
+      )
+    ) {
+      setLoading(false);
+      setError(
+        "Enter the current 6-digit authenticator code."
+      );
+      return;
+    }
+
+    const payload = {
+      username:
+        loginForm.username,
+      password:
+        loginForm.password,
+      mfa_code:
+        useRecoveryCode
+          ? ""
+          : loginForm.mfa_code,
+      recovery_code:
+        useRecoveryCode
+          ? loginForm
+              .recovery_code
+          : "",
+    };
+
     try {
       const response =
         await axiosClient.post(
           "/release2-final/owner/login",
-          loginForm
+          payload
         );
 
       const token =
@@ -120,9 +191,12 @@ export default function OwnerRecoveryPage() {
           .owner_recovery_token;
 
       setOwnerToken(token);
+
       setLoginForm({
         username: "",
         password: "",
+        mfa_code: "",
+        recovery_code: "",
       });
 
       setMessage(
@@ -136,7 +210,7 @@ export default function OwnerRecoveryPage() {
       setError(
         requestError.response
           ?.data?.message ||
-          "Owner Break-Glass login failed."
+        "Owner Break-Glass login failed."
       );
     } finally {
       setLoading(false);
@@ -196,6 +270,7 @@ export default function OwnerRecoveryPage() {
 
       setOwnerToken("");
       setEvents(null);
+
       setResetForm({
         temporary_password: "",
         confirm_password: "",
@@ -204,7 +279,7 @@ export default function OwnerRecoveryPage() {
       setError(
         requestError.response
           ?.data?.message ||
-          "System Administrator recovery failed."
+        "System Administrator recovery failed."
       );
     } finally {
       setLoading(false);
@@ -216,7 +291,7 @@ export default function OwnerRecoveryPage() {
       <section className="r2-owner-card">
         <header className="r2-owner-header">
           <div className="r2-owner-shield">
-            🛡️
+            SECURE
           </div>
 
           <div>
@@ -231,8 +306,9 @@ export default function OwnerRecoveryPage() {
             <span>
               Emergency recovery for the
               original System Administrator.
-              This is not an ordinary staff
-              login.
+              This private page requires the
+              owner password and a second
+              security factor.
             </span>
           </div>
         </header>
@@ -297,6 +373,113 @@ export default function OwnerRecoveryPage() {
               />
             </label>
 
+            <label
+              style={{
+                display: "flex",
+                alignItems:
+                  "center",
+                gap: "9px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={
+                  useRecoveryCode
+                }
+                onChange={(event) => {
+                  setUseRecoveryCode(
+                    event.target
+                      .checked
+                  );
+
+                  setLoginForm(
+                    (current) => ({
+                      ...current,
+                      mfa_code: "",
+                      recovery_code:
+                        "",
+                    })
+                  );
+                }}
+                style={{
+                  width: "auto",
+                  margin: 0,
+                }}
+              />
+
+              <span>
+                Use emergency recovery code
+              </span>
+            </label>
+
+            {useRecoveryCode ? (
+              <label>
+                One-time recovery code
+                <input
+                  value={
+                    loginForm
+                      .recovery_code
+                  }
+                  onChange={(event) =>
+                    setLoginForm(
+                      (current) => ({
+                        ...current,
+                        recovery_code:
+                          event.target
+                            .value
+                            .toUpperCase()
+                            .replace(
+                              /[^A-Z0-9-]/g,
+                              ""
+                            )
+                            .slice(
+                              0,
+                              11
+                            ),
+                      })
+                    )
+                  }
+                  placeholder="ABCDE-12345"
+                  autoComplete="one-time-code"
+                  maxLength={11}
+                  required
+                />
+              </label>
+            ) : (
+              <label>
+                Authenticator code
+                <input
+                  value={
+                    loginForm
+                      .mfa_code
+                  }
+                  onChange={(event) =>
+                    setLoginForm(
+                      (current) => ({
+                        ...current,
+                        mfa_code:
+                          event.target
+                            .value
+                            .replace(
+                              /\D/g,
+                              ""
+                            )
+                            .slice(
+                              0,
+                              6
+                            ),
+                      })
+                    )
+                  }
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                />
+              </label>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -341,6 +524,7 @@ export default function OwnerRecoveryPage() {
                       })
                     )
                   }
+                  autoComplete="new-password"
                   required
                 />
               </label>
@@ -364,6 +548,7 @@ export default function OwnerRecoveryPage() {
                       })
                     )
                   }
+                  autoComplete="new-password"
                   required
                 />
               </label>
@@ -380,7 +565,88 @@ export default function OwnerRecoveryPage() {
 
             <section className="r2-card">
               <h2>
-                Serious security evidence
+                Owner Login Evidence
+              </h2>
+
+              <p>
+                Emergency-login evidence is
+                recorded independently. No
+                password, authenticator code or
+                recovery code is stored in this
+                history.
+              </p>
+
+              <div className="r2-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Outcome</th>
+                      <th>Factor</th>
+                      <th>Reason</th>
+                      <th>Device evidence</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {(
+                      events
+                        ?.login_history ||
+                      []
+                    ).map(
+                      (item) => (
+                        <tr
+                          key={
+                            item.id
+                          }
+                        >
+                          <td>
+                            {formatDate(
+                              item
+                                .created_at
+                            )}
+                          </td>
+
+                          <td>
+                            {
+                              item.outcome
+                            }
+                          </td>
+
+                          <td>
+                            {item
+                              .mfa_method ||
+                              "-"}
+                          </td>
+
+                          <td>
+                            {item
+                              .failure_reason ||
+                              "-"}
+                          </td>
+
+                          <td>
+                            <small>
+                              {item
+                                .ip_address ||
+                                "-"}
+                              <br />
+                              {item
+                                .user_agent ||
+                                "-"}
+                            </small>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="r2-card">
+              <h2>
+                Serious Security Evidence
               </h2>
 
               <p>
@@ -414,7 +680,8 @@ export default function OwnerRecoveryPage() {
                         >
                           <td>
                             {formatDate(
-                              item.created_at
+                              item
+                                .created_at
                             )}
                           </td>
 

@@ -1464,9 +1464,7 @@ export default function LoginPage() {
                   </div>
 
                   <div className="premium-warning-box">
-                    The original System Administrator is protected from this
-                    recovery method until the Owner Break-Glass feature is
-                    released.
+                    The original System Administrator cannot use ordinary SMS recovery. Use the separately protected Owner Break-Glass process for emergency administrator recovery.
                   </div>
 
                   <div className="premium-forgot-actions">
