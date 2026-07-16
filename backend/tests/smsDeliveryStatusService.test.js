@@ -78,13 +78,15 @@ test("Arkesel report statuses are normalized without false delivery claims", () 
       .normalized_status,
     "undelivered"
   );
-  assert.equal(
-    interpretArkeselReport("sms-4", {
-      status: "error",
-      response: "message does not exist",
-    }).lookup_error,
-    true
-  );
+  const missingReport = interpretArkeselReport("sms-4", {
+    status: "error",
+    response: "message does not exist",
+  });
+
+  assert.equal(missingReport.lookup_error, true);
+  assert.equal(missingReport.terminal_lookup_failure, true);
+  assert.equal(missingReport.normalized_status, "failed");
+  assert.match(missingReport.status_reason, /Not sent/i);
 });
 
 test("live Arkesel message_status values are normalized correctly", () => {

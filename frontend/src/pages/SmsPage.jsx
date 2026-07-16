@@ -260,6 +260,7 @@ export default function SmsPage() {
   const [smsStatus, setSmsStatus] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [logTotalCount, setLogTotalCount] = useState(0);
 
   const [targetType, setTargetType] = useState("single");
   const [manualPhone, setManualPhone] = useState("");
@@ -286,6 +287,8 @@ export default function SmsPage() {
   const [retryingLogId, setRetryingLogId] = useState(null);
   const [archivingHistory, setArchivingHistory] = useState(false);
   const [restoringHistory, setRestoringHistory] = useState(false);
+  const [deletingArchivedHistory, setDeletingArchivedHistory] =
+    useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -465,13 +468,13 @@ export default function SmsPage() {
   function formatSmsStatus(value) {
     const labels = {
       pending: "Pending submission",
-      accepted: "Accepted by provider",
+      accepted: "Sent",
       delivered: "Delivered",
       undelivered: "Undelivered",
       expired: "Expired",
-      failed: "Failed",
+      failed: "Not sent",
       delivery_unknown: "Delivery unknown",
-      sent: "Accepted (legacy)",
+      sent: "Sent (legacy)",
     };
 
     const status = String(value || "delivery_unknown").toLowerCase();
@@ -583,6 +586,13 @@ export default function SmsPage() {
       setSmsStatus(statusResponse.data.sms || null);
       setCustomers(customersResponse.data.customers || []);
       setLogs(logsResponse.data.logs || []);
+      setLogTotalCount(
+        Number(
+          logsResponse.data.total_count ??
+            logsResponse.data.count ??
+            (logsResponse.data.logs || []).length
+        )
+      );
     } catch (error) {
       setError(getFriendlyError(error, "Failed to load SMS page."));
     } finally {
@@ -691,6 +701,54 @@ export default function SmsPage() {
     }
   }
 
+  async function permanentlyDeleteArchivedSmsHistory() {
+    if (logTotalCount <= 0) {
+      setError("There are no archived SMS records to delete.");
+      setNotice("");
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `This permanently deletes ${logTotalCount} archived SMS record(s) for this store. Active SMS records will not be deleted. Type "DELETE ARCHIVED SMS" to continue.`
+    );
+
+    if (confirmation === null) return;
+
+    const finalConfirmed = window.confirm(
+      "Permanent deletion cannot be undone from the SMS page. A summary will remain in Activity Log. Continue?"
+    );
+
+    if (!finalConfirmed) return;
+
+    setDeletingArchivedHistory(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post(
+        "/sms/logs/delete-archived",
+        {
+          confirmation,
+        }
+      );
+
+      setNotice(
+        response.data.message ||
+          "Archived SMS history permanently deleted."
+      );
+
+      await loadSmsPageData({ silent: true });
+    } catch (error) {
+      setError(
+        getFriendlyError(
+          error,
+          "Failed to permanently delete archived SMS history."
+        )
+      );
+    } finally {
+      setDeletingArchivedHistory(false);
+    }
+  }
   async function retrySmsLog(logId) {
     const cleanLogId = Number(logId);
 
@@ -898,16 +956,14 @@ export default function SmsPage() {
       </div>
 
       <div className="warning-box">
-        Provider acceptance can use SMS credit, but it does not prove that the
-        recipient's phone received the message. Chalin 03 now checks Arkesel
-        automatically and updates Delivered, Undelivered or Expired without
-        staff calling customers or ticking a confirmation. Do not resend while
-        a message is Awaiting Delivery.
+        Sent means Arkesel accepted the SMS submission. Delivered appears only
+        when Arkesel confirms delivery to the phone. Chalin 03 checks Sent
+        records briefly in the background and stops checking terminal failures.
       </div>
 
       <div style={styles.metricsGrid}>
         <MetricCard label="Customers With Phone" value={customers.length} icon="👥" />
-        <MetricCard label="Accepted by Provider" value={smsDashboard.acceptedCount} icon="📤" />
+        <MetricCard label="Sent" value={smsDashboard.acceptedCount} icon="📤" />
         <MetricCard label="Delivered" value={smsDashboard.deliveredCount} icon="✅" />
         <MetricCard label="Unknown / Pending" value={smsDashboard.unknownCount} icon="⏳" />
         <MetricCard label="Failed / Undelivered" value={smsDashboard.failedCount} icon="⚠️" />
@@ -1213,7 +1269,7 @@ export default function SmsPage() {
             <p style={styles.eyebrowDark}>Message History</p>
             <h2 style={styles.panelTitle}>Recent SMS History</h2>
             <p style={styles.panelSubtitle}>
-              Delivery evidence updates automatically from Arkesel. Clear History safely archives records instead of deleting audit evidence.
+              Delivery evidence updates automatically from Arkesel for Sent records. Sent, Delivered and Not sent are shown clearly. Clear History archives records; administrators may restore or permanently delete archived records.
             </p>
           </div>
 
@@ -1252,14 +1308,37 @@ export default function SmsPage() {
             )}
 
             {isAdministrator && logView === "archived" && (
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={restoreSmsHistory}
-                disabled={restoringHistory || logs.length === 0}
-              >
-                {restoringHistory ? "Restoring..." : "Restore Archived History"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={restoreSmsHistory}
+                  disabled={
+                    restoringHistory ||
+                    deletingArchivedHistory ||
+                    logTotalCount === 0
+                  }
+                >
+                  {restoringHistory
+                    ? "Restoring..."
+                    : "Restore Archived History"}
+                </button>
+
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={permanentlyDeleteArchivedSmsHistory}
+                  disabled={
+                    deletingArchivedHistory ||
+                    restoringHistory ||
+                    logTotalCount === 0
+                  }
+                >
+                  {deletingArchivedHistory
+                    ? "Deleting..."
+                    : "Permanently Delete Archived SMS"}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1273,12 +1352,12 @@ export default function SmsPage() {
             >
               <option value="all">All statuses</option>
               <option value="pending">Pending submission</option>
-              <option value="accepted">Accepted by provider</option>
+              <option value="accepted">Sent</option>
               <option value="delivered">Delivered</option>
               <option value="delivery_unknown">Delivery unknown</option>
               <option value="undelivered">Undelivered</option>
               <option value="expired">Expired</option>
-              <option value="failed">Failed</option>
+              <option value="failed">Not sent</option>
             </select>
           </div>
 
@@ -1335,7 +1414,7 @@ export default function SmsPage() {
               const isFailedSms = ["failed", "undelivered", "expired"].includes(
                 normalizedStatus
               );
-              const canRetrySms = isFailedSms;
+              const canRetrySms = logView === "active" && isFailedSms;
 
               return (
                 <article
@@ -1432,8 +1511,12 @@ export default function SmsPage() {
                         {normalizedStatus === "delivered"
                           ? "Confirmed"
                           : normalizedStatus === "accepted"
-                            ? "Updates automatically"
-                            : "Do not retry yet"}
+                            ? "Sent"
+                            : ["failed", "undelivered", "expired"].includes(
+                                  normalizedStatus
+                                )
+                              ? "Not sent"
+                              : "Checking provider"}
                       </span>
                     )}
                   </div>

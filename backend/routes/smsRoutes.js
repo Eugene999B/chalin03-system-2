@@ -161,7 +161,7 @@ function requireSmsHistoryAdmin(req, res, next) {
   if (role !== "admin") {
     return res.status(403).json({
       status: "error",
-      message: "Only an administrator can clear or restore SMS history.",
+      message: "Only an administrator can clear, restore, or permanently delete archived SMS history.",
     });
   }
 
@@ -247,6 +247,119 @@ async function updateSmsHistoryArchiveState({
   }
 }
 
+async function permanentlyDeleteArchivedSmsHistory({
+  branchId,
+  userId,
+}) {
+  const pool = db?.pool;
+
+  if (!pool || typeof pool.getConnection !== "function") {
+    throw new Error("Database transaction support is unavailable.");
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [summaryRows] = await connection.execute(
+      `SELECT
+         COUNT(*) AS record_count,
+         MIN(created_at) AS oldest_created_at,
+         MAX(created_at) AS newest_created_at,
+         COALESCE(SUM(segment_count), 0) AS segment_count,
+         COALESCE(SUM(estimated_credits), 0) AS estimated_credits
+       FROM sms_log
+       WHERE branch_id = ?
+         AND archived_at IS NOT NULL`,
+      [branchId]
+    );
+
+    const summary = summaryRows[0] || {};
+    const recordCount = Number(summary.record_count || 0);
+
+    if (recordCount === 0) {
+      await connection.rollback();
+
+      return {
+        affectedRows: 0,
+        summary: {
+          record_count: 0,
+        },
+      };
+    }
+
+    const activityDetails = JSON.stringify({
+      branch_id: branchId,
+      record_count: recordCount,
+      oldest_created_at: summary.oldest_created_at || null,
+      newest_created_at: summary.newest_created_at || null,
+      segment_count: Number(summary.segment_count || 0),
+      estimated_credits: Number(summary.estimated_credits || 0),
+      confirmation: "DELETE ARCHIVED SMS",
+      scope: "archived_sms_only",
+    });
+
+    await connection.execute(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [
+        branchId,
+        userId,
+        "SMS_HISTORY_PERMANENTLY_DELETED",
+        activityDetails,
+      ]
+    );
+
+    await connection.execute(
+      `UPDATE sms_log child
+       JOIN sms_log archived
+         ON child.original_log_id = archived.id
+       SET child.original_log_id = NULL
+       WHERE archived.branch_id = ?
+         AND archived.archived_at IS NOT NULL`,
+      [branchId]
+    );
+
+    const [deleteResult] = await connection.execute(
+      `DELETE FROM sms_log
+       WHERE branch_id = ?
+         AND archived_at IS NOT NULL`,
+      [branchId]
+    );
+
+    const affectedRows = Number(deleteResult?.affectedRows || 0);
+
+    if (affectedRows !== recordCount) {
+      throw new Error(
+        `Archived SMS deletion count mismatch. Expected ${recordCount}, deleted ${affectedRows}.`
+      );
+    }
+
+    await connection.commit();
+
+    return {
+      affectedRows,
+      summary: {
+        record_count: recordCount,
+        oldest_created_at: summary.oldest_created_at || null,
+        newest_created_at: summary.newest_created_at || null,
+        segment_count: Number(summary.segment_count || 0),
+        estimated_credits: Number(summary.estimated_credits || 0),
+      },
+    };
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Preserve the original transaction error.
+    }
+
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
 function safeJson(value) {
   try {
     return JSON.stringify(value || {});
@@ -508,7 +621,7 @@ function smsResultMessage(result) {
   if (result?.message) return result.message;
   if (result?.status === "delivered") return "SMS delivery confirmed.";
   if (result?.status === "accepted") {
-    return "SMS accepted by the provider. Delivery has not yet been confirmed.";
+    return "SMS sent. Arkesel accepted the submission; delivery confirmation may follow automatically.";
   }
   if (result?.status === "delivery_unknown") {
     return "SMS submission recorded, but delivery confirmation is unavailable.";
@@ -658,7 +771,7 @@ async function sendAndLogSms({
     status === "delivered"
       ? "Provider reported delivery."
       : status === "accepted"
-      ? "Provider accepted the SMS. Delivery has not yet been confirmed."
+      ? "SMS sent. Provider accepted the submission."
       : "Delivery confirmation is unavailable.";
 
   const logUpdateWarning = await updateSmsLogSafely(pendingLogId, {
@@ -687,7 +800,7 @@ async function sendAndLogSms({
       status === "delivered"
         ? "SMS delivery confirmed."
         : status === "accepted"
-        ? "SMS accepted by the provider. Delivery has not yet been confirmed."
+        ? "SMS sent. Arkesel accepted the submission; delivery confirmation may follow automatically."
         : "SMS recorded, but delivery confirmation is unavailable.",
     provider: result.provider,
     sender_id: result.senderId || config.senderId,
@@ -951,6 +1064,16 @@ router.get(
           ? "1 = 1"
           : "sl.archived_at IS NULL";
 
+    const [countRows] = await runQuery(
+      `SELECT COUNT(*) AS total_count
+       FROM sms_log sl
+       WHERE sl.branch_id = ?
+         AND ${archiveCondition}`,
+      [branchId]
+    );
+
+    const totalCount = Number(countRows[0]?.total_count || 0);
+
     const [logs] = await runQuery(
       `
         SELECT
@@ -1003,6 +1126,7 @@ router.get(
       branch_id: branchId,
       view,
       count: logs.length,
+      total_count: totalCount,
       logs,
     });
   })
@@ -1087,6 +1211,41 @@ router.post(
   })
 );
 
+router.post(
+  "/logs/delete-archived",
+  requireAuth,
+  requireSmsHistoryAdmin,
+  asyncHandler(async (req, res) => {
+    const branchId = getBranchId(req);
+    const userId = getUserId(req);
+    const confirmation = String(req.body?.confirmation || "")
+      .trim()
+      .toUpperCase();
+
+    if (confirmation !== "DELETE ARCHIVED SMS") {
+      return res.status(400).json({
+        status: "error",
+        message: 'Type "DELETE ARCHIVED SMS" to confirm permanent deletion.',
+      });
+    }
+
+    const result = await permanentlyDeleteArchivedSmsHistory({
+      branchId,
+      userId,
+    });
+
+    res.json({
+      status: "success",
+      branch_id: branchId,
+      deleted_count: result.affectedRows,
+      deletion_summary: result.summary,
+      message:
+        result.affectedRows > 0
+          ? `${result.affectedRows} archived SMS record(s) permanently deleted. A deletion summary remains in Activity Log.`
+          : "There are no archived SMS records to delete.",
+    });
+  })
+);
 router.post(
   "/test",
   requireAuth,
