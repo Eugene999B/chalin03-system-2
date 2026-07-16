@@ -111,8 +111,17 @@ axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const statusCode = error.response?.status;
+    const errorCode = String(error.response?.data?.code || "");
+    const errorMessage = String(error.response?.data?.message || "");
 
     if (statusCode === 401) {
+      if (errorCode === "SESSION_REPLACED") {
+        sessionStorage.setItem(
+          "chalin03_login_notice",
+          errorMessage || "Your account was signed in on another device."
+        );
+      }
+
       localStorage.removeItem("chalin03_token");
       localStorage.removeItem("chalin03_user");
       localStorage.removeItem("chalin03_active_context_mining");

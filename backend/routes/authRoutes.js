@@ -11,6 +11,11 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const {
+  createSession,
+  revokeAllUserSessions,
+  revokeSession,
+} = require("../services/accountSessionService");
 
 const router = express.Router();
 
@@ -98,7 +103,7 @@ function boolValue(value) {
   return value === true || Number(value || 0) === 1;
 }
 
-function createToken(user, branch, workspace) {
+function createToken(user, branch, workspace, sessionId) {
   const branchCode = branch?.branch_code || branch?.code || null;
   const branchName = branch?.name || branch?.branch_name || null;
   const branchLocation = branch?.location || branch?.branch_location || null;
@@ -125,6 +130,7 @@ function createToken(user, branch, workspace) {
           ? boolValue(user.can_access_all_branches)
           : false,
       must_change_password: boolValue(user.must_change_password),
+      session_id: sessionId,
       token_version: Number(user.token_version || 0),
     },
     process.env.JWT_SECRET,
@@ -885,7 +891,20 @@ router.post("/login", async (req, res) => {
       selectedBranch = branchResult.branch;
     }
 
-    const token = createToken(user, selectedBranch, workspace);
+    const session = await createSession({
+      userId: user.id,
+      req,
+      workspaceCode: workspace.code,
+      branchId: selectedBranch?.id || null,
+    });
+
+    const token = createToken(
+      user,
+      selectedBranch,
+      workspace,
+      session.sessionId
+    );
+
     const loginContext = selectedBranch
       ? `${workspace.name} — ${selectedBranch.name}`
       : workspace.name;
@@ -893,8 +912,12 @@ router.post("/login", async (req, res) => {
     await writeActivityLog(
       selectedBranch?.id || null,
       user.id,
-      "LOGIN",
-      `${user.username} logged in successfully to ${loginContext}`
+      session.replacedSessionCount > 0
+        ? "LOGIN_SESSION_REPLACED"
+        : "LOGIN",
+      session.replacedSessionCount > 0
+        ? `${user.username} logged in to ${loginContext}; the previous device session was revoked`
+        : `${user.username} logged in successfully to ${loginContext}`
     );
 
     await recordSuccessfulLogin(req, user);
@@ -916,6 +939,42 @@ router.post("/login", async (req, res) => {
     return res.status(500).json({
       status: "error",
       message: "Something went wrong while logging in.",
+    });
+  }
+});
+
+// POST /api/auth/logout
+router.post("/logout", requireAuth, async (req, res) => {
+  try {
+    await revokeSession({
+      userId: req.user.id,
+      sessionId: req.user.session_id,
+      reason: "logout",
+    });
+
+    await writeAuditEvent({
+      req,
+      userId: req.user.id,
+      branchId: req.user.branch_id || null,
+      action: "LOGOUT",
+      actionType: "auth.logout",
+      outcome: "success",
+      severity: "info",
+      entityType: "user",
+      entityId: req.user.id,
+      details: "User logged out and the active server session was revoked.",
+    });
+
+    return res.json({
+      status: "success",
+      message: "Logged out successfully.",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message: "Something went wrong while logging out.",
     });
   }
 });
@@ -1097,6 +1156,8 @@ router.post("/change-password", requireAuth, async (req, res) => {
       [...updateParams, user.id]
     );
 
+    await revokeAllUserSessions(user.id, "password_changed");
+
     const workspaceCode =
       normalizeWorkspaceCode(req.user.workspace_code) ||
       DEFAULT_WORKSPACE_CODE;
@@ -1136,12 +1197,9 @@ router.post("/change-password", requireAuth, async (req, res) => {
         ? Number(user.token_version || 0) + 1
         : Number(user.token_version || 0),
     };
-    const token = createToken(updatedUser, selectedBranch, workspace);
-
     return res.json({
       status: "success",
       message: "Password changed successfully.",
-      token,
       user: buildUserResponse(updatedUser, selectedBranch, workspace),
     });
   } catch (error) {

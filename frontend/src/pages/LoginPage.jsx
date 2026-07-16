@@ -74,6 +74,15 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const loginNotice = sessionStorage.getItem("chalin03_login_notice");
+
+    if (loginNotice) {
+      setError(loginNotice);
+      sessionStorage.removeItem("chalin03_login_notice");
+    }
+  }, []);
+
   const selectedBranch = useMemo(() => {
     return branches.find(
       (branch) => getBranchId(branch) === Number(selectedBranchId)

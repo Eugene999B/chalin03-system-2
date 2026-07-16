@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/db");
 const { getEffectivePermissions } = require("../security/permissionCatalog");
+const { validateSession } = require("../services/accountSessionService");
 
 const tableColumnCache = new Map();
 
@@ -105,9 +106,26 @@ async function requireAuth(req, res, next) {
       });
     }
 
+    const sessionState = await validateSession({
+      userId: decoded.id,
+      sessionId: decoded.session_id,
+    });
+
+    if (!sessionState.ok) {
+      return res.status(sessionState.statusCode || 401).json({
+        status: "error",
+        code: sessionState.code || "SESSION_REVOKED",
+        message:
+          sessionState.message ||
+          "Your secure session is no longer active. Please login again.",
+        request_id: req.requestId || null,
+      });
+    }
+
     req.user = {
       ...decoded,
       token_version: currentTokenVersion,
+      session_id: sessionState.session.session_id,
     };
     req.user.effective_permissions = getEffectivePermissions(req.user);
 
