@@ -10,6 +10,13 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  MOVEMENT_TYPES,
+  calculateStockAfter,
+  movementLabel,
+  normalizeMovementType,
+  validateMovementCompatibility,
+} = require("../services/stockMovementService");
 
 const router = express.Router();
 
@@ -51,6 +58,36 @@ function toSafeLimit(value, fallback = 50) {
   }
 
   return Math.min(number, 200);
+}
+
+function toOptionalMoney(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  return toMoney(value);
+}
+
+function toMovementDate(value) {
+  const cleanValue = String(value || "").trim();
+
+  if (!cleanValue) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanValue)) {
+    return null;
+  }
+
+  const parsed = new Date(`${cleanValue}T00:00:00Z`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10) === cleanValue
+    ? cleanValue
+    : null;
 }
 
 
@@ -317,10 +354,18 @@ router.get(
           sa.branch_id,
           sa.product_id,
           sa.adjustment_type,
+          sa.movement_type,
           sa.quantity,
           sa.old_quantity,
           sa.new_quantity,
           sa.reason,
+          sa.source_name,
+          sa.reference_number,
+          sa.unit_cost,
+          sa.cost_price_before,
+          sa.cost_price_after,
+          sa.movement_date,
+          sa.notes,
           sa.adjusted_at,
 
           b.branch_code,
@@ -434,10 +479,16 @@ router.get(
         `SELECT
           sa.id,
           sa.adjustment_type,
+          sa.movement_type,
           sa.quantity,
           sa.old_quantity,
           sa.new_quantity,
           sa.reason,
+          sa.source_name,
+          sa.reference_number,
+          sa.unit_cost,
+          sa.movement_date,
+          sa.notes,
           sa.adjusted_at,
           u.full_name AS adjusted_by_name
          FROM stock_adjustments sa
@@ -455,11 +506,31 @@ router.get(
         const newQuantity = toLedgerNumber(adjustment.new_quantity);
         const changeQuantity = newQuantity - oldQuantity;
 
+        const movementType = normalizeMovementType(
+          adjustment.movement_type,
+          adjustment.adjustment_type === "increase"
+            ? MOVEMENT_TYPES.CORRECTION_INCREASE
+            : adjustment.adjustment_type === "decrease"
+              ? MOVEMENT_TYPES.CORRECTION_DECREASE
+              : MOVEMENT_TYPES.PHYSICAL_COUNT
+        );
+        const detailParts = [adjustment.reason, adjustment.notes]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean);
+
+        if (adjustment.source_name) {
+          detailParts.push(`Source: ${adjustment.source_name}`);
+        }
+
+        if (adjustment.unit_cost !== null && adjustment.unit_cost !== undefined) {
+          detailParts.push(`Unit cost: GHS ${Number(adjustment.unit_cost).toFixed(2)}`);
+        }
+
         addLedgerEntry({
-          date: adjustment.adjusted_at,
-          movement_type: `Stock Adjustment - ${adjustment.adjustment_type}`,
-          reference: `ADJ-${adjustment.id}`,
-          details: adjustment.reason || "",
+          date: adjustment.movement_date || adjustment.adjusted_at,
+          movement_type: movementLabel(movementType),
+          reference: adjustment.reference_number || `ADJ-${adjustment.id}`,
+          details: detailParts.join(" • "),
           change_quantity: changeQuantity,
           quantity_before: oldQuantity,
           quantity_after: newQuantity,
@@ -916,10 +987,18 @@ router.get(
           sa.branch_id,
           sa.product_id,
           sa.adjustment_type,
+          sa.movement_type,
           sa.quantity,
           sa.old_quantity,
           sa.new_quantity,
           sa.reason,
+          sa.source_name,
+          sa.reference_number,
+          sa.unit_cost,
+          sa.cost_price_before,
+          sa.cost_price_after,
+          sa.movement_date,
+          sa.notes,
           sa.adjusted_at,
           u.full_name AS adjusted_by_name
          FROM stock_adjustments sa
@@ -1012,6 +1091,8 @@ router.post(
   requireAuth,
   requireRole("admin", "manager"),
   async (req, res) => {
+    const connection = await pool.getConnection();
+
     try {
       const branchId = requireSelectedBranch(req, res);
 
@@ -1064,7 +1145,7 @@ router.post(
       if (productQuantity === null) {
         return res.status(400).json({
           status: "error",
-          message: "Quantity must be a whole number and cannot be negative.",
+          message: "Opening quantity must be a whole number and cannot be negative.",
         });
       }
 
@@ -1076,7 +1157,9 @@ router.post(
         });
       }
 
-      const [result] = await pool.query(
+      await connection.beginTransaction();
+
+      const [result] = await connection.query(
         `INSERT INTO products (
           branch_id,
           name,
@@ -1106,12 +1189,57 @@ router.post(
         ]
       );
 
-      await logActivity(
+      if (productQuantity > 0) {
+        await connection.query(
+          `INSERT INTO stock_adjustments (
+            branch_id,
+            product_id,
+            adjustment_type,
+            movement_type,
+            quantity,
+            old_quantity,
+            new_quantity,
+            reason,
+            unit_cost,
+            cost_price_before,
+            cost_price_after,
+            movement_date,
+            notes,
+            adjusted_by
+          )
+          VALUES (?, ?, 'set', ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            branchId,
+            result.insertId,
+            MOVEMENT_TYPES.OPENING_BALANCE,
+            productQuantity,
+            productQuantity,
+            "Opening quantity recorded when product was created",
+            costPrice,
+            costPrice,
+            costPrice,
+            new Date().toISOString().slice(0, 10),
+            "System-created opening balance record",
+            req.user.id,
+          ]
+        );
+      }
+
+      await writeAuditEvent({
+        connection,
         branchId,
-        req.user.id,
-        "CREATE_PRODUCT",
-        `Created product "${cleanName}" with quantity ${productQuantity}`
-      );
+        userId: req.user.id,
+        action: "CREATE_PRODUCT",
+        details: `Created product "${cleanName}" with opening quantity ${productQuantity}`,
+        workspaceCode: "spare_parts",
+        entityType: "product",
+        entityId: String(result.insertId),
+        actionType: "CREATE_PRODUCT",
+        outcome: "success",
+        severity: "notice",
+      });
+
+      await connection.commit();
 
       const [products] = await pool.query(
         `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
@@ -1120,11 +1248,15 @@ router.post(
 
       return res.status(201).json({
         status: "success",
-        message: "Product created successfully.",
+        message:
+          productQuantity > 0
+            ? "Product created successfully with an opening stock record."
+            : "Product created successfully.",
         branch_id: branchId,
         product: products[0],
       });
     } catch (error) {
+      await connection.rollback();
       console.error("Create product error:", error);
 
       if (error.code === "ER_DUP_ENTRY") {
@@ -1138,6 +1270,8 @@ router.post(
         status: "error",
         message: "Something went wrong while creating the product.",
       });
+    } finally {
+      connection.release();
     }
   }
 );
@@ -1156,7 +1290,6 @@ router.put(
       }
 
       const { id } = req.params;
-
       const {
         name,
         size,
@@ -1182,6 +1315,8 @@ router.put(
         });
       }
 
+      const existingProduct = existingProducts[0];
+
       if (!name || !name.trim()) {
         return res.status(400).json({
           status: "error",
@@ -1192,19 +1327,34 @@ router.put(
       const cleanName = name.trim();
       const costPrice = toMoney(cost_price);
       const sellingPrice = toMoney(selling_price);
-      const productQuantity = toNonNegativeInt(Number(quantity));
       const lowStockThreshold = toNonNegativeInt(Number(low_stock_threshold));
 
       if (
         costPrice === null ||
         sellingPrice === null ||
-        productQuantity === null ||
         lowStockThreshold === null
       ) {
         return res.status(400).json({
           status: "error",
-          message: "Please check price, quantity and low-stock values.",
+          message: "Please check price and low-stock threshold values.",
         });
+      }
+
+      if (quantity !== undefined && quantity !== null && quantity !== "") {
+        const submittedQuantity = toNonNegativeInt(Number(quantity));
+
+        if (
+          submittedQuantity === null ||
+          submittedQuantity !== Number(existingProduct.quantity || 0)
+        ) {
+          return res.status(409).json({
+            status: "error",
+            code: "STOCK_CHANGE_REQUIRES_MOVEMENT",
+            message:
+              "Product details cannot directly change stock. Use Receive / Restock for new stock or Adjust Stock for a correction.",
+            current_quantity: Number(existingProduct.quantity || 0),
+          });
+        }
       }
 
       await pool.query(
@@ -1215,7 +1365,6 @@ router.put(
           category = ?,
           cost_price = ?,
           selling_price = ?,
-          quantity = ?,
           low_stock_threshold = ?,
           barcode = ?,
           image_url = ?,
@@ -1228,7 +1377,6 @@ router.put(
           nullIfEmpty(category),
           costPrice,
           sellingPrice,
-          productQuantity,
           lowStockThreshold,
           nullIfEmpty(barcode),
           nullIfEmpty(image_url),
@@ -1241,8 +1389,10 @@ router.put(
       await logActivity(
         branchId,
         req.user.id,
-        "UPDATE_PRODUCT",
-        `Updated product "${cleanName}" with ID ${id}`
+        "UPDATE_PRODUCT_DETAILS",
+        `Updated details for product "${cleanName}" with ID ${id}; stock remained ${Number(
+          existingProduct.quantity || 0
+        )}`
       );
 
       const [products] = await pool.query(
@@ -1252,7 +1402,7 @@ router.put(
 
       return res.json({
         status: "success",
-        message: "Product updated successfully.",
+        message: "Product details updated successfully. Stock was not changed.",
         branch_id: branchId,
         product: products[0],
       });
@@ -1274,6 +1424,205 @@ router.put(
   }
 );
 
+// POST /api/products/:id/restock
+router.post(
+  "/:id/restock",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+      const branchId = requireSelectedBranch(req, res);
+
+      if (!branchId) {
+        return;
+      }
+
+      const { id } = req.params;
+      const {
+        quantity,
+        source_name,
+        reference_number,
+        unit_cost,
+        movement_date,
+        notes,
+        update_cost_price,
+      } = req.body;
+
+      const receivedQuantity = toNonNegativeInt(Number(quantity));
+      const receivedUnitCost = toOptionalMoney(unit_cost);
+      const receivedDate = toMovementDate(movement_date);
+      const cleanSource = String(source_name || "").trim();
+      const cleanReference = String(reference_number || "").trim();
+      const cleanNotes = String(notes || "").trim();
+
+      if (!receivedQuantity || receivedQuantity <= 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Restock quantity must be a whole number greater than zero.",
+        });
+      }
+
+      if (!cleanSource) {
+        return res.status(400).json({
+          status: "error",
+          message: "Supplier or stock source is required for a restock.",
+        });
+      }
+
+      if (unit_cost !== undefined && unit_cost !== null && unit_cost !== "" && receivedUnitCost === null) {
+        return res.status(400).json({
+          status: "error",
+          message: "Unit cost must be a valid number and cannot be negative.",
+        });
+      }
+
+      if (!receivedDate) {
+        return res.status(400).json({
+          status: "error",
+          message: "Movement date must use YYYY-MM-DD format.",
+        });
+      }
+
+      await connection.beginTransaction();
+
+      const [products] = await connection.query(
+        `SELECT id, branch_id, name, quantity, cost_price
+         FROM products
+         WHERE id = ?
+         AND branch_id = ?
+         AND is_active = TRUE
+         LIMIT 1
+         FOR UPDATE`,
+        [id, branchId]
+      );
+
+      if (products.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          status: "error",
+          message: "Product not found in this store.",
+        });
+      }
+
+      const product = products[0];
+      const oldQuantity = Number(product.quantity || 0);
+      const newQuantity = oldQuantity + receivedQuantity;
+      const oldCostPrice = Number(product.cost_price || 0);
+      const shouldUpdateCost = update_cost_price === true || update_cost_price === "true";
+      const newCostPrice =
+        shouldUpdateCost && receivedUnitCost !== null
+          ? Number(receivedUnitCost)
+          : oldCostPrice;
+
+      await connection.query(
+        `UPDATE products
+         SET quantity = ?, cost_price = ?
+         WHERE id = ? AND branch_id = ?`,
+        [newQuantity, newCostPrice.toFixed(2), id, branchId]
+      );
+
+      const [movementResult] = await connection.query(
+        `INSERT INTO stock_adjustments (
+          branch_id,
+          product_id,
+          adjustment_type,
+          movement_type,
+          quantity,
+          old_quantity,
+          new_quantity,
+          reason,
+          source_name,
+          reference_number,
+          unit_cost,
+          cost_price_before,
+          cost_price_after,
+          movement_date,
+          notes,
+          adjusted_by
+        )
+        VALUES (?, ?, 'increase', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          branchId,
+          id,
+          MOVEMENT_TYPES.QUICK_RESTOCK,
+          receivedQuantity,
+          oldQuantity,
+          newQuantity,
+          `Received ${receivedQuantity} unit(s) from ${cleanSource}`,
+          cleanSource,
+          cleanReference || null,
+          receivedUnitCost,
+          oldCostPrice,
+          newCostPrice,
+          receivedDate,
+          cleanNotes || null,
+          req.user.id,
+        ]
+      );
+
+      await writeAuditEvent({
+        connection,
+        branchId,
+        userId: req.user.id,
+        action: "RESTOCK_PRODUCT",
+        details: `Received ${receivedQuantity} unit(s) of "${product.name}" from ${cleanSource}. Stock ${oldQuantity} to ${newQuantity}. Reference: ${cleanReference || "-"}`,
+        workspaceCode: "spare_parts",
+        entityType: "product",
+        entityId: String(id),
+        actionType: "RESTOCK_PRODUCT",
+        outcome: "success",
+        severity: "notice",
+        metadata: {
+          movement_id: movementResult.insertId,
+          source_name: cleanSource,
+          reference_number: cleanReference || null,
+          unit_cost: receivedUnitCost,
+          movement_date: receivedDate,
+          old_quantity: oldQuantity,
+          new_quantity: newQuantity,
+        },
+      });
+
+      await connection.commit();
+
+      const [updatedProducts] = await pool.query(
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, branchId]
+      );
+
+      return res.status(201).json({
+        status: "success",
+        message: `${receivedQuantity} unit(s) received and recorded successfully.`,
+        branch_id: branchId,
+        movement: {
+          id: movementResult.insertId,
+          movement_type: MOVEMENT_TYPES.QUICK_RESTOCK,
+          movement_label: movementLabel(MOVEMENT_TYPES.QUICK_RESTOCK),
+          source_name: cleanSource,
+          reference_number: cleanReference || null,
+          unit_cost: receivedUnitCost,
+          movement_date: receivedDate,
+          old_quantity: oldQuantity,
+          new_quantity: newQuantity,
+        },
+        product: updatedProducts[0],
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Restock product error:", error);
+
+      return res.status(500).json({
+        status: "error",
+        message: error.message || "Something went wrong while receiving stock.",
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
 // PATCH /api/products/:id/stock-adjustment
 router.patch(
   "/:id/stock-adjustment",
@@ -1290,7 +1639,15 @@ router.patch(
       }
 
       const { id } = req.params;
-      const { adjustment_type, quantity, reason } = req.body;
+      const {
+        adjustment_type,
+        movement_type,
+        quantity,
+        reason,
+        reference_number,
+        movement_date,
+        notes,
+      } = req.body;
 
       if (!["increase", "decrease", "set"].includes(adjustment_type)) {
         return res.status(400).json({
@@ -1322,12 +1679,41 @@ router.patch(
         });
       }
 
+      let cleanMovementType;
+
+      try {
+        cleanMovementType = validateMovementCompatibility(
+          adjustment_type,
+          movement_type ||
+            (adjustment_type === "increase"
+              ? MOVEMENT_TYPES.CORRECTION_INCREASE
+              : adjustment_type === "decrease"
+                ? MOVEMENT_TYPES.CORRECTION_DECREASE
+                : MOVEMENT_TYPES.PHYSICAL_COUNT)
+        );
+      } catch (validationError) {
+        return res.status(400).json({
+          status: "error",
+          message: validationError.message,
+        });
+      }
+
       const cleanReason = reason.trim();
+      const cleanReference = String(reference_number || "").trim();
+      const cleanNotes = String(notes || "").trim();
+      const cleanMovementDate = toMovementDate(movement_date);
+
+      if (!cleanMovementDate) {
+        return res.status(400).json({
+          status: "error",
+          message: "Movement date must use YYYY-MM-DD format.",
+        });
+      }
 
       await connection.beginTransaction();
 
       const [products] = await connection.query(
-        `SELECT id, branch_id, name, quantity
+        `SELECT id, branch_id, name, quantity, cost_price
          FROM products
          WHERE id = ?
          AND branch_id = ?
@@ -1348,27 +1734,19 @@ router.patch(
 
       const product = products[0];
       const oldQuantity = Number(product.quantity || 0);
+      let newQuantity;
 
-      let newQuantity = oldQuantity;
-
-      if (adjustment_type === "increase") {
-        newQuantity = oldQuantity + adjustmentQuantity;
-      }
-
-      if (adjustment_type === "decrease") {
-        newQuantity = oldQuantity - adjustmentQuantity;
-      }
-
-      if (adjustment_type === "set") {
-        newQuantity = adjustmentQuantity;
-      }
-
-      if (newQuantity < 0) {
+      try {
+        newQuantity = calculateStockAfter({
+          currentQuantity: oldQuantity,
+          adjustmentType: adjustment_type,
+          quantity: adjustmentQuantity,
+        });
+      } catch (calculationError) {
         await connection.rollback();
-
         return res.status(400).json({
           status: "error",
-          message: "Stock cannot be less than zero.",
+          message: calculationError.message,
         });
       }
 
@@ -1385,35 +1763,58 @@ router.patch(
           branch_id,
           product_id,
           adjustment_type,
+          movement_type,
           quantity,
           old_quantity,
           new_quantity,
           reason,
+          reference_number,
+          cost_price_before,
+          cost_price_after,
+          movement_date,
+          notes,
           adjusted_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           branchId,
           id,
           adjustment_type,
+          cleanMovementType,
           adjustmentQuantity,
           oldQuantity,
           newQuantity,
           cleanReason,
+          cleanReference || null,
+          Number(product.cost_price || 0),
+          Number(product.cost_price || 0),
+          cleanMovementDate,
+          cleanNotes || null,
           req.user.id,
         ]
       );
 
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [
-          branchId,
-          req.user.id,
-          "STOCK_ADJUSTMENT",
-          `Product "${product.name}" stock changed from ${oldQuantity} to ${newQuantity}. Reason: ${cleanReason}`,
-        ]
-      );
+      await writeAuditEvent({
+        connection,
+        branchId,
+        userId: req.user.id,
+        action: "STOCK_ADJUSTMENT",
+        details: `${movementLabel(cleanMovementType)} for "${product.name}": ${oldQuantity} to ${newQuantity}. Reason: ${cleanReason}`,
+        workspaceCode: "spare_parts",
+        entityType: "product",
+        entityId: String(id),
+        actionType: "STOCK_ADJUSTMENT",
+        outcome: "success",
+        severity: "notice",
+        metadata: {
+          movement_id: adjustmentResult.insertId,
+          movement_type: cleanMovementType,
+          adjustment_type,
+          old_quantity: oldQuantity,
+          new_quantity: newQuantity,
+          reference_number: cleanReference || null,
+        },
+      });
 
       await connection.commit();
 
@@ -1424,7 +1825,7 @@ router.patch(
 
       return res.json({
         status: "success",
-        message: "Stock adjusted successfully.",
+        message: `${movementLabel(cleanMovementType)} recorded successfully.`,
         branch_id: branchId,
         old_quantity: oldQuantity,
         new_quantity: newQuantity,
@@ -1433,10 +1834,15 @@ router.patch(
           branch_id: branchId,
           product_id: Number(id),
           adjustment_type,
+          movement_type: cleanMovementType,
+          movement_label: movementLabel(cleanMovementType),
           quantity: adjustmentQuantity,
           old_quantity: oldQuantity,
           new_quantity: newQuantity,
           reason: cleanReason,
+          reference_number: cleanReference || null,
+          movement_date: cleanMovementDate,
+          notes: cleanNotes || null,
           adjusted_by: req.user.id,
         },
         product: updatedProducts[0],
@@ -1450,7 +1856,7 @@ router.patch(
         status: "error",
         message:
           error.message ||
-          "Something went wrong while adjusting stock. Make sure the stock_adjustments table exists.",
+          "Something went wrong while adjusting stock. Make sure the stock movement migration has been applied.",
       });
     } finally {
       connection.release();

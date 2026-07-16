@@ -316,31 +316,34 @@ export default function SmsPage() {
   }, [logs, logStatusFilter, logTypeFilter]);
 
   const smsDashboard = useMemo(() => {
-    const sentCount = logs.filter(
-      (log) => String(log.status || "").toLowerCase() === "sent"
-    ).length;
+    const normalizedLogs = logs.map((log) => ({
+      ...log,
+      normalizedStatus: String(log.status || "delivery_unknown").toLowerCase(),
+    }));
 
-    const failedCount = logs.filter(
-      (log) => String(log.status || "").toLowerCase() === "failed"
+    const acceptedCount = normalizedLogs.filter((log) =>
+      ["accepted", "delivered"].includes(log.normalizedStatus)
     ).length;
-
-    const receiptCount = logs.filter(
-      (log) => String(log.sms_type || "").toLowerCase() === "receipt"
+    const deliveredCount = normalizedLogs.filter(
+      (log) => log.normalizedStatus === "delivered"
     ).length;
-
-    const debtReminderCount = logs.filter(
-      (log) => String(log.sms_type || "").toLowerCase() === "debt_reminder"
+    const failedCount = normalizedLogs.filter((log) =>
+      ["failed", "undelivered", "expired"].includes(log.normalizedStatus)
     ).length;
-
-    const successRate =
-      logs.length === 0 ? 0 : Math.round((sentCount / logs.length) * 100);
+    const unknownCount = normalizedLogs.filter((log) =>
+      ["pending", "delivery_unknown"].includes(log.normalizedStatus)
+    ).length;
+    const estimatedCredits = normalizedLogs.reduce(
+      (sum, log) => sum + Number(log.estimated_credits || 0),
+      0
+    );
 
     return {
-      sentCount,
+      acceptedCount,
+      deliveredCount,
       failedCount,
-      receiptCount,
-      debtReminderCount,
-      successRate,
+      unknownCount,
+      estimatedCredits,
     };
   }, [logs]);
 
@@ -454,6 +457,34 @@ export default function SmsPage() {
     return date.toLocaleString();
   }
 
+  function formatSmsStatus(value) {
+    const labels = {
+      pending: "Pending submission",
+      accepted: "Accepted by provider",
+      delivered: "Delivered",
+      undelivered: "Undelivered",
+      expired: "Expired",
+      failed: "Failed",
+      delivery_unknown: "Delivery unknown",
+      sent: "Accepted (legacy)",
+    };
+
+    const status = String(value || "delivery_unknown").toLowerCase();
+    return labels[status] || status.replace(/_/g, " ");
+  }
+
+  function getSmsStatusStyle(value) {
+    const status = String(value || "delivery_unknown").toLowerCase();
+
+    if (status === "delivered") return styles.logStatusDelivered;
+    if (status === "accepted") return styles.logStatusAccepted;
+    if (["failed", "undelivered", "expired"].includes(status)) {
+      return styles.logStatusFailed;
+    }
+
+    return styles.logStatusUnknown;
+  }
+
   function downloadSmsCsv() {
     if (filteredLogs.length === 0) {
       setError("No SMS records available to export with the selected filters.");
@@ -468,6 +499,16 @@ export default function SmsPage() {
       "Phone",
       "Type",
       "Status",
+      "Provider",
+      "Sender ID",
+      "Provider Message ID",
+      "Provider Status",
+      "Segments",
+      "Estimated Credits",
+      "Submitted At",
+      "Delivery Confirmed At",
+      "Status Reason",
+      "Source Reference",
       "Message",
       "Sent By",
     ];
@@ -478,7 +519,17 @@ export default function SmsPage() {
       log.branch_name || currentBranchName,
       log.recipient_phone || "",
       log.sms_type || "",
-      log.status || "",
+      formatSmsStatus(log.status),
+      log.provider || "",
+      log.sender_id || "",
+      log.provider_message_id || "",
+      log.provider_status || "",
+      log.segment_count || 1,
+      log.estimated_credits || 0,
+      formatDateTime(log.submitted_at),
+      formatDateTime(log.delivery_confirmed_at),
+      log.status_reason || "",
+      log.source_reference || "",
       log.message || "",
       log.sent_by_name || log.sent_by_username || "",
     ]);
@@ -594,7 +645,7 @@ export default function SmsPage() {
     try {
       const response = await axiosClient.post(`/sms/retry/${cleanLogId}`);
 
-      setNotice(response.data.message || "SMS retry sent successfully.");
+      setNotice(response.data.message || "SMS retry submission completed. Check its delivery status.");
 
       await loadSmsPageData({ silent: true });
     } catch (error) {
@@ -618,7 +669,7 @@ export default function SmsPage() {
       setNotice(
         response.data?.result?.message ||
           response.data?.message ||
-          "Test SMS sent successfully."
+          "Test SMS submission completed. Provider acceptance does not yet prove phone delivery."
       );
 
       await loadSmsPageData({ silent: true });
@@ -639,7 +690,7 @@ export default function SmsPage() {
 
       setNotice(
         response.data.message ||
-          "Official Daily Closing summary SMS sent successfully."
+          "Daily Closing SMS submission completed. Check the history for provider acceptance and delivery evidence."
       );
 
       await loadSmsPageData({ silent: true });
@@ -764,14 +815,27 @@ export default function SmsPage() {
           <span>Sender ID: {smsStatus?.sender_id || "-"}</span>
           <span>SMS Enabled: {smsStatus?.enabled ? "Yes" : "No"}</span>
           <span>Real SMS: {smsStatus?.live_sending ? "YES" : "NO"}</span>
+          <span>
+            Delivery Tracking:{" "}
+            {smsStatus?.delivery_callback_ready ? "Callback ready" : "Provider dashboard only"}
+          </span>
         </div>
+      </div>
+
+      <div className="warning-box">
+        Provider acceptance can use SMS credit, but it does not prove that the
+        recipient's phone received the message. Only a Delivered status is
+        confirmed delivery. Do not retry Accepted or Delivery Unknown messages
+        until the provider dashboard has been checked.
       </div>
 
       <div style={styles.metricsGrid}>
         <MetricCard label="Customers With Phone" value={customers.length} icon="👥" />
-        <MetricCard label="Sent SMS" value={smsDashboard.sentCount} icon="✅" />
-        <MetricCard label="Failed SMS" value={smsDashboard.failedCount} icon="⚠️" />
-        <MetricCard label="Success Rate" value={`${smsDashboard.successRate}%`} icon="📈" />
+        <MetricCard label="Accepted by Provider" value={smsDashboard.acceptedCount} icon="📤" />
+        <MetricCard label="Delivered" value={smsDashboard.deliveredCount} icon="✅" />
+        <MetricCard label="Unknown / Pending" value={smsDashboard.unknownCount} icon="⏳" />
+        <MetricCard label="Failed / Undelivered" value={smsDashboard.failedCount} icon="⚠️" />
+        <MetricCard label="Estimated Credits" value={smsDashboard.estimatedCredits} icon="💳" />
       </div>
 
       {loading ? (
@@ -1073,7 +1137,7 @@ export default function SmsPage() {
             <p style={styles.eyebrowDark}>Message History</p>
             <h2 style={styles.panelTitle}>Recent SMS History</h2>
             <p style={styles.panelSubtitle}>
-              Filter, retry failed SMS and export SMS history as CSV.
+              Filter delivery evidence, retry only confirmed failures and export SMS history as CSV.
             </p>
           </div>
 
@@ -1094,7 +1158,12 @@ export default function SmsPage() {
               onChange={(event) => setLogStatusFilter(event.target.value)}
             >
               <option value="all">All statuses</option>
-              <option value="sent">Sent</option>
+              <option value="pending">Pending submission</option>
+              <option value="accepted">Accepted by provider</option>
+              <option value="delivered">Delivered</option>
+              <option value="delivery_unknown">Delivery unknown</option>
+              <option value="undelivered">Undelivered</option>
+              <option value="expired">Expired</option>
               <option value="failed">Failed</option>
             </select>
           </div>
@@ -1141,8 +1210,13 @@ export default function SmsPage() {
         ) : (
           <div style={styles.logList}>
             {filteredLogs.map((log) => {
-              const isFailedSms =
-                String(log.status || "").toLowerCase() === "failed";
+              const normalizedStatus = String(
+                log.status || "delivery_unknown"
+              ).toLowerCase();
+              const isFailedSms = ["failed", "undelivered", "expired"].includes(
+                normalizedStatus
+              );
+              const canRetrySms = isFailedSms;
 
               return (
                 <article
@@ -1158,23 +1232,59 @@ export default function SmsPage() {
                       <span
                         style={{
                           ...styles.logStatus,
-                          ...(isFailedSms ? styles.logStatusFailed : {}),
+                          ...getSmsStatusStyle(normalizedStatus),
                         }}
                       >
-                        {log.status}
+                        {formatSmsStatus(normalizedStatus)}
                       </span>
                     </div>
 
                     <p>{log.message}</p>
 
-                    <small>
-                      {formatDateTime(log.created_at)} • {log.sms_type} • Sent
-                      by {log.sent_by_name || log.sent_by_username || "-"}
-                    </small>
+                    <div style={styles.logEvidenceGrid}>
+                      <small>
+                        <strong>Submitted:</strong>{" "}
+                        {formatDateTime(log.submitted_at || log.created_at)}
+                      </small>
+                      <small>
+                        <strong>Delivery confirmed:</strong>{" "}
+                        {formatDateTime(log.delivery_confirmed_at)}
+                      </small>
+                      <small>
+                        <strong>Provider:</strong> {log.provider || "-"} • Sender:{" "}
+                        {log.sender_id || "-"}
+                      </small>
+                      <small>
+                        <strong>Provider reference:</strong>{" "}
+                        {log.provider_message_id || "Not returned"}
+                      </small>
+                      <small>
+                        <strong>Provider status:</strong>{" "}
+                        {log.provider_status || "Not returned"}
+                      </small>
+                      <small>
+                        <strong>Segments / estimated credits:</strong>{" "}
+                        {log.segment_count || 1} / {log.estimated_credits || 0}
+                      </small>
+                      <small>
+                        <strong>Source:</strong> {log.sms_type} •{" "}
+                        {log.source_reference || "No source reference"}
+                      </small>
+                      <small>
+                        <strong>Submitted by:</strong>{" "}
+                        {log.sent_by_name || log.sent_by_username || "-"}
+                      </small>
+                    </div>
+
+                    {log.status_reason && (
+                      <p style={styles.statusReason}>
+                        <strong>Status reason:</strong> {log.status_reason}
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    {isFailedSms ? (
+                    {canRetrySms ? (
                       <button
                         type="button"
                         className="secondary-button"
@@ -1186,7 +1296,13 @@ export default function SmsPage() {
                           : "Retry"}
                       </button>
                     ) : (
-                      <span style={styles.doneMark}>Done</span>
+                      <span style={styles.doneMark}>
+                        {normalizedStatus === "delivered"
+                          ? "Confirmed"
+                          : normalizedStatus === "accepted"
+                            ? "Awaiting delivery"
+                            : "Do not retry yet"}
+                      </span>
                     )}
                   </div>
                 </article>
@@ -1702,6 +1818,31 @@ const styles = {
   logStatusFailed: {
     background: "#fee2e2",
     color: "#991b1b",
+  },
+  logStatusDelivered: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+  logStatusAccepted: {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+  },
+  logStatusUnknown: {
+    background: "#fef3c7",
+    color: "#92400e",
+  },
+  logEvidenceGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "6px 18px",
+    marginTop: "12px",
+  },
+  statusReason: {
+    marginTop: "10px",
+    padding: "10px 12px",
+    borderRadius: "12px",
+    background: "#fff7ed",
+    color: "#9a3412",
   },
 
   doneMark: {

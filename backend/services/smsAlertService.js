@@ -1,5 +1,10 @@
 const { pool } = require("../config/db");
-const { normalizeGhanaPhone, sendSms } = require("./smsService");
+const { getSmsConfig, normalizeGhanaPhone, sendSms } = require("./smsService");
+const {
+  estimateSmsSegments,
+  humanizeSmsStatus,
+  isSubmissionAccepted,
+} = require("./smsReliabilityService");
 
 function safeJson(value) {
   try {
@@ -220,15 +225,35 @@ async function writeSmsLogSafe({
   status,
   providerResponse,
   sentBy,
+  provider = null,
+  senderId = null,
+  providerMessageId = null,
+  providerStatus = null,
+  statusReason = null,
+  segmentCount = null,
+  estimatedCredits = null,
+  retryCount = 0,
+  originalLogId = null,
+  sourceReference = null,
+  submittedAt = null,
+  deliveryConfirmedAt = null,
 }) {
   try {
     if (!(await tableExists(pool, "sms_log"))) {
-      return;
+      return null;
     }
 
-    const sentAt = status === "sent" ? new Date() : null;
+    const metrics = estimateSmsSegments(message);
+    const finalStatus = String(status || "delivery_unknown").toLowerCase();
+    const acceptedAt = isSubmissionAccepted(finalStatus)
+      ? submittedAt || new Date()
+      : null;
+    const deliveredAt =
+      finalStatus === "delivered"
+        ? deliveryConfirmedAt || submittedAt || new Date()
+        : deliveryConfirmedAt || null;
 
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO sms_log (
         branch_id,
         recipient_phone,
@@ -237,22 +262,55 @@ async function writeSmsLogSafe({
         status,
         provider_response,
         sent_by,
-        sent_at
+        sent_at,
+        provider,
+        sender_id,
+        provider_message_id,
+        provider_status,
+        status_reason,
+        segment_count,
+        estimated_credits,
+        retry_count,
+        original_log_id,
+        source_reference,
+        submitted_at,
+        delivery_confirmed_at,
+        last_status_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         branchId || null,
         phone,
         message,
         smsType,
-        status,
+        finalStatus,
         safeJson(providerResponse).slice(0, 6000),
         sentBy || null,
-        sentAt,
+        acceptedAt,
+        provider,
+        senderId,
+        providerMessageId,
+        providerStatus,
+        statusReason,
+        Number(segmentCount || metrics.segment_count || 1),
+        Number(
+          estimatedCredits === null || estimatedCredits === undefined
+            ? metrics.estimated_credits
+            : estimatedCredits
+        ),
+        Number(retryCount || 0),
+        originalLogId || null,
+        sourceReference || null,
+        submittedAt || acceptedAt,
+        deliveredAt,
+        new Date(),
       ]
     );
+
+    return result.insertId;
   } catch (error) {
     console.warn("SMS alert log skipped:", error.message);
+    return null;
   }
 }
 
@@ -261,9 +319,11 @@ async function sendOwnerSmsAlert({
   message,
   smsType = "security_alert",
   sentBy = null,
+  sourceReference = null,
 }) {
   try {
     const settings = await getSmsSettingsForBranch(branchId);
+    const config = getSmsConfig();
 
     const alertPhone = firstValidGhanaPhone(
       settings.owner_phone,
@@ -275,6 +335,8 @@ async function sendOwnerSmsAlert({
       return {
         ok: false,
         skipped: true,
+        status: "failed",
+        status_label: "Failed",
         reason: "No valid owner/admin phone found.",
       };
     }
@@ -286,45 +348,100 @@ async function sendOwnerSmsAlert({
         to: alertPhone,
         message: finalMessage,
       });
+      const finalStatus = result.status || "delivery_unknown";
+      const accepted = isSubmissionAccepted(finalStatus);
 
-      await writeSmsLogSafe({
+      const logId = await writeSmsLogSafe({
         branchId,
         phone: alertPhone,
         message: finalMessage,
         smsType,
-        status: "sent",
+        status: finalStatus,
         providerResponse: result.providerResponse,
         sentBy,
+        provider: result.provider || config.provider,
+        senderId: result.senderId || config.senderId,
+        providerMessageId: result.providerMessageId,
+        providerStatus: result.providerStatus,
+        segmentCount: result.segmentCount,
+        estimatedCredits: result.estimatedCredits,
+        sourceReference,
+        submittedAt: result.submittedAt || new Date(),
+        deliveryConfirmedAt:
+          finalStatus === "delivered" ? new Date() : null,
       });
 
       return {
-        ok: true,
+        ok: accepted,
         skipped: false,
+        log_id: logId,
         phone: alertPhone,
+        status: finalStatus,
+        status_label: humanizeSmsStatus(finalStatus),
+        provider: result.provider || config.provider,
+        sender_id: result.senderId || config.senderId,
+        provider_message_id: result.providerMessageId || null,
+        provider_status: result.providerStatus || null,
+        segment_count: result.segmentCount || 1,
+        estimated_credits: Number(result.estimatedCredits || 0),
+        submitted_at: result.submittedAt || new Date(),
+        delivery_confirmed: finalStatus === "delivered",
+        message:
+          finalStatus === "delivered"
+            ? "SMS delivery was confirmed."
+            : finalStatus === "accepted"
+              ? "SMS was accepted by the provider; phone delivery is still pending confirmation."
+              : "SMS submission completed, but phone delivery could not be confirmed.",
         providerResponse: result.providerResponse,
       };
     } catch (error) {
-      await writeSmsLogSafe({
+      const submissionUncertain =
+        !error.statusCode ||
+        error.statusCode === 408 ||
+        /timeout|timed out|network|socket|connection reset|fetch failed/i.test(
+          String(error.message || "")
+        );
+      const failureStatus = submissionUncertain
+        ? "delivery_unknown"
+        : "failed";
+      const providerResponse = {
+        error: error.message,
+        statusCode: error.statusCode || null,
+        providerResponse: error.providerResponse || null,
+      };
+
+      const logId = await writeSmsLogSafe({
         branchId,
         phone: alertPhone,
         message: finalMessage,
         smsType,
-        status: "failed",
-        providerResponse: {
-          error: error.message,
-          statusCode: error.statusCode || null,
-          providerResponse: error.providerResponse || null,
-        },
+        status: failureStatus,
+        providerResponse,
         sentBy,
+        provider: error.provider || config.provider,
+        senderId: config.senderId,
+        providerMessageId: error.providerMessageId,
+        providerStatus: error.providerStatus,
+        statusReason: error.message,
+        sourceReference,
+        submittedAt: failureStatus === "delivery_unknown" ? new Date() : null,
       });
 
       console.warn("SMS alert failed:", error.message);
 
       return {
-        ok: false,
+        ok: failureStatus === "delivery_unknown",
         skipped: false,
+        log_id: logId,
         phone: alertPhone,
+        status: failureStatus,
+        status_label: humanizeSmsStatus(failureStatus),
+        delivery_confirmed: false,
         error: error.message,
+        message:
+          failureStatus === "delivery_unknown"
+            ? "SMS delivery is unknown. Check the provider dashboard before retrying to avoid duplicate credit charges."
+            : "SMS failed before provider acceptance was confirmed.",
       };
     }
   } catch (error) {
@@ -333,6 +450,8 @@ async function sendOwnerSmsAlert({
     return {
       ok: false,
       skipped: true,
+      status: "failed",
+      status_label: "Failed",
       reason: error.message,
     };
   }

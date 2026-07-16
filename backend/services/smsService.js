@@ -1,3 +1,9 @@
+const {
+  buildSmsEvidence,
+  estimateSmsSegments,
+  hasExplicitProviderFailure,
+} = require("./smsReliabilityService");
+
 const DEFAULT_HUBTEL_BASE_URL = "https://smsc.hubtel.com/v1/messages/send";
 const DEFAULT_ARKESEL_BASE_URL = "https://sms.arkesel.com/api/v2/sms/send";
 const DEFAULT_SMS_TIMEOUT_MS = 15000;
@@ -14,6 +20,11 @@ function getSmsConfig() {
     arkeselApiKey: String(process.env.SMS_ARKESEL_API_KEY || "").trim(),
     arkeselBaseUrl: String(
       process.env.SMS_ARKESEL_BASE_URL || DEFAULT_ARKESEL_BASE_URL
+    ).trim(),
+
+    // Optional delivery-report callback protection.
+    deliveryWebhookSecret: String(
+      process.env.SMS_DELIVERY_WEBHOOK_SECRET || ""
     ).trim(),
 
     // Hubtel kept as optional backup
@@ -44,27 +55,19 @@ function normalizeGhanaPhone(phone) {
     digits = digits.slice(2);
   }
 
-  // Example: 0543421127 -> 233543421127
   if (digits.startsWith("0") && digits.length === 10) {
     digits = `233${digits.slice(1)}`;
   }
 
-  // Example: 543421127 -> 233543421127
   if (digits.length === 9) {
     digits = `233${digits}`;
   }
 
-  // Example: 2330543421127 -> 233543421127
   if (digits.startsWith("2330") && digits.length === 13) {
     digits = `233${digits.slice(4)}`;
   }
 
-  // Ghana SMS format: 233 + 9 digits = 12 digits
-  if (!digits.startsWith("233")) {
-    return "";
-  }
-
-  if (digits.length !== 12) {
+  if (!digits.startsWith("233") || digits.length !== 12) {
     return "";
   }
 
@@ -88,17 +91,14 @@ function validateSmsMessage(message) {
 function createSmsError(message, extra = {}) {
   const error = new Error(message);
 
-  if (extra.statusCode) {
-    error.statusCode = extra.statusCode;
-  }
-
-  if (extra.providerResponse !== undefined) {
-    error.providerResponse = extra.providerResponse;
-  }
-
-  if (extra.provider) {
-    error.provider = extra.provider;
-  }
+  Object.assign(error, {
+    statusCode: extra.statusCode || null,
+    providerResponse:
+      extra.providerResponse === undefined ? null : extra.providerResponse,
+    provider: extra.provider || null,
+    providerMessageId: extra.providerMessageId || null,
+    providerStatus: extra.providerStatus || null,
+  });
 
   return error;
 }
@@ -107,33 +107,19 @@ async function readResponseBody(response) {
   const responseText = await response.text();
 
   if (!responseText) {
-    return {
-      raw: "",
-      parsed: null,
-    };
+    return { raw: "", parsed: null };
   }
 
   try {
-    return {
-      raw: responseText,
-      parsed: JSON.parse(responseText),
-    };
+    return { raw: responseText, parsed: JSON.parse(responseText) };
   } catch {
-    return {
-      raw: responseText,
-      parsed: responseText,
-    };
+    return { raw: responseText, parsed: responseText };
   }
 }
 
 function getProviderMessage(providerResponse) {
-  if (!providerResponse) {
-    return "";
-  }
-
-  if (typeof providerResponse === "string") {
-    return providerResponse;
-  }
+  if (!providerResponse) return "";
+  if (typeof providerResponse === "string") return providerResponse;
 
   if (Array.isArray(providerResponse)) {
     return providerResponse
@@ -150,17 +136,9 @@ function getProviderMessage(providerResponse) {
       providerResponse.description ||
       providerResponse.reason;
 
-    if (possibleMessage) {
-      return String(possibleMessage);
-    }
-
-    if (providerResponse.errors) {
-      return getProviderMessage(providerResponse.errors);
-    }
-
-    if (providerResponse.data) {
-      return getProviderMessage(providerResponse.data);
-    }
+    if (possibleMessage) return String(possibleMessage);
+    if (providerResponse.errors) return getProviderMessage(providerResponse.errors);
+    if (providerResponse.data) return getProviderMessage(providerResponse.data);
 
     try {
       return JSON.stringify(providerResponse);
@@ -173,18 +151,14 @@ function getProviderMessage(providerResponse) {
 }
 
 function getTimeoutMs(config) {
-  if (Number.isFinite(config.timeoutMs) && config.timeoutMs > 0) {
-    return config.timeoutMs;
-  }
-
-  return DEFAULT_SMS_TIMEOUT_MS;
+  return Number.isFinite(config.timeoutMs) && config.timeoutMs > 0
+    ? config.timeoutMs
+    : DEFAULT_SMS_TIMEOUT_MS;
 }
 
 function ensureFetchAvailable() {
   if (typeof fetch !== "function") {
-    throw new Error(
-      "This backend needs Node.js 18 or newer for live SMS sending."
-    );
+    throw new Error("This backend needs Node.js 18 or newer for live SMS sending.");
   }
 }
 
@@ -234,95 +208,118 @@ function validateHubtelConfig(config) {
   ensureFetchAvailable();
 }
 
-async function sendArkeselSms({ config, to, message }) {
-  validateArkeselConfig(config);
-
-  const payload = {
-    sender: config.senderId,
+function buildSubmissionResult({ provider, to, message, config, providerResponse }) {
+  const evidence = buildSmsEvidence({
+    providerResponse,
     message,
-    recipients: [to],
-  };
+    provider,
+    senderId: config.senderId,
+  });
 
+  return {
+    success: true,
+    provider,
+    to,
+    status: evidence.status === "delivered" ? "delivered" : "accepted",
+    providerStatus: evidence.provider_status,
+    providerMessageId: evidence.provider_message_id,
+    senderId: evidence.sender_id,
+    encoding: evidence.encoding,
+    characterCount: evidence.character_count,
+    encodedLength: evidence.encoded_length,
+    segmentCount: evidence.segment_count,
+    estimatedCredits: evidence.estimated_credits,
+    submittedAt: new Date(),
+    providerResponse,
+  };
+}
+
+async function postWithTimeout({ url, headers, payload, timeoutMs, provider }) {
   const controller = new AbortController();
-  const timeoutMs = getTimeoutMs(config);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response;
-
   try {
-    response = await fetch(config.arkeselBaseUrl, {
+    return await fetch(url, {
       method: "POST",
-      headers: {
-        "api-key": config.arkeselApiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (error) {
     if (error.name === "AbortError") {
-      throw createSmsError("Arkesel SMS request timed out.", {
-        provider: "arkesel",
+      throw createSmsError(`${provider} SMS request timed out.`, {
+        provider: provider.toLowerCase(),
         statusCode: 408,
         providerResponse: {
-          message: `Request timed out after ${timeoutMs}ms.`,
+          message: `Request timed out after ${timeoutMs}ms. Delivery is unknown; do not resend until the provider dashboard is checked.`,
         },
       });
     }
 
-    throw createSmsError(`Arkesel SMS network error: ${error.message}`, {
-      provider: "arkesel",
-      providerResponse: {
-        message: error.message,
-      },
+    throw createSmsError(`${provider} SMS network error: ${error.message}`, {
+      provider: provider.toLowerCase(),
+      providerResponse: { message: error.message },
     });
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function sendArkeselSms({ config, to, message }) {
+  validateArkeselConfig(config);
+
+  // Arkesel's recipient payload uses the international digits. The log keeps +233.
+  const providerRecipient = String(to).replace(/^\+/, "");
+  const payload = {
+    sender: config.senderId,
+    message,
+    recipients: [providerRecipient],
+  };
+
+  const response = await postWithTimeout({
+    url: config.arkeselBaseUrl,
+    headers: {
+      "api-key": config.arkeselApiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    payload,
+    timeoutMs: getTimeoutMs(config),
+    provider: "Arkesel",
+  });
 
   const responseBody = await readResponseBody(response);
-  const providerResponse = responseBody.parsed || responseBody.raw;
+  const providerResponse = responseBody.parsed ?? responseBody.raw;
   const providerMessage = getProviderMessage(providerResponse);
+  const evidence = buildSmsEvidence({
+    providerResponse,
+    message,
+    provider: "arkesel",
+    senderId: config.senderId,
+  });
 
-  if (!response.ok) {
+  if (!response.ok || hasExplicitProviderFailure(providerResponse)) {
     throw createSmsError(
       providerMessage
-        ? `Arkesel SMS request failed. HTTP ${response.status}: ${providerMessage}`
-        : `Arkesel SMS request failed. HTTP ${response.status}.`,
+        ? `Arkesel SMS was not accepted. HTTP ${response.status}: ${providerMessage}`
+        : `Arkesel SMS was not accepted. HTTP ${response.status}.`,
       {
         provider: "arkesel",
         statusCode: response.status,
         providerResponse,
+        providerMessageId: evidence.provider_message_id,
+        providerStatus: evidence.provider_status,
       }
     );
   }
 
-  if (
-    responseBody.parsed &&
-    typeof responseBody.parsed === "object" &&
-    responseBody.parsed.status &&
-    String(responseBody.parsed.status).toLowerCase() !== "success"
-  ) {
-    throw createSmsError(
-      providerMessage
-        ? `Arkesel SMS was not accepted: ${providerMessage}`
-        : "Arkesel SMS was not accepted.",
-      {
-        provider: "arkesel",
-        statusCode: response.status,
-        providerResponse,
-      }
-    );
-  }
-
-  return {
-    success: true,
+  return buildSubmissionResult({
     provider: "arkesel",
     to,
-    status: "sent",
+    message,
+    config,
     providerResponse,
-  };
+  });
 }
 
 async function sendHubtelSms({ config, to, message }) {
@@ -332,81 +329,61 @@ async function sendHubtelSms({ config, to, message }) {
     `${config.hubtelClientId}:${config.hubtelClientSecret}`
   ).toString("base64");
 
-  const payload = {
-    From: config.senderId,
-    To: to,
-    Content: message,
-  };
-
-  const controller = new AbortController();
-  const timeoutMs = getTimeoutMs(config);
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response;
-
-  try {
-    response = await fetch(config.hubtelBaseUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${authToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw createSmsError("Hubtel SMS request timed out.", {
-        provider: "hubtel",
-        statusCode: 408,
-        providerResponse: {
-          message: `Request timed out after ${timeoutMs}ms.`,
-        },
-      });
-    }
-
-    throw createSmsError(`Hubtel SMS network error: ${error.message}`, {
-      provider: "hubtel",
-      providerResponse: {
-        message: error.message,
-      },
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const response = await postWithTimeout({
+    url: config.hubtelBaseUrl,
+    headers: {
+      Authorization: `Basic ${authToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    payload: {
+      From: config.senderId,
+      To: to,
+      Content: message,
+    },
+    timeoutMs: getTimeoutMs(config),
+    provider: "Hubtel",
+  });
 
   const responseBody = await readResponseBody(response);
-  const providerResponse = responseBody.parsed || responseBody.raw;
+  const providerResponse = responseBody.parsed ?? responseBody.raw;
   const providerMessage = getProviderMessage(providerResponse);
+  const evidence = buildSmsEvidence({
+    providerResponse,
+    message,
+    provider: "hubtel",
+    senderId: config.senderId,
+  });
 
-  if (!response.ok) {
+  if (!response.ok || hasExplicitProviderFailure(providerResponse)) {
     throw createSmsError(
       providerMessage
-        ? `Hubtel SMS request failed. HTTP ${response.status}: ${providerMessage}`
-        : `Hubtel SMS request failed. HTTP ${response.status}.`,
+        ? `Hubtel SMS was not accepted. HTTP ${response.status}: ${providerMessage}`
+        : `Hubtel SMS was not accepted. HTTP ${response.status}.`,
       {
         provider: "hubtel",
         statusCode: response.status,
         providerResponse,
+        providerMessageId: evidence.provider_message_id,
+        providerStatus: evidence.provider_status,
       }
     );
   }
 
-  return {
-    success: true,
+  return buildSubmissionResult({
     provider: "hubtel",
     to,
-    status: "sent",
+    message,
+    config,
     providerResponse,
-  };
+  });
 }
 
 async function sendSms({ to, message }) {
   const config = getSmsConfig();
-
   const normalizedTo = normalizeGhanaPhone(to);
   const cleanMessage = validateSmsMessage(message);
+  const metrics = estimateSmsSegments(cleanMessage);
 
   if (!normalizedTo) {
     throw new Error("Invalid Ghana phone number.");
@@ -421,28 +398,29 @@ async function sendSms({ to, message }) {
       success: true,
       provider: "mock",
       to: normalizedTo,
-      status: "sent",
+      status: "delivery_unknown",
+      providerStatus: "mock",
+      providerMessageId: null,
+      senderId: config.senderId,
+      encoding: metrics.encoding,
+      characterCount: metrics.character_count,
+      encodedLength: metrics.encoded_length,
+      segmentCount: metrics.segment_count,
+      estimatedCredits: 0,
+      submittedAt: new Date(),
       providerResponse: {
         message:
-          "Mock SMS sent successfully. No real SMS credit was used. Switch SMS_PROVIDER to arkesel or hubtel for live SMS.",
+          "Mock SMS recorded. No real provider submission occurred and no credit was used.",
       },
     };
   }
 
   if (config.provider === "arkesel") {
-    return sendArkeselSms({
-      config,
-      to: normalizedTo,
-      message: cleanMessage,
-    });
+    return sendArkeselSms({ config, to: normalizedTo, message: cleanMessage });
   }
 
   if (config.provider === "hubtel") {
-    return sendHubtelSms({
-      config,
-      to: normalizedTo,
-      message: cleanMessage,
-    });
+    return sendHubtelSms({ config, to: normalizedTo, message: cleanMessage });
   }
 
   throw new Error(`Unsupported SMS provider: ${config.provider}`);

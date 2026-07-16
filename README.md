@@ -449,6 +449,17 @@ Meaning:
 
 Approval alone does not move stock.
 
+### Product detail, restock and correction separation
+
+Product editing and stock movement are separate controls:
+
+- **Edit Product Details** changes description, pricing, barcode, low-stock level and active status without changing quantity.
+- **Receive / Restock** records stock received, supplier or source, reference number, unit cost, received date, notes and the receiving user.
+- **Adjust / Correct** records damaged stock, lost or missing stock, physical counts and authorized corrections.
+- Supplier purchases remain the preferred full-invoice restocking workflow. Quick Restock is for legitimate received stock that does not require a complete purchase transaction.
+
+Every quantity movement must appear in the Stock Movement Ledger and Activity Log.
+
 ### Product stock ledger
 
 Use the product ledger to review:
@@ -474,9 +485,18 @@ Arkesel SMS support includes:
 - Debt reminders
 - Low-stock alerts
 - Daily summary
-- Logs and retry
+- Provider reference and response evidence
+- SMS segment and estimated-credit evidence
+- Delivery-status filters and controlled retry
 
-Keep provider credentials private.
+SMS status meanings:
+
+- `Accepted by provider` means the provider accepted the submission and credit may have been used. It does not prove that the phone received the message.
+- `Delivered` is shown only after explicit delivery evidence.
+- `Delivery unknown` means the provider result cannot safely prove success or failure. Check the provider dashboard before retrying.
+- Automatic retry is limited to `Failed`, `Undelivered`, or `Expired` records to reduce duplicate charges.
+
+Keep provider credentials and the delivery callback secret private.
 
 ### WhatsApp
 
@@ -605,7 +625,9 @@ SMS_ENABLED=false
 SMS_PROVIDER=mock
 SMS_SENDER_ID=CHALIN03
 SMS_ARKESEL_API_KEY=
+SMS_ARKESEL_BASE_URL=https://sms.arkesel.com/api/v2/sms/send
 SMS_TIMEOUT_MS=15000
+SMS_DELIVERY_WEBHOOK_SECRET=generate_a_long_private_callback_secret
 
 WHATSAPP_RECEIPT_ENABLED=false
 WHATSAPP_PHONE_NUMBER_ID=
@@ -680,6 +702,17 @@ Applied successfully and verified on 2026-07-15.
 ```
 
 Do not rerun it casually. Do not run `schema.sql` to repair a migration problem.
+
+### SMS Reliability and Restock Release 1 migration
+
+Files:
+
+```text
+database/20260715_sms_reliability_and_restock_migration.sql
+database/20260715_sms_reliability_and_restock_verify.sql
+```
+
+This additive migration must be executed and verified before deploying the Release 1 backend and frontend. It converts legacy SMS `sent` records to `accepted`, adds SMS delivery evidence, and adds professional stock-movement evidence. Never use `schema.sql` for this production update.
 
 ## Run Locally
 
