@@ -10,6 +10,9 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  resetAccountBySystemAdministrator,
+} = require("../services/accountRecoveryService");
 
 const router = express.Router();
 
@@ -431,6 +434,12 @@ async function getUserById(userId) {
       can_access_all_branches,
       phone,
       is_active,
+      failed_login_attempts,
+      is_login_locked,
+      login_locked_at,
+      login_lock_reason,
+      last_failed_login_at,
+      last_failed_login_ip,
       created_at,
       updated_at
      FROM users
@@ -545,6 +554,18 @@ function normalizeUserRow(user) {
     can_access_all_branches: Boolean(user.can_access_all_branches),
     phone: user.phone,
     is_active: Boolean(user.is_active),
+    failed_login_attempts:
+      Number(user.failed_login_attempts || 0),
+    is_login_locked:
+      Boolean(user.is_login_locked),
+    login_locked_at:
+      user.login_locked_at || null,
+    login_lock_reason:
+      user.login_lock_reason || null,
+    last_failed_login_at:
+      user.last_failed_login_at || null,
+    last_failed_login_ip:
+      user.last_failed_login_ip || null,
     created_at: user.created_at,
     updated_at: user.updated_at,
     branches: user.branches || [],
@@ -566,6 +587,12 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         can_access_all_branches,
         phone,
         is_active,
+        failed_login_attempts,
+        is_login_locked,
+        login_locked_at,
+        login_lock_reason,
+        last_failed_login_at,
+        last_failed_login_ip,
         created_at,
         updated_at
        FROM users
@@ -986,99 +1013,59 @@ router.patch(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const branchId = getBranchId(req);
-      const { id } = req.params;
-      const { password, confirm_password } = req.body;
+      const {
+        password,
+        confirm_password,
+      } = req.body;
 
       if (!password || !confirm_password) {
         return res.status(400).json({
           status: "error",
-          message: "New password and confirm password are required.",
-        });
-      }
-
-      const passwordPolicyError = strongPasswordError(password);
-
-      if (passwordPolicyError) {
-        return res.status(400).json({
-          status: "error",
-          message: passwordPolicyError,
+          message:
+            "New password and confirm password are required.",
         });
       }
 
       if (password !== confirm_password) {
         return res.status(400).json({
           status: "error",
-          message: "New password and confirm password do not match.",
+          message:
+            "New password and confirm password do not match.",
         });
       }
 
-      const user = await getUserById(id);
-
-      if (!user) {
-        return res.status(404).json({
-          status: "error",
-          message: "User not found.",
+      const result =
+        await resetAccountBySystemAdministrator({
+          req,
+          targetUserId: req.params.id,
+          newPassword: password,
         });
-      }
-
-      if (isOriginalSystemAdministrator(user)) {
-        const requester = await getUserById(req.user.id);
-
-        if (!isOriginalSystemAdministrator(requester)) {
-          return res.status(403).json({
-            status: "error",
-            message:
-              "Only the original System Administrator can reset the original System Administrator password.",
-          });
-        }
-      }
-
-      const passwordHash = await bcrypt.hash(password, 10);
-      const updateFields = ["password_hash = ?"];
-      const updateParams = [passwordHash];
-
-      if (await columnExists(pool, "users", "must_change_password")) {
-        updateFields.push("must_change_password = TRUE");
-      }
-
-      if (await columnExists(pool, "users", "password_changed_at")) {
-        updateFields.push("password_changed_at = NULL");
-      }
-
-      if (await columnExists(pool, "users", "token_version")) {
-        updateFields.push("token_version = token_version + 1");
-      }
-
-      await pool.query(
-        `UPDATE users
-         SET ${updateFields.join(", ")}
-         WHERE id = ?`,
-        [...updateParams, id]
-      );
-
-      await logActivity(
-        req.user.id,
-        branchId,
-        "RESET_USER_PASSWORD",
-        `Reset password for user "${user.username}" with ID ${user.id}`
-      );
 
       return res.json({
         status: "success",
-        message: `Password reset successfully for ${user.full_name}. Tell the user to login and change it immediately.`,
+        message: result.message,
       });
     } catch (error) {
-      console.error("Reset user password error:", error);
+      console.error(
+        "Reset user password error:",
+        error.code || error.message
+      );
 
-      return res.status(500).json({
-        status: "error",
-        message: "Something went wrong while resetting user password.",
-      });
+      return res
+        .status(error.statusCode || 500)
+        .json({
+          status: "error",
+          code:
+            error.code ||
+            "ACCOUNT_RESET_FAILED",
+          message:
+            error.statusCode && error.statusCode < 500
+              ? error.message
+              : "Something went wrong while resetting the user account.",
+        });
     }
   }
 );
-
 // PATCH /api/users/:id/toggle-status
 router.patch(
   "/:id/toggle-status",

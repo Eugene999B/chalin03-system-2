@@ -457,6 +457,152 @@ async function sendOwnerSmsAlert({
   }
 }
 
+function redactSecretFromProviderResponse(value, secret) {
+  const rawValue = safeJson(value);
+  const secretText = String(secret || "");
+
+  const redactedValue = secretText
+    ? rawValue.split(secretText).join("[REDACTED]")
+    : rawValue;
+
+  try {
+    return JSON.parse(redactedValue);
+  } catch {
+    return redactedValue;
+  }
+}
+
+async function sendSmsAlertToPhone({
+  branchId,
+  phone,
+  message,
+  logMessage = null,
+  smsType = "security_alert",
+  sentBy = null,
+  sourceReference = null,
+}) {
+  const normalizedPhone = normalizeGhanaPhone(phone);
+
+  if (!normalizedPhone) {
+    return {
+      ok: false,
+      skipped: true,
+      status: "failed",
+      status_label: "Failed",
+      reason: "No valid registered Ghana phone was found.",
+    };
+  }
+
+  const config = getSmsConfig();
+  const finalMessage = truncateMessage(message, 480);
+  const finalLogMessage = truncateMessage(
+    logMessage || message,
+    480
+  );
+
+  try {
+    const result = await sendSms({
+      to: normalizedPhone,
+      message: finalMessage,
+    });
+
+    const finalStatus =
+      result.status || "delivery_unknown";
+
+    const logId = await writeSmsLogSafe({
+      branchId,
+      phone: normalizedPhone,
+      message: finalLogMessage,
+      smsType,
+      status: finalStatus,
+      providerResponse:
+        redactSecretFromProviderResponse(
+          result.providerResponse,
+          finalMessage
+        ),
+      sentBy,
+      provider: result.provider || config.provider,
+      senderId: result.senderId || config.senderId,
+      providerMessageId: result.providerMessageId,
+      providerStatus: result.providerStatus,
+      segmentCount: result.segmentCount,
+      estimatedCredits: result.estimatedCredits,
+      sourceReference,
+      submittedAt: result.submittedAt || new Date(),
+      deliveryConfirmedAt:
+        finalStatus === "delivered" ? new Date() : null,
+    });
+
+    return {
+      ok: isSubmissionAccepted(finalStatus),
+      skipped: false,
+      log_id: logId,
+      phone: normalizedPhone,
+      status: finalStatus,
+      status_label: humanizeSmsStatus(finalStatus),
+      provider: result.provider || config.provider,
+      sender_id: result.senderId || config.senderId,
+      provider_message_id:
+        result.providerMessageId || null,
+      provider_status: result.providerStatus || null,
+      delivery_confirmed: finalStatus === "delivered",
+    };
+  } catch (error) {
+    const submissionUncertain =
+      !error.statusCode ||
+      error.statusCode === 408 ||
+      /timeout|timed out|network|socket|connection reset|fetch failed/i.test(
+        String(error.message || "")
+      );
+
+    const failureStatus = submissionUncertain
+      ? "delivery_unknown"
+      : "failed";
+
+    const providerResponse =
+      redactSecretFromProviderResponse(
+        {
+          error: error.message,
+          statusCode: error.statusCode || null,
+          providerResponse:
+            error.providerResponse || null,
+        },
+        finalMessage
+      );
+
+    const logId = await writeSmsLogSafe({
+      branchId,
+      phone: normalizedPhone,
+      message: finalLogMessage,
+      smsType,
+      status: failureStatus,
+      providerResponse,
+      sentBy,
+      provider: error.provider || config.provider,
+      senderId: config.senderId,
+      providerMessageId: error.providerMessageId,
+      providerStatus: error.providerStatus,
+      statusReason: error.message,
+      sourceReference,
+      submittedAt:
+        failureStatus === "delivery_unknown"
+          ? new Date()
+          : null,
+    });
+
+    return {
+      ok: failureStatus === "delivery_unknown",
+      skipped: false,
+      log_id: logId,
+      phone: normalizedPhone,
+      status: failureStatus,
+      status_label: humanizeSmsStatus(failureStatus),
+      delivery_confirmed: false,
+      error: error.message,
+    };
+  }
+}
+
 async function buildOwnerAlertContext(branchId) {
   const settings = await getSmsSettingsForBranch(branchId);
   const branch = await getBranchInfoById(branchId);
@@ -476,6 +622,7 @@ module.exports = {
   getBranchInfoById,
   getSmsSettingsForBranch,
   sendOwnerSmsAlert,
+  sendSmsAlertToPhone,
   truncateMessage,
   writeSmsLogSafe,
 };

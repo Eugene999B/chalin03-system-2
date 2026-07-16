@@ -37,6 +37,28 @@ function normalizeBranches(data) {
   return [];
 }
 
+function strongPasswordError(password) {
+  const text = String(password || "");
+
+  if (text.length < 8) {
+    return "New password must be at least 8 characters long.";
+  }
+
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "New password must include uppercase and lowercase letters.";
+  }
+
+  if (!/\d/.test(text)) {
+    return "New password must include at least one number.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(text)) {
+    return "New password must include at least one symbol.";
+  }
+
+  return "";
+}
+
 export default function LoginPage() {
   const { login, isLoggedIn, workspaceCode: activeWorkspaceCode } = useAuth();
   const navigate = useNavigate();
@@ -70,6 +92,11 @@ export default function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState("");
   const [forgotError, setForgotError] = useState("");
+  const [forgotStage, setForgotStage] = useState("request");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
+  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
+  const [showRecoveryPasswords, setShowRecoveryPasswords] = useState(false);
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -257,27 +284,109 @@ export default function LoginPage() {
     setForgotLoading(true);
 
     try {
-      const response = await axiosClient.post("/auth/forgot-password", {
+      const response = await axiosClient.post("/auth/recovery/request-otp", {
         username: usernameToSend,
       });
 
+      setForgotUsername(usernameToSend);
       setForgotMessage(
         response.data?.message ||
-          "Please contact the admin to reset your password."
+          "Check the registered phone for a recovery code. Contact the original System Administrator when no code arrives."
       );
-    } catch (error) {
+      setForgotStage("verify");
+    } catch (requestError) {
       setForgotError(
-        error.response?.data?.message ||
-          "Failed to request password reset help."
+        requestError.response?.data?.message ||
+          "Password recovery is temporarily unavailable."
       );
     } finally {
       setForgotLoading(false);
     }
   }
 
+  async function handleRecoveryReset(event) {
+    event.preventDefault();
+
+    setForgotMessage("");
+    setForgotError("");
+    setError("");
+
+    const usernameToSend = forgotUsername.trim() || username.trim();
+    const cleanCode = recoveryCode.trim();
+
+    if (!usernameToSend) {
+      setForgotError("Username is required.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setForgotError("Enter the 6-digit recovery code.");
+      return;
+    }
+
+    const passwordPolicyError = strongPasswordError(recoveryNewPassword);
+
+    if (passwordPolicyError) {
+      setForgotError(passwordPolicyError);
+      return;
+    }
+
+    if (recoveryNewPassword !== recoveryConfirmPassword) {
+      setForgotError("New password and confirmation do not match.");
+      return;
+    }
+
+    setForgotLoading(true);
+
+    try {
+      const response = await axiosClient.post(
+        "/auth/recovery/reset-password",
+        {
+          username: usernameToSend,
+          otp: cleanCode,
+          new_password: recoveryNewPassword,
+          confirm_password: recoveryConfirmPassword,
+        }
+      );
+
+      setUsername(usernameToSend);
+      setPassword("");
+      setRecoveryCode("");
+      setRecoveryNewPassword("");
+      setRecoveryConfirmPassword("");
+      setForgotMessage(
+        response.data?.message ||
+          "Password changed successfully. You may now login with the new password."
+      );
+      setForgotStage("complete");
+    } catch (requestError) {
+      setForgotError(
+        requestError.response?.data?.message ||
+          "Password recovery could not be completed."
+      );
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
+  function restartForgotPassword() {
+    setForgotStage("request");
+    setRecoveryCode("");
+    setRecoveryNewPassword("");
+    setRecoveryConfirmPassword("");
+    setShowRecoveryPasswords(false);
+    setForgotMessage("");
+    setForgotError("");
+  }
+
   function openForgotPassword() {
     setShowForgotPassword(true);
     setForgotUsername(username);
+    setForgotStage("request");
+    setRecoveryCode("");
+    setRecoveryNewPassword("");
+    setRecoveryConfirmPassword("");
+    setShowRecoveryPasswords(false);
     setForgotMessage("");
     setForgotError("");
     setError("");
@@ -286,6 +395,11 @@ export default function LoginPage() {
   function closeForgotPassword() {
     setShowForgotPassword(false);
     setForgotUsername("");
+    setForgotStage("request");
+    setRecoveryCode("");
+    setRecoveryNewPassword("");
+    setRecoveryConfirmPassword("");
+    setShowRecoveryPasswords(false);
     setForgotMessage("");
     setForgotError("");
   }
@@ -1315,57 +1429,208 @@ export default function LoginPage() {
                 className="premium-forgot-button"
                 onClick={openForgotPassword}
               >
-                Forgot Password?
+                Forgot Password / Unlock Account?
               </button>
             </div>
           </form>
 
           {showForgotPassword && (
             <div className="premium-forgot-panel">
-              <h3>Forgot Password</h3>
+              <h3>Forgot Password / Unlock Account</h3>
 
-              <p>
-                Enter your username. The system will guide you to contact the
-                administrator for password reset support.
-              </p>
+              {forgotStage === "request" && (
+                <form onSubmit={handleForgotPassword}>
+                  <p>
+                    Enter your username. Eligible accounts receive a 6-digit
+                    recovery code on the registered phone. The code expires
+                    after 5 minutes.
+                  </p>
 
-              {forgotMessage && (
-                <div className="premium-success-box">{forgotMessage}</div>
+                  {forgotError && (
+                    <div className="premium-error-box">{forgotError}</div>
+                  )}
+
+                  <label>Username</label>
+                  <div className="premium-field-wrap">
+                    <span className="premium-field-icon">👤</span>
+                    <input
+                      value={forgotUsername}
+                      onChange={(event) =>
+                        setForgotUsername(event.target.value)
+                      }
+                      placeholder="Enter your username"
+                      autoComplete="username"
+                    />
+                  </div>
+
+                  <div className="premium-warning-box">
+                    The original System Administrator is protected from this
+                    recovery method until the Owner Break-Glass feature is
+                    released.
+                  </div>
+
+                  <div className="premium-forgot-actions">
+                    <button
+                      type="submit"
+                      className="premium-forgot-action"
+                      disabled={forgotLoading}
+                    >
+                      {forgotLoading ? "Requesting..." : "Send Recovery Code"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="premium-forgot-cancel"
+                      onClick={closeForgotPassword}
+                      disabled={forgotLoading}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               )}
-              {forgotError && (
-                <div className="premium-error-box">{forgotError}</div>
+
+              {forgotStage === "verify" && (
+                <form onSubmit={handleRecoveryReset}>
+                  <p>
+                    Enter the code sent to the registered phone and choose a
+                    new secure password. No employee should ask you to reveal
+                    the code.
+                  </p>
+
+                  {forgotMessage && (
+                    <div className="premium-success-box">{forgotMessage}</div>
+                  )}
+
+                  {forgotError && (
+                    <div className="premium-error-box">{forgotError}</div>
+                  )}
+
+                  <label>Username</label>
+                  <div className="premium-field-wrap">
+                    <span className="premium-field-icon">👤</span>
+                    <input
+                      value={forgotUsername}
+                      onChange={(event) =>
+                        setForgotUsername(event.target.value)
+                      }
+                      placeholder="Enter your username"
+                      autoComplete="username"
+                    />
+                  </div>
+
+                  <label>6-Digit Recovery Code</label>
+                  <div className="premium-field-wrap">
+                    <span className="premium-field-icon">🔐</span>
+                    <input
+                      value={recoveryCode}
+                      onChange={(event) =>
+                        setRecoveryCode(
+                          event.target.value.replace(/\D/g, "").slice(0, 6)
+                        )
+                      }
+                      placeholder="000000"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <label>New Password</label>
+                  <div className="premium-field-wrap">
+                    <span className="premium-field-icon">🔑</span>
+                    <input
+                      type={showRecoveryPasswords ? "text" : "password"}
+                      value={recoveryNewPassword}
+                      onChange={(event) =>
+                        setRecoveryNewPassword(event.target.value)
+                      }
+                      placeholder="8+ characters with upper/lower, number and symbol"
+                      autoComplete="new-password"
+                      minLength={8}
+                    />
+                  </div>
+
+                  <label>Confirm New Password</label>
+                  <div className="premium-field-wrap">
+                    <span className="premium-field-icon">✓</span>
+                    <input
+                      type={showRecoveryPasswords ? "text" : "password"}
+                      value={recoveryConfirmPassword}
+                      onChange={(event) =>
+                        setRecoveryConfirmPassword(event.target.value)
+                      }
+                      placeholder="Confirm the new password"
+                      autoComplete="new-password"
+                      minLength={8}
+                    />
+                  </div>
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "9px",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showRecoveryPasswords}
+                      onChange={(event) =>
+                        setShowRecoveryPasswords(event.target.checked)
+                      }
+                      style={{
+                        width: "auto",
+                        margin: 0,
+                        padding: 0,
+                      }}
+                    />
+                    <span>Show passwords while typing</span>
+                  </label>
+
+                  <div className="premium-forgot-actions">
+                    <button
+                      type="submit"
+                      className="premium-forgot-action"
+                      disabled={forgotLoading}
+                    >
+                      {forgotLoading ? "Verifying..." : "Reset Password"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="premium-forgot-cancel"
+                      onClick={restartForgotPassword}
+                      disabled={forgotLoading}
+                    >
+                      Request New Code
+                    </button>
+                  </div>
+                </form>
               )}
 
-              <label>Username</label>
-              <div className="premium-field-wrap">
-                <span className="premium-field-icon">👤</span>
-                <input
-                  value={forgotUsername}
-                  onChange={(event) => setForgotUsername(event.target.value)}
-                  placeholder="Enter your username"
-                  autoComplete="off"
-                />
-              </div>
+              {forgotStage === "complete" && (
+                <div>
+                  <div className="premium-success-box">
+                    {forgotMessage ||
+                      "Password changed successfully. You may now login."}
+                  </div>
 
-              <div className="premium-forgot-actions">
-                <button
-                  type="button"
-                  className="premium-forgot-action"
-                  onClick={handleForgotPassword}
-                  disabled={forgotLoading}
-                >
-                  {forgotLoading ? "Checking..." : "Request Help"}
-                </button>
+                  <p>
+                    All previous sessions were signed out. Enter the new
+                    password in the normal login form.
+                  </p>
 
-                <button
-                  type="button"
-                  className="premium-forgot-cancel"
-                  onClick={closeForgotPassword}
-                  disabled={forgotLoading}
-                >
-                  Cancel
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    className="premium-forgot-action"
+                    onClick={closeForgotPassword}
+                  >
+                    Return to Login
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -16,6 +16,12 @@ const {
   revokeAllUserSessions,
   revokeSession,
 } = require("../services/accountSessionService");
+const {
+  GENERIC_RECOVERY_REQUEST_MESSAGE,
+  recordFailedLoginAttempt,
+  recoverAccountWithOtp,
+  requestRecoveryOtp,
+} = require("../services/accountRecoveryService");
 
 const router = express.Router();
 
@@ -28,8 +34,7 @@ const WORKSPACE_CODES = new Set([
   "equipment_hire",
 ]);
 const AUTH_FAILURE_MESSAGE = "Invalid username or password.";
-const MAX_FAILED_LOGIN_ATTEMPTS = Number(process.env.MAX_FAILED_LOGIN_ATTEMPTS || 5);
-const LOGIN_LOCKOUT_MINUTES = Number(process.env.LOGIN_LOCKOUT_MINUTES || 15);
+const MAX_FAILED_LOGIN_ATTEMPTS = 3;
 
 function cleanText(value) {
   if (value === undefined || value === null) {
@@ -168,6 +173,21 @@ async function buildUserSelectByWhere(whereSql, params) {
   const lockedUntilSql = userColumns.has("locked_until")
     ? "locked_until"
     : "NULL AS locked_until";
+  const permanentLockSql = userColumns.has("is_login_locked")
+    ? "is_login_locked"
+    : "0 AS is_login_locked";
+  const loginLockedAtSql = userColumns.has("login_locked_at")
+    ? "login_locked_at"
+    : "NULL AS login_locked_at";
+  const loginLockReasonSql = userColumns.has("login_lock_reason")
+    ? "login_lock_reason"
+    : "NULL AS login_lock_reason";
+  const lastFailedLoginAtSql = userColumns.has("last_failed_login_at")
+    ? "last_failed_login_at"
+    : "NULL AS last_failed_login_at";
+  const lastFailedLoginIpSql = userColumns.has("last_failed_login_ip")
+    ? "last_failed_login_ip"
+    : "NULL AS last_failed_login_ip";
   const lastLoginAtSql = userColumns.has("last_login_at")
     ? "last_login_at"
     : "NULL AS last_login_at";
@@ -194,6 +214,11 @@ async function buildUserSelectByWhere(whereSql, params) {
       ${createdAtSql},
       ${failedLoginSql},
       ${lockedUntilSql},
+      ${permanentLockSql},
+      ${loginLockedAtSql},
+      ${loginLockReasonSql},
+      ${lastFailedLoginAtSql},
+      ${lastFailedLoginIpSql},
       ${lastLoginAtSql},
       ${lastLoginIpSql},
       ${tokenVersionSql}
@@ -627,6 +652,10 @@ function lockedUntilDate(user) {
 }
 
 function isLoginLocked(user) {
+  if (boolValue(user?.is_login_locked)) {
+    return true;
+  }
+
   const lockedUntil = lockedUntilDate(user);
   return lockedUntil ? lockedUntil.getTime() > Date.now() : false;
 }
@@ -653,58 +682,6 @@ function strongPasswordError(password) {
   return "";
 }
 
-async function recordFailedLogin(req, user) {
-  const userColumns = await getTableColumns("users");
-
-  if (
-    userColumns.has("failed_login_attempts") ||
-    userColumns.has("locked_until")
-  ) {
-    const nextAttempts = Number(user.failed_login_attempts || 0) + 1;
-    const lockAccount = nextAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
-    const updateFields = [];
-    const updateParams = [];
-
-    if (userColumns.has("failed_login_attempts")) {
-      updateFields.push("failed_login_attempts = ?");
-      updateParams.push(nextAttempts);
-    }
-
-    if (userColumns.has("locked_until")) {
-      updateFields.push(
-        lockAccount
-          ? "locked_until = DATE_ADD(NOW(), INTERVAL ? MINUTE)"
-          : "locked_until = locked_until"
-      );
-      if (lockAccount) updateParams.push(LOGIN_LOCKOUT_MINUTES);
-    }
-
-    if (updateFields.length > 0) {
-      await pool.query(
-        `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
-        [...updateParams, user.id]
-      );
-    }
-  }
-
-  await writeAuditEvent({
-    req,
-    userId: user?.id || null,
-    branchId: user?.default_branch_id || null,
-    action: "LOGIN_FAILURE",
-    actionType: "auth.login.failure",
-    outcome: "failure",
-    severity: "warning",
-    entityType: "user",
-    entityId: user?.id || null,
-    details: "Login failed.",
-    metadata: {
-      username: user?.username || null,
-      ip_address: requestIp(req),
-    },
-  });
-}
-
 async function recordSuccessfulLogin(req, user) {
   const userColumns = await getTableColumns("users");
   const updateFields = [];
@@ -716,6 +693,18 @@ async function recordSuccessfulLogin(req, user) {
 
   if (userColumns.has("locked_until")) {
     updateFields.push("locked_until = NULL");
+  }
+
+  if (userColumns.has("is_login_locked")) {
+    updateFields.push("is_login_locked = FALSE");
+  }
+
+  if (userColumns.has("login_locked_at")) {
+    updateFields.push("login_locked_at = NULL");
+  }
+
+  if (userColumns.has("login_lock_reason")) {
+    updateFields.push("login_lock_reason = NULL");
   }
 
   if (userColumns.has("last_login_at")) {
@@ -826,24 +815,28 @@ router.post("/login", async (req, res) => {
         req,
         userId: user.id,
         branchId: user.default_branch_id || null,
-        action: "LOGIN_LOCKED_OUT",
-        actionType: "auth.login.lockout",
+        action: "LOGIN_BLOCKED_ACCOUNT_LOCKED",
+        actionType: "security.account.login_blocked",
         outcome: "blocked",
-        severity: "warning",
+        severity: "critical",
         entityType: "user",
         entityId: user.id,
-        details: "Login blocked because the account is temporarily locked.",
+        details:
+          "Login blocked because the account is locked.",
         metadata: {
-          username: user.username,
-          locked_until: user.locked_until,
+          failed_login_attempts:
+            Number(user.failed_login_attempts || 0),
+          login_locked_at: user.login_locked_at || null,
+          login_lock_reason:
+            user.login_lock_reason || null,
         },
       });
 
-      return res.status(429).json({
+      return res.status(423).json({
         status: "error",
-        code: "ACCOUNT_TEMPORARILY_LOCKED",
+        code: "ACCOUNT_LOCKED",
         message:
-          "Too many failed login attempts. Please wait and try again later.",
+          "This account is locked. Use Forgot Password for SMS recovery or contact the original System Administrator.",
       });
     }
 
@@ -857,7 +850,19 @@ router.post("/login", async (req, res) => {
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
-      await recordFailedLogin(req, user);
+      const failure = await recordFailedLoginAttempt({
+        req,
+        user,
+      });
+
+      if (failure.locked) {
+        return res.status(423).json({
+          status: "error",
+          code: "ACCOUNT_LOCKED",
+          message:
+            "This account is locked. Use Forgot Password for SMS recovery or contact the original System Administrator.",
+        });
+      }
 
       return res.status(401).json({
         status: "error",
@@ -1213,38 +1218,82 @@ router.post("/change-password", requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/forgot-password
-router.post("/forgot-password", async (req, res) => {
+// Compatibility endpoint for the existing Login page.
+async function requestRecoveryOtpHandler(req, res) {
   try {
-    const username = cleanText(req.body.username);
-
-    if (username) {
-      const users = await buildUserSelectByWhere(`WHERE username = ?`, [
-        username,
-      ]);
-
-      if (users.length > 0) {
-        await writeActivityLog(
-          users[0].default_branch_id || null,
-          users[0].id,
-          "FORGOT_PASSWORD_REQUEST",
-          `${users[0].username} requested password reset help`
-        );
-      }
-    }
+    await requestRecoveryOtp({
+      req,
+      username: req.body.username,
+    });
 
     return res.json({
       status: "success",
-      message:
-        "Please contact the admin to reset your password. After admin resets it, login and change it from your account.",
+      message: GENERIC_RECOVERY_REQUEST_MESSAGE,
     });
   } catch (error) {
-    console.error("Forgot password error:", error);
+    console.error(
+      "Password recovery OTP request error:",
+      error
+    );
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       status: "error",
-      message: "Something went wrong while requesting password reset help.",
+      code: error.code || "RECOVERY_REQUEST_FAILED",
+      message:
+        error.statusCode && error.statusCode < 500
+          ? error.message
+          : "Password recovery is temporarily unavailable.",
     });
   }
-});
+}
+
+router.post(
+  "/forgot-password",
+  requestRecoveryOtpHandler
+);
+
+router.post(
+  "/recovery/request-otp",
+  requestRecoveryOtpHandler
+);
+
+// POST /api/auth/recovery/reset-password
+router.post(
+  "/recovery/reset-password",
+  async (req, res) => {
+    try {
+      const result = await recoverAccountWithOtp({
+        req,
+        username: req.body.username,
+        otp: req.body.otp,
+        newPassword: req.body.new_password,
+        confirmPassword: req.body.confirm_password,
+      });
+
+      return res.json({
+        status: "success",
+        message: result.message,
+      });
+    } catch (error) {
+      console.error(
+        "Password recovery reset error:",
+        error.code || error.message
+      );
+
+      return res
+        .status(error.statusCode || 500)
+        .json({
+          status: "error",
+          code:
+            error.code ||
+            "PASSWORD_RECOVERY_FAILED",
+          message:
+            error.statusCode && error.statusCode < 500
+              ? error.message
+              : "Password recovery could not be completed.",
+        });
+    }
+  }
+);
 
 module.exports = router;
