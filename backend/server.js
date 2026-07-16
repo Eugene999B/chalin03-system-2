@@ -44,6 +44,7 @@ const miningRoutes = require("./routes/miningRoutes");
 const equipmentHireRoutes = require("./routes/equipmentHireRoutes");
 const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
 const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
+const ownerSecurityRoutes = require("./routes/ownerSecurityRoutes");
 const release2FinalRoutes = require("./routes/release2FinalRoutes");
 const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
 const workerPrintRoutes = require("./routes/workerPrintRoutes");
@@ -187,6 +188,7 @@ app.use("/api/operations-documents", operationsDocumentRoutes);
 app.use("/api/group-executive", groupExecutiveRoutes);
 app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
+app.use("/api/release2-final", ownerSecurityRoutes);
 app.use("/api/release2-final", release2FinalRoutes);
 app.use("/api/workspace-admin", workspaceAdminRoutes);
 app.use("/api/workspace-context", workspaceContextRoutes);
@@ -203,13 +205,13 @@ async function startServer() {
     await runStartupSelfCheck();
 
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`🔐 Allowed frontend origins: ${allowedOrigins.join(", ")}`);
+      console.log(`âœ… Server running on port ${PORT}`);
+      console.log(`ðŸŒ Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`ðŸ” Allowed frontend origins: ${allowedOrigins.join(", ")}`);
       startSmsDeliveryStatusSync();
     });
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
+    console.error("âŒ Failed to start server:", error);
     process.exit(1);
   }
 }

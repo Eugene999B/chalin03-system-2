@@ -107,6 +107,8 @@ const DIMENSION_TABLES = new Set([
   "fleet_assets",
   "hire_customers",
   "worker_profiles",
+  "owner_break_glass_accounts",
+  "owner_break_glass_recovery_codes",
 ]);
 
 const COMMON_DEPENDENCIES = [
@@ -165,6 +167,8 @@ const SCOPE_TABLES = Object.freeze({
     "fleet_maintenance_records",
     "fleet_inspections",
     "worker_profiles",
+  "owner_break_glass_accounts",
+  "owner_break_glass_recovery_codes",
     "worker_assignments",
     "worker_documents",
     "worker_licenses",
@@ -198,6 +202,8 @@ const SCOPE_TABLES = Object.freeze({
     "fleet_maintenance_records",
     "fleet_inspections",
     "worker_profiles",
+  "owner_break_glass_accounts",
+  "owner_break_glass_recovery_codes",
     "worker_assignments",
     "worker_documents",
     "worker_licenses",
@@ -224,6 +230,8 @@ const SCOPE_TABLES = Object.freeze({
     "hire_work_logs",
     "hire_return_inspections",
     "worker_profiles",
+  "owner_break_glass_accounts",
+  "owner_break_glass_recovery_codes",
     "worker_assignments",
     "worker_licenses",
     "worker_family_members",
@@ -297,6 +305,9 @@ const CATEGORY_TABLES = Object.freeze({
     "protected_action_sessions",
     "owner_break_glass_accounts",
     "owner_recovery_sessions",
+    "owner_break_glass_mfa_enrollments",
+    "owner_break_glass_recovery_codes",
+    "owner_break_glass_login_history",
     "privileged_action_ledger",
     "activity_log",
     "application_error_log",
@@ -311,6 +322,8 @@ const CATEGORY_TABLES = Object.freeze({
     "user_mining_site_access",
     "user_hire_location_access",
     "worker_profiles",
+  "owner_break_glass_accounts",
+  "owner_break_glass_recovery_codes",
     "worker_assignments",
     "worker_documents",
     "worker_licenses",
@@ -2021,6 +2034,26 @@ router.get(
       const ledger =
         await verifyLedgerChain();
 
+      const breakGlass =
+        breakGlassRows[0] || null;
+
+      const ownerSecurityReadiness =
+        !breakGlass?.id
+          ? {
+              code: "not_configured",
+              label: "Not configured",
+              detail:
+                "Create a separate Owner Break-Glass credential before relying on emergency recovery.",
+              fully_protected: false,
+            }
+          : {
+              code: "configured_without_mfa",
+              label: "MFA pending",
+              detail:
+                "Owner Break-Glass exists. Release 3 MFA activation is required before protection is complete.",
+              fully_protected: false,
+            };
+
       return res.json({
         status: "success",
         generated_at:
@@ -2034,9 +2067,11 @@ router.get(
         security_sms:
           smsCounts[0] || {},
         break_glass:
-          breakGlassRows[0] || {
+          breakGlass || {
             configured: false,
           },
+        owner_security_readiness:
+          ownerSecurityReadiness,
         privileged_ledger:
           ledger,
         recent_sessions:
@@ -2269,7 +2304,7 @@ router.post(
       return res.json({
         status: "success",
         message:
-          "Owner Break-Glass was configured successfully. Store the credentials securely outside the ordinary system.",
+          "Owner Break-Glass was configured successfully. Store the credentials securely outside the ordinary system. Release 3 MFA activation is still required before protection is complete.",
       });
     }
   )
