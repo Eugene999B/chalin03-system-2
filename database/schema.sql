@@ -566,10 +566,14 @@ CREATE TABLE sms_log (
     submitted_at DATETIME NULL,
     delivery_confirmed_at DATETIME NULL,
     last_status_at DATETIME NULL,
+    archived_at DATETIME NULL,
+    archived_by INT NULL,
+    archive_reason VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
     FOREIGN KEY (sent_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (archived_by) REFERENCES users(id) ON DELETE SET NULL,
 
     INDEX idx_sms_branch (branch_id),
     INDEX idx_sms_type (sms_type),
@@ -577,7 +581,8 @@ CREATE TABLE sms_log (
     INDEX idx_sms_provider_message_id (provider_message_id),
     INDEX idx_sms_original_log (original_log_id),
     INDEX idx_sms_sent_by (sent_by),
-    INDEX idx_sms_created_at (created_at)
+    INDEX idx_sms_created_at (created_at),
+    INDEX idx_sms_branch_archived (branch_id, archived_at)
 );
 
 -- activity_log

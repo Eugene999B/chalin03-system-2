@@ -255,7 +255,14 @@ function interpretArkeselReport(providerMessageId, reportEntry) {
   }
 
   const providerStatus = String(
-    entry.status || entry.delivery_status || entry.state || ""
+    entry.status ||
+      entry.message_status ||
+      entry.messageStatus ||
+      entry.delivery_status ||
+      entry.deliveryStatus ||
+      entry.sms_status ||
+      entry.state ||
+      ""
   ).trim();
   const lookupError =
     providerStatus.toLowerCase() === "error" ||

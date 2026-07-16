@@ -255,6 +255,8 @@ export default function SmsPage() {
     user?.selected_branch?.location ||
     "";
 
+  const isAdministrator = String(user?.role || "").toLowerCase() === "admin";
+
   const [smsStatus, setSmsStatus] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -275,12 +277,15 @@ export default function SmsPage() {
 
   const [logStatusFilter, setLogStatusFilter] = useState("all");
   const [logTypeFilter, setLogTypeFilter] = useState("all");
+  const [logView, setLogView] = useState("active");
 
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [sendingDailySummary, setSendingDailySummary] = useState(false);
   const [retryingLogId, setRetryingLogId] = useState(null);
+  const [archivingHistory, setArchivingHistory] = useState(false);
+  const [restoringHistory, setRestoringHistory] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -572,7 +577,7 @@ export default function SmsPage() {
         await Promise.all([
           axiosClient.get("/sms/status"),
           axiosClient.get("/sms/customers"),
-          axiosClient.get("/sms/logs?limit=50"),
+          axiosClient.get(`/sms/logs?limit=50&view=${logView}`),
         ]);
 
       setSmsStatus(statusResponse.data.sms || null);
@@ -596,7 +601,7 @@ export default function SmsPage() {
 
     return () => window.clearInterval(automaticRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId]);
+  }, [branchId, logView]);
 
   function toggleCustomer(customerId) {
     const cleanId = Number(customerId);
@@ -633,6 +638,57 @@ export default function SmsPage() {
     setMessage(templateMessage);
     setError("");
     setNotice("");
+  }
+
+  async function clearSmsHistory() {
+    const confirmation = window.prompt(
+      'This clears all active SMS records from this store view while preserving them in Archived History. Type "CLEAR SMS HISTORY" to continue.'
+    );
+
+    if (confirmation === null) return;
+
+    setArchivingHistory(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post("/sms/logs/archive", {
+        confirmation,
+        reason: "Cleared by administrator from SMS Center",
+      });
+
+      setNotice(response.data.message || "SMS history cleared safely.");
+      await loadSmsPageData({ silent: true });
+    } catch (error) {
+      setError(getFriendlyError(error, "Failed to clear SMS history."));
+    } finally {
+      setArchivingHistory(false);
+    }
+  }
+
+  async function restoreSmsHistory() {
+    const confirmation = window.prompt(
+      'Type "RESTORE SMS HISTORY" to restore every archived SMS record for this store.'
+    );
+
+    if (confirmation === null) return;
+
+    setRestoringHistory(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await axiosClient.post("/sms/logs/restore", {
+        confirmation,
+      });
+
+      setNotice(response.data.message || "Archived SMS history restored.");
+      await loadSmsPageData({ silent: true });
+    } catch (error) {
+      setError(getFriendlyError(error, "Failed to restore SMS history."));
+    } finally {
+      setRestoringHistory(false);
+    }
   }
 
   async function retrySmsLog(logId) {
@@ -1157,17 +1213,55 @@ export default function SmsPage() {
             <p style={styles.eyebrowDark}>Message History</p>
             <h2 style={styles.panelTitle}>Recent SMS History</h2>
             <p style={styles.panelSubtitle}>
-              Delivery evidence updates automatically from Arkesel. Retry only confirmed failures and export SMS history as CSV.
+              Delivery evidence updates automatically from Arkesel. Clear History safely archives records instead of deleting audit evidence.
             </p>
           </div>
 
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={downloadSmsCsv}
-          >
-            Export CSV
-          </button>
+          <div style={styles.historyActions}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setLogView(logView === "active" ? "archived" : "active")}
+              disabled={!isAdministrator}
+              title={
+                isAdministrator
+                  ? "Switch between active and archived SMS history"
+                  : "Only an administrator can view archived SMS history"
+              }
+            >
+              {logView === "active" ? "View Archived" : "View Active"}
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={downloadSmsCsv}
+            >
+              Export CSV
+            </button>
+
+            {isAdministrator && logView === "active" && (
+              <button
+                type="button"
+                className="danger-button"
+                onClick={clearSmsHistory}
+                disabled={archivingHistory || logs.length === 0}
+              >
+                {archivingHistory ? "Clearing..." : "Clear SMS History"}
+              </button>
+            )}
+
+            {isAdministrator && logView === "archived" && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={restoreSmsHistory}
+                disabled={restoringHistory || logs.length === 0}
+              >
+                {restoringHistory ? "Restoring..." : "Restore Archived History"}
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={styles.logToolbar}>
@@ -1218,11 +1312,16 @@ export default function SmsPage() {
 
         <p>
           Showing <strong>{filteredLogs.length}</strong> of{" "}
-          <strong>{logs.length}</strong> SMS records.
+          <strong>{logs.length}</strong>{" "}
+          {logView === "archived" ? "archived" : "active"} SMS records.
         </p>
 
         {logs.length === 0 ? (
-          <div style={styles.emptyState}>No SMS records yet.</div>
+          <div style={styles.emptyState}>
+            {logView === "archived"
+              ? "No archived SMS records."
+              : "No active SMS records yet."}
+          </div>
         ) : filteredLogs.length === 0 ? (
           <div style={styles.emptyState}>
             No SMS records match the selected filters.
@@ -1286,6 +1385,15 @@ export default function SmsPage() {
                         <strong>Last automatic check:</strong>{" "}
                         {formatDateTime(log.last_status_at)}
                       </small>
+                      {log.archived_at && (
+                        <small>
+                          <strong>Archived:</strong>{" "}
+                          {formatDateTime(log.archived_at)} by{" "}
+                          {log.archived_by_name ||
+                            log.archived_by_username ||
+                            "Administrator"}
+                        </small>
+                      )}
                       <small>
                         <strong>Segments / estimated credits:</strong>{" "}
                         {log.segment_count || 1} / {log.estimated_credits || 0}
@@ -1782,6 +1890,13 @@ const styles = {
     border: "1px solid rgba(226, 232, 240, 0.95)",
     boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
     minWidth: 0,
+  },
+
+  historyActions: {
+    display: "flex",
+    gap: "9px",
+    flexWrap: "wrap",
+    alignItems: "center",
   },
 
   logToolbar: {
