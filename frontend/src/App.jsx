@@ -45,6 +45,7 @@ import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
 import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
+import GroupConfigurationPage from "./pages/GroupConfigurationPage";
 import OwnerRecoveryPage from "./pages/OwnerRecoveryPage";
 import Release2FinalControlPage from "./pages/Release2FinalControlPage";
 import WorkspaceHelpPage from "./pages/WorkspaceHelpPage";
@@ -506,6 +507,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "executive.operations.view",
                 <Release2FinalControlPage mode="executive" />
+              )}
+            />
+            <Route
+              path="configuration"
+              element={permissionOnlyPage(
+                "security.admin",
+                <GroupConfigurationPage />
               )}
             />
           </Route>
