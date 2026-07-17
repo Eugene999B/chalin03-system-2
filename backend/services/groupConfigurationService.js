@@ -420,7 +420,7 @@ function publicSequence(row) {
     last_reset_key: row.last_reset_key,
     include_year: Boolean(Number(row.include_year)),
     include_month: Boolean(Number(row.include_month)),
-    separator: row.separator,
+    separator: row.number_separator,
     is_active: Boolean(Number(row.is_active)),
     updated_at: row.updated_at || null,
     updated_by_name: row.updated_by_name || null,
@@ -438,7 +438,7 @@ function sequenceResetKey(sequence, date = new Date()) {
 }
 
 function formatDocumentNumber(sequence, number, date = new Date()) {
-  const separator = sequence.separator || "-";
+  const separator = sequence.number_separator || sequence.separator || "-";
   const parts = [sequence.prefix];
 
   if (Boolean(Number(sequence.include_year))) {
@@ -489,7 +489,7 @@ function normalizeSequenceDefinition(current, changes = {}) {
     20
   ).toLowerCase();
   const separator = cleanText(
-    changes.separator ?? current.separator,
+    changes.separator ?? current.number_separator,
     5
   );
   const nextNumber = Number(changes.next_number ?? current.next_number);
@@ -582,7 +582,7 @@ async function updateSequence({
            reset_policy = ?,
            include_year = ?,
            include_month = ?,
-           separator = ?,
+           number_separator = ?,
            is_active = ?,
            updated_by = ?,
            updated_at = NOW()

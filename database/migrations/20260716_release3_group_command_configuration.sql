@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS document_sequences (
     last_reset_key VARCHAR(20) NULL,
     include_year BOOLEAN NOT NULL DEFAULT TRUE,
     include_month BOOLEAN NOT NULL DEFAULT FALSE,
-    separator VARCHAR(5) NOT NULL DEFAULT '-',
+    number_separator VARCHAR(5) NOT NULL DEFAULT '-',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     updated_by INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -384,7 +384,7 @@ INSERT INTO document_sequences (
     reset_policy,
     include_year,
     include_month,
-    separator,
+    number_separator,
     is_active
 )
 VALUES
