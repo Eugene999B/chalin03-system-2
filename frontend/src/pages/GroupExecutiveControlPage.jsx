@@ -695,7 +695,7 @@ export default function GroupExecutiveControlPage() {
               description="Live management controls from Owner protection, staff accounts, professional backups, worker records and application-health evidence."
               action={
                 <Link to="/group-executive-control/configuration">
-                  Open Group Configuration â†’
+                  Open Group Configuration →
                 </Link>
               }
             />

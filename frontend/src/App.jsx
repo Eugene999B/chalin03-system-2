@@ -40,6 +40,7 @@ import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntell
 import StockTransfersPage from "./pages/StockTransfersPage";
 import MiningPortalPage from "./pages/MiningPortalPage";
 import MiningOperationsPage from "./pages/MiningOperationsPage";
+import MiningControlCentrePage from "./pages/MiningControlCentrePage";
 import EquipmentHirePortalPage from "./pages/EquipmentHirePortalPage";
 import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
@@ -339,6 +340,13 @@ export default function App() {
               element={permissionPage(
                 MINING_SECTION_PERMISSIONS.incidents,
                 <MiningOperationsPage section="incidents" />
+              )}
+            />
+            <Route
+              path="control-centre"
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.control,
+                <MiningControlCentrePage />
               )}
             />
             <Route

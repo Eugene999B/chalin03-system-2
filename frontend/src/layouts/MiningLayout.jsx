@@ -35,6 +35,19 @@ const navigationSections = [
         permissions: ["mining.production.view"],
       },
       {
+        title: "Mining Control Centre",
+        description: "Stockpiles, dispatch, fuel reconciliation, crews and site closing",
+        path: "/mining/control-centre",
+        icon: "\u{1F3D7}\u{FE0F}",
+        anyPermissions: [
+          "mining.stockpiles.view",
+          "mining.dispatch.view",
+          "mining.fuel_control.view",
+          "mining.workforce.view",
+          "mining.closing.view",
+        ],
+      },
+      {
         title: "Equipment Operations",
         description: "Machine hours, operators and downtime",
         path: "/mining/equipment",

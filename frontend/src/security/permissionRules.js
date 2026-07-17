@@ -7,6 +7,11 @@ export const MINING_VIEW_PERMISSIONS = Object.freeze([
   "mining.expenses.view",
   "mining.incidents.view",
   "mining.reports.view",
+  "mining.stockpiles.view",
+  "mining.dispatch.view",
+  "mining.fuel_control.view",
+  "mining.workforce.view",
+  "mining.closing.view",
 ]);
 
 export const HIRE_VIEW_PERMISSIONS = Object.freeze([
@@ -31,6 +36,7 @@ export const MINING_SECTION_PERMISSIONS = Object.freeze({
   fuel: { all: ["mining.fuel.view"] },
   expenses: { all: ["mining.expenses.view"] },
   incidents: { all: ["mining.incidents.view"] },
+  control: { any: ["mining.stockpiles.view", "mining.dispatch.view", "mining.fuel_control.view", "mining.workforce.view", "mining.closing.view"] },
   fleet: { all: ["fleet.assets.view"] },
   documents: { all: ["operations.documents.view"] },
   administration: { all: ["workspace.admin"] },

@@ -1,10 +1,23 @@
-# Database Migrations
+# Chalin 03 Additive Database Migrations
 
-The active database root is now clean. Historical one-off migrations are not
-kept here as executable files.
+This folder contains controlled, additive migrations for the live Chalin 03
+platform.
 
-Use `schema.sql` for a deliberate clean reset through the reset runner, then
-restore the private JSON backup and run `seed_reference_data.sql`.
+## Production safety
 
-Future migrations should be added here with a clear date, purpose, and rollback
-note.
+- Never run `database/schema.sql` against the production Railway database.
+- Create and verify a Professional Backup before every production migration.
+- Apply only migrations that are missing from `schema_migrations`.
+- Run the matching `*_verify.sql` file immediately after the migration.
+- Do not run automatic destructive rollback SQL. Correct forward with another
+  reviewed additive migration when necessary.
+
+## Release 3 order
+
+1. `20260716_release3_group_command_configuration.sql`
+2. `20260716_release3_owner_mfa_security.sql`
+3. `20260717_release3b_mining_operations_control.sql`
+4. `20260717_release3b_mining_operations_control_verify.sql` — read-only check
+
+Release 3B requires the Group Configuration migration because Mining document
+numbers use the database-backed `document_sequences` table.
