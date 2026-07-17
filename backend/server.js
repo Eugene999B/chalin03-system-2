@@ -46,6 +46,7 @@ const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
 const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
 const ownerSecurityRoutes = require("./routes/ownerSecurityRoutes");
 const release2FinalRoutes = require("./routes/release2FinalRoutes");
+const groupConfigurationRoutes = require("./routes/groupConfigurationRoutes");
 const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
 const workerPrintRoutes = require("./routes/workerPrintRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
@@ -136,6 +137,7 @@ app.get("/api", (req, res) => {
       "/api/equipment-hire",
       "/api/operations-documents",
       "/api/group-executive",
+      "/api/group-configuration",
       "/api/release2-final",
       "/api/workspace-admin",
     ],
@@ -158,6 +160,7 @@ app.use("/api/release2-final/backups", sensitiveAdminLimiter);
 app.use("/api/release2-final/workers", sensitiveAdminLimiter);
 app.use("/api/users", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
+app.use("/api/group-configuration", sensitiveAdminLimiter);
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
@@ -186,6 +189,7 @@ app.use("/api/mining", miningRoutes);
 app.use("/api/equipment-hire", equipmentHireRoutes);
 app.use("/api/operations-documents", operationsDocumentRoutes);
 app.use("/api/group-executive", groupExecutiveRoutes);
+app.use("/api/group-configuration", groupConfigurationRoutes);
 app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
 app.use("/api/release2-final", ownerSecurityRoutes);

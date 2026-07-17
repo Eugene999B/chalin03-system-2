@@ -386,6 +386,7 @@ export default function GroupExecutiveControlPage() {
   const hire = summary?.hire || {};
   const fleet = summary?.fleet || {};
   const cashControl = summary?.cash_control || {};
+  const commandCentre = summary?.command_centre || {};
   const alertCounts = summary?.alert_counts || {};
   const trendRows = Array.isArray(summary?.financial_trend)
     ? summary.financial_trend
@@ -403,6 +404,94 @@ export default function GroupExecutiveControlPage() {
       : numberValue(alertCounts.high) > 0 || numberValue(cashControl.variance_count) > 0
         ? { label: "Attention required", tone: "warning", note: "Priority exceptions need follow-up" }
         : { label: "Controls stable", tone: "stable", note: "No critical exception detected" };
+
+  const commandMetrics = [
+    {
+      label: "Owner protection",
+      value:
+        commandCentre.owner_security?.readiness_label ||
+        "Setup required",
+      note: `${decimal(
+        commandCentre.owner_security?.unused_recovery_codes
+      )} unused recovery codes`,
+    },
+    {
+      label: "Locked accounts",
+      value: decimal(commandCentre.accounts?.locked_accounts),
+      note: "Staff security review",
+    },
+    {
+      label: "Active sessions",
+      value: decimal(commandCentre.accounts?.active_sessions),
+      note: "Server-side sessions",
+    },
+    {
+      label: "Latest backup age",
+      value:
+        commandCentre.backups?.latest_backup_age_hours === null ||
+        commandCentre.backups?.latest_backup_age_hours === undefined
+          ? "No backup"
+          : `${decimal(
+              commandCentre.backups.latest_backup_age_hours
+            )}h`,
+      note: `Maximum ${decimal(
+        commandCentre.backups?.maximum_age_hours
+      )}h`,
+    },
+    {
+      label: "Unverified backups",
+      value: decimal(commandCentre.backups?.unverified_backups),
+      note: "Verification outstanding",
+    },
+    {
+      label: "Active workers",
+      value: decimal(commandCentre.workforce?.active_workers),
+      note: "Current workforce records",
+    },
+    {
+      label: "Expiring documents",
+      value: decimal(
+        commandCentre.workforce?.expiring_documents
+      ),
+      note: "Expired or within warning period",
+    },
+    {
+      label: "Expiring licences",
+      value: decimal(
+        commandCentre.workforce?.expiring_licenses
+      ),
+      note: "Licence follow-up required",
+    },
+    {
+      label: "Overdue property",
+      value: decimal(
+        commandCentre.workforce?.overdue_property_returns
+      ),
+      note: "Company property not returned",
+    },
+    {
+      label: "Owner login failures",
+      value: decimal(
+        commandCentre.security?.failed_owner_logins_24h
+      ),
+      note: "Past 24 hours",
+    },
+    {
+      label: "Critical privileged actions",
+      value: decimal(
+        commandCentre.security
+          ?.critical_privileged_actions_7d
+      ),
+      note: "Past 7 days",
+    },
+    {
+      label: "Server errors",
+      value: decimal(
+        commandCentre.system?.application_errors_24h
+      ),
+      note: "HTTP 500-level errors in 24 hours",
+    },
+  ];
 
   const portfolioCards = [
       {
@@ -599,6 +688,29 @@ export default function GroupExecutiveControlPage() {
 
       {summary ? (
         <>
+          <section className="gec-section-card">
+            <SectionHeader
+              eyebrow="Group Command Centre"
+              title="Security, backup, workforce and system readiness"
+              description="Live management controls from Owner protection, staff accounts, professional backups, worker records and application-health evidence."
+              action={
+                <Link to="/group-executive-control/configuration">
+                  Open Group Configuration â†’
+                </Link>
+              }
+            />
+
+            <div className="gec-control-grid">
+              {commandMetrics.map((metric) => (
+                <div key={metric.label}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.note}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section className="gec-kpi-grid">
             <MetricCard
               icon="◫"

@@ -103,6 +103,8 @@ const DIMENSION_TABLES = new Set([
   "business_locations",
   "user_business_access",
   "settings",
+  "group_configuration",
+  "document_sequences",
   "mining_sites",
   "fleet_assets",
   "hire_customers",
@@ -120,6 +122,10 @@ const COMMON_DEPENDENCIES = [
   "business_locations",
   "user_business_access",
   "settings",
+  "group_configuration",
+  "group_configuration_history",
+  "document_sequences",
+  "document_sequence_history",
 ];
 
 const SCOPE_TABLES = Object.freeze({
@@ -4234,3 +4240,5 @@ router.get(
 );
 
 module.exports = router;
+module.exports.requireProtectedAction = requireProtectedAction;
+module.exports.appendLedger = appendLedger;

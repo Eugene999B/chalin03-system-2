@@ -30,6 +30,13 @@ export default function GroupExecutiveLayout() {
           permissions: ["executive.operations.view"],
         },
         {
+          title: "Group Configuration",
+          description: "Company settings, thresholds, features and document numbering",
+          path: "/group-executive-control/configuration",
+          icon: "\u2699\uFE0F",
+          permissions: ["security.admin"],
+        },
+        {
           title: "Return to Current Business",
           description: "Go back to the workspace used for this login",
           path: returnPath,

@@ -4,6 +4,9 @@ const ExcelJS = require("exceljs");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  loadGroupCommandCentreSummary,
+} = require("../services/groupCommandCentreService");
 
 const router = express.Router();
 const ALLOWED_ROLES = ["admin", "manager", "auditor"];
@@ -1158,7 +1161,54 @@ async function loadGroupSummary(req) {
         : 0,
   };
 
-  summary.recommendations = buildRecommendations(summary);
+  summary.command_centre =
+    await loadGroupCommandCentreSummary({
+      period: summary.period,
+    });
+
+  const commandAlerts =
+    summary.command_centre?.alerts || [];
+
+  if (commandAlerts.length > 0) {
+    const severityRank = {
+      critical: 0,
+      high: 1,
+      medium: 2,
+      low: 3,
+    };
+
+    summary.alerts = [
+      ...(summary.alerts || []),
+      ...commandAlerts,
+    ]
+      .sort(
+        (left, right) =>
+          (severityRank[left.severity] ?? 9) -
+          (severityRank[right.severity] ?? 9)
+      )
+      .slice(0, 80);
+
+    summary.alert_counts = summary.alerts.reduce(
+      (counts, alert) => {
+        counts.total += 1;
+        counts[alert.severity] =
+          (counts[alert.severity] || 0) + 1;
+        return counts;
+      },
+      {
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      }
+    );
+  }
+
+  summary.recommendations = [
+    ...(summary.command_centre?.recommendations || []),
+    ...buildRecommendations(summary),
+  ].slice(0, 20);
 
   return summary;
 }
