@@ -43,6 +43,7 @@ import MiningOperationsPage from "./pages/MiningOperationsPage";
 import MiningControlCentrePage from "./pages/MiningControlCentrePage";
 import EquipmentHirePortalPage from "./pages/EquipmentHirePortalPage";
 import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
+import HireCommercialControlPage from "./pages/HireCommercialControlPage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
 import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
@@ -433,6 +434,13 @@ export default function App() {
               element={permissionPage(
                 HIRE_SECTION_PERMISSIONS.contracts,
                 <EquipmentHireOperationsPage section="contracts" />
+              )}
+            />
+            <Route
+              path="commercial-control"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.commercial,
+                <HireCommercialControlPage />
               )}
             />
             <Route

@@ -25,6 +25,7 @@ export const HIRE_VIEW_PERMISSIONS = Object.freeze([
   "hire.payments.view",
   "hire.returns.view",
   "hire.reports.view",
+  "hire.commercial.view",
 ]);
 
 export const MINING_SECTION_PERMISSIONS = Object.freeze({
@@ -49,6 +50,7 @@ export const HIRE_SECTION_PERMISSIONS = Object.freeze({
   availability: { all: ["fleet.assets.view"] },
   quotations: { all: ["hire.quotations.view"] },
   contracts: { all: ["hire.contracts.view"] },
+  commercial: { all: ["hire.commercial.view"] },
   operations: { any: ["hire.dispatch.view", "hire.work_logs.view"] },
   finance: { any: ["hire.invoices.view", "hire.payments.view"] },
   returns: { all: ["hire.returns.view"] },
@@ -103,6 +105,10 @@ export const HIRE_ACTION_PERMISSIONS = Object.freeze({
   return: "hire.returns.manage",
   operationalClose: "hire.contracts.close_operational",
   financialClose: "hire.contracts.close_financial",
+  commercial: "hire.commercial.manage",
+  commercialApprove: "hire.commercial.approve",
+  evidence: "hire.commercial.evidence",
+  damage: "hire.commercial.damage",
 });
 
 export const FLEET_ACTION_PERMISSIONS = Object.freeze({

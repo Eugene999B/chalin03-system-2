@@ -12,6 +12,7 @@ const {
   sendHireLocationScopeError,
 } = require("../services/hireLocationScope");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { nextDocumentNumber } = require("../services/groupConfigurationService");
 
 const router = express.Router();
 
@@ -1254,7 +1255,7 @@ router.post("/enquiries", requirePermission("hire.enquiries.manage"), async (req
       return res.status(404).json({ status: "error", message: "Active hire customer not found." });
     }
 
-    const enquiryNumber = generateDocumentNumber("HENQ");
+    const enquiryNumber = await nextDocumentNumber("HENQ", { userId: req.user.id });
     const [result] = await pool.query(
       `INSERT INTO hire_enquiries (
          hire_location_id, enquiry_number, customer_id, enquiry_date,
@@ -1486,7 +1487,7 @@ router.post("/enquiries/:id/convert-to-quotation", requirePermission("hire.enqui
       return res.status(400).json({ status: "error", message: "Discount cannot exceed the quotation subtotal." });
     }
 
-    const quotationNumber = generateDocumentNumber("HQUO");
+    const quotationNumber = await nextDocumentNumber("HQUO", { userId: req.user.id });
     const [result] = await connection.query(
       `INSERT INTO hire_quotations (
          hire_location_id, quotation_number, enquiry_id, customer_id,
@@ -1755,7 +1756,7 @@ router.post("/quotations", requirePermission("hire.quotations.manage"), async (r
     if (!totals) {
       return res.status(400).json({ status: "error", message: "Discount cannot exceed the quotation subtotal." });
     }
-    const quotationNumber = generateDocumentNumber("HQUO");
+    const quotationNumber = await nextDocumentNumber("HQUO", { userId: req.user.id });
 
     await connection.beginTransaction();
 
@@ -2168,7 +2169,7 @@ router.post("/quotations/:id/convert-to-contract", requirePermission("hire.quota
     }
 
     const startDate = databaseDate(quote.requested_start_date) || new Date().toISOString().slice(0, 10);
-    const contractNumber = generateDocumentNumber("HCON");
+    const contractNumber = await nextDocumentNumber("HCON", { userId: req.user.id });
     const [result] = await connection.query(
       `INSERT INTO hire_contracts (
          hire_location_id, contract_number, quotation_id, customer_id,
@@ -2439,7 +2440,7 @@ router.post("/contracts", requirePermission("hire.contracts.manage"), async (req
       return res.status(404).json({ status: "error", message: "Active hire customer not found." });
     }
 
-    const contractNumber = generateDocumentNumber("HCON");
+    const contractNumber = await nextDocumentNumber("HCON", { userId: req.user.id });
     const [result] = await connection.query(
       `INSERT INTO hire_contracts (
          hire_location_id, contract_number, quotation_id, customer_id,
@@ -3175,14 +3176,16 @@ router.post("/dispatches", requirePermission("hire.dispatch.manage"), async (req
       });
     }
 
+    const dispatchNumber = await nextDocumentNumber("HDSP", { userId: req.user.id });
     const [result] = await connection.query(
       `INSERT INTO hire_dispatches (
-         hire_location_id, contract_id, contract_asset_id,
+         dispatch_number, hire_location_id, contract_id, contract_asset_id,
          dispatch_datetime, destination, opening_meter, fuel_level_percent,
          condition_status, attachments_tools, transport_details,
          receiving_person, notes, created_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        dispatchNumber,
         selectedHireLocationId(req),
         assignment.contract_id,
         contractAssetId,
@@ -3883,7 +3886,7 @@ router.post("/invoices", requirePermission("hire.invoices.manage"), async (req, 
     const taxAmount = Number((taxable * (taxRate / 100)).toFixed(2));
     const total = Number((taxable + taxAmount).toFixed(2));
 
-    const invoiceNumber = generateDocumentNumber("HINV");
+    const invoiceNumber = await nextDocumentNumber("HINV", { userId: req.user.id });
     const initialStatus =
       dueDate < new Date().toISOString().slice(0, 10) ? "overdue" : "issued";
     const [result] = await connection.query(
@@ -4356,15 +4359,17 @@ router.post("/returns", requirePermission("hire.returns.manage"), async (req, re
       missingItems,
     });
 
+    const returnNumber = await nextDocumentNumber("HRET", { userId: req.user.id });
     const [result] = await connection.query(
       `INSERT INTO hire_return_inspections (
-         hire_location_id, contract_id, contract_asset_id,
+         return_number, hire_location_id, contract_id, contract_asset_id,
          return_datetime, closing_meter, fuel_level_percent,
          condition_status, damage_details, missing_items,
          estimated_damage_amount, customer_representative, status,
          notes, created_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
       [
+        returnNumber,
         selectedHireLocationId(req),
         assignment.contract_id,
         contractAssetId,

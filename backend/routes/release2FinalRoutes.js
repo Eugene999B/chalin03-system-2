@@ -216,6 +216,14 @@ const SCOPE_TABLES = Object.freeze({
     "hire_invoice_lines",
     "hire_payments",
     "hire_return_inspections",
+    "hire_rate_cards",
+    "hire_quotation_items",
+    "hire_contract_items",
+    "hire_contract_amendments",
+    "hire_deposit_transactions",
+    "hire_commercial_approvals",
+    "hire_evidence_files",
+    "hire_damage_assessments",
     "fleet_assets",
     "fleet_meter_readings",
     "fleet_fuel_logs",
@@ -298,6 +306,13 @@ const CATEGORY_TABLES = Object.freeze({
     "hire_dispatches",
     "hire_work_logs",
     "hire_return_inspections",
+    "hire_rate_cards",
+    "hire_quotation_items",
+    "hire_contract_items",
+    "hire_contract_amendments",
+    "hire_commercial_approvals",
+    "hire_evidence_files",
+    "hire_damage_assessments",
   ]),
 
   financial: new Set([
@@ -322,6 +337,8 @@ const CATEGORY_TABLES = Object.freeze({
     "hire_invoices",
     "hire_invoice_lines",
     "hire_payments",
+    "hire_deposit_transactions",
+    "hire_damage_assessments",
   ]),
 
   security: new Set([

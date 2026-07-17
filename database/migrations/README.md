@@ -21,3 +21,12 @@ platform.
 
 Release 3B requires the Group Configuration migration because Mining document
 numbers use the database-backed `document_sequences` table.
+
+## Release 3C — Equipment Hire Commercial Completion
+
+Apply in production only after a full application backup and a second SQL backup:
+
+1. `20260717_release3c_hire_commercial_completion.sql`
+2. `20260717_release3c_hire_commercial_completion_verify.sql` (read-only verification)
+
+This migration is additive. It normalizes legacy single-line quotations/contracts into one initial line, adds controlled dispatch/return numbering, and never runs `database/schema.sql` against production.

@@ -43,6 +43,7 @@ const fleetRoutes = require("./routes/fleetRoutes");
 const miningRoutes = require("./routes/miningRoutes");
 const miningControlRoutes = require("./routes/miningControlRoutes");
 const equipmentHireRoutes = require("./routes/equipmentHireRoutes");
+const hireCommercialRoutes = require("./routes/hireCommercialRoutes");
 const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
 const groupExecutiveRoutes = require("./routes/groupExecutiveRoutes");
 const ownerSecurityRoutes = require("./routes/ownerSecurityRoutes");
@@ -137,6 +138,7 @@ app.get("/api", (req, res) => {
       "/api/mining",
       "/api/mining-control",
       "/api/equipment-hire",
+      "/api/hire-commercial",
       "/api/operations-documents",
       "/api/group-executive",
       "/api/group-configuration",
@@ -190,6 +192,7 @@ app.use("/api/fleet", fleetRoutes);
 app.use("/api/mining", miningRoutes);
 app.use("/api/mining-control", miningControlRoutes);
 app.use("/api/equipment-hire", equipmentHireRoutes);
+app.use("/api/hire-commercial", hireCommercialRoutes);
 app.use("/api/operations-documents", operationsDocumentRoutes);
 app.use("/api/group-executive", groupExecutiveRoutes);
 app.use("/api/group-configuration", groupConfigurationRoutes);

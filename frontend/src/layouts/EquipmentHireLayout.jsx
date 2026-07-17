@@ -49,6 +49,13 @@ const navigationSections = [
         permissions: ["hire.contracts.view"],
       },
       {
+        title: "Commercial Control",
+        description: "Rate cards, multi-item quotes, amendments, deposits and damage settlement",
+        path: "/equipment-hire-operations/commercial-control",
+        icon: "\u{1F4BC}",
+        permissions: ["hire.commercial.view"],
+      },
+      {
         title: "Dispatch & Job Cards",
         description: "Mobilization, work logs and billable hours",
         path: "/equipment-hire-operations/operations",

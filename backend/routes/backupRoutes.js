@@ -102,6 +102,14 @@ const PREFERRED_TABLE_ORDER = [
   "hire_invoice_lines",
   "hire_payments",
   "hire_return_inspections",
+  "hire_rate_cards",
+  "hire_quotation_items",
+  "hire_contract_items",
+  "hire_contract_amendments",
+  "hire_deposit_transactions",
+  "hire_commercial_approvals",
+  "hire_evidence_files",
+  "hire_damage_assessments",
 ];
 
 const DATE_ONLY_COLUMNS = new Set([
@@ -124,6 +132,11 @@ const DATE_ONLY_COLUMNS = new Set([
   "actual_end_date",
   "validity_date",
   "invoice_date",
+  "effective_from",
+  "effective_to",
+  "effective_date",
+  "previous_end_date",
+  "proposed_end_date",
 ]);
 
 const DATE_TIME_COLUMNS = new Set([
@@ -164,6 +177,11 @@ const DATE_TIME_COLUMNS = new Set([
   "assigned_from",
   "assigned_to",
   "issued_at",
+  "transaction_date",
+  "captured_at",
+  "decided_at",
+  "voided_at",
+  "settled_at",
 ]);
 
 function getBranchId(req) {
