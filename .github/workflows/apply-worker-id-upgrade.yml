@@ -24,6 +24,17 @@ jobs:
           ref: agent/release-3f-d2-worker-id-card
           fetch-depth: 0
 
+      - name: Normalize one-time script quoting
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/apply_worker_id_upgrade.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace("MIGRATION = r'''-- CHALIN 03 RELEASE 3F-D2", 'MIGRATION = r"""-- CHALIN 03 RELEASE 3F-D2', 1)
+          text = text.replace("\n'''\n\nTEST = r'''const test", "\n\"\"\"\n\nTEST = r'''const test", 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Apply Release 3F-D2 patch
         run: |
           set -o pipefail
