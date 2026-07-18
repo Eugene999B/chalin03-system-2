@@ -47,6 +47,18 @@ jobs:
           if count != 1:
               raise RuntimeError('Could not normalize the settings SQL marker.')
           settings_path.write_text(settings, encoding='utf-8')
+
+          worker_path = Path('frontend/src/pages/ExpandedWorkerProfilePage.jsx')
+          worker = worker_path.read_text(encoding='utf-8')
+          worker, count = re.subn(
+              r'\n\s+>\n\s+Print ID Card\n\s+</button>',
+              '\n                        >\n                          Print ID Card\n                        </button>',
+              worker,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError('Could not normalize the worker ID action marker.')
+          worker_path.write_text(worker, encoding='utf-8')
           PY
 
       - name: Apply Release 3F-D2 patch
