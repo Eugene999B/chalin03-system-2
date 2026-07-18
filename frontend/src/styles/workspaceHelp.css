@@ -109,3 +109,73 @@
     flex-direction: column;
   }
 }
+
+.workspace-help-boundary,
+.workspace-help-search,
+.workspace-help-empty {
+  padding: 17px 19px;
+  border: 1px solid #cbd5e1;
+  border-radius: 15px;
+  background: #f8fafc;
+}
+
+.workspace-help-boundary strong,
+.workspace-help-search label {
+  display: block;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.workspace-help-boundary p {
+  margin: 7px 0 0;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.workspace-help-search > div {
+  display: flex;
+  gap: 9px;
+  margin-top: 9px;
+}
+
+.workspace-help-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.workspace-help-search button {
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 10px;
+  background: #1e3a5f;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workspace-help-grid ul {
+  margin: 12px 0 0;
+  padding-left: 19px;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.workspace-help-grid li + li {
+  margin-top: 4px;
+}
+
+.workspace-help-empty {
+  color: #64748b;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .workspace-help-search > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

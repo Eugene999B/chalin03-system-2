@@ -1095,3 +1095,15 @@ Production maintenance must apply only the reviewed additive migration:
 `database/migrations/20260718_release3fc_user_permissions_security_messages.sql`
 
 Never run `database/schema.sql` against the live Railway database.
+
+## Release 3F-C2 — Independent Category Controls
+
+Release 3F-C2 makes Spare Parts, Mining Operations and Equipment Hire independent
+login and workforce domains. The original System Administrator is the only
+cross-category account. Category-specific permission catalogs and user lists are
+enforced server-side, worker profiles are scoped by category, ambiguous legacy
+assignments are preserved for protected Safe Conflict Review, each category has
+its own detailed Help/User Guide, the Equipment Hire sidebar Unicode rendering
+is corrected, and each Spare Parts store's Business Phone is the MoMo number on
+its receipts. Production uses only the additive 3F-C2 migration; `schema.sql` is
+never used against the live database.

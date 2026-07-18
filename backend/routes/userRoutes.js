@@ -441,6 +441,9 @@ async function getUserById(userId) {
       login_lock_reason,
       last_failed_login_at,
       last_failed_login_ip,
+      primary_workspace_code,
+      category_assignment_status,
+      category_conflict_reason,
       created_at,
       updated_at
      FROM users
@@ -569,6 +572,9 @@ function normalizeUserRow(user) {
       user.last_failed_login_ip || null,
     created_at: user.created_at,
     updated_at: user.updated_at,
+    primary_workspace_code: user.primary_workspace_code || "spare_parts",
+    category_assignment_status: user.category_assignment_status || "assigned",
+    category_conflict_reason: user.category_conflict_reason || null,
     branches: user.branches || [],
   };
 }
@@ -594,10 +600,16 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         login_lock_reason,
         last_failed_login_at,
         last_failed_login_ip,
+        primary_workspace_code,
+        category_assignment_status,
+        category_conflict_reason,
         created_at,
         updated_at
        FROM users
-       ORDER BY created_at DESC`
+       WHERE primary_workspace_code = 'spare_parts'
+          OR (id = ? AND username = ? AND role = 'admin')
+       ORDER BY created_at DESC`,
+      [SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
     );
 
     const userIds = users.map((user) => user.id);
@@ -758,9 +770,13 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
         default_branch_id,
         can_access_all_branches,
         phone,
-        is_active
+        is_active,
+        primary_workspace_code,
+        category_assignment_status,
+        category_assignment_reviewed_at,
+        category_assignment_reviewed_by
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, 'spare_parts', 'assigned', NOW(), ?)`,
       [
         cleanFullName,
         cleanUsername,
@@ -769,6 +785,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
         selectedBranchIds[0],
         accessAllBranches ? 1 : 0,
         cleanPhone || null,
+        req.user.id,
       ]
     );
 
@@ -891,6 +908,16 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "User not found.",
+      });
+    }
+
+    if (
+      !isOriginalSystemAdministrator(existingUser) &&
+      String(existingUser.primary_workspace_code || "") !== "spare_parts"
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message: "This user belongs to another independent business category.",
       });
     }
 

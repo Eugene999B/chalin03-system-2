@@ -116,3 +116,58 @@
   .upm-hero { padding: 21px; }
   .upm-card { padding: 15px; }
 }
+
+.upm-conflict-panel {
+  border-color: #f5b8a8;
+  background: #fffaf7;
+}
+
+.upm-conflict-count {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fff1f3;
+  color: #b42318;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.upm-conflict-reason {
+  margin-bottom: 14px;
+}
+
+.upm-conflict-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upm-conflict-list article {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(210px, .55fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.upm-conflict-list article > div {
+  display: grid;
+  gap: 4px;
+}
+
+.upm-conflict-list span,
+.upm-conflict-list small {
+  color: #667085;
+}
+
+.upm-conflict-list button {
+  background: #9a3412;
+  color: #fff;
+}
+
+@media (max-width: 850px) {
+  .upm-conflict-list article {
+    grid-template-columns: 1fr;
+  }
+}

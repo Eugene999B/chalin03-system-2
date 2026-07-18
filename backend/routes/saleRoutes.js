@@ -471,6 +471,7 @@ function buildReceiptPayload({
       user?.branch_location ||
       "",
     business_phone: settings.business_phone || null,
+    momo_number: settings.business_phone || null,
     owner_phone: settings.owner_phone || null,
     staff: {
       id: sale.staff_id || user?.id || null,

@@ -6,8 +6,10 @@ const {
   hasPermission,
 } = require("../security/permissionCatalog");
 
-test("group admin has full operational and system permissions", () => {
+test("original System Administrator retains protected cross-category access", () => {
   const permissions = getEffectivePermissions({
+    id: 1,
+    username: "admin",
     role: "admin",
     workspace_code: "mining",
     workspace_role: "group_admin",
@@ -17,6 +19,23 @@ test("group admin has full operational and system permissions", () => {
   assert.equal(permissions.includes("backup.restore"), true);
   assert.equal(permissions.includes("mining.production.approve"), true);
   assert.equal(permissions.includes("hire.payments.manage"), true);
+});
+
+test("non-original administrators remain inside their active category", () => {
+  const permissions = getEffectivePermissions({
+    id: 9,
+    username: "mining-admin",
+    role: "admin",
+    workspace_code: "mining",
+    workspace_role: "manager",
+  });
+
+  assert.equal(permissions.includes("users.manage"), true);
+  assert.equal(permissions.includes("mining.production.approve"), true);
+  assert.equal(permissions.includes("hire.payments.manage"), false);
+  assert.equal(permissions.includes("spare_parts.sell"), false);
+  assert.equal(permissions.includes("backup.restore"), false);
+  assert.equal(permissions.includes("security.admin"), false);
 });
 
 test("cashier remains Spare Parts-only", () => {

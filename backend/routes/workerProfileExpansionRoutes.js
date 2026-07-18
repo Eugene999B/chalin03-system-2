@@ -9,6 +9,10 @@ const {
 const {
   writeAuditEvent,
 } = require("../services/auditTrailService");
+const {
+  getBusinessUnitId,
+  normalizeCategory,
+} = require("../services/categoryIsolationService");
 
 const router = express.Router();
 
@@ -77,6 +81,61 @@ const SENSITIVE_PROFILE_FIELDS = Object.freeze([
 function asyncHandler(handler) {
   return (req, res, next) =>
     Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function activeWorkerWorkspace(req) {
+  return normalizeCategory(req.user?.workspace_code) || "spare_parts";
+}
+
+async function validateWorkerLinks({ payload, workspaceCode, workerId = null }) {
+  if (payload.user_id) {
+    const [userRows] = await pool.query(
+      `SELECT id, primary_workspace_code, category_assignment_status
+       FROM users
+       WHERE id = ?
+         AND is_active = TRUE
+       LIMIT 1`,
+      [payload.user_id]
+    );
+
+    const linkedUser = userRows[0];
+    if (
+      !linkedUser ||
+      linkedUser.category_assignment_status !== "assigned" ||
+      normalizeCategory(linkedUser.primary_workspace_code) !== workspaceCode
+    ) {
+      const error = new Error(
+        "The linked login account must be active and assigned to this same business category."
+      );
+      error.statusCode = 409;
+      error.code = "WORKER_ACCOUNT_CATEGORY_MISMATCH";
+      throw error;
+    }
+  }
+
+  if (payload.supervisor_worker_id) {
+    const params = [payload.supervisor_worker_id, workspaceCode];
+    let sql = `SELECT id
+       FROM worker_profiles
+       WHERE id = ?
+         AND workspace_code = ?`;
+
+    if (workerId) {
+      sql += " AND id <> ?";
+      params.push(workerId);
+    }
+
+    sql += " LIMIT 1";
+    const [supervisorRows] = await pool.query(sql, params);
+    if (!supervisorRows.length) {
+      const error = new Error(
+        "The selected supervisor must belong to this same business category."
+      );
+      error.statusCode = 409;
+      error.code = "WORKER_SUPERVISOR_CATEGORY_MISMATCH";
+      throw error;
+    }
+  }
 }
 
 function cleanText(value, maxLength = 255) {
@@ -348,13 +407,14 @@ function redactWorkerDetail(detail, req) {
   };
 }
 
-async function workerExists(workerId) {
+async function workerExists(workerId, req) {
   const [rows] = await pool.query(
     `SELECT id
      FROM worker_profiles
      WHERE id = ?
+       AND workspace_code = ?
      LIMIT 1`,
-    [workerId]
+    [workerId, activeWorkerWorkspace(req)]
   );
 
   return rows.length > 0;
@@ -382,8 +442,9 @@ async function loadExpandedWorker(workerId, req) {
      LEFT JOIN worker_profiles supervisor
        ON supervisor.id = wp.supervisor_worker_id
      WHERE wp.id = ?
+       AND wp.workspace_code = ?
      LIMIT 1`,
-    [workerId]
+    [workerId, activeWorkerWorkspace(req)]
   );
 
   if (!profileRows.length) {
@@ -405,8 +466,9 @@ async function loadExpandedWorker(workerId, req) {
       `SELECT *
        FROM worker_assignments
        WHERE worker_id = ?
+         AND workspace_code = ?
        ORDER BY is_active DESC, id DESC`,
-      [workerId]
+      [workerId, activeWorkerWorkspace(req)]
     ),
 
     pool.query(
@@ -532,6 +594,7 @@ router.get(
   requireAuth,
   requirePermission("workers.view"),
   asyncHandler(async (req, res) => {
+    const workspaceCode = activeWorkerWorkspace(req);
     const canManage = userHasPermission(
       req,
       "workers.manage"
@@ -554,7 +617,10 @@ router.get(
                is_active
              FROM users
              WHERE is_active = TRUE
-             ORDER BY full_name ASC`
+               AND category_assignment_status = 'assigned'
+               AND primary_workspace_code = ?
+             ORDER BY full_name ASC`,
+            [workspaceCode]
           )
         : Promise.resolve([[]]),
 
@@ -565,7 +631,9 @@ router.get(
            full_name,
            employment_status
          FROM worker_profiles
-         ORDER BY full_name ASC`
+         WHERE workspace_code = ?
+         ORDER BY full_name ASC`,
+        [workspaceCode]
       ),
 
       pool.query(
@@ -576,7 +644,9 @@ router.get(
            location
          FROM branches
          WHERE is_active = TRUE
-         ORDER BY name ASC`
+           AND ? = 'spare_parts'
+         ORDER BY name ASC`,
+        [workspaceCode]
       ),
 
       pool.query(
@@ -588,7 +658,9 @@ router.get(
          FROM mining_sites
          WHERE is_active = TRUE
            AND status = 'active'
-         ORDER BY site_name ASC`
+           AND ? = 'mining'
+         ORDER BY site_name ASC`,
+        [workspaceCode]
       ),
 
       pool.query(
@@ -603,7 +675,9 @@ router.get(
          WHERE unit.code = 'equipment_hire'
            AND unit.is_enabled = TRUE
            AND location.is_active = TRUE
-         ORDER BY location.name ASC`
+           AND ? = 'equipment_hire'
+         ORDER BY location.name ASC`,
+        [workspaceCode]
       ),
     ]);
 
@@ -627,10 +701,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const search = cleanText(req.query.search, 120);
     const status = cleanText(req.query.status, 40);
-    const workspace = cleanText(req.query.workspace, 50);
+    const workspace = activeWorkerWorkspace(req);
 
-    const where = ["1 = 1"];
-    const params = [];
+    const where = ["wp.workspace_code = ?"];
+    const params = [workspace];
 
     if (search) {
       const term = `%${search}%`;
@@ -652,19 +726,6 @@ router.get(
       params.push(status);
     }
 
-    if (workspace) {
-      where.push(
-        `EXISTS (
-           SELECT 1
-           FROM worker_assignments assignment
-           WHERE assignment.worker_id = wp.id
-             AND assignment.workspace_code = ?
-             AND assignment.is_active = TRUE
-         )`
-      );
-
-      params.push(workspace);
-    }
 
     const [rows] = await pool.query(
       `SELECT
@@ -694,6 +755,7 @@ router.get(
            SELECT COUNT(*)
            FROM worker_assignments assignment
            WHERE assignment.worker_id = wp.id
+             AND assignment.workspace_code = wp.workspace_code
              AND assignment.is_active = TRUE
          ) AS active_assignment_count,
          (
@@ -750,8 +812,14 @@ router.post(
     }
 
     try {
+      const workspaceCode = activeWorkerWorkspace(req);
+      const businessUnitId = await getBusinessUnitId(workspaceCode);
+      await validateWorkerLinks({ payload, workspaceCode });
+
       const columns = [
         ...PROFILE_EDIT_COLUMNS,
+        "workspace_code",
+        "business_unit_id",
         "employment_status",
         "created_by",
         "updated_by",
@@ -761,6 +829,8 @@ router.post(
         ...PROFILE_EDIT_COLUMNS.map(
           (column) => payload[column]
         ),
+        workspaceCode,
+        businessUnitId,
         "active",
         req.user.id,
         req.user.id,
@@ -884,12 +954,16 @@ router.put(
       });
     }
 
+    const workspaceCode = activeWorkerWorkspace(req);
+    await validateWorkerLinks({ payload, workspaceCode, workerId });
+
     const [beforeRows] = await pool.query(
       `SELECT *
        FROM worker_profiles
        WHERE id = ?
+         AND workspace_code = ?
        LIMIT 1`,
-      [workerId]
+      [workerId, workspaceCode]
     );
 
     if (!beforeRows.length) {
@@ -908,13 +982,15 @@ router.put(
         `UPDATE worker_profiles
          SET ${assignments.join(", ")},
              updated_by = ?
-         WHERE id = ?`,
+         WHERE id = ?
+           AND workspace_code = ?`,
         [
           ...PROFILE_EDIT_COLUMNS.map(
             (column) => payload[column]
           ),
           req.user.id,
           workerId,
+          workspaceCode,
         ]
       );
 
@@ -922,8 +998,9 @@ router.put(
         `SELECT *
          FROM worker_profiles
          WHERE id = ?
+           AND workspace_code = ?
          LIMIT 1`,
-        [workerId]
+        [workerId, workspaceCode]
       );
 
       await pool.query(
@@ -992,11 +1069,11 @@ router.get(
        FROM worker_private_files
        WHERE worker_id = ?
          AND file_category = 'photo'
-         AND is_current = TRUE
-         AND is_active = TRUE
-       ORDER BY id DESC
+         AND file.is_current = TRUE
+         AND file.is_active = TRUE
+       ORDER BY file.id DESC
        LIMIT 1`,
-      [workerId]
+      [workerId, activeWorkerWorkspace(req)]
     );
 
     if (!rows.length) {
@@ -1036,7 +1113,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const workerId = positiveId(req.params.id);
 
-    if (!workerId || !(await workerExists(workerId))) {
+    if (!workerId || !(await workerExists(workerId, req))) {
       return res.status(404).json({
         status: "error",
         message: "Worker profile not found.",
@@ -1156,7 +1233,7 @@ router.post(
 
     if (
       !workerId ||
-      !(await workerExists(workerId)) ||
+      !(await workerExists(workerId, req)) ||
       !fullName ||
       !relationship
     ) {
@@ -1255,7 +1332,7 @@ router.post(
 
     if (
       !workerId ||
-      !(await workerExists(workerId)) ||
+      !(await workerExists(workerId, req)) ||
       !fullName ||
       !relationship ||
       !primaryPhone
@@ -1377,7 +1454,7 @@ router.post(
 
     if (
       !workerId ||
-      !(await workerExists(workerId)) ||
+      !(await workerExists(workerId, req)) ||
       !title
     ) {
       return res.status(400).json({
@@ -1548,13 +1625,15 @@ router.get(
          file_size_bytes,
          checksum_sha256,
          file_data
-       FROM worker_private_files
-       WHERE id = ?
-         AND worker_id = ?
-         AND is_active = TRUE
-         AND file_category <> 'photo'
+       FROM worker_private_files file
+       INNER JOIN worker_profiles wp ON wp.id = file.worker_id
+       WHERE file.id = ?
+         AND file.worker_id = ?
+         AND wp.workspace_code = ?
+         AND file.is_active = TRUE
+         AND file.file_category <> 'photo'
        LIMIT 1`,
-      [fileId, workerId]
+      [fileId, workerId, activeWorkerWorkspace(req)]
     );
 
     if (!rows.length) {

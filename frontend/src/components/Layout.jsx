@@ -53,10 +53,10 @@ export default function Layout() {
   const canAudit = canManage || isAuditor;
   const isAdmin = role === "admin";
 
-  const isSystemAdministrator =
-    Number(user?.id) === 1 &&
-    String(user?.username || "").toLowerCase() === "admin" &&
-    role === "admin";
+  const isSystemAdministrator = Boolean(
+    user?.is_original_system_administrator ||
+      (user?.primary_workspace_code === "*" && role === "admin")
+  );
 
   const displayName = user?.full_name || user?.username || "User";
   const userInitials = getUserInitials(displayName);
@@ -191,14 +191,6 @@ export default function Layout() {
     if (canAudit) {
       const auditItems = [
         {
-          title: "Group Executive Control",
-          description: "Boss-level view of Spare Parts, Mining, Hire and Fleet",
-          path: "/group-executive-control",
-          icon: "🏢",
-          keywords:
-            "group executive boss control centre dashboard spare parts mining equipment hire fleet revenue expenses debt alerts",
-        },
-        {
           title: "Shared Reports & Documents",
           description: "Controlled reporting, document access and audit evidence",
           path: "/shared-controls",
@@ -254,6 +246,17 @@ export default function Layout() {
             "exports excel download data report stock ledger transfers adjustments audit",
         },
       ];
+
+      if (isSystemAdministrator) {
+        auditItems.unshift({
+          title: "Group Executive Control",
+          description: "Boss-level view of Spare Parts, Mining, Hire and Fleet",
+          path: "/group-executive-control",
+          icon: "🏢",
+          keywords:
+            "group executive boss control centre dashboard spare parts mining equipment hire fleet revenue expenses debt alerts",
+        });
+      }
 
       if (canManage) {
         auditItems.splice(1, 0, {
@@ -353,29 +356,6 @@ export default function Layout() {
           keywords: "activity log audit staff actions security",
         },
         {
-          title: "Backup & Restore",
-          description: "Download or restore the full system database",
-          path: "/backup",
-          icon: "💾",
-          keywords: "backup restore database data safety full system",
-        },
-        {
-          title: "Security Centre",
-          description: "Sessions, locks, Break-Glass and privileged audit evidence",
-          path: "/security-centre",
-          icon: "🛡️",
-          keywords:
-            "security centre sessions locks login break glass privileged ledger recovery",
-        },
-        {
-          title: "Professional Backups",
-          description: "Module packages, manifests, checksums and verification",
-          path: "/professional-backups",
-          icon: "🔐",
-          keywords:
-            "professional backup manifest checksum verify full mining hire fleet workforce",
-        },
-        {
           title: "Worker Profiles",
           description: "Employees, assignments, licences, documents and property",
           path: "/workers",
@@ -383,24 +363,46 @@ export default function Layout() {
           keywords:
             "workers employees staff profiles assignments licences documents property workforce",
         },
-        {
-          title: "System Operations",
-          description: "Health, readiness, diagnostics and local acceptance",
-          path: "/system-operations",
-          icon: "🖥️",
-          keywords:
-            "system operations health readiness diagnostics acceptance backup restore",
-        },
       ];
 
       if (isSystemAdministrator) {
-        adminItems.push({
+        adminItems.push(
+          {
+            title: "Backup & Restore",
+            description: "Download or restore the full system database",
+            path: "/backup",
+            icon: "💾",
+            keywords: "backup restore database data safety full system",
+          },
+          {
+            title: "Security Centre",
+            description: "Sessions, locks, Break-Glass and privileged audit evidence",
+            path: "/security-centre",
+            icon: "🛡️",
+            keywords: "security centre sessions locks login break glass privileged ledger recovery",
+          },
+          {
+            title: "Professional Backups",
+            description: "Module packages, manifests, checksums and verification",
+            path: "/professional-backups",
+            icon: "🔐",
+            keywords: "professional backup manifest checksum verify full mining hire fleet workforce",
+          },
+          {
+            title: "System Operations",
+            description: "Health, readiness, diagnostics and local acceptance",
+            path: "/system-operations",
+            icon: "🖥️",
+            keywords: "system operations health readiness diagnostics acceptance backup restore",
+          },
+          {
           title: "System Maintenance",
           description: "Clear test data and maintain the system",
           path: "/maintenance",
           icon: "🧰",
           keywords: "maintenance clear test data reset system administrator",
-        });
+          }
+        );
       }
 
       sections.push({

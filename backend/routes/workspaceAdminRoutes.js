@@ -9,6 +9,12 @@ const { normalizedPhoneForStorage } = require("../services/loginIdentityService"
 const {
   resetAccountBySystemAdministrator,
 } = require("../services/accountRecoveryService");
+const {
+  normalizeCategory,
+} = require("../services/categoryIsolationService");
+const {
+  isOriginalSystemAdministrator,
+} = require("../security/systemAdminIdentity");
 
 const router = express.Router();
 
@@ -266,7 +272,10 @@ async function getUserById(db, userId) {
        last_failed_login_ip,
        created_by,
        created_at,
-       updated_at
+       updated_at,
+       primary_workspace_code,
+       category_assignment_status,
+       category_conflict_reason
      FROM users
      WHERE id = ?
      LIMIT 1`,
@@ -331,6 +340,9 @@ async function loadWorkspaceUsers(workspace) {
        u.last_failed_login_ip,
        u.created_at,
        u.updated_at,
+       u.primary_workspace_code,
+       u.category_assignment_status,
+       u.category_conflict_reason,
        uba.id AS access_id,
        uba.access_role,
        uba.can_access,
@@ -340,18 +352,23 @@ async function loadWorkspaceUsers(workspace) {
      LEFT JOIN user_business_access uba
        ON uba.user_id = u.id
       AND uba.business_unit_id = ?
-     WHERE u.role <> 'cashier'
-        OR uba.id IS NOT NULL
+     WHERE u.primary_workspace_code = ?
+        OR (u.id = ? AND u.username = ? AND u.role = 'admin')
      ORDER BY
        FIELD(u.role, 'admin', 'manager', 'staff', 'auditor', 'cashier'),
        u.full_name,
        u.username`,
-    [workspace.id]
+    [
+      workspace.id,
+      workspace.code,
+      Number(process.env.SYSTEM_ADMIN_USER_ID || 1),
+      String(process.env.SYSTEM_ADMIN_USERNAME || "admin").trim(),
+    ]
   );
 
   return users.map((user) => {
     const role = normalizeRole(user.role);
-    const automaticAccess = role === "admin";
+    const automaticAccess = isOriginalSystemAdministrator(user);
     const assignable = ASSIGNABLE_ROLES.has(role);
     const workspaceRole =
       cleanText(user.access_role, 50) ||
@@ -380,7 +397,7 @@ async function loadWorkspaceUsers(workspace) {
       last_failed_login_ip:
         user.last_failed_login_ip || null,
       access_reason: automaticAccess
-        ? "Group administrators have automatic access."
+        ? "The original System Administrator has protected access across categories."
         : assignable
         ? "Access is controlled by the workspace administrator."
         : "This global account class is not supported in Mining or Hire workspaces.",
@@ -400,16 +417,20 @@ async function loadEligibleCentralUsers(workspace) {
        u.must_change_password,
        u.created_at,
        u.updated_at,
+       u.primary_workspace_code,
+       u.category_assignment_status,
        uba.can_access,
        uba.access_role
      FROM users u
      LEFT JOIN user_business_access uba
        ON uba.user_id = u.id
       AND uba.business_unit_id = ?
-     WHERE u.role IN ('manager', 'staff', 'auditor')
+     WHERE u.role IN ('manager', 'staff', 'auditor', 'admin')
+       AND u.primary_workspace_code = ?
+       AND u.category_assignment_status = 'assigned'
        AND (uba.id IS NULL OR uba.can_access = FALSE)
      ORDER BY u.full_name, u.username`,
-    [workspace.id]
+    [workspace.id, workspace.code]
   );
 
   return users.map((user) => ({
@@ -923,8 +944,12 @@ router.post("/staff", async (req, res) => {
          is_active,
          must_change_password,
          password_changed_at,
+         primary_workspace_code,
+         category_assignment_status,
+         category_assignment_reviewed_at,
+         category_assignment_reviewed_by,
          created_by
-       ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'assigned', NOW(), ?, ?)`,
       [
         fullName,
         username,
@@ -935,6 +960,8 @@ router.post("/staff", async (req, res) => {
         isActive,
         mustChangePassword,
         passwordChangedAt,
+        workspace.code,
+        req.user.id,
         req.user.id,
       ]
     );
@@ -1022,10 +1049,24 @@ router.post("/staff/existing", async (req, res) => {
       throw clientError(404, "User account not found.");
     }
 
-    if (normalizeRole(user.role) === "admin") {
+    if (isOriginalSystemAdministrator(user)) {
       throw clientError(
         400,
-        "Administrator accounts already have automatic access to every enabled business workspace."
+        "The original System Administrator already has protected access across categories."
+      );
+    }
+
+    if (user.category_assignment_status === "conflict_review") {
+      throw clientError(
+        409,
+        "Resolve this user's category conflict in User Permission Manager first."
+      );
+    }
+
+    if (normalizeCategory(user.primary_workspace_code) !== workspace.code) {
+      throw clientError(
+        409,
+        `This user belongs to ${user.primary_workspace_code || "another category"} and cannot be added to ${workspace.name}.`
       );
     }
 
@@ -1108,6 +1149,13 @@ router.put("/staff/:userId", async (req, res) => {
 
     if (!user) {
       throw clientError(404, "User account not found.");
+    }
+
+    if (
+      !isOriginalSystemAdministrator(user) &&
+      normalizeCategory(user.primary_workspace_code) !== workspace.code
+    ) {
+      throw clientError(409, "This worker belongs to a different independent business category.");
     }
 
     const fullName = cleanText(req.body.full_name || user.full_name, 150);
@@ -1389,10 +1437,17 @@ router.put("/users/:userId/access", async (req, res) => {
 
     const role = normalizeRole(user.role);
 
-    if (role === "admin") {
+    if (isOriginalSystemAdministrator(user)) {
       throw clientError(
         400,
-        "Administrator accounts have automatic access to every enabled business workspace."
+        "The original System Administrator has protected access across categories."
+      );
+    }
+
+    if (normalizeCategory(user.primary_workspace_code) !== workspace.code) {
+      throw clientError(
+        409,
+        "This user belongs to a different independent business category."
       );
     }
 

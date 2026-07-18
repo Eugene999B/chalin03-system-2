@@ -260,6 +260,14 @@ function ProtectedUnlock({
 
 export default function ExpandedWorkerProfilePage() {
   const auth = useAuth();
+  const activeWorkspaceCode =
+    auth.workspaceCode || auth.user?.workspace_code || "spare_parts";
+  const activeWorkspaceLabel =
+    activeWorkspaceCode === "mining"
+      ? "Mining Operations"
+      : activeWorkspaceCode === "equipment_hire"
+        ? "Equipment Hire"
+        : "Spare Parts";
 
   const canManage = auth.hasPermission(
     "workers.manage"
@@ -308,8 +316,6 @@ export default function ExpandedWorkerProfilePage() {
   const [statusFilter, setStatusFilter] =
     useState("");
 
-  const [workspaceFilter, setWorkspaceFilter] =
-    useState("");
 
   const [createOpen, setCreateOpen] =
     useState(false);
@@ -353,7 +359,7 @@ export default function ExpandedWorkerProfilePage() {
 
   const [assignmentForm, setAssignmentForm] =
     useState({
-      workspace_code: "spare_parts",
+      workspace_code: activeWorkspaceCode,
       role_code: "",
       context_id: "",
       assignment_start: today,
@@ -462,7 +468,6 @@ export default function ExpandedWorkerProfilePage() {
           params: {
             search,
             status: statusFilter,
-            workspace: workspaceFilter,
           },
         }
       );
@@ -935,7 +940,7 @@ export default function ExpandedWorkerProfilePage() {
       setMessage(response.data.message);
 
       setAssignmentForm({
-        workspace_code: "spare_parts",
+        workspace_code: activeWorkspaceCode,
         role_code: "",
         context_id: "",
         assignment_start: today,
@@ -1313,6 +1318,10 @@ export default function ExpandedWorkerProfilePage() {
         ) : null}
       </header>
 
+      <Notice type="info">
+        Showing {activeWorkspaceLabel} worker profiles only. Users, assignments, photographs and private documents from other business categories are not available here.
+      </Notice>
+
       {message ? (
         <Notice type="success">{message}</Notice>
       ) : null}
@@ -1436,26 +1445,9 @@ export default function ExpandedWorkerProfilePage() {
           </option>
         </select>
 
-        <select
-          value={workspaceFilter}
-          onChange={(event) =>
-            setWorkspaceFilter(event.target.value)
-          }
-        >
-          <option value="">All workspaces</option>
-          <option value="spare_parts">
-            Spare Parts
-          </option>
-          <option value="mining">
-            Mining Operations
-          </option>
-          <option value="equipment_hire">
-            Equipment Hire
-          </option>
-          <option value="fleet">
-            Shared Fleet
-          </option>
-        </select>
+        <div className="worker-category-filter" aria-label="Active worker category">
+          {activeWorkspaceLabel}
+        </div>
 
         <button
           type="button"
@@ -2347,41 +2339,18 @@ export default function ExpandedWorkerProfilePage() {
                 <div className="worker-tab-stack">
                   {canManage ? (
                     <section className="expanded-worker-card">
-                      <h3>Add Workspace Assignment</h3>
+                      <h3>Add Category Assignment</h3>
 
                       <form
                         className="expanded-worker-form-grid"
                         onSubmit={addAssignment}
                       >
-                        <Field label="Workspace">
-                          <select
-                            value={
-                              assignmentForm.workspace_code
-                            }
-                            onChange={(event) =>
-                              setAssignmentForm(
-                                (current) => ({
-                                  ...current,
-                                  workspace_code:
-                                    event.target.value,
-                                  context_id: "",
-                                })
-                              )
-                            }
-                          >
-                            <option value="spare_parts">
-                              Spare Parts
-                            </option>
-                            <option value="mining">
-                              Mining Operations
-                            </option>
-                            <option value="equipment_hire">
-                              Equipment Hire
-                            </option>
-                            <option value="fleet">
-                              Shared Fleet
-                            </option>
-                          </select>
+                        <Field label="Business category">
+                          <input
+                            value={activeWorkspaceLabel}
+                            readOnly
+                            aria-readonly="true"
+                          />
                         </Field>
 
                         <Field label="Branch / Site / Location">
@@ -2404,7 +2373,7 @@ export default function ExpandedWorkerProfilePage() {
                             }
                           >
                             <option value="">
-                              Group-wide / not selected
+                              Category-wide / not selected
                             </option>
 
                             {assignmentContextOptions.map(
@@ -2508,7 +2477,7 @@ export default function ExpandedWorkerProfilePage() {
                                   </td>
                                   <td>
                                     {item.context_label ||
-                                      "Group-wide"}
+                                      "Category-wide"}
                                   </td>
                                   <td>
                                     {item.role_code || "-"}

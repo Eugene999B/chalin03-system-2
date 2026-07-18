@@ -1,5 +1,6 @@
 const { pool } = require("../config/db");
 const { hasPermission, normalizeCode, normalizeRole } = require("../security/permissionCatalog");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 const WORKSPACES = new Set(["group", "spare_parts", "mining", "equipment_hire"]);
 const SEVERITIES = new Set(["low", "medium", "high", "critical"]);
@@ -669,7 +670,8 @@ function buildVisibilitySql(
   const params = [req.user.id, roles[0] || "", roles[1] || ""];
 
   const groupScopeRequested =
-    isAdmin(req) && cleanText(req.query?.workspace_scope, 20).toLowerCase() === "group";
+    isOriginalSystemAdministrator(req.user) &&
+    cleanText(req.query?.workspace_scope, 20).toLowerCase() === "group";
 
   if (!groupScopeRequested) {
     clauses.push("(n.workspace_code = 'group' OR n.workspace_code = ?)");

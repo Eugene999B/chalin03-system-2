@@ -34,13 +34,20 @@ function Notice({ type = "info", children }) {
   return <div className={`upm-notice is-${type}`}>{children}</div>;
 }
 
+function normalizedWorkspace(value) {
+  const workspace = String(value || "").trim().toLowerCase();
+  return ["spare_parts", "mining", "equipment_hire"].includes(workspace)
+    ? workspace
+    : "spare_parts";
+}
+
 export default function UserPermissionManagerPage() {
   const { user: signedInUser } = useAuth();
   const [catalog, setCatalog] = useState([]);
   const [workspaceOptions, setWorkspaceOptions] = useState([]);
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [workspaceCode, setWorkspaceCode] = useState("spare_parts");
+  const [workspaceCode, setWorkspaceCode] = useState(() => normalizedWorkspace(signedInUser?.workspace_code));
   const [detail, setDetail] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +63,11 @@ export default function UserPermissionManagerPage() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [protectedToken, setProtectedToken] = useState(null);
+  const [conflicts, setConflicts] = useState([]);
+  const [workerConflicts, setWorkerConflicts] = useState([]);
+  const [conflictSelections, setConflictSelections] = useState({});
+  const [conflictReason, setConflictReason] = useState("");
+  const [canReviewConflicts, setCanReviewConflicts] = useState(false);
 
   const tokenReady = Boolean(
     protectedToken?.value && protectedToken.expiresAt > Date.now()
@@ -80,23 +92,40 @@ export default function UserPermissionManagerPage() {
     });
   }, [catalog, category, search]);
 
-  async function loadInitial() {
+  async function loadWorkspaceData(workspace = workspaceCode) {
     setLoading(true);
     setError("");
     try {
-      const [catalogResponse, usersResponse] = await Promise.all([
-        axiosClient.get("/user-permissions/catalog"),
-        axiosClient.get("/user-permissions/users"),
+      const [catalogResponse, usersResponse, conflictResponse] = await Promise.all([
+        axiosClient.get("/user-permissions/catalog", {
+          params: { workspace_code: workspace },
+        }),
+        axiosClient.get("/user-permissions/users", {
+          params: { workspace_code: workspace },
+        }),
+        axiosClient.get("/user-permissions/category-conflicts"),
       ]);
+
       const loadedUsers = usersResponse.data?.users || [];
       setCatalog(catalogResponse.data?.permissions || []);
       setWorkspaceOptions(catalogResponse.data?.workspace_options || []);
       setUsers(loadedUsers);
-      if (loadedUsers.length > 0) {
+      setConflicts(conflictResponse.data?.conflicts || []);
+      setWorkerConflicts(conflictResponse.data?.worker_conflicts || []);
+      setCanReviewConflicts(Boolean(conflictResponse.data?.can_review_conflicts));
+      setCategory("all");
+      setSearch("");
+
+      const currentStillVisible = loadedUsers.some(
+        (item) => Number(item.id) === Number(selectedUserId)
+      );
+      if (!currentStillVisible) {
         const preferred = loadedUsers.find(
           (item) => Number(item.id) !== Number(signedInUser?.id)
         );
-        setSelectedUserId(String(preferred?.id || loadedUsers[0].id));
+        setSelectedUserId(loadedUsers.length ? String(preferred?.id || loadedUsers[0].id) : "");
+        setDetail(null);
+        setHistory([]);
       }
     } catch (requestError) {
       setError(
@@ -129,8 +158,13 @@ export default function UserPermissionManagerPage() {
   }
 
   useEffect(() => {
-    loadInitial();
-  }, []);
+    const signedInWorkspace = normalizedWorkspace(signedInUser?.workspace_code);
+    if (signedInWorkspace !== workspaceCode && workspaceOptions.length === 0) {
+      setWorkspaceCode(signedInWorkspace);
+      return;
+    }
+    loadWorkspaceData(workspaceCode);
+  }, [workspaceCode, signedInUser?.workspace_code]);
 
   useEffect(() => {
     if (selectedUserId) loadDetail(selectedUserId, workspaceCode);
@@ -311,6 +345,100 @@ export default function UserPermissionManagerPage() {
     }
   }
 
+  async function resolveCategoryConflict(conflict) {
+    const selectedWorkspace = conflictSelections[conflict.user_id];
+    if (!selectedWorkspace) {
+      setError("Choose the single category this account must retain.");
+      return;
+    }
+    if (!tokenReady) {
+      setError("Unlock protected actions with your current password first.");
+      return;
+    }
+    if (conflictReason.trim().length < 8) {
+      setError("Enter a clear conflict-resolution reason of at least 8 characters.");
+      return;
+    }
+    const label = selectedWorkspace.replaceAll("_", " ");
+    if (!window.confirm(`Assign ${conflict.full_name || conflict.username} only to ${label}? Other category access will be disabled and active sessions revoked.`)) {
+      return;
+    }
+
+    setActionLoading(`conflict:${conflict.user_id}`);
+    setError("");
+    setMessage("");
+    try {
+      const response = await axiosClient.put(
+        `/user-permissions/category-conflicts/${conflict.user_id}/resolve`,
+        {
+          workspace_code: selectedWorkspace,
+          reason: conflictReason.trim(),
+        },
+        {
+          headers: { "X-Protected-Action-Token": protectedToken.value },
+        }
+      );
+      setMessage(response.data.message);
+      setConflictReason("");
+      setConflictSelections((current) => {
+        const next = { ...current };
+        delete next[conflict.user_id];
+        return next;
+      });
+      await loadWorkspaceData(workspaceCode);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "The category assignment conflict could not be resolved."
+      );
+    } finally {
+      setActionLoading("");
+    }
+  }
+
+  async function resolveWorkerCategoryConflict(conflict) {
+    const selectionKey = `worker:${conflict.worker_id}`;
+    const selectedWorkspace = conflictSelections[selectionKey];
+    if (!selectedWorkspace) {
+      setError("Choose the single category this worker profile must retain.");
+      return;
+    }
+    if (!tokenReady) {
+      setError("Unlock protected actions with your current password first.");
+      return;
+    }
+    if (conflictReason.trim().length < 8) {
+      setError("Enter a clear conflict-resolution reason of at least 8 characters.");
+      return;
+    }
+    if (!window.confirm(`Assign ${conflict.full_name} only to ${selectedWorkspace.replaceAll("_", " ")}? Historical assignments will remain auditable and other active category assignments will be ended.`)) {
+      return;
+    }
+
+    setActionLoading(`worker-conflict:${conflict.worker_id}`);
+    setError("");
+    setMessage("");
+    try {
+      const response = await axiosClient.put(
+        `/user-permissions/worker-category-conflicts/${conflict.worker_id}/resolve`,
+        { workspace_code: selectedWorkspace, reason: conflictReason.trim() },
+        { headers: { "X-Protected-Action-Token": protectedToken.value } }
+      );
+      setMessage(response.data.message);
+      setConflictReason("");
+      setConflictSelections((current) => {
+        const next = { ...current };
+        delete next[selectionKey];
+        return next;
+      });
+      await loadWorkspaceData(workspaceCode);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "The worker category conflict could not be resolved.");
+    } finally {
+      setActionLoading("");
+    }
+  }
+
   if (loading) {
     return <div className="upm-loading">Loading User Permission Manager...</div>;
   }
@@ -322,12 +450,10 @@ export default function UserPermissionManagerPage() {
     <div className="upm-page">
       <header className="upm-hero">
         <div>
-          <p>Release 3F-C · Administrator Control</p>
+          <p>Release 3F-C2 · Independent Category Control</p>
           <h1>User Permission Manager</h1>
           <span>
-            Grant or restrict individual pages and actions. Explicit deny always
-            overrides allow, every change needs a reason, and session revocation is
-            available immediately.
+            Select one independent business category at a time. Only its users and permissions are shown. Explicit deny overrides allow, every change needs a reason, and ambiguous category assignments remain blocked until reviewed.
           </span>
         </div>
         <div className="upm-hero-badge">🔐 Protected changes</div>
@@ -335,6 +461,68 @@ export default function UserPermissionManagerPage() {
 
       {error ? <Notice type="error">{error}</Notice> : null}
       {message ? <Notice type="success">{message}</Notice> : null}
+
+      {canReviewConflicts && (conflicts.length || workerConflicts.length) ? (
+        <section className="upm-card upm-conflict-panel">
+          <div className="upm-card-heading">
+            <div>
+              <h2>Category Assignment Conflicts</h2>
+              <p>These accounts were preserved exactly as found but are blocked from category login. The original System Administrator must choose one category. No access is silently deleted.</p>
+            </div>
+            <span className="upm-conflict-count">{conflicts.length + workerConflicts.length} awaiting review</span>
+          </div>
+
+          <label className="upm-conflict-reason">
+            Resolution reason for the next conflict
+            <textarea value={conflictReason} onChange={(event) => setConflictReason(event.target.value)} rows={2} maxLength={500} placeholder="Example: Management confirmed this worker belongs only to Mining Operations" />
+          </label>
+
+          <div className="upm-conflict-list">
+            {conflicts.map((conflict) => (
+              <article key={conflict.user_id}>
+                <div>
+                  <strong>{conflict.full_name || conflict.username}</strong>
+                  <span>@{conflict.username} · Detected: {(conflict.detected_workspaces || []).join(", ") || "multiple categories"}</span>
+                  <small>{conflict.conflict_reason}</small>
+                </div>
+                <select value={conflictSelections[conflict.user_id] || ""} onChange={(event) => setConflictSelections((current) => ({ ...current, [conflict.user_id]: event.target.value }))}>
+                  <option value="">Choose retained category</option>
+                  <option value="spare_parts">Spare Parts</option>
+                  <option value="mining">Mining Operations</option>
+                  <option value="equipment_hire">Equipment Hire</option>
+                </select>
+                <button type="button" onClick={() => resolveCategoryConflict(conflict)} disabled={actionLoading === `conflict:${conflict.user_id}`}>
+                  {actionLoading === `conflict:${conflict.user_id}` ? "Resolving..." : "Resolve safely"}
+                </button>
+              </article>
+            ))}
+
+            {workerConflicts.map((conflict) => {
+              const selectionKey = `worker:${conflict.worker_id}`;
+              return (
+                <article key={selectionKey}>
+                  <div>
+                    <strong>{conflict.full_name} · {conflict.employee_number}</strong>
+                    <span>Worker profile · Detected: {(conflict.detected_workspaces || []).join(", ") || "multiple categories"}</span>
+                    <small>{conflict.conflict_reason}</small>
+                  </div>
+                  <select value={conflictSelections[selectionKey] || ""} onChange={(event) => setConflictSelections((current) => ({ ...current, [selectionKey]: event.target.value }))}>
+                    <option value="">Choose retained category</option>
+                    <option value="spare_parts">Spare Parts</option>
+                    <option value="mining">Mining Operations</option>
+                    <option value="equipment_hire">Equipment Hire</option>
+                  </select>
+                  <button type="button" onClick={() => resolveWorkerCategoryConflict(conflict)} disabled={actionLoading === `worker-conflict:${conflict.worker_id}`}>
+                    {actionLoading === `worker-conflict:${conflict.worker_id}` ? "Resolving..." : "Resolve worker safely"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : canReviewConflicts ? (
+        <Notice type="success">No unresolved multi-category account assignments were detected.</Notice>
+      ) : null}
 
       <section className="upm-card upm-selection-grid">
         <label>
@@ -365,10 +553,14 @@ export default function UserPermissionManagerPage() {
           <span>
             @{selectedUser?.username || "-"} · {selectedUser?.role || "-"} ·{
               selectedUser?.is_active ? " Active" : " Disabled"
-            }
+            } · {selectedUser?.primary_workspace_code === "*" ? "System Administrator" : (selectedUser?.primary_workspace_code || "Conflict review").replaceAll("_", " ")}
           </span>
         </div>
       </section>
+
+      <Notice type="info">
+        Showing {workspaceCode.replaceAll("_", " ")} users and permissions only. A grant or restriction made here cannot affect another business category.
+      </Notice>
 
       <section className="upm-card">
         <div className="upm-card-heading">

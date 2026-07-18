@@ -72,7 +72,7 @@ function isSaleVoided(sale) {
   );
 }
 
-async function getSettings() {
+async function getSettings(branchId) {
   const [settingsRows] = await pool.query(
     `SELECT
       business_name,
@@ -81,8 +81,10 @@ async function getSettings() {
       owner_phone,
       receipt_footer
      FROM settings
-     ORDER BY id ASC
-     LIMIT 1`
+     WHERE branch_id = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [branchId]
   );
 
   if (settingsRows.length === 0) {
@@ -129,6 +131,7 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
     const [sales] = await pool.query(
       `SELECT
         s.id,
+        s.branch_id,
         s.receipt_number,
         s.customer_name,
         s.customer_phone,
@@ -179,7 +182,7 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
       [id]
     );
 
-    const settings = await getSettings();
+    const settings = await getSettings(sale.branch_id);
     const voided = isSaleVoided(sale);
 
     const businessName =
@@ -188,7 +191,7 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
       settings.business_address || "Dunkwa Police Barrier";
     const businessPhone =
       settings.business_phone || "0249469080 / 0249995510";
-    const momoNumber = settings.owner_phone || "0543421127";
+    const momoNumber = settings.business_phone || "0249469080 / 0249995510";
     const receiptFooter = settings.receipt_footer || "Thank You For Coming";
 
     const filename = `${sale.receipt_number || "receipt"}.pdf`;

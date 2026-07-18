@@ -714,3 +714,15 @@ button.danger {
     min-height: 115px;
   }
 }
+
+.worker-category-filter {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 850;
+}

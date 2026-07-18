@@ -568,7 +568,7 @@ export default function App() {
             path="/group-executive-control"
             element={
               <WorkspaceShell allowedWorkspaces={ALL_WORKSPACES}>
-                <PermissionRoute permissions={["audit.view"]}>
+                <PermissionRoute permissions={["executive.operations.view"]}>
                   <GroupExecutiveLayout />
                 </PermissionRoute>
               </WorkspaceShell>

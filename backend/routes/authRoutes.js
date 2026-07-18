@@ -13,6 +13,11 @@ const {
 } = require("../services/smsAlertService");
 const { resolveEffectivePermissions } = require("../services/permissionOverrideService");
 const {
+  loadUserCategoryState,
+  validateUserCategoryAccess,
+} = require("../services/categoryIsolationService");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const {
   createSession,
   revokeAllUserSessions,
   revokeSession,
@@ -202,6 +207,15 @@ async function buildUserSelectByWhere(whereSql, params) {
   const tokenVersionSql = userColumns.has("token_version")
     ? "token_version"
     : "0 AS token_version";
+  const primaryWorkspaceSql = userColumns.has("primary_workspace_code")
+    ? "primary_workspace_code"
+    : "NULL AS primary_workspace_code";
+  const categoryStatusSql = userColumns.has("category_assignment_status")
+    ? "category_assignment_status"
+    : "'assigned' AS category_assignment_status";
+  const categoryConflictSql = userColumns.has("category_conflict_reason")
+    ? "category_conflict_reason"
+    : "NULL AS category_conflict_reason";
 
   const [users] = await pool.query(
     `SELECT
@@ -227,7 +241,10 @@ async function buildUserSelectByWhere(whereSql, params) {
       ${lastFailedLoginIpSql},
       ${lastLoginAtSql},
       ${lastLoginIpSql},
-      ${tokenVersionSql}
+      ${tokenVersionSql},
+      ${primaryWorkspaceSql},
+      ${categoryStatusSql},
+      ${categoryConflictSql}
      FROM users
      ${whereSql}
      LIMIT 1`,
@@ -446,42 +463,12 @@ async function getBusinessUnitByCode(workspaceCode) {
 }
 
 async function userCanAccessWorkspace(user, workspace) {
-  if (!workspace) {
-    return false;
-  }
-
-  const role = cleanText(user.role).toLowerCase();
-
-  // Administrators manage all enabled business workspaces.
-  if (role === "admin") {
-    return true;
-  }
-
-  if (role === "cashier" && workspace.code !== DEFAULT_WORKSPACE_CODE) {
-    return false;
-  }
-
-  if (workspace.code === DEFAULT_WORKSPACE_CODE) {
-    return true;
-  }
-
-  const accessTableExists = await tableExists("user_business_access");
-
-  if (!accessTableExists || !workspace.id) {
-    return false;
-  }
-
-  const [rows] = await pool.query(
-    `SELECT id
-     FROM user_business_access
-     WHERE user_id = ?
-       AND business_unit_id = ?
-       AND can_access = TRUE
-     LIMIT 1`,
-    [user.id, workspace.id]
-  );
-
-  return rows.length > 0;
+  if (!workspace) return false;
+  const access = await validateUserCategoryAccess({
+    user,
+    workspaceCode: workspace.code,
+  });
+  return access.ok;
 }
 
 async function resolveWorkspaceAccess(user, workspace) {
@@ -489,62 +476,37 @@ async function resolveWorkspaceAccess(user, workspace) {
     return {
       canAccess: false,
       workspaceRole: null,
+      statusCode: 400,
+      code: "INVALID_BUSINESS_CATEGORY",
+      message: "Choose a valid business category.",
     };
   }
 
-  const role = cleanText(user.role).toLowerCase();
+  const access = await validateUserCategoryAccess({
+    user,
+    workspaceCode: workspace.code,
+  });
 
-  if (role === "admin") {
-    return {
-      canAccess: true,
-      workspaceRole:
-        workspace.code === DEFAULT_WORKSPACE_CODE ? "admin" : "group_admin",
-    };
-  }
-
-  if (workspace.code === DEFAULT_WORKSPACE_CODE) {
-    return {
-      canAccess: true,
-      workspaceRole: role,
-    };
-  }
-
-  if (role === "cashier") {
+  if (!access.ok) {
     return {
       canAccess: false,
       workspaceRole: null,
-    };
-  }
-
-  const accessTableExists = await tableExists("user_business_access");
-
-  if (!accessTableExists || !workspace.id) {
-    return {
-      canAccess: false,
-      workspaceRole: null,
-    };
-  }
-
-  const [rows] = await pool.query(
-    `SELECT access_role
-     FROM user_business_access
-     WHERE user_id = ?
-       AND business_unit_id = ?
-       AND can_access = TRUE
-     LIMIT 1`,
-    [user.id, workspace.id]
-  );
-
-  if (rows.length === 0) {
-    return {
-      canAccess: false,
-      workspaceRole: null,
+      statusCode: access.statusCode || 403,
+      code: access.code || "CATEGORY_ACCESS_DENIED",
+      message: access.message,
     };
   }
 
   return {
     canAccess: true,
-    workspaceRole: cleanText(rows[0].access_role, 80).toLowerCase(),
+    workspaceRole:
+      access.workspaceRole ||
+      (workspace.code === DEFAULT_WORKSPACE_CODE
+        ? String(user.role || "staff").trim().toLowerCase()
+        : "manager"),
+    statusCode: 200,
+    code: null,
+    message: "Workspace selected.",
   };
 }
 
@@ -579,8 +541,11 @@ async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
   if (!access.canAccess) {
     return {
       ok: false,
-      statusCode: 403,
-      message: `Your account does not have access to ${workspace.name}.`,
+      statusCode: access.statusCode || 403,
+      code: access.code || "CATEGORY_ACCESS_DENIED",
+      message:
+        access.message ||
+        `Your account does not have access to ${workspace.name}.`,
       workspace: null,
     };
   }
@@ -616,6 +581,10 @@ async function buildUserResponse(user, branch, workspace) {
     workspace_role: workspaceRole,
     phone: user.phone,
     login_method: user.login_method || "username",
+    primary_workspace_code: user.primary_workspace_code || null,
+    category_assignment_status: user.category_assignment_status || null,
+    category_conflict_reason: user.category_conflict_reason || null,
+    is_original_system_administrator: isOriginalSystemAdministrator(user),
     workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
     business_unit_id: workspace?.id || null,
     business_unit_name: workspace?.name || "Spare Parts",
@@ -928,12 +897,17 @@ router.post("/login", async (req, res) => {
     if (!workspaceResult.ok) {
       return res.status(workspaceResult.statusCode).json({
         status: "error",
+        code: workspaceResult.code || "CATEGORY_ACCESS_DENIED",
         message: workspaceResult.message,
       });
     }
 
     const workspace = workspaceResult.workspace;
     user.workspace_role = workspaceResult.workspaceRole;
+    const categoryState = await loadUserCategoryState(user);
+    user.primary_workspace_code = categoryState.primary_workspace_code;
+    user.category_assignment_status = categoryState.category_assignment_status;
+    user.category_conflict_reason = categoryState.conflict_reason;
     let selectedBranch = null;
 
     if (workspace.code === DEFAULT_WORKSPACE_CODE) {

@@ -3,14 +3,13 @@ const ExcelJS = require("exceljs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
   loadGroupCommandCentreSummary,
 } = require("../services/groupCommandCentreService");
 const { writeSharedControlEvidence } = require("../services/sharedControlService");
 
 const router = express.Router();
-const ALLOWED_ROLES = ["admin", "manager", "auditor"];
 
 function dateOnly(value) {
   const text = String(value || "").trim();
@@ -1297,7 +1296,16 @@ async function logWorkbookDownload(req, summary) {
 }
 
 router.use(requireAuth);
-router.use(requireRole(...ALLOWED_ROLES));
+router.use((req, res, next) => {
+  if (!isOriginalSystemAdministrator(req.user)) {
+    return res.status(403).json({
+      status: "error",
+      code: "SYSTEM_ADMINISTRATOR_REQUIRED",
+      message: "Only the original System Administrator can open group-wide executive control.",
+    });
+  }
+  return next();
+});
 
 router.get("/summary", async (req, res) => {
   try {

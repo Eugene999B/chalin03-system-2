@@ -22,6 +22,10 @@ const {
   sendOwnerSmsAlert,
   sendSmsAlertToPhone,
 } = require("../services/smsAlertService");
+const {
+  getBusinessUnitId,
+  normalizeCategory,
+} = require("../services/categoryIsolationService");
 
 const router = express.Router();
 
@@ -110,6 +114,8 @@ const DIMENSION_TABLES = new Set([
   "business_units",
   "business_locations",
   "user_business_access",
+  "user_category_assignment_conflicts",
+  "worker_category_assignment_conflicts",
   "settings",
   "group_configuration",
   "document_sequences",
@@ -3342,16 +3348,13 @@ router.get(
         );
 
       const workspace =
-        cleanText(
-          req.query.workspace,
-          50
-        );
+        normalizeCategory(req.user?.workspace_code) || "spare_parts";
 
       const where = [
-        "1 = 1",
+        "wp.workspace_code = ?",
       ];
 
-      const params = [];
+      const params = [workspace];
 
       if (search) {
         where.push(
@@ -3382,21 +3385,6 @@ router.get(
         );
       }
 
-      if (workspace) {
-        where.push(
-          `EXISTS (
-             SELECT 1
-             FROM worker_assignments wa
-             WHERE wa.worker_id = wp.id
-               AND wa.workspace_code = ?
-               AND wa.is_active = TRUE
-           )`
-        );
-
-        params.push(
-          workspace
-        );
-      }
 
       const [rows] =
         await pool.query(
@@ -3410,6 +3398,7 @@ router.get(
                SELECT COUNT(*)
                FROM worker_assignments wa
                WHERE wa.worker_id = wp.id
+                 AND wa.workspace_code = wp.workspace_code
                  AND wa.is_active = TRUE
              ) AS active_assignment_count,
              (
@@ -3526,11 +3515,17 @@ router.post(
           });
       }
 
+      const workspaceCode =
+        normalizeCategory(req.user?.workspace_code) || "spare_parts";
+      const businessUnitId = await getBusinessUnitId(workspaceCode);
+
       const [result] =
         await pool.query(
           `INSERT INTO worker_profiles (
              employee_number,
              user_id,
+             workspace_code,
+             business_unit_id,
              full_name,
              phone,
              email,
@@ -3548,13 +3543,15 @@ router.post(
              created_by,
              updated_by
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             employeeNumber,
             positiveId(
               req.body
                 ?.user_id
             ),
+            workspaceCode,
+            businessUnitId,
             fullName,
             cleanText(
               req.body?.phone,
@@ -3999,34 +3996,15 @@ router.post(
         );
 
       const workspaceCode =
-        cleanText(
-          req.body
-            ?.workspace_code,
-          50
-        )
-          .toLowerCase()
-          .replace(
-            /[\s-]+/g,
-            "_"
-          );
+        normalizeCategory(req.user?.workspace_code) || "spare_parts";
+      const businessUnitId = await getBusinessUnitId(workspaceCode);
 
-      if (
-        !workerId ||
-        ![
-          "spare_parts",
-          "mining",
-          "equipment_hire",
-          "fleet",
-        ].includes(
-          workspaceCode
-        )
-      ) {
+      if (!workerId) {
         return res
           .status(400)
           .json({
             status: "error",
-            message:
-              "Valid worker and workspace are required.",
+            message: "Valid worker is required.",
           });
       }
 
@@ -4052,14 +4030,10 @@ router.post(
           [
             workerId,
             workspaceCode,
-            positiveId(
-              req.body
-                ?.business_unit_id
-            ),
-            positiveId(
-              req.body
-                ?.branch_id
-            ),
+            businessUnitId,
+            workspaceCode === "spare_parts"
+              ? positiveId(req.body?.branch_id)
+              : null,
             cleanText(
               req.body
                 ?.context_type,

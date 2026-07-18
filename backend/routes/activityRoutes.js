@@ -3,6 +3,7 @@ const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { requireAuth } = require("../middleware/authMiddleware");
 const {
   requirePermission,
@@ -143,7 +144,7 @@ async function loadUserScope(req, columns) {
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
 
-  if (role === "admin") {
+  if (isOriginalSystemAdministrator(req.user)) {
     return { where: ["1 = 1"], params: [] };
   }
 
@@ -192,6 +193,10 @@ async function loadUserScope(req, columns) {
       return { where: ["1 = 0"], params: [] };
     }
 
+    if (role === "admin") {
+      return { where: ["al.workspace_code = 'mining'"], params: [] };
+    }
+
     const [rows] = await pool.query(
       `SELECT site_id
        FROM user_mining_site_access
@@ -216,6 +221,10 @@ async function loadUserScope(req, columns) {
   if (workspaceCode === "equipment_hire") {
     if (!columns.has("workspace_code") || !columns.has("hire_location_id")) {
       return { where: ["1 = 0"], params: [] };
+    }
+
+    if (role === "admin") {
+      return { where: ["al.workspace_code = 'equipment_hire'"], params: [] };
     }
 
     const [rows] = await pool.query(

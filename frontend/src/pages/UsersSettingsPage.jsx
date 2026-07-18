@@ -1743,20 +1743,22 @@ export default function UsersSettingsPage() {
                       </div>
 
                       <div className="users-field">
-                        <label>Business Phone</label>
+                        <label>Business Phone / Receipt MoMo Number</label>
                         <input
                           name="business_phone"
                           value={settings.business_phone || ""}
                           onChange={handleSettingsChange}
+                          placeholder="Shown on this store’s receipt as telephone and MoMo number"
                         />
                       </div>
 
                       <div className="users-field">
-                        <label>Owner Phone / MoMo</label>
+                        <label>Owner Security Alert Phone</label>
                         <input
                           name="owner_phone"
                           value={settings.owner_phone || ""}
                           onChange={handleSettingsChange}
+                          placeholder="Used for protected owner/security alerts only"
                         />
                       </div>
 

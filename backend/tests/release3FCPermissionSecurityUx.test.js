@@ -28,7 +28,7 @@ test("Release 3F-C explicit deny overrides role and explicit allow", () => {
 });
 
 test("Release 3F-C permission catalog labels every code and protects owner controls", () => {
-  const descriptors = buildPermissionDescriptors();
+  const descriptors = buildPermissionDescriptors("spare_parts");
   const permissionManager = descriptors.find(
     (item) => item.code === "users.permissions.manage"
   );
@@ -38,8 +38,15 @@ test("Release 3F-C permission catalog labels every code and protects owner contr
 
   assert.ok(permissionManager);
   assert.equal(permissionManager.category, "Users and Permissions");
-  assert.equal(securityAdmin.owner_protected, true);
-  assert.equal(securityAdmin.admin_only_grant, true);
+  assert.equal(securityAdmin, undefined);
+
+  const protectedOwnerResult = validateOverridePolicy({
+    targetUser: { id: 1, username: "admin", role: "admin" },
+    permissionCode: "security.admin",
+    effect: "deny",
+    workspaceCode: "spare_parts",
+  });
+  assert.equal(protectedOwnerResult.code, "OWNER_PERMISSION_PROTECTED");
 });
 
 test("Release 3F-C blocks owner-security denial for original administrator", () => {
@@ -58,6 +65,7 @@ test("Release 3F-C blocks protected administration grants to non-admin users", (
     targetUser: { id: 9, username: "cashier", role: "cashier" },
     permissionCode: "users.permissions.manage",
     effect: "allow",
+    workspaceCode: "spare_parts",
   });
 
   assert.equal(result.ok, false);
@@ -118,7 +126,7 @@ test("Release 3F-C frontend registers the permission manager route and sidebar",
   assert.match(app, /path="user-permissions"/);
   assert.match(app, /users\.permissions\.manage/);
   assert.match(layout, /title: "User Permissions"/);
-  assert.match(page, /Explicit deny always/);
+  assert.match(page, /Explicit deny overrides/);
   assert.match(page, /Reset all to role defaults/);
   assert.match(page, /X-Protected-Action-Token/);
 });

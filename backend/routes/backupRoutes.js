@@ -3,13 +3,13 @@ const crypto = require("crypto");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
 const {
   buildOwnerAlertContext,
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 const router = express.Router();
 
@@ -33,6 +33,19 @@ const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
 const BACKUP_MANIFEST_VERSION = "chalin03-final-local-6b-6f-v1";
 const LEGACY_ALIAS_TABLES = new Set(["stores", "user_store_access", "activity_logs"]);
 
+function requireOriginalSystemAdministrator(req, res, next) {
+  if (!isOriginalSystemAdministrator(req.user)) {
+    return res.status(403).json({
+      status: "error",
+      code: "SYSTEM_ADMINISTRATOR_REQUIRED",
+      message:
+        "Only the original System Administrator can download, validate or restore a full-system backup.",
+    });
+  }
+
+  return next();
+}
+
 const PREFERRED_TABLE_ORDER = [
   "branches",
   "schema_migrations",
@@ -42,6 +55,19 @@ const PREFERRED_TABLE_ORDER = [
   "business_units",
   "business_locations",
   "user_business_access",
+  "user_category_assignment_conflicts",
+  "worker_profiles",
+  "worker_assignments",
+  "worker_family_members",
+  "worker_emergency_contacts",
+  "worker_documents",
+  "worker_licenses",
+  "worker_property_assignments",
+  "worker_status_history",
+  "worker_profile_change_history",
+  "worker_private_files",
+  "worker_print_history",
+  "worker_category_assignment_conflicts",
   "products",
   "stock_adjustments",
   "suppliers",
@@ -614,7 +640,7 @@ async function sendBackupCreatedSecuritySmsAlert({
 }
 
 // GET /api/backups/download
-router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
+router.get("/download", requireAuth, requireOriginalSystemAdministrator, async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
@@ -724,7 +750,7 @@ router.get("/download", requireAuth, requireRole("admin"), async (req, res) => {
 router.post(
   "/restore/dry-run",
   requireAuth,
-  requireRole("admin"),
+  requireOriginalSystemAdministrator,
   async (req, res) => {
     const connection = await pool.getConnection();
 
@@ -759,7 +785,7 @@ router.post(
 );
 
 // POST /api/backups/restore
-router.post("/restore", requireAuth, requireRole("admin"), async (req, res) => {
+router.post("/restore", requireAuth, requireOriginalSystemAdministrator, async (req, res) => {
   const connection = await pool.getConnection();
   let transactionStarted = false;
 

@@ -95,3 +95,18 @@ Read-only verification:
 `20260718_release3fc_user_permissions_security_messages_verify.sql`
 
 This additive migration creates auditable per-user allow/deny permission overrides and Security Centre message dismissal records. Dismissing a Security Centre message never deletes its underlying `activity_log` or privileged-ledger evidence. Never run `database/schema.sql` against production.
+
+## Release 3F-C2 — Independent Categories, Guides, Receipts and Workers
+
+Production migration order:
+
+1. `20260718_release3fc2_category_isolation_guides_receipts_workers.sql`
+2. `20260718_release3fc2_category_isolation_guides_receipts_workers_verify.sql`
+
+This additive migration assigns every non-owner account and worker profile to one
+independent category: Spare Parts, Mining Operations or Equipment Hire. The
+original System Administrator remains the only protected cross-category account.
+Existing accounts or worker profiles with more than one detected category are
+not guessed, deleted or silently changed: their records are preserved, login or
+profile access is blocked, and they appear in Safe Conflict Review for an
+explicit protected decision. Never run `database/schema.sql` against Railway.

@@ -5,6 +5,7 @@ const {
   normalizeRole,
 } = require("../security/permissionCatalog");
 const { sanitizeMetadata } = require("./auditTrailService");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 function cleanText(value, maxLength = 500) {
   if (value === undefined || value === null) return "";
@@ -174,8 +175,7 @@ function evidenceScopeFilter(req, { groupMode = false } = {}) {
   );
 
   const canUseGroupMode =
-    groupMode &&
-    (role === "admin" || permissions.has("executive.operations.view"));
+    groupMode && isOriginalSystemAdministrator(req.user);
 
   if (canUseGroupMode) {
     return {

@@ -6,6 +6,7 @@ const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
   getEffectivePermissions,
   getPublicPermissionCatalog,
+  permissionsForWorkspace,
 } = require("../security/permissionCatalog");
 const {
   buildPermissionDescriptors,
@@ -16,6 +17,13 @@ const {
   validateOverridePolicy,
 } = require("../services/permissionOverrideService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  CATEGORY_CODES,
+  categoryLabel,
+  getBusinessUnitId,
+  normalizeCategory,
+  revokeUserSessions,
+} = require("../services/categoryIsolationService");
 const release2FinalRoutes = require("./release2FinalRoutes");
 
 const router = express.Router();
@@ -52,6 +60,46 @@ function parseExpiry(value) {
   return date;
 }
 
+function requesterCanViewTarget(requester, targetUser, workspaceCode) {
+  if (isOriginalSystemAdministrator(requester)) return true;
+  if (isOriginalSystemAdministrator(targetUser)) return false;
+
+  return (
+    String(targetUser?.category_assignment_status || "") === "assigned" &&
+    normalizeCategory(targetUser?.primary_workspace_code) ===
+      normalizeCategory(workspaceCode)
+  );
+}
+
+function requesterCanManageTarget(requester, targetUser, workspaceCode) {
+  if (isOriginalSystemAdministrator(targetUser)) {
+    return isOriginalSystemAdministrator(requester);
+  }
+
+  return (
+    String(targetUser?.category_assignment_status || "") === "assigned" &&
+    normalizeCategory(targetUser?.primary_workspace_code) ===
+      normalizeCategory(workspaceCode)
+  );
+}
+
+function sendTargetCategoryError(res, targetUser, workspaceCode) {
+  if (String(targetUser?.category_assignment_status || "") === "conflict_review") {
+    return res.status(409).json({
+      status: "error",
+      code: "CATEGORY_ASSIGNMENT_REVIEW_REQUIRED",
+      message:
+        "Resolve this account's category assignment conflict before changing its permissions.",
+    });
+  }
+
+  return res.status(403).json({
+    status: "error",
+    code: "USER_CATEGORY_ACCESS_DENIED",
+    message: `This user cannot be managed from ${categoryLabel(workspaceCode)}.`,
+  });
+}
+
 async function loadTargetUser(userId, connection = pool, lock = false) {
   const [rows] = await connection.query(
     `SELECT
@@ -64,6 +112,10 @@ async function loadTargetUser(userId, connection = pool, lock = false) {
        default_branch_id,
        can_access_all_branches,
        token_version,
+       primary_workspace_code,
+       category_assignment_status,
+       category_conflict_reason,
+       category_assignment_reviewed_at,
        created_at,
        updated_at
      FROM users
@@ -78,7 +130,7 @@ async function loadTargetUser(userId, connection = pool, lock = false) {
 async function loadWorkspaceRole(user, workspaceCode, connection = pool) {
   const workspace = normalizeWorkspace(workspaceCode);
 
-  if (workspace === "spare_parts" || workspace === "*") {
+  if (workspace === "spare_parts") {
     return String(user.role || "").trim().toLowerCase();
   }
 
@@ -101,7 +153,7 @@ async function targetSession(user, workspaceCode, connection = pool) {
   const workspace = normalizeWorkspace(workspaceCode);
   return {
     ...user,
-    workspace_code: workspace === "*" ? "spare_parts" : workspace,
+    workspace_code: workspace,
     workspace_role: await loadWorkspaceRole(user, workspace, connection),
   };
 }
@@ -109,14 +161,17 @@ async function targetSession(user, workspaceCode, connection = pool) {
 async function permissionState(user, workspaceCode) {
   const workspace = normalizeWorkspace(workspaceCode);
   const session = await targetSession(user, workspace);
-  const roleDefaults = getEffectivePermissions(session);
+  const allowedPermissions = new Set(permissionsForWorkspace(workspace));
+  const roleDefaults = getEffectivePermissions(session).filter((permission) =>
+    allowedPermissions.has(permission)
+  );
   const overrides = await loadActivePermissionOverrides({
     userId: user.id,
     workspaceCode: workspace,
   });
-  const effectivePermissions = await resolveEffectivePermissions(session, {
+  const effectivePermissions = (await resolveEffectivePermissions(session, {
     workspaceCode: workspace,
-  });
+  })).filter((permission) => allowedPermissions.has(permission));
 
   const allowSet = new Set(
     overrides
@@ -164,7 +219,7 @@ async function permissionHistory(userId, workspaceCode) {
      LEFT JOIN users revoker
        ON revoker.id = upo.revoked_by
      WHERE upo.user_id = ?
-       AND upo.workspace_code IN (?, '*')
+       AND upo.workspace_code = ?
      ORDER BY upo.id DESC
      LIMIT 100`,
     [userId, workspace]
@@ -193,20 +248,107 @@ async function revokeTargetAccess(connection, userId, reason) {
   return Number(result.affectedRows || 0);
 }
 
+async function alignUserAccessToCategory(
+  connection,
+  { userId, workspaceCode, actorUserId }
+) {
+  const workspace = normalizeCategory(workspaceCode);
+  const businessUnitId = await getBusinessUnitId(workspace, connection);
+
+  await connection.query(
+    `UPDATE user_business_access uba
+     INNER JOIN business_units bu ON bu.id = uba.business_unit_id
+     SET uba.can_access = CASE WHEN bu.code = ? THEN TRUE ELSE FALSE END,
+         uba.is_default = CASE WHEN bu.code = ? THEN TRUE ELSE FALSE END
+     WHERE uba.user_id = ?
+       AND bu.code IN ('mining', 'equipment_hire')`,
+    [workspace, workspace, userId]
+  );
+
+  if (workspace !== "spare_parts" && businessUnitId) {
+    await connection.query(
+      `INSERT INTO user_business_access (
+         user_id, business_unit_id, access_role, can_access, is_default, created_by
+       ) VALUES (?, ?, 'staff', TRUE, TRUE, ?)
+       ON DUPLICATE KEY UPDATE
+         can_access = TRUE,
+         is_default = TRUE,
+         updated_at = NOW()`,
+      [userId, businessUnitId, actorUserId]
+    );
+
+    await connection.query(
+      `UPDATE user_branch_access
+       SET can_access = FALSE,
+           is_primary = FALSE
+       WHERE user_id = ?`,
+      [userId]
+    );
+  }
+
+  await connection.query(
+    `UPDATE user_permission_overrides
+     SET revoked_at = NOW(),
+         revoked_by = ?,
+         revocation_reason = 'category_assignment_resolved'
+     WHERE user_id = ?
+       AND workspace_code <> ?
+       AND revoked_at IS NULL`,
+    [actorUserId, userId, workspace]
+  );
+
+  return businessUnitId;
+}
+
 router.use(requireAuth, requirePermission("users.permissions.manage"));
+router.use((req, res, next) => {
+  const activeWorkspace = normalizeCategory(req.user?.workspace_code);
+  const requestedWorkspace = normalizeCategory(
+    req.query.workspace_code || req.body?.workspace_code || activeWorkspace
+  );
+
+  if (!requestedWorkspace) {
+    return res.status(400).json({
+      status: "error",
+      code: "INVALID_BUSINESS_CATEGORY",
+      message: "Choose a valid business category.",
+    });
+  }
+
+  if (
+    !isOriginalSystemAdministrator(req.user) &&
+    requestedWorkspace !== activeWorkspace
+  ) {
+    return res.status(403).json({
+      status: "error",
+      code: "CROSS_CATEGORY_PERMISSION_ACCESS_DENIED",
+      message:
+        "Permission management is restricted to the business category used for this login.",
+    });
+  }
+
+  req.permissionWorkspaceCode = requestedWorkspace;
+  return next();
+});
 
 router.get(
   "/catalog",
   asyncHandler(async (req, res) => {
+    const workspaceCode = req.permissionWorkspaceCode;
     return res.json({
       status: "success",
-      permissions: buildPermissionDescriptors(),
+      workspace_code: workspaceCode,
+      permissions: buildPermissionDescriptors(workspaceCode),
       role_catalog: getPublicPermissionCatalog(),
-      workspace_options: [
-        { code: "spare_parts", label: "Spare Parts" },
-        { code: "mining", label: "Mining Operations" },
-        { code: "equipment_hire", label: "Equipment Hire" },
-      ],
+      workspace_options: isOriginalSystemAdministrator(req.user)
+        ? [
+            { code: "spare_parts", label: "Spare Parts" },
+            { code: "mining", label: "Mining Operations" },
+            { code: "equipment_hire", label: "Equipment Hire" },
+          ]
+        : [
+            { code: workspaceCode, label: categoryLabel(workspaceCode) },
+          ],
       policy: {
         deny_overrides_allow: true,
         reason_required: true,
@@ -221,6 +363,28 @@ router.get(
 router.get(
   "/users",
   asyncHandler(async (req, res) => {
+    const workspaceCode = req.permissionWorkspaceCode;
+    const originalSystemAdministrator = isOriginalSystemAdministrator(req.user);
+    const ownerId = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
+    const ownerUsername = String(
+      process.env.SYSTEM_ADMIN_USERNAME || "admin"
+    ).trim();
+
+    const whereClause = originalSystemAdministrator
+      ? `(
+           (u.primary_workspace_code = ? AND u.category_assignment_status = 'assigned')
+           OR u.category_assignment_status = 'conflict_review'
+           OR (u.id = ? AND LOWER(u.username) = LOWER(?) AND u.role = 'admin')
+         )`
+      : `(
+           u.primary_workspace_code = ?
+           AND u.category_assignment_status = 'assigned'
+         )`;
+
+    const queryParameters = originalSystemAdministrator
+      ? [workspaceCode, ownerId, ownerUsername]
+      : [workspaceCode];
+
     const [rows] = await pool.query(
       `SELECT
          u.id,
@@ -230,6 +394,10 @@ router.get(
          u.phone,
          u.is_active,
          u.token_version,
+         u.primary_workspace_code,
+         u.category_assignment_status,
+         u.category_conflict_reason,
+         u.category_assignment_reviewed_at,
          u.created_at,
          GROUP_CONCAT(
            DISTINCT CONCAT(bu.code, ':', uba.access_role)
@@ -242,6 +410,7 @@ router.get(
         AND uba.can_access = TRUE
        LEFT JOIN business_units bu
          ON bu.id = uba.business_unit_id
+       WHERE ${whereClause}
        GROUP BY
          u.id,
          u.full_name,
@@ -250,12 +419,21 @@ router.get(
          u.phone,
          u.is_active,
          u.token_version,
+         u.primary_workspace_code,
+         u.category_assignment_status,
+         u.category_conflict_reason,
+         u.category_assignment_reviewed_at,
          u.created_at
-       ORDER BY u.full_name, u.username`
+       ORDER BY
+         u.category_assignment_status = 'conflict_review' DESC,
+         u.full_name,
+         u.username`,
+      queryParameters
     );
 
     return res.json({
       status: "success",
+      workspace_code: workspaceCode,
       users: rows.map((row) => ({
         ...row,
         is_active: Boolean(Number(row.is_active)),
@@ -273,10 +451,373 @@ router.get(
 );
 
 router.get(
+  "/category-conflicts",
+  asyncHandler(async (req, res) => {
+    if (!isOriginalSystemAdministrator(req.user)) {
+      return res.json({
+        status: "success",
+        can_review_conflicts: false,
+        conflicts: [],
+        worker_conflicts: [],
+      });
+    }
+    const [rows] = await pool.query(
+      `SELECT
+         conflict.id,
+         conflict.user_id,
+         conflict.detected_categories,
+         conflict.conflict_reason,
+         conflict.detected_at,
+         u.full_name,
+         u.username,
+         u.role,
+         u.phone,
+         u.primary_workspace_code,
+         u.category_assignment_status
+       FROM user_category_assignment_conflicts conflict
+       INNER JOIN users u ON u.id = conflict.user_id
+       WHERE conflict.status = 'open'
+       ORDER BY conflict.detected_at ASC, conflict.id ASC`
+    );
+
+    const [workerRows] = await pool.query(
+      `SELECT
+         conflict.id,
+         conflict.worker_id,
+         conflict.detected_categories,
+         conflict.conflict_reason,
+         conflict.detected_at,
+         wp.employee_number,
+         wp.full_name,
+         wp.user_id,
+         wp.workspace_code
+       FROM worker_category_assignment_conflicts conflict
+       INNER JOIN worker_profiles wp ON wp.id = conflict.worker_id
+       WHERE conflict.status = 'open'
+       ORDER BY conflict.detected_at ASC, conflict.id ASC`
+    );
+
+    return res.json({
+      status: "success",
+      can_review_conflicts: true,
+      conflicts: rows.map((row) => ({
+        ...row,
+        detected_workspaces: String(row.detected_categories || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      })),
+      worker_conflicts: workerRows.map((row) => ({
+        ...row,
+        detected_workspaces: String(row.detected_categories || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      })),
+    });
+  })
+);
+
+router.put(
+  "/category-conflicts/:userId/resolve",
+  requireProtectedAction,
+  asyncHandler(async (req, res) => {
+    if (!isOriginalSystemAdministrator(req.user)) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only the original System Administrator can resolve category conflicts.",
+      });
+    }
+
+    const userId = positiveInteger(req.params.userId);
+    const selectedWorkspace = req.permissionWorkspaceCode;
+    const reason = cleanText(req.body.reason, 500);
+
+    if (!userId || !selectedWorkspace || !CATEGORY_CODES.includes(selectedWorkspace)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Choose a valid worker and one business category.",
+      });
+    }
+
+    if (reason.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "Enter a clear category-resolution reason of at least 8 characters.",
+      });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const targetUser = await loadTargetUser(userId, connection, true);
+
+      if (!targetUser) {
+        await connection.rollback();
+        return res.status(404).json({ status: "error", message: "User account was not found." });
+      }
+
+      if (isOriginalSystemAdministrator(targetUser)) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error",
+          message: "The original System Administrator remains the protected cross-category account.",
+        });
+      }
+
+      const businessUnitId = await alignUserAccessToCategory(connection, {
+        userId,
+        workspaceCode: selectedWorkspace,
+        actorUserId: req.user.id,
+      });
+
+      await connection.query(
+        `UPDATE users
+         SET primary_workspace_code = ?,
+             category_assignment_status = 'assigned',
+             category_conflict_reason = NULL,
+             category_assignment_reviewed_at = NOW(),
+             category_assignment_reviewed_by = ?
+         WHERE id = ?`,
+        [selectedWorkspace, req.user.id, userId]
+      );
+
+
+      await connection.query(
+        `UPDATE worker_profiles
+         SET workspace_code = ?,
+             business_unit_id = ?,
+             updated_by = ?
+         WHERE user_id = ?`,
+        [selectedWorkspace, businessUnitId, req.user.id, userId]
+      );
+
+      await connection.query(
+        `UPDATE worker_assignments wa
+         INNER JOIN worker_profiles wp ON wp.id = wa.worker_id
+         SET wa.is_active = CASE WHEN wa.workspace_code = ? THEN wa.is_active ELSE FALSE END,
+             wa.is_primary = CASE WHEN wa.workspace_code = ? THEN wa.is_primary ELSE FALSE END
+         WHERE wp.user_id = ?`,
+        [selectedWorkspace, selectedWorkspace, userId]
+      );
+
+      await connection.query(
+        `UPDATE user_category_assignment_conflicts
+         SET status = 'resolved',
+             retained_workspace_code = ?,
+             resolved_by = ?,
+             resolved_at = NOW(),
+             resolution_reason = ?
+         WHERE user_id = ?
+           AND status = 'open'`,
+        [selectedWorkspace, req.user.id, reason, userId]
+      );
+
+      await connection.query(
+        `UPDATE worker_category_assignment_conflicts conflict
+         INNER JOIN worker_profiles wp ON wp.id = conflict.worker_id
+         SET conflict.status = 'resolved',
+             conflict.retained_workspace_code = ?,
+             conflict.resolved_by = ?,
+             conflict.resolved_at = NOW(),
+             conflict.resolution_reason = ?
+         WHERE wp.user_id = ?
+           AND conflict.status = 'open'`,
+        [selectedWorkspace, req.user.id, reason, userId]
+      );
+
+      const sessionsRevoked = await revokeUserSessions(
+        connection,
+        userId,
+        'business_category_conflict_resolved'
+      );
+
+      await connection.commit();
+
+      await writeAuditEvent({
+        req,
+        action: "USER_CATEGORY_CONFLICT_RESOLVED",
+        actionType: "security.user_category.resolved",
+        outcome: "success",
+        severity: "warning",
+        entityType: "user",
+        entityId: userId,
+        details: `${targetUser.username} was assigned exclusively to ${categoryLabel(selectedWorkspace)}.`,
+        metadata: {
+          workspace_code: selectedWorkspace,
+          reason,
+          sessions_revoked: sessionsRevoked,
+        },
+      });
+
+      return res.json({
+        status: "success",
+        message: `${targetUser.full_name || targetUser.username} now belongs only to ${categoryLabel(selectedWorkspace)}.`,
+        sessions_revoked: sessionsRevoked,
+      });
+    } catch (error) {
+      try { await connection.rollback(); } catch {}
+      throw error;
+    } finally {
+      connection.release();
+    }
+  })
+);
+
+router.put(
+  "/worker-category-conflicts/:workerId/resolve",
+  requireProtectedAction,
+  asyncHandler(async (req, res) => {
+    if (!isOriginalSystemAdministrator(req.user)) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only the original System Administrator can resolve worker category conflicts.",
+      });
+    }
+
+    const workerId = positiveInteger(req.params.workerId);
+    const selectedWorkspace = req.permissionWorkspaceCode;
+    const reason = cleanText(req.body.reason, 500);
+
+    if (!workerId || !selectedWorkspace) {
+      return res.status(400).json({
+        status: "error",
+        message: "Choose a valid worker profile and one business category.",
+      });
+    }
+    if (reason.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "Enter a clear category-resolution reason of at least 8 characters.",
+      });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [workerRows] = await connection.query(
+        `SELECT id, user_id, employee_number, full_name
+         FROM worker_profiles
+         WHERE id = ?
+         LIMIT 1 FOR UPDATE`,
+        [workerId]
+      );
+      const worker = workerRows[0];
+      if (!worker) {
+        await connection.rollback();
+        return res.status(404).json({ status: "error", message: "Worker profile was not found." });
+      }
+
+      const businessUnitId = await getBusinessUnitId(selectedWorkspace, connection);
+      await connection.query(
+        `UPDATE worker_profiles
+         SET workspace_code = ?,
+             business_unit_id = ?,
+             updated_by = ?
+         WHERE id = ?`,
+        [selectedWorkspace, businessUnitId, req.user.id, workerId]
+      );
+      await connection.query(
+        `UPDATE worker_assignments
+         SET is_active = CASE WHEN workspace_code = ? THEN is_active ELSE FALSE END,
+             is_primary = CASE WHEN workspace_code = ? THEN is_primary ELSE FALSE END,
+             assignment_end = CASE
+               WHEN workspace_code <> ? AND is_active = TRUE
+               THEN COALESCE(assignment_end, CURDATE())
+               ELSE assignment_end
+             END
+         WHERE worker_id = ?`,
+        [selectedWorkspace, selectedWorkspace, selectedWorkspace, workerId]
+      );
+      await connection.query(
+        `UPDATE worker_category_assignment_conflicts
+         SET status = 'resolved',
+             retained_workspace_code = ?,
+             resolved_by = ?,
+             resolved_at = NOW(),
+             resolution_reason = ?
+         WHERE worker_id = ?
+           AND status = 'open'`,
+        [selectedWorkspace, req.user.id, reason, workerId]
+      );
+
+      let sessionsRevoked = 0;
+      if (worker.user_id) {
+        const [userRows] = await connection.query(
+          `SELECT id, full_name, username, role
+           FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+          [worker.user_id]
+        );
+        const linkedUser = userRows[0];
+        if (linkedUser && !isOriginalSystemAdministrator(linkedUser)) {
+          await alignUserAccessToCategory(connection, {
+            userId: linkedUser.id,
+            workspaceCode: selectedWorkspace,
+            actorUserId: req.user.id,
+          });
+
+          await connection.query(
+            `UPDATE users
+             SET primary_workspace_code = ?,
+                 category_assignment_status = 'assigned',
+                 category_conflict_reason = NULL,
+                 category_assignment_reviewed_at = NOW(),
+                 category_assignment_reviewed_by = ?
+             WHERE id = ?`,
+            [selectedWorkspace, req.user.id, linkedUser.id]
+          );
+          await connection.query(
+            `UPDATE user_category_assignment_conflicts
+             SET status = 'resolved',
+                 retained_workspace_code = ?,
+                 resolved_by = ?,
+                 resolved_at = NOW(),
+                 resolution_reason = ?
+             WHERE user_id = ?
+               AND status = 'open'`,
+            [selectedWorkspace, req.user.id, reason, linkedUser.id]
+          );
+
+          sessionsRevoked = await revokeUserSessions(
+            connection,
+            linkedUser.id,
+            'worker_category_conflict_resolved'
+          );
+        }
+      }
+
+      await connection.commit();
+      await writeAuditEvent({
+        req,
+        action: "WORKER_CATEGORY_CONFLICT_RESOLVED",
+        actionType: "security.worker_category.resolved",
+        outcome: "success",
+        severity: "warning",
+        entityType: "worker",
+        entityId: workerId,
+        details: `${worker.employee_number} was assigned exclusively to ${categoryLabel(selectedWorkspace)}.`,
+        metadata: { workspace_code: selectedWorkspace, reason, sessions_revoked: sessionsRevoked },
+      });
+
+      return res.json({
+        status: "success",
+        message: `${worker.full_name} now belongs only to ${categoryLabel(selectedWorkspace)}.`,
+        sessions_revoked: sessionsRevoked,
+      });
+    } catch (error) {
+      try { await connection.rollback(); } catch {}
+      throw error;
+    } finally {
+      connection.release();
+    }
+  })
+);
+
+router.get(
   "/users/:userId",
   asyncHandler(async (req, res) => {
     const userId = positiveInteger(req.params.userId);
-    const workspaceCode = normalizeWorkspace(req.query.workspace_code);
+    const workspaceCode = req.permissionWorkspaceCode;
 
     if (!userId) {
       return res.status(400).json({
@@ -291,6 +832,10 @@ router.get(
         status: "error",
         message: "User account was not found.",
       });
+    }
+
+    if (!requesterCanViewTarget(req.user, user, workspaceCode)) {
+      return sendTargetCategoryError(res, user, workspaceCode);
     }
 
     return res.json({
@@ -312,7 +857,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const userId = positiveInteger(req.params.userId);
     const permissionCode = cleanText(req.body.permission_code, 120);
-    const workspaceCode = normalizeWorkspace(req.body.workspace_code);
+    const workspaceCode = req.permissionWorkspaceCode;
     const effect = cleanText(req.body.effect, 20).toLowerCase();
     const reason = cleanText(req.body.reason, 500);
     const expiresAt = parseExpiry(req.body.expires_at);
@@ -350,10 +895,16 @@ router.post(
         });
       }
 
+      if (!requesterCanManageTarget(req.user, targetUser, workspaceCode)) {
+        await connection.rollback();
+        return sendTargetCategoryError(res, targetUser, workspaceCode);
+      }
+
       const policy = validateOverridePolicy({
         targetUser,
         permissionCode,
         effect,
+        workspaceCode,
       });
 
       if (!policy.ok) {
@@ -475,7 +1026,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const userId = positiveInteger(req.params.userId);
     const permissionCode = cleanText(req.body.permission_code, 120);
-    const workspaceCode = normalizeWorkspace(req.body.workspace_code);
+    const workspaceCode = req.permissionWorkspaceCode;
     const reason = cleanText(req.body.reason, 500);
     const revokeSessions = booleanValue(req.body.revoke_sessions, true);
 
@@ -503,6 +1054,11 @@ router.post(
       if (!targetUser) {
         await connection.rollback();
         return res.status(404).json({ status: "error", message: "User account was not found." });
+      }
+
+      if (!requesterCanManageTarget(req.user, targetUser, workspaceCode)) {
+        await connection.rollback();
+        return sendTargetCategoryError(res, targetUser, workspaceCode);
       }
 
       const [result] = await connection.query(
@@ -572,7 +1128,7 @@ router.post(
   requireProtectedAction,
   asyncHandler(async (req, res) => {
     const userId = positiveInteger(req.params.userId);
-    const workspaceCode = normalizeWorkspace(req.body.workspace_code);
+    const workspaceCode = req.permissionWorkspaceCode;
     const reason = cleanText(req.body.reason, 500);
     const revokeSessions = booleanValue(req.body.revoke_sessions, true);
 
@@ -597,6 +1153,11 @@ router.post(
       if (!targetUser) {
         await connection.rollback();
         return res.status(404).json({ status: "error", message: "User account was not found." });
+      }
+
+      if (!requesterCanManageTarget(req.user, targetUser, workspaceCode)) {
+        await connection.rollback();
+        return sendTargetCategoryError(res, targetUser, workspaceCode);
       }
 
       const [result] = await connection.query(

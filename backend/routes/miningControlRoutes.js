@@ -505,7 +505,8 @@ router.get(
            INNER JOIN worker_assignments wa ON wa.worker_id = wp.id
            LEFT JOIN worker_licenses wl ON wl.worker_id = wp.id AND wl.status = 'valid'
            LEFT JOIN worker_property_assignments wpa ON wpa.worker_id = wp.id
-           WHERE wa.workspace_code = 'mining'
+           WHERE wp.workspace_code = 'mining'
+             AND wa.workspace_code = 'mining'
              AND wa.context_id = ?
              AND wa.is_active = TRUE
              AND wp.employment_status = 'active'
@@ -1382,7 +1383,7 @@ router.get("/crews", requirePermission("mining.workforce.view"), async (req, res
               approver.full_name AS approved_by_name,
               COUNT(member.id) AS member_count
        FROM mining_shift_crews c
-       LEFT JOIN worker_profiles supervisor ON supervisor.id = c.supervisor_worker_id
+       LEFT JOIN worker_profiles supervisor ON supervisor.id = c.supervisor_worker_id AND supervisor.workspace_code = 'mining'
        LEFT JOIN mining_contractors contractor ON contractor.id = c.contractor_id
        LEFT JOIN users creator ON creator.id = c.created_by
        LEFT JOIN users approver ON approver.id = c.approved_by
@@ -1400,7 +1401,7 @@ router.get("/crews", requirePermission("mining.workforce.view"), async (req, res
       [members] = await pool.query(
         `SELECT m.*, wp.employee_number, wp.full_name
          FROM mining_shift_crew_members m
-         LEFT JOIN worker_profiles wp ON wp.id = m.worker_id
+         LEFT JOIN worker_profiles wp ON wp.id = m.worker_id AND wp.workspace_code = 'mining'
          WHERE m.crew_id IN (${placeholders})
          ORDER BY m.crew_id, COALESCE(wp.full_name, m.external_worker_name)`,
         crewIds
@@ -1429,7 +1430,8 @@ router.post("/crews", requirePermission("mining.workforce.manage"), async (req, 
       const [assigned] = await connection.query(
         `SELECT DISTINCT wa.worker_id
          FROM worker_assignments wa
-         WHERE wa.workspace_code = 'mining' AND wa.context_id = ? AND wa.is_active = TRUE
+         WHERE wp.workspace_code = 'mining'
+         AND wa.workspace_code = 'mining' AND wa.context_id = ? AND wa.is_active = TRUE
            AND wa.worker_id IN (${placeholders})`,
         [siteId, ...workerIds]
       );

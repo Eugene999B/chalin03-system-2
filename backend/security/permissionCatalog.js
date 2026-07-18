@@ -1,3 +1,5 @@
+const { isOriginalSystemAdministrator } = require("./systemAdminIdentity");
+
 const WORKSPACES = Object.freeze({
   SPARE_PARTS: "spare_parts",
   MINING: "mining",
@@ -131,6 +133,68 @@ const ALL_PERMISSIONS = Object.freeze([
   "sms.manage",
   "exports.download",
 ]);
+
+const CATEGORY_SHARED_PERMISSIONS = Object.freeze([
+  "workspace.view",
+  "workspace.admin",
+  "users.manage",
+  "users.permissions.manage",
+  "audit.view",
+  "audit.export",
+  "workers.view",
+  "workers.sensitive.view",
+  "workers.manage",
+  "workers.documents.view",
+  "workers.documents.manage",
+  "workers.deactivate",
+  "notifications.view",
+  "notifications.sync",
+  "notifications.manage",
+  "notifications.escalate",
+  "shared.control.view",
+  "shared.documents.view",
+  "shared.reports.view",
+  "shared.reports.export",
+  "shared.audit.view",
+  "exports.download",
+]);
+
+const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
+  ...CATEGORY_SHARED_PERMISSIONS,
+  "spare_parts.read",
+  "spare_parts.sell",
+  "spare_parts.manage",
+  "spare_parts.audit",
+  "installments.view",
+  "installments.manage",
+  "installments.collect",
+  "installments.remind",
+  "installments.export",
+  "installments.settings",
+  "sms.manage",
+]);
+
+const MINING_CATEGORY_PERMISSIONS = Object.freeze([
+  ...CATEGORY_SHARED_PERMISSIONS,
+  ...MINING_PERMISSIONS,
+  ...FLEET_PERMISSIONS,
+  "operations.documents.view",
+  "operations.documents.manage",
+]);
+
+const HIRE_CATEGORY_PERMISSIONS = Object.freeze([
+  ...CATEGORY_SHARED_PERMISSIONS,
+  ...HIRE_PERMISSIONS,
+  ...FLEET_PERMISSIONS,
+  "operations.documents.view",
+  "operations.documents.manage",
+]);
+
+const WORKSPACE_PERMISSION_CATALOG = Object.freeze({
+  [WORKSPACES.SPARE_PARTS]: SPARE_PARTS_CATEGORY_PERMISSIONS,
+  [WORKSPACES.MINING]: MINING_CATEGORY_PERMISSIONS,
+  [WORKSPACES.EQUIPMENT_HIRE]: HIRE_CATEGORY_PERMISSIONS,
+});
 
 const ADMIN_GRANTS = Object.freeze([...ALL_PERMISSIONS]);
 
@@ -597,8 +661,29 @@ function getEffectivePermissions(session = {}) {
     session.workspace_role || session.access_role || globalRole
   );
 
-  if (globalRole === "admin") {
+  if (isOriginalSystemAdministrator(session)) {
     return ADMIN_GRANTS;
+  }
+
+  if (globalRole === "admin") {
+    const categoryAdminShared = CATEGORY_SHARED_PERMISSIONS;
+
+    if (workspaceCode === WORKSPACES.SPARE_PARTS) {
+      return uniquePermissions([
+        ...SPARE_PARTS_GRANTS.admin,
+        ...categoryAdminShared,
+      ]).filter((permission) =>
+        SPARE_PARTS_CATEGORY_PERMISSIONS.includes(permission)
+      );
+    }
+
+    const roleGrants = WORKSPACE_ROLE_GRANTS[workspaceCode] || {};
+    return uniquePermissions([
+      ...(roleGrants.manager || []),
+      ...categoryAdminShared,
+    ]).filter((permission) =>
+      (WORKSPACE_PERMISSION_CATALOG[workspaceCode] || []).includes(permission)
+    );
   }
 
   function notificationGrants(baseGrants) {
@@ -623,7 +708,9 @@ function getEffectivePermissions(session = {}) {
       ...(SPARE_PARTS_GRANTS[globalRole] || []),
       ...(CROSS_CUTTING_GRANTS[globalRole] || []),
     ];
-    return uniquePermissions([...grants, ...notificationGrants(grants)]);
+    return uniquePermissions([...grants, ...notificationGrants(grants)]).filter(
+      (permission) => SPARE_PARTS_CATEGORY_PERMISSIONS.includes(permission)
+    );
   }
 
   if (globalRole === "cashier") {
@@ -638,7 +725,10 @@ function getEffectivePermissions(session = {}) {
     ...(CROSS_CUTTING_GRANTS[globalRole] || []),
   ];
 
-  return uniquePermissions([...grants, ...notificationGrants(grants)]);
+  return uniquePermissions([...grants, ...notificationGrants(grants)]).filter(
+    (permission) =>
+      (WORKSPACE_PERMISSION_CATALOG[workspaceCode] || []).includes(permission)
+  );
 }
 
 function hasPermission(session, permission) {
@@ -657,6 +747,17 @@ function hasAnyPermission(session, permissions) {
   return permissions.some((permission) => hasPermission(session, permission));
 }
 
+function permissionsForWorkspace(workspaceCode) {
+  const code = normalizeCode(workspaceCode);
+  return [...(WORKSPACE_PERMISSION_CATALOG[code] || [])];
+}
+
+function isPermissionAllowedForWorkspace(permissionCode, workspaceCode) {
+  return permissionsForWorkspace(workspaceCode).includes(
+    String(permissionCode || "").trim()
+  );
+}
+
 function getPublicPermissionCatalog() {
   return {
     workspaces: WORKSPACES,
@@ -664,6 +765,7 @@ function getPublicPermissionCatalog() {
     spare_parts_roles: SPARE_PARTS_GRANTS,
     mining_roles: MINING_ROLE_GRANTS,
     equipment_hire_roles: HIRE_ROLE_GRANTS,
+    workspace_permissions: WORKSPACE_PERMISSION_CATALOG,
   };
 }
 
@@ -673,6 +775,13 @@ module.exports = {
   MINING_PERMISSIONS,
   FLEET_PERMISSIONS,
   HIRE_PERMISSIONS,
+  CATEGORY_SHARED_PERMISSIONS,
+  SPARE_PARTS_CATEGORY_PERMISSIONS,
+  MINING_CATEGORY_PERMISSIONS,
+  HIRE_CATEGORY_PERMISSIONS,
+  WORKSPACE_PERMISSION_CATALOG,
+  permissionsForWorkspace,
+  isPermissionAllowedForWorkspace,
   normalizeCode,
   normalizeRole,
   getEffectivePermissions,

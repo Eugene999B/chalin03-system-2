@@ -66,7 +66,7 @@ export default function SalesHistoryPage() {
   const businessName = "CHALIN 03 COMPANY LIMITED";
   const businessAddress = "Dunkwa Police Barrier";
   const businessPhone = "0249469080 / 0249995510";
-  const momoNumber = "0543421127";
+  const momoNumber = businessPhone;
   const receiptFooter = "Thank You For Coming";
   const policyText = "QUALITY PARTS. RELIABLE SERVICE. BUILT ON TRUST.";
 
@@ -88,7 +88,7 @@ export default function SalesHistoryPage() {
   }
 
   function getReceiptMomoNumber(receiptData) {
-    return receiptData?.owner_phone || momoNumber;
+    return receiptData?.momo_number || receiptData?.business_phone || momoNumber;
   }
 
   function getReceiptStoreCode(receiptData) {

@@ -15,6 +15,11 @@ const {
   loginLimiter,
   sensitiveAdminLimiter,
 } = require("./middleware/securityMiddleware");
+const { requireAuth } = require("./middleware/authMiddleware");
+const { requireWorkerCategoryRecord } = require("./middleware/workerCategoryMiddleware");
+const {
+  requireWorkspaceCategory,
+} = require("./services/categoryIsolationService");
 
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
@@ -62,6 +67,11 @@ const { startInstallmentReminderScheduler } = require("./services/installmentRem
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
+
+const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
+const miningBoundary = requireWorkspaceCategory("mining");
+const hireBoundary = requireWorkspaceCategory("equipment_hire");
+const fleetBoundary = requireWorkspaceCategory("mining", "equipment_hire");
 
 const app = express();
 
@@ -169,39 +179,41 @@ app.use("/api/release2-final/owner", loginLimiter);
 app.use("/api/release2-final/security", sensitiveAdminLimiter);
 app.use("/api/release2-final/backups", sensitiveAdminLimiter);
 app.use("/api/release2-final/workers", sensitiveAdminLimiter);
+app.use("/api/release2-final/workers", requireAuth, requireWorkerCategoryRecord);
+app.use("/api/release2-final/workers-expanded", requireAuth, requireWorkerCategoryRecord);
 app.use("/api/users", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/sales", saleRoutes);
-app.use("/api/installments", installmentRoutes);
-app.use("/api/debts", debtRoutes);
-app.use("/api/reports", reportRoutes);
-app.use("/api/users", userRoutes);
+app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
+app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
+app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
+app.use("/api/debts", requireAuth, sparePartsBoundary, debtRoutes);
+app.use("/api/reports", requireAuth, sparePartsBoundary, reportRoutes);
+app.use("/api/users", requireAuth, sparePartsBoundary, userRoutes);
 app.use("/api/user-permissions", userPermissionRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/expenses", expenseRoutes);
-app.use("/api/purchases", purchaseRoutes);
-app.use("/api/returns", returnRoutes);
+app.use("/api/settings", requireAuth, sparePartsBoundary, settingsRoutes);
+app.use("/api/expenses", requireAuth, sparePartsBoundary, expenseRoutes);
+app.use("/api/purchases", requireAuth, sparePartsBoundary, purchaseRoutes);
+app.use("/api/returns", requireAuth, sparePartsBoundary, returnRoutes);
 app.use("/api/exports", exportRoutes);
 app.use("/api/activity-log", activityRoutes);
-app.use("/api/receipts", receiptRoutes);
+app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
 app.use("/api/backups", backupRoutes);
-app.use("/api/daily-closing", dailyClosingRoutes);
-app.use("/api/customer-statements", customerStatementRoutes);
-app.use("/api/maintenance", maintenanceRoutes);
-app.use("/api/audit-signoffs", auditSignoffRoutes);
-app.use("/api/audit-unlock-requests", auditUnlockRequestRoutes);
-app.use("/api/sms", smsRoutes);
-app.use("/api/accounting-intelligence", accountingIntelligenceRoutes);
-app.use("/api/stock-transfers", stockTransferRoutes);
-app.use("/api/fleet", fleetRoutes);
-app.use("/api/mining", miningRoutes);
-app.use("/api/mining-control", miningControlRoutes);
-app.use("/api/equipment-hire", equipmentHireRoutes);
-app.use("/api/hire-commercial", hireCommercialRoutes);
+app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
+app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
+app.use("/api/maintenance", requireAuth, sparePartsBoundary, maintenanceRoutes);
+app.use("/api/audit-signoffs", requireAuth, sparePartsBoundary, auditSignoffRoutes);
+app.use("/api/audit-unlock-requests", requireAuth, sparePartsBoundary, auditUnlockRequestRoutes);
+app.use("/api/sms", requireAuth, sparePartsBoundary, smsRoutes);
+app.use("/api/accounting-intelligence", requireAuth, sparePartsBoundary, accountingIntelligenceRoutes);
+app.use("/api/stock-transfers", requireAuth, sparePartsBoundary, stockTransferRoutes);
+app.use("/api/fleet", requireAuth, fleetBoundary, fleetRoutes);
+app.use("/api/mining", requireAuth, miningBoundary, miningRoutes);
+app.use("/api/mining-control", requireAuth, miningBoundary, miningControlRoutes);
+app.use("/api/equipment-hire", requireAuth, hireBoundary, equipmentHireRoutes);
+app.use("/api/hire-commercial", requireAuth, hireBoundary, hireCommercialRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/shared-control", sharedControlRoutes);
 app.use("/api/operations-documents", operationsDocumentRoutes);
@@ -211,8 +223,8 @@ app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
 app.use("/api/release2-final", ownerSecurityRoutes);
 app.use("/api/release2-final", release2FinalRoutes);
-app.use("/api/workspace-admin", workspaceAdminRoutes);
-app.use("/api/workspace-context", workspaceContextRoutes);
+app.use("/api/workspace-admin", requireAuth, fleetBoundary, workspaceAdminRoutes);
+app.use("/api/workspace-context", requireAuth, fleetBoundary, workspaceContextRoutes);
 
 
 app.use(notFoundHandler);

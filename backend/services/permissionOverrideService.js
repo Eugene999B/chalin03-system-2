@@ -2,21 +2,18 @@ const { pool } = require("../config/db");
 const {
   ALL_PERMISSIONS,
   getEffectivePermissions,
+  isPermissionAllowedForWorkspace,
   normalizeCode,
+  permissionsForWorkspace,
 } = require("../security/permissionCatalog");
-
-const SYSTEM_ADMIN_ID = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
-const SYSTEM_ADMIN_USERNAME = String(
-  process.env.SYSTEM_ADMIN_USERNAME || "admin"
-)
-  .trim()
-  .toLowerCase();
+const {
+  isOriginalSystemAdministrator,
+} = require("../security/systemAdminIdentity");
 
 const WORKSPACE_CODES = new Set([
   "spare_parts",
   "mining",
   "equipment_hire",
-  "*",
 ]);
 
 const OWNER_PROTECTED_PERMISSIONS = Object.freeze([
@@ -58,14 +55,6 @@ function isKnownPermission(permissionCode) {
   return ALL_PERMISSIONS.includes(String(permissionCode || "").trim());
 }
 
-function isOriginalSystemAdministrator(user = {}) {
-  return (
-    Number(user.id) === SYSTEM_ADMIN_ID &&
-    String(user.username || "").trim().toLowerCase() ===
-      SYSTEM_ADMIN_USERNAME &&
-    String(user.role || "").trim().toLowerCase() === "admin"
-  );
-}
 
 function applyPermissionOverrides(basePermissions = [], overrides = []) {
   const allowed = new Set(basePermissions.filter(Boolean));
@@ -117,10 +106,8 @@ async function loadActivePermissionOverrides({
        WHERE user_id = ?
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > NOW())
-         AND workspace_code IN (?, '*')
-       ORDER BY
-         CASE WHEN workspace_code = '*' THEN 0 ELSE 1 END,
-         id ASC`,
+         AND workspace_code = ?
+       ORDER BY id ASC`,
       [userId, workspace]
     );
 
@@ -154,7 +141,7 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
   return applyPermissionOverrides(basePermissions, overrides);
 }
 
-function validateOverridePolicy({ targetUser, permissionCode, effect }) {
+function validateOverridePolicy({ targetUser, permissionCode, effect, workspaceCode }) {
   if (!isKnownPermission(permissionCode)) {
     return {
       ok: false,
@@ -185,6 +172,17 @@ function validateOverridePolicy({ targetUser, permissionCode, effect }) {
       code: "OWNER_PERMISSION_PROTECTED",
       message:
         "This owner-security permission cannot be denied for the original System Administrator.",
+    };
+  }
+
+  const workspace = normalizeWorkspace(workspaceCode);
+  if (!isPermissionAllowedForWorkspace(permissionCode, workspace)) {
+    return {
+      ok: false,
+      statusCode: 409,
+      code: "CROSS_CATEGORY_PERMISSION_BLOCKED",
+      message:
+        "This permission belongs to a different independent business category.",
     };
   }
 
@@ -241,8 +239,9 @@ function humanizePermission(permissionCode) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function buildPermissionDescriptors() {
-  return ALL_PERMISSIONS.map((permissionCode) => ({
+function buildPermissionDescriptors(workspaceCode = "spare_parts") {
+  const allowed = new Set(permissionsForWorkspace(workspaceCode));
+  return ALL_PERMISSIONS.filter((permissionCode) => allowed.has(permissionCode)).map((permissionCode) => ({
     code: permissionCode,
     label: humanizePermission(permissionCode),
     category: permissionCategory(permissionCode),
