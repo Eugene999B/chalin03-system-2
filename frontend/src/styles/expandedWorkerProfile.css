@@ -803,3 +803,28 @@ button.danger {
   color: #07182c;
   box-shadow: 0 8px 16px rgba(7, 24, 44, 0.12);
 }
+
+/* Release 3F-C4 worker photo upload and list thumbnail correction. */
+.worker-list-avatar {
+  overflow: hidden;
+}
+
+.worker-list-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+}
+
+@media (max-width: 720px) {
+  .expanded-worker-list-item {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .worker-list-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+  }
+}

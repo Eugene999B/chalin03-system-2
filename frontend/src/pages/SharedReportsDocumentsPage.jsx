@@ -675,14 +675,14 @@ export default function SharedReportsDocumentsPage({ executiveMode = false }) {
                 <tbody>
                   {filteredDocuments.map((item) => (
                     <tr key={`${item.type}-${item.id}-${item.reference}`}>
-                      <td>{labelDate(item.date)}</td>
-                      <td>{item.type}</td>
-                      <td><strong>{item.reference || `Record ${item.id}`}</strong></td>
-                      <td>{item.subject || "-"}</td>
-                      <td><span className="srd-status">{item.status || "recorded"}</span></td>
-                      <td>{item.context || "Authorized context"}</td>
-                      <td>{item.amount !== undefined ? money(item.amount) : "-"}</td>
-                      <td>
+                      <td data-label="Date">{labelDate(item.date)}</td>
+                      <td data-label="Type">{item.type}</td>
+                      <td data-label="Reference"><strong>{item.reference || `Record ${item.id}`}</strong></td>
+                      <td data-label="Customer / Site">{item.subject || "-"}</td>
+                      <td data-label="Status"><span className="srd-status">{item.status || "recorded"}</span></td>
+                      <td data-label="Context">{item.context || "Authorized context"}</td>
+                      <td data-label="Amount">{item.amount !== undefined ? money(item.amount) : "-"}</td>
+                      <td data-label="Action">
                         <button
                           type="button"
                           className="srd-table-button"
@@ -728,14 +728,14 @@ export default function SharedReportsDocumentsPage({ executiveMode = false }) {
               <tbody>
                 {evidence.map((row) => (
                   <tr key={row.id}>
-                    <td>{labelDateTime(row.created_at)}</td>
-                    <td>{row.full_name || row.username || "System"}</td>
-                    <td>{String(row.workspace_code || "-").replaceAll("_", " ")}</td>
-                    <td>{row.control_area}</td>
-                    <td>{row.action_type}</td>
-                    <td>{row.document_number || row.document_type || row.export_format || "-"}</td>
-                    <td>{row.description || "-"}</td>
-                    <td><code>{row.request_id || "-"}</code></td>
+                    <td data-label="Time">{labelDateTime(row.created_at)}</td>
+                    <td data-label="User">{row.full_name || row.username || "System"}</td>
+                    <td data-label="Workspace">{String(row.workspace_code || "-").replaceAll("_", " ")}</td>
+                    <td data-label="Area">{row.control_area}</td>
+                    <td data-label="Action">{row.action_type}</td>
+                    <td data-label="Document / Format">{row.document_number || row.document_type || row.export_format || "-"}</td>
+                    <td data-label="Details">{row.description || "-"}</td>
+                    <td data-label="Request ID"><code>{row.request_id || "-"}</code></td>
                   </tr>
                 ))}
                 {!evidence.length ? <tr><td colSpan="8" className="srd-empty">No matching Release 3E evidence has been recorded yet.</td></tr> : null}

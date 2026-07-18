@@ -75,3 +75,174 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .srd-panel { padding: 15px; }
   .srd-panel__heading { flex-direction: column; }
 }
+
+/* Release 3F-C4 mobile-first Shared Reports, Documents & Audit Centre. */
+@media (max-width: 760px) {
+  .srd-page {
+    min-width: 0;
+    overflow-x: hidden;
+    padding: 10px;
+    gap: 12px;
+  }
+
+  .srd-hero {
+    gap: 16px;
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .srd-hero h1 {
+    font-size: clamp(1.55rem, 8vw, 2rem);
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+  }
+
+  .srd-hero p,
+  .srd-panel__heading p {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .srd-panel {
+    min-width: 0;
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .srd-panel__heading {
+    gap: 10px;
+    margin-bottom: 13px;
+  }
+
+  .srd-panel__heading > button,
+  .srd-action-row button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .srd-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .srd-filter-grid input,
+  .srd-filter-grid select {
+    min-width: 0;
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .srd-assurance-grid > div,
+  .srd-metric-card {
+    min-width: 0;
+    min-height: 82px;
+  }
+
+  .srd-table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .srd-table,
+  .srd-table tbody,
+  .srd-table tr,
+  .srd-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .srd-table {
+    font-size: 0.88rem;
+  }
+
+  .srd-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .srd-table tbody tr {
+    margin-bottom: 12px;
+    overflow: hidden;
+    border: 1px solid #dbe5ef;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 35, 63, 0.06);
+  }
+
+  .srd-table tbody tr:nth-child(even) {
+    background: #fff;
+  }
+
+  .srd-table td {
+    display: grid;
+    grid-template-columns: minmax(104px, 36%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 10px 11px;
+    border-bottom: 1px solid #e5edf5;
+    overflow-wrap: anywhere;
+  }
+
+  .srd-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .srd-table td::before {
+    content: attr(data-label);
+    color: #63758b;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .srd-table td[data-label="Action"] {
+    display: block;
+  }
+
+  .srd-table td[data-label="Action"]::before {
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .srd-table-button {
+    width: 100%;
+    min-height: 42px;
+    white-space: normal;
+  }
+
+  .srd-table code {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .srd-empty {
+    display: block !important;
+    padding: 20px 14px !important;
+  }
+
+  .srd-empty::before {
+    content: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .srd-table td {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

@@ -1061,14 +1061,17 @@ router.get(
 
     const [rows] = await pool.query(
       `SELECT
-         original_filename,
-         mime_type,
-         file_size_bytes,
-         checksum_sha256,
-         file_data
-       FROM worker_private_files
-       WHERE worker_id = ?
-         AND file_category = 'photo'
+         file.original_filename,
+         file.mime_type,
+         file.file_size_bytes,
+         file.checksum_sha256,
+         file.file_data
+       FROM worker_private_files file
+       INNER JOIN worker_profiles worker
+         ON worker.id = file.worker_id
+       WHERE file.worker_id = ?
+         AND worker.workspace_code = ?
+         AND file.file_category = 'photo'
          AND file.is_current = TRUE
          AND file.is_active = TRUE
        ORDER BY file.id DESC

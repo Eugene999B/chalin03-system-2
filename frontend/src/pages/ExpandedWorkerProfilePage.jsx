@@ -127,6 +127,116 @@ function fileToDataUrl(file) {
   });
 }
 
+
+function canvasToBlob(canvas, mimeType, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, mimeType, quality);
+  });
+}
+
+async function loadImageSource(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      });
+    } catch {
+      // Fall back to an HTML image below.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(
+        new Error("The selected photograph could not be decoded.")
+      );
+      element.src = objectUrl;
+    });
+
+    return image;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function optimizeWorkerPhoto(file) {
+  const allowedTypes = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ]);
+
+  if (!allowedTypes.has(file.type)) {
+    throw new Error("Choose a JPEG, PNG or WebP photograph.");
+  }
+
+  if (file.size > 15 * 1024 * 1024) {
+    throw new Error("The selected photograph is too large. Choose an image below 15 MB.");
+  }
+
+  const source = await loadImageSource(file);
+  const sourceWidth = Number(source.naturalWidth || source.width || 0);
+  const sourceHeight = Number(source.naturalHeight || source.height || 0);
+
+  if (!sourceWidth || !sourceHeight) {
+    source.close?.();
+    throw new Error("The selected photograph has invalid dimensions.");
+  }
+
+  const maximumDimension = 1200;
+  const scale = Math.min(1, maximumDimension / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) {
+    source.close?.();
+    throw new Error("This browser could not prepare the worker photograph.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(source, 0, 0, width, height);
+  source.close?.();
+
+  let mimeType = "image/webp";
+  let quality = 0.84;
+  let blob = await canvasToBlob(canvas, mimeType, quality);
+
+  if (!blob) {
+    mimeType = "image/jpeg";
+    blob = await canvasToBlob(canvas, mimeType, 0.84);
+  }
+
+  while (blob && blob.size > 2 * 1024 * 1024 && quality > 0.6) {
+    quality -= 0.08;
+    blob = await canvasToBlob(canvas, mimeType, quality);
+  }
+
+  if (!blob || blob.size > 2 * 1024 * 1024) {
+    throw new Error("The photograph could not be reduced below the secure 2 MB upload limit.");
+  }
+
+  const stem = String(file.name || "worker-photo")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-|-$/g, "") || "worker-photo";
+
+  return {
+    fileName: `${stem}.${mimeType === "image/webp" ? "webp" : "jpg"}`,
+    mimeType,
+    dataUrl: await fileToDataUrl(blob),
+    size: blob.size,
+  };
+}
+
 function Notice({
   type = "info",
   children,
@@ -329,6 +439,9 @@ export default function ExpandedWorkerProfilePage() {
   const [photoUrl, setPhotoUrl] =
     useState("");
 
+  const [workerPhotoUrls, setWorkerPhotoUrls] =
+    useState({});
+
   const [photoLoading, setPhotoLoading] =
     useState(false);
 
@@ -457,6 +570,33 @@ export default function ExpandedWorkerProfilePage() {
     options,
   ]);
 
+  async function loadWorkerThumbnails(workerRows) {
+    const photographedWorkers = (workerRows || []).filter(
+      (worker) => Number(worker.has_photo || 0) === 1
+    );
+
+    const entries = await Promise.all(
+      photographedWorkers.map(async (worker) => {
+        try {
+          const response = await axiosClient.get(
+            `/release2-final/workers-expanded/${worker.id}/photo`,
+            { responseType: "blob" }
+          );
+
+          return [String(worker.id), URL.createObjectURL(response.data)];
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const nextUrls = Object.fromEntries(entries.filter(Boolean));
+    setWorkerPhotoUrls((current) => {
+      Object.values(current).forEach((url) => URL.revokeObjectURL(url));
+      return nextUrls;
+    });
+  }
+
   async function loadWorkers() {
     setLoading(true);
     setError("");
@@ -472,7 +612,9 @@ export default function ExpandedWorkerProfilePage() {
         }
       );
 
-      setWorkers(response.data.workers || []);
+      const nextWorkers = response.data.workers || [];
+      setWorkers(nextWorkers);
+      loadWorkerThumbnails(nextWorkers).catch(() => {});
     } catch (requestError) {
       setError(
         errorMessage(
@@ -623,13 +765,19 @@ export default function ExpandedWorkerProfilePage() {
   useEffect(() => {
     loadWorkers();
     loadOptions();
-
-    return () => {
-      if (photoUrl) {
-        URL.revokeObjectURL(photoUrl);
-      }
-    };
   }, []);
+
+  useEffect(() => () => {
+    if (photoUrl) {
+      URL.revokeObjectURL(photoUrl);
+    }
+  }, [photoUrl]);
+
+  useEffect(() => () => {
+    Object.values(workerPhotoUrls).forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
+  }, [workerPhotoUrls]);
 
   async function refreshSelected() {
     await loadWorkers();
@@ -712,30 +860,25 @@ export default function ExpandedWorkerProfilePage() {
 
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      setError(
-        "Worker photograph must not exceed 2 MB."
-      );
-      return;
-    }
-
     setPhotoLoading(true);
     setError("");
     setMessage("");
 
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const optimized = await optimizeWorkerPhoto(file);
 
       const response = await axiosClient.post(
         `/release2-final/workers-expanded/${selectedId}/photo`,
         {
-          file_name: file.name,
-          mime_type: file.type,
-          data_base64: dataUrl,
+          file_name: optimized.fileName,
+          mime_type: optimized.mimeType,
+          data_base64: optimized.dataUrl,
         }
       );
 
-      setMessage(response.data.message);
+      setMessage(
+        `${response.data.message} Optimized upload: ${formatBytes(optimized.size)}.`
+      );
       await loadDetail(selectedId);
       await loadWorkers();
     } catch (requestError) {
@@ -1485,7 +1628,14 @@ export default function ExpandedWorkerProfilePage() {
                 }}
               >
                 <span className="worker-list-avatar">
-                  {initials(worker.full_name)}
+                  {workerPhotoUrls[String(worker.id)] ? (
+                    <img
+                      src={workerPhotoUrls[String(worker.id)]}
+                      alt={`${worker.full_name} profile`}
+                    />
+                  ) : (
+                    initials(worker.full_name)
+                  )}
                 </span>
 
                 <span>
