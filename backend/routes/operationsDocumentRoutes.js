@@ -3,7 +3,9 @@ const ExcelJS = require("exceljs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  requireAnyPermission,
+} = require("../middleware/permissionMiddleware");
 const {
   resolveHireLocationScope,
   sendHireLocationScopeError,
@@ -29,9 +31,9 @@ const {
   formatDateTime,
   sanitizeFilename,
 } = require("../services/operationsDocumentService");
+const { writeSharedControlEvidence } = require("../services/sharedControlService");
 
 const router = express.Router();
-const READ_ROLES = ["admin", "manager", "auditor"];
 
 function positiveId(value) {
   const number = Number(value);
@@ -158,6 +160,22 @@ async function logDownload(req, action, details) {
   } catch (error) {
     console.warn("Operations document activity log skipped:", error.message);
   }
+
+  const evidenceAction =
+    String(req.query?.evidence_action || "").trim().toLowerCase() === "reprint"
+      ? "reprint"
+      : "download";
+
+  await writeSharedControlEvidence({
+    req,
+    controlArea: "documents",
+    actionType: evidenceAction,
+    documentType: String(action || "operations_document")
+      .replace(/^DOWNLOAD_/, "")
+      .toLowerCase(),
+    description: details,
+    metadata: { activity_action: action },
+  });
 }
 
 
@@ -279,7 +297,9 @@ function addWorkbookSheet(workbook, name, title, columns, rows, moneyKeys = []) 
 }
 
 router.use(requireAuth);
-router.use(requireRole(...READ_ROLES));
+router.use(
+  requireAnyPermission("operations.documents.view", "shared.documents.view")
+);
 
 router.use("/hire", async (req, res, next) => {
   try {
@@ -2574,7 +2594,10 @@ router.get("/mining/incidents/:id/pdf", async (req, res) => {
 });
 
 // OPERATIONS ACCOUNTING WORKBOOK
-router.get("/workbook.xlsx", async (req, res) => {
+router.get(
+  "/workbook.xlsx",
+  requireAnyPermission("shared.reports.export", "exports.download"),
+  async (req, res) => {
   try {
     const { from, to } = dateRange(req);
     const workspace = activeWorkspaceCode(req);

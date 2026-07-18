@@ -102,6 +102,13 @@ const navigationSections = [
         permissions: ["operations.documents.view"],
       },
       {
+        title: "Shared Reports & Audit",
+        description: "Search documents, export reports and review access evidence",
+        path: "/mining/shared-controls",
+        icon: "📚",
+        permissions: ["shared.control.view"],
+      },
+      {
         title: "Mining Workforce",
         description: "Worker profiles, site assignments, licences and expiries",
         path: "/mining/workers",

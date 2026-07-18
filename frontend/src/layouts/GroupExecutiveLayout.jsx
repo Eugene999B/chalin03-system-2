@@ -30,6 +30,13 @@ export default function GroupExecutiveLayout() {
           permissions: ["notifications.view"],
         },
         {
+          title: "Shared Reports & Documents",
+          description: "Group reporting, controlled documents, role assurance and audit evidence",
+          path: "/group-executive-control/shared-controls",
+          icon: "📚",
+          permissions: ["shared.control.view"],
+        },
+        {
           title: "Security, Backups & Workforce",
           description: "Read-only group security, backup and worker oversight",
           path: "/group-executive-control/operations",

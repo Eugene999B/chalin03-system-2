@@ -44,3 +44,12 @@ read/archive state, synchronization evidence and controlled escalation logs.
 No automatic SMS is sent. SMS escalation remains disabled unless
 `NOTIFICATION_SMS_ENABLED=true` is deliberately set for an approved window,
 and every eligible escalation requires an explicit confirmation phrase.
+
+## Release 3E — Shared Reports, Documents, Roles and Audit Completion
+
+Production migration order for Release 3E:
+
+1. `20260718_release3e_shared_reports_documents_roles_audit.sql`
+2. `20260718_release3e_shared_reports_documents_roles_audit_verify.sql`
+
+Release 3E is additive and introduces only `shared_control_evidence`. It never runs `database/schema.sql`, never resets production data and never changes SMS configuration.

@@ -191,6 +191,14 @@ export default function Layout() {
             "group executive boss control centre dashboard spare parts mining equipment hire fleet revenue expenses debt alerts",
         },
         {
+          title: "Shared Reports & Documents",
+          description: "Controlled reporting, document access and audit evidence",
+          path: "/shared-controls",
+          icon: "📚",
+          keywords:
+            "shared reports documents audit evidence exports role scope access reprint",
+        },
+        {
           title: "Customer Statement",
           description: "Review customer sales and debt records",
           path: "/customer-statement",

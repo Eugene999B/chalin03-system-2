@@ -135,6 +135,7 @@ const COMMON_DEPENDENCIES = [
   "notification_user_states",
   "notification_escalations",
   "notification_sync_runs",
+  "shared_control_evidence",
 ];
 
 const SCOPE_TABLES = Object.freeze({
@@ -370,6 +371,7 @@ const CATEGORY_TABLES = Object.freeze({
     "notification_user_states",
     "notification_escalations",
     "notification_sync_runs",
+  "shared_control_evidence",
   ]),
 
   workforce: new Set([

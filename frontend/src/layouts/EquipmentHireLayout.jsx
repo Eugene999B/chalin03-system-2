@@ -110,6 +110,13 @@ const navigationSections = [
         permissions: ["operations.documents.view"],
       },
       {
+        title: "Shared Reports & Audit",
+        description: "Search documents, export reports and review access evidence",
+        path: "/equipment-hire-operations/shared-controls",
+        icon: "📚",
+        permissions: ["shared.control.view"],
+      },
+      {
         title: "Hire Workforce",
         description: "Worker profiles, location assignments, licences and expiries",
         path: "/equipment-hire-operations/workers",

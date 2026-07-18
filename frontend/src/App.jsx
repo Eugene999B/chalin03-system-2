@@ -45,6 +45,7 @@ import EquipmentHirePortalPage from "./pages/EquipmentHirePortalPage";
 import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
 import HireCommercialControlPage from "./pages/HireCommercialControlPage";
 import NotificationCentrePage from "./pages/NotificationCentrePage";
+import SharedReportsDocumentsPage from "./pages/SharedReportsDocumentsPage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
 import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
@@ -178,6 +179,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "notifications.view",
                 <NotificationCentrePage />
+              )}
+            />
+            <Route
+              path="shared-controls"
+              element={permissionOnlyPage(
+                "shared.control.view",
+                <SharedReportsDocumentsPage />
               )}
             />
 
@@ -370,6 +378,13 @@ export default function App() {
               )}
             />
             <Route
+              path="shared-controls"
+              element={permissionPage(
+                MINING_SECTION_PERMISSIONS.shared,
+                <SharedReportsDocumentsPage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
@@ -498,6 +513,13 @@ export default function App() {
               )}
             />
             <Route
+              path="shared-controls"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.shared,
+                <SharedReportsDocumentsPage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
@@ -552,6 +574,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "notifications.view",
                 <NotificationCentrePage executiveMode />
+              )}
+            />
+            <Route
+              path="shared-controls"
+              element={permissionOnlyPage(
+                "shared.control.view",
+                <SharedReportsDocumentsPage executiveMode />
               )}
             />
             <Route

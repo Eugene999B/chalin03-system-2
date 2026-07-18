@@ -115,6 +115,7 @@ const PREFERRED_TABLE_ORDER = [
   "notification_user_states",
   "notification_escalations",
   "notification_sync_runs",
+  "shared_control_evidence",
 ];
 
 const DATE_ONLY_COLUMNS = new Set([

@@ -9,8 +9,26 @@ const {
   requireAnyPermission,
 } = require("../middleware/permissionMiddleware");
 const { rowsToCsv } = require("../utils/csvSafety");
+const { writeSharedControlEvidence } = require("../services/sharedControlService");
 
 const router = express.Router();
+
+async function logAuditExport(req, format, rowCount, category) {
+  await writeSharedControlEvidence({
+    req,
+    controlArea: "audit",
+    actionType: "export",
+    documentType: "audit_activity_report",
+    documentNumber: category || "all",
+    exportFormat: format,
+    description: `Exported ${rowCount} audit activity record(s) in ${String(format).toUpperCase()} format.`,
+    metadata: {
+      category: category || "all",
+      from: req.query.from || null,
+      to: req.query.to || null,
+    },
+  });
+}
 
 function cleanText(value, maxLength = 255) {
   if (value === undefined || value === null) return "";
@@ -588,6 +606,7 @@ router.get(
       const workbook = createAuditWorkbook(logs, req);
       const category = safeFilePart(req.query.category || "all");
       const filename = `chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      await logAuditExport(req, "xlsx", logs.length, category);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       await workbook.xlsx.write(res);
@@ -603,6 +622,7 @@ router.get(
     try {
       const { logs } = await loadAuditRows(req, { exportMode: true });
       const category = safeFilePart(req.query.category || "all");
+      await logAuditExport(req, "pdf", logs.length, category);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.pdf"`);
       createAuditPdf(logs, req, res);
@@ -619,6 +639,7 @@ router.get(
       const { logs } = await loadAuditRows(req, { exportMode: true });
       const category = safeFilePart(req.query.category || "all");
       const html = createAuditWordHtml(logs, req);
+      await logAuditExport(req, "doc", logs.length, category);
       res.setHeader("Content-Type", "application/msword; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="chalin03-audit-${category}-${new Date().toISOString().slice(0, 10)}.doc"`);
       return res.send(Buffer.from(`\uFEFF${html}`, "utf8"));
@@ -652,6 +673,7 @@ router.get(
         logs
       );
 
+      await logAuditExport(req, "csv", logs.length, safeFilePart(req.query.category || "all"));
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
         "Content-Disposition",

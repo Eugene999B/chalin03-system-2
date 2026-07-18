@@ -7,6 +7,7 @@ const { requireRole } = require("../middleware/roleMiddleware");
 const {
   loadGroupCommandCentreSummary,
 } = require("../services/groupCommandCentreService");
+const { writeSharedControlEvidence } = require("../services/sharedControlService");
 
 const router = express.Router();
 const ALLOWED_ROLES = ["admin", "manager", "auditor"];
@@ -1281,6 +1282,18 @@ async function logWorkbookDownload(req, summary) {
   } catch (error) {
     console.warn("Group executive workbook activity log skipped:", error.message);
   }
+
+  await writeSharedControlEvidence({
+    req,
+    controlArea: "reports",
+    actionType: "export",
+    documentType: "group_executive_workbook",
+    documentNumber: `${summary.period.from}-to-${summary.period.to}`,
+    exportFormat: "xlsx",
+    description: `Downloaded Group Executive workbook for ${summary.period.from} to ${summary.period.to}.`,
+    metadata: { branch_scope: summary.branch_scope?.mode || "authorized" },
+    workspaceCode: "group",
+  });
 }
 
 router.use(requireAuth);

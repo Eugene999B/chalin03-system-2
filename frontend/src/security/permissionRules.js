@@ -40,6 +40,7 @@ export const MINING_SECTION_PERMISSIONS = Object.freeze({
   control: { any: ["mining.stockpiles.view", "mining.dispatch.view", "mining.fuel_control.view", "mining.workforce.view", "mining.closing.view"] },
   fleet: { all: ["fleet.assets.view"] },
   documents: { all: ["operations.documents.view"] },
+  shared: { all: ["shared.control.view"] },
   administration: { all: ["workspace.admin"] },
 });
 
@@ -57,6 +58,7 @@ export const HIRE_SECTION_PERMISSIONS = Object.freeze({
   reports: { all: ["hire.reports.view"] },
   fleet: { all: ["fleet.assets.view"] },
   documents: { all: ["operations.documents.view"] },
+  shared: { all: ["shared.control.view"] },
   administration: { all: ["workspace.admin"] },
 });
 
@@ -163,4 +165,13 @@ export const NOTIFICATION_PERMISSIONS = Object.freeze({
   sync: "notifications.sync",
   manage: "notifications.manage",
   escalate: "notifications.escalate",
+});
+
+
+export const SHARED_CONTROL_PERMISSIONS = Object.freeze({
+  view: "shared.control.view",
+  documents: "shared.documents.view",
+  reports: "shared.reports.view",
+  export: "shared.reports.export",
+  audit: "shared.audit.view",
 });
