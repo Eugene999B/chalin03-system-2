@@ -18,6 +18,11 @@ const {
 const { requireAuth } = require("./middleware/authMiddleware");
 const { requireWorkerCategoryRecord } = require("./middleware/workerCategoryMiddleware");
 const {
+  delegatedUserAdministrationGate,
+  requireDelegatedCapability,
+  requireDelegatedCapabilityForAdministrator,
+} = require("./middleware/delegatedAdministrationMiddleware");
+const {
   requireWorkspaceCategory,
 } = require("./services/categoryIsolationService");
 
@@ -28,6 +33,7 @@ const debtRoutes = require("./routes/debtRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const userRoutes = require("./routes/userRoutes");
 const userPermissionRoutes = require("./routes/userPermissionRoutes");
+const delegatedAdministrationRoutes = require("./routes/delegatedAdministrationRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
@@ -35,6 +41,7 @@ const returnRoutes = require("./routes/returnRoutes");
 const exportRoutes = require("./routes/exportRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
+const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
@@ -81,6 +88,8 @@ app.disable("x-powered-by");
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
+  "https://chalin03.com",
+  "https://www.chalin03.com",
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_ALT,
 ]
@@ -135,6 +144,8 @@ app.get("/api", (req, res) => {
       "/api/debts",
       "/api/reports",
       "/api/users",
+      "/api/user-permissions",
+      "/api/delegated-administration",
       "/api/settings",
       "/api/expenses",
       "/api/purchases",
@@ -182,8 +193,16 @@ app.use("/api/release2-final/workers", sensitiveAdminLimiter);
 app.use("/api/release2-final/workers", requireAuth, requireWorkerCategoryRecord);
 app.use("/api/release2-final/workers-expanded", requireAuth, requireWorkerCategoryRecord);
 app.use("/api/users", sensitiveAdminLimiter);
+app.use("/api/user-permissions", sensitiveAdminLimiter);
+app.use("/api/delegated-administration", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
+
+app.use(
+  "/api/system/diagnostics",
+  requireAuth,
+  requireDelegatedCapability("system_operations")
+);
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
@@ -191,15 +210,33 @@ app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
 app.use("/api/debts", requireAuth, sparePartsBoundary, debtRoutes);
 app.use("/api/reports", requireAuth, sparePartsBoundary, reportRoutes);
-app.use("/api/users", requireAuth, sparePartsBoundary, userRoutes);
-app.use("/api/user-permissions", userPermissionRoutes);
+app.use(
+  "/api/users",
+  requireAuth,
+  sparePartsBoundary,
+  delegatedUserAdministrationGate,
+  userRoutes
+);
+app.use(
+  "/api/user-permissions",
+  requireAuth,
+  requireDelegatedCapability("manage_permissions"),
+  userPermissionRoutes
+);
+app.use("/api/delegated-administration", delegatedAdministrationRoutes);
 app.use("/api/settings", requireAuth, sparePartsBoundary, settingsRoutes);
 app.use("/api/expenses", requireAuth, sparePartsBoundary, expenseRoutes);
 app.use("/api/purchases", requireAuth, sparePartsBoundary, purchaseRoutes);
 app.use("/api/returns", requireAuth, sparePartsBoundary, returnRoutes);
 app.use("/api/exports", exportRoutes);
-app.use("/api/activity-log", activityRoutes);
+app.use(
+  "/api/activity-log",
+  requireAuth,
+  requireDelegatedCapabilityForAdministrator("audit_view"),
+  activityRoutes
+);
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
+app.use("/api/backups", delegatedBackupRoutes);
 app.use("/api/backups", backupRoutes);
 app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
 app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
@@ -223,9 +260,14 @@ app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
 app.use("/api/release2-final", ownerSecurityRoutes);
 app.use("/api/release2-final", release2FinalRoutes);
-app.use("/api/workspace-admin", requireAuth, fleetBoundary, workspaceAdminRoutes);
+app.use(
+  "/api/workspace-admin",
+  requireAuth,
+  fleetBoundary,
+  delegatedUserAdministrationGate,
+  workspaceAdminRoutes
+);
 app.use("/api/workspace-context", requireAuth, fleetBoundary, workspaceContextRoutes);
-
 
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -238,14 +280,14 @@ async function startServer() {
     await runStartupSelfCheck();
 
     app.listen(PORT, () => {
-      console.log(`âœ… Server running on port ${PORT}`);
-      console.log(`ðŸŒ Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`ðŸ” Allowed frontend origins: ${allowedOrigins.join(", ")}`);
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`Allowed frontend origins: ${allowedOrigins.join(", ")}`);
       startSmsDeliveryStatusSync();
       startInstallmentReminderScheduler();
     });
   } catch (error) {
-    console.error("âŒ Failed to start server:", error);
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
 }
