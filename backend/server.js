@@ -199,6 +199,22 @@ app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
 
 app.use(
+  "/api/release2-final/backups/history",
+  requireAuth,
+  requireDelegatedCapabilityForAdministrator("backup_download")
+);
+app.use(
+  "/api/release2-final/backups/download",
+  requireAuth,
+  requireDelegatedCapabilityForAdministrator("backup_download")
+);
+app.use(
+  "/api/release2-final/backups/verify",
+  requireAuth,
+  requireDelegatedCapabilityForAdministrator("backup_validate")
+);
+
+app.use(
   "/api/system/diagnostics",
   requireAuth,
   requireDelegatedCapability("system_operations")
