@@ -3193,8 +3193,8 @@ export default function ExpandedWorkerProfilePage() {
                 </h2>
 
                 <span>
-                  Both formats contain the professional
-                  Chalin 03 front and back ID-card design.
+                  Both formats contain the redesigned modern Chalin 03
+                  employee card with clean identity, verification and security sections.
                 </span>
               </div>
 
@@ -3212,9 +3212,17 @@ export default function ExpandedWorkerProfilePage() {
 
             <div className="worker-print-choice-grid">
               <article>
-                <div className="worker-print-format-preview exact">
-                  <span>FRONT</span>
-                  <span>BACK</span>
+                <div className="worker-print-format-preview exact worker-id-preview-modern">
+                  <span className="worker-id-mini-card front">
+                    <b>C03</b>
+                    <i>EMPLOYEE ID</i>
+                    <small>Photo · Name · Role</small>
+                  </span>
+                  <span className="worker-id-mini-card back">
+                    <b>VERIFICATION</b>
+                    <i>Emergency · Serial</i>
+                    <small>Security bars</small>
+                  </span>
                 </div>
 
                 <h3>Exact Card Size</h3>
@@ -3248,9 +3256,13 @@ export default function ExpandedWorkerProfilePage() {
               </article>
 
               <article>
-                <div className="worker-print-format-preview a4">
-                  <span>A4</span>
-                  <span>FRONT + BACK</span>
+                <div className="worker-print-format-preview a4 worker-id-preview-modern">
+                  <span className="worker-id-a4-sheet">A4</span>
+                  <span className="worker-id-mini-card sheet">
+                    <b>FRONT + BACK</b>
+                    <i>100% actual size</i>
+                    <small>Cut marks included</small>
+                  </span>
                 </div>
 
                 <h3>A4 Print Sheet</h3>

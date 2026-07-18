@@ -726,3 +726,80 @@ button.danger {
   color: #334155;
   font-weight: 850;
 }
+
+/* Release 3F-C3 modern employee ID preview */
+.worker-id-preview-modern {
+  overflow: hidden;
+  padding: 15px;
+  background:
+    radial-gradient(circle at 85% 15%, rgba(231, 191, 46, 0.22), transparent 32%),
+    linear-gradient(145deg, #eef3f7, #dce7ef);
+}
+
+.worker-print-format-preview .worker-id-mini-card {
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 3px;
+  overflow: hidden;
+  border: 1px solid #07182c;
+  border-left: 4px solid #e7bf2e;
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #07182c;
+  text-align: left;
+  box-shadow: 0 8px 16px rgba(7, 24, 44, 0.14);
+}
+
+.worker-print-format-preview .worker-id-mini-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 16px;
+  background: #07182c;
+}
+
+.worker-print-format-preview .worker-id-mini-card b,
+.worker-print-format-preview .worker-id-mini-card i,
+.worker-print-format-preview .worker-id-mini-card small {
+  position: relative;
+  z-index: 1;
+}
+
+.worker-print-format-preview .worker-id-mini-card b {
+  margin-top: 12px;
+  font-size: 8px;
+}
+
+.worker-print-format-preview .worker-id-mini-card i {
+  color: #153f68;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.worker-print-format-preview .worker-id-mini-card small {
+  color: #64748b;
+  font-size: 6px;
+}
+
+.worker-print-format-preview .worker-id-mini-card.back {
+  border-left-color: #006b3f;
+}
+
+.worker-print-format-preview .worker-id-mini-card.sheet {
+  width: 135px;
+  height: 75px;
+}
+
+.worker-print-format-preview .worker-id-a4-sheet {
+  width: 85px;
+  height: 112px;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #fff;
+  color: #07182c;
+  box-shadow: 0 8px 16px rgba(7, 24, 44, 0.12);
+}

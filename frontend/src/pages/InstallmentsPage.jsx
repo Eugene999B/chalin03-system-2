@@ -631,7 +631,7 @@ export default function InstallmentsPage() {
         </div>
 
         <div className="installment-table-wrap">
-          <table className="installment-table">
+          <table className="installment-table installment-table--agreements">
             <thead>
               <tr>
                 <th>Agreement</th>
@@ -654,20 +654,20 @@ export default function InstallmentsPage() {
               ) : (
                 agreements.map((agreement) => (
                   <tr key={agreement.id}>
-                    <td>
+                    <td data-label="Agreement">
                       <strong>{agreement.agreement_number}</strong>
                       <small>{agreement.receipt_number}</small>
                     </td>
-                    <td>
+                    <td data-label="Customer">
                       <strong>{agreement.customer_name}</strong>
                       <small>{agreement.customer_phone}</small>
                     </td>
-                    <td>
+                    <td data-label="Schedule">
                       {label(agreement.payment_frequency)}
                       <small>{agreement.installment_count} payment(s)</small>
                     </td>
-                    <td>GHS {money(agreement.amount_paid)}</td>
-                    <td>
+                    <td data-label="Paid">GHS {money(agreement.amount_paid)}</td>
+                    <td data-label="Outstanding">
                       <strong>GHS {money(agreement.outstanding_balance)}</strong>
                       {Number(agreement.overdue_amount || 0) > 0 ? (
                         <small className="installment-overdue-text">
@@ -675,11 +675,11 @@ export default function InstallmentsPage() {
                         </small>
                       ) : null}
                     </td>
-                    <td>{shortDate(agreement.next_due_date)}</td>
-                    <td>
+                    <td data-label="Next Due">{shortDate(agreement.next_due_date)}</td>
+                    <td data-label="Status">
                       <StatusPill value={agreement.agreement_status} />
                     </td>
-                    <td>
+                    <td data-label="Action">
                       <button
                         type="button"
                         className="installment-small-button"
@@ -892,7 +892,7 @@ export default function InstallmentsPage() {
             <div>
               <h3>Payment Schedule</h3>
               <div className="installment-table-wrap">
-                <table className="installment-table">
+                <table className="installment-table installment-table--schedule">
                   <thead>
                     <tr>
                       <th>#</th>
@@ -906,11 +906,11 @@ export default function InstallmentsPage() {
                   <tbody>
                     {(selected.schedule || []).map((row) => (
                       <tr key={row.id}>
-                        <td>{row.sequence_number}</td>
-                        <td>{shortDate(row.due_date)}</td>
-                        <td>GHS {money(row.scheduled_amount)}</td>
-                        <td>GHS {money(row.amount_paid)}</td>
-                        <td>
+                        <td data-label="Payment #">{row.sequence_number}</td>
+                        <td data-label="Due">{shortDate(row.due_date)}</td>
+                        <td data-label="Scheduled">GHS {money(row.scheduled_amount)}</td>
+                        <td data-label="Paid">GHS {money(row.amount_paid)}</td>
+                        <td data-label="Charges">
                           GHS{" "}
                           {money(
                             Number(row.late_charge_amount || 0) -
@@ -928,7 +928,7 @@ export default function InstallmentsPage() {
                             </button>
                           ) : null}
                         </td>
-                        <td>
+                        <td data-label="Status">
                           <StatusPill value={row.schedule_status} />
                         </td>
                       </tr>

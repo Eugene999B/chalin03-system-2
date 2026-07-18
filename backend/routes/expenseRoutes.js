@@ -26,6 +26,35 @@ function cleanText(value) {
   return String(value).trim();
 }
 
+const EXPENSE_FUNDING_SOURCES = new Set([
+  "today_sales_receipts",
+  "petty_cash",
+  "prior_business_funds",
+  "owner_manager_funds",
+  "bank_account",
+  "momo_wallet",
+  "unpaid_credit",
+  "other",
+]);
+
+function parseRequiredBoolean(value) {
+  if (value === true || value === 1 || value === "1" || value === "true") {
+    return true;
+  }
+
+  if (value === false || value === 0 || value === "0" || value === "false") {
+    return false;
+  }
+
+  return null;
+}
+
+function fundingSourceLabel(value) {
+  return cleanText(value || "other")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function toDateOnly(value) {
   const date = value ? new Date(value) : new Date();
 
@@ -172,6 +201,9 @@ router.get(
           e.description,
           e.amount,
           e.payment_method,
+          e.funding_source,
+          e.affects_daily_closing,
+          e.closing_treatment_note,
           e.expense_date,
           e.recorded_by,
           e.created_at,
@@ -189,7 +221,9 @@ router.get(
       const [summaryRows] = await pool.query(
         `SELECT
           COALESCE(SUM(e.amount), 0) AS total_expenses,
-          COUNT(*) AS expense_count
+          COUNT(*) AS expense_count,
+          COALESCE(SUM(CASE WHEN e.affects_daily_closing = 1 THEN e.amount ELSE 0 END), 0) AS closing_expenses,
+          COALESCE(SUM(CASE WHEN e.affects_daily_closing = 0 THEN e.amount ELSE 0 END), 0) AS externally_funded_expenses
          FROM expenses e
          LEFT JOIN users u ON e.recorded_by = u.id
          ${whereClause}`,
@@ -203,6 +237,10 @@ router.get(
         summary: {
           total_expenses: Number(summaryRows[0].total_expenses || 0),
           expense_count: Number(summaryRows[0].expense_count || 0),
+          closing_expenses: Number(summaryRows[0].closing_expenses || 0),
+          externally_funded_expenses: Number(
+            summaryRows[0].externally_funded_expenses || 0
+          ),
         },
         expenses,
       });
@@ -232,6 +270,13 @@ router.post(
       const description = cleanText(req.body.description);
       const expenseDate = cleanText(req.body.expense_date);
       const paymentMethod = cleanText(req.body.payment_method || "cash").toLowerCase();
+      const fundingSource = cleanText(req.body.funding_source).toLowerCase();
+      const affectsDailyClosing = parseRequiredBoolean(
+        req.body.affects_daily_closing
+      );
+      const closingTreatmentNote = cleanText(
+        req.body.closing_treatment_note
+      ).slice(0, 500);
       const cleanAmount = Number(req.body.amount);
 
       if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {
@@ -252,6 +297,53 @@ router.post(
         return res.status(400).json({
           status: "error",
           message: "Expense payment method must be cash, momo, bank, or other.",
+        });
+      }
+
+      if (!EXPENSE_FUNDING_SOURCES.has(fundingSource)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Choose a valid source of funds for this expense.",
+        });
+      }
+
+      if (affectsDailyClosing === null) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Confirm whether this expense used money collected during this business day.",
+        });
+      }
+
+      if (affectsDailyClosing && fundingSource !== "today_sales_receipts") {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "An expense may reduce Daily Closing only when its source is Today's Sales Receipts.",
+        });
+      }
+
+      if (!affectsDailyClosing && fundingSource === "today_sales_receipts") {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Today's Sales Receipts must be marked to reduce the selected Daily Closing payment channel.",
+        });
+      }
+
+      if (fundingSource === "unpaid_credit" && paymentMethod !== "other") {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "An unpaid credit expense must use Other as its payment method until it is actually paid.",
+        });
+      }
+
+      if (fundingSource === "other" && closingTreatmentNote.length < 8) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Describe the other funding source using at least 8 characters.",
         });
       }
 
@@ -277,16 +369,22 @@ router.post(
           description,
           amount,
           payment_method,
+          funding_source,
+          affects_daily_closing,
+          closing_treatment_note,
           expense_date,
           recorded_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           branchId,
           category,
           description || null,
           cleanAmount,
           paymentMethod,
+          fundingSource,
+          affectsDailyClosing ? 1 : 0,
+          closingTreatmentNote || null,
           expenseDate,
           req.user.id,
         ]
@@ -296,14 +394,24 @@ router.post(
         req.user.id,
         branchId,
         "CREATE_EXPENSE",
-        `Recorded ${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(2)}`,
+        `Recorded ${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(
+          2
+        )}. Funding: ${fundingSourceLabel(fundingSource)}. Daily Closing: ${
+          affectsDailyClosing ? "deduct from selected channel" : "accounting only"
+        }.`,
         connection
       );
 
       const affectedClosing = await markClosingStale(connection, {
         branchId,
         transactionDate: expenseDate,
-        reason: `${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(2)} was recorded after the business day had already been closed.`,
+        reason: `${paymentMethod} expense "${category}" worth GHS ${cleanAmount.toFixed(
+          2
+        )} was recorded after the business day had already been closed. Funding: ${fundingSourceLabel(
+          fundingSource
+        )}. Daily Closing treatment: ${
+          affectsDailyClosing ? "deduct from expected settlement" : "report only"
+        }.`,
         sourceEntityType: "expense",
         sourceEntityId: result.insertId,
         changedBy: req.user.id,
@@ -319,6 +427,9 @@ router.post(
           e.description,
           e.amount,
           e.payment_method,
+          e.funding_source,
+          e.affects_daily_closing,
+          e.closing_treatment_note,
           e.expense_date,
           e.recorded_by,
           e.created_at,
@@ -367,7 +478,15 @@ router.delete(
       const { id } = req.params;
 
       const [expenses] = await connection.query(
-        `SELECT id, branch_id, category, amount, expense_date
+        `SELECT
+          id,
+          branch_id,
+          category,
+          amount,
+          payment_method,
+          funding_source,
+          affects_daily_closing,
+          expense_date
          FROM expenses
          WHERE id = ?
          AND branch_id = ?
@@ -412,7 +531,13 @@ router.delete(
         "DELETE_EXPENSE",
         `Deleted expense "${expense.category}" worth GHS ${Number(
           expense.amount
-        ).toFixed(2)}`,
+        ).toFixed(2)}. Funding: ${fundingSourceLabel(
+          expense.funding_source
+        )}. Daily Closing: ${
+          Number(expense.affects_daily_closing) === 1
+            ? "deducted from expected settlement"
+            : "accounting only"
+        }.`,
         connection
       );
 

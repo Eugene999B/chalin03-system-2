@@ -1202,7 +1202,9 @@ export default function DailyClosingPage() {
             <MetricCard
               eyebrow="Expenses"
               value={formatMoney(summary.expenses_total)}
-              helper={`${summary.expenses_count} expense record(s)`}
+              helper={`${summary.expenses_count} record(s) · ${formatMoney(
+                summary.closing_expenses_total
+              )} affects closing`}
               icon="🧯"
               tone="orange"
             />
@@ -1212,7 +1214,7 @@ export default function DailyClosingPage() {
               helper={
                 alreadyClosed
                   ? "Saved closing snapshot"
-                  : "Sales received + debt collections − expenses"
+                  : "Receipts + collections − closing-funded expenses"
               }
               icon="🎯"
               tone="gold"
@@ -1406,13 +1408,25 @@ export default function DailyClosingPage() {
                   <span className="dc-section-kicker">Cash outflow</span>
                   <h2>Expenses</h2>
                   <p>
-                    Each expense reduces the payment channel recorded for that
-                    expense: Cash, MoMo, Bank or Other.
+                    Only expenses explicitly paid from today&apos;s sales
+                    receipts reduce Cash, MoMo, Bank or Other. Petty cash,
+                    owner-funded and other external expenses remain visible for
+                    accounting without reducing today&apos;s expected settlement.
                   </p>
                 </div>
-                <strong className="dc-heading-total">
-                  {formatMoney(summary.expenses_total)}
-                </strong>
+                <div className="dc-expense-heading-totals">
+                  <strong className="dc-heading-total">
+                    {formatMoney(summary.expenses_total)}
+                  </strong>
+                  <small>
+                    Closing deduction:{" "}
+                    {formatMoney(summary.closing_expenses_total)}
+                  </small>
+                  <small>
+                    Accounting only:{" "}
+                    {formatMoney(summary.external_expenses_total)}
+                  </small>
+                </div>
               </div>
 
               {(summary.expenses || []).length === 0 ? (
@@ -1428,6 +1442,19 @@ export default function DailyClosingPage() {
                       <div className="dc-simple-row-main">
                         <strong>{expense.category || "Other"}</strong>
                         <span>{expense.description || "No description"}</span>
+                        <small className="dc-expense-source">
+                          {String(expense.funding_source || "other")
+                            .replaceAll("_", " ")
+                            .replace(/\b\w/g, (letter) =>
+                              letter.toUpperCase()
+                            )}
+                          {" · "}
+                          {Number(expense.affects_daily_closing) === 1
+                            ? `Deduct from ${String(
+                                expense.payment_method || "other"
+                              ).toUpperCase()} closing`
+                            : "Accounting only — does not reduce closing"}
+                        </small>
                       </div>
                       <div className="dc-simple-row-value">
                         <b>{formatMoney(expense.amount)}</b>

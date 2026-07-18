@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import "../styles/expensesFunding.css";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -10,6 +11,9 @@ const emptyExpenseForm = {
   description: "",
   amount: "",
   payment_method: "cash",
+  funding_source: "",
+  affects_daily_closing: null,
+  closing_treatment_note: "",
   expense_date: today,
 };
 
@@ -42,6 +46,8 @@ export default function ExpensesPage() {
   const [summary, setSummary] = useState({
     total_expenses: 0,
     expense_count: 0,
+    closing_expenses: 0,
+    externally_funded_expenses: 0,
   });
 
   const [form, setForm] = useState(emptyExpenseForm);
@@ -95,16 +101,17 @@ export default function ExpensesPage() {
     return responseData?.message || fallbackMessage;
   }
 
-  async function loadExpenses() {
+  async function loadExpenses(overrides = null) {
     setError("");
+
+    const requestedFilters =
+      overrides && !overrides.nativeEvent
+        ? overrides
+        : { search, from, to };
 
     try {
       const response = await axiosClient.get("/expenses", {
-        params: {
-          search,
-          from,
-          to,
-        },
+        params: requestedFilters,
       });
 
       setExpenses(response.data.expenses || []);
@@ -126,10 +133,24 @@ export default function ExpensesPage() {
   }, [branchId]);
 
   function handleChange(event) {
-    setForm({
-      ...form,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    if (name === "funding_source") {
+      const affectsDailyClosing = value === "today_sales_receipts";
+      setForm((current) => ({
+        ...current,
+        funding_source: value,
+        affects_daily_closing: value ? affectsDailyClosing : null,
+        payment_method:
+          value === "unpaid_credit" ? "other" : current.payment_method,
+      }));
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
   }
 
   async function createExpense(event) {
@@ -144,6 +165,7 @@ export default function ExpensesPage() {
       const response = await axiosClient.post("/expenses", {
         ...form,
         amount: Number(form.amount || 0),
+        affects_daily_closing: form.affects_daily_closing,
       });
 
       setMessage(response.data.message || "Expense recorded successfully.");
@@ -223,7 +245,7 @@ export default function ExpensesPage() {
           </p>
         </div>
 
-        <button onClick={loadExpenses}>Refresh</button>
+        <button onClick={() => loadExpenses()}>Refresh</button>
       </div>
 
       <div
@@ -260,10 +282,22 @@ export default function ExpensesPage() {
         }}
       />
 
-      <div className="cards-grid expense-summary-grid">
+      <div className="cards-grid expense-summary-grid expense-funding-summary">
         <div className="stat-card">
           <span>{currentStoreCode} Total Expenses</span>
           <strong>{formatMoney(summary.total_expenses)}</strong>
+        </div>
+
+        <div className="stat-card expense-closing-card">
+          <span>Deducted from Daily Closing</span>
+          <strong>{formatMoney(summary.closing_expenses)}</strong>
+          <small>Only money explicitly taken from today&apos;s receipts.</small>
+        </div>
+
+        <div className="stat-card expense-external-card">
+          <span>Accounting Only</span>
+          <strong>{formatMoney(summary.externally_funded_expenses)}</strong>
+          <small>Petty cash, prior funds, owner funds, bank/MoMo or credit.</small>
         </div>
 
         <div className="stat-card">
@@ -273,7 +307,7 @@ export default function ExpensesPage() {
       </div>
 
       <div className="two-column expenses-grid">
-        <form className="section-card" onSubmit={createExpense}>
+        <form className="section-card expense-funding-form" onSubmit={createExpense}>
           <h2>Record Expense - {currentStoreCode}</h2>
 
           <div className="warning-box">
@@ -311,7 +345,7 @@ export default function ExpensesPage() {
             step="0.01"
           />
 
-          <label>Payment Method</label>
+          <label>Payment Method / Channel</label>
           <select
             name="payment_method"
             value={form.payment_method}
@@ -322,6 +356,71 @@ export default function ExpensesPage() {
             <option value="bank">Bank</option>
             <option value="other">Other</option>
           </select>
+
+          <label>Where did the money come from?</label>
+          <select
+            name="funding_source"
+            value={form.funding_source}
+            onChange={handleChange}
+            required
+          >
+            <option value="">Choose funding source</option>
+            <option value="today_sales_receipts">
+              Today&apos;s Sales Receipts
+            </option>
+            <option value="petty_cash">Petty Cash</option>
+            <option value="prior_business_funds">
+              Earlier / Prior Business Funds
+            </option>
+            <option value="owner_manager_funds">
+              Owner or Manager Funds
+            </option>
+            <option value="bank_account">Separate Bank Account Balance</option>
+            <option value="momo_wallet">Separate MoMo Wallet Balance</option>
+            <option value="unpaid_credit">Credit / Not Paid Yet</option>
+            <option value="other">Other Funding Source</option>
+          </select>
+
+          <div
+            className={`expense-closing-decision ${
+              !form.funding_source
+                ? "is-unselected"
+                : form.affects_daily_closing
+                  ? "is-deducted"
+                  : "is-accounting-only"
+            }`}
+          >
+            <strong>
+              {!form.funding_source
+                ? "Choose where the expense money came from"
+                : form.affects_daily_closing
+                  ? "This expense will reduce Daily Closing"
+                  : "This expense will not reduce Daily Closing"}
+            </strong>
+            <span>
+              {!form.funding_source
+                ? "No Daily Closing deduction is assumed until a funding source is selected."
+                : form.affects_daily_closing
+                  ? `The amount will be deducted from today's ${String(
+                      form.payment_method
+                    ).toUpperCase()} expected balance.`
+                  : "It remains in expense and accounting reports, but today's expected settlement is unchanged."}
+            </span>
+          </div>
+
+          <label>Funding / Closing Note</label>
+          <textarea
+            name="closing_treatment_note"
+            value={form.closing_treatment_note}
+            onChange={handleChange}
+            maxLength={500}
+            required={form.funding_source === "other"}
+            placeholder={
+              form.affects_daily_closing
+                ? "Optional: Example — paid from today's counter cash"
+                : "Example — paid by owner using personal funds"
+            }
+          />
 
           <label>Expense Date</label>
           <input
@@ -397,7 +496,8 @@ export default function ExpensesPage() {
         {expenses.length === 0 ? (
           <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
-          <table>
+          <div className="expense-table-wrap">
+          <table className="expense-funding-table">
             <thead>
               <tr>
                 <th>Date</th>
@@ -405,7 +505,9 @@ export default function ExpensesPage() {
                 <th>Category</th>
                 <th>Description</th>
                 <th>Payment</th>
-              <th>Amount</th>
+                <th>Funding Source</th>
+                <th>Daily Closing</th>
+                <th>Amount</th>
                 <th>Recorded By</th>
                 <th></th>
               </tr>
@@ -414,16 +516,41 @@ export default function ExpensesPage() {
             <tbody>
               {expenses.map((expense) => (
                 <tr key={expense.id}>
-                  <td>{new Date(expense.expense_date).toLocaleDateString()}</td>
-                  <td>{expense.branch_code || expense.store_code || currentStoreCode}</td>
-                  <td>
+                  <td data-label="Date">{new Date(expense.expense_date).toLocaleDateString()}</td>
+                  <td data-label="Store">{expense.branch_code || expense.store_code || currentStoreCode}</td>
+                  <td data-label="Category">
                     <strong>{expense.category}</strong>
                   </td>
-                  <td>{expense.description || "-"}</td>
-                  <td>{String(expense.payment_method || "cash").toUpperCase()}</td>
-                <td>{formatMoney(expense.amount)}</td>
-                  <td>{expense.recorded_by_name || "-"}</td>
-                  <td>
+                  <td data-label="Description">
+                    {expense.description || "-"}
+                    {expense.closing_treatment_note ? (
+                      <small className="expense-treatment-note">
+                        {expense.closing_treatment_note}
+                      </small>
+                    ) : null}
+                  </td>
+                  <td data-label="Payment">{String(expense.payment_method || "cash").toUpperCase()}</td>
+                  <td data-label="Funding Source">
+                    {String(expense.funding_source || "other")
+                      .replaceAll("_", " ")
+                      .replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                  </td>
+                  <td data-label="Daily Closing">
+                    <span
+                      className={`expense-closing-badge ${
+                        Number(expense.affects_daily_closing) === 1
+                          ? "is-deducted"
+                          : "is-accounting-only"
+                      }`}
+                    >
+                      {Number(expense.affects_daily_closing) === 1
+                        ? "Deduct"
+                        : "Accounting only"}
+                    </span>
+                  </td>
+                  <td data-label="Amount">{formatMoney(expense.amount)}</td>
+                  <td data-label="Recorded By">{expense.recorded_by_name || "-"}</td>
+                  <td data-label="Action">
                     <button
                       type="button"
                       className="small-danger"
@@ -436,6 +563,7 @@ export default function ExpensesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

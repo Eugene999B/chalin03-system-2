@@ -698,22 +698,22 @@ export default function UserPermissionManagerPage() {
 
                 return (
                   <tr key={permission.code}>
-                    <td>
+                    <td data-label="Permission">
                       <strong>{permission.label}</strong>
                       <code>{permission.code}</code>
                       <small>{permission.category}</small>
                       {permission.owner_protected ? <em>Owner protected</em> : null}
                     </td>
-                    <td>
+                    <td data-label="Current Result">
                       <span className={`upm-status is-${permissionStatus.code}`}>
                         {permissionStatus.label}
                       </span>
                       <small>{permissionStatus.note}</small>
                     </td>
-                    <td>
+                    <td data-label="Expiry">
                       {activeOverride ? formatDate(activeOverride.expires_at) : "Role default"}
                     </td>
-                    <td>
+                    <td data-label="Controls">
                       <div className="upm-actions">
                         <button
                           type="button"
@@ -768,7 +768,7 @@ export default function UserPermissionManagerPage() {
           <span>{history.length} recent records</span>
         </div>
         <div className="upm-table-wrap">
-          <table>
+          <table className="upm-history-table">
             <thead>
               <tr>
                 <th>Date</th>
@@ -782,16 +782,16 @@ export default function UserPermissionManagerPage() {
             <tbody>
               {history.map((item) => (
                 <tr key={item.id}>
-                  <td>{formatDate(item.created_at)}</td>
-                  <td><code>{item.permission_code}</code></td>
-                  <td>{String(item.effect || "").toUpperCase()}</td>
-                  <td>{item.reason}</td>
-                  <td>
+                  <td data-label="Date">{formatDate(item.created_at)}</td>
+                  <td data-label="Permission"><code>{item.permission_code}</code></td>
+                  <td data-label="Rule">{String(item.effect || "").toUpperCase()}</td>
+                  <td data-label="Reason">{item.reason}</td>
+                  <td data-label="Expiry / Reset">
                     {item.revoked_at
                       ? `Reset ${formatDate(item.revoked_at)} · ${item.revocation_reason || "No reason"}`
                       : formatDate(item.expires_at)}
                   </td>
-                  <td>{item.created_by_name || item.created_by_username || "System"}</td>
+                  <td data-label="Administrator">{item.created_by_name || item.created_by_username || "System"}</td>
                 </tr>
               ))}
             </tbody>

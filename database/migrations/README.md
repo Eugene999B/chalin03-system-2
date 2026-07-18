@@ -110,3 +110,19 @@ Existing accounts or worker profiles with more than one detected category are
 not guessed, deleted or silently changed: their records are preserved, login or
 profile access is blocked, and they appear in Safe Conflict Review for an
 explicit protected decision. Never run `database/schema.sql` against Railway.
+
+## Release 3F-C3 — Mobile UX, Worker ID Card and Expense Funding Controls
+
+Production migration order:
+
+1. `20260718_release3fc3_mobile_id_expense_funding.sql`
+2. `20260718_release3fc3_mobile_id_expense_funding_verify.sql`
+
+This additive migration records whether an expense used money collected during
+that business day. Existing expenses remain marked as affecting Daily Closing so
+previously approved historical closings do not silently change. New expense
+records require an explicit funding-source decision in the application. Expenses
+funded by petty cash, earlier business funds, owner/manager funds, a separate bank
+or MoMo balance, credit or another external source remain in accounting reports
+but do not reduce that day's expected settlement. Never run `database/schema.sql`
+against Railway production.

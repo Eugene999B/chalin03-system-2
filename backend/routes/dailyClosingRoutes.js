@@ -610,6 +610,9 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
       e.category,
       e.amount,
       e.payment_method,
+      e.funding_source,
+      e.affects_daily_closing,
+      e.closing_treatment_note,
       e.description,
       e.expense_date,
       e.created_at,
@@ -792,10 +795,22 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
     salesTransactions.reduce((sum, sale) => sum + Number(sale.other_received || 0), 0)
   );
 
-  const expenseCash = toMoney(expenses.filter((item) => item.payment_method === "cash").reduce((sum, item) => sum + Number(item.amount || 0), 0));
-  const expenseMomo = toMoney(expenses.filter((item) => item.payment_method === "momo").reduce((sum, item) => sum + Number(item.amount || 0), 0));
-  const expenseBank = toMoney(expenses.filter((item) => item.payment_method === "bank").reduce((sum, item) => sum + Number(item.amount || 0), 0));
-  const expenseOther = toMoney(expenses.filter((item) => !["cash", "momo", "bank"].includes(item.payment_method)).reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const closingExpenses = expenses.filter(
+    (item) => Number(item.affects_daily_closing ?? 1) === 1
+  );
+  const externalExpenses = expenses.filter(
+    (item) => Number(item.affects_daily_closing ?? 1) === 0
+  );
+  const closingExpensesTotal = toMoney(
+    closingExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  );
+  const externalExpensesTotal = toMoney(
+    externalExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  );
+  const expenseCash = toMoney(closingExpenses.filter((item) => item.payment_method === "cash").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseMomo = toMoney(closingExpenses.filter((item) => item.payment_method === "momo").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseBank = toMoney(closingExpenses.filter((item) => item.payment_method === "bank").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const expenseOther = toMoney(closingExpenses.filter((item) => !["cash", "momo", "bank"].includes(item.payment_method)).reduce((sum, item) => sum + Number(item.amount || 0), 0));
 
   const cashControls = getCashControls(cashControlSource);
   const expectedCash = toMoney(
@@ -945,6 +960,10 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
 
     expenses_count: expensesCount,
     expenses_total: expensesTotal,
+    closing_expenses_total: closingExpensesTotal,
+    external_expenses_total: externalExpensesTotal,
+    closing_expenses_count: closingExpenses.length,
+    external_expenses_count: externalExpenses.length,
     expense_cash: expenseCash,
     expense_momo: expenseMomo,
     expense_bank: expenseBank,
@@ -993,7 +1012,9 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
       "Credit and Mixed are sale classifications, not extra settlement channels. Their deposits are distributed only to the recorded Cash, MoMo, Bank or Other channel.",
       "Later debt payments are removed from the original sale receipt and are counted only on the date the debt payment was actually received.",
       "Historical payments without exact channel evidence remain under Other / Unallocated instead of being guessed.",
-      "Expected physical cash is based on recorded Cash sales, Cash debt collections, Cash expenses and approved Cash refunds.",
+      "Only expenses explicitly funded from today's sales receipts reduce the selected Daily Closing payment channel.",
+      "Petty-cash, owner-funded, earlier-fund, separate bank/MoMo, unpaid-credit and other externally funded expenses remain in accounting reports but do not reduce today's expected settlement.",
+      "Expected physical cash is based on recorded Cash sales, Cash debt collections, closing-eligible Cash expenses and approved Cash refunds.",
       "Approved return refunds are deducted from the payment channel used for the refund on the date the return was recorded.",
     ],
   };
@@ -1595,19 +1616,30 @@ function createDailyClosingWorkbook(reportData) {
   const expensesSheet = workbook.addWorksheet("Expenses");
   expensesSheet.columns = [
     { width: 13 },
+    { width: 22 },
+    { width: 16 },
+    { width: 17 },
     { width: 24 },
     { width: 18 },
-    { width: 17 },
-    { width: 46 },
-    { width: 23 },
+    { width: 42 },
+    { width: 22 },
   ];
-  styleWorkbookTitle(expensesSheet, "A1:F1", "DAILY EXPENSES");
-  expensesSheet.mergeCells("A2:F2");
+  styleWorkbookTitle(expensesSheet, "A1:H1", "DAILY EXPENSES");
+  expensesSheet.mergeCells("A2:H2");
   expensesSheet.getCell("A2").value = `${summary.branch.code} - ${summary.branch.name} | ${summary.closing_date}`;
   expensesSheet.getCell("A2").alignment = { horizontal: "center" };
   expensesSheet.getCell("A2").font = { bold: true };
   const expensesHeader = expensesSheet.getRow(4);
-  expensesHeader.values = ["Date", "Category", "Amount", "Payment Method", "Description", "Recorded By"];
+  expensesHeader.values = [
+    "Date",
+    "Category",
+    "Amount",
+    "Payment Method",
+    "Funding Source",
+    "Closing Treatment",
+    "Description / Treatment Note",
+    "Recorded By",
+  ];
   styleHeaderRow(expensesHeader);
   let expenseRow = 5;
   for (const expense of summary.expenses) {
@@ -1617,21 +1649,39 @@ function createDailyClosingWorkbook(reportData) {
       expense.category,
       Number(expense.amount || 0),
       String(expense.payment_method || "cash").toUpperCase(),
-      expense.description || null,
+      String(expense.funding_source || "other").replaceAll("_", " ").toUpperCase(),
+      Number(expense.affects_daily_closing) === 1
+        ? "DEDUCT FROM CLOSING"
+        : "ACCOUNTING ONLY",
+      [
+        expense.description || null,
+        expense.closing_treatment_note || null,
+      ]
+        .filter(Boolean)
+        .join(" | ") || null,
       expense.recorded_by_name,
     ];
     applyMoneyFormat(row.getCell(3));
     expenseRow += 1;
   }
   if (expenseRow === 5) {
-    expensesSheet.mergeCells("A5:F5");
+    expensesSheet.mergeCells("A5:H5");
     expensesSheet.getCell("A5").value = "No expenses were recorded for this date.";
     expenseRow = 6;
   } else {
-    styleDataRange(expensesSheet, 5, expenseRow - 1, 1, 6);
+    styleDataRange(expensesSheet, 5, expenseRow - 1, 1, 8);
   }
   const expenseTotalRow = expensesSheet.getRow(expenseRow);
-  expenseTotalRow.values = ["TOTAL", null, summary.expenses_total, null, null, null];
+  expenseTotalRow.values = [
+    "TOTAL",
+    null,
+    summary.expenses_total,
+    null,
+    null,
+    `Closing GHS ${Number(summary.closing_expenses_total || 0).toFixed(2)} | Accounting-only GHS ${Number(summary.external_expenses_total || 0).toFixed(2)}`,
+    null,
+    null,
+  ];
   expenseTotalRow.font = { bold: true };
   expenseTotalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF5" } };
   applyMoneyFormat(expenseTotalRow.getCell(3));
@@ -2157,15 +2207,17 @@ function createDailyClosingPdf(reportData, res) {
     [
       { key: "category", label: "Category", width: 120, maxLength: 22 },
       { key: "description", label: "Description", width: 245, maxLength: 48 },
-      { key: "payment_method", label: "Method", width: 80, format: (value) => String(value || "other").toUpperCase(), maxLength: 12 },
-      { key: "amount", label: "Amount", width: 95, align: "right", format: moneyText, maxLength: 18 },
-      { key: "recorded_by_name", label: "Recorded By", width: 120, maxLength: 22 },
+      { key: "payment_method", label: "Method", width: 62, format: (value) => String(value || "other").toUpperCase(), maxLength: 10 },
+      { key: "funding_source", label: "Funding", width: 105, format: (value) => String(value || "other").replaceAll("_", " ").toUpperCase(), maxLength: 20 },
+      { key: "affects_daily_closing", label: "Closing", width: 78, format: (value) => Number(value) === 1 ? "DEDUCT" : "REPORT ONLY", maxLength: 12 },
+      { key: "amount", label: "Amount", width: 82, align: "right", format: moneyText, maxLength: 16 },
+      { key: "recorded_by_name", label: "Recorded By", width: 95, maxLength: 18 },
     ],
     summary.expenses,
     { emptyText: "No expenses recorded.", rowHeight: 20, fontSize: 7 }
   );
   doc.font("Helvetica-Bold").fontSize(8).text(
-    `Expenses total: ${moneyText(summary.expenses_total)}`,
+    `Expenses total: ${moneyText(summary.expenses_total)} | Deducted from closing: ${moneyText(summary.closing_expenses_total)} | Accounting only: ${moneyText(summary.external_expenses_total)}`,
     doc.page.margins.left,
     doc.y,
     {
@@ -2456,12 +2508,14 @@ function createDailyClosingWordHtml(reportData) {
                 ${wordCell(expense.category || "Other")}
                 ${wordCell(expense.description || null)}
                 ${wordCell(String(expense.payment_method || "other").toUpperCase())}
+                ${wordCell(String(expense.funding_source || "other").replaceAll("_", " ").toUpperCase())}
+                ${wordCell(Number(expense.affects_daily_closing) === 1 ? "DEDUCT" : "REPORT ONLY")}
                 <td class="money">${wordMoney(expense.amount)}</td>
                 ${wordCell(expense.recorded_by_name || "System")}
               </tr>`
           )
           .join("")
-      : `<tr><td colspan="5" class="empty">No expenses recorded.</td></tr>`;
+      : `<tr><td colspan="7" class="empty">No expenses recorded.</td></tr>`;
 
   const returnRows =
     (summary.returns || []).length > 0
@@ -2689,10 +2743,10 @@ function createDailyClosingWordHtml(reportData) {
 
   <h2>EXPENSES</h2>
   <table>
-    <thead><tr><th>Category</th><th>Description</th><th>Method</th><th>Amount</th><th>Recorded By</th></tr></thead>
+    <thead><tr><th>Category</th><th>Description</th><th>Method</th><th>Funding Source</th><th>Closing</th><th>Amount</th><th>Recorded By</th></tr></thead>
     <tbody>
       ${expenseRows}
-      <tr class="subtotal"><td colspan="3">Expenses total</td><td class="money">${wordMoney(summary.expenses_total)}</td><td></td></tr>
+      <tr class="subtotal"><td colspan="5">Expenses total · Closing deduction ${wordMoney(summary.closing_expenses_total)} · Accounting only ${wordMoney(summary.external_expenses_total)}</td><td class="money">${wordMoney(summary.expenses_total)}</td><td></td></tr>
     </tbody>
   </table>
 

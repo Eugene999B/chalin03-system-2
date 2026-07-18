@@ -1,0 +1,173 @@
+.expense-funding-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.expense-funding-summary .stat-card small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.expense-closing-card {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.expense-external-card {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.expense-funding-form {
+  align-content: start;
+}
+
+.expense-closing-decision {
+  display: grid;
+  gap: 5px;
+  margin: 2px 0 10px;
+  padding: 14px;
+  border: 1px solid;
+  border-radius: 14px;
+}
+
+.expense-closing-decision strong {
+  font-size: 0.95rem;
+}
+
+.expense-closing-decision span {
+  line-height: 1.5;
+}
+
+.expense-closing-decision.is-deducted {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.expense-closing-decision.is-accounting-only {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.expense-table-wrap {
+  overflow-x: auto;
+}
+
+.expense-funding-table {
+  min-width: 1180px;
+}
+
+.expense-closing-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.74rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.expense-closing-badge.is-deducted {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.expense-closing-badge.is-accounting-only {
+  color: #1e3a8a;
+  background: #dbeafe;
+}
+
+.expense-treatment-note {
+  display: block;
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1120px) {
+  .expense-funding-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .expense-funding-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .expense-table-wrap {
+    overflow: visible;
+  }
+
+  .expense-funding-table,
+  .expense-funding-table tbody,
+  .expense-funding-table tr,
+  .expense-funding-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .expense-funding-table thead {
+    display: none;
+  }
+
+  .expense-funding-table tbody {
+    display: grid;
+    gap: 13px;
+  }
+
+  .expense-funding-table tr {
+    overflow: hidden;
+    border: 1px solid #dbe4ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  }
+
+  .expense-funding-table td {
+    display: grid;
+    grid-template-columns: minmax(105px, 0.42fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    padding: 10px 13px;
+    border-bottom: 1px solid #eef2f7;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .expense-funding-table td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .expense-funding-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .expense-funding-table td:last-child button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .expense-funding-table td {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+}
+
+.expense-closing-decision.is-unselected {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+}

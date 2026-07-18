@@ -25,3 +25,30 @@ Spare Parts worker profiles, permissions, stores, receipts, sales, stock,
 installments, debts, purchases and reports cannot be opened by Mining or Hire
 worker accounts. Only the original System Administrator may switch across all
 three categories.
+
+## Expense funding and Daily Closing (Release 3F-C3)
+
+Every new expense must state where the money came from. Choose **Today's Sales
+Receipts** only when the expense genuinely used money collected in that business
+day. The selected payment method then reduces that channel in Daily Closing.
+
+Petty cash, earlier business funds, owner/manager funds, a separate bank or MoMo
+balance, unpaid credit and other external sources remain in expense and accounting
+reports but do not reduce that day's expected settlement. Use the funding note to
+record supporting context, especially for an Other funding source.
+
+Historical expenses recorded before Release 3F-C3 keep their former Daily Closing
+treatment so approved past closings do not silently change.
+
+## Mobile installment and permission screens
+
+Installment agreements, schedules and the User Permission Manager use mobile card
+layouts on small screens. Open each record to see actions; wide desktop tables are
+not required on a phone.
+
+## Employee ID card
+
+The worker print pack provides a modern company employee card in exact CR80 size
+and on an A4 cut sheet. Confirm the worker photo, employee number, category, issue
+date and expiry date before printing. The card is a Chalin 03 company identity
+card and is not a national or government identity document.

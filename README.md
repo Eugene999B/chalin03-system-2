@@ -1107,3 +1107,12 @@ its own detailed Help/User Guide, the Equipment Hire sidebar Unicode rendering
 is corrected, and each Spare Parts store's Business Phone is the MoMo number on
 its receipts. Production uses only the additive 3F-C2 migration; `schema.sql` is
 never used against the live database.
+
+### Release 3F-C3 — Mobile UX, Worker ID Card and Expense Funding
+
+- Mobile-first Installment Sales and User Permission Manager layouts.
+- Redesigned modern Chalin 03 employee ID card in CR80 and A4 formats.
+- Explicit expense funding-source evidence.
+- Only expenses paid from today's sales receipts reduce the selected Daily
+  Closing channel; externally funded expenses remain in accounting reports.
+- Existing historical expense treatment is preserved by the additive migration.
