@@ -3,6 +3,11 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const {
+  ensureWorkerIdentitySchema,
+  normalizeEmployeePrefix,
+  normalizeValidityMonths,
+} = require("../services/workerIdentityService");
 
 const router = express.Router();
 
@@ -70,6 +75,7 @@ async function getBranch(branchId) {
 }
 
 async function createDefaultSettingsForBranch(branchId) {
+  await ensureWorkerIdentitySchema();
   const branch = await getBranch(branchId);
 
   const branchName = branch?.name || "Chalin 03 Store";
@@ -110,6 +116,7 @@ async function createDefaultSettingsForBranch(branchId) {
 }
 
 async function getSettingsForBranch(branchId) {
+  await ensureWorkerIdentitySchema();
   let [settingsRows] = await pool.query(
     `SELECT
       s.*,
@@ -189,6 +196,8 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
       daily_summary_time,
       receipt_footer,
       receipt_prefix,
+      worker_id_card_validity_months,
+      worker_employee_number_prefix,
     } = req.body;
 
     const cleanBusinessName = cleanText(business_name);
@@ -203,6 +212,12 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
 
     const taxRate = toNonNegativeNumber(tax_rate ?? 0);
     const reminderDays = toPositiveInt(Number(debt_reminder_days ?? 7));
+    const cardValidityMonths = normalizeValidityMonths(
+      Number(worker_id_card_validity_months ?? 24)
+    );
+    const employeeNumberPrefix = normalizeEmployeePrefix(
+      worker_employee_number_prefix
+    );
 
     if (taxRate === null) {
       return res.status(400).json({
@@ -252,8 +267,10 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
            tax_rate = ?,
            debt_reminder_days = ?,
            daily_summary_time = ?,
-           receipt_footer = ?,
-           receipt_prefix = ?
+            receipt_footer = ?,
+            receipt_prefix = ?,
+            worker_id_card_validity_months = ?,
+            worker_employee_number_prefix = ?
        WHERE id = ?
        AND branch_id = ?`,
       [
@@ -267,9 +284,19 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
         daily_summary_time || "18:00:00",
         nullableText(receipt_footer),
         nullableText(receipt_prefix),
+        cardValidityMonths,
+        employeeNumberPrefix,
         settingsId,
         branchId,
       ]
+    );
+
+    // Worker identity rules are group-wide so every workspace generates consistent cards.
+    await pool.query(
+      `UPDATE settings
+       SET worker_id_card_validity_months = ?,
+           worker_employee_number_prefix = ?`,
+      [cardValidityMonths, employeeNumberPrefix]
     );
 
     /*

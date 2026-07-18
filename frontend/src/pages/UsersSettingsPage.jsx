@@ -178,6 +178,8 @@ export default function UsersSettingsPage() {
     debt_reminder_days: 7,
     daily_summary_time: "18:00:00",
     receipt_footer: "",
+    worker_id_card_validity_months: 24,
+    worker_employee_number_prefix: "CH03",
   });
 
   const [message, setMessage] = useState("");
@@ -655,6 +657,9 @@ export default function UsersSettingsPage() {
         ...settings,
         tax_rate: Number(settings.tax_rate || 0),
         debt_reminder_days: Number(settings.debt_reminder_days || 7),
+        worker_id_card_validity_months: Number(
+          settings.worker_id_card_validity_months || 24
+        ),
       });
 
       setSettings(response.data.settings);
@@ -1508,7 +1513,7 @@ export default function UsersSettingsPage() {
           className={`users-panel-tab ${activePanel === "settings" ? "active" : ""}`}
           onClick={() => setActivePanel("settings")}
         >
-          Store Settings
+          Business & ID Settings
         </button>
         <button
           type="button"
@@ -1712,7 +1717,7 @@ export default function UsersSettingsPage() {
             {activePanel === "settings" && (
               <form className="users-card" onSubmit={saveSettings}>
                 <div className="users-card-header">
-                  <h2>Selected Store Settings</h2>
+                  <h2>Selected Business & ID Settings</h2>
                   <p>
                     Settings below affect only the currently selected store and
                     receipt/business identity.
@@ -1767,6 +1772,37 @@ export default function UsersSettingsPage() {
                         <input
                           name="business_address"
                           value={settings.business_address || ""}
+                          onChange={handleSettingsChange}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="users-settings-section">
+                    <h3>Worker Identity Cards</h3>
+                    <p style={{ marginTop: 0, color: "#64748b", fontWeight: 750 }}>
+                      These group-wide rules automatically control employee numbers and every new or reissued worker ID card across Spare Parts, Mining and Equipment Hire.
+                    </p>
+                    <div className="users-form-grid">
+                      <div className="users-field">
+                        <label>Employee number prefix</label>
+                        <input
+                          name="worker_employee_number_prefix"
+                          value={settings.worker_employee_number_prefix || "CH03"}
+                          onChange={handleSettingsChange}
+                          maxLength={12}
+                          placeholder="CH03"
+                        />
+                      </div>
+
+                      <div className="users-field">
+                        <label>Card lifespan (months)</label>
+                        <input
+                          type="number"
+                          name="worker_id_card_validity_months"
+                          min="1"
+                          max="120"
+                          value={settings.worker_id_card_validity_months || 24}
                           onChange={handleSettingsChange}
                         />
                       </div>
@@ -1831,7 +1867,7 @@ export default function UsersSettingsPage() {
                   </div>
 
                   <button type="submit" className="users-primary-action">
-                    Save Store Settings
+                    Save Business & ID Settings
                   </button>
                 </div>
               </form>
