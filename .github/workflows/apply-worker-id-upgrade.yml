@@ -26,7 +26,8 @@ jobs:
 
       - name: Normalize one-time patch markers
         run: |
-          python - <<'PY'
+          set -o pipefail
+          python - 2>&1 <<'PY' | tee worker-id-patch.log
           import re
           from pathlib import Path
 
@@ -77,12 +78,13 @@ jobs:
           )
 
           worker_path.write_text(worker, encoding='utf-8')
+          print('Worker ID patch markers normalized successfully.')
           PY
 
       - name: Apply Release 3F-D2 patch
         run: |
           set -o pipefail
-          python .github/scripts/apply_worker_id_upgrade.py 2>&1 | tee worker-id-patch.log
+          python .github/scripts/apply_worker_id_upgrade.py 2>&1 | tee -a worker-id-patch.log
 
       - name: Preserve patch diagnostics
         if: always()
