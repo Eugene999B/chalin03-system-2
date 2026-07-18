@@ -1,0 +1,38 @@
+name: Apply Worker ID Upgrade
+
+on:
+  push:
+    branches:
+      - agent/release-3f-d2-worker-id-card
+
+permissions:
+  contents: write
+
+jobs:
+  apply-upgrade:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/release-3f-d2-worker-id-card
+          fetch-depth: 0
+
+      - name: Apply Release 3F-D2 patch
+        run: python .github/scripts/apply_worker_id_upgrade.py
+
+      - name: Remove one-time patch files
+        run: |
+          rm -f .github/scripts/apply_worker_id_upgrade.py
+          rm -f .github/workflows/apply-worker-id-upgrade.yml
+
+      - name: Commit upgraded worker identity package
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: upgrade worker identity cards"
+          git push origin HEAD:agent/release-3f-d2-worker-id-card
