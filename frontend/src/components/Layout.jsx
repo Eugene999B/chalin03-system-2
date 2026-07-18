@@ -99,6 +99,13 @@ export default function Layout() {
             keywords: "password security change login auditor",
           },
           {
+            title: "Notification Centre",
+            description: "Store alerts, overdue debt and management notices",
+            path: "/notifications",
+            icon: "🔔",
+            keywords: "notifications alerts reminders unread archive management",
+          },
+          {
             title: "Help / User Guide",
             description: "Open the built-in operating guide",
             path: "/help",
@@ -149,6 +156,13 @@ export default function Layout() {
             path: "/change-password",
             icon: "🔐",
             keywords: "password security change login",
+          },
+          {
+            title: "Notification Centre",
+            description: "Store alerts, overdue debt and management notices",
+            path: "/notifications",
+            icon: "🔔",
+            keywords: "notifications alerts reminders unread archive management",
           },
           {
             title: "Help / User Guide",

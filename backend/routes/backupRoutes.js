@@ -110,6 +110,11 @@ const PREFERRED_TABLE_ORDER = [
   "hire_commercial_approvals",
   "hire_evidence_files",
   "hire_damage_assessments",
+  "notification_rules",
+  "notifications",
+  "notification_user_states",
+  "notification_escalations",
+  "notification_sync_runs",
 ];
 
 const DATE_ONLY_COLUMNS = new Set([

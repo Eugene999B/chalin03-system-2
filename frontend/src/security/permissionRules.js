@@ -157,3 +157,10 @@ export function canUseHireAction(permissions, action) {
 export function canUseFleetAction(permissions, action) {
   return hasPermission(permissions, FLEET_ACTION_PERMISSIONS[action]);
 }
+
+export const NOTIFICATION_PERMISSIONS = Object.freeze({
+  view: "notifications.view",
+  sync: "notifications.sync",
+  manage: "notifications.manage",
+  escalate: "notifications.escalate",
+});

@@ -134,6 +134,7 @@ async function loadGroupCommandCentreSummary() {
     ownerLoginRows,
     applicationErrorRows,
     configurationRows,
+    notificationRows,
   ] = await Promise.all([
     safeRows(
       `SELECT
@@ -306,6 +307,18 @@ async function loadGroupCommandCentreSummary() {
            WHERE is_active = TRUE
          ) AS active_sequence_count`
     ),
+
+    safeRows(
+      `SELECT
+         COUNT(*) AS active_notifications,
+         COALESCE(SUM(severity = 'critical'), 0) AS critical_notifications,
+         COALESCE(SUM(severity = 'high'), 0) AS high_notifications,
+         COALESCE(SUM(workspace_code = 'spare_parts'), 0) AS spare_parts_notifications,
+         COALESCE(SUM(workspace_code = 'mining'), 0) AS mining_notifications,
+         COALESCE(SUM(workspace_code = 'equipment_hire'), 0) AS hire_notifications
+       FROM notifications
+       WHERE status = 'active'`
+    ),
   ]);
 
   const owner = ownerRows[0] || {};
@@ -321,6 +334,7 @@ async function loadGroupCommandCentreSummary() {
   const ownerLogins = ownerLoginRows[0] || {};
   const applicationErrors = applicationErrorRows[0] || {};
   const configurationState = configurationRows[0] || {};
+  const notificationState = notificationRows[0] || {};
 
   const summary = {
     generated_at: new Date().toISOString(),
@@ -399,6 +413,15 @@ async function loadGroupCommandCentreSummary() {
       active_sequence_count: numeric(
         configurationState.active_sequence_count
       ),
+    },
+
+    notification_centre: {
+      active_notifications: numeric(notificationState.active_notifications),
+      critical_notifications: numeric(notificationState.critical_notifications),
+      high_notifications: numeric(notificationState.high_notifications),
+      spare_parts_notifications: numeric(notificationState.spare_parts_notifications),
+      mining_notifications: numeric(notificationState.mining_notifications),
+      hire_notifications: numeric(notificationState.hire_notifications),
     },
 
     thresholds,
@@ -539,6 +562,24 @@ async function loadGroupCommandCentreSummary() {
       "Review recent server errors",
       `${summary.system.application_errors_24h} server error(s) were recorded within 24 hours.`,
       "/system-operations"
+    );
+  }
+
+  if (summary.notification_centre.critical_notifications > 0) {
+    addAlert(
+      "critical",
+      "Notification Centre",
+      "Review critical group operations alerts",
+      `${summary.notification_centre.critical_notifications} critical notification(s) are active across the group.`,
+      "/group-executive-control/notifications"
+    );
+  } else if (summary.notification_centre.high_notifications > 0) {
+    addAlert(
+      "high",
+      "Notification Centre",
+      "Review high-priority operations alerts",
+      `${summary.notification_centre.high_notifications} high-priority notification(s) are active across the group.`,
+      "/group-executive-control/notifications"
     );
   }
 

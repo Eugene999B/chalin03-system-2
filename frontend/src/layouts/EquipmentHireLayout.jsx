@@ -14,6 +14,13 @@ const navigationSections = [
         anyPermissions: HIRE_VIEW_PERMISSIONS,
       },
       {
+        title: "Notification Centre",
+        description: "Commercial approvals, overdue finance and contract alerts",
+        path: "/equipment-hire-operations/notifications",
+        icon: "\u{1F514}",
+        permissions: ["notifications.view"],
+      },
+      {
         title: "Customers",
         description: "Hire customers, contacts and credit terms",
         path: "/equipment-hire-operations/customers",

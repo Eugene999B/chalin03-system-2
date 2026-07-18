@@ -23,6 +23,10 @@ const CORE_PERMISSIONS = Object.freeze([
   "workers.documents.manage",
   "workers.deactivate",
   "executive.operations.view",
+  "notifications.view",
+  "notifications.sync",
+  "notifications.manage",
+  "notifications.escalate",
   "spare_parts.read",
   "spare_parts.sell",
   "spare_parts.manage",
@@ -510,11 +514,29 @@ function getEffectivePermissions(session = {}) {
     return ADMIN_GRANTS;
   }
 
+  function notificationGrants(baseGrants) {
+    const extra = [];
+    if (baseGrants.includes("workspace.view")) {
+      extra.push("notifications.view");
+    }
+    if (
+      globalRole === "manager" ||
+      ["manager", "site_supervisor", "accountant"].includes(workspaceRole)
+    ) {
+      extra.push("notifications.sync");
+    }
+    if (globalRole === "manager" || workspaceRole === "manager") {
+      extra.push("notifications.manage");
+    }
+    return extra;
+  }
+
   if (workspaceCode === WORKSPACES.SPARE_PARTS) {
-    return uniquePermissions([
+    const grants = [
       ...(SPARE_PARTS_GRANTS[globalRole] || []),
       ...(CROSS_CUTTING_GRANTS[globalRole] || []),
-    ]);
+    ];
+    return uniquePermissions([...grants, ...notificationGrants(grants)]);
   }
 
   if (globalRole === "cashier") {
@@ -522,15 +544,14 @@ function getEffectivePermissions(session = {}) {
   }
 
   const roleGrants = WORKSPACE_ROLE_GRANTS[workspaceCode] || {};
-  const grants =
-    roleGrants[workspaceRole] ||
-    (globalRole === "auditor" ? roleGrants.auditor : []) ||
-    [];
-
-  return uniquePermissions([
-    ...grants,
+  const grants = [
+    ...(roleGrants[workspaceRole] ||
+      (globalRole === "auditor" ? roleGrants.auditor : []) ||
+      []),
     ...(CROSS_CUTTING_GRANTS[globalRole] || []),
-  ]);
+  ];
+
+  return uniquePermissions([...grants, ...notificationGrants(grants)]);
 }
 
 function hasPermission(session, permission) {

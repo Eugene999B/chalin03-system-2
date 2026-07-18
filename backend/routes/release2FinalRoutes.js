@@ -130,6 +130,11 @@ const COMMON_DEPENDENCIES = [
   "group_configuration_history",
   "document_sequences",
   "document_sequence_history",
+  "notification_rules",
+  "notifications",
+  "notification_user_states",
+  "notification_escalations",
+  "notification_sync_runs",
 ];
 
 const SCOPE_TABLES = Object.freeze({
@@ -360,6 +365,11 @@ const CATEGORY_TABLES = Object.freeze({
     "application_error_log",
     "sms_log",
     "backup_history",
+    "notification_rules",
+    "notifications",
+    "notification_user_states",
+    "notification_escalations",
+    "notification_sync_runs",
   ]),
 
   workforce: new Set([

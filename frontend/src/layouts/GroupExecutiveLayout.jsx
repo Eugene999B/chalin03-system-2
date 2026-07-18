@@ -23,6 +23,13 @@ export default function GroupExecutiveLayout() {
           end: true,
         },
         {
+          title: "Notification Centre",
+          description: "Group-wide operational alerts, priorities and escalation evidence",
+          path: "/group-executive-control/notifications",
+          icon: "🔔",
+          permissions: ["notifications.view"],
+        },
+        {
           title: "Security, Backups & Workforce",
           description: "Read-only group security, backup and worker oversight",
           path: "/group-executive-control/operations",
@@ -31,9 +38,9 @@ export default function GroupExecutiveLayout() {
         },
         {
           title: "Group Configuration",
-          description: "Company settings, thresholds, features and document numbering",
+          description: "Thresholds, document sequences and controlled platform settings",
           path: "/group-executive-control/configuration",
-          icon: "\u2699\uFE0F",
+          icon: "⚙️",
           permissions: ["security.admin"],
         },
         {

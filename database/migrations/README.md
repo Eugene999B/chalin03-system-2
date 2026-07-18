@@ -30,3 +30,17 @@ Apply in production only after a full application backup and a second SQL backup
 2. `20260717_release3c_hire_commercial_completion_verify.sql` (read-only verification)
 
 This migration is additive. It normalizes legacy single-line quotations/contracts into one initial line, adds controlled dispatch/return numbering, and never runs `database/schema.sql` against production.
+
+## Release 3D — Notifications and Group Operations Alerts
+
+Apply only after Release 3C is live and a fresh full-system website backup has
+been downloaded and validated:
+
+1. `20260718_release3d_notifications_group_alerts.sql`
+2. `20260718_release3d_notifications_group_alerts_verify.sql` (read-only verification)
+
+Release 3D adds notification rules, active/resolved alert history, per-user
+read/archive state, synchronization evidence and controlled escalation logs.
+No automatic SMS is sent. SMS escalation remains disabled unless
+`NOTIFICATION_SMS_ENABLED=true` is deliberately set for an approved window,
+and every eligible escalation requires an explicit confirmation phrase.

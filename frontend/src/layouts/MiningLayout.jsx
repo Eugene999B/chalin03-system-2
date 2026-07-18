@@ -14,6 +14,13 @@ const navigationSections = [
         anyPermissions: MINING_VIEW_PERMISSIONS,
       },
       {
+        title: "Notification Centre",
+        description: "Approvals, safety, fuel, stockpile and closing alerts",
+        path: "/mining/notifications",
+        icon: "\u{1F514}",
+        permissions: ["notifications.view"],
+      },
+      {
         title: "Mining Sites",
         description: "Administrator-created mining sites",
         path: "/mining/sites",

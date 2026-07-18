@@ -44,6 +44,7 @@ import MiningControlCentrePage from "./pages/MiningControlCentrePage";
 import EquipmentHirePortalPage from "./pages/EquipmentHirePortalPage";
 import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
 import HireCommercialControlPage from "./pages/HireCommercialControlPage";
+import NotificationCentrePage from "./pages/NotificationCentrePage";
 import FleetAssetsPage from "./pages/FleetAssetsPage";
 import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
 import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
@@ -172,6 +173,13 @@ export default function App() {
 
             <Route path="change-password" element={safe(<ChangePasswordPage />)} />
             <Route path="help" element={safe(<HelpPage />)} />
+            <Route
+              path="notifications"
+              element={permissionOnlyPage(
+                "notifications.view",
+                <NotificationCentrePage />
+              )}
+            />
 
             <Route
               path="customer-statement"
@@ -376,6 +384,13 @@ export default function App() {
               )}
             />
             <Route
+              path="notifications"
+              element={permissionOnlyPage(
+                "notifications.view",
+                <NotificationCentrePage />
+              )}
+            />
+            <Route
               path="help"
               element={safe(<WorkspaceHelpPage workspace="mining" />)}
             />
@@ -497,6 +512,13 @@ export default function App() {
               )}
             />
             <Route
+              path="notifications"
+              element={permissionOnlyPage(
+                "notifications.view",
+                <NotificationCentrePage />
+              )}
+            />
+            <Route
               path="help"
               element={safe(<WorkspaceHelpPage workspace="equipment_hire" />)}
             />
@@ -523,6 +545,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "executive.operations.view",
                 <Release2FinalControlPage mode="executive" />
+              )}
+            />
+            <Route
+              path="notifications"
+              element={permissionOnlyPage(
+                "notifications.view",
+                <NotificationCentrePage executiveMode />
               )}
             />
             <Route
