@@ -169,9 +169,16 @@ async function workspaceAvailability() {
 }
 
 function missingConfigNames() {
-  return ["JWT_SECRET", "DB_HOST", "DB_USER", "DB_NAME"].filter(
-    (name) => !process.env[name] && !process.env[name.replace("DB_", "MYSQL")]
-  );
+  const required = {
+    JWT_SECRET: ["JWT_SECRET"],
+    DB_HOST: ["DB_HOST", "MYSQLHOST", "MYSQL_HOST"],
+    DB_USER: ["DB_USER", "MYSQLUSER", "MYSQL_USER"],
+    DB_NAME: ["DB_NAME", "MYSQLDATABASE", "MYSQL_DATABASE"],
+  };
+
+  return Object.entries(required)
+    .filter(([, aliases]) => !aliases.some((name) => process.env[name]))
+    .map(([label]) => label);
 }
 
 function deploymentStatus() {
