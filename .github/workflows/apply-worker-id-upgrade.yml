@@ -50,14 +50,20 @@ jobs:
 
           worker_path = Path('frontend/src/pages/ExpandedWorkerProfilePage.jsx')
           worker = worker_path.read_text(encoding='utf-8')
-          worker, count = re.subn(
+          worker, button_count = re.subn(
               r'\n\s+>\n\s+Print ID Card\n\s+</button>',
               '\n                        >\n                          Print ID Card\n                        </button>',
               worker,
               count=1,
           )
-          if count != 1:
-              raise RuntimeError('Could not normalize the worker ID action marker.')
+          worker, form_count = re.subn(
+              r'\n\s*<form\n\s*className="expanded-worker-form-grid"\n\s*onSubmit=\{createWorker\}\n\s*>',
+              '\n            <form\n              className="expanded-worker-form-grid"\n              onSubmit={createWorker}\n            >',
+              worker,
+              count=1,
+          )
+          if button_count != 1 or form_count != 1:
+              raise RuntimeError('Could not normalize worker identity UI markers.')
           worker_path.write_text(worker, encoding='utf-8')
           PY
 
