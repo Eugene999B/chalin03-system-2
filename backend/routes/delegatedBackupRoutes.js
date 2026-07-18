@@ -302,12 +302,18 @@ function requireDelegatedBackup(capabilityCode) {
   };
 }
 
-async function recordBackupEvent(req, action, details, metadata) {
+async function recordBackupEvent(
+  req,
+  action,
+  details,
+  metadata,
+  outcome = "success"
+) {
   await writeAuditEvent({
     req,
     action,
     actionType: `backup.${action.toLowerCase()}`,
-    outcome: "success",
+    outcome,
     severity: "critical",
     entityType: "backup",
     details,
@@ -321,7 +327,7 @@ async function recordBackupEvent(req, action, details, metadata) {
     req,
     actorUserId: req.user.id,
     actionCode: action,
-    outcome: "success",
+    outcome,
     severity: "critical",
     entityType: "backup",
     payload: {
@@ -432,7 +438,8 @@ router.post(
           valid: report.valid,
           error_count: report.errors.length,
           warning_count: report.warnings.length,
-        }
+        },
+        report.valid ? "success" : "failure"
       );
       return res.status(report.valid ? 200 : 400).json({
         status: report.valid ? "success" : "error",
