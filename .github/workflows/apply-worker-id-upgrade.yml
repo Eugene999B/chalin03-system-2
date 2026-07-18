@@ -24,15 +24,29 @@ jobs:
           ref: agent/release-3f-d2-worker-id-card
           fetch-depth: 0
 
-      - name: Normalize one-time script quoting
+      - name: Normalize one-time patch markers
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
-          path = Path('.github/scripts/apply_worker_id_upgrade.py')
-          text = path.read_text(encoding='utf-8')
+
+          script_path = Path('.github/scripts/apply_worker_id_upgrade.py')
+          text = script_path.read_text(encoding='utf-8')
           text = text.replace("MIGRATION = r'''-- CHALIN 03 RELEASE 3F-D2", 'MIGRATION = r"""-- CHALIN 03 RELEASE 3F-D2', 1)
           text = text.replace("\n'''\n\nTEST = r'''const test", "\n\"\"\"\n\nTEST = r'''const test", 1)
-          path.write_text(text, encoding='utf-8')
+          script_path.write_text(text, encoding='utf-8')
+
+          settings_path = Path('backend/routes/settingsRoutes.js')
+          settings = settings_path.read_text(encoding='utf-8')
+          settings, count = re.subn(
+              r'\n\s+receipt_footer = \?,\n\s+receipt_prefix = \?',
+              '\n            receipt_footer = ?,\n            receipt_prefix = ?',
+              settings,
+              count=1,
+          )
+          if count != 1:
+              raise RuntimeError('Could not normalize the settings SQL marker.')
+          settings_path.write_text(settings, encoding='utf-8')
           PY
 
       - name: Apply Release 3F-D2 patch
