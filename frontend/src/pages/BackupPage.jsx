@@ -181,7 +181,8 @@ export default function BackupPage() {
     setError("");
     setMessage("");
     try {
-      await validateSelectedBackup();
+      const validation = await validateSelectedBackup();
+      if (!validation) return;
       setMessage("Backup validation and restore preview completed. No data was changed.");
     } catch (requestError) {
       setError(
