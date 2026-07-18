@@ -42,7 +42,18 @@ jobs:
         run: npm run syntax-check
 
       - name: Run backend tests
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee backend-test.log
+
+      - name: Preserve backend test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-log
+          path: backend/backend-test.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   frontend:
     name: Frontend tests, lint and build
@@ -69,7 +80,23 @@ jobs:
         run: npm test
 
       - name: Run frontend lint
-        run: npm run lint
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee frontend-lint.log
 
       - name: Build production frontend
-        run: npm run build
+        if: always()
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee frontend-build.log
+
+      - name: Preserve frontend verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-verification-logs
+          path: |
+            frontend/frontend-lint.log
+            frontend/frontend-build.log
+          if-no-files-found: ignore
+          retention-days: 7
