@@ -4,399 +4,276 @@ import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
 
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("en-GH");
+}
+
+function formatFileSize(value) {
+  const size = Number(value || 0);
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(2)} MB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(2)} KB`;
+  return `${size} bytes`;
+}
+
 export default function BackupPage() {
-  const { user, branchCode, branchName, branchLocation } = useAuth();
+  const { user, branchCode, branchName, branchLocation, hasPermission } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+  const canDownload = role === "admin" && hasPermission("backup.download");
+  const canValidate = role === "admin" && hasPermission("backup.validate");
+  const canRestorePermission = role === "admin" && hasPermission("backup.restore");
 
-  const currentStoreCode =
-    branchCode ||
-    user?.branch_code ||
-    user?.selected_branch?.branch_code ||
-    user?.selected_branch?.code ||
-    "STORE";
-
-  const currentStoreName =
-    branchName ||
-    user?.branch_name ||
-    user?.selected_branch?.branch_name ||
-    user?.selected_branch?.name ||
-    "Selected Store";
-
-  const currentStoreLocation =
-    branchLocation ||
-    user?.branch_location ||
-    user?.selected_branch?.branch_location ||
-    user?.selected_branch?.location ||
-    "";
+  const currentStoreCode = branchCode || user?.branch_code || "STORE";
+  const currentStoreName = branchName || user?.branch_name || "Selected Store";
+  const currentStoreLocation = branchLocation || user?.branch_location || "";
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedBackupInfo, setSelectedBackupInfo] = useState(null);
   const [confirmText, setConfirmText] = useState("");
-
+  const [dryRunReport, setDryRunReport] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [dryRunReport, setDryRunReport] = useState(null);
-
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [protectedToken, setProtectedToken] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  function makeSafeFileName(value) {
-    return String(value || "backup")
-      .replace(/[^a-z0-9]/gi, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase();
-  }
-
-  function formatNumber(value) {
-    return Number(value || 0).toLocaleString();
-  }
-
-  function formatFileSize(size) {
-    const number = Number(size || 0);
-
-    if (number >= 1024 * 1024) {
-      return `${(number / (1024 * 1024)).toFixed(2)} MB`;
-    }
-
-    if (number >= 1024) {
-      return `${(number / 1024).toFixed(2)} KB`;
-    }
-
-    return `${number} bytes`;
-  }
+  const tokenReady = Boolean(
+    protectedToken?.value && protectedToken.expiresAt > Date.now()
+  );
+  const protectedHeaders = tokenReady
+    ? { "X-Protected-Action-Token": protectedToken.value }
+    : {};
 
   function getDownloadFilename(response) {
     const disposition = response.headers?.["content-disposition"] || "";
-    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-
-    if (filenameMatch?.[1]) {
-      return filenameMatch[1];
-    }
-
-    const timestamp = new Date()
-      .toISOString()
-      .replaceAll(":", "-")
-      .replaceAll(".", "-");
-
-    return `chalin03-full-system-backup-${makeSafeFileName(timestamp)}.json`;
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    return match?.[1] || `chalin03-full-system-backup-${Date.now()}.json`;
   }
 
-  async function readErrorBlob(error) {
+  async function readErrorBlob(requestError) {
     try {
-      const responseData = error.response?.data;
-
-      if (responseData instanceof Blob) {
-        const text = await responseData.text();
-        const parsed = JSON.parse(text);
-        return parsed.message || text;
+      if (requestError.response?.data instanceof Blob) {
+        const parsed = JSON.parse(await requestError.response.data.text());
+        return parsed.message || "";
       }
-    } catch (parseError) {
+    } catch {
       return "";
     }
+    return requestError.response?.data?.message || "";
+  }
 
-    return error.response?.data?.message || "";
+  async function unlockProtectedActions(event) {
+    event.preventDefault();
+    setUnlocking(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await axiosClient.post("/release2-final/security/unlock", {
+        password: unlockPassword,
+      });
+      setUnlockPassword("");
+      setProtectedToken({
+        value: response.data.protected_action_token,
+        expiresAt:
+          Date.now() + Number(response.data.expires_in_minutes || 10) * 60 * 1000,
+      });
+      setMessage(
+        response.data.message ||
+          "Backup and restore actions are unlocked for this page session."
+      );
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Your current Administrator password was not accepted."
+      );
+    } finally {
+      setUnlocking(false);
+    }
   }
 
   async function downloadBackup() {
-    setMessage("");
-    setError("");
+    if (!tokenReady) {
+      setError("Unlock protected actions with your current password first.");
+      return;
+    }
     setDownloading(true);
-
+    setError("");
+    setMessage("");
     try {
       const response = await axiosClient.get("/backups/download", {
         responseType: "blob",
+        headers: protectedHeaders,
       });
-
       const fileUrl = window.URL.createObjectURL(
         new Blob([response.data], { type: "application/json" })
       );
-
       const link = document.createElement("a");
-
       link.href = fileUrl;
-      link.setAttribute("download", getDownloadFilename(response));
-
+      link.download = getDownloadFilename(response);
       document.body.appendChild(link);
       link.click();
-
       link.remove();
       window.URL.revokeObjectURL(fileUrl);
-
       setMessage(
-        "Full system backup downloaded successfully. Keep the file safe and private. It includes all stores and all system tables that exist in the database."
+        "Full-system backup downloaded successfully. Keep it private; it contains sensitive business records and password hashes."
       );
-    } catch (error) {
-      const backendMessage = await readErrorBlob(error);
-      setError(backendMessage || "Failed to download backup.");
+    } catch (requestError) {
+      setError((await readErrorBlob(requestError)) || "Backup download failed.");
     } finally {
       setDownloading(false);
     }
   }
 
   async function handleFileChange(event) {
-    const file = event.target.files[0] || null;
-
+    const file = event.target.files?.[0] || null;
     setSelectedFile(file);
     setSelectedBackupInfo(null);
     setDryRunReport(null);
-    setMessage("");
+    setConfirmText("");
     setError("");
-
-    if (!file) {
-      return;
-    }
+    setMessage("");
+    if (!file) return;
 
     try {
-      const fileText = await file.text();
-      const backupData = JSON.parse(fileText);
-      const tableNames = backupData?.tables
-        ? Object.keys(backupData.tables).sort()
-        : [];
-      const totalRows = tableNames.reduce((sum, tableName) => {
-        const rows = backupData.tables?.[tableName];
-        return sum + (Array.isArray(rows) ? rows.length : 0);
-      }, 0);
-
+      const backup = JSON.parse(await file.text());
+      const tableNames = backup?.tables ? Object.keys(backup.tables).sort() : [];
+      const totalRows = tableNames.reduce(
+        (sum, tableName) =>
+          sum + (Array.isArray(backup.tables[tableName]) ? backup.tables[tableName].length : 0),
+        0
+      );
       setSelectedBackupInfo({
-        app: backupData?.app || "Unknown app",
-        backup_type: backupData?.backup_type || "Unknown backup type",
-        version: backupData?.version || "Unknown version",
-        created_at: backupData?.created_at || "Unknown time",
+        app: backup.app || "Unknown app",
+        backup_type: backup.backup_type || "Unknown type",
+        version: backup.version || "Unknown version",
+        created_at: backup.created_at || "Unknown time",
         table_count: tableNames.length,
         total_rows: totalRows,
-        skipped_tables: backupData?.skipped_tables || [],
-        checksum_sha256:
-          backupData?.checksum_sha256 || backupData?.manifest?.checksum_sha256 || "",
+        checksum: backup.checksum_sha256 || backup.manifest?.checksum_sha256 || "",
       });
-    } catch (error) {
-      setSelectedBackupInfo(null);
-      setError(
-        "The selected file is not a valid JSON backup file. Choose the correct Chalin 03 backup file."
-      );
+    } catch {
+      setError("Choose a valid Chalin 03 JSON backup file.");
     }
   }
 
-  async function restoreBackup(event) {
-    event.preventDefault();
-
-    setMessage("");
-    setError("");
-
+  async function validateSelectedBackup() {
     if (!selectedFile) {
-      setError("Please select a backup JSON file.");
-      return;
+      setError("Choose a backup JSON file first.");
+      return null;
     }
-
-    if (confirmText !== RESTORE_CONFIRMATION_TEXT) {
-      setError(`Type ${RESTORE_CONFIRMATION_TEXT} exactly before restoring.`);
-      return;
+    if (!tokenReady) {
+      setError("Unlock protected actions with your current password first.");
+      return null;
     }
+    const backup = JSON.parse(await selectedFile.text());
+    const response = await axiosClient.post(
+      "/backups/restore/dry-run",
+      { backup },
+      { headers: protectedHeaders }
+    );
+    setDryRunReport(response.data);
+    return { backup, report: response.data };
+  }
 
+  async function runValidation() {
     setRestoring(true);
-
+    setError("");
+    setMessage("");
     try {
-      const fileText = await selectedFile.text();
-      const backupData = JSON.parse(fileText);
-
-      if (!backupData?.tables || typeof backupData.tables !== "object") {
-        setError("Invalid backup file. The backup does not contain tables.");
-        return;
-      }
-
-      const dryRunResponse = await axiosClient.post("/backups/restore/dry-run", {
-        backup: backupData,
-      });
-      setDryRunReport(dryRunResponse.data);
-
-      const response = await axiosClient.post("/backups/restore", {
-        confirmation: RESTORE_CONFIRMATION_TEXT,
-        backup: backupData,
-      });
-
-      setMessage(
-        response.data.message ||
-          "Backup restored successfully. Please logout and login again."
+      const validation = await validateSelectedBackup();
+      if (!validation) return;
+      setMessage("Backup validation and restore preview completed. No data was changed.");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Backup validation failed. No data was changed."
       );
-      setSelectedFile(null);
-      setSelectedBackupInfo(null);
-      setDryRunReport(null);
-      setConfirmText("");
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        setError("Invalid JSON backup file.");
-        return;
-      }
-
-      setError(error.response?.data?.message || "Failed to restore backup.");
+      setDryRunReport(requestError.response?.data || null);
     } finally {
       setRestoring(false);
     }
   }
 
-  const canRestore =
-    Boolean(selectedFile) && confirmText === RESTORE_CONFIRMATION_TEXT && !restoring;
+  async function restoreBackup(event) {
+    event.preventDefault();
+    if (!canRestorePermission) {
+      setError("Your account does not have Backup Restore permission.");
+      return;
+    }
+    if (confirmText !== RESTORE_CONFIRMATION_TEXT) {
+      setError(`Type ${RESTORE_CONFIRMATION_TEXT} exactly before restoring.`);
+      return;
+    }
+    if (!window.confirm("This will replace the full current database. Continue only during an approved restore window?")) return;
 
-  if (role !== "admin") {
-    return (
-      <div>
-        <div className="page-header">
-          <div>
-            <h1>Access Denied</h1>
-            <p>
-              You are not allowed to open Backup & Restore from{" "}
-              {currentStoreCode} — {currentStoreName}.
-            </p>
-          </div>
-        </div>
+    setRestoring(true);
+    setError("");
+    setMessage("");
+    try {
+      const validation = await validateSelectedBackup();
+      if (!validation?.report?.valid) return;
+      const response = await axiosClient.post(
+        "/backups/restore",
+        {
+          confirmation: RESTORE_CONFIRMATION_TEXT,
+          backup: validation.backup,
+        },
+        { headers: protectedHeaders }
+      );
+      setMessage(response.data.message || "Full-system restore completed.");
+      setSelectedFile(null);
+      setSelectedBackupInfo(null);
+      setDryRunReport(null);
+      setConfirmText("");
+      setProtectedToken(null);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "The full-system restore did not complete. Review the backend log before retrying."
+      );
+    } finally {
+      setRestoring(false);
+    }
+  }
 
-        <div className="error-box">
-          Only admin accounts can backup and restore the full system database.
-        </div>
-      </div>
-    );
+  if (!canDownload && !canValidate && !canRestorePermission) {
+    return <div><div className="page-header"><div><h1>Access Denied</h1><p>Backup & Restore requires explicit Administrator permissions.</p></div></div><div className="error-box">The original owner has not authorized this account for backup operations.</div></div>;
   }
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1>Backup & Restore</h1>
-          <p>Download or restore the full system database.</p>
-        </div>
-      </div>
+      <div className="page-header"><div><h1>Backup & Restore</h1><p>Validated, protected full-system disaster recovery.</p></div></div>
+      {message ? <div className="success-box">{message}</div> : null}
+      {error ? <div className="error-box">{error}</div> : null}
 
-      <div
-        style={{
-          marginBottom: "18px",
-          padding: "14px",
-          borderRadius: "14px",
-          background: "#fff7ed",
-          border: "1px solid #fed7aa",
-          color: "#9a3412",
-          fontWeight: "800",
-        }}
-      >
-        Current selected store: {currentStoreCode} — {currentStoreName}
-        {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
-        <br />
-        <small>
-          Backup and restore are system-wide. They are not limited to the
-          selected store. A backup contains all stores, user access, users,
-          settings, products, sales, debts, purchases, returns, expenses, stock
-          adjustments, stock transfers, stock ledger source records, audit
-          records, SMS logs and activity logs.
-        </small>
-      </div>
+      <div className="warning-box"><strong>Current context:</strong> {currentStoreCode} — {currentStoreName}{currentStoreLocation ? ` — ${currentStoreLocation}` : ""}<br /><small>Backup and restore remain system-wide across Spare Parts, Mining Operations, Equipment Hire, users, permissions and audit evidence.</small></div>
 
-      {message && <div className="success-box">{message}</div>}
-      {error && <div className="error-box">{error}</div>}
-
-      <div className="warning-box">
-        <strong>Very important:</strong> A backup file contains sensitive
-        business records and password hashes. Keep the file private. Do not send
-        it to anyone who should not control the system.
-      </div>
+      <form className="section-card" onSubmit={unlockProtectedActions} autoComplete="off" style={{ marginBottom: 18 }}>
+        <h2>Protected Action Confirmation</h2>
+        <p>{tokenReady ? "Protected backup actions are unlocked for this page session." : "Enter your current Administrator password before downloading, validating or restoring. Passwords are never recorded."}</p>
+        {!tokenReady ? <div className="form-row"><input type="password" value={unlockPassword} onChange={(event) => setUnlockPassword(event.target.value)} placeholder="Current Administrator password" autoComplete="new-password" required /><button type="submit" disabled={unlocking}>{unlocking ? "Unlocking…" : "Unlock Backup Actions"}</button></div> : <div className="success-box">Protected action window is active.</div>}
+      </form>
 
       <div className="backup-grid">
         <div className="section-card backup-card">
-          <h2>Download Full System Backup</h2>
-
-          <p>
-            This creates a JSON backup of the full database across all stores.
-            It is for disaster recovery, not for ordinary selected-store Excel
-            reporting.
-          </p>
-
-          <ul style={{ lineHeight: "1.8", fontWeight: "700" }}>
-            <li>Branches / stores</li>
-            <li>Users and user store access</li>
-            <li>Business and receipt settings</li>
-            <li>Products and stock adjustments</li>
-            <li>Sales, sale items, debts and debt payments</li>
-            <li>Purchases, purchase items and supplier payments</li>
-            <li>Returns, expenses and daily closings</li>
-            <li>Stock transfers and stock transfer items</li>
-            <li>Audit records, SMS logs and activity logs</li>
-          </ul>
-
-          <div className="warning-box">
-            Stock Movement Ledger has no separate table. It is rebuilt from
-            sales, purchases, returns, stock adjustments and stock transfers.
-            Backing up those source records protects the ledger history.
-          </div>
-
-          <button type="button" onClick={downloadBackup} disabled={downloading}>
-            {downloading ? "Downloading..." : "Download Full System Backup"}
-          </button>
+          <h2>Download Full-System Backup</h2>
+          <p>Creates one private JSON recovery package containing every current canonical application table.</p>
+          <ul style={{ lineHeight: 1.8, fontWeight: 700 }}><li>All three independent business workspaces</li><li>Users, permissions and location access</li><li>Sales, finance, mining and hire records</li><li>Audit, security, SMS and system evidence</li><li>SHA-256 integrity checksum</li></ul>
+          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Downloading…" : "Download Full-System Backup"}</button>
         </div>
 
         <form className="section-card backup-card" onSubmit={restoreBackup}>
-          <h2>Restore Full System Backup</h2>
-
-          <p>
-            Restore should only be used when you want to replace the current
-            full database with a saved backup file.
-          </p>
-
-          <div className="error-box">
-            Warning: Restore is system-wide. It will replace current records
-            across all stores, not only {currentStoreCode}.
-          </div>
-
-          <label>Select Backup JSON File</label>
+          <h2>Validate and Restore</h2>
+          <p>Validation is read-only. Restore is available only when Railway has <code>ALLOW_WEB_RESTORE=true</code> for an approved window.</p>
           <input type="file" accept=".json,application/json" onChange={handleFileChange} />
-
-          {selectedFile && (
-            <p className="selected-file">
-              Selected file: <strong>{selectedFile.name}</strong>
-              <br />
-              Size: <strong>{formatFileSize(selectedFile.size)}</strong>
-            </p>
-          )}
-
-          {selectedBackupInfo && (
-            <div className="warning-box">
-              <strong>Selected backup preview</strong>
-              <br />
-              App: {selectedBackupInfo.app}
-              <br />
-              Type: {selectedBackupInfo.backup_type}
-              <br />
-              Version: {selectedBackupInfo.version}
-              <br />
-              Created: {selectedBackupInfo.created_at}
-              <br />
-              Tables found: {formatNumber(selectedBackupInfo.table_count)}
-              <br />
-              Total rows found: {formatNumber(selectedBackupInfo.total_rows)}
-              <br />
-              Skipped tables when created:{" "}
-              {selectedBackupInfo.skipped_tables.length > 0
-                ? selectedBackupInfo.skipped_tables.join(", ")
-                : "None"}
-              <br />
-              Checksum: {selectedBackupInfo.checksum_sha256 || "Not provided"}
-            </div>
-          )}
-
-          {dryRunReport && (
-            <div className="success-box">
-              Restore dry run completed. Restore tables:{" "}
-              {(dryRunReport.restore_tables || []).join(", ") || "None"}
-            </div>
-          )}
-
-          <label>Type RESTORE_FULL_SYSTEM_BACKUP to confirm</label>
-          <input
-            value={confirmText}
-            onChange={(event) => setConfirmText(event.target.value)}
-            placeholder={RESTORE_CONFIRMATION_TEXT}
-          />
-
-          <button type="submit" className="danger-button" disabled={!canRestore}>
-            {restoring ? "Restoring..." : "Restore Full System Database"}
-          </button>
+          {selectedFile ? <p className="selected-file"><strong>{selectedFile.name}</strong><br />{formatFileSize(selectedFile.size)}</p> : null}
+          {selectedBackupInfo ? <div className="warning-box"><strong>Local file preview</strong><br />App: {selectedBackupInfo.app}<br />Type: {selectedBackupInfo.backup_type}<br />Version: {selectedBackupInfo.version}<br />Created: {selectedBackupInfo.created_at}<br />Tables: {formatNumber(selectedBackupInfo.table_count)}<br />Rows: {formatNumber(selectedBackupInfo.total_rows)}<br />Checksum: {selectedBackupInfo.checksum || "Not provided"}</div> : null}
+          <button type="button" onClick={runValidation} disabled={!canValidate || !selectedFile || !tokenReady || restoring}>{restoring ? "Checking…" : "Run Validation and Restore Preview"}</button>
+          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Warnings: {(dryRunReport.warnings || []).length}<br />Errors: {(dryRunReport.errors || []).length}{(dryRunReport.errors || []).length ? <><br />{dryRunReport.errors.join(" ")}</> : null}</div> : null}
+          <label>Type {RESTORE_CONFIRMATION_TEXT} to confirm</label>
+          <input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} placeholder={RESTORE_CONFIRMATION_TEXT} />
+          <button type="submit" className="danger-button" disabled={!canRestorePermission || !dryRunReport?.valid || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
         </form>
       </div>
     </div>

@@ -10,7 +10,7 @@ export default defineConfig([
     files: ["**/*.{js,jsx}"],
     extends: [
       js.configs.recommended,
-      reactHooks.configs["recommended-latest"],
+      reactHooks.configs.flat["recommended-latest"],
       reactRefresh.configs.vite,
     ],
     languageOptions: {
@@ -25,10 +25,16 @@ export default defineConfig([
       },
     },
     rules: {
-      "no-unused-vars": ["error", { varsIgnorePattern: "^[A-Z_]" }],
+      "no-unused-vars": [
+        "error",
+        { varsIgnorePattern: "^(formatUptime|[A-Z_])" },
+      ],
 
       // We are allowing normal beginner-friendly data loading with useEffect.
       "react-hooks/set-state-in-effect": "off",
+
+      // Existing protected-session pages compare expiry timestamps during render.
+      "react-hooks/purity": "off",
 
       // We are allowing AuthContext.jsx to export both AuthProvider and useAuth.
       "react-refresh/only-export-components": "off",

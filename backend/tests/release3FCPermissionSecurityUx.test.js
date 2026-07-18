@@ -140,5 +140,5 @@ test("Release 3F-C backup and System Operations cover new control evidence", () 
   assert.match(backup, /security_event_dismissals/);
   assert.match(system, /permissionControlStatus/);
   assert.match(systemPage, /Open User Permission Manager/);
-  assert.match(systemPage, /Security messages hidden/);
+  assert.match(systemPage, /Delegated System Administrator/);
 });

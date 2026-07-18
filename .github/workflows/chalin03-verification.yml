@@ -1,0 +1,108 @@
+name: Chalin 03 Verification
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - "agent/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalin03-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend syntax and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Check backend syntax
+        run: npm run syntax-check
+
+      - name: Run backend tests
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee backend-test.log
+
+      - name: Preserve backend test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-log
+          path: backend/backend-test.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: Frontend tests, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend source tests
+        run: npm test
+
+      - name: Lint Release 3F-D frontend files
+        run: |
+          npx eslint \
+            src/pages/BackupPage.jsx \
+            src/pages/SystemOperationsPage.jsx
+
+      - name: Build production frontend
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee frontend-build.log
+
+      - name: Record legacy full-project lint backlog
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee frontend-lint.log
+
+      - name: Preserve frontend verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-verification-logs
+          path: |
+            frontend/frontend-lint.log
+            frontend/frontend-build.log
+          if-no-files-found: ignore
+          retention-days: 7

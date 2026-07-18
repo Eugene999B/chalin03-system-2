@@ -5,6 +5,9 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { getPublicPermissionCatalog } = require("../security/permissionCatalog");
 const { getSmsConfig } = require("../services/smsService");
+const {
+  delegatedAuthorityCounts,
+} = require("../services/delegatedAdministrationService");
 
 const router = express.Router();
 const startedAt = Date.now();
@@ -47,7 +50,7 @@ const EXPECTED_TABLES = Object.freeze([
 ]);
 
 function appVersion() {
-  return process.env.APP_VERSION || "final-local-6b-6f";
+  return process.env.APP_VERSION || "release-3f-d";
 }
 
 async function databaseStatus() {
@@ -59,13 +62,16 @@ async function databaseStatus() {
      WHERE TABLE_SCHEMA = DATABASE()`
   );
   const existingTables = new Set(tableRows.map((row) => row.TABLE_NAME));
-  const missingTables = EXPECTED_TABLES.filter((table) => !existingTables.has(table));
+  const missingTables = EXPECTED_TABLES.filter(
+    (table) => !existingTables.has(table)
+  );
 
   return {
     reachable: true,
     database_name: dbRows[0]?.database_name || null,
     query_latency_ms: Date.now() - started,
     expected_table_count: EXPECTED_TABLES.length,
+    discovered_table_count: existingTables.size,
     missing_tables: missingTables,
   };
 }
@@ -87,32 +93,61 @@ async function recentErrorCounts() {
 
 async function permissionControlStatus() {
   try {
-    const [[overrideCounts], [dismissalCounts]] = await Promise.all([
-      pool.query(
-        `SELECT
-           COUNT(*) AS total_override_records,
-           SUM(revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS active_overrides,
-           SUM(revoked_at IS NULL AND effect = 'deny' AND (expires_at IS NULL OR expires_at > NOW())) AS active_denies,
-           SUM(revoked_at IS NULL AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY)) AS expiring_within_7_days
-         FROM user_permission_overrides`
-      ),
-      pool.query(
-        `SELECT
-           COUNT(*) AS total_dismissal_records,
-           SUM(restored_at IS NULL) AS messages_hidden_from_security_centre
-         FROM security_event_dismissals`
-      ),
-    ]);
+    const [[overrideCounts], [dismissalCounts], delegatedCounts] =
+      await Promise.all([
+        pool.query(
+          `SELECT
+             COUNT(*) AS total_override_records,
+             SUM(revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS active_overrides,
+             SUM(revoked_at IS NULL AND effect = 'deny' AND (expires_at IS NULL OR expires_at > NOW())) AS active_denies,
+             SUM(revoked_at IS NULL AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY)) AS expiring_within_7_days
+           FROM user_permission_overrides`
+        ),
+        pool.query(
+          `SELECT
+             COUNT(*) AS total_dismissal_records,
+             SUM(restored_at IS NULL) AS messages_hidden_from_security_centre
+           FROM security_event_dismissals`
+        ),
+        delegatedAuthorityCounts().catch(() => ({})),
+      ]);
 
     return {
       overrides: overrideCounts[0] || {},
       security_messages: dismissalCounts[0] || {},
+      delegated_administration: delegatedCounts || {},
     };
   } catch {
     return {
       overrides: {},
       security_messages: {},
+      delegated_administration: {},
     };
+  }
+}
+
+async function sessionControlStatus() {
+  try {
+    const [[sessionRows], [protectedRows]] = await Promise.all([
+      pool.query(
+        `SELECT
+           SUM(revoked_at IS NULL AND expires_at > NOW()) AS active_sessions,
+           SUM(revoked_at IS NOT NULL) AS revoked_sessions,
+           SUM(revoked_at IS NULL AND expires_at <= NOW()) AS expired_unrevoked_sessions
+         FROM auth_sessions`
+      ),
+      pool.query(
+        `SELECT
+           SUM(revoked_at IS NULL AND expires_at > NOW()) AS active_protected_windows
+         FROM protected_action_sessions`
+      ),
+    ]);
+    return {
+      ...(sessionRows[0] || {}),
+      ...(protectedRows[0] || {}),
+    };
+  } catch {
+    return {};
   }
 }
 
@@ -134,9 +169,34 @@ async function workspaceAvailability() {
 }
 
 function missingConfigNames() {
-  return ["JWT_SECRET", "DB_HOST", "DB_USER", "DB_NAME"].filter(
-    (name) => !process.env[name] && !process.env[name.replace("DB_", "MYSQL")]
-  );
+  const required = {
+    JWT_SECRET: ["JWT_SECRET"],
+    DB_HOST: ["DB_HOST", "MYSQLHOST", "MYSQL_HOST"],
+    DB_USER: ["DB_USER", "MYSQLUSER", "MYSQL_USER"],
+    DB_NAME: ["DB_NAME", "MYSQLDATABASE", "MYSQL_DATABASE"],
+  };
+
+  return Object.entries(required)
+    .filter(([, aliases]) => !aliases.some((name) => process.env[name]))
+    .map(([label]) => label);
+}
+
+function deploymentStatus() {
+  const commit = String(
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.GIT_COMMIT_SHA ||
+      process.env.COMMIT_SHA ||
+      ""
+  ).trim();
+
+  return {
+    provider: process.env.RAILWAY_ENVIRONMENT ? "railway" : "local_or_other",
+    railway_environment: process.env.RAILWAY_ENVIRONMENT || null,
+    railway_service: process.env.RAILWAY_SERVICE_NAME || null,
+    commit_sha: commit || null,
+    commit_short: commit ? commit.slice(0, 12) : null,
+    node_environment: process.env.NODE_ENV || "development",
+  };
 }
 
 router.get("/health", (req, res) => {
@@ -153,7 +213,10 @@ router.get("/health", (req, res) => {
 router.get("/readiness", async (req, res) => {
   try {
     const db = await databaseStatus();
-    const ready = db.reachable && db.missing_tables.length === 0;
+    const ready =
+      db.reachable &&
+      db.missing_tables.length === 0 &&
+      missingConfigNames().length === 0;
 
     return res.status(ready ? 200 : 503).json({
       status: ready ? "success" : "degraded",
@@ -162,11 +225,12 @@ router.get("/readiness", async (req, res) => {
       checks: {
         database: db.reachable ? "ready" : "degraded",
         schema: db.missing_tables.length === 0 ? "ready" : "degraded",
-        configuration: missingConfigNames().length === 0 ? "ready" : "degraded",
+        configuration:
+          missingConfigNames().length === 0 ? "ready" : "degraded",
       },
       request_id: req.requestId || null,
     });
-  } catch (error) {
+  } catch {
     return res.status(503).json({
       status: "error",
       ready: false,
@@ -182,12 +246,14 @@ router.get(
   requirePermission("system.diagnostics"),
   async (req, res) => {
     try {
-      const [db, workspaces, errors, permissionControls] = await Promise.all([
-        databaseStatus(),
-        workspaceAvailability(),
-        recentErrorCounts(),
-        permissionControlStatus(),
-      ]);
+      const [db, workspaces, errors, permissionControls, sessionControls] =
+        await Promise.all([
+          databaseStatus(),
+          workspaceAvailability(),
+          recentErrorCounts(),
+          permissionControlStatus(),
+          sessionControlStatus(),
+        ]);
       const smsConfig = getSmsConfig();
 
       return res.json({
@@ -198,13 +264,26 @@ router.get(
           environment: process.env.NODE_ENV || "development",
           uptime_seconds: Math.floor((Date.now() - startedAt) / 1000),
           node_version: process.version,
+          deployment: deploymentStatus(),
           database: db,
           enabled_workspaces: workspaces,
           missing_configuration: missingConfigNames(),
+          cors: {
+            canonical_frontend: "https://chalin03.com",
+            alternate_frontend: "https://www.chalin03.com",
+            canonical_configured:
+              process.env.FRONTEND_URL === "https://chalin03.com" ||
+              process.env.FRONTEND_URL_ALT === "https://chalin03.com",
+            alternate_configured:
+              process.env.FRONTEND_URL === "https://www.chalin03.com" ||
+              process.env.FRONTEND_URL_ALT === "https://www.chalin03.com",
+          },
           backup: {
             web_restore_enabled:
-              String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() === "true",
-            manifest_version: "chalin03-final-local-6b-6f-v1",
+              String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() ===
+              "true",
+            manifest_version: "chalin03-release-3f-d-delegated-v1",
+            original_owner_remains_protected: true,
           },
           sms: {
             enabled: Boolean(smsConfig.enabled),
@@ -214,11 +293,12 @@ router.get(
           },
           recent_error_counts: errors,
           permission_controls: permissionControls,
+          session_controls: sessionControls,
           permission_catalog: getPublicPermissionCatalog(),
         },
         request_id: req.requestId || null,
       });
-    } catch (error) {
+    } catch {
       return res.status(503).json({
         status: "error",
         message: "Diagnostics could not be loaded safely.",
