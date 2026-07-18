@@ -53,3 +53,17 @@ Production migration order for Release 3E:
 2. `20260718_release3e_shared_reports_documents_roles_audit_verify.sql`
 
 Release 3E is additive and introduces only `shared_control_evidence`. It never runs `database/schema.sql`, never resets production data and never changes SMS configuration.
+
+## Release 3F-A — Authentication, Sessions and System Operations UX
+
+Production migration order for Release 3F-A:
+
+1. `20260718_release3fa_authentication_sessions_ux.sql`
+2. `20260718_release3fa_authentication_sessions_ux_verify.sql`
+
+Release 3F-A is additive. It adds a unique normalized Ghana phone login identity,
+professional browser/device/location evidence to `auth_sessions`, and phone
+normalization triggers. Existing usernames remain valid. Duplicate existing
+phone numbers are not deleted; phone login remains disabled for duplicates until
+an administrator assigns unique numbers. The migration never runs
+`database/schema.sql` and never sends SMS.

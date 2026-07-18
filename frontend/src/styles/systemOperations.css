@@ -1,0 +1,335 @@
+.sysops-page {
+  display: grid;
+  gap: 22px;
+  color: #0f172a;
+}
+
+.sysops-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  padding: 30px;
+  border-radius: 30px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 90% 15%, rgba(250, 204, 21, 0.25), transparent 30%),
+    linear-gradient(135deg, #07182c 0%, #0e3155 62%, #174f72 100%);
+  box-shadow: 0 24px 60px rgba(7, 24, 44, 0.2);
+}
+
+.sysops-hero::after {
+  content: "";
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  right: -120px;
+  bottom: -190px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  box-shadow: 0 0 0 42px rgba(255, 255, 255, 0.04), 0 0 0 90px rgba(255, 255, 255, 0.025);
+}
+
+.sysops-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.sysops-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fde68a;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.sysops-hero h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.sysops-hero p {
+  max-width: 720px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.7;
+}
+
+.sysops-hero-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sysops-refresh {
+  min-width: 220px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  padding: 13px 16px;
+  color: #07182c;
+  background: #fff;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 16px 35px rgba(0, 0, 0, 0.2);
+}
+
+.sysops-refresh:disabled {
+  opacity: 0.68;
+  cursor: wait;
+}
+
+.sysops-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 950;
+  white-space: nowrap;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.sysops-badge.is-success { background: #d1fae5; color: #065f46; }
+.sysops-badge.is-warning { background: #fef3c7; color: #92400e; }
+.sysops-badge.is-danger { background: #fee2e2; color: #991b1b; }
+.sysops-badge.is-neutral { background: #e2e8f0; color: #334155; }
+
+.sysops-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sysops-metric {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 132px;
+  padding: 19px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.sysops-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  background: #f1f5f9;
+  font-size: 22px;
+}
+
+.sysops-metric span,
+.sysops-panel-heading span,
+.sysops-safety span {
+  display: block;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sysops-metric strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+}
+
+.sysops-metric small { color: #64748b; line-height: 1.45; }
+.sysops-metric.is-success { border-color: #a7f3d0; }
+.sysops-metric.is-warning { border-color: #fde68a; }
+.sysops-metric.is-danger { border-color: #fecaca; }
+
+.sysops-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.sysops-panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.055);
+}
+
+.sysops-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.sysops-panel h2,
+.sysops-safety h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+}
+
+.sysops-check-list,
+.sysops-workspace-list,
+.sysops-setting-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sysops-check,
+.sysops-workspace-list > div,
+.sysops-setting-list > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 15px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+}
+
+.sysops-check > span,
+.sysops-workspace-list > div > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: #e2e8f0;
+  font-weight: 950;
+}
+
+.sysops-check > span.is-ready { background: #d1fae5; color: #047857; }
+.sysops-check > span.is-warning { background: #fef3c7; color: #92400e; }
+.sysops-check div,
+.sysops-workspace-list div > div { flex: 1; min-width: 0; }
+.sysops-check strong,
+.sysops-workspace-list strong,
+.sysops-setting-list strong { display: block; text-transform: capitalize; }
+.sysops-check small,
+.sysops-workspace-list small { color: #64748b; }
+
+.sysops-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sysops-detail-grid > div {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.sysops-detail-grid span { display: block; color: #64748b; font-size: 11px; }
+.sysops-detail-grid strong { display: block; margin-top: 4px; }
+
+.sysops-alert {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.sysops-alert.is-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.sysops-alert.is-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.sysops-alert.is-danger { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+
+.sysops-setting-list > div { justify-content: space-between; align-items: flex-start; }
+.sysops-setting-list span { color: #64748b; }
+.sysops-setting-list strong { text-align: right; }
+
+.sysops-error-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sysops-error-list > div {
+  padding: 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fff7ed;
+}
+
+.sysops-error-list span { display: block; color: #9a3412; font-size: 11px; font-weight: 900; }
+.sysops-error-list strong { display: block; margin-top: 5px; font-size: 20px; }
+.sysops-empty { padding: 22px; border-radius: 16px; text-align: center; color: #64748b; background: #f8fafc; }
+
+.sysops-safety {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(260px, 0.7fr);
+  gap: 18px;
+  align-items: center;
+  padding: 22px;
+  border-radius: 24px;
+  color: #e2e8f0;
+  background: #0f172a;
+}
+
+.sysops-safety-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 27px;
+}
+
+.sysops-safety p { margin: 9px 0 0; color: #94a3b8; line-height: 1.65; }
+.sysops-safety code { color: #fde68a; }
+.sysops-safety ul { margin: 0; padding-left: 20px; color: #cbd5e1; line-height: 1.7; }
+
+.sysops-denied {
+  display: grid;
+  place-items: center;
+  min-height: 440px;
+  padding: 30px;
+  border: 1px solid #fecaca;
+  border-radius: 28px;
+  text-align: center;
+  background: #fff;
+}
+.sysops-denied > span { font-size: 46px; }
+.sysops-denied h1 { margin: 14px 0 6px; }
+.sysops-denied p { max-width: 520px; color: #64748b; }
+
+@media (max-width: 980px) {
+  .sysops-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sysops-safety { grid-template-columns: auto 1fr; }
+  .sysops-safety ul { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .sysops-hero { align-items: stretch; flex-direction: column; padding: 22px; }
+  .sysops-refresh { width: 100%; }
+  .sysops-metric-grid,
+  .sysops-layout { grid-template-columns: 1fr; }
+  .sysops-metric { min-height: 112px; }
+  .sysops-detail-grid { grid-template-columns: 1fr; }
+  .sysops-safety { grid-template-columns: 1fr; }
+  .sysops-safety-icon { width: 50px; height: 50px; }
+}

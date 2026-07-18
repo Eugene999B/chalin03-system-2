@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { getEffectivePermissions } = require("../security/permissionCatalog");
+const { normalizeLoginIdentity } = require("../services/loginIdentityService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   buildOwnerAlertContext,
@@ -119,6 +120,7 @@ function createToken(user, branch, workspace, sessionId) {
       full_name: user.full_name,
       username: user.username,
       role: user.role,
+      login_method: user.login_method || "username",
       workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
       business_unit_id: workspace?.id || null,
       business_unit_name: workspace?.name || "Spare Parts",
@@ -149,6 +151,9 @@ async function buildUserSelectByWhere(whereSql, params) {
   const userColumns = await getTableColumns("users");
 
   const phoneSql = userColumns.has("phone") ? "phone" : "NULL AS phone";
+  const loginPhoneSql = userColumns.has("login_phone_normalized")
+    ? "login_phone_normalized"
+    : "NULL AS login_phone_normalized";
   const defaultBranchSql = userColumns.has("default_branch_id")
     ? "default_branch_id"
     : "1 AS default_branch_id";
@@ -206,6 +211,7 @@ async function buildUserSelectByWhere(whereSql, params) {
       password_hash,
       role,
       ${phoneSql},
+      ${loginPhoneSql},
       ${defaultBranchSql},
       ${allBranchesSql},
       ${activeSql},
@@ -229,6 +235,32 @@ async function buildUserSelectByWhere(whereSql, params) {
   );
 
   return users;
+}
+
+async function findUsersForLogin(rawIdentifier) {
+  const identity = normalizeLoginIdentity(rawIdentifier);
+
+  if (!identity.identifier) {
+    return { identity, users: [] };
+  }
+
+  if (identity.method === "phone") {
+    const userColumns = await getTableColumns("users");
+    if (!userColumns.has("login_phone_normalized")) {
+      return { identity, users: [] };
+    }
+
+    const users = await buildUserSelectByWhere(
+      "WHERE login_phone_normalized = ?",
+      [identity.normalizedPhone]
+    );
+    return { identity, users };
+  }
+
+  const users = await buildUserSelectByWhere("WHERE username = ?", [
+    identity.identifier,
+  ]);
+  return { identity, users };
 }
 
 async function getBranchById(branchId) {
@@ -583,6 +615,7 @@ function buildUserResponse(user, branch, workspace) {
     role: user.role,
     workspace_role: workspaceRole,
     phone: user.phone,
+    login_method: user.login_method || "username",
     workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
     business_unit_id: workspace?.id || null,
     business_unit_name: workspace?.name || "Spare Parts",
@@ -658,6 +691,18 @@ function isLoginLocked(user) {
 
   const lockedUntil = lockedUntilDate(user);
   return lockedUntil ? lockedUntil.getTime() > Date.now() : false;
+}
+
+function failedLoginMessage(failure) {
+  if (failure?.protected_original_admin) {
+    return "Incorrect password. This protected original System Administrator account is not automatically blocked, but the failed attempt was recorded.";
+  }
+
+  const remaining = Math.max(Number(failure?.attempts_remaining || 0), 0);
+
+  return `Incorrect password. ${remaining} login attempt${
+    remaining === 1 ? "" : "s"
+  } remaining before the account is blocked.`;
 }
 
 function strongPasswordError(password) {
@@ -763,15 +808,16 @@ async function sendPasswordChangedSecuritySmsAlert({ user, branch, workspace }) 
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
-    const username = cleanText(req.body.username);
+    const rawIdentifier = cleanText(req.body.identifier || req.body.username);
     const password = req.body.password;
     const workspaceCode = normalizeWorkspaceCode(req.body.workspace_code);
     const branchId = cleanNumber(req.body.branch_id, null);
 
-    if (!username || !password) {
+    if (!rawIdentifier || !password) {
       return res.status(400).json({
         status: "error",
-        message: "Username and password are required.",
+        code: "LOGIN_FIELDS_REQUIRED",
+        message: "Username or phone number and password are required.",
       });
     }
 
@@ -797,9 +843,9 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const users = await buildUserSelectByWhere(`WHERE username = ?`, [
-      username,
-    ]);
+    const loginLookup = await findUsersForLogin(rawIdentifier);
+    const users = loginLookup.users;
+    const loginIdentity = loginLookup.identity;
 
     if (users.length === 0) {
       return res.status(401).json({
@@ -836,7 +882,8 @@ router.post("/login", async (req, res) => {
         status: "error",
         code: "ACCOUNT_LOCKED",
         message:
-          "This account is locked. Use Forgot Password for SMS recovery or contact the original System Administrator.",
+          "Account blocked after three unsuccessful login attempts. Use Forgot Password / Unlock Account or contact the System Administrator.",
+        recovery_available: true,
       });
     }
 
@@ -860,13 +907,19 @@ router.post("/login", async (req, res) => {
           status: "error",
           code: "ACCOUNT_LOCKED",
           message:
-            "This account is locked. Use Forgot Password for SMS recovery or contact the original System Administrator.",
+            "Account blocked after three unsuccessful login attempts. Use Forgot Password / Unlock Account or contact the System Administrator.",
+          recovery_available: true,
+          failed_login_attempts: Number(failure.attempts || 3),
+          attempts_remaining: 0,
         });
       }
 
       return res.status(401).json({
         status: "error",
-        message: AUTH_FAILURE_MESSAGE,
+        code: "LOGIN_FAILED",
+        message: failedLoginMessage(failure),
+        failed_login_attempts: Number(failure.attempts || 0),
+        attempts_remaining: failure.attempts_remaining,
       });
     }
 
@@ -896,11 +949,14 @@ router.post("/login", async (req, res) => {
       selectedBranch = branchResult.branch;
     }
 
+    user.login_method = loginIdentity.method;
     const session = await createSession({
       userId: user.id,
       req,
       workspaceCode: workspace.code,
       branchId: selectedBranch?.id || null,
+      loginMethod: loginIdentity.method,
+      deviceEvidence: req.body.device_evidence || {},
     });
 
     const token = createToken(
@@ -921,8 +977,8 @@ router.post("/login", async (req, res) => {
         ? "LOGIN_SESSION_REPLACED"
         : "LOGIN",
       session.replacedSessionCount > 0
-        ? `${user.username} logged in to ${loginContext}; the previous device session was revoked`
-        : `${user.username} logged in successfully to ${loginContext}`
+        ? `${user.username} logged in to ${loginContext} using ${loginIdentity.method}; the previous device session was revoked`
+        : `${user.username} logged in successfully to ${loginContext} using ${loginIdentity.method}`
     );
 
     await recordSuccessfulLogin(req, user);
@@ -1019,6 +1075,7 @@ router.get("/me", requireAuth, async (req, res) => {
 
     const workspace = workspaceResult.workspace;
     user.workspace_role = workspaceResult.workspaceRole;
+    user.login_method = req.user.login_method || "username";
     let selectedBranch = null;
 
     if (workspace.code === DEFAULT_WORKSPACE_CODE) {
@@ -1223,7 +1280,7 @@ async function requestRecoveryOtpHandler(req, res) {
   try {
     await requestRecoveryOtp({
       req,
-      username: req.body.username,
+      identifier: req.body.identifier || req.body.username,
     });
 
     return res.json({
@@ -1264,7 +1321,7 @@ router.post(
     try {
       const result = await recoverAccountWithOtp({
         req,
-        username: req.body.username,
+        identifier: req.body.identifier || req.body.username,
         otp: req.body.otp,
         newPassword: req.body.new_password,
         confirmPassword: req.body.confirm_password,

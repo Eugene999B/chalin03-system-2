@@ -371,7 +371,7 @@ export default function Layout() {
           title: "System Operations",
           description: "Health, readiness, diagnostics and local acceptance",
           path: "/system-operations",
-          icon: "Ops",
+          icon: "🖥️",
           keywords:
             "system operations health readiness diagnostics acceptance backup restore",
         },

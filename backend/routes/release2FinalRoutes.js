@@ -11,6 +11,9 @@ const {
   revokeAllUserSessions,
 } = require("../services/accountSessionService");
 const {
+  friendlySessionEvidence,
+} = require("../services/sessionDeviceService");
+const {
   writeAuditEvent,
 } = require("../services/auditTrailService");
 const {
@@ -2028,9 +2031,33 @@ router.get(
           `SELECT
              s.id,
              s.workspace_code,
+             s.login_method,
              s.branch_id,
              s.ip_address,
              s.user_agent,
+             s.device_type,
+             s.device_label,
+             s.device_model,
+             s.device_platform,
+             s.architecture,
+             s.os_name,
+             s.os_version,
+             s.browser_name,
+             s.browser_version,
+             s.client_timezone,
+             s.client_language,
+             s.screen_width,
+             s.screen_height,
+             s.pixel_ratio,
+             s.touch_points,
+             s.pwa_mode,
+             s.location_permission,
+             s.location_source,
+             s.latitude,
+             s.longitude,
+             s.location_accuracy_m,
+             s.location_recorded_at,
+             s.network_country,
              s.created_at,
              s.last_seen_at,
              s.expires_at,
@@ -2134,7 +2161,7 @@ router.get(
         privileged_ledger:
           ledger,
         recent_sessions:
-          recentSessions,
+          recentSessions.map(friendlySessionEvidence),
         recent_security_events:
           recentEvents,
         recent_privileged_actions:

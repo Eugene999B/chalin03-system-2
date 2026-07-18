@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
+const { normalizeLoginIdentity } = require("./loginIdentityService");
 const { revokeAllUserSessions } = require("./accountSessionService");
 const {
   buildOwnerAlertContext,
@@ -27,7 +28,7 @@ const OTP_RESEND_SECONDS = 60;
 const OTP_HOURLY_LIMIT = 3;
 
 const GENERIC_RECOVERY_REQUEST_MESSAGE =
-  "If the username is eligible and has a valid registered phone, a password recovery code will be sent. Enter the code below or contact the original System Administrator.";
+  "If the username or phone number is eligible and has a valid registered phone, a password recovery code will be sent. Enter the code below or contact the original System Administrator.";
 
 function cleanText(value, maxLength = 255) {
   return String(value || "").trim().slice(0, maxLength);
@@ -409,8 +410,9 @@ async function writeRecoveryAudit({
   }
 }
 
-async function requestRecoveryOtp({ req, username }) {
-  const cleanUsername = cleanText(username, 80);
+async function requestRecoveryOtp({ req, username, identifier }) {
+  const identity = normalizeLoginIdentity(identifier || username);
+  const cleanUsername = identity.identifier;
 
   if (!cleanUsername) {
     return {
@@ -436,10 +438,10 @@ async function requestRecoveryOtp({ req, username }) {
          is_active,
          is_login_locked
        FROM users
-       WHERE username = ?
+       WHERE ${identity.method === "phone" ? "login_phone_normalized" : "username"} = ?
        LIMIT 1
        FOR UPDATE`,
-      [cleanUsername]
+      [identity.method === "phone" ? identity.normalizedPhone : cleanUsername]
     );
 
     const user = users[0] || null;
@@ -710,11 +712,13 @@ async function sendRecoveryCompletedAlerts(user, method) {
 async function recoverAccountWithOtp({
   req,
   username,
+  identifier,
   otp,
   newPassword,
   confirmPassword,
 }) {
-  const cleanUsername = cleanText(username, 80);
+  const identity = normalizeLoginIdentity(identifier || username);
+  const cleanUsername = identity.identifier;
   const cleanOtp = cleanText(otp, 12);
 
   if (
@@ -726,7 +730,7 @@ async function recoverAccountWithOtp({
     throw createServiceError(
       400,
       "RECOVERY_FIELDS_REQUIRED",
-      "Username, verification code, new password and confirmation are required."
+      "Username or phone number, verification code, new password and confirmation are required."
     );
   }
 
@@ -776,10 +780,10 @@ async function recoverAccountWithOtp({
          is_login_locked,
          token_version
        FROM users
-       WHERE username = ?
+       WHERE ${identity.method === "phone" ? "login_phone_normalized" : "username"} = ?
        LIMIT 1
        FOR UPDATE`,
-      [cleanUsername]
+      [identity.method === "phone" ? identity.normalizedPhone : cleanUsername]
     );
 
     const user = users[0] || null;

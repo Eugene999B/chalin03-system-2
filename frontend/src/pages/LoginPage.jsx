@@ -4,6 +4,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import BusinessWorkspaceSelector from "../components/BusinessWorkspaceSelector";
 import { getBusinessWorkspace } from "../data/businessWorkspaces";
+import { collectDeviceEvidence } from "../utils/deviceEvidence";
 
 function getBranchId(branch) {
   return Number(branch?.id || branch?.branch_id || 0);
@@ -86,6 +87,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [sharePreciseLocation, setSharePreciseLocation] = useState(true);
 
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotUsername, setForgotUsername] = useState("");
@@ -99,6 +101,8 @@ export default function LoginPage() {
   const [showRecoveryPasswords, setShowRecoveryPasswords] = useState(false);
 
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
+  const [attemptsRemaining, setAttemptsRemaining] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -224,12 +228,16 @@ export default function LoginPage() {
 
     setSearchParams(nextParams, { replace: true });
     setError("");
+    setErrorCode("");
+    setAttemptsRemaining(null);
   }
 
   async function handleLogin(event) {
     event.preventDefault();
 
     setError("");
+    setErrorCode("");
+    setAttemptsRemaining(null);
     setForgotMessage("");
     setForgotError("");
 
@@ -239,28 +247,44 @@ export default function LoginPage() {
     }
 
     if (!username.trim() || !password.trim()) {
-      setError("Please enter username and password.");
+      setError("Please enter your username or phone number and password.");
       return;
     }
 
     setLoading(true);
 
     try {
+      const deviceEvidence = await collectDeviceEvidence({
+        requestLocation: sharePreciseLocation,
+      });
+
       await login({
+        identifier: username.trim(),
         username: username.trim(),
         password,
         workspaceCode: selectedWorkspaceCode,
         branchId: isSparePartsWorkspace
           ? Number(selectedBranchId)
           : null,
+        deviceEvidence,
       });
 
       navigate(selectedWorkspaceRoute, { replace: true });
     } catch (error) {
+      const responseData = error.response?.data || {};
+      setErrorCode(responseData.code || "");
+      const rawAttemptsRemaining = responseData.attempts_remaining;
+      setAttemptsRemaining(
+        rawAttemptsRemaining !== undefined &&
+        rawAttemptsRemaining !== null &&
+        Number.isInteger(Number(rawAttemptsRemaining))
+          ? Number(rawAttemptsRemaining)
+          : null
+      );
       setError(
-        error.response?.data?.message ||
+        responseData.message ||
           error.message ||
-          "Invalid username or password."
+          "Invalid username, phone number or password."
       );
     } finally {
       setLoading(false);
@@ -277,7 +301,7 @@ export default function LoginPage() {
     const usernameToSend = forgotUsername.trim() || username.trim();
 
     if (!usernameToSend) {
-      setForgotError("Please enter your username first.");
+      setForgotError("Please enter your username or phone number first.");
       return;
     }
 
@@ -285,6 +309,7 @@ export default function LoginPage() {
 
     try {
       const response = await axiosClient.post("/auth/recovery/request-otp", {
+        identifier: usernameToSend,
         username: usernameToSend,
       });
 
@@ -315,7 +340,7 @@ export default function LoginPage() {
     const cleanCode = recoveryCode.trim();
 
     if (!usernameToSend) {
-      setForgotError("Username is required.");
+      setForgotError("Username or phone number is required.");
       return;
     }
 
@@ -342,6 +367,7 @@ export default function LoginPage() {
       const response = await axiosClient.post(
         "/auth/recovery/reset-password",
         {
+          identifier: usernameToSend,
           username: usernameToSend,
           otp: cleanCode,
           new_password: recoveryNewPassword,
@@ -390,6 +416,8 @@ export default function LoginPage() {
     setForgotMessage("");
     setForgotError("");
     setError("");
+    setErrorCode("");
+    setAttemptsRemaining(null);
   }
 
   function closeForgotPassword() {
@@ -1033,9 +1061,65 @@ export default function LoginPage() {
         }
 
         .premium-error-box {
+          display: grid;
+          gap: 4px;
           background: #fef2f2;
           color: #991b1b;
           border: 1px solid #fecaca;
+        }
+
+        .premium-error-box.is-locked {
+          padding: 15px;
+          background: linear-gradient(135deg, #7f1d1d, #b42318);
+          color: #ffffff;
+          border-color: #dc2626;
+          box-shadow: 0 14px 30px rgba(180, 35, 24, 0.2);
+        }
+
+        .premium-error-box strong {
+          font-size: 15px;
+        }
+
+        .premium-error-box small {
+          font-weight: 900;
+          opacity: 0.88;
+        }
+
+        .premium-location-consent {
+          display: flex !important;
+          align-items: flex-start;
+          gap: 11px;
+          margin: 2px 0 16px;
+          padding: 12px 13px;
+          border-radius: 16px;
+          border: 1px solid #d0d5dd;
+          background: #f8fafc;
+          color: #344054;
+          cursor: pointer;
+        }
+
+        .premium-location-consent input {
+          width: 18px;
+          height: 18px;
+          margin: 2px 0 0;
+          accent-color: #0f2a48;
+          flex: 0 0 auto;
+        }
+
+        .premium-location-consent span {
+          display: grid;
+          gap: 3px;
+        }
+
+        .premium-location-consent strong {
+          color: #101828;
+          font-size: 13px;
+        }
+
+        .premium-location-consent small {
+          color: #667085;
+          font-size: 11px;
+          line-height: 1.45;
         }
 
         .premium-success-box {
@@ -1290,7 +1374,7 @@ export default function LoginPage() {
             onSelect={handleWorkspaceSelect}
           />
 
-          <form onSubmit={handleLogin} autoComplete="off">
+          <form onSubmit={handleLogin} autoComplete="on">
             {isSparePartsWorkspace ? (
               <>
                 <div className="premium-branch-title">
@@ -1371,17 +1455,35 @@ export default function LoginPage() {
             )}
 
             <div className="premium-form-box">
-              {error && <div className="premium-error-box">{error}</div>}
+              {error ? (
+                <div
+                  className={`premium-error-box ${
+                    errorCode === "ACCOUNT_LOCKED" ? "is-locked" : ""
+                  }`}
+                  role="alert"
+                >
+                  {errorCode === "ACCOUNT_LOCKED" ? (
+                    <strong>Account blocked</strong>
+                  ) : null}
+                  <span>{error}</span>
+                  {attemptsRemaining !== null &&
+                  errorCode !== "ACCOUNT_LOCKED" ? (
+                    <small>
+                      Attempts remaining before block: {attemptsRemaining}
+                    </small>
+                  ) : null}
+                </div>
+              ) : null}
 
-              <label>Username</label>
+              <label>Username or phone number</label>
               <div className="premium-field-wrap">
                 <span className="premium-field-icon">👤</span>
                 <input
                   name="chalin03_login_username"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  placeholder="Enter username"
-                  autoComplete="off"
+                  placeholder="Username or Ghana phone number"
+                  autoComplete="username"
                 />
               </div>
 
@@ -1395,7 +1497,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter password"
-                    autoComplete="new-password"
+                    autoComplete="current-password"
                   />
                 </div>
 
@@ -1408,6 +1510,23 @@ export default function LoginPage() {
                 </button>
               </div>
 
+              <label className="premium-location-consent">
+                <input
+                  type="checkbox"
+                  checked={sharePreciseLocation}
+                  onChange={(event) =>
+                    setSharePreciseLocation(event.target.checked)
+                  }
+                />
+                <span>
+                  <strong>Record this login device and precise location</strong>
+                  <small>
+                    Your browser may request location permission. Login continues
+                    when permission is denied or unavailable.
+                  </small>
+                </span>
+              </label>
+
               <button
                 type="submit"
                 className="premium-login-button"
@@ -1418,7 +1537,9 @@ export default function LoginPage() {
                 }
               >
                 {loading
-                  ? `Opening ${selectedWorkspace?.shortName || "workspace"}...`
+                  ? `Checking device and opening ${
+                      selectedWorkspace?.shortName || "workspace"
+                    }...`
                   : selectedWorkspace
                   ? `Login to ${selectedWorkspace.shortName}`
                   : "Login"}
@@ -1441,7 +1562,7 @@ export default function LoginPage() {
               {forgotStage === "request" && (
                 <form onSubmit={handleForgotPassword}>
                   <p>
-                    Enter your username. Eligible accounts receive a 6-digit
+                    Enter your username or phone number. Eligible accounts receive a 6-digit
                     recovery code on the registered phone. The code expires
                     after 5 minutes.
                   </p>
@@ -1450,7 +1571,7 @@ export default function LoginPage() {
                     <div className="premium-error-box">{forgotError}</div>
                   )}
 
-                  <label>Username</label>
+                  <label>Username or phone number</label>
                   <div className="premium-field-wrap">
                     <span className="premium-field-icon">👤</span>
                     <input
@@ -1458,7 +1579,7 @@ export default function LoginPage() {
                       onChange={(event) =>
                         setForgotUsername(event.target.value)
                       }
-                      placeholder="Enter your username"
+                      placeholder="Username or Ghana phone number"
                       autoComplete="username"
                     />
                   </div>
@@ -1504,7 +1625,7 @@ export default function LoginPage() {
                     <div className="premium-error-box">{forgotError}</div>
                   )}
 
-                  <label>Username</label>
+                  <label>Username or phone number</label>
                   <div className="premium-field-wrap">
                     <span className="premium-field-icon">👤</span>
                     <input
@@ -1512,7 +1633,7 @@ export default function LoginPage() {
                       onChange={(event) =>
                         setForgotUsername(event.target.value)
                       }
-                      placeholder="Enter your username"
+                      placeholder="Username or Ghana phone number"
                       autoComplete="username"
                     />
                   </div>

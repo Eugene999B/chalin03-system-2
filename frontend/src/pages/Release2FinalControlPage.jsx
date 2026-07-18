@@ -41,6 +41,56 @@ function formatDate(value) {
       );
 }
 
+function humanizeCode(value) {
+  return String(value || "-")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function workspaceLabel(value) {
+  const code = String(value || "").toLowerCase();
+
+  if (code === "spare_parts") return "Spare Parts";
+  if (code === "mining") return "Mining Operations";
+  if (code === "equipment_hire") return "Equipment Hire";
+
+  return humanizeCode(value);
+}
+
+function sessionStatus(item) {
+  if (!item?.revoked_at) {
+    return {
+      code: "active",
+      label: "Active",
+      tone: "success",
+    };
+  }
+
+  const reason = String(item.revocation_reason || "revoked");
+
+  if (reason === "replaced_by_new_login") {
+    return {
+      code: reason,
+      label: "Replaced by new login",
+      tone: "warning",
+    };
+  }
+
+  if (reason === "logout") {
+    return {
+      code: reason,
+      label: "Logged out",
+      tone: "neutral",
+    };
+  }
+
+  return {
+    code: reason,
+    label: humanizeCode(reason),
+    tone: "danger",
+  };
+}
+
 function filenameFromHeaders(
   headers
 ) {
@@ -1287,70 +1337,113 @@ function SecurityCentre() {
         </div>
       </section>
 
-      <section className="r2-card">
-        <h2>
-          Recent Sessions
-        </h2>
+      <section className="r2-card r2-session-card">
+        <div className="r2-card-heading">
+          <div>
+            <h2>Recent Sessions</h2>
+            <p>
+              Human-readable device, login method and location evidence. Precise
+              coordinates appear only when the user allowed browser location
+              access.
+            </p>
+          </div>
 
-        <div className="r2-table-wrap">
-          <table>
+          <span className="r2-session-count">
+            {(data?.recent_sessions || []).length} recent
+          </span>
+        </div>
+
+        <div className="r2-table-wrap r2-session-table-wrap">
+          <table className="r2-session-table">
             <thead>
               <tr>
                 <th>User</th>
-                <th>Workspace</th>
-                <th>Started</th>
+                <th>Workspace & login</th>
+                <th>Session time</th>
                 <th>Status</th>
-                <th>Device evidence</th>
+                <th>Device</th>
+                <th>Location</th>
+                <th>Network</th>
               </tr>
             </thead>
 
             <tbody>
-              {(
-                data
-                  ?.recent_sessions ||
-                []
-              ).map(
-                (item) => (
+              {(data?.recent_sessions || []).map((item) => {
+                const status = sessionStatus(item);
+
+                return (
                   <tr key={item.id}>
                     <td>
-                      {item.full_name ||
-                        item.username}
+                      <strong>{item.full_name || item.username}</strong>
+                      <small>@{item.username}</small>
                     </td>
 
                     <td>
-                      {
-                        item.workspace_code
-                      }
-                    </td>
-
-                    <td>
-                      {formatDate(
-                        item.created_at
-                      )}
-                    </td>
-
-                    <td>
-                      {item.revoked_at
-                        ? item.revocation_reason ||
-                          "revoked"
-                        : "active"}
-                    </td>
-
-                    <td>
+                      <strong>{workspaceLabel(item.workspace_code)}</strong>
                       <small>
-                        {item.ip_address ||
-                          "-"}
-                        <br />
-                        {item.user_agent ||
-                          "-"}
+                        {humanizeCode(item.login_method || "username")} login
+                      </small>
+                    </td>
+
+                    <td>
+                      <strong>{formatDate(item.created_at)}</strong>
+                      <small>Last seen {formatDate(item.last_seen_at)}</small>
+                    </td>
+
+                    <td>
+                      <span className={`r2-session-status is-${status.tone}`}>
+                        {status.label}
+                      </span>
+                    </td>
+
+                    <td className="r2-session-device">
+                      <strong>{item.device_summary || "Unknown device"}</strong>
+                      <small>
+                        {item.os_summary || "Unknown OS"} ·{" "}
+                        {item.browser_summary || "Unknown browser"}
+                      </small>
+                      <small>
+                        {item.screen_summary
+                          ? `Screen ${item.screen_summary}`
+                          : "Screen not reported"}
+                        {item.pwa_mode ? " · Installed app" : " · Web browser"}
+                      </small>
+                    </td>
+
+                    <td className="r2-session-location">
+                      <strong>{item.location_summary || "Not available"}</strong>
+                      <small>
+                        {humanizeCode(item.location_source || "network_only")}
+                      </small>
+                      {item.precise_location?.map_url ? (
+                        <a
+                          href={item.precise_location.map_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open exact point on map
+                        </a>
+                      ) : null}
+                    </td>
+
+                    <td>
+                      <strong>{item.ip_address || "Not reported"}</strong>
+                      <small>
+                        {item.network_country
+                          ? `Country ${item.network_country}`
+                          : "Country unavailable"}
                       </small>
                     </td>
                   </tr>
-                )
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
+
+        {(data?.recent_sessions || []).length === 0 ? (
+          <div className="r2-session-empty">No session evidence is available.</div>
+        ) : null}
       </section>
 
       <section className="r2-card">

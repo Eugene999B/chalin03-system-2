@@ -5,6 +5,7 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { normalizedPhoneForStorage } = require("../services/loginIdentityService");
 const {
   resetAccountBySystemAdministrator,
 } = require("../services/accountRecoveryService");
@@ -719,9 +720,15 @@ function sendRouteError(res, error, fallbackMessage) {
   }
 
   if (error?.code === "ER_DUP_ENTRY") {
+    const duplicatePhone = String(error.message || "").includes(
+      "uq_users_login_phone_normalized"
+    );
+
     return res.status(409).json({
       status: "error",
-      message: "This username already exists.",
+      message: duplicatePhone
+        ? "This phone number is already attached to another login account."
+        : "This username already exists.",
     });
   }
 
@@ -867,6 +874,7 @@ router.post("/staff", async (req, res) => {
     const fullName = cleanText(req.body.full_name, 150);
     const username = cleanText(req.body.username, 80);
     const phone = nullableText(req.body.phone, 30);
+    const normalizedLoginPhone = normalizedPhoneForStorage(phone);
     const temporaryPassword = String(req.body.temporary_password || "");
     const globalRole = validateGlobalRole(req.body.global_role || req.body.role || "staff");
     const workspaceRole = validateWorkspaceRole(
@@ -880,6 +888,13 @@ router.post("/staff", async (req, res) => {
       req.body.force_password_change === undefined
         ? true
         : booleanValue(req.body.force_password_change);
+
+    if (phone && !normalizedLoginPhone) {
+      throw clientError(
+        400,
+        "Enter a valid Ghana phone number such as 0241234567 or +233241234567."
+      );
+    }
 
     if (!fullName || !username || !temporaryPassword) {
       throw clientError(400, "Full name, username and temporary password are required.");
@@ -1099,6 +1114,7 @@ router.put("/staff/:userId", async (req, res) => {
     const username = cleanText(req.body.username || user.username, 80);
     const phone =
       req.body.phone === undefined ? user.phone || null : nullableText(req.body.phone, 30);
+    const normalizedLoginPhone = normalizedPhoneForStorage(phone);
     const globalRole = validateGlobalRole(
       req.body.global_role || req.body.role || user.role
     );
@@ -1115,6 +1131,13 @@ router.put("/staff/:userId", async (req, res) => {
       req.body.must_change_password === undefined
         ? booleanValue(user.must_change_password)
         : booleanValue(req.body.must_change_password);
+
+    if (phone && !normalizedLoginPhone) {
+      throw clientError(
+        400,
+        "Enter a valid Ghana phone number such as 0241234567 or +233241234567."
+      );
+    }
 
     if (!fullName || !username) {
       throw clientError(400, "Full name and username are required.");

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 const { pool } = require("../config/db");
+const { parseDeviceEvidence } = require("./sessionDeviceService");
 
 const SESSION_TTL_DAYS = Math.max(
   Number(process.env.AUTH_SESSION_TTL_DAYS || 7),
@@ -15,6 +16,7 @@ function requestIp(req) {
   return cleanText(
     String(
       req?.headers?.["x-forwarded-for"] ||
+        req?.headers?.["cf-connecting-ip"] ||
         req?.ip ||
         req?.socket?.remoteAddress ||
         ""
@@ -27,8 +29,138 @@ function requestUserAgent(req) {
   return cleanText(req?.headers?.["user-agent"], 255);
 }
 
+function requestNetworkCountry(req) {
+  return cleanText(
+    req?.headers?.["cf-ipcountry"] ||
+      req?.headers?.["x-vercel-ip-country"] ||
+      req?.headers?.["x-country-code"] ||
+      "",
+    8
+  );
+}
+
 function createSessionId() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+async function insertLegacySession({
+  connection,
+  sessionId,
+  userId,
+  workspaceCode,
+  branchId,
+  req,
+}) {
+  await connection.query(
+    `INSERT INTO auth_sessions (
+       session_id,
+       user_id,
+       workspace_code,
+       branch_id,
+       ip_address,
+       user_agent,
+       created_at,
+       last_seen_at,
+       expires_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(),
+       DATE_ADD(NOW(), INTERVAL ? DAY)
+     )`,
+    [
+      sessionId,
+      userId,
+      workspaceCode || null,
+      branchId || null,
+      requestIp(req) || null,
+      requestUserAgent(req) || null,
+      SESSION_TTL_DAYS,
+    ]
+  );
+}
+
+async function insertRichSession({
+  connection,
+  sessionId,
+  userId,
+  workspaceCode,
+  branchId,
+  req,
+  loginMethod,
+  parsedEvidence,
+}) {
+  await connection.query(
+    `INSERT INTO auth_sessions (
+       session_id,
+       user_id,
+       workspace_code,
+       login_method,
+       branch_id,
+       ip_address,
+       user_agent,
+       device_type,
+       device_label,
+       device_model,
+       device_platform,
+       architecture,
+       os_name,
+       os_version,
+       browser_name,
+       browser_version,
+       client_timezone,
+       client_language,
+       screen_width,
+       screen_height,
+       pixel_ratio,
+       touch_points,
+       pwa_mode,
+       location_permission,
+       location_source,
+       latitude,
+       longitude,
+       location_accuracy_m,
+       location_recorded_at,
+       network_country,
+       created_at,
+       last_seen_at,
+       expires_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(),
+       DATE_ADD(NOW(), INTERVAL ? DAY)
+     )`,
+    [
+      sessionId,
+      userId,
+      workspaceCode || null,
+      String(loginMethod || "username").slice(0, 20),
+      branchId || null,
+      requestIp(req) || null,
+      requestUserAgent(req) || null,
+      parsedEvidence.device_type,
+      parsedEvidence.device_label,
+      parsedEvidence.device_model,
+      parsedEvidence.device_platform,
+      parsedEvidence.architecture,
+      parsedEvidence.os_name,
+      parsedEvidence.os_version,
+      parsedEvidence.browser_name,
+      parsedEvidence.browser_version,
+      parsedEvidence.client_timezone,
+      parsedEvidence.client_language,
+      parsedEvidence.screen_width,
+      parsedEvidence.screen_height,
+      parsedEvidence.pixel_ratio,
+      parsedEvidence.touch_points,
+      parsedEvidence.pwa_mode ? 1 : 0,
+      parsedEvidence.location_permission,
+      parsedEvidence.location_source,
+      parsedEvidence.latitude,
+      parsedEvidence.longitude,
+      parsedEvidence.location_accuracy_m,
+      parsedEvidence.location_recorded_at,
+      parsedEvidence.network_country,
+      SESSION_TTL_DAYS,
+    ]
+  );
 }
 
 async function createSession({
@@ -36,9 +168,16 @@ async function createSession({
   req,
   workspaceCode = null,
   branchId = null,
+  loginMethod = "username",
+  deviceEvidence = {},
 }) {
   const connection = await pool.getConnection();
   const sessionId = createSessionId();
+  const parsedEvidence = parseDeviceEvidence({
+    userAgent: requestUserAgent(req),
+    evidence: deviceEvidence || {},
+    networkCountry: requestNetworkCountry(req),
+  });
 
   try {
     await connection.beginTransaction();
@@ -69,31 +208,31 @@ async function createSession({
       [sessionId, userId]
     );
 
-    await connection.query(
-      `INSERT INTO auth_sessions (
-         session_id,
-         user_id,
-         workspace_code,
-         branch_id,
-         ip_address,
-         user_agent,
-         created_at,
-         last_seen_at,
-         expires_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(),
-         DATE_ADD(NOW(), INTERVAL ? DAY)
-       )`,
-      [
+    try {
+      await insertRichSession({
+        connection,
         sessionId,
         userId,
-        workspaceCode || null,
-        branchId || null,
-        requestIp(req) || null,
-        requestUserAgent(req) || null,
-        SESSION_TTL_DAYS,
-      ]
-    );
+        workspaceCode,
+        branchId,
+        req,
+        loginMethod,
+        parsedEvidence,
+      });
+    } catch (error) {
+      if (error.code !== "ER_BAD_FIELD_ERROR") {
+        throw error;
+      }
+
+      await insertLegacySession({
+        connection,
+        sessionId,
+        userId,
+        workspaceCode,
+        branchId,
+        req,
+      });
+    }
 
     await connection.commit();
 
@@ -101,6 +240,7 @@ async function createSession({
       sessionId,
       replacedSessionCount: Number(revokeResult.affectedRows || 0),
       expiresInDays: SESSION_TTL_DAYS,
+      device: parsedEvidence,
     };
   } catch (error) {
     try {

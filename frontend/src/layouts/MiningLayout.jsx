@@ -9,7 +9,7 @@ const navigationSections = [
         title: "Mining Dashboard",
         description: "Production, equipment, fuel, costs and safety overview",
         path: "/mining",
-        icon: "\u{26CF}\u{FE0F}",
+        icon: "⛏️",
         end: true,
         anyPermissions: MINING_VIEW_PERMISSIONS,
       },
@@ -153,7 +153,7 @@ export default function MiningLayout() {
     <BusinessWorkspaceLayout
       workspaceCode="mining"
       workspaceName="Mining Operations"
-      icon="\u{26CF}\u{FE0F}"
+      icon="⛏️"
       theme="earth"
       description="Independent Mining workspace. Mining sites are created by an administrator. Spare Parts stores are never used here."
       navigationSections={navigationSections}

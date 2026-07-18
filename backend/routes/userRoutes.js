@@ -10,6 +10,7 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { normalizedPhoneForStorage } = require("../services/loginIdentityService");
 const {
   resetAccountBySystemAdministrator,
 } = require("../services/accountRecoveryService");
@@ -709,9 +710,18 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
     const cleanPhone = cleanText(phone);
+    const normalizedLoginPhone = normalizedPhoneForStorage(cleanPhone);
     const cleanRole = cleanText(role).toLowerCase();
     const accessAllBranches =
       cleanBoolean(can_access_all_branches) || cleanRole === "admin";
+
+    if (cleanPhone && !normalizedLoginPhone) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Enter a valid Ghana phone number such as 0241234567 or +233241234567.",
+      });
+    }
 
     if (!cleanFullName || !cleanUsername || !password || !cleanRole) {
       return res.status(400).json({
@@ -803,9 +813,15 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     console.error("Create user error:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
+      const duplicatePhone = String(error.message || "").includes(
+        "uq_users_login_phone_normalized"
+      );
+
       return res.status(409).json({
         status: "error",
-        message: "This username already exists.",
+        message: duplicatePhone
+          ? "This phone number is already attached to another login account."
+          : "This username already exists.",
       });
     }
 
@@ -844,7 +860,16 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     const cleanFullName = cleanText(full_name);
     const cleanUsername = cleanText(username);
     const cleanPhone = cleanText(phone);
+    const normalizedLoginPhone = normalizedPhoneForStorage(cleanPhone);
     const cleanRole = cleanText(role).toLowerCase();
+
+    if (cleanPhone && !normalizedLoginPhone) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Enter a valid Ghana phone number such as 0241234567 or +233241234567.",
+      });
+    }
 
     if (!cleanFullName || !cleanUsername || !cleanRole) {
       return res.status(400).json({
@@ -991,9 +1016,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     console.error("Update user error:", error);
 
     if (error.code === "ER_DUP_ENTRY") {
+      const duplicatePhone = String(error.message || "").includes(
+        "uq_users_login_phone_normalized"
+      );
+
       return res.status(409).json({
         status: "error",
-        message: "This username already exists.",
+        message: duplicatePhone
+          ? "This phone number is already attached to another login account."
+          : "This username already exists.",
       });
     }
 

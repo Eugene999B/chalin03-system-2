@@ -252,12 +252,18 @@ export function AuthProvider({ children }) {
       throw new Error("Please choose a Spare Parts store before logging in.");
     }
 
+    const identifier = String(
+      credentials.identifier || credentials.username || ""
+    ).trim();
+
     const response = await axiosClient.post("/auth/login", {
-      username: String(credentials.username || "").trim(),
+      identifier,
+      username: identifier,
       password: credentials.password,
       workspace_code: workspaceCode,
       branch_id:
         workspaceCode === DEFAULT_WORKSPACE_CODE ? cleanBranchId : null,
+      device_evidence: credentials.deviceEvidence || {},
     });
 
     const responseUser = {
