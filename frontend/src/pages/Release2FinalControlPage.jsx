@@ -257,6 +257,7 @@ function ProtectedUnlock({
 function SecurityCentre() {
   const {
     user,
+    hasPermission,
   } = useAuth();
 
   const [data, setData] =
@@ -294,6 +295,8 @@ function SecurityCentre() {
     recoveryCodes,
     setRecoveryCodes,
   ] = useState([]);
+
+  const canDeleteSecurityMessages = hasPermission("security.admin");
 
   const originalAdmin =
     Number(user?.id) === 1 &&
@@ -660,6 +663,61 @@ function SecurityCentre() {
         requestError.response
           ?.data?.message ||
         "Recovery-code rotation failed."
+      );
+    }
+  }
+
+  async function dismissSecurityMessage(item) {
+    setError("");
+    setMessage("");
+
+    if (!requireProtectedToken("deleting Security Centre messages")) {
+      return;
+    }
+
+    const reason = window.prompt(
+      "Why should this message be removed from the Security Centre view? The underlying audit evidence will remain protected.",
+      "Reviewed by administrator"
+    );
+
+    if (reason === null) return;
+
+    if (String(reason).trim().length < 8) {
+      setError("Enter a deletion reason of at least 8 characters.");
+      return;
+    }
+
+    const approved = window.confirm(
+      "Delete this message from the Security Centre view? The activity log and privileged evidence will not be deleted."
+    );
+
+    if (!approved) return;
+
+    try {
+      const response = await axiosClient.post(
+        "/release2-final/security/events/dismiss",
+        {
+          event_ids: [item.id],
+          reason: String(reason).trim(),
+        },
+        {
+          headers: {
+            "X-Protected-Action-Token": token.value,
+          },
+        }
+      );
+
+      setData((current) => ({
+        ...current,
+        recent_security_events: (current?.recent_security_events || []).filter(
+          (event) => Number(event.id) !== Number(item.id)
+        ),
+      }));
+      setMessage(response.data?.message || "Security Centre message deleted.");
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Security Centre message could not be deleted."
       );
     }
   }
@@ -1447,9 +1505,15 @@ function SecurityCentre() {
       </section>
 
       <section className="r2-card">
-        <h2>
-          Recent Security Events
-        </h2>
+        <div className="r2-card-heading">
+          <div>
+            <h2>Recent Security Events</h2>
+            <p>
+              Delete removes a reviewed message from this Security Centre view.
+              The protected activity-log and ledger evidence remains preserved.
+            </p>
+          </div>
+        </div>
 
         <div className="r2-table-wrap">
           <table>
@@ -1459,6 +1523,7 @@ function SecurityCentre() {
                 <th>User</th>
                 <th>Event</th>
                 <th>Severity</th>
+                {canDeleteSecurityMessages ? <th>Action</th> : null}
               </tr>
             </thead>
 
@@ -1495,6 +1560,18 @@ function SecurityCentre() {
                     <td>
                       {item.severity}
                     </td>
+
+                    {canDeleteSecurityMessages ? (
+                      <td>
+                        <button
+                          type="button"
+                          className="r2-danger-button"
+                          onClick={() => dismissSecurityMessage(item)}
+                        >
+                          Delete message
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 )
               )}

@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { getEffectivePermissions } = require("../security/permissionCatalog");
 const { normalizeLoginIdentity } = require("../services/loginIdentityService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
@@ -12,6 +11,7 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
+const { resolveEffectivePermissions } = require("../services/permissionOverrideService");
 const {
   createSession,
   revokeAllUserSessions,
@@ -594,7 +594,7 @@ async function resolveLoginWorkspace(user, requestedWorkspaceCode) {
   };
 }
 
-function buildUserResponse(user, branch, workspace) {
+async function buildUserResponse(user, branch, workspace) {
   const isSpareParts = workspace?.code === DEFAULT_WORKSPACE_CODE;
   const activeBranch = isSpareParts ? branch : null;
   const workspaceRole =
@@ -635,7 +635,7 @@ function buildUserResponse(user, branch, workspace) {
     branch_name: branchName,
     branch_location: branchLocation,
     branch_phone: activeBranch?.phone || null,
-    effective_permissions: getEffectivePermissions({
+    effective_permissions: await resolveEffectivePermissions({
       ...user,
       workspace_code: workspace?.code || DEFAULT_WORKSPACE_CODE,
       workspace_role: workspaceRole,
@@ -992,7 +992,7 @@ router.post("/login", async (req, res) => {
         code: workspace.code,
         name: workspace.name,
       },
-      user: buildUserResponse(user, selectedBranch, workspace),
+      user: await buildUserResponse(user, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -1111,7 +1111,7 @@ router.get("/me", requireAuth, async (req, res) => {
         code: workspace.code,
         name: workspace.name,
       },
-      user: buildUserResponse(user, selectedBranch, workspace),
+      user: await buildUserResponse(user, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Me route error:", error);
@@ -1262,7 +1262,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
     return res.json({
       status: "success",
       message: "Password changed successfully.",
-      user: buildUserResponse(updatedUser, selectedBranch, workspace),
+      user: await buildUserResponse(updatedUser, selectedBranch, workspace),
     });
   } catch (error) {
     console.error("Change password error:", error);

@@ -4,13 +4,18 @@ const {
   hasEveryPermission,
   normalizeCode,
 } = require("../security/permissionCatalog");
+const { resolveEffectivePermissions } = require("../services/permissionOverrideService");
 
-function attachEffectivePermissions(req, res, next) {
-  if (req.user) {
-    req.user.effective_permissions = getEffectivePermissions(req.user);
+async function attachEffectivePermissions(req, res, next) {
+  try {
+    if (req.user) {
+      req.user.effective_permissions = await resolveEffectivePermissions(req.user);
+    }
+
+    next();
+  } catch (error) {
+    next(error);
   }
-
-  next();
 }
 
 function permissionDenied(res, req, permissions) {

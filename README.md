@@ -1068,3 +1068,30 @@ Production maintenance must apply only the reviewed additive migration:
 `database/migrations/20260718_release3fb_professional_installment_sales.sql`
 
 Never run `database/schema.sql` against the live Railway database.
+
+## Release 3F-C — User Permission Manager and Security UX
+
+Release 3F-C adds protected per-user permission control while preserving the role
+catalog as the default source of access.
+
+- Administrators can Allow, Restrict or return an individual feature, page or
+  action to its role default for one user and workspace.
+- Explicit Deny always overrides Allow. Optional expiry dates support temporary
+  duty assignments.
+- Every change requires a reason, a current-password protected-action window and
+  complete Activity Log / privileged-ledger evidence.
+- Active user sessions can be revoked immediately after a permission change.
+- Original owner-security, Break-Glass and core recovery permissions cannot be
+  removed from the original System Administrator.
+- Security Centre messages can be deleted from the active view after review;
+  underlying activity-log and ledger evidence is never deleted.
+- The login page clears remembered passwords on page open and uses browser/password
+  manager resistance controls so the password field starts empty.
+- System Operations reports active overrides, explicit restrictions, expiring
+  rules and reviewed Security Centre messages.
+
+Production maintenance must apply only the reviewed additive migration:
+
+`database/migrations/20260718_release3fc_user_permissions_security_messages.sql`
+
+Never run `database/schema.sql` against the live Railway database.

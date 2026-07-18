@@ -338,6 +338,14 @@ export default function Layout() {
           keywords: "users settings roles admin cashier manager auditor reset password",
         },
         {
+          title: "User Permissions",
+          description: "Grant or restrict individual pages and actions per user",
+          path: "/user-permissions",
+          icon: "🔑",
+          keywords:
+            "user permission manager allow deny restrict page action expiry session revoke",
+        },
+        {
           title: "Activity Log",
           description: "Review staff and system activities",
           path: "/activity-log",

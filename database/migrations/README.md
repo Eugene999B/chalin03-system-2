@@ -83,3 +83,15 @@ sales, debts, products, stock, customers or accounting evidence.
 
 Every verification row must return `PASS` with `problem_count = 0`.
 Never run `database/schema.sql` against Railway production for this release.
+
+## Release 3F-C — User Permission Manager and Security Centre Messages
+
+Production migration:
+
+`20260718_release3fc_user_permissions_security_messages.sql`
+
+Read-only verification:
+
+`20260718_release3fc_user_permissions_security_messages_verify.sql`
+
+This additive migration creates auditable per-user allow/deny permission overrides and Security Centre message dismissal records. Dismissing a Security Centre message never deletes its underlying `activity_log` or privileged-ledger evidence. Never run `database/schema.sql` against production.

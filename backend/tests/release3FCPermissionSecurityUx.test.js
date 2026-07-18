@@ -1,0 +1,136 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const {
+  applyPermissionOverrides,
+  buildPermissionDescriptors,
+  validateOverridePolicy,
+} = require("../services/permissionOverrideService");
+
+const ROOT = path.resolve(__dirname, "..", "..");
+function read(relativePath) {
+  return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+}
+
+test("Release 3F-C explicit deny overrides role and explicit allow", () => {
+  const result = applyPermissionOverrides(
+    ["workspace.view", "spare_parts.sell"],
+    [
+      { permission_code: "installments.view", effect: "allow" },
+      { permission_code: "spare_parts.sell", effect: "allow" },
+      { permission_code: "spare_parts.sell", effect: "deny" },
+    ]
+  );
+
+  assert.deepEqual(result, ["installments.view", "workspace.view"]);
+});
+
+test("Release 3F-C permission catalog labels every code and protects owner controls", () => {
+  const descriptors = buildPermissionDescriptors();
+  const permissionManager = descriptors.find(
+    (item) => item.code === "users.permissions.manage"
+  );
+  const securityAdmin = descriptors.find(
+    (item) => item.code === "security.admin"
+  );
+
+  assert.ok(permissionManager);
+  assert.equal(permissionManager.category, "Users and Permissions");
+  assert.equal(securityAdmin.owner_protected, true);
+  assert.equal(securityAdmin.admin_only_grant, true);
+});
+
+test("Release 3F-C blocks owner-security denial for original administrator", () => {
+  const result = validateOverridePolicy({
+    targetUser: { id: 1, username: "admin", role: "admin" },
+    permissionCode: "security.admin",
+    effect: "deny",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "OWNER_PERMISSION_PROTECTED");
+});
+
+test("Release 3F-C blocks protected administration grants to non-admin users", () => {
+  const result = validateOverridePolicy({
+    targetUser: { id: 9, username: "cashier", role: "cashier" },
+    permissionCode: "users.permissions.manage",
+    effect: "allow",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "ADMIN_PERMISSION_PROTECTED");
+});
+
+test("Release 3F-C migration is additive and creates only control tables", () => {
+  const migration = read(
+    "database/migrations/20260718_release3fc_user_permissions_security_messages.sql"
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS user_permission_overrides/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS security_event_dismissals/);
+  assert.match(migration, /release3fc_user_permissions_security_messages/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE TABLE|DELETE FROM users|DELETE FROM activity_log/i);
+});
+
+test("Release 3F-C API requires protected actions, reason and session control", () => {
+  const routes = read("backend/routes/userPermissionRoutes.js");
+
+  assert.match(routes, /requirePermission\("users\.permissions\.manage"\)/);
+  assert.match(routes, /requireProtectedAction/);
+  assert.match(routes, /reason\.length < 8/);
+  assert.match(routes, /permission_override_changed/);
+  assert.match(routes, /token_version = COALESCE\(token_version, 0\) \+ 1/);
+  assert.match(routes, /reset-permission/);
+  assert.match(routes, /reset-all/);
+});
+
+test("Release 3F-C Security Centre deletes only the message view, not audit evidence", () => {
+  const routes = read("backend/routes/release2FinalRoutes.js");
+  const page = read("frontend/src/pages/Release2FinalControlPage.jsx");
+
+  assert.match(routes, /security\/events\/dismiss/);
+  assert.match(routes, /security_event_dismissals/);
+  assert.match(routes, /evidence_deleted: false/);
+  assert.doesNotMatch(routes, /DELETE FROM activity_log/);
+  assert.match(page, /Delete message/);
+  assert.match(page, /underlying audit evidence will remain protected/i);
+});
+
+test("Release 3F-C login page clears and resists remembered password autofill", () => {
+  const page = read("frontend/src/pages/LoginPage.jsx");
+
+  assert.match(page, /clearRememberedPassword/);
+  assert.match(page, /autoComplete="off"/);
+  assert.match(page, /autoComplete="new-password"/);
+  assert.match(page, /readOnly=!\{?passwordFieldActivated\}?|readOnly=\{!passwordFieldActivated\}/);
+  assert.match(page, /data-lpignore="true"/);
+  assert.doesNotMatch(page, /name="chalin03_login_password"/);
+});
+
+test("Release 3F-C frontend registers the permission manager route and sidebar", () => {
+  const app = read("frontend/src/App.jsx");
+  const layout = read("frontend/src/components/Layout.jsx");
+  const page = read("frontend/src/pages/UserPermissionManagerPage.jsx");
+
+  assert.match(app, /path="user-permissions"/);
+  assert.match(app, /users\.permissions\.manage/);
+  assert.match(layout, /title: "User Permissions"/);
+  assert.match(page, /Explicit deny always/);
+  assert.match(page, /Reset all to role defaults/);
+  assert.match(page, /X-Protected-Action-Token/);
+});
+
+test("Release 3F-C backup and System Operations cover new control evidence", () => {
+  const backup = read("backend/routes/backupRoutes.js");
+  const system = read("backend/routes/systemRoutes.js");
+  const systemPage = read("frontend/src/pages/SystemOperationsPage.jsx");
+
+  assert.match(backup, /user_permission_overrides/);
+  assert.match(backup, /security_event_dismissals/);
+  assert.match(system, /permissionControlStatus/);
+  assert.match(systemPage, /Open User Permission Manager/);
+  assert.match(systemPage, /Security messages hidden/);
+});

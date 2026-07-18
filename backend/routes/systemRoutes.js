@@ -14,6 +14,7 @@ const EXPECTED_TABLES = Object.freeze([
   "schema_migrations",
   "users",
   "user_branch_access",
+  "user_permission_overrides",
   "business_units",
   "business_locations",
   "user_business_access",
@@ -22,6 +23,7 @@ const EXPECTED_TABLES = Object.freeze([
   "sale_items",
   "debts",
   "activity_log",
+  "security_event_dismissals",
   "settings",
   "stock_transfers",
   "fleet_assets",
@@ -78,6 +80,37 @@ async function recentErrorCounts() {
     return rows;
   } catch {
     return [];
+  }
+}
+
+async function permissionControlStatus() {
+  try {
+    const [[overrideCounts], [dismissalCounts]] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*) AS total_override_records,
+           SUM(revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS active_overrides,
+           SUM(revoked_at IS NULL AND effect = 'deny' AND (expires_at IS NULL OR expires_at > NOW())) AS active_denies,
+           SUM(revoked_at IS NULL AND expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 7 DAY)) AS expiring_within_7_days
+         FROM user_permission_overrides`
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) AS total_dismissal_records,
+           SUM(restored_at IS NULL) AS messages_hidden_from_security_centre
+         FROM security_event_dismissals`
+      ),
+    ]);
+
+    return {
+      overrides: overrideCounts[0] || {},
+      security_messages: dismissalCounts[0] || {},
+    };
+  } catch {
+    return {
+      overrides: {},
+      security_messages: {},
+    };
   }
 }
 
@@ -147,10 +180,11 @@ router.get(
   requirePermission("system.diagnostics"),
   async (req, res) => {
     try {
-      const [db, workspaces, errors] = await Promise.all([
+      const [db, workspaces, errors, permissionControls] = await Promise.all([
         databaseStatus(),
         workspaceAvailability(),
         recentErrorCounts(),
+        permissionControlStatus(),
       ]);
       const smsConfig = getSmsConfig();
 
@@ -177,6 +211,7 @@ router.get(
             api_key_configured: Boolean(smsConfig.arkeselApiKey),
           },
           recent_error_counts: errors,
+          permission_controls: permissionControls,
           permission_catalog: getPublicPermissionCatalog(),
         },
         request_id: req.requestId || null,

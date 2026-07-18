@@ -20,6 +20,7 @@ import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
 import UsersSettingsPage from "./pages/UsersSettingsPage";
+import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ReturnsPage from "./pages/ReturnsPage";
@@ -255,6 +256,13 @@ export default function App() {
             <Route
               path="users-settings"
               element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}
+            />
+            <Route
+              path="user-permissions"
+              element={permissionOnlyPage(
+                "users.permissions.manage",
+                <UserPermissionManagerPage />
+              )}
             />
             <Route
               path="activity-log"

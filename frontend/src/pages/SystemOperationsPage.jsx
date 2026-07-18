@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/systemOperations.css";
@@ -122,6 +123,9 @@ export default function SystemOperationsPage() {
   const recentErrors = Array.isArray(diagnostics?.recent_error_counts)
     ? diagnostics.recent_error_counts
     : [];
+  const permissionControls = diagnostics?.permission_controls || {};
+  const permissionOverrideCounts = permissionControls?.overrides || {};
+  const securityMessageCounts = permissionControls?.security_messages || {};
   const ready = Boolean(readiness?.ready);
   const overallTone = error ? "danger" : ready ? "success" : "warning";
   const overallLabel = error
@@ -230,6 +234,13 @@ export default function SystemOperationsPage() {
               : "Provider sending is disabled"
           }
           tone={diagnostics?.sms?.enabled ? "success" : "warning"}
+        />
+        <MetricCard
+          icon="🔑"
+          label="Active User Overrides"
+          value={Number(permissionOverrideCounts.active_overrides || 0).toLocaleString("en-GH")}
+          note={`${Number(permissionOverrideCounts.active_denies || 0)} explicit restrictions`}
+          tone={Number(permissionOverrideCounts.active_overrides || 0) > 0 ? "warning" : "success"}
         />
         <MetricCard
           icon="🚨"
@@ -375,6 +386,42 @@ export default function SystemOperationsPage() {
                   : "Not configured"}
               </strong>
             </div>
+          </div>
+        </section>
+
+        <section className="sysops-panel">
+          <div className="sysops-panel-heading">
+            <div>
+              <span>ACCESS CONTROL</span>
+              <h2>Permission and message controls</h2>
+            </div>
+            <StatusBadge tone={Number(permissionOverrideCounts.active_denies || 0) > 0 ? "warning" : "success"}>
+              {Number(permissionOverrideCounts.active_overrides || 0)} active rules
+            </StatusBadge>
+          </div>
+
+          <div className="sysops-detail-grid">
+            <div>
+              <span>Active overrides</span>
+              <strong>{Number(permissionOverrideCounts.active_overrides || 0)}</strong>
+            </div>
+            <div>
+              <span>Explicit denies</span>
+              <strong>{Number(permissionOverrideCounts.active_denies || 0)}</strong>
+            </div>
+            <div>
+              <span>Expiring in 7 days</span>
+              <strong>{Number(permissionOverrideCounts.expiring_within_7_days || 0)}</strong>
+            </div>
+            <div>
+              <span>Security messages hidden</span>
+              <strong>{Number(securityMessageCounts.messages_hidden_from_security_centre || 0)}</strong>
+            </div>
+          </div>
+
+          <div className="sysops-control-links">
+            <Link to="/user-permissions">Open User Permission Manager</Link>
+            <Link to="/security-centre">Open Security Centre</Link>
           </div>
         </section>
 

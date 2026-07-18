@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -87,6 +87,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordFieldActivated, setPasswordFieldActivated] = useState(false);
+  const passwordInputRef = useRef(null);
   const [sharePreciseLocation, setSharePreciseLocation] = useState(true);
 
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -112,6 +114,34 @@ export default function LoginPage() {
       setError(loginNotice);
       sessionStorage.removeItem("chalin03_login_notice");
     }
+  }, []);
+
+  useEffect(() => {
+    function clearRememberedPassword() {
+      setPassword("");
+      setShowPassword(false);
+      setPasswordFieldActivated(false);
+
+      if (passwordInputRef.current) {
+        passwordInputRef.current.value = "";
+      }
+    }
+
+    clearRememberedPassword();
+    const earlyClear = window.setTimeout(clearRememberedPassword, 80);
+    const delayedClear = window.setTimeout(clearRememberedPassword, 550);
+
+    function handlePageShow() {
+      clearRememberedPassword();
+    }
+
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.clearTimeout(earlyClear);
+      window.clearTimeout(delayedClear);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, []);
 
   const selectedBranch = useMemo(() => {
@@ -286,6 +316,9 @@ export default function LoginPage() {
           error.message ||
           "Invalid username, phone number or password."
       );
+      setPassword("");
+      setShowPassword(false);
+      setPasswordFieldActivated(false);
     } finally {
       setLoading(false);
     }
@@ -1374,7 +1407,7 @@ export default function LoginPage() {
             onSelect={handleWorkspaceSelect}
           />
 
-          <form onSubmit={handleLogin} autoComplete="on">
+          <form onSubmit={handleLogin} autoComplete="off" data-form-type="other">
             {isSparePartsWorkspace ? (
               <>
                 <div className="premium-branch-title">
@@ -1492,12 +1525,20 @@ export default function LoginPage() {
                 <div className="premium-field-wrap">
                   <span className="premium-field-icon">🔒</span>
                   <input
-                    name="chalin03_login_password"
+                    ref={passwordInputRef}
+                    name="chalin03_login_secret_unstored"
                     type={showPassword ? "text" : "password"}
                     value={password}
+                    readOnly={!passwordFieldActivated}
+                    onFocus={() => setPasswordFieldActivated(true)}
+                    onPointerDown={() => setPasswordFieldActivated(true)}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter password"
-                    autoComplete="current-password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    aria-label="Password"
                   />
                 </div>
 

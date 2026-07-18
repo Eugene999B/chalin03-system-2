@@ -105,6 +105,7 @@ const DIMENSION_TABLES = new Set([
   "branches",
   "schema_migrations",
   "users",
+  "user_permission_overrides",
   "user_branch_access",
   "business_units",
   "business_locations",
@@ -368,6 +369,7 @@ const CATEGORY_TABLES = Object.freeze({
     "auth_sessions",
     "password_recovery_otps",
     "protected_action_sessions",
+  "security_event_dismissals",
     "owner_break_glass_accounts",
     "owner_recovery_sessions",
     "owner_break_glass_mfa_enrollments",
@@ -2096,9 +2098,18 @@ router.get(
            FROM activity_log al
            LEFT JOIN users u
              ON u.id = al.user_id
-           WHERE
-             al.action_type LIKE 'security.%'
-             OR al.action REGEXP 'LOGIN|PASSWORD|LOCK|SESSION|RECOVERY|SECURITY'
+           LEFT JOIN security_event_dismissals sed
+             ON sed.activity_log_id = al.id
+            AND sed.restored_at IS NULL
+           WHERE sed.id IS NULL
+             AND COALESCE(al.action_type, '') NOT IN (
+               'security.message.dismissed',
+               'security.message.restored'
+             )
+             AND (
+               al.action_type LIKE 'security.%'
+               OR al.action REGEXP 'LOGIN|PASSWORD|LOCK|SESSION|RECOVERY|SECURITY'
+             )
            ORDER BY al.id DESC
            LIMIT 40`
         ),
@@ -2180,6 +2191,137 @@ router.get(
       });
     }
   )
+);
+
+router.post(
+  "/security/events/dismiss",
+  requireAuth,
+  requirePermission("security.admin"),
+  requireProtectedAction,
+  asyncHandler(async (req, res) => {
+    const eventIds = [...new Set(
+      (Array.isArray(req.body?.event_ids) ? req.body.event_ids : [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )].slice(0, 100);
+    const reason = cleanText(req.body?.reason, 500);
+
+    if (eventIds.length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Choose at least one Security Centre message to delete.",
+      });
+    }
+
+    if (!reason || reason.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "Enter a clear deletion reason of at least 8 characters.",
+      });
+    }
+
+    const placeholders = eventIds.map(() => "?").join(",");
+    const [events] = await pool.query(
+      `SELECT id, action, action_type, severity
+       FROM activity_log
+       WHERE id IN (${placeholders})
+         AND COALESCE(action_type, '') NOT IN (
+           'security.message.dismissed',
+           'security.message.restored'
+         )
+         AND (
+           action_type LIKE 'security.%'
+           OR action REGEXP 'LOGIN|PASSWORD|LOCK|SESSION|RECOVERY|SECURITY'
+         )`,
+      eventIds
+    );
+
+    if (events.length !== eventIds.length) {
+      return res.status(409).json({
+        status: "error",
+        message:
+          "One or more selected records are not removable Security Centre messages.",
+      });
+    }
+
+    const connection = await pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      for (const event of events) {
+        await connection.query(
+          `INSERT INTO security_event_dismissals (
+             activity_log_id,
+             dismissed_by,
+             dismissal_reason,
+             dismissed_at,
+             restored_by,
+             restored_at,
+             restoration_reason
+           )
+           VALUES (?, ?, ?, NOW(), NULL, NULL, NULL)
+           ON DUPLICATE KEY UPDATE
+             dismissed_by = VALUES(dismissed_by),
+             dismissal_reason = VALUES(dismissal_reason),
+             dismissed_at = NOW(),
+             restored_by = NULL,
+             restored_at = NULL,
+             restoration_reason = NULL`,
+          [event.id, req.user.id, reason]
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Keep the original error.
+      }
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    await writeAuditEvent({
+      req,
+      userId: req.user.id,
+      action: "SECURITY_MESSAGE_DISMISSED",
+      actionType: "security.message.dismissed",
+      outcome: "success",
+      severity: "warning",
+      entityType: "security_event_dismissal",
+      entityId: eventIds.join(","),
+      details: `${eventIds.length} Security Centre message(s) removed from the active view.`,
+      metadata: {
+        event_ids: eventIds,
+        reason,
+        evidence_deleted: false,
+      },
+    });
+
+    await appendLedger({
+      req,
+      actorUserId: req.user.id,
+      actionCode: "SECURITY_MESSAGE_DISMISSED",
+      outcome: "success",
+      severity: "warning",
+      payload: {
+        event_ids: eventIds,
+        reason,
+        evidence_deleted: false,
+      },
+    });
+
+    return res.json({
+      status: "success",
+      message:
+        `${eventIds.length} message(s) deleted from the Security Centre view. ` +
+        "The protected audit evidence remains preserved.",
+      dismissed_event_ids: eventIds,
+    });
+  })
 );
 
 router.get(

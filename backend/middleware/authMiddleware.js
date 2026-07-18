@@ -1,8 +1,8 @@
 const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/db");
-const { getEffectivePermissions } = require("../security/permissionCatalog");
 const { validateSession } = require("../services/accountSessionService");
+const { resolveEffectivePermissions } = require("../services/permissionOverrideService");
 
 const tableColumnCache = new Map();
 
@@ -127,7 +127,7 @@ async function requireAuth(req, res, next) {
       token_version: currentTokenVersion,
       session_id: sessionState.session.session_id,
     };
-    req.user.effective_permissions = getEffectivePermissions(req.user);
+    req.user.effective_permissions = await resolveEffectivePermissions(req.user);
 
     next();
   } catch {
