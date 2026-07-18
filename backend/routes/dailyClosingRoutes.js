@@ -17,6 +17,7 @@ const PAYMENT_GROUPS = [
   { key: "bank", label: "Bank Sales" },
   { key: "mixed", label: "Mixed Sales" },
   { key: "credit", label: "Credit Sales" },
+  { key: "installment", label: "Installment Sales" },
 ];
 
 function getBranchId(req) {
@@ -538,7 +539,7 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
      AND s.sale_status = 'completed'
      AND COALESCE(s.is_voided, 0) = 0
      ORDER BY
-       FIELD(s.payment_type, 'cash', 'momo', 'bank', 'mixed', 'credit'),
+       FIELD(s.payment_type, 'cash', 'momo', 'bank', 'mixed', 'credit', 'installment'),
        s.created_at ASC,
        s.id ASC`,
     [branchId, closingDate]
@@ -547,28 +548,60 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
   const salesTransactions = rawSalesTransactions.map(normalizeSaleForClosing);
 
   const [debtPayments] = await connection.query(
-    `SELECT
-      dp.id,
-      dp.amount,
-      dp.payment_method,
-      dp.paid_at,
-      dp.notes,
-      d.customer_name,
-      d.customer_phone,
-      s.receipt_number,
-      COALESCE(u.full_name, 'System') AS received_by_name
-     FROM debt_payments dp
-     INNER JOIN debts d ON dp.debt_id = d.id
-     INNER JOIN sales s ON d.sale_id = s.id
-     LEFT JOIN users u ON dp.received_by = u.id
-     WHERE dp.branch_id = ?
-     AND d.branch_id = ?
-     AND s.branch_id = ?
-     AND DATE(dp.paid_at) = ?
-     AND COALESCE(s.is_voided, 0) = 0
-     AND s.sale_status != 'cancelled'
-     ORDER BY dp.paid_at ASC, dp.id ASC`,
-    [branchId, branchId, branchId, closingDate]
+    `SELECT *
+     FROM (
+       SELECT
+        dp.id,
+        dp.amount,
+        dp.payment_method,
+        dp.paid_at,
+        dp.notes,
+        d.customer_name,
+        d.customer_phone,
+        s.receipt_number,
+        COALESCE(u.full_name, 'System') AS received_by_name,
+        'debt' AS collection_type
+       FROM debt_payments dp
+       INNER JOIN debts d ON dp.debt_id = d.id
+       INNER JOIN sales s ON d.sale_id = s.id
+       LEFT JOIN users u ON dp.received_by = u.id
+       WHERE dp.branch_id = ?
+       AND d.branch_id = ?
+       AND s.branch_id = ?
+       AND DATE(dp.paid_at) = ?
+       AND COALESCE(s.is_voided, 0) = 0
+       AND s.sale_status != 'cancelled'
+
+       UNION ALL
+
+       SELECT
+        ip.id,
+        ip.amount,
+        ip.payment_method,
+        ip.paid_at,
+        ip.notes,
+        ia.customer_name,
+        ia.customer_phone,
+        s.receipt_number,
+        COALESCE(u.full_name, 'System') AS received_by_name,
+        'installment' AS collection_type
+       FROM installment_payments ip
+       INNER JOIN installment_agreements ia ON ia.id = ip.agreement_id
+       INNER JOIN sales s ON s.id = ia.sale_id
+       LEFT JOIN users u ON ip.received_by = u.id
+       WHERE ip.branch_id = ?
+       AND ia.branch_id = ?
+       AND s.branch_id = ?
+       AND DATE(ip.paid_at) = ?
+       AND ip.is_voided = 0
+       AND COALESCE(s.is_voided, 0) = 0
+       AND s.sale_status != 'cancelled'
+     ) collections
+     ORDER BY paid_at ASC, id ASC`,
+    [
+      branchId, branchId, branchId, closingDate,
+      branchId, branchId, branchId, closingDate
+    ]
   );
 
   const [expenses] = await connection.query(

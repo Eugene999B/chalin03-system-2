@@ -1040,3 +1040,31 @@ or ticking a manual confirmation.
 - Existing accepted messages with provider UUIDs are backfilled automatically
   after deployment.
 - The process never resends an SMS and therefore does not spend another credit.
+
+## Release 3F-B — Professional Installment Sales
+
+Release 3F-B adds controlled branch-isolated installment sales without replacing the
+existing Cash, MoMo, Bank, Credit or Mixed workflows.
+
+- New Sale can create a professional installment agreement with deposit, payment
+  frequency, first due date, grace period, delivery policy, guarantor details and
+  accepted terms.
+- The system generates exact weekly, fortnightly, monthly or custom payment
+  schedules and preserves the agreement, item and payment ledgers.
+- Authorized staff can approve agreements, collect partial or full payments,
+  reschedule future dues, record delivery, waive approved charges and correct a
+  payment through controlled evidence.
+- The Installment Sales workspace shows due, overdue, completed and default-risk
+  accounts with agreement PDFs, payment receipts, customer statements and Excel
+  exports.
+- Installment collections are included in Daily Closing channel totals and all new
+  tables are included in full-system and professional backups.
+- Arkesel reminders keep truthful provider evidence. Automatic scheduled reminders
+  remain disabled until `INSTALLMENT_SMS_REMINDERS_ENABLED=true` is deliberately
+  configured in production; authorized staff can run due reminders from the page.
+
+Production maintenance must apply only the reviewed additive migration:
+
+`database/migrations/20260718_release3fb_professional_installment_sales.sql`
+
+Never run `database/schema.sql` against the live Railway database.

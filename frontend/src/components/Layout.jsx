@@ -131,7 +131,7 @@ export default function Layout() {
           },
           {
             title: "New Sale",
-            description: "Record cash, MoMo, bank, mixed or credit sale",
+            description: "Record cash, MoMo, bank, mixed, credit or installment sale",
             path: "/new-sale",
             icon: "🛒",
             keywords: "sale sell receipt customer payment cash momo bank credit",
@@ -142,6 +142,14 @@ export default function Layout() {
             path: "/sales-history",
             icon: "🧾",
             keywords: "sales history receipt transaction old sale previous",
+          },
+          {
+            title: "Installment Sales",
+            description: "Agreements, due dates, collections and reminders",
+            path: "/installments",
+            icon: "📅",
+            keywords:
+              "installment instalment payment plan due overdue collection customer statement",
           },
           {
             title: "Debts",

@@ -12,6 +12,8 @@ const {
 } = require("../services/smsAlertService");
 const { sendSaleReceiptWhatsApp } = require("../services/whatsappService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { createAgreementForSale } = require("../services/installmentService");
+const { sendInstallmentEventSms } = require("../services/installmentReminderService");
 
 const router = express.Router();
 
@@ -802,6 +804,7 @@ router.post("/", requireAuth, async (req, res) => {
       amount_paid,
       discount_amount,
       payment_allocations,
+      installment_plan,
       items,
     } = req.body;
 
@@ -809,12 +812,12 @@ router.post("/", requireAuth, async (req, res) => {
     const cleanCustomerPhone = cleanText(customer_phone);
     const cleanCustomerLocation = cleanText(customer_location);
 
-    const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed"];
+    const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed", "installment"];
 
     if (!allowedPaymentTypes.includes(payment_type)) {
       return res.status(400).json({
         status: "error",
-        message: "payment_type must be cash, momo, bank, credit, or mixed.",
+        message: "payment_type must be cash, momo, bank, credit, mixed, or installment.",
       });
     }
 
@@ -845,13 +848,23 @@ router.post("/", requireAuth, async (req, res) => {
     }
 
     if (
-      (payment_type === "credit" || payment_type === "mixed") &&
+      (["credit", "mixed", "installment"].includes(payment_type)) &&
       !cleanCustomerName &&
       !cleanCustomerPhone
     ) {
       return res.status(400).json({
         status: "error",
-        message: "Customer name or phone is required for credit or mixed sales.",
+        message: "Customer name and phone are required for credit, mixed, or installment sales.",
+      });
+    }
+
+    if (
+      payment_type === "installment" &&
+      (!cleanCustomerName || !cleanCustomerPhone)
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Installment sales require both the customer name and a valid phone number.",
       });
     }
 
@@ -1151,6 +1164,28 @@ router.post("/", requireAuth, async (req, res) => {
       };
     }
 
+    let installment = null;
+
+    if (payment_type === "installment") {
+      installment = await createAgreementForSale(connection, {
+        branchId,
+        branchCode: req.user?.branch_code || req.user?.selected_branch?.code,
+        saleId,
+        debtId: debt?.id || null,
+        customer: {
+          id: customer?.id || null,
+          name: finalCustomerName,
+          phone: finalCustomerPhone,
+          location: cleanCustomerLocation || customer?.location || null,
+        },
+        saleItems,
+        total,
+        deposit: payment.amount_paid,
+        plan: installment_plan || {},
+        userId: req.user.id,
+      });
+    }
+
     await writeAuditEvent({
       connection,
       req,
@@ -1169,14 +1204,39 @@ router.post("/", requireAuth, async (req, res) => {
         amount_paid: payment.amount_paid,
         balance: payment.balance,
         payment_allocations: allocationResult.allocations,
+        installment_agreement_number: installment?.agreement_number || null,
       },
     });
 
     await connection.commit();
 
+    let installmentSms = null;
+    if (installment?.id) {
+      try {
+        installmentSms = await sendInstallmentEventSms({
+          agreementId: installment.id,
+          branchId,
+          type: "agreement_created",
+          details: {
+            outstanding_balance: installment.outstanding_balance,
+            event_key: saleId,
+          },
+          sentBy: req.user.id,
+        });
+      } catch (smsError) {
+        installmentSms = {
+          success: false,
+          status: "failed",
+          error: smsError.message,
+        };
+      }
+    }
+
     return res.status(201).json({
       status: "success",
       message: "Sale recorded successfully.",
+      installment,
+      installment_sms: installmentSms,
       receipt: buildReceiptPayload({
         sale: {
           id: saleId,
@@ -1579,12 +1639,12 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed"];
+    const allowedPaymentTypes = ["cash", "momo", "bank", "credit", "mixed", "installment"];
 
     if (!allowedPaymentTypes.includes(payment_type)) {
       return res.status(400).json({
         status: "error",
-        message: "payment_type must be cash, momo, bank, credit, or mixed.",
+        message: "payment_type must be cash, momo, bank, credit, mixed, or installment.",
       });
     }
 
@@ -1618,7 +1678,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     if (
-      (payment_type === "credit" || payment_type === "mixed") &&
+      (["credit", "mixed", "installment"].includes(payment_type)) &&
       !cleanCustomerName &&
       !cleanCustomerPhone
     ) {
@@ -1664,6 +1724,17 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const sale = sales[0];
+
+    if (sale.payment_type === "installment" || payment_type === "installment") {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        code: "INSTALLMENT_AGREEMENT_CONTROL_REQUIRED",
+        message:
+          "Installment sales cannot be converted or edited through the general sale editor. Use the Installment Sales workspace for payments, rescheduling, delivery, cancellation and corrections.",
+      });
+    }
+
     const beforeSnapshot = await loadCompleteSaleSnapshot(connection, id, branchId);
 
     const lockedPeriod = await findApprovedAuditLockForDate(

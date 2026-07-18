@@ -175,3 +175,13 @@ export const SHARED_CONTROL_PERMISSIONS = Object.freeze({
   export: "shared.reports.export",
   audit: "shared.audit.view",
 });
+
+
+export const INSTALLMENT_PERMISSIONS = Object.freeze({
+  view: "installments.view",
+  manage: "installments.manage",
+  collect: "installments.collect",
+  remind: "installments.remind",
+  export: "installments.export",
+  settings: "installments.settings",
+});

@@ -46,6 +46,24 @@ export default function NewSalePage() {
     bank: "",
     other: "",
   });
+  const [installmentApprovalRequired, setInstallmentApprovalRequired] = useState(false);
+  const [installmentPlan, setInstallmentPlan] = useState({
+    frequency: "monthly",
+    installment_count: 3,
+    first_due_date: new Date(Date.now() + 30 * 86400000)
+      .toISOString()
+      .slice(0, 10),
+    grace_days: 3,
+    delivery_policy: "immediate",
+    late_charge_type: "none",
+    late_charge_value: 0,
+    guarantor_name: "",
+    guarantor_phone: "",
+    guarantor_location: "",
+    terms_accepted: false,
+    notes: "",
+    custom_due_dates_text: "",
+  });
 
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
@@ -165,6 +183,7 @@ export default function NewSalePage() {
       bank: "Bank",
       credit: "Credit",
       mixed: "Mixed",
+      installment: "Installment",
     };
 
     return paymentMethods[String(value || "").toLowerCase()] || value || "-";
@@ -350,6 +369,46 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
   }, [branchId]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadInstallmentDefaults() {
+      try {
+        const response = await axiosClient.get("/installments/settings");
+        const value = response.data.settings || {};
+
+        if (!active || !value) return;
+
+        setInstallmentApprovalRequired(Boolean(value.require_manager_approval));
+
+        setInstallmentPlan((current) => ({
+          ...current,
+          frequency: value.default_frequency || current.frequency,
+          installment_count:
+            Number(value.default_installment_count || 0) ||
+            current.installment_count,
+          grace_days:
+            Number(value.default_grace_days ?? current.grace_days) ||
+            0,
+          delivery_policy:
+            value.default_delivery_policy || current.delivery_policy,
+          late_charge_type:
+            value.late_charge_type || current.late_charge_type,
+          late_charge_value:
+            Number(value.late_charge_value ?? current.late_charge_value) || 0,
+        }));
+      } catch {
+        // Installment defaults are optional while the page is used for ordinary sales.
+      }
+    }
+
+    loadInstallmentDefaults();
+
+    return () => {
+      active = false;
+    };
+  }, [branchId]);
+
+  useEffect(() => {
     function checkScreenSize() {
       setIsMobile(window.innerWidth <= 760);
     }
@@ -425,8 +484,12 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       score += 15;
     }
 
-    if (paymentType === "credit" || paymentType === "mixed") {
-      if (cleanText(customerName) || cleanText(customerPhone)) score += 20;
+    if (["credit", "mixed", "installment"].includes(paymentType)) {
+      if (paymentType === "installment") {
+        if (cleanText(customerName) && cleanText(customerPhone)) score += 20;
+      } else if (cleanText(customerName) || cleanText(customerPhone)) {
+        score += 20;
+      }
     } else {
       score += 20;
     }
@@ -569,6 +632,22 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setDiscountAmount("");
     setAmountPaid("");
     setPaymentAllocations({ cash: "", momo: "", bank: "", other: "" });
+    setInstallmentPlan({
+      frequency: "monthly",
+      installment_count: 3,
+      first_due_date: new Date(Date.now() + 30 * 86400000)
+        .toISOString()
+        .slice(0, 10),
+      grace_days: 3,
+      delivery_policy: "immediate",
+      late_charge_type: "none",
+      late_charge_value: 0,
+      guarantor_name: "",
+      guarantor_phone: "",
+      guarantor_location: "",
+      terms_accepted: false,
+      notes: "",
+    });
     setReceipt(null);
     setMessage("");
     setError("");
@@ -605,11 +684,68 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }
 
     if (
-      (paymentType === "credit" || paymentType === "mixed") &&
+      ["credit", "mixed", "installment"].includes(paymentType) &&
       !cleanCustomerName &&
       !cleanCustomerPhone
     ) {
-      setError("Customer name or phone is required for credit/mixed sales.");
+      setError("Customer name or phone is required for credit, mixed or installment sales.");
+      return;
+    }
+
+    if (
+      paymentType === "installment" &&
+      (!cleanCustomerName || !cleanCustomerPhone)
+    ) {
+      setError("Installment sales require both the customer name and phone number.");
+      return;
+    }
+
+    if (
+      paymentType === "installment" &&
+      (!installmentPlan.first_due_date ||
+        Number(installmentPlan.installment_count || 0) < 1)
+    ) {
+      setError("Choose the first payment date and number of installment payments.");
+      return;
+    }
+
+    if (
+      paymentType === "installment" &&
+      installmentPlan.frequency === "custom"
+    ) {
+      const customDates = String(installmentPlan.custom_due_dates_text || "")
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (customDates.length !== Number(installmentPlan.installment_count || 0)) {
+        setError(
+          "Custom schedules require one YYYY-MM-DD due date for every installment payment."
+        );
+        return;
+      }
+    }
+
+    if (
+      paymentType === "installment" &&
+      installmentApprovalRequired &&
+      liveAppliedPayment > 0.005
+    ) {
+      setError(
+        "This store requires manager approval before collecting a deposit. Set all payment channels to zero, save the agreement, then collect the first payment after approval."
+      );
+      return;
+    }
+
+    if (paymentType === "installment" && !installmentPlan.terms_accepted) {
+      setError("Confirm that the customer accepted the installment terms.");
+      return;
+    }
+
+    if (
+      paymentType === "installment" &&
+      liveAmountTendered >= estimatedAmountDue
+    ) {
+      setError("An installment sale must leave an outstanding balance.");
       return;
     }
 
@@ -623,6 +759,23 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         amount_tendered: Number(liveAmountTendered || 0),
         amount_paid: Number(liveAmountTendered || 0),
         payment_allocations: paymentAllocations,
+        installment_plan:
+          paymentType === "installment"
+            ? {
+                ...installmentPlan,
+                customer_phone: cleanCustomerPhone,
+                installment_count: Number(installmentPlan.installment_count || 0),
+                grace_days: Number(installmentPlan.grace_days || 0),
+                late_charge_value: Number(installmentPlan.late_charge_value || 0),
+                custom_due_dates:
+                  installmentPlan.frequency === "custom"
+                    ? String(installmentPlan.custom_due_dates_text || "")
+                        .split(/[\n,]+/)
+                        .map((item) => item.trim())
+                        .filter(Boolean)
+                    : [],
+              }
+            : null,
         items: cart.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
@@ -633,6 +786,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       setReceipt({
         ...savedReceipt,
+        installment: response.data.installment || null,
         branch_id: savedReceipt.branch_id || branchId,
         branch_code: savedReceipt.branch_code || currentStoreCode,
         branch_name: savedReceipt.branch_name || currentStoreName,
@@ -652,7 +806,15 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         },
       });
 
-      setMessage("Sale recorded successfully.");
+      setMessage(
+        paymentType === "installment"
+          ? `Installment sale recorded successfully${
+              response.data.installment?.agreement_number
+                ? ` — ${response.data.installment.agreement_number}`
+                : ""
+            }.`
+          : "Sale recorded successfully."
+      );
       setLockedPeriod(null);
 
       setCart([]);
@@ -666,6 +828,23 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       setDiscountAmount("");
       setAmountPaid("");
       setPaymentAllocations({ cash: "", momo: "", bank: "", other: "" });
+      setInstallmentPlan({
+        frequency: "monthly",
+        installment_count: 3,
+        first_due_date: new Date(Date.now() + 30 * 86400000)
+          .toISOString()
+          .slice(0, 10),
+        grace_days: 3,
+        delivery_policy: "immediate",
+        late_charge_type: "none",
+        late_charge_value: 0,
+        guarantor_name: "",
+        guarantor_phone: "",
+        guarantor_location: "",
+        terms_accepted: false,
+        notes: "",
+        custom_due_dates_text: "",
+      });
 
       await loadProducts();
     } catch (error) {
@@ -1304,7 +1483,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                   <p style={styles.eyebrowDark}>Step 2</p>
                   <h2 style={styles.panelTitle}>Customer & Payment</h2>
                   <p style={styles.panelSubtitle}>
-                    Credit and mixed sales require customer details.
+                    Credit, mixed and installment sales require customer details.
                   </p>
                 </div>
               </div>
@@ -1332,7 +1511,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
               <label>Payment Type</label>
               <div style={styles.paymentTypeGrid}>
-                {["cash", "momo", "bank", "credit", "mixed"].map((method) => (
+                {["cash", "momo", "bank", "credit", "mixed", "installment"].map((method) => (
                   <button
                     key={method}
                     type="button"
@@ -1420,6 +1599,261 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                   </div>
                 </div>
               )}
+
+              {paymentType === "installment" ? (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    padding: "16px",
+                    borderRadius: "14px",
+                    border: "1px solid #d6c084",
+                    background: "#fffaf0",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div>
+                    <strong>Installment Agreement</strong>
+                    <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "13px" }}>
+                      The amount paid now becomes the deposit. The remaining balance is divided into a controlled payment schedule.
+                    </p>
+                  </div>
+
+                  {installmentApprovalRequired ? (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        background: "#fff4d6",
+                        border: "1px solid #e7bd55",
+                        color: "#713f12",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Manager approval is required before any deposit is collected.
+                      Leave all payment channels at zero, save the agreement, then
+                      collect the first payment from Installment Sales after approval.
+                    </div>
+                  ) : null}
+
+                  <label>Payment Frequency</label>
+                  <select
+                    value={installmentPlan.frequency}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        frequency: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="fortnightly">Every Two Weeks</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="custom">Custom Dates</option>
+                  </select>
+
+                  <label>Number of Payments</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={installmentPlan.installment_count}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        installment_count: event.target.value,
+                      }))
+                    }
+                  />
+
+                  {installmentPlan.frequency === "custom" ? (
+                    <>
+                      <label>Custom Due Dates</label>
+                      <textarea
+                        rows="4"
+                        value={installmentPlan.custom_due_dates_text}
+                        onChange={(event) =>
+                          setInstallmentPlan((current) => ({
+                            ...current,
+                            custom_due_dates_text: event.target.value,
+                          }))
+                        }
+                        placeholder={"2026-08-01, 2026-08-15, 2026-09-01"}
+                      />
+                      <small>
+                        Enter one YYYY-MM-DD date per payment, separated by commas or new lines.
+                      </small>
+                    </>
+                  ) : null}
+
+                  <label>First Payment Date</label>
+                  <input
+                    type="date"
+                    value={installmentPlan.first_due_date}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        first_due_date: event.target.value,
+                      }))
+                    }
+                  />
+
+                  <label>Grace Days</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={installmentPlan.grace_days}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        grace_days: event.target.value,
+                      }))
+                    }
+                  />
+
+                  <label>Item Delivery Policy</label>
+                  <select
+                    value={installmentPlan.delivery_policy}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        delivery_policy: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="immediate">Deliver immediately</option>
+                    <option value="after_full_payment">
+                      Reserve now, deliver after full payment
+                    </option>
+                  </select>
+
+                  <label>Late Charge Policy</label>
+                  <select
+                    value={installmentPlan.late_charge_type}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        late_charge_type: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="none">No late charge</option>
+                    <option value="fixed">Fixed amount after grace period</option>
+                    <option value="percentage">Percentage after grace period</option>
+                  </select>
+
+                  {installmentPlan.late_charge_type !== "none" ? (
+                    <>
+                      <label>
+                        Late Charge{" "}
+                        {installmentPlan.late_charge_type === "percentage"
+                          ? "Percentage"
+                          : "Amount"}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={installmentPlan.late_charge_value}
+                        onChange={(event) =>
+                          setInstallmentPlan((current) => ({
+                            ...current,
+                            late_charge_value: event.target.value,
+                          }))
+                        }
+                      />
+                    </>
+                  ) : null}
+
+                  <label>Guarantor Name (Optional)</label>
+                  <input
+                    value={installmentPlan.guarantor_name}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        guarantor_name: event.target.value,
+                      }))
+                    }
+                    placeholder="Guarantor or reference person"
+                  />
+
+                  <label>Guarantor Phone (Optional)</label>
+                  <input
+                    value={installmentPlan.guarantor_phone}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        guarantor_phone: event.target.value,
+                      }))
+                    }
+                    placeholder="0240000000"
+                  />
+
+                  <label>Agreement Notes</label>
+                  <textarea
+                    value={installmentPlan.notes}
+                    onChange={(event) =>
+                      setInstallmentPlan((current) => ({
+                        ...current,
+                        notes: event.target.value,
+                      }))
+                    }
+                    rows="3"
+                    placeholder="Special terms, collector instructions or customer notes"
+                  />
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "10px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={installmentPlan.terms_accepted}
+                      onChange={(event) =>
+                        setInstallmentPlan((current) => ({
+                          ...current,
+                          terms_accepted: event.target.checked,
+                        }))
+                      }
+                      style={{ width: "18px", height: "18px", marginTop: "2px" }}
+                    />
+                    Customer has reviewed and accepted the installment payment and delivery terms.
+                  </label>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "10px",
+                      padding: "12px",
+                      borderRadius: "10px",
+                      background: "#fff",
+                    }}
+                  >
+                    <span>Deposit</span>
+                    <strong style={{ textAlign: "right" }}>
+                      GHS {formatMoney(liveAppliedPayment)}
+                    </strong>
+                    <span>Financed Balance</span>
+                    <strong style={{ textAlign: "right" }}>
+                      GHS {formatMoney(expectedBalance)}
+                    </strong>
+                    <span>Estimated Payment</span>
+                    <strong style={{ textAlign: "right" }}>
+                      GHS{" "}
+                      {formatMoney(
+                        expectedBalance /
+                          Math.max(Number(installmentPlan.installment_count || 1), 1)
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div style={styles.totalPanel}>

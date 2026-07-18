@@ -67,3 +67,19 @@ normalization triggers. Existing usernames remain valid. Duplicate existing
 phone numbers are not deleted; phone login remains disabled for duplicates until
 an administrator assigns unique numbers. The migration never runs
 `database/schema.sql` and never sends SMS.
+
+
+## Release 3F-B — Professional Installment Sales
+
+Production-safe migration order:
+
+1. `20260718_release3fb_professional_installment_sales.sql`
+2. `20260718_release3fb_professional_installment_sales_verify.sql`
+
+This migration is additive and idempotent. It extends the existing `sales.payment_type`
+enum with `installment` and adds branch-isolated agreement, schedule, collection,
+rescheduling, delivery, reminder and settings tables. It does not delete existing
+sales, debts, products, stock, customers or accounting evidence.
+
+Every verification row must return `PASS` with `problem_count = 0`.
+Never run `database/schema.sql` against Railway production for this release.

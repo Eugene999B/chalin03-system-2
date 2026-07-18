@@ -139,6 +139,15 @@ const COMMON_DEPENDENCIES = [
   "notification_escalations",
   "notification_sync_runs",
   "shared_control_evidence",
+  "installment_settings",
+  "installment_sequences",
+  "installment_agreements",
+  "installment_agreement_items",
+  "installment_schedule",
+  "installment_payments",
+  "installment_payment_allocations",
+  "installment_reschedules",
+  "installment_reminder_log",
 ];
 
 const SCOPE_TABLES = Object.freeze({

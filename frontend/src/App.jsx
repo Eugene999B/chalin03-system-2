@@ -15,6 +15,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
 import NewSalePage from "./pages/NewSalePage";
+import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -166,6 +167,10 @@ export default function App() {
             <Route
               path="sales-history"
               element={rolePage(businessWorkRoles, <SalesHistoryPage />)}
+            />
+            <Route
+              path="installments"
+              element={permissionOnlyPage("installments.view", <InstallmentsPage />)}
             />
             <Route
               path="debts"

@@ -116,6 +116,15 @@ const PREFERRED_TABLE_ORDER = [
   "notification_escalations",
   "notification_sync_runs",
   "shared_control_evidence",
+  "installment_settings",
+  "installment_sequences",
+  "installment_agreements",
+  "installment_agreement_items",
+  "installment_schedule",
+  "installment_payments",
+  "installment_payment_allocations",
+  "installment_reschedules",
+  "installment_reminder_log",
 ];
 
 const DATE_ONLY_COLUMNS = new Set([
@@ -143,6 +152,11 @@ const DATE_ONLY_COLUMNS = new Set([
   "effective_date",
   "previous_end_date",
   "proposed_end_date",
+  "first_due_date",
+  "next_due_date",
+  "final_due_date",
+  "new_first_due_date",
+  "old_next_due_date",
 ]);
 
 const DATE_TIME_COLUMNS = new Set([
@@ -188,6 +202,11 @@ const DATE_TIME_COLUMNS = new Set([
   "decided_at",
   "voided_at",
   "settled_at",
+  "delivered_at",
+  "cancelled_at",
+  "completed_at",
+  "requested_at",
+  "decided_at",
 ]);
 
 function getBranchId(req) {

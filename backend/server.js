@@ -56,6 +56,8 @@ const workerPrintRoutes = require("./routes/workerPrintRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
+const installmentRoutes = require("./routes/installmentRoutes");
+const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
@@ -173,6 +175,7 @@ app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/sales", saleRoutes);
+app.use("/api/installments", installmentRoutes);
 app.use("/api/debts", debtRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/users", userRoutes);
@@ -225,6 +228,7 @@ async function startServer() {
       console.log(`ðŸŒ Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`ðŸ” Allowed frontend origins: ${allowedOrigins.join(", ")}`);
       startSmsDeliveryStatusSync();
+      startInstallmentReminderScheduler();
     });
   } catch (error) {
     console.error("âŒ Failed to start server:", error);
