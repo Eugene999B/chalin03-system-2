@@ -42,7 +42,7 @@ assert.match(
 );
 assert.match(appIndex, /rel="apple-touch-icon"/);
 assert.match(appIndex, /rel="shortcut icon" href="\/favicon\.ico"/);
-assert.match(appIndex, /"logo": "https:\/\/chalin03\.com\/favicon-512x512\.png"/);
+assert.match(appIndex, /"logo": "\/favicon-512x512\.png"/);
 
 assert.equal(fs.existsSync(path.join(frontendRoot, "public/favicon.ico")), true);
 assert.equal(
