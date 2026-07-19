@@ -1,9 +1,6 @@
 name: Apply Version 3 API Security Hardening
 
 on:
-  push:
-    branches:
-      - agent/version-3-final-audit
   pull_request:
     branches:
       - main
@@ -17,7 +14,7 @@ permissions:
 
 jobs:
   harden:
-    if: github.actor != 'github-actions[bot]' && (github.ref == 'refs/heads/agent/version-3-final-audit' || github.head_ref == 'agent/version-3-final-audit')
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/version-3-final-audit'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
