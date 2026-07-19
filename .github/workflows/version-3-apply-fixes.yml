@@ -1,16 +1,20 @@
 name: Apply Version 3 Final Fixes
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/version-3-final-audit
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/version-3-final-audit'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
