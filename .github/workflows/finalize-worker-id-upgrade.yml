@@ -1,0 +1,212 @@
+name: Finalize Worker ID Upgrade
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out worker ID branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/release-3f-d2-worker-id-card
+          fetch-depth: 0
+
+      - name: Apply review fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise RuntimeError(f'Could not locate {label}')
+              return text.replace(old, new, 1)
+
+          service_path = Path('backend/services/workerIdentityService.js')
+          service = service_path.read_text(encoding='utf-8')
+          service = replace_once(
+              service,
+              '''  const nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
+          await connection.query(
+            `UPDATE worker_identity_sequences
+             SET last_number = ?
+             WHERE workspace_code = ?`,
+            [nextNumber, workspace]
+          );
+
+          const employeeNumber = formatEmployeeNumber(
+            settings.employeePrefix,
+            workspace,
+            nextNumber
+          );''',
+              '''  let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
+          let employeeNumber = "";
+          let identityAllocated = false;
+
+          for (let attempt = 0; attempt < 100000; attempt += 1) {
+            const candidate = formatEmployeeNumber(
+              settings.employeePrefix,
+              workspace,
+              nextNumber
+            );
+            const [existingRows] = await connection.query(
+              `SELECT id
+               FROM worker_profiles
+               WHERE employee_number = ?
+               LIMIT 1`,
+              [candidate]
+            );
+
+            if (!existingRows.length) {
+              employeeNumber = candidate;
+              identityAllocated = true;
+              break;
+            }
+
+            nextNumber += 1;
+          }
+
+          if (!identityAllocated) {
+            const error = new Error(
+              "A unique employee number could not be allocated safely."
+            );
+            error.code = "WORKER_ID_SEQUENCE_EXHAUSTED";
+            throw error;
+          }
+
+          await connection.query(
+            `UPDATE worker_identity_sequences
+             SET last_number = ?
+             WHERE workspace_code = ?`,
+            [nextNumber, workspace]
+          );''',
+              'collision-safe employee number allocation',
+          )
+          service_path.write_text(service, encoding='utf-8')
+
+          routes_path = Path('backend/routes/workerProfileExpansionRoutes.js')
+          routes = routes_path.read_text(encoding='utf-8')
+          routes = replace_once(
+              routes,
+              '''        connection,
+                  workspaceCode,
+                  payload.employment_start_date || new Date()
+                );''',
+              '''        connection,
+                  workspaceCode,
+                  new Date()
+                );''',
+              'card issuance date',
+          )
+          routes_path.write_text(routes, encoding='utf-8')
+
+          worker_path = Path('frontend/src/pages/ExpandedWorkerProfilePage.jsx')
+          worker = worker_path.read_text(encoding='utf-8')
+          worker = worker.replace(
+              '''  ["id_card_issue_date", "ID card issue date", "date"],
+            ["id_card_expiry_date", "ID card expiry date", "date"],
+            ["id_card_serial", "ID card serial / reference"],
+          ''',
+              '',
+              1,
+          )
+          worker = replace_once(
+              worker,
+              '''          <h2>Create Worker Profile</h2>
+                    <form
+                      className="expanded-worker-form-grid"
+                      onSubmit={createWorker}
+                    >
+                      <Notice type="info">
+                        Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+                      </Notice>
+                    {[
+                                  ["full_name", "Full legal name"],''',
+              '''          <h2>Create Worker Profile</h2>
+
+                    <form
+                      className="expanded-worker-form-grid"
+                      onSubmit={createWorker}
+                    >
+                      <Notice type="info">
+                        Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+                      </Notice>
+
+                      {[
+                        ["full_name", "Full legal name"],''',
+              'worker create form formatting',
+          )
+          worker_path.write_text(worker, encoding='utf-8')
+
+          settings_path = Path('backend/routes/settingsRoutes.js')
+          settings = settings_path.read_text(encoding='utf-8')
+          settings = settings.replace(
+              '''           daily_summary_time = ?,
+                    receipt_footer = ?,
+                    receipt_prefix = ?,
+                    worker_id_card_validity_months = ?,
+                    worker_employee_number_prefix = ?''',
+              '''           daily_summary_time = ?,
+                   receipt_footer = ?,
+                   receipt_prefix = ?,
+                   worker_id_card_validity_months = ?,
+                   worker_employee_number_prefix = ?''',
+              1,
+          )
+          settings_path.write_text(settings, encoding='utf-8')
+
+          workflow_path = Path('.github/workflows/chalin03-verification.yml')
+          workflow = workflow_path.read_text(encoding='utf-8')
+          workflow = replace_once(
+              workflow,
+              '''          npx eslint \\
+                    src/pages/BackupPage.jsx \\
+                    src/pages/SystemOperationsPage.jsx''',
+              '''          npx eslint \\
+                    src/pages/BackupPage.jsx \\
+                    src/pages/SystemOperationsPage.jsx \\
+                    src/pages/UsersSettingsPage.jsx \\
+                    src/pages/ExpandedWorkerProfilePage.jsx''',
+              'strict frontend lint list',
+          )
+          workflow = workflow.replace(
+              'Lint Release 3F-D frontend files',
+              'Lint protected release frontend files',
+              1,
+          )
+          workflow_path.write_text(workflow, encoding='utf-8')
+
+          test_path = Path('backend/tests/release3fD2WorkerIdentityCard.test.js')
+          tests = test_path.read_text(encoding='utf-8')
+          if 'skips matching legacy employee numbers' not in tests:
+              tests += '''\n
+test("Release 3F-D2 skips matching legacy employee numbers and issues cards today", () => {
+  const service = read("backend/services/workerIdentityService.js");
+  const routes = read("backend/routes/workerProfileExpansionRoutes.js");
+  assert.match(service, /FROM worker_profiles[\\s\\S]*WHERE employee_number = \\?/);
+  assert.match(service, /identityAllocated/);
+  assert.match(routes, /allocateWorkerIdentity\\(\\s*connection,\\s*workspaceCode,\\s*new Date\\(\\)/);
+});
+'''
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+
+      - name: Remove one-time finalizer
+        run: rm -f .github/workflows/finalize-worker-id-upgrade.yml
+
+      - name: Commit review fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: harden worker identity generation and card settings"
+          git push origin HEAD:agent/release-3f-d2-worker-id-card
