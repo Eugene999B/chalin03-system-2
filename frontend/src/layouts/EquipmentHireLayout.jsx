@@ -123,11 +123,25 @@ const navigationSections = [
         icon: "👷",
         permissions: ["workers.view"],
       },
+      {
+        title: "Employment & HR Documents",
+        description: "Prepare new-hire letters before worker registration",
+        path: "/equipment-hire-operations/employment-documents",
+        icon: "✍️",
+        permissions: ["workers.documents.view"],
+      },
     ],
   },
   {
     title: "Administration",
     items: [
+      {
+        title: "Document Signature Settings",
+        description: "Boss signature for approved employment and HR documents",
+        path: "/equipment-hire-operations/document-signature-settings",
+        icon: "🖋️",
+        permissions: ["security.admin"],
+      },
       {
         title: "Hire Administration",
         description: "Bases, yards and staff workspace access",

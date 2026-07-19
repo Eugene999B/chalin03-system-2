@@ -259,6 +259,13 @@ export default function Layout() {
       }
 
       if (canManage) {
+        auditItems.unshift({
+          title: "Employment & HR Documents",
+          description: "Prepare new-hire letters before worker registration",
+          path: "/employment-documents",
+          icon: "✍️",
+          keywords: "employment appointment hiring worker letter hr document candidate signature",
+        });
         auditItems.splice(1, 0, {
           title: "SMS Center",
           description: "Send live SMS, review logs and retry failures",
@@ -362,6 +369,13 @@ export default function Layout() {
           icon: "👷",
           keywords:
             "workers employees staff profiles assignments licences documents property workforce",
+        },
+        {
+          title: "Document Signature Settings",
+          description: "Boss signature used for approved employment documents",
+          path: "/document-signature-settings",
+          icon: "🖋️",
+          keywords: "boss signature draw finger approval document settings",
         },
       ];
 

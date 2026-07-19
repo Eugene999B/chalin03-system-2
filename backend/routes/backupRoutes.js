@@ -68,6 +68,8 @@ const PREFERRED_TABLE_ORDER = [
   "worker_private_files",
   "worker_print_history",
   "worker_hr_letters",
+  "standalone_hr_documents",
+  "document_signature_settings",
   "worker_category_assignment_conflicts",
   "products",
   "stock_adjustments",

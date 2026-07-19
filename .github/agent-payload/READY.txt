@@ -1,1 +1,0 @@
-The branch is ready for the draft pull request verification trigger.

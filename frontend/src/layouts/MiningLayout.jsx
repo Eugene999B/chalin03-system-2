@@ -115,11 +115,25 @@ const navigationSections = [
         icon: "\u{1F477}",
         permissions: ["workers.view"],
       },
+      {
+        title: "Employment & HR Documents",
+        description: "Prepare new-hire letters before worker registration",
+        path: "/mining/employment-documents",
+        icon: "✍️",
+        permissions: ["workers.documents.view"],
+      },
     ],
   },
   {
     title: "Administration",
     items: [
+      {
+        title: "Document Signature Settings",
+        description: "Boss signature for approved employment and HR documents",
+        path: "/mining/document-signature-settings",
+        icon: "🖋️",
+        permissions: ["security.admin"],
+      },
       {
         title: "Mining Administration",
         description: "Sites and staff workspace access",
