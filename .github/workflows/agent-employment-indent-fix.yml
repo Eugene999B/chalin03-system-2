@@ -1,0 +1,61 @@
+name: Fix employment release indentation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/standalone-employment-documents-signature
+
+      - name: Fix link guard indentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('backend/routes/standaloneHrDocumentRoutes.js')
+          lines = path.read_text().splitlines()
+          marker = 'if (!["issued", "acknowledged"].includes(document.status)) {'
+          index = next((i for i, line in enumerate(lines) if marker in line), None)
+          if index is None:
+              raise SystemExit('Link guard marker not found.')
+          expected = [
+              '    if (!["issued", "acknowledged"].includes(document.status)) {',
+              '      return res.status(409).json({',
+              '        status: "error",',
+              '        message: "Approve and issue the document before linking it to a worker profile.",',
+              '      });',
+              '    }',
+          ]
+          if len(lines) < index + len(expected):
+              raise SystemExit('Link guard block is incomplete.')
+          lines[index:index + len(expected)] = expected
+          path.write_text('\n'.join(lines) + '\n')
+          PY
+
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run syntax-check
+          npm test
+
+      - name: Commit indentation fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/standaloneHrDocumentRoutes.js
+          git commit -m "Fix standalone employment link guard indentation"
+          git push origin HEAD
