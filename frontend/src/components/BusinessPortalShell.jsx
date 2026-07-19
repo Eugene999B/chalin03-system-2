@@ -31,7 +31,7 @@ export default function BusinessPortalShell({ workspace }) {
       <div className="business-preview-background" />
 
       <header className="business-preview-topbar">
-        <Link className="business-preview-brand" to="/company/">
+        <a className="business-preview-brand" href="/company/">
           <span className="business-preview-logo">
             <img
               src="/chalin03-logo.png"
@@ -47,7 +47,7 @@ export default function BusinessPortalShell({ workspace }) {
             <small>Chalin 03 Company Limited</small>
             <strong>{workspace.name}</strong>
           </span>
-        </Link>
+        </a>
 
         <nav aria-label="Public division navigation">
           <a className="business-preview-back" href="/company/">
