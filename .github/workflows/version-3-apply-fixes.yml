@@ -1,0 +1,53 @@
+name: Apply Version 3 Final Fixes
+
+on:
+  push:
+    branches:
+      - agent/version-3-final-audit
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/version-3-final-audit
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Apply guarded release fixes
+        run: python tools/apply_version3_final_fixes.py
+
+      - name: Install and verify backend
+        working-directory: backend
+        run: npm ci && npm run syntax-check && npm test
+
+      - name: Install and verify frontend
+        working-directory: frontend
+        run: npm ci && npm test && npm run lint && npm run build
+
+      - name: Commit verified fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No release fixes were necessary."
+            exit 0
+          fi
+          git commit -m "fix: complete Version Three release audit findings"
+          git push origin HEAD:agent/version-3-final-audit
