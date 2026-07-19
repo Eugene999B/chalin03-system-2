@@ -18,6 +18,7 @@ const companyPage = read("public/company/index.html");
 const portalShell = read("src/components/BusinessPortalShell.jsx");
 const publicMeta = read("src/components/PublicPageMeta.jsx");
 
+assert.match(headers, /Strict-Transport-Security: max-age=31536000; includeSubDomains; preload/);
 assert.match(headers, /Content-Security-Policy:/);
 assert.match(headers, /frame-ancestors 'none'/);
 assert.match(headers, /X-Frame-Options: DENY/);
@@ -93,5 +94,5 @@ assert.match(publicMeta, /noindex, nofollow, noarchive/);
 assert.match(publicMeta, /link\[rel="canonical"\]/);
 
 console.log(
-  "Release 3F-E public web, favicon and Cloudflare security checks passed."
+  "Version Three public web, favicon, indexing and Cloudflare security checks passed."
 );
