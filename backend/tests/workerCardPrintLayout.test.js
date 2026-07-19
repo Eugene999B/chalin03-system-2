@@ -134,6 +134,14 @@ test("approved first design is premium, QR-verifiable and excludes blood group",
     verificationRoute,
     /not a Ghana Card, ECOWAS identity card, passport/i
   );
+  assert.match(
+    verificationRoute,
+    /state\.code !== "invalid"/
+  );
+  assert.match(
+    verificationRoute,
+    /No worker details are displayed unless the QR signature is valid/
+  );
   assert.doesNotMatch(
     verificationRoute,
     /national_id_number|medical_notes|emergency_contacts/i
@@ -151,4 +159,8 @@ test("generated employee number is visible in the worker fill-in area", () => {
   );
   assert.match(page, /selectedProfile\.employee_number/);
   assert.match(page, /Generated employee number:/);
+  assert.match(
+    page,
+    /Generated automatically after saving/
+  );
 });

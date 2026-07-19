@@ -1523,6 +1523,15 @@ export default function ExpandedWorkerProfilePage() {
               Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
             </Notice>
 
+            <Field label="Employee number">
+              <input
+                type="text"
+                value="Generated automatically after saving"
+                readOnly
+                disabled
+              />
+            </Field>
+
             {[
               ["full_name", "Full legal name"],
               ["preferred_name", "Preferred name"],

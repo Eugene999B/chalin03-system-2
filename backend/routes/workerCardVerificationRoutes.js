@@ -148,6 +148,8 @@ function renderPage({
     timeStyle: "short",
     timeZone: "Africa/Accra",
   });
+  const showDetails =
+    state.code !== "invalid" && Boolean(profile.id);
 
   return `<!doctype html>
 <html lang="en">
@@ -338,7 +340,9 @@ function renderPage({
         <span>${html(state.message)}</span>
       </section>
 
-      <dl>
+      ${
+        showDetails
+          ? `<dl>
         <div>
           <dt>Employee name</dt>
           <dd>${html(profile.full_name || "Not available")}</dd>
@@ -375,7 +379,9 @@ function renderPage({
           <dt>Expiry date</dt>
           <dd>${html(formatDate(profile.id_card_expiry_date))}</dd>
         </div>
-      </dl>
+      </dl>`
+          : `<p class="notice">No worker details are displayed unless the QR signature is valid.</p>`
+      }
 
       <p class="notice">
         This page confirms a signed Chalin 03 corporate credential only. It is not a Ghana Card, ECOWAS identity card, passport, travel document or government identity record. Verification performed ${html(
