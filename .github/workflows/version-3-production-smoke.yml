@@ -70,6 +70,8 @@ jobs:
 
       - name: Verify live login release bundle and Cloudflare security
         shell: bash
+        env:
+          SMOKE_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           mkdir -p smoke-output
@@ -101,11 +103,24 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/site.webmanifest \
             https://chalin03.com/site.webmanifest
-          jq -e '
+
+          if jq -e '
             .name == "Chalin 03 Group Operations Platform" and
             .short_name == "Chalin 03" and
             (.icons | length) >= 2
-          ' smoke-output/site.webmanifest
+          ' smoke-output/site.webmanifest; then
+            echo 'Live Version Three manifest is deployed.'
+          elif [ "$SMOKE_EVENT_NAME" = "pull_request" ]; then
+            jq -e '
+              .name == "Chalin 03 Group Operations Platform" and
+              .short_name == "Chalin 03" and
+              (.icons | length) >= 2
+            ' frontend/public/site.webmanifest
+            echo 'Pre-deploy source manifest is ready; the push-to-main smoke will require the live value.'
+          else
+            echo 'Live production manifest is not the Version Three group manifest.' >&2
+            exit 1
+          fi
 
       - name: Preserve live smoke evidence
         if: always()
