@@ -150,6 +150,14 @@ async function requireAuth(req, res, next) {
 
     req.user = {
       ...decoded,
+      // Security-sensitive identity and permission fields always come from
+      // current server-side state after JWT verification, never from stale
+      // token claims alone.
+      id: state.id,
+      username: state.username,
+      role: state.role,
+      workspace_code: categoryAccess.workspaceCode,
+      workspace_role: categoryAccess.workspaceRole || state.role,
       primary_workspace_code: state.primary_workspace_code || null,
       category_assignment_status: state.category_assignment_status || null,
       category_conflict_reason: state.category_conflict_reason || null,
