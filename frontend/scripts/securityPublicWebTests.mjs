@@ -14,6 +14,7 @@ const appIndex = read("index.html");
 const headers = read("public/_headers");
 const robots = read("public/robots.txt");
 const sitemap = read("public/sitemap.xml");
+const serviceWorker = read("public/sw.js");
 const companyPage = read("public/company/index.html");
 const portalShell = read("src/components/BusinessPortalShell.jsx");
 const publicMeta = read("src/components/PublicPageMeta.jsx");
@@ -52,6 +53,7 @@ assert.match(
 assert.match(appIndex, /rel="apple-touch-icon"/);
 assert.match(appIndex, /rel="shortcut icon" href="\/favicon\.ico"/);
 assert.match(appIndex, /"logo": "\/favicon-512x512\.png"/);
+assert.match(appIndex, /<link rel="manifest" href="\/site\.webmanifest"/);
 
 assert.equal(fs.existsSync(path.join(frontendRoot, "public/favicon.ico")), true);
 assert.equal(
@@ -62,6 +64,21 @@ assert.equal(
   fs.existsSync(path.join(frontendRoot, "public/favicon-512x512.png")),
   true
 );
+assert.equal(
+  fs.existsSync(path.join(frontendRoot, "public/site.webmanifest")),
+  true
+);
+assert.equal(
+  fs.existsSync(path.join(frontendRoot, "public/manifest.webmanifest")),
+  false
+);
+
+assert.match(serviceWorker, /CACHE_NAME = "chalin03-version-3-v1"/);
+assert.match(serviceWorker, /"\/site\.webmanifest"/);
+assert.match(serviceWorker, /"\/favicon-192x192\.png"/);
+assert.match(serviceWorker, /"\/favicon-512x512\.png"/);
+assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
+assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
 assert.match(robots, /Allow: \/company\//);
 assert.match(robots, /Allow: \/mining-operations/);
@@ -94,5 +111,5 @@ assert.match(publicMeta, /noindex, nofollow, noarchive/);
 assert.match(publicMeta, /link\[rel="canonical"\]/);
 
 console.log(
-  "Version Three public web, favicon, indexing and Cloudflare security checks passed."
+  "Version Three public web, service worker, favicon, indexing and Cloudflare security checks passed."
 );
