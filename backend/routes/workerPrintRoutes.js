@@ -18,6 +18,9 @@ const {
   ensureWorkerIdentitySchema,
   loadWorkerIdentitySettings,
 } = require("../services/workerIdentityService");
+const {
+  normalizePdfImageBuffer,
+} = require("../services/pdfImageService");
 
 const router = express.Router();
 
@@ -378,6 +381,11 @@ async function loadWorkerPrintData(workerId) {
   if (!profileRows.length) {
     return null;
   }
+
+  profileRows[0].photo_data = await normalizePdfImageBuffer(
+    profileRows[0].photo_data,
+    profileRows[0].photo_mime_type
+  );
 
   const [
     [assignments],
