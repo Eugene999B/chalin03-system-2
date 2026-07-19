@@ -21,15 +21,14 @@ def require_replace(text: str, old: str, new: str, label: str) -> str:
 
 
 service = read("backend/services/workerIdentityService.js")
-allocation_pattern = re.compile(
-    r"  const nextNumber = Number\(sequenceRows\[0\]\?\.last_number \|\| 0\) \+ 1;"
-    r"[\s\S]*?"
-    r"  const employeeNumber = formatEmployeeNumber\(\n"
-    r"    settings\.employeePrefix,\n"
-    r"    workspace,\n"
-    r"    nextNumber\n"
-    r"  \);"
+allocation_start_marker = (
+    "  const nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;"
 )
+allocation_end_marker = (
+    "  const dates = calculateCardDates(issueValue, settings.validityMonths);"
+)
+allocation_start = service.index(allocation_start_marker)
+allocation_end = service.index(allocation_end_marker, allocation_start)
 allocation_replacement = '''  let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
   let employeeNumber = "";
   let identityAllocated = false;
@@ -70,14 +69,14 @@ allocation_replacement = '''  let nextNumber = Number(sequenceRows[0]?.last_numb
      SET last_number = ?
      WHERE workspace_code = ?`,
     [nextNumber, workspace]
-  );'''
-service, replacement_count = allocation_pattern.subn(
-    allocation_replacement,
-    service,
-    count=1,
+  );
+
+'''
+service = (
+    service[:allocation_start]
+    + allocation_replacement
+    + service[allocation_end:]
 )
-if replacement_count != 1:
-    raise RuntimeError("Could not harden employee-number allocation.")
 write("backend/services/workerIdentityService.js", service)
 
 routes = read("backend/routes/workerProfileExpansionRoutes.js")
