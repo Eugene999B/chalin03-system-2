@@ -22,13 +22,23 @@ jobs:
           fetch-depth: 0
           ref: agent/standalone-employment-documents-signature
 
-      - name: Materialize release files
+      - name: Assemble release archive
         shell: bash
         run: |
-          cat .github/agent-payload/part-* > /tmp/standalone-release.b64
+          cat .github/agent-payload/part-00 .github/agent-payload/part-01 .github/agent-payload/part-02 .github/agent-payload/part-03 .github/agent-payload/part-04 .github/agent-payload/part-05 > /tmp/standalone-release.b64
+          test "$(wc -c < /tmp/standalone-release.b64)" -eq 41808
           base64 --decode /tmp/standalone-release.b64 > /tmp/standalone-release.tar.gz
+
+      - name: Validate and extract release archive
+        shell: bash
+        run: |
+          gzip -t /tmp/standalone-release.tar.gz
+          tar -tzf /tmp/standalone-release.tar.gz | head -40
           tar -xzf /tmp/standalone-release.tar.gz -C .
-          node scripts/applyStandaloneEmploymentRelease.mjs
+
+      - name: Apply source patches
+        shell: bash
+        run: node scripts/applyStandaloneEmploymentRelease.mjs
 
       - name: Verify backend
         working-directory: backend
