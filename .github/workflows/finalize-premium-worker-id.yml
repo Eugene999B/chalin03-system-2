@@ -1,16 +1,20 @@
 name: Finalize Premium Worker ID
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/final-premium-worker-id
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   finalize-and-preview:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/final-premium-worker-id'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
