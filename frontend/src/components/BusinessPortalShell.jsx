@@ -1,6 +1,13 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import PublicPageMeta from "./PublicPageMeta";
 import "../styles/businessPortal.css";
+
+function publicPathForWorkspace(workspaceCode) {
+  return workspaceCode === "equipment_hire"
+    ? "/equipment-hire"
+    : "/mining-operations";
+}
 
 export default function BusinessPortalShell({ workspace }) {
   const { isLoggedIn } = useAuth();
@@ -8,19 +15,27 @@ export default function BusinessPortalShell({ workspace }) {
   const protectedRoute = workspace.openRoute || "/";
   const loginRoute = `/login?workspace=${encodeURIComponent(workspace.code)}`;
   const primaryRoute = isLoggedIn ? protectedRoute : loginRoute;
+  const canonicalPath = publicPathForWorkspace(workspace.code);
+  const pageDescription = `${workspace.name} is a Chalin 03 Company Limited business division. ${workspace.summary}`;
 
   return (
     <div
       className={`business-preview-page business-preview-page--${workspace.accent}`}
     >
+      <PublicPageMeta
+        title={`${workspace.name} | Chalin 03 Company Limited`}
+        description={pageDescription}
+        canonicalPath={canonicalPath}
+      />
+
       <div className="business-preview-background" />
 
       <header className="business-preview-topbar">
-        <Link className="business-preview-brand" to={loginRoute}>
+        <a className="business-preview-brand" href="/company/">
           <span className="business-preview-logo">
             <img
               src="/chalin03-logo.png"
-              alt=""
+              alt="Chalin 03 Company Limited logo"
               onError={(event) => {
                 event.currentTarget.style.display = "none";
               }}
@@ -29,14 +44,19 @@ export default function BusinessPortalShell({ workspace }) {
           </span>
 
           <span>
-            <small>Chalin 03 Group Operations Platform</small>
+            <small>Chalin 03 Company Limited</small>
             <strong>{workspace.name}</strong>
           </span>
-        </Link>
+        </a>
 
-        <Link className="business-preview-back" to={loginRoute}>
-          ← Return to Staff Login
-        </Link>
+        <nav aria-label="Public division navigation">
+          <a className="business-preview-back" href="/company/">
+            Company Overview
+          </a>
+          <Link className="business-preview-back" to={loginRoute}>
+            Staff Login
+          </Link>
+        </nav>
       </header>
 
       <main className="business-preview-main">
@@ -46,12 +66,12 @@ export default function BusinessPortalShell({ workspace }) {
               <span>
                 {workspace.icon} {workspace.name}
               </span>
-              <span>Operational MVP</span>
-              <span>Separate workspace</span>
+              <span>Chalin 03 business division</span>
+              <span>Secure staff operations</span>
             </div>
 
             <p className="business-preview-eyebrow">
-              New Chalin 03 business module
+              Professional operations in Ghana
             </p>
 
             <h1>{workspace.headline}</h1>
@@ -61,24 +81,23 @@ export default function BusinessPortalShell({ workspace }) {
               <Link className="business-preview-primary" to={primaryRoute}>
                 {isLoggedIn
                   ? `Open ${workspace.shortName} Workspace`
-                  : `Login to ${workspace.shortName}`}
+                  : `Staff Login to ${workspace.shortName}`}
               </Link>
 
-              <a className="business-preview-secondary" href="#module-plan">
-                View operational areas
+              <a className="business-preview-secondary" href="#capabilities">
+                Explore capabilities
               </a>
             </div>
           </div>
 
           <aside className="business-preview-status-panel">
             <span className="business-preview-status-dot" />
-            <p>Current rollout status</p>
-            <strong>
-              {workspace.openRoute ? "Operational workspace" : "Workspace prepared"}
-            </strong>
+            <p>Digital operations</p>
+            <strong>Controlled and accountable workspace</strong>
             <span>
-              {workspace.rolloutMessage ||
-                "The workspace is separated from the live spare-parts operation. Operational forms and database routes will be enabled phase by phase after testing."}
+              Authorized staff work within assigned sites, locations and
+              permissions. Operational records remain separated from other Chalin
+              03 business divisions.
             </span>
           </aside>
         </section>
@@ -86,23 +105,23 @@ export default function BusinessPortalShell({ workspace }) {
         <section className="business-preview-safety">
           <div aria-hidden="true">🛡️</div>
           <div>
-            <strong>Live-system protection</strong>
+            <strong>Secure business operations</strong>
             <p>
-              This public overview page does not create, change or delete business
-              records. Sign in through the workspace-aware login to enter the
-              protected operational area.
+              This public page contains company information only. Business records,
+              staff controls, financial information and operational documents are
+              available exclusively through authenticated workspaces.
             </p>
           </div>
         </section>
 
-        <section id="module-plan" className="business-preview-section">
+        <section id="capabilities" className="business-preview-section">
           <div className="business-preview-section-heading">
             <div>
-              <p>Connected operational areas</p>
-              <h2>Everything this workspace manages</h2>
+              <p>Operational capabilities</p>
+              <h2>How this division supports the business</h2>
             </div>
 
-            <span>{workspace.modules.length} module areas</span>
+            <span>{workspace.modules.length} managed areas</span>
           </div>
 
           <div className="business-preview-module-grid">
@@ -118,12 +137,11 @@ export default function BusinessPortalShell({ workspace }) {
 
         <section className="business-preview-workflow">
           <div>
-            <p className="business-preview-eyebrow">Operating flow</p>
-            <h2>Simple staff workflow, strong management control</h2>
+            <p className="business-preview-eyebrow">Accountable workflow</p>
+            <h2>Clear staff responsibilities and management oversight</h2>
             <p>
-              Staff will see only the sites, machines and actions granted to
-              their account. Sensitive approvals and corrections will remain
-              traceable.
+              Staff see only the locations, machines and actions granted to their
+              accounts. Sensitive approvals and corrections remain traceable.
             </p>
           </div>
 
@@ -143,12 +161,13 @@ export default function BusinessPortalShell({ workspace }) {
           </div>
 
           <div>
-            <p className="business-preview-eyebrow">Shared fleet foundation</p>
-            <h2>One machine register for Mining and Equipment Hire</h2>
+            <p className="business-preview-eyebrow">Shared fleet control</p>
+            <h2>Consistent machine records across operational divisions</h2>
             <p>
-              Excavators and other machines are registered once. Their location,
+              Excavators and other machines are registered once. Location,
               availability, meter readings, fuel, inspections, maintenance and
-              assignment history stay consistent across both workspaces.
+              assignment history remain consistent across Mining Operations and
+              Equipment Hire.
             </p>
           </div>
         </section>
@@ -156,7 +175,7 @@ export default function BusinessPortalShell({ workspace }) {
 
       <footer className="business-preview-footer">
         <span>Chalin 03 Company Limited</span>
-        <span>Group Operations Local Completion</span>
+        <span>Dunkwa Police Barrier, Ghana</span>
       </footer>
     </div>
   );

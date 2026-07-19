@@ -85,7 +85,9 @@ jobs:
             src/pages/BackupPage.jsx \
             src/pages/SystemOperationsPage.jsx \
             src/pages/UsersSettingsPage.jsx \
-            src/pages/ExpandedWorkerProfilePage.jsx
+            src/pages/ExpandedWorkerProfilePage.jsx \
+            src/components/BusinessPortalShell.jsx \
+            src/components/PublicPageMeta.jsx
 
       - name: Build production frontend
         run: |
