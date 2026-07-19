@@ -150,35 +150,4 @@ test("Release 3F-D2 skips matching legacy employee numbers and issues cards toda
 '''
 write("backend/tests/release3fD2WorkerIdentityCard.test.js", tests)
 
-verification_path = ROOT / ".github/workflows/chalin03-verification.yml"
-verification = verification_path.read_text(encoding="utf-8")
-verification = verification.replace("contents: write", "contents: read", 1)
-temporary_start = "  # BEGIN TEMPORARY WORKER ID FINALIZER\n"
-temporary_end = "  # END TEMPORARY WORKER ID FINALIZER\n"
-if temporary_start in verification and temporary_end in verification:
-    start = verification.index(temporary_start)
-    end = verification.index(temporary_end, start) + len(temporary_end)
-    verification = verification[:start] + verification[end:]
-if "src/pages/UsersSettingsPage.jsx" not in verification:
-    verification = require_replace(
-        verification,
-        "            src/pages/SystemOperationsPage.jsx",
-        "            src/pages/SystemOperationsPage.jsx \\\n"
-        "            src/pages/UsersSettingsPage.jsx \\\n"
-        "            src/pages/ExpandedWorkerProfilePage.jsx",
-        "strict worker identity lint list",
-    )
-verification = verification.replace(
-    "Lint Release 3F-D frontend files",
-    "Lint protected release frontend files",
-    1,
-)
-verification_path.write_text(verification, encoding="utf-8")
-
-for temporary_path in (
-    ROOT / ".github/workflows/finalize-worker-id-upgrade.yml",
-    ROOT / ".github/scripts/finalize_worker_id_upgrade.py",
-):
-    temporary_path.unlink(missing_ok=True)
-
-print("Worker ID review fixes applied and temporary finalizers removed.")
+print("Worker ID application review fixes applied.")
