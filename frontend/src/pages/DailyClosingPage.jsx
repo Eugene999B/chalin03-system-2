@@ -1130,8 +1130,8 @@ export default function DailyClosingPage() {
                 {closingRevisions.map((revision) => {
                   let expected = {};
                   let countedSnapshot = {};
-                  try { expected = JSON.parse(revision.expected_snapshot_json || "{}"); } catch {}
-                  try { countedSnapshot = JSON.parse(revision.counted_snapshot_json || "{}"); } catch {}
+                  try { expected = JSON.parse(revision.expected_snapshot_json || "{}"); } catch { /* Keep empty fallback for invalid historical JSON. */ }
+                  try { countedSnapshot = JSON.parse(revision.counted_snapshot_json || "{}"); } catch { /* Keep empty fallback for invalid historical JSON. */ }
                   return (
                     <article key={revision.id} className="dc-revision-item">
                       <div className="dc-revision-head">
