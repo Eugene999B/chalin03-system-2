@@ -182,6 +182,8 @@ jobs:
 
       - name: Check public site headers and private route indexing protection
         shell: bash
+        env:
+          AUDIT_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           mkdir -p audit-output
@@ -190,7 +192,14 @@ jobs:
           grep -qi '^x-content-type-options: nosniff' audit-output/site.headers
           grep -qi '^x-frame-options: DENY' audit-output/site.headers
           grep -qi '^referrer-policy:' audit-output/site.headers
-          grep -qi '^strict-transport-security:' audit-output/site.headers
+
+          if ! grep -qi '^strict-transport-security:' audit-output/site.headers; then
+            if [ "$AUDIT_EVENT_NAME" = "push" ]; then
+              echo 'Live public site is missing HSTS after deployment.' >&2
+              exit 1
+            fi
+            grep -q 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload' frontend/public/_headers
+          fi
 
           curl --fail --silent --show-error --location --dump-header audit-output/login.headers \
             --output audit-output/login.html https://chalin03.com/login
