@@ -687,14 +687,14 @@ function drawBackCard(
     });
 
   doc
-    .moveTo(18, 145)
-    .lineTo(96, 145)
+    .moveTo(18, 140)
+    .lineTo(96, 140)
     .strokeColor(NAVY)
     .lineWidth(0.55)
     .stroke();
   doc
-    .moveTo(146, 145)
-    .lineTo(224, 145)
+    .moveTo(146, 140)
+    .lineTo(224, 140)
     .strokeColor(NAVY)
     .lineWidth(0.55)
     .stroke();
@@ -702,36 +702,38 @@ function drawBackCard(
   doc
     .fillColor(MUTED)
     .font("Helvetica-Bold")
-    .fontSize(3.2)
-    .text("EMPLOYEE SIGNATURE", 18, 147, {
+    .fontSize(2.8)
+    .text("EMPLOYEE SIGNATURE", 18, 141.5, {
       width: 78,
       align: "center",
+      lineBreak: false,
     });
   doc
     .fillColor(MUTED)
     .font("Helvetica-Bold")
-    .fontSize(3.2)
-    .text("AUTHORIZED SIGNATURE", 146, 147, {
+    .fontSize(2.8)
+    .text("AUTHORIZED SIGNATURE", 146, 141.5, {
       width: 78,
       align: "center",
+      lineBreak: false,
     });
 
   doc
     .fillColor(NAVY)
     .font("Helvetica-Bold")
-    .fontSize(3.1)
+    .fontSize(2.7)
     .text(
       "CORPORATE CREDENTIAL — NOT A NATIONAL OR TRAVEL IDENTITY DOCUMENT",
-      44,
-      150,
+      39,
+      147,
       {
-        width: 154,
+        width: 164,
         align: "center",
         lineBreak: false,
       }
     );
 
-  doc.rect(0, 152, CARD_WIDTH, 1).fill(GOLD);
+  doc.rect(0, 151.5, CARD_WIDTH, 1.5).fill(GOLD);
   endCard(doc, x, y, scale);
 }
 

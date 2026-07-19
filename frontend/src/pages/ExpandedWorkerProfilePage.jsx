@@ -803,9 +803,14 @@ export default function ExpandedWorkerProfilePage() {
       const workerId =
         response.data.worker.profile.id;
 
+      const generatedEmployeeNumber =
+        response.data.worker.profile.employee_number;
+
       setCreateForm(emptyCreateForm);
       setCreateOpen(false);
-      setMessage(response.data.message);
+      setMessage(
+        `${response.data.message} Generated employee number: ${generatedEmployeeNumber}.`
+      );
 
       await loadWorkers();
       await loadOptions();
@@ -1956,6 +1961,17 @@ export default function ExpandedWorkerProfilePage() {
                     className="expanded-worker-form-grid"
                     onSubmit={updateProfile}
                   >
+                    <Field label="Employee number (system generated)">
+                      <input
+                        type="text"
+                        value={
+                          selectedProfile.employee_number || ""
+                        }
+                        readOnly
+                        disabled
+                      />
+                    </Field>
+
                     {profileFields.map(
                       ([key, label, type = "text"]) => (
                         <Field key={key} label={label}>

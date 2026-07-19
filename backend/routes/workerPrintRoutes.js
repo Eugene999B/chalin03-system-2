@@ -24,7 +24,7 @@ const {
 const {
   buildA4ProofCardPdf,
   buildExactCr80CardPdf,
-} = require("../services/workerCardArtworkService");
+} = require("../services/premiumWorkerCardService");
 
 const router = express.Router();
 
