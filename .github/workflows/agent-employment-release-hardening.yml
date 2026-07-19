@@ -1,0 +1,158 @@
+name: Harden standalone employment release
+
+on:
+  push:
+    branches:
+      - agent/standalone-employment-documents-signature
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/standalone-employment-documents-signature
+
+      - name: Apply security and lifecycle hardening
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          signature_route = Path('backend/routes/documentSignatureRoutes.js')
+          source = signature_route.read_text()
+          old = '''router.get(
+            "/document-signature",
+            requireAuth,
+            requirePermission("workers.documents.view"),'''
+          new = '''router.get(
+            "/document-signature",
+            requireAuth,
+            requirePermission("security.admin"),'''
+          if old not in source:
+              raise SystemExit('Signature GET permission anchor missing.')
+          signature_route.write_text(source.replace(old, new, 1))
+
+          route = Path('backend/routes/standaloneHrDocumentRoutes.js')
+          source = route.read_text()
+          anchor = '''    if (document.linked_worker_letter_id) {
+              return res.status(409).json({
+                status: "error",
+                message: "This document is already linked to a worker profile.",
+              });
+            }
+
+            const [workerRows] = await pool.query('''
+          replacement = '''    if (document.linked_worker_letter_id) {
+              return res.status(409).json({
+                status: "error",
+                message: "This document is already linked to a worker profile.",
+              });
+            }
+            if (!["issued", "acknowledged"].includes(document.status)) {
+              return res.status(409).json({
+                status: "error",
+                message: "Approve and issue the document before linking it to a worker profile.",
+              });
+            }
+
+            const [workerRows] = await pool.query('''
+          if anchor not in source:
+              raise SystemExit('Standalone link lifecycle anchor missing.')
+          route.write_text(source.replace(anchor, replacement, 1))
+
+          page = Path('frontend/src/pages/EmploymentDocumentsPage.jsx')
+          source = page.read_text()
+          old = '''  const canManage = hasPermission("workers.documents.manage");
+            const canLink = hasPermission("workers.manage") || canManage;'''
+          new = '''  const canManage = hasPermission("workers.documents.manage");
+            const canApproveOrArchive = canManage && hasPermission("workers.manage");
+            const canLink = canApproveOrArchive;'''
+          if old not in source:
+              raise SystemExit('Frontend permission anchor missing.')
+          source = source.replace(old, new, 1)
+          source = source.replace(
+              ') : canLink ? (',
+              ') : canLink && ["issued", "acknowledged"].includes(document.status) ? (',
+              1,
+          )
+          source = source.replace(
+              '{canManage && document.status === "draft" ? (',
+              '{canApproveOrArchive && document.status === "draft" ? (',
+              1,
+          )
+          source = source.replace(
+              '{canManage && document.status !== "cancelled" ? (',
+              '{canApproveOrArchive && document.status !== "cancelled" ? (',
+              1,
+          )
+          page.write_text(source)
+
+          backend_test = Path('backend/tests/employmentDocuments.test.js')
+          source = backend_test.read_text()
+          anchor = '''  const schemaSource = fs.readFileSync(
+              path.join(__dirname, "..", "services", "employmentDocumentSchemaService.js"),
+              "utf8"
+            );'''
+          replacement = '''  const schemaSource = fs.readFileSync(
+              path.join(__dirname, "..", "services", "employmentDocumentSchemaService.js"),
+              "utf8"
+            );
+            const signatureRouteSource = fs.readFileSync(
+              path.join(__dirname, "..", "routes", "documentSignatureRoutes.js"),
+              "utf8"
+            );'''
+          if anchor not in source:
+              raise SystemExit('Backend test source anchor missing.')
+          source = source.replace(anchor, replacement, 1)
+          source = source.replace(
+              '  assert.match(routeSource, /link-worker/);',
+              '  assert.match(routeSource, /link-worker/);\n  assert.match(routeSource, /Approve and issue the document before linking/);',
+              1,
+          )
+          source = source.replace(
+              '  assert.match(schemaSource, /signature_captured_at/);',
+              '  assert.match(schemaSource, /signature_captured_at/);\n  assert.match(signatureRouteSource, /requirePermission\\("security\\.admin"\\)/);',
+              1,
+          )
+          backend_test.write_text(source)
+
+          frontend_test = Path('frontend/scripts/employmentDocumentsTests.mjs')
+          source = frontend_test.read_text()
+          source = source.replace(
+              'assert.match(employmentPage, /link-worker/);',
+              'assert.match(employmentPage, /link-worker/);\nassert.match(employmentPage, /canApproveOrArchive/);\nassert.match(employmentPage, /\\["issued", "acknowledged"\\]\\.includes\\(document\\.status\\)/);',
+              1,
+          )
+          frontend_test.write_text(source)
+          PY
+
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run syntax-check
+          npm test
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npx eslint src/pages/EmploymentDocumentsPage.jsx src/pages/DocumentSignatureSettingsPage.jsx
+          npm run build
+
+      - name: Commit hardened release
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Harden employment document signature and linking controls"
+          git push origin HEAD
