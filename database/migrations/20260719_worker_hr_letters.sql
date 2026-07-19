@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS worker_hr_letters (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    worker_id INT NOT NULL,
+    worker_id BIGINT NOT NULL,
     workspace_code VARCHAR(50) NOT NULL,
     letter_number VARCHAR(100) NULL,
     letter_type VARCHAR(50) NOT NULL,
