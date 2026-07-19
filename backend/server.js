@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 
 const { testDatabaseConnection } = require("./config/db");
 const { requestContext } = require("./middleware/requestContext");
@@ -108,6 +109,22 @@ const allowedOrigins = [
   .map((origin) => String(origin).trim())
   .filter((origin, index, array) => array.indexOf(origin) === index);
 
+const generalApiLimiter = rateLimit({
+  windowMs:
+    Math.max(1, Number(process.env.API_RATE_LIMIT_WINDOW_MINUTES) || 15) *
+    60 *
+    1000,
+  max: Math.max(100, Number(process.env.API_RATE_LIMIT_MAX) || 1500),
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === "/health",
+  message: {
+    status: "error",
+    code: "API_RATE_LIMITED",
+    message: "Too many API requests. Please wait briefly and try again.",
+  },
+});
+
 app.use(requestContext);
 app.use(buildSecurityMiddleware());
 
@@ -127,6 +144,11 @@ app.use(
     credentials: true,
   })
 );
+
+// A generous global ceiling protects ordinary database and reporting routes
+// from denial-of-service abuse. Login and sensitive administration retain
+// their tighter dedicated limiters below.
+app.use("/api", generalApiLimiter);
 
 const bodyLimit = process.env.API_BODY_LIMIT || "10mb";
 
