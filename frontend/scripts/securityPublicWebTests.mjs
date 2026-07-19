@@ -31,6 +31,14 @@ assert.match(headers, /\/favicon-192x192\.png/);
 assert.match(headers, /\/favicon-512x512\.png/);
 assert.match(headers, /max-age=86400, must-revalidate/);
 
+assert.match(
+  appIndex,
+  /<meta\s+name="robots"\s+content="index, follow, max-image-preview:large"\s*\/>/s
+);
+assert.doesNotMatch(
+  appIndex,
+  /<meta\s+name="robots"\s+content="noindex/i
+);
 assert.match(appIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any"/);
 assert.match(
   appIndex,
