@@ -86,6 +86,7 @@ jobs:
             src/pages/SystemOperationsPage.jsx \
             src/pages/UsersSettingsPage.jsx \
             src/pages/ExpandedWorkerProfilePage.jsx \
+            src/components/WorkerHrLettersPanel.jsx \
             src/components/BusinessPortalShell.jsx \
             src/components/PublicPageMeta.jsx
 

@@ -33,6 +33,12 @@ const expandedWorkerPage = read(
 const expandedWorkerCss = read(
   "src/styles/expandedWorkerProfile.css"
 );
+const workerHrLettersPanel = read(
+  "src/components/WorkerHrLettersPanel.jsx"
+);
+const workerHrLettersCss = read(
+  "src/styles/workerHrLetters.css"
+);
 
 assert.match(indexHtml, /Chalin 03 Group Operations Platform/);
 assert.doesNotMatch(indexHtml, /https:\/\/chalin03\.com/);
@@ -97,6 +103,8 @@ assert.match(release2FinalCss, /\.r2-worker-shell/);
 assert.match(release2FinalControlPage, /ExpandedWorkerProfilePage/);
 assert.match(expandedWorkerPage, /Upload Photo/);
 assert.match(expandedWorkerPage, /Personal & National ID/);
+assert.match(expandedWorkerPage, /Letters & HR Correspondence/);
+assert.match(expandedWorkerPage, /WorkerHrLettersPanel/);
 assert.match(expandedWorkerPage, /Family & Emergency/);
 assert.match(expandedWorkerPage, /GhanaPost digital address/);
 assert.match(expandedWorkerPage, /SSNIT number/);
@@ -111,5 +119,10 @@ assert.match(expandedWorkerCss, /\.worker-print-pack-actions/);
 assert.match(expandedWorkerCss, /\.worker-print-choice-overlay/);
 assert.match(expandedWorkerCss, /\.expanded-worker-layout/);
 assert.match(expandedWorkerCss, /\.worker-profile-tabs/);
+assert.match(workerHrLettersPanel, /Employment Letters and HR Correspondence/);
+assert.match(workerHrLettersPanel, /Save Draft Letter/);
+assert.match(workerHrLettersPanel, /Record Worker Signature \/ Receipt/);
+assert.match(workerHrLettersPanel, /Authorised boss \/ signatory name/);
+assert.match(workerHrLettersCss, /\.worker-hr-card/);
 
 console.log("PASS - frontend static source checks completed.");

@@ -67,6 +67,7 @@ const PREFERRED_TABLE_ORDER = [
   "worker_profile_change_history",
   "worker_private_files",
   "worker_print_history",
+  "worker_hr_letters",
   "worker_category_assignment_conflicts",
   "products",
   "stock_adjustments",
