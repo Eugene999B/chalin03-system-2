@@ -1,10 +1,10 @@
-const CACHE_NAME = "chalin03-app-v6";
+const CACHE_NAME = "chalin03-version-3-v1";
 
 const CORE_ASSETS = [
   "/",
-  "/manifest.webmanifest",
-  "/chalin03-pwa-192.png",
-  "/chalin03-pwa-512.png",
+  "/site.webmanifest",
+  "/favicon-192x192.png",
+  "/favicon-512x512.png",
   "/chalin03-logo.png"
 ];
 
