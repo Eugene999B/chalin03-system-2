@@ -45,6 +45,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/routes/workerPrintRoutes.js
+          git add \
+            backend/routes/workerPrintRoutes.js \
+            backend/services/workerCardArtworkService.js \
+            backend/tests/workerCardPrintLayout.test.js
           git commit -m "fix: generate exact two-page CR80 staff cards"
           git push origin HEAD:agent/hotfix-id-card-print-layout
