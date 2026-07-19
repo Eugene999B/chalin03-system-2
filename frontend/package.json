@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs",
+    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

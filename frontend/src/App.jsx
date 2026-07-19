@@ -56,6 +56,8 @@ import OwnerRecoveryPage from "./pages/OwnerRecoveryPage";
 import Release2FinalControlPage from "./pages/Release2FinalControlPage";
 import WorkspaceHelpPage from "./pages/WorkspaceHelpPage";
 import WorkspaceAdministrationPage from "./pages/WorkspaceAdministrationPage";
+import EmploymentDocumentsPage from "./pages/EmploymentDocumentsPage";
+import DocumentSignatureSettingsPage from "./pages/DocumentSignatureSettingsPage";
 import {
   HIRE_SECTION_PERMISSIONS,
   MINING_SECTION_PERMISSIONS,
@@ -294,6 +296,20 @@ export default function App() {
               )}
             />
             <Route
+              path="employment-documents"
+              element={permissionOnlyPage(
+                "workers.documents.view",
+                <EmploymentDocumentsPage />
+              )}
+            />
+            <Route
+              path="document-signature-settings"
+              element={permissionOnlyPage(
+                "security.admin",
+                <DocumentSignatureSettingsPage />
+              )}
+            />
+            <Route
               path="system-operations"
               element={permissionOnlyPage("system.diagnostics", <SystemOperationsPage />)}
             />
@@ -402,6 +418,20 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="employment-documents"
+              element={permissionOnlyPage(
+                "workers.documents.view",
+                <EmploymentDocumentsPage />
+              )}
+            />
+            <Route
+              path="document-signature-settings"
+              element={permissionOnlyPage(
+                "security.admin",
+                <DocumentSignatureSettingsPage />
               )}
             />
             <Route
@@ -537,6 +567,20 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="employment-documents"
+              element={permissionOnlyPage(
+                "workers.documents.view",
+                <EmploymentDocumentsPage />
+              )}
+            />
+            <Route
+              path="document-signature-settings"
+              element={permissionOnlyPage(
+                "security.admin",
+                <DocumentSignatureSettingsPage />
               )}
             />
             <Route

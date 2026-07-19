@@ -67,9 +67,15 @@ const groupConfigurationRoutes = require("./routes/groupConfigurationRoutes");
 const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
 const workerPrintRoutes = require("./routes/workerPrintRoutes");
 const workerHrLetterRoutes = require("./routes/workerHrLetterRoutes");
+const workerHrPdfV2Routes = require("./routes/workerHrPdfV2Routes");
+const standaloneHrDocumentRoutes = require("./routes/standaloneHrDocumentRoutes");
+const documentSignatureRoutes = require("./routes/documentSignatureRoutes");
 const {
   ensureWorkerHrLetterSchema,
 } = require("./services/workerHrLetterSchemaService");
+const {
+  ensureEmploymentDocumentSchema,
+} = require("./services/employmentDocumentSchemaService");
 const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
@@ -176,6 +182,8 @@ app.get("/api", (req, res) => {
       "/api/group-executive",
       "/api/group-configuration",
       "/api/release2-final",
+      "/api/release2-final/standalone-hr",
+      "/api/release2-final/document-signature",
       "/api/workspace-admin",
     ],
   });
@@ -280,6 +288,10 @@ app.use("/api/group-configuration", groupConfigurationRoutes);
 app.use("/api/release2-final", workerCardVerificationRoutes);
 app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
+// Register the compact signed-PDF and approval handlers before the legacy HR router.
+app.use("/api/release2-final", workerHrPdfV2Routes);
+app.use("/api/release2-final", standaloneHrDocumentRoutes);
+app.use("/api/release2-final", documentSignatureRoutes);
 app.use("/api/release2-final", workerHrLetterRoutes);
 app.use("/api/release2-final", ownerSecurityRoutes);
 app.use("/api/release2-final", release2FinalRoutes);
@@ -302,6 +314,7 @@ async function startServer() {
     await testDatabaseConnection();
     await runStartupSelfCheck();
     await ensureWorkerHrLetterSchema();
+    await ensureEmploymentDocumentSchema();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
