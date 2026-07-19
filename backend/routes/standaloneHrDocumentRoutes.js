@@ -672,11 +672,11 @@ router.post(
     }
 
     if (!["issued", "acknowledged"].includes(document.status)) {
-  return res.status(409).json({
-    status: "error",
-    message: "Approve and issue the document before linking it to a worker profile.",
-  });
-}
+    return res.status(409).json({
+      status: "error",
+      message: "Approve and issue the document before linking it to a worker profile.",
+    });
+  }
 
     const [workerRows] = await pool.query(
       `SELECT id, employee_number, full_name, workspace_code
