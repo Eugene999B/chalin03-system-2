@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 
 const { pool } = require("../config/db");
+const { BACKUP_MANIFEST_VERSION } = require("../config/version");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
@@ -16,7 +17,7 @@ const { requireProtectedAction, appendLedger } = release2FinalRoutes;
 const router = express.Router();
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const MANIFEST_VERSION = "chalin03-release-3f-d-delegated-v1";
+const MANIFEST_VERSION = BACKUP_MANIFEST_VERSION;
 const LEGACY_ALIAS_TABLES = new Set([
   "stores",
   "user_store_access",
