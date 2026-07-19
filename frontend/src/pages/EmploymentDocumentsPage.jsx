@@ -104,7 +104,8 @@ function statusLabel(value) {
 export default function EmploymentDocumentsPage() {
   const { workspaceCode, hasPermission } = useAuth();
   const canManage = hasPermission("workers.documents.manage");
-  const canLink = hasPermission("workers.manage") || canManage;
+  const canApproveOrArchive = canManage && hasPermission("workers.manage");
+  const canLink = canApproveOrArchive;
   const [options, setOptions] = useState({
     letter_types: [],
     default_rules: [],
@@ -942,7 +943,7 @@ export default function EmploymentDocumentsPage() {
                           <strong>{document.linked_worker_number}</strong>
                           <span>{document.linked_worker_name}</span>
                         </div>
-                      ) : canLink ? (
+                      ) : canLink && ["issued", "acknowledged"].includes(document.status) ? (
                         <div className="employment-link-control">
                           <select
                             value={linkSelections[document.id] || ""}
@@ -982,7 +983,7 @@ export default function EmploymentDocumentsPage() {
                         >
                           PDF
                         </button>
-                        {canManage && document.status === "draft" ? (
+                        {canApproveOrArchive && document.status === "draft" ? (
                           <>
                             <button
                               type="button"
@@ -1017,7 +1018,7 @@ export default function EmploymentDocumentsPage() {
                             Acknowledge
                           </button>
                         ) : null}
-                        {canManage && document.status !== "cancelled" ? (
+                        {canApproveOrArchive && document.status !== "cancelled" ? (
                           <button
                             type="button"
                             className="danger compact"

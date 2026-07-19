@@ -90,12 +90,18 @@ test("standalone documents preserve linking and signature snapshot requirements"
     path.join(__dirname, "..", "services", "employmentDocumentSchemaService.js"),
     "utf8"
   );
+  const signatureRouteSource = fs.readFileSync(
+    path.join(__dirname, "..", "routes", "documentSignatureRoutes.js"),
+    "utf8"
+  );
 
   assert.match(routeSource, /standalone_hr_documents/);
   assert.match(routeSource, /link-worker/);
+  assert.match(routeSource, /Approve and issue the document before linking/);
   assert.match(routeSource, /linked_worker_letter_id/);
   assert.match(routeSource, /approval_signature_data_url/);
   assert.match(workerV2Source, /getDocumentSignatureSnapshot/);
   assert.match(schemaSource, /document_signature_settings/);
   assert.match(schemaSource, /signature_captured_at/);
+  assert.match(signatureRouteSource, /requirePermission\("security\.admin"\)/);
 });

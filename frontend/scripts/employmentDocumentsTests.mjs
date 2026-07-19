@@ -20,6 +20,8 @@ const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
 assert.match(employmentPage, /standalone-hr\/documents/);
 assert.match(employmentPage, /Approve & Sign/);
 assert.match(employmentPage, /link-worker/);
+assert.match(employmentPage, /canApproveOrArchive/);
+assert.match(employmentPage, /\["issued", "acknowledged"\]\.includes\(document\.status\)/);
 assert.match(employmentPage, /No worker profile is created by this form/);
 assert.match(signaturePage, /onPointerDown/);
 assert.match(signaturePage, /toDataURL\("image\/png"\)/);

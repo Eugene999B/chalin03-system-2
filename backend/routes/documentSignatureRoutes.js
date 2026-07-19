@@ -22,7 +22,7 @@ function cleanText(value, maxLength = 255) {
 router.get(
   "/document-signature",
   requireAuth,
-  requirePermission("workers.documents.view"),
+  requirePermission("security.admin"),
   asyncHandler(async (req, res) => {
     const setting = await loadDocumentSignature();
     return res.json({
