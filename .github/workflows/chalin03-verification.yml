@@ -79,27 +79,15 @@ jobs:
       - name: Run frontend source tests
         run: npm test
 
-      - name: Lint protected release frontend files
+      - name: Enforce full frontend lint
         run: |
-          npx eslint \
-            src/pages/BackupPage.jsx \
-            src/pages/SystemOperationsPage.jsx \
-            src/pages/UsersSettingsPage.jsx \
-            src/pages/ExpandedWorkerProfilePage.jsx \
-            src/components/WorkerHrLettersPanel.jsx \
-            src/components/BusinessPortalShell.jsx \
-            src/components/PublicPageMeta.jsx
+          set -o pipefail
+          npm run lint 2>&1 | tee frontend-lint.log
 
       - name: Build production frontend
         run: |
           set -o pipefail
           npm run build 2>&1 | tee frontend-build.log
-
-      - name: Record legacy full-project lint backlog
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          npm run lint 2>&1 | tee frontend-lint.log
 
       - name: Preserve frontend verification logs
         if: always()
