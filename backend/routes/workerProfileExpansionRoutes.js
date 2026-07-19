@@ -13,6 +13,11 @@ const {
   getBusinessUnitId,
   normalizeCategory,
 } = require("../services/categoryIsolationService");
+const {
+  allocateWorkerIdentity,
+  cardDatesForReissue,
+  ensureWorkerIdentitySchema,
+} = require("../services/workerIdentityService");
 
 const router = express.Router();
 
@@ -803,18 +808,33 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = profilePayload(req.body);
 
-    if (!payload.employee_number || !payload.full_name) {
+    if (!payload.full_name) {
       return res.status(400).json({
         status: "error",
-        message:
-          "Employee number and full legal name are required.",
+        message: "Full legal name is required. Employee number is generated automatically.",
       });
     }
 
+    const workspaceCode = activeWorkerWorkspace(req);
+    const businessUnitId = await getBusinessUnitId(workspaceCode);
+    await validateWorkerLinks({ payload, workspaceCode });
+    await ensureWorkerIdentitySchema();
+
+    const connection = await pool.getConnection();
+    let identity = null;
+
     try {
-      const workspaceCode = activeWorkerWorkspace(req);
-      const businessUnitId = await getBusinessUnitId(workspaceCode);
-      await validateWorkerLinks({ payload, workspaceCode });
+      await connection.beginTransaction();
+      identity = await allocateWorkerIdentity(
+        connection,
+        workspaceCode,
+        new Date()
+      );
+
+      payload.employee_number = identity.employeeNumber;
+      payload.id_card_serial = identity.cardSerial;
+      payload.id_card_issue_date = identity.issueDate;
+      payload.id_card_expiry_date = identity.expiryDate;
 
       const columns = [
         ...PROFILE_EDIT_COLUMNS,
@@ -826,9 +846,7 @@ router.post(
       ];
 
       const values = [
-        ...PROFILE_EDIT_COLUMNS.map(
-          (column) => payload[column]
-        ),
+        ...PROFILE_EDIT_COLUMNS.map((column) => payload[column]),
         workspaceCode,
         businessUnitId,
         "active",
@@ -836,7 +854,7 @@ router.post(
         req.user.id,
       ];
 
-      const [result] = await pool.query(
+      const [result] = await connection.query(
         `INSERT INTO worker_profiles (
            ${columns.join(", ")}
          )
@@ -846,7 +864,7 @@ router.post(
         values
       );
 
-      await pool.query(
+      await connection.query(
         `INSERT INTO worker_profile_change_history (
            worker_id,
            change_type,
@@ -858,14 +876,18 @@ router.post(
          VALUES (?, 'profile_created', ?, NULL, ?, ?)`,
         [
           result.insertId,
-          cleanText(
-            req.body?.change_reason,
-            2000
-          ) || "Initial worker profile created.",
-          safeJson(payload),
+          cleanText(req.body?.change_reason, 2000) ||
+            "Initial worker profile created with automatic employee identity.",
+          safeJson({
+            ...payload,
+            employee_number_is_automatic: true,
+            card_validity_months: identity.validityMonths,
+          }),
           req.user.id,
         ]
       );
+
+      await connection.commit();
 
       await writeAuditEvent({
         req,
@@ -875,28 +897,35 @@ router.post(
         entityId: result.insertId,
         severity: "notice",
         details:
-          `Expanded worker profile ${payload.employee_number} was created.`,
+          `Expanded worker profile ${payload.employee_number} was created with automatic identity and ${identity.validityMonths}-month card validity.`,
       });
 
       return res.status(201).json({
         status: "success",
         message:
-          "Expanded worker profile created successfully.",
-        worker: await loadExpandedWorker(
-          result.insertId,
-          req
-        ),
+          `Worker profile created. Employee number ${payload.employee_number} and card expiry ${payload.id_card_expiry_date} were generated automatically.`,
+        employee_number_is_automatic: true,
+        card_validity_months: identity.validityMonths,
+        worker: await loadExpandedWorker(result.insertId, req),
       });
     } catch (error) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Preserve the original error.
+      }
+
       if (error.code === "ER_DUP_ENTRY") {
         return res.status(409).json({
           status: "error",
           message:
-            "The employee number, linked account or another unique value is already assigned.",
+            "The generated employee number, linked account or another unique value is already assigned.",
         });
       }
 
       throw error;
+    } finally {
+      connection.release();
     }
   })
 );
@@ -943,14 +972,13 @@ router.put(
 
     if (
       !workerId ||
-      !payload.employee_number ||
       !payload.full_name ||
       !reason
     ) {
       return res.status(400).json({
         status: "error",
         message:
-          "Worker, employee number, full legal name and change reason are required.",
+          "Worker, full legal name and change reason are required.",
       });
     }
 
@@ -972,6 +1000,12 @@ router.put(
         message: "Worker profile not found.",
       });
     }
+
+    // Employee number, card serial and validity are controlled by the identity service.
+    payload.employee_number = beforeRows[0].employee_number;
+    payload.id_card_serial = beforeRows[0].id_card_serial;
+    payload.id_card_issue_date = beforeRows[0].id_card_issue_date;
+    payload.id_card_expiry_date = beforeRows[0].id_card_expiry_date;
 
     try {
       const assignments = PROFILE_EDIT_COLUMNS.map(
@@ -1049,6 +1083,93 @@ router.put(
 
       throw error;
     }
+  })
+);
+
+router.post(
+  "/workers-expanded/:id/reissue-id-card",
+  requireAuth,
+  requirePermission(
+    "workers.manage",
+    "workers.sensitive.view"
+  ),
+  asyncHandler(async (req, res) => {
+    const workerId = positiveId(req.params.id);
+    const reason = cleanText(req.body?.reason, 1000);
+
+    if (!workerId || !reason) {
+      return res.status(400).json({
+        status: "error",
+        message: "Worker and reissue reason are required.",
+      });
+    }
+
+    const workspaceCode = activeWorkerWorkspace(req);
+    const [beforeRows] = await pool.query(
+      `SELECT id, employee_number, id_card_issue_date, id_card_expiry_date, id_card_serial
+       FROM worker_profiles
+       WHERE id = ? AND workspace_code = ?
+       LIMIT 1`,
+      [workerId, workspaceCode]
+    );
+
+    if (!beforeRows.length) {
+      return res.status(404).json({
+        status: "error",
+        message: "Worker profile not found.",
+      });
+    }
+
+    const dates = await cardDatesForReissue(new Date());
+    const serial = beforeRows[0].id_card_serial || beforeRows[0].employee_number;
+
+    await pool.query(
+      `UPDATE worker_profiles
+       SET id_card_issue_date = ?,
+           id_card_expiry_date = ?,
+           id_card_serial = ?,
+           updated_by = ?
+       WHERE id = ? AND workspace_code = ?`,
+      [dates.issueDate, dates.expiryDate, serial, req.user.id, workerId, workspaceCode]
+    );
+
+    await pool.query(
+      `INSERT INTO worker_profile_change_history (
+         worker_id, change_type, reason, before_json, after_json, changed_by
+       ) VALUES (?, 'id_card_reissued', ?, ?, ?, ?)`,
+      [
+        workerId,
+        reason,
+        safeJson(beforeRows[0]),
+        safeJson({
+          employee_number: beforeRows[0].employee_number,
+          id_card_serial: serial,
+          id_card_issue_date: dates.issueDate,
+          id_card_expiry_date: dates.expiryDate,
+          card_validity_months: dates.validityMonths,
+        }),
+        req.user.id,
+      ]
+    );
+
+    await writeAuditEvent({
+      req,
+      action: "WORKER_ID_CARD_REISSUED",
+      actionType: "workforce.id_card.reissued",
+      entityType: "worker",
+      entityId: workerId,
+      severity: "notice",
+      details:
+        `Worker ID card was reissued until ${dates.expiryDate}. Reason: ${reason}`,
+    });
+
+    return res.json({
+      status: "success",
+      message:
+        `ID card reissued successfully. New expiry date: ${dates.expiryDate}.`,
+      card_validity_months: dates.validityMonths,
+      worker: await loadExpandedWorker(workerId, req),
+    });
   })
 );
 

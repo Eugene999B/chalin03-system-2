@@ -16,7 +16,6 @@ const today = new Date()
   .slice(0, 10);
 
 const emptyCreateForm = {
-  employee_number: "",
   full_name: "",
   preferred_name: "",
   phone: "",
@@ -28,7 +27,6 @@ const emptyCreateForm = {
 };
 
 const profileFields = [
-  ["employee_number", "Employee number"],
   ["full_name", "Full legal name"],
   ["preferred_name", "Preferred name"],
   ["phone", "Phone"],
@@ -46,9 +44,6 @@ const profileFields = [
   ["ssnit_number", "SSNIT number"],
   ["tin_number", "TIN number"],
   ["blood_group", "Blood group"],
-  ["id_card_issue_date", "ID card issue date", "date"],
-  ["id_card_expiry_date", "ID card expiry date", "date"],
-  ["id_card_serial", "ID card serial / reference"],
   ["job_title", "Job title"],
   ["department", "Department"],
   ["employment_start_date", "Employment start date", "date"],
@@ -1324,6 +1319,36 @@ export default function ExpandedWorkerProfilePage() {
     }
   }
 
+  async function reissueIdCard() {
+    const reason = window.prompt(
+      "Enter the reason for reissuing this worker ID card."
+    );
+    if (!reason?.trim()) return;
+
+    setSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await axiosClient.post(
+        `/release2-final/workers-expanded/${selectedId}/reissue-id-card`,
+        { reason: reason.trim() }
+      );
+      setDetail(response.data.worker);
+      setMessage(response.data.message);
+      await refreshSelected();
+    } catch (requestError) {
+      setError(
+        errorMessage(
+          requestError,
+          "Worker ID card could not be reissued."
+        )
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function openPrintPdf(endpoint, loadingKey) {
     const previewWindow = window.open("", "_blank");
 
@@ -1489,8 +1514,11 @@ export default function ExpandedWorkerProfilePage() {
             className="expanded-worker-form-grid"
             onSubmit={createWorker}
           >
+            <Notice type="info">
+              Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+            </Notice>
+
             {[
-              ["employee_number", "Employee number"],
               ["full_name", "Full legal name"],
               ["preferred_name", "Preferred name"],
               ["phone", "Phone"],
@@ -1513,10 +1541,7 @@ export default function ExpandedWorkerProfilePage() {
                       [key]: event.target.value,
                     }))
                   }
-                  required={[
-                    "employee_number",
-                    "full_name",
-                  ].includes(key)}
+                  required={key === "full_name"}
                 />
               </Field>
             ))}
@@ -1763,9 +1788,20 @@ export default function ExpandedWorkerProfilePage() {
                           setPrintChoiceOpen(true)
                         }
                         disabled={Boolean(printLoading)}
-                      >
-                        Print ID Card
-                      </button>
+                        >
+                          Print ID Card
+                        </button>
+
+                        {canManage ? (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={reissueIdCard}
+                            disabled={saving || Boolean(printLoading)}
+                          >
+                            Reissue ID Card
+                          </button>
+                        ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -1819,6 +1855,14 @@ export default function ExpandedWorkerProfilePage() {
                         [
                           "Email",
                           selectedProfile.email || "-",
+                        ],
+                        [
+                          "ID card issued",
+                          formatDate(selectedProfile.id_card_issue_date),
+                        ],
+                        [
+                          "ID card expires",
+                          formatDate(selectedProfile.id_card_expiry_date),
                         ],
                         [
                           "Active assignments",
@@ -1931,10 +1975,7 @@ export default function ExpandedWorkerProfilePage() {
                               ) &&
                                 !canSensitive)
                             }
-                            required={[
-                              "employee_number",
-                              "full_name",
-                            ].includes(key)}
+                            required={key === "full_name"}
                           />
                         </Field>
                       )

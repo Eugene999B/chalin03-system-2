@@ -710,6 +710,8 @@ CREATE TABLE settings (
     debt_reminder_days INT NOT NULL DEFAULT 7,
     daily_summary_time TIME DEFAULT '18:00:00',
     receipt_footer VARCHAR(255) DEFAULT 'Thank You For Coming',
+    worker_id_card_validity_months INT NOT NULL DEFAULT 24,
+    worker_employee_number_prefix VARCHAR(20) NOT NULL DEFAULT 'CH03',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -2730,3 +2732,11 @@ VALUES (
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 SELECT 'RELEASE 3F-B INSTALLMENT MIGRATION COMPLETE' AS result;
+
+
+-- worker_identity_sequences
+CREATE TABLE IF NOT EXISTS worker_identity_sequences (
+    workspace_code VARCHAR(50) NOT NULL PRIMARY KEY,
+    last_number INT NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

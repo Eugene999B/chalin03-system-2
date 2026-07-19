@@ -13,6 +13,11 @@ const {
 const {
   writeAuditEvent,
 } = require("../services/auditTrailService");
+const {
+  calculateCardDates,
+  ensureWorkerIdentitySchema,
+  loadWorkerIdentitySettings,
+} = require("../services/workerIdentityService");
 
 const router = express.Router();
 
@@ -334,6 +339,8 @@ function renderPdf(options, buildDocument) {
 }
 
 async function loadWorkerPrintData(workerId) {
+  await ensureWorkerIdentitySchema();
+  const identitySettings = await loadWorkerIdentitySettings();
   const [profileRows] = await pool.query(
     `SELECT
        wp.*,
@@ -460,6 +467,19 @@ async function loadWorkerPrintData(workerId) {
   ]);
 
   const settings = settingsRows[0] || {};
+  const cardDates = calculateCardDates(
+    profileRows[0].id_card_issue_date ||
+      profileRows[0].employment_start_date ||
+      new Date(),
+    identitySettings.validityMonths
+  );
+
+  profileRows[0].id_card_issue_date =
+    profileRows[0].id_card_issue_date || cardDates.issueDate;
+  profileRows[0].id_card_expiry_date =
+    profileRows[0].id_card_expiry_date || cardDates.expiryDate;
+  profileRows[0].id_card_serial =
+    profileRows[0].id_card_serial || profileRows[0].employee_number;
 
   return {
     profile: profileRows[0],
@@ -1471,103 +1491,66 @@ function drawIdCardFront(
   const scale = width / CARD_WIDTH;
   const workspaceLabel = workspaceCardLabel(data);
   const serial = profile.id_card_serial || profile.employee_number;
+  const status = titleCase(profile.employment_status || "active");
 
-  doc
-    .save()
-    .roundedRect(x, y, width, height, 7 * scale)
-    .fill(WHITE);
-
-  // Ghana-inspired security accent. This is a company card, not a government ID.
-  doc.rect(x, y, 3.1 * scale, height / 3).fill(GHANA_RED);
-  doc.rect(x, y + height / 3, 3.1 * scale, height / 3).fill(GOLD);
-  doc.rect(x, y + (height / 3) * 2, 3.1 * scale, height / 3).fill(GHANA_GREEN);
-
-  doc
-    .rect(x + 3.1 * scale, y, width - 3.1 * scale, 39 * scale)
-    .fill(NAVY);
-
-  // Subtle company watermark.
   doc.save();
-  doc.opacity(0.045);
+  doc.roundedRect(x, y, width, height, 7 * scale).fill(WHITE);
+
+  doc.rect(x, y, width, 46 * scale).fill(NAVY);
+  doc.rect(x, y + 46 * scale, width, 2.5 * scale).fill(GOLD);
+  doc.rect(x, y, 3.2 * scale, height / 3).fill(GHANA_RED);
+  doc.rect(x, y + height / 3, 3.2 * scale, height / 3).fill(GOLD);
+  doc.rect(x, y + (height / 3) * 2, 3.2 * scale, height / 3).fill(GHANA_GREEN);
+
+  doc.save();
+  doc.opacity(0.04);
   doc
     .fillColor(NAVY)
     .font("Helvetica-Bold")
-    .fontSize(62 * scale)
-    .text("C03", x + 116 * scale, y + 55 * scale, {
-      width: 112 * scale,
+    .fontSize(31 * scale)
+    .text("CHALIN 03", x + 82 * scale, y + 95 * scale, {
+      width: width - 94 * scale,
       align: "right",
       lineBreak: false,
     });
   doc.restore();
 
   doc
-    .roundedRect(
-      x + 10 * scale,
-      y + 8 * scale,
-      31 * scale,
-      31 * scale,
-      6 * scale
-    )
+    .roundedRect(x + 11 * scale, y + 7 * scale, 35 * scale, 35 * scale, 8 * scale)
     .fill(WHITE);
-
-  drawLogo(
-    doc,
-    x + 12.5 * scale,
-    y + 10.5 * scale,
-    26 * scale
-  );
+  drawLogo(doc, x + 14 * scale, y + 10 * scale, 29 * scale);
 
   fitSingleLine(
     doc,
     data.company.name.toUpperCase(),
-    x + 49 * scale,
-    y + 9 * scale,
-    width - 60 * scale,
-    9.3 * scale,
-    5.3 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: WHITE,
-    }
+    x + 53 * scale,
+    y + 8 * scale,
+    width - 65 * scale,
+    10.5 * scale,
+    6.2 * scale,
+    { font: "Helvetica-Bold", color: WHITE }
   );
 
   fitSingleLine(
     doc,
-    "EMPLOYEE IDENTITY CARD",
-    x + 49 * scale,
-    y + 24 * scale,
-    115 * scale,
-    6.2 * scale,
-    4.3 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: GOLD,
-    }
+    "OFFICIAL PERSONNEL IDENTIFICATION",
+    x + 53 * scale,
+    y + 24.5 * scale,
+    width - 65 * scale,
+    5.8 * scale,
+    4.1 * scale,
+    { font: "Helvetica-Bold", color: GOLD }
   );
-
-  doc
-    .roundedRect(
-      x + width - 67 * scale,
-      y + 22 * scale,
-      57 * scale,
-      11 * scale,
-      5.5 * scale
-    )
-    .fill("#173d61");
 
   fitSingleLine(
     doc,
     workspaceLabel.toUpperCase(),
-    x + width - 64 * scale,
-    y + 25.2 * scale,
-    51 * scale,
-    4.8 * scale,
-    3.4 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: WHITE,
-      align: "center",
-    }
+    x + 53 * scale,
+    y + 35 * scale,
+    width - 65 * scale,
+    4.7 * scale,
+    3.6 * scale,
+    { font: "Helvetica-Bold", color: "#cbd5e1" }
   );
 
   drawPhoto(
@@ -1575,21 +1558,31 @@ function drawIdCardFront(
     profile.photo_data,
     profile.full_name,
     x + 12 * scale,
-    y + 49 * scale,
-    67 * scale,
-    82 * scale,
-    {
-      radius: 6 * scale,
-      borderColor: GOLD,
-      background: CARD_SOFT,
-    }
+    y + 56 * scale,
+    68 * scale,
+    84 * scale,
+    { radius: 7 * scale, borderColor: GOLD, background: CARD_SOFT }
+  );
+
+  doc
+    .roundedRect(x + 88 * scale, y + 55 * scale, width - 100 * scale, 17 * scale, 8.5 * scale)
+    .fill("#fff8dc");
+  fitSingleLine(
+    doc,
+    profile.employee_number,
+    x + 95 * scale,
+    y + 60 * scale,
+    width - 114 * scale,
+    7.3 * scale,
+    4.8 * scale,
+    { font: "Helvetica-Bold", color: NAVY, align: "center" }
   );
 
   doc
     .fillColor(MUTED)
     .font("Helvetica-Bold")
-    .fontSize(4.6 * scale)
-    .text("EMPLOYEE NAME", x + 90 * scale, y + 49 * scale, {
+    .fontSize(4.3 * scale)
+    .text("EMPLOYEE NAME", x + 90 * scale, y + 79 * scale, {
       width: width - 102 * scale,
       lineBreak: false,
     });
@@ -1598,127 +1591,87 @@ function drawIdCardFront(
     doc,
     profile.full_name,
     x + 90 * scale,
-    y + 58 * scale,
+    y + 87 * scale,
     width - 102 * scale,
-    11.5 * scale,
-    6.2 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: CARD_INK,
-    }
+    11.2 * scale,
+    6.1 * scale,
+    { font: "Helvetica-Bold", color: CARD_INK }
   );
 
   fitSingleLine(
     doc,
     profile.job_title || "Staff Member",
     x + 90 * scale,
-    y + 75 * scale,
+    y + 104 * scale,
     width - 102 * scale,
-    7.2 * scale,
-    4.8 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: NAVY_LIGHT,
-    }
+    6.8 * scale,
+    4.5 * scale,
+    { font: "Helvetica-Bold", color: NAVY_LIGHT }
   );
 
-  const detailX = x + 90 * scale;
-  const labelWidth = 48 * scale;
-  const valueX = x + 142 * scale;
-  const valueWidth = width - 154 * scale;
-
-  [
-    ["EMPLOYEE NO.", profile.employee_number],
-    ["DEPARTMENT", profile.department || "Operations"],
-    ["WORK AREA", workspaceLabel],
-  ].forEach(([detailLabel, detailValue], index) => {
-    const rowY = y + (91 + index * 12) * scale;
-    doc
-      .fillColor(MUTED)
-      .font("Helvetica-Bold")
-      .fontSize(4.5 * scale)
-      .text(detailLabel, detailX, rowY, {
-        width: labelWidth,
-        lineBreak: false,
-      });
-
-    fitSingleLine(
-      doc,
-      detailValue,
-      valueX,
-      rowY - 0.4 * scale,
-      valueWidth,
-      6.2 * scale,
-      4 * scale,
-      {
-        font: "Helvetica-Bold",
-        color: TEXT,
-      }
-    );
-  });
+  fitSingleLine(
+    doc,
+    profile.department || "Operations",
+    x + 90 * scale,
+    y + 116 * scale,
+    width - 102 * scale,
+    5.2 * scale,
+    3.8 * scale,
+    { color: MUTED }
+  );
 
   doc
-    .roundedRect(
-      x + 88 * scale,
-      y + 126 * scale,
-      width - 100 * scale,
-      17 * scale,
-      4 * scale
-    )
+    .roundedRect(x + 88 * scale, y + 128 * scale, width - 100 * scale, 14 * scale, 4 * scale)
     .fill(CARD_SOFT);
 
   fitSingleLine(
     doc,
-    `ISSUED ${formatDate(
-      profile.id_card_issue_date || profile.employment_start_date,
-      "NOT SET"
-    )}`,
+    `ISSUED ${formatDate(profile.id_card_issue_date, "NOT SET")}`,
     x + 94 * scale,
-    y + 130.8 * scale,
-    56 * scale,
-    4.7 * scale,
-    3.5 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: NAVY,
-    }
+    y + 132 * scale,
+    59 * scale,
+    4.5 * scale,
+    3.4 * scale,
+    { font: "Helvetica-Bold", color: NAVY }
   );
 
   fitSingleLine(
     doc,
-    `EXPIRES ${formatDate(
-      profile.id_card_expiry_date,
-      "EMPLOYMENT END"
-    )}`,
-    x + 153 * scale,
-    y + 130.8 * scale,
-    67 * scale,
-    4.7 * scale,
-    3.5 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: NAVY,
-      align: "right",
-    }
+    `EXPIRES ${formatDate(profile.id_card_expiry_date, "NOT SET")}`,
+    x + 155 * scale,
+    y + 132 * scale,
+    width - 167 * scale,
+    4.5 * scale,
+    3.4 * scale,
+    { font: "Helvetica-Bold", color: NAVY, align: "right" }
   );
 
+  doc
+    .roundedRect(x + 12 * scale, y + height - 12.5 * scale, 68 * scale, 8.5 * scale, 4 * scale)
+    .fill(NAVY);
   fitSingleLine(
     doc,
-    `SERIAL ${serial}`,
-    x + 12 * scale,
-    y + height - 12 * scale,
-    66 * scale,
-    4.4 * scale,
+    status.toUpperCase(),
+    x + 16 * scale,
+    y + height - 10.2 * scale,
+    60 * scale,
+    4.2 * scale,
     3.2 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: MUTED,
-      align: "center",
-    }
+    { font: "Helvetica-Bold", color: GOLD, align: "center" }
+  );
+
+  fitSingleLine(
+    doc,
+    `CARD ${serial}`,
+    x + 88 * scale,
+    y + height - 10.2 * scale,
+    width - 100 * scale,
+    4.2 * scale,
+    3.2 * scale,
+    { font: "Helvetica-Bold", color: MUTED, align: "right" }
   );
 
   doc.restore();
-
   doc
     .lineWidth(1 * scale)
     .strokeColor(NAVY)
@@ -1740,132 +1693,93 @@ function drawIdCardBack(
   const serial = profile.id_card_serial || profile.employee_number;
   const workspaceLabel = workspaceCardLabel(data);
 
-  doc
-    .save()
-    .roundedRect(x, y, width, height, 7 * scale)
-    .fill(WHITE);
+  doc.save();
+  doc.roundedRect(x, y, width, height, 7 * scale).fill(LIGHT);
+  doc.rect(x, y, width, 38 * scale).fill(NAVY);
+  doc.rect(x, y + 38 * scale, width, 2.4 * scale).fill(GOLD);
 
-  doc
-    .rect(x, y, width, 34 * scale)
-    .fill(NAVY);
-
-  doc.rect(x, y + 34 * scale, width, 2.4 * scale).fill(GOLD);
-
-  drawLogo(
-    doc,
-    x + 10 * scale,
-    y + 7 * scale,
-    22 * scale
-  );
-
+  drawLogo(doc, x + 11 * scale, y + 7 * scale, 24 * scale);
   fitSingleLine(
     doc,
     data.company.name.toUpperCase(),
-    x + 40 * scale,
-    y + 7.5 * scale,
-    width - 50 * scale,
-    8 * scale,
-    4.7 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: WHITE,
-    }
+    x + 43 * scale,
+    y + 8 * scale,
+    width - 55 * scale,
+    8.7 * scale,
+    5 * scale,
+    { font: "Helvetica-Bold", color: WHITE }
   );
-
   fitSingleLine(
     doc,
-    "AUTHORIZED EMPLOYEE IDENTIFICATION",
-    x + 40 * scale,
-    y + 20.5 * scale,
-    width - 50 * scale,
-    5.3 * scale,
-    3.8 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: GOLD,
-    }
+    "SECURE WORKER CREDENTIAL • PROPERTY OF THE COMPANY",
+    x + 43 * scale,
+    y + 23 * scale,
+    width - 55 * scale,
+    4.7 * scale,
+    3.5 * scale,
+    { font: "Helvetica-Bold", color: GOLD }
   );
 
-  // Left information panel.
   doc
-    .roundedRect(
-      x + 10 * scale,
-      y + 45 * scale,
-      105 * scale,
-      58 * scale,
-      5 * scale
-    )
-    .fill(CARD_SOFT);
+    .roundedRect(x + 11 * scale, y + 49 * scale, 103 * scale, 58 * scale, 6 * scale)
+    .fill(WHITE)
+    .strokeColor(BORDER)
+    .lineWidth(0.7 * scale)
+    .stroke();
 
   doc
     .fillColor(NAVY)
     .font("Helvetica-Bold")
-    .fontSize(5.4 * scale)
-    .text("EMERGENCY CONTACT", x + 16 * scale, y + 51 * scale, {
-      width: 92 * scale,
+    .fontSize(5.2 * scale)
+    .text("EMERGENCY & SAFETY", x + 17 * scale, y + 55 * scale, {
+      width: 91 * scale,
       lineBreak: false,
     });
 
   fitSingleLine(
     doc,
     emergency?.full_name || "Not recorded",
-    x + 16 * scale,
-    y + 62 * scale,
-    92 * scale,
-    7 * scale,
-    4.5 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: TEXT,
-    }
+    x + 17 * scale,
+    y + 67 * scale,
+    91 * scale,
+    6.7 * scale,
+    4.3 * scale,
+    { font: "Helvetica-Bold", color: TEXT }
   );
-
   fitSingleLine(
     doc,
     emergency?.primary_phone || "No phone recorded",
-    x + 16 * scale,
-    y + 74 * scale,
-    92 * scale,
-    5.8 * scale,
-    4 * scale,
-    {
-      color: TEXT,
-    }
+    x + 17 * scale,
+    y + 80 * scale,
+    91 * scale,
+    5.6 * scale,
+    3.8 * scale,
+    { color: TEXT }
   );
-
   fitSingleLine(
     doc,
     `Blood group: ${profile.blood_group || "Not recorded"}`,
-    x + 16 * scale,
-    y + 87 * scale,
-    92 * scale,
-    5.7 * scale,
-    4 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: profile.blood_group ? DANGER : MUTED,
-    }
+    x + 17 * scale,
+    y + 93 * scale,
+    91 * scale,
+    5.4 * scale,
+    3.8 * scale,
+    { font: "Helvetica-Bold", color: profile.blood_group ? DANGER : MUTED }
   );
 
-  // Right verification panel.
   doc
-    .roundedRect(
-      x + 124 * scale,
-      y + 45 * scale,
-      width - 134 * scale,
-      58 * scale,
-      5 * scale
-    )
-    .lineWidth(0.7 * scale)
+    .roundedRect(x + 124 * scale, y + 49 * scale, width - 135 * scale, 58 * scale, 6 * scale)
+    .fill(WHITE)
     .strokeColor(BORDER)
+    .lineWidth(0.7 * scale)
     .stroke();
 
   doc
     .fillColor(NAVY)
     .font("Helvetica-Bold")
-    .fontSize(5.4 * scale)
-    .text("CARD VERIFICATION", x + 131 * scale, y + 51 * scale, {
-      width: width - 148 * scale,
+    .fontSize(5.2 * scale)
+    .text("CREDENTIAL VERIFICATION", x + 131 * scale, y + 55 * scale, {
+      width: width - 149 * scale,
       lineBreak: false,
     });
 
@@ -1873,121 +1787,83 @@ function drawIdCardBack(
     ["SERIAL", serial],
     ["EMPLOYEE", profile.employee_number],
     ["CATEGORY", workspaceLabel],
-    [
-      "VALIDITY",
-      `${formatDate(
-        profile.id_card_issue_date || profile.employment_start_date,
-        "NOT SET"
-      )} - ${formatDate(profile.id_card_expiry_date, "EMPLOYMENT END")}`,
-    ],
-  ].forEach(([detailLabel, detailValue], index) => {
-    const rowY = y + (62 + index * 9.2) * scale;
-    fitSingleLine(
-      doc,
-      `${detailLabel}:`,
-      x + 131 * scale,
-      rowY,
-      34 * scale,
-      4.5 * scale,
-      3.4 * scale,
-      {
-        font: "Helvetica-Bold",
-        color: MUTED,
-      }
-    );
-    fitSingleLine(
-      doc,
-      detailValue,
-      x + 166 * scale,
-      rowY,
-      width - 178 * scale,
-      4.8 * scale,
-      3.4 * scale,
-      {
-        font: "Helvetica-Bold",
-        color: TEXT,
-      }
-    );
+    ["VALID UNTIL", formatDate(profile.id_card_expiry_date, "NOT SET")],
+  ].forEach(([label, value], index) => {
+    const rowY = y + (67 + index * 8.9) * scale;
+    fitSingleLine(doc, `${label}:`, x + 131 * scale, rowY, 39 * scale, 4.2 * scale, 3.2 * scale, {
+      font: "Helvetica-Bold",
+      color: MUTED,
+    });
+    fitSingleLine(doc, value, x + 171 * scale, rowY, width - 183 * scale, 4.5 * scale, 3.2 * scale, {
+      font: "Helvetica-Bold",
+      color: TEXT,
+    });
   });
 
   drawCardSecurityBars(
     doc,
-    `${serial}-${profile.employee_number}`,
-    x + 130 * scale,
-    y + 96 * scale,
-    width - 145 * scale,
-    8 * scale,
+    `${serial}-${profile.employee_number}-${profile.id_card_expiry_date}`,
+    x + 131 * scale,
+    y + 99 * scale,
+    width - 146 * scale,
+    7 * scale,
     scale
   );
 
-  // Signatures.
   doc
-    .moveTo(x + 12 * scale, y + 121 * scale)
-    .lineTo(x + 104 * scale, y + 121 * scale)
+    .fillColor(TEXT)
+    .font("Helvetica")
+    .fontSize(4.8 * scale)
+    .text(
+      "This card identifies an authorized worker of Chalin 03 Company Limited. It is not a national identity document. Alteration, transfer or unauthorized duplication is prohibited.",
+      x + 12 * scale,
+      y + 114 * scale,
+      { width: width - 24 * scale, align: "center", lineGap: 1.1 * scale }
+    );
+
+  doc
+    .moveTo(x + 17 * scale, y + 137 * scale)
+    .lineTo(x + 103 * scale, y + 137 * scale)
     .strokeColor(MUTED)
     .lineWidth(0.5 * scale)
     .stroke();
-
   doc
     .fillColor(MUTED)
     .font("Helvetica")
-    .fontSize(4.5 * scale)
-    .text("Employee Signature", x + 12 * scale, y + 124 * scale, {
-      width: 92 * scale,
+    .fontSize(4.2 * scale)
+    .text("Employee Signature", x + 17 * scale, y + 140 * scale, {
+      width: 86 * scale,
       align: "center",
     });
 
   doc
-    .moveTo(x + 133 * scale, y + 121 * scale)
-    .lineTo(x + width - 12 * scale, y + 121 * scale)
+    .moveTo(x + 139 * scale, y + 137 * scale)
+    .lineTo(x + width - 17 * scale, y + 137 * scale)
     .strokeColor(MUTED)
     .lineWidth(0.5 * scale)
     .stroke();
-
   doc
     .fillColor(MUTED)
     .font("Helvetica")
-    .fontSize(4.5 * scale)
-    .text("Authorized Signature", x + 133 * scale, y + 124 * scale, {
-      width: width - 145 * scale,
+    .fontSize(4.2 * scale)
+    .text("Authorized Signature", x + 139 * scale, y + 140 * scale, {
+      width: width - 156 * scale,
       align: "center",
     });
 
-  doc
-    .rect(x, y + height - 19 * scale, width, 19 * scale)
-    .fill(NAVY);
-
+  doc.rect(x, y + height - 8.5 * scale, width, 8.5 * scale).fill(NAVY);
   fitSingleLine(
     doc,
-    `If found, return to ${data.company.name}. ${data.company.phone}`,
+    `IF FOUND: ${data.company.address} • ${data.company.phone}`,
     x + 10 * scale,
-    y + height - 14.5 * scale,
+    y + height - 6.5 * scale,
     width - 20 * scale,
-    5.1 * scale,
-    3.7 * scale,
-    {
-      font: "Helvetica-Bold",
-      color: WHITE,
-      align: "center",
-    }
-  );
-
-  fitSingleLine(
-    doc,
-    "Company employee card only - not a national or government identity document.",
-    x + 10 * scale,
-    y + height - 7.3 * scale,
-    width - 20 * scale,
-    4.1 * scale,
-    3.2 * scale,
-    {
-      color: GOLD,
-      align: "center",
-    }
+    4 * scale,
+    3.1 * scale,
+    { font: "Helvetica-Bold", color: WHITE, align: "center" }
   );
 
   doc.restore();
-
   doc
     .lineWidth(1 * scale)
     .strokeColor(NAVY)

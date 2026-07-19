@@ -79,11 +79,13 @@ jobs:
       - name: Run frontend source tests
         run: npm test
 
-      - name: Lint Release 3F-D frontend files
+      - name: Lint protected release frontend files
         run: |
           npx eslint \
             src/pages/BackupPage.jsx \
-            src/pages/SystemOperationsPage.jsx
+            src/pages/SystemOperationsPage.jsx \
+            src/pages/UsersSettingsPage.jsx \
+            src/pages/ExpandedWorkerProfilePage.jsx
 
       - name: Build production frontend
         run: |
