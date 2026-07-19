@@ -10,50 +10,13 @@ on:
       - "agent/**"
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: chalin03-verification-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # BEGIN TEMPORARY WORKER ID FINALIZER
-  finalize-worker-id:
-    name: Finalize worker identity review
-    if: github.actor != 'github-actions[bot]' && (github.ref_name == 'agent/release-3f-d2-worker-id-card' || github.head_ref == 'agent/release-3f-d2-worker-id-card')
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out worker ID branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/release-3f-d2-worker-id-card
-          fetch-depth: 0
-
-      - name: Apply final review fixes
-        run: |
-          set -o pipefail
-          python .github/scripts/finalize_worker_id_upgrade.py 2>&1 | tee worker-id-finalizer.log
-
-      - name: Preserve finalizer diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: worker-id-finalizer-log
-          path: worker-id-finalizer.log
-          if-no-files-found: ignore
-          retention-days: 2
-
-      - name: Commit finalized worker identity package
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix: harden worker identity generation and card settings"
-          git push origin HEAD:agent/release-3f-d2-worker-id-card
-  # END TEMPORARY WORKER ID FINALIZER
-
   backend:
     name: Backend syntax and tests
     runs-on: ubuntu-latest
@@ -116,11 +79,13 @@ jobs:
       - name: Run frontend source tests
         run: npm test
 
-      - name: Lint Release 3F-D frontend files
+      - name: Lint protected release frontend files
         run: |
           npx eslint \
             src/pages/BackupPage.jsx \
-            src/pages/SystemOperationsPage.jsx
+            src/pages/SystemOperationsPage.jsx \
+            src/pages/UsersSettingsPage.jsx \
+            src/pages/ExpandedWorkerProfilePage.jsx
 
       - name: Build production frontend
         run: |
