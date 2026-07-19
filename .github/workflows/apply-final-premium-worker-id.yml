@@ -76,6 +76,7 @@ jobs:
             backend/package-lock.json \
             backend/routes/workerPrintRoutes.js \
             backend/server.js \
+            backend/services/workerCardDrawingService.js \
             frontend/src/pages/ExpandedWorkerProfilePage.jsx
           git commit -m "feat: activate approved premium worker ID and QR verification"
           git push origin HEAD:agent/final-premium-worker-id
