@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,4 +83,15 @@ const cashierHire = permissions("equipment_hire", "cashier", "cashier");
 assert.equal(canOpen(cashierMining, MINING_SECTION_PERMISSIONS.overview), false);
 assert.equal(canOpen(cashierHire, HIRE_SECTION_PERMISSIONS.overview), false);
 
-console.log("PASS - frontend permission routing and action tests completed.");
+const mainSource = readFileSync(join(root, "src/main.jsx"), "utf8");
+const mobilePermissionCss = readFileSync(
+  join(root, "src/styles/userPermissionManager.mobile.css"),
+  "utf8"
+);
+assert.match(mainSource, /userPermissionManager\.mobile\.css/);
+assert.match(mobilePermissionCss, /@media \(max-width: 720px\)/);
+assert.match(mobilePermissionCss, /\.upm-actions \.is-reset/);
+assert.match(mobilePermissionCss, /min-height: 46px/);
+assert.match(mobilePermissionCss, /overflow-x: clip/);
+
+console.log("PASS - frontend permission routing, action and mobile layout tests completed.");
