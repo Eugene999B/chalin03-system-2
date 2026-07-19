@@ -1,7 +1,7 @@
 {
-  "name": "Chalin 03 System",
+  "name": "Chalin 03 Group Operations Platform",
   "short_name": "Chalin 03",
-  "description": "Chalin 03 Company Limited staff portal for sales, inventory, stock transfers, reports, SMS, backups, maintenance and accounting intelligence.",
+  "description": "Chalin 03 Company Limited group operations platform for Spare Parts, Mining Operations, Equipment Hire, workers, HR documents, accounting, reporting, security and administration.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07182c",
