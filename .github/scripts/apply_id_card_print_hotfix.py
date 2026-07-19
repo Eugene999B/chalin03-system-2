@@ -1,7 +1,12 @@
 from pathlib import Path
 
 ROUTES_PATH = Path("backend/routes/workerPrintRoutes.js")
+SERVICE_PATH = Path("backend/services/workerCardArtworkService.js")
+TEST_PATH = Path("backend/tests/workerCardPrintLayout.test.js")
+
 routes = ROUTES_PATH.read_text(encoding="utf-8")
+service = SERVICE_PATH.read_text(encoding="utf-8")
+tests = TEST_PATH.read_text(encoding="utf-8")
 
 import_anchor = '''const {
   normalizePdfImageBuffer,
@@ -39,4 +44,22 @@ if old_builder not in routes:
 else:
     routes = routes.replace(old_builder, new_builder, 1)
 
+service = service.replace(
+    'sharp(Buffer.from(frontSvg(data)), { density: 300 })',
+    'sharp(Buffer.from(frontSvg(data)))',
+)
+service = service.replace(
+    'sharp(Buffer.from(backSvg(data)), { density: 300 })',
+    'sharp(Buffer.from(backSvg(data)))',
+)
+tests = tests.replace(
+    'assert.match(back, /Dunkwa Police Barrier/);',
+    'assert.match(back, /DUNKWA POLICE BARRIER/i);',
+)
+
+if "density: 300" in service:
+    raise RuntimeError("SVG density double scaling remains in the artwork service.")
+
 ROUTES_PATH.write_text(routes, encoding="utf-8")
+SERVICE_PATH.write_text(service, encoding="utf-8")
+TEST_PATH.write_text(tests, encoding="utf-8")
