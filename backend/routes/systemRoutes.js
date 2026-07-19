@@ -5,6 +5,7 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { getPublicPermissionCatalog } = require("../security/permissionCatalog");
 const { getSmsConfig } = require("../services/smsService");
+const { APP_VERSION } = require("../config/version");
 const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
@@ -51,7 +52,7 @@ const EXPECTED_TABLES = Object.freeze([
 ]);
 
 function appVersion() {
-  return process.env.APP_VERSION || "release-3f-d";
+  return process.env.APP_VERSION || APP_VERSION;
 }
 
 async function databaseStatus() {

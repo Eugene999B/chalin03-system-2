@@ -466,7 +466,7 @@ export default function NotificationCentrePage({ executiveMode = false }) {
                   <label>
                     <input
                       type="checkbox"
-                      checked={Boolean(Number(rule.is_enabled))}
+                      checked={Number(rule.is_enabled) === 1}
                       onChange={(event) => updateRule(rule, { is_enabled: event.target.checked })}
                       disabled={workingId === `rule-${rule.id}`}
                     />
@@ -476,7 +476,7 @@ export default function NotificationCentrePage({ executiveMode = false }) {
                     <label>
                       <input
                         type="checkbox"
-                        checked={Boolean(Number(rule.sms_allowed))}
+                        checked={Number(rule.sms_allowed) === 1}
                         onChange={(event) => updateRule(rule, { sms_allowed: event.target.checked })}
                         disabled={workingId === `rule-${rule.id}`}
                       />
@@ -484,7 +484,7 @@ export default function NotificationCentrePage({ executiveMode = false }) {
                     </label>
                   ) : (
                     <span className="notification-rule-sms-state">
-                      SMS escalation: {Boolean(Number(rule.sms_allowed)) ? "Admin approved" : "Not approved"}
+                      SMS escalation: {Number(rule.sms_allowed) === 1 ? "Admin approved" : "Not approved"}
                     </span>
                   )}
                 </div>

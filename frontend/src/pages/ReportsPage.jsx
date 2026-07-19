@@ -291,20 +291,6 @@ export default function ReportsPage() {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
 
-  function formatCompactMoney(value) {
-    const number = Number(value || 0);
-
-    if (number >= 1000000) {
-      return `GHS ${(number / 1000000).toFixed(1)}M`;
-    }
-
-    if (number >= 1000) {
-      return `GHS ${(number / 1000).toFixed(1)}K`;
-    }
-
-    return formatMoney(number);
-  }
-
   function formatNumber(value) {
     return Number(value || 0).toLocaleString();
   }

@@ -171,7 +171,6 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard();
     // Reload dashboard when the selected store changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
 
   useEffect(() => {
@@ -582,6 +581,8 @@ export default function DashboardPage() {
       actionPlan,
       bossBrief,
     };
+    // Pure display helpers are intentionally stable for the lifetime of this component.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, sales, debtSummary]);
 
   const recentSales = [...sales].slice(0, 8);

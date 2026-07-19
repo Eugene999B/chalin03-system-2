@@ -111,10 +111,20 @@ export default function SystemOperationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView]);
 
-  const catalog = delegation?.capability_catalog || [];
-  const activeAuthorities = delegation?.active_authorities || [];
-  const selectedAuthority = activeAuthorities.find(
-    (item) => Number(item.user?.id) === Number(selectedAdminId)
+  const catalog = useMemo(
+    () => delegation?.capability_catalog || [],
+    [delegation?.capability_catalog]
+  );
+  const activeAuthorities = useMemo(
+    () => delegation?.active_authorities || [],
+    [delegation?.active_authorities]
+  );
+  const selectedAuthority = useMemo(
+    () =>
+      activeAuthorities.find(
+        (item) => Number(item.user?.id) === Number(selectedAdminId)
+      ),
+    [activeAuthorities, selectedAdminId]
   );
 
   useEffect(() => {
@@ -127,7 +137,7 @@ export default function SystemOperationsPage() {
         ? new Date(selectedAuthority.expires_at).toISOString().slice(0, 16)
         : ""
     );
-  }, [selectedAdminId, delegation]);
+  }, [catalog, selectedAuthority]);
 
   async function unlockProtectedActions(event) {
     event.preventDefault();
@@ -242,7 +252,10 @@ export default function SystemOperationsPage() {
   const missingTables = database.missing_tables || [];
   const missingConfiguration = diagnostics?.missing_configuration || [];
   const workspaces = diagnostics?.enabled_workspaces || [];
-  const recentErrors = diagnostics?.recent_error_counts || [];
+  const recentErrors = useMemo(
+    () => diagnostics?.recent_error_counts || [],
+    [diagnostics?.recent_error_counts]
+  );
   const permissionControls = diagnostics?.permission_controls || {};
   const permissionOverrideCounts = permissionControls.overrides || {};
   const delegatedCounts = permissionControls.delegated_administration || {};

@@ -1,6 +1,6 @@
 {
   "name": "chalin03-backend",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {

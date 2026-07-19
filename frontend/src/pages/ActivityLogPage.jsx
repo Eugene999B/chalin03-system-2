@@ -47,7 +47,7 @@ function downloadBlob(response, fallbackName) {
 }
 
 export default function ActivityLogPage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const [filters, setFilters] = useState(emptyFilters);
   const [logs, setLogs] = useState([]);
   const [actions, setActions] = useState([]);

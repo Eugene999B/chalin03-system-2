@@ -140,7 +140,6 @@ export default function MaintenancePage() {
     if (isAdmin) {
       loadSummary();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
   async function clearBusinessData(event) {
@@ -200,8 +199,8 @@ export default function MaintenancePage() {
     }
   }
 
-  const counts = summary?.counts || {};
-  const tableNames = Object.keys(counts);
+  const counts = useMemo(() => summary?.counts || {}, [summary?.counts]);
+  const tableNames = useMemo(() => Object.keys(counts), [counts]);
 
   const totalRecords = useMemo(() => {
     return tableNames.reduce(

@@ -1,13 +1,13 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs",
+    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs && node scripts/versionThreeReleaseTests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -93,7 +93,7 @@ function downloadCsv(filename, rows) {
   const escapeCell = (value) => {
     if (value === null || value === undefined) return "";
     const text = typeof value === "object" ? JSON.stringify(value) : String(value);
-    return `"${text.replaceAll('\"', '\"\"')}"`;
+    return `"${text.replaceAll('"', '""')}"`;
   };
 
   const csv = [

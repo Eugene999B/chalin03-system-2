@@ -763,6 +763,8 @@ export default function ExpandedWorkerProfilePage() {
   useEffect(() => {
     loadWorkers();
     loadOptions();
+    // Initial bootstrap only; refresh actions explicitly reload the same data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => {

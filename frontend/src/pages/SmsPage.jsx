@@ -644,7 +644,7 @@ export default function SmsPage() {
     setLogTypeFilter("all");
   }
 
-  function useTemplate(templateMessage) {
+  function applyTemplate(templateMessage) {
     setMessage(templateMessage);
     setError("");
     setNotice("");
@@ -1147,7 +1147,7 @@ export default function SmsPage() {
                       key={template.title}
                       type="button"
                       style={styles.templateCard}
-                      onClick={() => useTemplate(template.message)}
+                      onClick={() => applyTemplate(template.message)}
                     >
                       <strong>{template.title}</strong>
                       <small>{template.message}</small>

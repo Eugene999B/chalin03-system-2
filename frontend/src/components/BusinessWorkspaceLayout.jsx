@@ -47,7 +47,6 @@ function canSee(item, role, auth) {
 }
 
 export default function BusinessWorkspaceLayout({
-  workspaceCode,
   workspaceName,
   icon,
   description,

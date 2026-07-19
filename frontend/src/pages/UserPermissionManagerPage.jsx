@@ -164,10 +164,14 @@ export default function UserPermissionManagerPage() {
       return;
     }
     loadWorkspaceData(workspaceCode);
+    // Selection changes are handled by the detail effect below; avoid reloading the catalog on each user click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceCode, signedInUser?.workspace_code]);
 
   useEffect(() => {
     if (selectedUserId) loadDetail(selectedUserId, workspaceCode);
+    // The explicit IDs are the complete reload key for this request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUserId, workspaceCode]);
 
   async function unlockProtectedActions(event) {

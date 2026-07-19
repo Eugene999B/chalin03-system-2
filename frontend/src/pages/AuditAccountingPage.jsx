@@ -272,9 +272,6 @@ function todayInput() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function cleanText(value) {
-  return String(value ?? "").trim();
-}
 
 function escapeHtml(value) {
   return String(value ?? "")

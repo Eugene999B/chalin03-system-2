@@ -1477,8 +1477,8 @@ export default function SalesHistoryPage() {
                   {selectedReceipt.change_history.map((change) => {
                     let before = {};
                     let after = {};
-                    try { before = JSON.parse(change.before_snapshot_json || "{}"); } catch { before = {}; }
-                    try { after = JSON.parse(change.after_snapshot_json || "{}"); } catch { after = {}; }
+                    try { before = JSON.parse(change.before_snapshot_json || "{}"); } catch {}
+                    try { after = JSON.parse(change.after_snapshot_json || "{}"); } catch {}
                     return (
                       <div key={change.id} style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #d8c584" }}>
                         <div><strong>{String(change.change_type || "change").toUpperCase()}</strong> · {formatDateTime(change.created_at)}</div>

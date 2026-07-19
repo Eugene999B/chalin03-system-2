@@ -5,6 +5,8 @@ import { useAuth } from "../context/AuthContext";
 import BusinessWorkspaceSelector from "../components/BusinessWorkspaceSelector";
 import { getBusinessWorkspace } from "../data/businessWorkspaces";
 import { collectDeviceEvidence } from "../utils/deviceEvidence";
+import { APP_RELEASE_LABEL } from "../config/appVersion";
+import "../styles/appVersion.css";
 
 function getBranchId(branch) {
   return Number(branch?.id || branch?.branch_id || 0);
@@ -467,6 +469,9 @@ export default function LoginPage() {
 
   return (
     <div className="premium-login-page">
+      <div className="premium-version-badge" aria-label={`Chalin 03 ${APP_RELEASE_LABEL}`}>
+        {APP_RELEASE_LABEL}
+      </div>
       <style>{`
         .premium-login-page {
           min-height: 100vh;
