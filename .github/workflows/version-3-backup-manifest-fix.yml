@@ -1,0 +1,83 @@
+name: Apply Version 3 Backup Manifest Label
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/version-3-backup-manifest-label'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/version-3-backup-manifest-label
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply guarded manifest-label replacements
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(filename, old, new):
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(
+                      f"Expected exactly one match in {filename}: {old!r}; found {text.count(old)}"
+                  )
+              path.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_once(
+              "backend/routes/delegatedBackupRoutes.js",
+              'const { pool } = require("../config/db");\n',
+              'const { pool } = require("../config/db");\nconst { BACKUP_MANIFEST_VERSION } = require("../config/version");\n',
+          )
+          replace_once(
+              "backend/routes/delegatedBackupRoutes.js",
+              'const MANIFEST_VERSION = "chalin03-release-3f-d-delegated-v1";',
+              'const MANIFEST_VERSION = BACKUP_MANIFEST_VERSION;',
+          )
+          replace_once(
+              "backend/routes/systemRoutes.js",
+              'const { APP_VERSION } = require("../config/version");',
+              'const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");',
+          )
+          replace_once(
+              "backend/routes/systemRoutes.js",
+              'manifest_version: "chalin03-release-3f-d-delegated-v1",',
+              'manifest_version: BACKUP_MANIFEST_VERSION,',
+          )
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Verify backend syntax and full tests
+        working-directory: backend
+        run: npm run syntax-check && npm test
+
+      - name: Commit verified manifest correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/delegatedBackupRoutes.js backend/routes/systemRoutes.js
+          git commit -m "fix: identify Version Three backup manifests consistently"
+          git push origin HEAD:agent/version-3-backup-manifest-label
