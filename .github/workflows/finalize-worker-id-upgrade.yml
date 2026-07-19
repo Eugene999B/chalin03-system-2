@@ -1,6 +1,9 @@
 name: Finalize Worker ID Upgrade
 
 on:
+  push:
+    branches:
+      - agent/release-3f-d2-worker-id-card
   pull_request:
     branches:
       - main
@@ -24,31 +27,21 @@ jobs:
       - name: Apply review fixes
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
-
-          def replace_once(text, old, new, label):
-              if old not in text:
-                  raise RuntimeError(f'Could not locate {label}')
-              return text.replace(old, new, 1)
 
           service_path = Path('backend/services/workerIdentityService.js')
           service = service_path.read_text(encoding='utf-8')
-          service = replace_once(
-              service,
-              '''  const nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
-          await connection.query(
-            `UPDATE worker_identity_sequences
-             SET last_number = ?
-             WHERE workspace_code = ?`,
-            [nextNumber, workspace]
-          );
-
-          const employeeNumber = formatEmployeeNumber(
-            settings.employeePrefix,
-            workspace,
-            nextNumber
-          );''',
-              '''  let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
+          pattern = re.compile(
+              r'  const nextNumber = Number\(sequenceRows\[0\]\?\.last_number \|\| 0\) \+ 1;'
+              r'[\s\S]*?'
+              r'  const employeeNumber = formatEmployeeNumber\(\n'
+              r'    settings\.employeePrefix,\n'
+              r'    workspace,\n'
+              r'    nextNumber\n'
+              r'  \);'
+          )
+          replacement = '''  let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
           let employeeNumber = "";
           let identityAllocated = false;
 
@@ -88,102 +81,74 @@ jobs:
              SET last_number = ?
              WHERE workspace_code = ?`,
             [nextNumber, workspace]
-          );''',
-              'collision-safe employee number allocation',
-          )
+          );'''
+          service, count = pattern.subn(replacement, service, count=1)
+          if count != 1:
+              raise RuntimeError('Could not harden employee number allocation.')
           service_path.write_text(service, encoding='utf-8')
 
           routes_path = Path('backend/routes/workerProfileExpansionRoutes.js')
           routes = routes_path.read_text(encoding='utf-8')
-          routes = replace_once(
-              routes,
-              '''        connection,
-                  workspaceCode,
-                  payload.employment_start_date || new Date()
-                );''',
-              '''        connection,
-                  workspaceCode,
-                  new Date()
-                );''',
-              'card issuance date',
-          )
+          old_issue_source = 'payload.employment_start_date || new Date()'
+          if old_issue_source not in routes:
+              raise RuntimeError('Could not locate worker card issue date source.')
+          routes = routes.replace(old_issue_source, 'new Date()', 1)
           routes_path.write_text(routes, encoding='utf-8')
 
           worker_path = Path('frontend/src/pages/ExpandedWorkerProfilePage.jsx')
           worker = worker_path.read_text(encoding='utf-8')
-          worker = worker.replace(
-              '''  ["id_card_issue_date", "ID card issue date", "date"],
-            ["id_card_expiry_date", "ID card expiry date", "date"],
-            ["id_card_serial", "ID card serial / reference"],
-          ''',
-              '',
-              1,
-          )
-          worker = replace_once(
-              worker,
-              '''          <h2>Create Worker Profile</h2>
-                    <form
-                      className="expanded-worker-form-grid"
-                      onSubmit={createWorker}
-                    >
-                      <Notice type="info">
-                        Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
-                      </Notice>
-                    {[
-                                  ["full_name", "Full legal name"],''',
-              '''          <h2>Create Worker Profile</h2>
+          for field_line in (
+              '  ["id_card_issue_date", "ID card issue date", "date"],\n',
+              '  ["id_card_expiry_date", "ID card expiry date", "date"],\n',
+              '  ["id_card_serial", "ID card serial / reference"],\n',
+          ):
+              worker = worker.replace(field_line, '', 1)
 
-                    <form
-                      className="expanded-worker-form-grid"
-                      onSubmit={createWorker}
-                    >
-                      <Notice type="info">
-                        Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
-                      </Notice>
+          heading = '          <h2>Create Worker Profile</h2>'
+          heading_start = worker.index(heading)
+          full_name_line = '["full_name", "Full legal name"],'
+          full_name_start = worker.index(full_name_line, heading_start)
+          full_name_end = worker.index('\n', full_name_start) + 1
+          clean_create_start = '''          <h2>Create Worker Profile</h2>
 
-                      {[
-                        ["full_name", "Full legal name"],''',
-              'worker create form formatting',
-          )
+          <form
+            className="expanded-worker-form-grid"
+            onSubmit={createWorker}
+          >
+            <Notice type="info">
+              Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+            </Notice>
+
+            {[
+              ["full_name", "Full legal name"],
+'''
+          worker = worker[:heading_start] + clean_create_start + worker[full_name_end:]
           worker_path.write_text(worker, encoding='utf-8')
 
           settings_path = Path('backend/routes/settingsRoutes.js')
           settings = settings_path.read_text(encoding='utf-8')
-          settings = settings.replace(
-              '''           daily_summary_time = ?,
-                    receipt_footer = ?,
-                    receipt_prefix = ?,
-                    worker_id_card_validity_months = ?,
-                    worker_employee_number_prefix = ?''',
-              '''           daily_summary_time = ?,
-                   receipt_footer = ?,
-                   receipt_prefix = ?,
-                   worker_id_card_validity_months = ?,
-                   worker_employee_number_prefix = ?''',
-              1,
+          settings = re.sub(
+              r'\n\s+receipt_footer = \?,\n\s+receipt_prefix = \?,\n\s+worker_id_card_validity_months = \?,\n\s+worker_employee_number_prefix = \?',
+              '\n           receipt_footer = ?,\n           receipt_prefix = ?,\n           worker_id_card_validity_months = ?,\n           worker_employee_number_prefix = ?',
+              settings,
+              count=1,
           )
           settings_path.write_text(settings, encoding='utf-8')
 
-          workflow_path = Path('.github/workflows/chalin03-verification.yml')
-          workflow = workflow_path.read_text(encoding='utf-8')
-          workflow = replace_once(
-              workflow,
-              '''          npx eslint \\
-                    src/pages/BackupPage.jsx \\
-                    src/pages/SystemOperationsPage.jsx''',
-              '''          npx eslint \\
-                    src/pages/BackupPage.jsx \\
-                    src/pages/SystemOperationsPage.jsx \\
-                    src/pages/UsersSettingsPage.jsx \\
-                    src/pages/ExpandedWorkerProfilePage.jsx''',
-              'strict frontend lint list',
-          )
-          workflow = workflow.replace(
+          verification_path = Path('.github/workflows/chalin03-verification.yml')
+          verification = verification_path.read_text(encoding='utf-8')
+          if 'src/pages/UsersSettingsPage.jsx' not in verification:
+              verification = verification.replace(
+                  '            src/pages/SystemOperationsPage.jsx',
+                  '            src/pages/SystemOperationsPage.jsx \\\n            src/pages/UsersSettingsPage.jsx \\\n            src/pages/ExpandedWorkerProfilePage.jsx',
+                  1,
+              )
+          verification = verification.replace(
               'Lint Release 3F-D frontend files',
               'Lint protected release frontend files',
               1,
           )
-          workflow_path.write_text(workflow, encoding='utf-8')
+          verification_path.write_text(verification, encoding='utf-8')
 
           test_path = Path('backend/tests/release3fD2WorkerIdentityCard.test.js')
           tests = test_path.read_text(encoding='utf-8')
