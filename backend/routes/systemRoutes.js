@@ -5,7 +5,7 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { getPublicPermissionCatalog } = require("../security/permissionCatalog");
 const { getSmsConfig } = require("../services/smsService");
-const { APP_VERSION } = require("../config/version");
+const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");
 const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
@@ -284,7 +284,7 @@ router.get(
             web_restore_enabled:
               String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() ===
               "true",
-            manifest_version: "chalin03-release-3f-d-delegated-v1",
+            manifest_version: BACKUP_MANIFEST_VERSION,
             original_owner_remains_protected: true,
           },
           sms: {

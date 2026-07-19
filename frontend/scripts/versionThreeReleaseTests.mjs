@@ -12,6 +12,9 @@ import {
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const loginSource = readFileSync(join(root, "src/pages/LoginPage.jsx"), "utf8");
 const versionStyles = readFileSync(join(root, "src/styles/appVersion.css"), "utf8");
+const manifest = JSON.parse(
+  readFileSync(join(root, "public/site.webmanifest"), "utf8")
+);
 const backendVersionSource = readFileSync(
   join(root, "../backend/config/version.js"),
   "utf8"
@@ -24,6 +27,11 @@ const systemRouteSource = readFileSync(
 assert.equal(APP_VERSION, "3.0.0");
 assert.equal(APP_RELEASE_NAME, "Version Three");
 assert.equal(APP_RELEASE_LABEL, "Version Three · v3.0.0");
+assert.equal(manifest.name, "Chalin 03 Group Operations Platform");
+assert.equal(manifest.short_name, "Chalin 03");
+assert.match(manifest.description, /Spare Parts/);
+assert.match(manifest.description, /Mining Operations/);
+assert.match(manifest.description, /Equipment Hire/);
 assert.match(loginSource, /premium-version-badge/);
 assert.match(loginSource, /APP_RELEASE_LABEL/);
 assert.match(versionStyles, /\.premium-login-page\s*\{[^}]*padding-top:/s);
@@ -34,5 +42,5 @@ assert.match(backendVersionSource, /APP_VERSION = "3\.0\.0"/);
 assert.match(systemRouteSource, /process\.env\.APP_VERSION \|\| APP_VERSION/);
 
 console.log(
-  "PASS - Version Three identity and login badge layout are consistent across frontend and API health."
+  "PASS - Version Three identity is consistent across login, PWA manifest and API health."
 );

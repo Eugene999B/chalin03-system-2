@@ -1,0 +1,132 @@
+name: Version 3 Production Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-3-production-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-production:
+    name: Live API and Cloudflare release checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify live API version, readiness and rate limiting
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-output
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/api-health.headers \
+            --output smoke-output/api-health.json \
+            https://api.chalin03.com/api/health
+
+          jq -e '
+            .status == "success" and
+            .service == "Chalin 03 Group Operations Platform" and
+            .version == "3.0.0"
+          ' smoke-output/api-health.json
+
+          grep -qi '^strict-transport-security:' smoke-output/api-health.headers
+          grep -qi '^content-security-policy:' smoke-output/api-health.headers
+          grep -qi '^cache-control: no-store' smoke-output/api-health.headers
+          grep -qi '^x-content-type-options: nosniff' smoke-output/api-health.headers
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/api-readiness.headers \
+            --output smoke-output/api-readiness.json \
+            https://api.chalin03.com/api/readiness
+
+          jq -e '
+            .status == "success" and
+            .ready == true and
+            .version == "3.0.0" and
+            .checks.database == "ready" and
+            .checks.schema == "ready" and
+            .checks.configuration == "ready"
+          ' smoke-output/api-readiness.json
+
+          protected_status="$(curl --silent --show-error \
+            --dump-header smoke-output/protected.headers \
+            --output smoke-output/protected.json \
+            --write-out '%{http_code}' \
+            https://api.chalin03.com/api/products)"
+          test "$protected_status" = "401"
+          grep -qiE '^ratelimit-(policy|limit):' smoke-output/protected.headers
+
+      - name: Verify live login release bundle and Cloudflare security
+        shell: bash
+        env:
+          SMOKE_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p smoke-output
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/login.headers \
+            --output smoke-output/login.html \
+            https://chalin03.com/login
+
+          grep -qi '^strict-transport-security: max-age=31536000' smoke-output/login.headers
+          grep -qi '^x-frame-options: DENY' smoke-output/login.headers
+          grep -qi '^x-content-type-options: nosniff' smoke-output/login.headers
+          grep -qi '^x-robots-tag:.*noindex' smoke-output/login.headers
+
+          bundle_path="$(grep -oE 'src="/assets/[^" ]+\.js"' smoke-output/login.html | head -n 1 | cut -d'"' -f2)"
+          test -n "$bundle_path"
+          curl --fail --silent --show-error --location \
+            --output smoke-output/application-bundle.js \
+            "https://chalin03.com${bundle_path}"
+          grep -q 'Version Three' smoke-output/application-bundle.js
+          grep -q '3.0.0' smoke-output/application-bundle.js
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/service-worker.js \
+            https://chalin03.com/sw.js
+          grep -q 'chalin03-version-3-v1' smoke-output/service-worker.js
+          grep -q '/site.webmanifest' smoke-output/service-worker.js
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/site.webmanifest \
+            https://chalin03.com/site.webmanifest
+
+          if jq -e '
+            .name == "Chalin 03 Group Operations Platform" and
+            .short_name == "Chalin 03" and
+            (.icons | length) >= 2
+          ' smoke-output/site.webmanifest; then
+            echo 'Live Version Three manifest is deployed.'
+          elif [ "$SMOKE_EVENT_NAME" = "pull_request" ]; then
+            jq -e '
+              .name == "Chalin 03 Group Operations Platform" and
+              .short_name == "Chalin 03" and
+              (.icons | length) >= 2
+            ' frontend/public/site.webmanifest
+            echo 'Pre-deploy source manifest is ready; the push-to-main smoke will require the live value.'
+          else
+            echo 'Live production manifest is not the Version Three group manifest.' >&2
+            exit 1
+          fi
+
+      - name: Preserve live smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-live-production-smoke
+          path: smoke-output
+          if-no-files-found: error
+          retention-days: 14
