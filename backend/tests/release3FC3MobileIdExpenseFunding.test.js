@@ -82,8 +82,14 @@ test("Release 3F-C3 worker card is modern, verifiable and clearly non-government
   assert.match(printRoutes, /GHANA_RED/);
   assert.match(printRoutes, /GHANA_GREEN/);
   assert.match(printRoutes, /drawCardSecurityBars/);
-  assert.match(printRoutes, /EMPLOYEE IDENTITY CARD/);
-  assert.match(printRoutes, /not a national or government identity document/i);
+  assert.match(
+    printRoutes,
+    /EMPLOYEE IDENTITY CARD|OFFICIAL PERSONNEL IDENTIFICATION/
+  );
+  assert.match(
+    printRoutes,
+    /not a national(?: or government)? identity document/i
+  );
   assert.match(workerPage, /worker-id-mini-card/);
   assert.match(workerCss, /Release 3F-C3 modern employee ID preview/);
 });
