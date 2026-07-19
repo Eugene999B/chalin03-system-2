@@ -19,6 +19,18 @@ WHERE TABLE_SCHEMA = DATABASE()
 ORDER BY ORDINAL_POSITION;
 
 SELECT
+    COUNT(*) AS worker_id_type_mismatches
+FROM information_schema.COLUMNS letter_column
+INNER JOIN information_schema.COLUMNS worker_column
+    ON worker_column.TABLE_SCHEMA = letter_column.TABLE_SCHEMA
+   AND worker_column.TABLE_NAME = 'worker_profiles'
+   AND worker_column.COLUMN_NAME = 'id'
+WHERE letter_column.TABLE_SCHEMA = DATABASE()
+  AND letter_column.TABLE_NAME = 'worker_hr_letters'
+  AND letter_column.COLUMN_NAME = 'worker_id'
+  AND letter_column.COLUMN_TYPE <> worker_column.COLUMN_TYPE;
+
+SELECT
     INDEX_NAME,
     GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS indexed_columns
 FROM information_schema.STATISTICS
