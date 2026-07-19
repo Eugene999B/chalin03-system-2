@@ -30,53 +30,33 @@ jobs:
 
           signature_route = Path('backend/routes/documentSignatureRoutes.js')
           source = signature_route.read_text()
-          old = '''router.get(
-            "/document-signature",
-            requireAuth,
-            requirePermission("workers.documents.view"),'''
-          new = '''router.get(
-            "/document-signature",
-            requireAuth,
-            requirePermission("security.admin"),'''
+          old = 'requirePermission("workers.documents.view"),'
+          new = 'requirePermission("security.admin"),'
           if old not in source:
               raise SystemExit('Signature GET permission anchor missing.')
           signature_route.write_text(source.replace(old, new, 1))
 
           route = Path('backend/routes/standaloneHrDocumentRoutes.js')
           source = route.read_text()
-          anchor = '''    if (document.linked_worker_letter_id) {
-              return res.status(409).json({
-                status: "error",
-                message: "This document is already linked to a worker profile.",
-              });
-            }
+          anchor = '    const [workerRows] = await pool.query('
+          guard = '''    if (!["issued", "acknowledged"].includes(document.status)) {
+            return res.status(409).json({
+              status: "error",
+              message: "Approve and issue the document before linking it to a worker profile.",
+            });
+          }
 
-            const [workerRows] = await pool.query('''
-          replacement = '''    if (document.linked_worker_letter_id) {
-              return res.status(409).json({
-                status: "error",
-                message: "This document is already linked to a worker profile.",
-              });
-            }
-            if (!["issued", "acknowledged"].includes(document.status)) {
-              return res.status(409).json({
-                status: "error",
-                message: "Approve and issue the document before linking it to a worker profile.",
-              });
-            }
-
-            const [workerRows] = await pool.query('''
+          '''
           if anchor not in source:
-              raise SystemExit('Standalone link lifecycle anchor missing.')
-          route.write_text(source.replace(anchor, replacement, 1))
+              raise SystemExit('Standalone worker-query anchor missing.')
+          if 'Approve and issue the document before linking' not in source:
+              source = source.replace(anchor, guard + anchor, 1)
+          route.write_text(source)
 
           page = Path('frontend/src/pages/EmploymentDocumentsPage.jsx')
           source = page.read_text()
-          old = '''  const canManage = hasPermission("workers.documents.manage");
-            const canLink = hasPermission("workers.manage") || canManage;'''
-          new = '''  const canManage = hasPermission("workers.documents.manage");
-            const canApproveOrArchive = canManage && hasPermission("workers.manage");
-            const canLink = canApproveOrArchive;'''
+          old = '  const canLink = hasPermission("workers.manage") || canManage;'
+          new = '  const canApproveOrArchive = canManage && hasPermission("workers.manage");\n  const canLink = canApproveOrArchive;'
           if old not in source:
               raise SystemExit('Frontend permission anchor missing.')
           source = source.replace(old, new, 1)
@@ -99,21 +79,17 @@ jobs:
 
           backend_test = Path('backend/tests/employmentDocuments.test.js')
           source = backend_test.read_text()
-          anchor = '''  const schemaSource = fs.readFileSync(
-              path.join(__dirname, "..", "services", "employmentDocumentSchemaService.js"),
-              "utf8"
-            );'''
-          replacement = '''  const schemaSource = fs.readFileSync(
-              path.join(__dirname, "..", "services", "employmentDocumentSchemaService.js"),
-              "utf8"
-            );
+          schema_end = '  );\n\n  assert.match(routeSource, /standalone_hr_documents/);'
+          signature_read = '''  );
             const signatureRouteSource = fs.readFileSync(
               path.join(__dirname, "..", "routes", "documentSignatureRoutes.js"),
               "utf8"
-            );'''
-          if anchor not in source:
-              raise SystemExit('Backend test source anchor missing.')
-          source = source.replace(anchor, replacement, 1)
+            );
+
+            assert.match(routeSource, /standalone_hr_documents/);'''
+          if schema_end not in source:
+              raise SystemExit('Backend test insertion anchor missing.')
+          source = source.replace(schema_end, signature_read, 1)
           source = source.replace(
               '  assert.match(routeSource, /link-worker/);',
               '  assert.match(routeSource, /link-worker/);\n  assert.match(routeSource, /Approve and issue the document before linking/);',
