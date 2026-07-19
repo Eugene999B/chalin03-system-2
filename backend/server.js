@@ -66,6 +66,10 @@ const release2FinalRoutes = require("./routes/release2FinalRoutes");
 const groupConfigurationRoutes = require("./routes/groupConfigurationRoutes");
 const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
 const workerPrintRoutes = require("./routes/workerPrintRoutes");
+const workerHrLetterRoutes = require("./routes/workerHrLetterRoutes");
+const {
+  ensureWorkerHrLetterSchema,
+} = require("./services/workerHrLetterSchemaService");
 const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
@@ -276,6 +280,7 @@ app.use("/api/group-configuration", groupConfigurationRoutes);
 app.use("/api/release2-final", workerCardVerificationRoutes);
 app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
+app.use("/api/release2-final", workerHrLetterRoutes);
 app.use("/api/release2-final", ownerSecurityRoutes);
 app.use("/api/release2-final", release2FinalRoutes);
 app.use(
@@ -296,6 +301,7 @@ async function startServer() {
   try {
     await testDatabaseConnection();
     await runStartupSelfCheck();
+    await ensureWorkerHrLetterSchema();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

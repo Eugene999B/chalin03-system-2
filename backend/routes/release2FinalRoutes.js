@@ -224,6 +224,7 @@ const SCOPE_TABLES = Object.freeze({
     "worker_private_files",
     "worker_profile_change_history",
     "worker_print_history",
+    "worker_hr_letters",
     "activity_log",
   ],
 
@@ -267,6 +268,7 @@ const SCOPE_TABLES = Object.freeze({
     "worker_private_files",
     "worker_profile_change_history",
     "worker_print_history",
+    "worker_hr_letters",
     "activity_log",
   ],
 
@@ -292,6 +294,7 @@ const SCOPE_TABLES = Object.freeze({
     "worker_private_files",
     "worker_profile_change_history",
     "worker_print_history",
+    "worker_hr_letters",
     "activity_log",
   ],
 });
@@ -413,6 +416,7 @@ const CATEGORY_TABLES = Object.freeze({
     "worker_private_files",
     "worker_profile_change_history",
     "worker_print_history",
+    "worker_hr_letters",
   ]),
 });
 

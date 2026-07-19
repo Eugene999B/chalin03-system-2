@@ -23,6 +23,7 @@ const EXPECTED_TABLES = Object.freeze([
   "user_business_access",
   "user_category_assignment_conflicts",
   "worker_category_assignment_conflicts",
+  "worker_hr_letters",
   "products",
   "sales",
   "sale_items",

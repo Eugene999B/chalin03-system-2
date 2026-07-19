@@ -9,6 +9,8 @@ import {
   useAuth,
 } from "../context/AuthContext";
 
+import WorkerHrLettersPanel from "../components/WorkerHrLettersPanel";
+
 import "../styles/expandedWorkerProfile.css";
 
 const today = new Date()
@@ -56,6 +58,7 @@ const tabItems = [
   ["family", "Family & Emergency"],
   ["employment", "Employment & Assignments"],
   ["documents", "Documents & Licences"],
+  ["letters", "Letters & HR Correspondence"],
   ["property", "Property & History"],
 ];
 
@@ -1472,7 +1475,8 @@ export default function ExpandedWorkerProfilePage() {
             Central employee identity, photographs,
             national identification, family,
             emergency contacts, employment,
-            assignments, licences, private documents
+            assignments, licences, private documents,
+            employment letters, disciplinary records
             and company property.
           </span>
         </div>
@@ -3138,6 +3142,17 @@ export default function ExpandedWorkerProfilePage() {
                     </>
                   )}
                 </div>
+              ) : null}
+
+              {activeTab === "letters" ? (
+                <WorkerHrLettersPanel
+                  worker={selectedProfile}
+                  canView={canDocuments}
+                  canManage={canManageDocuments}
+                  openPdf={openPrintPdf}
+                  onMessage={setMessage}
+                  onError={setError}
+                />
               ) : null}
 
               {activeTab === "property" ? (
