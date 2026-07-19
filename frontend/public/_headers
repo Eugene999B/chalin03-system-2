@@ -1,0 +1,49 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(self), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  X-Permitted-Cross-Domain-Policies: none
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/company
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/company/*
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/mining-operations
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/mining-operations/*
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/equipment-hire
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/equipment-hire/*
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/chalin03-logo.png
+  Cache-Control: public, max-age=86400
+
+/site.webmanifest
+  Cache-Control: public, max-age=3600
+
+https://chalin03-system-2.pages.dev/*
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+https://:version.chalin03-system-2.pages.dev/*
+  X-Robots-Tag: noindex, nofollow, noarchive
