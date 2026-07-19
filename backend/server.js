@@ -67,6 +67,9 @@ const groupConfigurationRoutes = require("./routes/groupConfigurationRoutes");
 const workerProfileExpansionRoutes = require("./routes/workerProfileExpansionRoutes");
 const workerPrintRoutes = require("./routes/workerPrintRoutes");
 const workerHrLetterRoutes = require("./routes/workerHrLetterRoutes");
+const {
+  ensureWorkerHrLetterSchema,
+} = require("./services/workerHrLetterSchemaService");
 const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
@@ -298,6 +301,7 @@ async function startServer() {
   try {
     await testDatabaseConnection();
     await runStartupSelfCheck();
+    await ensureWorkerHrLetterSchema();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
