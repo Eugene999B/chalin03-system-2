@@ -803,9 +803,14 @@ export default function ExpandedWorkerProfilePage() {
       const workerId =
         response.data.worker.profile.id;
 
+      const generatedEmployeeNumber =
+        response.data.worker.profile.employee_number;
+
       setCreateForm(emptyCreateForm);
       setCreateOpen(false);
-      setMessage(response.data.message);
+      setMessage(
+        `${response.data.message} Generated employee number: ${generatedEmployeeNumber}.`
+      );
 
       await loadWorkers();
       await loadOptions();
@@ -1518,6 +1523,15 @@ export default function ExpandedWorkerProfilePage() {
               Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
             </Notice>
 
+            <Field label="Employee number">
+              <input
+                type="text"
+                value="Generated automatically after saving"
+                readOnly
+                disabled
+              />
+            </Field>
+
             {[
               ["full_name", "Full legal name"],
               ["preferred_name", "Preferred name"],
@@ -1956,6 +1970,17 @@ export default function ExpandedWorkerProfilePage() {
                     className="expanded-worker-form-grid"
                     onSubmit={updateProfile}
                   >
+                    <Field label="Employee number (system generated)">
+                      <input
+                        type="text"
+                        value={
+                          selectedProfile.employee_number || ""
+                        }
+                        readOnly
+                        disabled
+                      />
+                    </Field>
+
                     {profileFields.map(
                       ([key, label, type = "text"]) => (
                         <Field key={key} label={label}>
