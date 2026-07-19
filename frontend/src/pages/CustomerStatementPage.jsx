@@ -240,20 +240,6 @@ export default function CustomerStatementPage() {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
 
-  function formatCompactMoney(value) {
-    const number = Number(value || 0);
-
-    if (number >= 1000000) {
-      return `GHS ${(number / 1000000).toFixed(1)}M`;
-    }
-
-    if (number >= 1000) {
-      return `GHS ${(number / 1000).toFixed(1)}K`;
-    }
-
-    return formatMoney(number);
-  }
-
   function formatDateTime(value) {
     if (!value) return "-";
 
@@ -438,7 +424,7 @@ export default function CustomerStatementPage() {
 
       link.remove();
       window.URL.revokeObjectURL(fileUrl);
-    } catch (error) {
+    } catch {
       setError(
         "Failed to export customer statement. Make sure the backend export route is working."
       );
@@ -543,6 +529,8 @@ export default function CustomerStatementPage() {
     return [...saleRecords, ...debtRecords, ...paymentRecords]
       .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 12);
+    // The selected statement is cleared whenever the active store changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statement]);
 
   return (

@@ -1079,7 +1079,7 @@ export default function DailyClosingPage() {
             existingClosing?.verification_status !== "verified" &&
             Number(existingClosing?.counted_confirmed || 0) === 1 &&
             Number(existingClosing?.closed_by || 0) !== Number(user?.id || 0) &&
-            !Boolean(Number(existingClosing?.stale_after_close || 0)) && (
+            Number(existingClosing?.stale_after_close || 0) !== 1 && (
               <section className="dc-panel dc-verification-panel">
                 <div className="dc-section-heading">
                   <div>
@@ -1130,8 +1130,8 @@ export default function DailyClosingPage() {
                 {closingRevisions.map((revision) => {
                   let expected = {};
                   let countedSnapshot = {};
-                  try { expected = JSON.parse(revision.expected_snapshot_json || "{}"); } catch { expected = {}; }
-                  try { countedSnapshot = JSON.parse(revision.counted_snapshot_json || "{}"); } catch { countedSnapshot = {}; }
+                  try { expected = JSON.parse(revision.expected_snapshot_json || "{}"); } catch { /* Keep empty fallback for invalid historical JSON. */ }
+                  try { countedSnapshot = JSON.parse(revision.counted_snapshot_json || "{}"); } catch { /* Keep empty fallback for invalid historical JSON. */ }
                   return (
                     <article key={revision.id} className="dc-revision-item">
                       <div className="dc-revision-head">

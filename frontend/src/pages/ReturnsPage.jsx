@@ -72,14 +72,6 @@ export default function ReturnsPage() {
     return record?.branch_name || record?.store_name || currentStoreName;
   }
 
-  function getRecordStoreLocation(record) {
-    return (
-      record?.branch_location ||
-      record?.store_location ||
-      currentStoreLocation
-    );
-  }
-
   async function loadSales() {
     const response = await axiosClient.get("/returns/sales", {
       params: {

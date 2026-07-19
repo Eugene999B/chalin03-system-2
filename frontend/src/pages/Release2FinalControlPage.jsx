@@ -14,8 +14,6 @@ const today = new Date()
   .toISOString()
   .slice(0, 10);
 
-const monthStart =
-  `${today.slice(0, 7)}-01`;
 
 function formatNumber(value) {
   return Number(
@@ -2247,6 +2245,8 @@ function WorkerManagement() {
 
   useEffect(() => {
     loadWorkers();
+    // Initial worker-list bootstrap; later mutations refresh explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function createWorker(

@@ -1,0 +1,222 @@
+name: Version 3 Final Security Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-3-final-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-and-quality:
+    name: Dependencies, tests, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Audit backend production dependencies
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high --json > backend-npm-audit.json
+
+      - name: Verify backend syntax and tests
+        working-directory: backend
+        run: npm run syntax-check && npm test
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Audit frontend production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high --json > frontend-npm-audit.json
+
+      - name: Run all frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Enforce full frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build production frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Check tracked files for secret-shaped values
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+            echo 'Tracked environment file detected.' >&2
+            exit 1
+          fi
+          if git grep -nEI '(BEGIN (RSA|EC|OPENSSH) PRIVATE KEY|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|sk-[A-Za-z0-9]{20,})' -- . ':!*.lock' ':!docs/**'; then
+            echo 'Potential committed secret detected.' >&2
+            exit 1
+          fi
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-dependency-audit
+          path: |
+            backend/backend-npm-audit.json
+            frontend/frontend-npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  codeql:
+    name: CodeQL JavaScript security-extended analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - id: analyze
+        continue-on-error: true
+        uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          output: codeql-results
+
+      - name: Enforce reviewed CodeQL SARIF policy
+        run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif
+
+      - name: Upload CodeQL SARIF evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-codeql-sarif
+          path: codeql-results
+          if-no-files-found: error
+          retention-days: 14
+
+  production-passive-checks:
+    name: Production passive security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check API headers, authentication gates and exposed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit-output
+
+          curl --fail --silent --show-error --location --dump-header audit-output/api-health.headers \
+            --output audit-output/api-health.json https://api.chalin03.com/api/health
+
+          grep -qi '^x-content-type-options: nosniff' audit-output/api-health.headers
+          grep -qi '^x-frame-options: DENY' audit-output/api-health.headers
+          grep -qi '^x-robots-tag: noindex' audit-output/api-health.headers
+          grep -qi '^cache-control: no-store' audit-output/api-health.headers
+          grep -qi '^strict-transport-security:' audit-output/api-health.headers
+          grep -qi '^content-security-policy:' audit-output/api-health.headers
+
+          check_protected() {
+            local path="$1"
+            local code
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://api.chalin03.com${path}")"
+            echo "${path} -> ${code}" | tee -a audit-output/protected-route-status.txt
+            case "$code" in
+              401|403) ;;
+              *) echo "Protected endpoint ${path} returned ${code}" >&2; exit 1 ;;
+            esac
+          }
+
+          check_protected /api/products
+          check_protected /api/user-permissions/catalog
+          check_protected /api/system/diagnostics
+          check_protected /api/release2-final/document-signature
+          check_protected /api/release2-final/standalone-hr/documents
+
+          unknown="$(curl --silent --output /dev/null --write-out '%{http_code}' https://api.chalin03.com/api/version-3-audit-not-found)"
+          test "$unknown" = "404"
+
+          for path in '/.env' '/.git/config' '/package.json' '/server.js'; do
+            code="$(curl --path-as-is --silent --output /dev/null --write-out '%{http_code}' "https://api.chalin03.com${path}")"
+            echo "${path} -> ${code}" | tee -a audit-output/sensitive-path-status.txt
+            test "$code" = "404"
+          done
+
+          curl --silent --show-error --dump-header audit-output/evil-cors.headers \
+            --output /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://attacker.invalid' \
+            -H 'Access-Control-Request-Method: GET' \
+            https://api.chalin03.com/api/products || true
+          if grep -qi '^access-control-allow-origin: https://attacker.invalid' audit-output/evil-cors.headers; then
+            echo 'Untrusted origin was accepted by CORS.' >&2
+            exit 1
+          fi
+
+          trace_code="$(curl --silent --output /dev/null --write-out '%{http_code}' -X TRACE https://api.chalin03.com/api/health)"
+          case "$trace_code" in
+            404|405) ;;
+            *) echo "TRACE returned unexpected ${trace_code}" >&2; exit 1 ;;
+          esac
+
+      - name: Check public site headers and private route indexing protection
+        shell: bash
+        env:
+          AUDIT_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p audit-output
+          curl --fail --silent --show-error --location --dump-header audit-output/site.headers \
+            --output audit-output/site.html https://chalin03.com/
+          grep -qi '^x-content-type-options: nosniff' audit-output/site.headers
+          grep -qi '^x-frame-options: DENY' audit-output/site.headers
+          grep -qi '^referrer-policy:' audit-output/site.headers
+
+          if ! grep -qi '^strict-transport-security:' audit-output/site.headers; then
+            if [ "$AUDIT_EVENT_NAME" = "push" ]; then
+              echo 'Live public site is missing HSTS after deployment.' >&2
+              exit 1
+            fi
+            grep -q 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload' frontend/public/_headers
+          fi
+
+          curl --fail --silent --show-error --location --dump-header audit-output/login.headers \
+            --output audit-output/login.html https://chalin03.com/login
+          if ! grep -qi '^x-robots-tag:.*noindex' audit-output/login.headers; then
+            grep -qi 'noindex' audit-output/login.html
+          fi
+
+      - name: Upload passive check evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-passive-security-evidence
+          path: audit-output
+          if-no-files-found: ignore
+          retention-days: 14

@@ -52,7 +52,6 @@ export default function InstallmentsPage() {
     notes: "",
     send_sms: true,
   });
-  const [settings, setSettings] = useState(null);
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -77,7 +76,6 @@ export default function InstallmentsPage() {
   const loadSettings = useCallback(async () => {
     const response = await axiosClient.get("/installments/settings");
     const value = response.data.settings || null;
-    setSettings(value);
     setSettingsDraft(value);
   }, []);
 
