@@ -1,6 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const sharp = require("sharp");
+const { createRequire } = require("node:module");
+
+const backendRequire = createRequire(
+  path.resolve(__dirname, "..", "..", "backend", "package.json")
+);
+const sharp = backendRequire("sharp");
 
 const {
   buildA4ProofCardPdf,
