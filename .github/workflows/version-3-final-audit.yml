@@ -100,10 +100,15 @@ jobs:
           languages: javascript-typescript
           queries: security-extended
 
-      - uses: github/codeql-action/analyze@v3
+      - id: analyze
+        continue-on-error: true
+        uses: github/codeql-action/analyze@v3
         with:
           upload: never
           output: codeql-results
+
+      - name: Enforce reviewed CodeQL SARIF policy
+        run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif
 
       - name: Upload CodeQL SARIF evidence
         if: always()
