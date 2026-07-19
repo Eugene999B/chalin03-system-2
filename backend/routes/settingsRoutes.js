@@ -267,10 +267,10 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
            tax_rate = ?,
            debt_reminder_days = ?,
            daily_summary_time = ?,
-            receipt_footer = ?,
-            receipt_prefix = ?,
-            worker_id_card_validity_months = ?,
-            worker_employee_number_prefix = ?
+           receipt_footer = ?,
+           receipt_prefix = ?,
+           worker_id_card_validity_months = ?,
+           worker_employee_number_prefix = ?
        WHERE id = ?
        AND branch_id = ?`,
       [

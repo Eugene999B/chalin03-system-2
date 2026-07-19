@@ -44,9 +44,6 @@ const profileFields = [
   ["ssnit_number", "SSNIT number"],
   ["tin_number", "TIN number"],
   ["blood_group", "Blood group"],
-  ["id_card_issue_date", "ID card issue date", "date"],
-  ["id_card_expiry_date", "ID card expiry date", "date"],
-  ["id_card_serial", "ID card serial / reference"],
   ["job_title", "Job title"],
   ["department", "Department"],
   ["employment_start_date", "Employment start date", "date"],
@@ -1512,15 +1509,17 @@ export default function ExpandedWorkerProfilePage() {
       {createOpen ? (
         <section className="expanded-worker-card">
           <h2>Create Worker Profile</h2>
-            <form
-              className="expanded-worker-form-grid"
-              onSubmit={createWorker}
-            >
-              <Notice type="info">
-                Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
-              </Notice>
+
+          <form
+            className="expanded-worker-form-grid"
+            onSubmit={createWorker}
+          >
+            <Notice type="info">
+              Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+            </Notice>
+
             {[
-                          ["full_name", "Full legal name"],
+              ["full_name", "Full legal name"],
               ["preferred_name", "Preferred name"],
               ["phone", "Phone"],
               ["email", "Email", "email"],

@@ -63,3 +63,12 @@ test("Release 3F-D2 PDF uses the backend logo and premium company branding", () 
   assert.match(printRoutes, /data\.company\.name\.toUpperCase\(\)/);
   assert.match(printRoutes, /CHALIN 03/);
 });
+
+
+test("Release 3F-D2 skips matching legacy employee numbers and issues cards today", () => {
+  const service = read("backend/services/workerIdentityService.js");
+  const routes = read("backend/routes/workerProfileExpansionRoutes.js");
+  assert.match(service, /FROM worker_profiles[\s\S]*WHERE employee_number = \?/);
+  assert.match(service, /identityAllocated/);
+  assert.match(routes, /allocateWorkerIdentity\(\s*connection,\s*workspaceCode,\s*new Date\(\)/);
+});

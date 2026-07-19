@@ -163,18 +163,46 @@ async function allocateWorkerIdentity(connection, workspaceCode, issueValue = ne
     [workspace]
   );
 
-  const nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
+  let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
+  let employeeNumber = "";
+  let identityAllocated = false;
+
+  for (let attempt = 0; attempt < 100000; attempt += 1) {
+    const candidate = formatEmployeeNumber(
+      settings.employeePrefix,
+      workspace,
+      nextNumber
+    );
+    const [existingRows] = await connection.query(
+      `SELECT id
+       FROM worker_profiles
+       WHERE employee_number = ?
+       LIMIT 1`,
+      [candidate]
+    );
+
+    if (!existingRows.length) {
+      employeeNumber = candidate;
+      identityAllocated = true;
+      break;
+    }
+
+    nextNumber += 1;
+  }
+
+  if (!identityAllocated) {
+    const error = new Error(
+      "A unique employee number could not be allocated safely."
+    );
+    error.code = "WORKER_ID_SEQUENCE_EXHAUSTED";
+    throw error;
+  }
+
   await connection.query(
     `UPDATE worker_identity_sequences
      SET last_number = ?
      WHERE workspace_code = ?`,
     [nextNumber, workspace]
-  );
-
-  const employeeNumber = formatEmployeeNumber(
-    settings.employeePrefix,
-    workspace,
-    nextNumber
   );
   const dates = calculateCardDates(issueValue, settings.validityMonths);
 

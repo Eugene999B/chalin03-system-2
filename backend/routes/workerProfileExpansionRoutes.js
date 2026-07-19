@@ -828,7 +828,7 @@ router.post(
       identity = await allocateWorkerIdentity(
         connection,
         workspaceCode,
-        payload.employment_start_date || new Date()
+        new Date()
       );
 
       payload.employee_number = identity.employeeNumber;
