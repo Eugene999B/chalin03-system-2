@@ -21,6 +21,10 @@ const {
 const {
   normalizePdfImageBuffer,
 } = require("../services/pdfImageService");
+const {
+  buildA4ProofCardPdf,
+  buildExactCr80CardPdf,
+} = require("../services/workerCardArtworkService");
 
 const router = express.Router();
 
@@ -2432,10 +2436,13 @@ router.get(
         data.profile.employee_number
       )}_${layout}`;
 
+    // Use complete 300-DPI artwork for each side. One artwork image is
+    // placed on one physical page, preventing PDFKit text flow from creating
+    // a blank page or a third page during CR80 printing.
     const buffer =
       layout === "a4"
-        ? await buildA4CardSheetPdf(data)
-        : await buildExactCardPdf(data);
+        ? await buildA4ProofCardPdf(data)
+        : await buildExactCr80CardPdf(data);
 
     await recordPrint(
       req,

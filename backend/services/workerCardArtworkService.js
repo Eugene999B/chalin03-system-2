@@ -400,10 +400,10 @@ function backSvg(data) {
 
 async function renderWorkerCardArtwork(data) {
   const [front, back] = await Promise.all([
-    sharp(Buffer.from(frontSvg(data)), { density: 300 })
+    sharp(Buffer.from(frontSvg(data)))
       .png({ compressionLevel: 7 })
       .toBuffer(),
-    sharp(Buffer.from(backSvg(data)), { density: 300 })
+    sharp(Buffer.from(backSvg(data)))
       .png({ compressionLevel: 7 })
       .toBuffer(),
   ]);

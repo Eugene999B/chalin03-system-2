@@ -104,6 +104,6 @@ test("corporate card is professional but clearly distinct from government IDs", 
   assert.match(back, /not a national, ECOWAS, travel or government identity document/i);
   assert.match(front, /CH03-SP-0001/);
   assert.match(front, /Appiah Amankwah Eugene/);
-  assert.match(back, /Dunkwa Police Barrier/);
+  assert.match(back, /DUNKWA POLICE BARRIER/i);
   assert.doesNotMatch(`${front}${back}`, /ECOWAS LOGO|MACHINE READABLE ZONE|E-PASSPORT/i);
 });
