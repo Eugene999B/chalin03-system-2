@@ -20,6 +20,7 @@ test("worker HR letter migration is additive and linked to worker profiles", () 
   );
 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS worker_hr_letters/);
+  assert.match(migration, /worker_id BIGINT NOT NULL/);
   assert.match(migration, /FOREIGN KEY \(worker_id\) REFERENCES worker_profiles\(id\)/);
   assert.match(migration, /payload_json JSON NOT NULL/);
   assert.match(migration, /worker_acknowledgement_status/);
@@ -59,6 +60,8 @@ test("worker HR letter API supports drafts, issue, acknowledgement, cancellation
 
 test("worker HR letters are registered, backed up and visible in the worker page", () => {
   const server = readBackend("server.js");
+  const schemaService = readBackend("services/workerHrLetterSchemaService.js");
+  const systemRoutes = readBackend("routes/systemRoutes.js");
   const backup = readBackend("routes/backupRoutes.js");
   const releaseBackup = readBackend("routes/release2FinalRoutes.js");
   const workerPage = readProject("frontend/src/pages/ExpandedWorkerProfilePage.jsx");
@@ -66,6 +69,11 @@ test("worker HR letters are registered, backed up and visible in the worker page
   const css = readProject("frontend/src/styles/workerHrLetters.css");
 
   assert.match(server, /workerHrLetterRoutes/);
+  assert.match(server, /await ensureWorkerHrLetterSchema\(\)/);
+  assert.match(schemaService, /CREATE TABLE IF NOT EXISTS worker_hr_letters/);
+  assert.match(schemaService, /worker_id BIGINT NOT NULL/);
+  assert.match(schemaService, /Worker HR schema verification failed/);
+  assert.match(systemRoutes, /"worker_hr_letters"/);
   assert.match(backup, /worker_hr_letters/);
   assert.match(releaseBackup, /worker_hr_letters/);
   assert.match(workerPage, /Letters & HR Correspondence/);
