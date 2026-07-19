@@ -1,16 +1,16 @@
 name: Version 3 Final Security Audit
 
 on:
-  push:
-    branches:
-      - agent/version-3-final-audit
+  workflow_dispatch:
   pull_request:
+    branches:
+      - main
+  push:
     branches:
       - main
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: version-3-final-audit-${{ github.ref }}
@@ -89,16 +89,30 @@ jobs:
           retention-days: 14
 
   codeql:
-    name: CodeQL JavaScript analysis
+    name: CodeQL JavaScript security-extended analysis
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
           queries: security-extended
+
       - uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          output: codeql-results
+
+      - name: Upload CodeQL SARIF evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-codeql-sarif
+          path: codeql-results
+          if-no-files-found: error
+          retention-days: 14
 
   production-passive-checks:
     name: Production passive security checks
@@ -107,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check API health and protected routes
+      - name: Check API headers, authentication gates and exposed files
         shell: bash
         run: |
           set -euo pipefail
@@ -120,11 +134,14 @@ jobs:
           grep -qi '^x-frame-options: DENY' audit-output/api-health.headers
           grep -qi '^x-robots-tag: noindex' audit-output/api-health.headers
           grep -qi '^cache-control: no-store' audit-output/api-health.headers
+          grep -qi '^strict-transport-security:' audit-output/api-health.headers
+          grep -qi '^content-security-policy:' audit-output/api-health.headers
 
           check_protected() {
             local path="$1"
             local code
             code="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://api.chalin03.com${path}")"
+            echo "${path} -> ${code}" | tee -a audit-output/protected-route-status.txt
             case "$code" in
               401|403) ;;
               *) echo "Protected endpoint ${path} returned ${code}" >&2; exit 1 ;;
@@ -133,12 +150,35 @@ jobs:
 
           check_protected /api/products
           check_protected /api/user-permissions/catalog
-          check_protected /api/backups
+          check_protected /api/system/diagnostics
           check_protected /api/release2-final/document-signature
           check_protected /api/release2-final/standalone-hr/documents
 
           unknown="$(curl --silent --output /dev/null --write-out '%{http_code}' https://api.chalin03.com/api/version-3-audit-not-found)"
           test "$unknown" = "404"
+
+          for path in '/.env' '/.git/config' '/package.json' '/server.js'; do
+            code="$(curl --path-as-is --silent --output /dev/null --write-out '%{http_code}' "https://api.chalin03.com${path}")"
+            echo "${path} -> ${code}" | tee -a audit-output/sensitive-path-status.txt
+            test "$code" = "404"
+          done
+
+          curl --silent --show-error --dump-header audit-output/evil-cors.headers \
+            --output /dev/null \
+            -X OPTIONS \
+            -H 'Origin: https://attacker.invalid' \
+            -H 'Access-Control-Request-Method: GET' \
+            https://api.chalin03.com/api/products || true
+          if grep -qi '^access-control-allow-origin: https://attacker.invalid' audit-output/evil-cors.headers; then
+            echo 'Untrusted origin was accepted by CORS.' >&2
+            exit 1
+          fi
+
+          trace_code="$(curl --silent --output /dev/null --write-out '%{http_code}' -X TRACE https://api.chalin03.com/api/health)"
+          case "$trace_code" in
+            404|405) ;;
+            *) echo "TRACE returned unexpected ${trace_code}" >&2; exit 1 ;;
+          esac
 
       - name: Check public site headers and private route indexing protection
         shell: bash
@@ -150,10 +190,13 @@ jobs:
           grep -qi '^x-content-type-options: nosniff' audit-output/site.headers
           grep -qi '^x-frame-options: DENY' audit-output/site.headers
           grep -qi '^referrer-policy:' audit-output/site.headers
+          grep -qi '^strict-transport-security:' audit-output/site.headers
 
           curl --fail --silent --show-error --location --dump-header audit-output/login.headers \
             --output audit-output/login.html https://chalin03.com/login
-          grep -qi '^x-robots-tag:.*noindex' audit-output/login.headers
+          if ! grep -qi '^x-robots-tag:.*noindex' audit-output/login.headers; then
+            grep -qi 'noindex' audit-output/login.html
+          fi
 
       - name: Upload passive check evidence
         if: always()
