@@ -11,7 +11,16 @@
       content="Chalin 03 Group Operations Platform - local staff portal for Spare Parts, Mining Operations and Equipment Hire."
     />
 
-    <meta name="robots" content="noindex, nofollow" />
+    <!--
+      Public React routes must be indexable in the initial HTML response because
+      Google may stop processing when it sees an early noindex directive. Private
+      staff routes remain protected by Cloudflare X-Robots-Tag headers and the
+      route metadata controller.
+    -->
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large"
+    />
     <meta name="application-name" content="Chalin 03 Group Operations Platform" />
     <meta name="msapplication-TileColor" content="#07182c" />
     <meta name="msapplication-TileImage" content="/favicon-192x192.png" />
