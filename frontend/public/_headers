@@ -36,11 +36,20 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+/favicon.ico
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/favicon-192x192.png
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/favicon-512x512.png
+  Cache-Control: public, max-age=86400, must-revalidate
+
 /chalin03-logo.png
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=86400, must-revalidate
 
 /site.webmanifest
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=3600, must-revalidate
 
 https://chalin03-system-2.pages.dev/*
   X-Robots-Tag: noindex, nofollow, noarchive
