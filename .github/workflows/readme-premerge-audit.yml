@@ -213,7 +213,7 @@ jobs:
               if re.search(pattern, text):
                   raise SystemExit(f"Destructive SQL instruction found in README: {pattern}")
 
-          if "cd /d C:\\Users\\DDK\\Desktop\\chalin03-system\n          git switch main" not in text:
+          if new_clone not in text:
               raise SystemExit("Clone instructions fail to enter the repository.")
           if text.count("Version 3 Production Smoke") < 1:
               raise SystemExit("Production smoke workflow is missing from required checks.")
