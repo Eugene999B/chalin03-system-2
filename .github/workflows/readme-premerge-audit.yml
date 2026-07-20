@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: readme-premerge-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit:
     if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/ai-agent-first-run-readme'
@@ -60,10 +64,20 @@ jobs:
 
           old_workflow_row = "| Security release audit | `.github/workflows/version-3-final-audit.yml` |"
           new_workflow_rows = old_workflow_row + "\n| Live production smoke verification | `.github/workflows/version-3-production-smoke.yml` |"
-          if "version-3-production-smoke.yml" not in text:
+          if "| Live production smoke verification |" not in text:
               if old_workflow_row not in text:
                   raise SystemExit("Could not locate the workflow source-of-truth table.")
               text = text.replace(old_workflow_row, new_workflow_rows, 1)
+
+          old_tree = """│       ├── chalin03-verification.yml
+          │       └── version-3-final-audit.yml"""
+          new_tree = """│       ├── chalin03-verification.yml
+          │       ├── version-3-final-audit.yml
+          │       └── version-3-production-smoke.yml"""
+          if old_tree in text:
+              text = text.replace(old_tree, new_tree, 1)
+          elif new_tree not in text:
+              raise SystemExit("Could not locate the workflow repository tree.")
 
           old_gate = """Before merge, both permanent workflows must be green:
 
@@ -79,9 +93,19 @@ jobs:
           elif new_gate not in text:
               raise SystemExit("Could not locate the required CI gate list.")
 
+          env_reference = "Use `backend/.env.example` as the complete variable reference. Never put real values in README, screenshots, issues, chat logs or commits."
+          db_account_note = (
+              "`DB_USER` and `DB_PASSWORD` must identify an existing local MySQL account. "
+              "The example `chalin03_user` is not created automatically; create it locally or use another existing local account. "
+              "Never reuse Railway production credentials on a development computer."
+          )
+          if db_account_note not in text:
+              if env_reference not in text:
+                  raise SystemExit("Could not locate the local environment guidance.")
+              text = text.replace(env_reference, db_account_note + "\n\n" + env_reference, 1)
+
           path.write_text(text, encoding="utf-8")
 
-          # The PR may contain only the intended README and this temporary verifier.
           changed = set(
               subprocess.check_output(
                   ["git", "diff", "--name-only", "origin/main...HEAD"],
@@ -93,7 +117,6 @@ jobs:
           if unexpected:
               raise SystemExit(f"Unexpected files in documentation PR: {sorted(unexpected)}")
 
-          # Numbered engineering sections must be complete and ordered.
           section_numbers = [
               int(value)
               for value in re.findall(r"^## (\d+)\. ", text, flags=re.MULTILINE)
@@ -104,11 +127,9 @@ jobs:
                   f"README numbered sections are incomplete or unordered: {section_numbers}"
               )
 
-          # Markdown fences must be balanced.
           if text.count("```") % 2 != 0:
               raise SystemExit("README has an unclosed fenced code block.")
 
-          # Validate every repository path written as inline code.
           prefixes = ("backend/", "frontend/", "database/", ".github/")
           referenced = set()
           for token in re.findall(r"`([^`\n]+)`", text):
@@ -178,7 +199,6 @@ jobs:
           if 'APP_VERSION = "3.0.0"' not in frontend_version:
               raise SystemExit("Frontend canonical version is inconsistent.")
 
-          # Ensure documentation contains no committed secret-shaped material.
           secret_patterns = [
               r"-----BEGIN (?:RSA|EC|OPENSSH) PRIVATE KEY-----",
               r"AKIA[0-9A-Z]{16}",
@@ -189,13 +209,16 @@ jobs:
               if re.search(pattern, text):
                   raise SystemExit(f"Secret-shaped value detected in README: {pattern}")
 
-          # The operating manual must never instruct destructive production SQL.
           for pattern in (r"(?im)^\s*DROP\s+TABLE", r"(?im)^\s*TRUNCATE\b", r"(?im)^\s*DELETE\s+FROM"):
               if re.search(pattern, text):
                   raise SystemExit(f"Destructive SQL instruction found in README: {pattern}")
 
           if "cd /d C:\\Users\\DDK\\Desktop\\chalin03-system\n          git switch main" not in text:
-              raise SystemExit("Clone instructions still fail to enter the repository.")
+              raise SystemExit("Clone instructions fail to enter the repository.")
+          if text.count("Version 3 Production Smoke") < 1:
+              raise SystemExit("Production smoke workflow is missing from required checks.")
+          if "version-3-production-smoke.yml" not in text:
+              raise SystemExit("Production smoke workflow path is missing from README.")
 
           print(f"README audit passed with {len(referenced)} validated repository references.")
 
