@@ -6,11 +6,11 @@ Production business-control platform for **Chalin 03 Company Limited**, prepared
 
 > **AI AGENT ENTRYPOINT**
 >
-> This repository is connected to a live business system with real sales, stock, debt, accounting, staff and operational records. Read this entire README before changing code. Production data is more valuable than the application source because source code can be restored from GitHub, while lost business records may not be reconstructable.
+> This repository controls a live business system with real sales, stock, debts, payments, accounting, staff and operational records. Read this README before changing code. Production data is more valuable than source code because code can be restored from GitHub, while lost business records may not be reconstructable.
 
 ---
 
-## 1. Current Production Environment
+## 1. Production Environment
 
 | Component | Production value |
 |---|---|
@@ -22,163 +22,165 @@ Production business-control platform for **Chalin 03 Company Limited**, prepared
 | Database | Railway MySQL |
 | Production branch | `main` |
 | Current release | `Version Three · v3.0.0` |
-| Backend runtime | Node.js 20+; CI uses Node.js 24 |
-| SMS provider | Arkesel when enabled; `mock` for safe development |
+| Supported backend runtime | Node.js 20+; CI uses Node.js 24 |
+| SMS | Arkesel when deliberately enabled; `mock` for development |
 | WhatsApp receipts | Keep disabled until approved Meta setup exists |
 
-`main` automatically deploys the backend and frontend. Never merge an unverified change into `main`.
+`main` deploys automatically. Never merge an unverified change into `main`.
 
-The exact production commit changes over time. Before any release task, verify the current `main` commit, open pull requests, workflow status, Railway deployment and Cloudflare deployment rather than trusting an old commit hash in documentation.
+The exact production commit changes over time. Before a release task, verify current `main`, open pull requests, workflow status, Railway deployment and Cloudflare deployment instead of trusting an old hash in documentation.
 
 ---
 
-## 2. Non-Negotiable Rules for Every Human or AI Agent
+## 2. Non-Negotiable Safety Rules
 
-### Production and data safety
+### Production data
 
 1. **Never run `database/schema.sql` against Railway production.** It is a fresh-install/reset schema.
-2. **Never drop, truncate, reset or mass-update production tables to fix an application error.**
+2. Never drop, truncate, reset or mass-update production tables to repair a normal application error.
 3. Production database changes must be additive, reviewed, backed up and verified.
-4. Take or confirm a current full-system backup before any production migration.
+4. Confirm a current full-system backup before every production migration.
 5. Never expose `.env`, database credentials, JWT secrets, SMS keys, customer data, staff data or backup contents.
-6. Do not rewrite historical audit, closing, approval, payment, signature or stock evidence.
-7. Do not silently change financial formulas or historical interpretation.
-8. Do not mix Spare Parts stores with Mining sites or Equipment Hire locations.
-9. Do not bypass backend authentication, category isolation, permission checks or protected-action controls.
-10. A hidden frontend button is not security. The backend must independently reject unauthorized requests.
+6. Never silently rewrite historical audit, closing, approval, payment, signature, sale or stock evidence.
+7. Never change a financial formula merely to make figures match an expectation.
+8. Never mix Spare Parts stores with Mining sites or Equipment Hire locations.
+9. Never bypass backend authentication, category isolation, permissions or protected-action controls.
+10. A hidden frontend button is not security. The API must reject unauthorized requests independently.
 
-### Change-management safety
+### Change management
 
 1. Start from current `main`.
 2. Use an isolated branch such as `agent/clear-change-name`.
 3. Make the smallest coherent change.
 4. Do not combine unrelated refactors with a production fix.
-5. Add or update tests for every behavior, permission, schema or security change.
-6. Run the complete required verification gates before requesting merge.
-7. Use a pull request. Do not push feature work directly to `main`.
-8. Confirm deployment and smoke-test the affected workspace after merge.
+5. Add or update tests for changed behavior, permissions, schema or security.
+6. Run all required verification gates before merge.
+7. Use a pull request; do not push feature work directly to `main`.
+8. Verify deployment and smoke-test the affected workspace after merge.
 9. Preserve backward compatibility for existing records unless an approved migration explicitly changes it.
-10. When uncertain, prefer stopping a risky write over guessing.
+10. When uncertain, stop a risky write rather than guess.
 
 ---
 
-## 3. First 15 Minutes for a Newly Connected AI Agent
+## 3. First 15 Minutes for a New AI Agent
 
-Perform these steps before proposing code:
+Before proposing code:
 
 1. Read this README completely.
-2. Inspect the current repository and branch:
+2. Inspect repository state:
+
    ```bash
    git status -sb
    git branch --show-current
    git log --oneline -10
    ```
-3. Confirm the current application version:
+
+3. Confirm the application version in:
    - `backend/config/version.js`
    - `frontend/src/config/appVersion.js`
    - `backend/package.json`
    - `frontend/package.json`
-4. Read the route and security entrypoints:
+4. Read the main control files:
    - `backend/server.js`
    - `frontend/src/App.jsx`
    - `backend/middleware/authMiddleware.js`
    - `backend/security/permissionCatalog.js`
    - `frontend/src/security/permissionRules.js`
-5. Identify the exact business workspace affected.
-6. Trace the complete flow:
+5. Identify the exact workspace affected: Spare Parts, Mining or Equipment Hire.
+6. Trace the complete request path:
+
    ```text
    UI page/component
-     → axiosClient request and workspace headers
-     → server route registration
-     → route handler
-     → auth/category/permission middleware
-     → service/database transaction
-     → audit/notification/backup implications
-     → frontend result
+     → shared Axios client and workspace headers
+     → backend route registration
+     → authentication/category/permission middleware
+     → route/service logic
+     → database transaction
+     → audit/notification/backup effects
+     → API response and frontend state
    ```
+
 7. Read the closest backend and frontend tests before editing.
-8. Determine whether the change requires:
-   - a database migration,
-   - backup-manifest updates,
-   - permission-catalog changes,
-   - activity-log evidence,
-   - PWA/cache changes,
-   - PDF/export changes,
-   - mobile layout changes,
-   - deployment configuration changes.
-9. State the intended scope and production risk before writing code.
-10. Do not claim completion until tests, lint, build and relevant security checks pass.
+8. Decide whether the change affects:
+   - database migrations,
+   - backup/restore coverage,
+   - permissions,
+   - activity/audit evidence,
+   - PWA caching,
+   - PDFs or exports,
+   - mobile layout,
+   - deployment configuration.
+9. State scope and production risk before writing code.
+10. Do not claim completion until all applicable checks pass.
 
 ---
 
-## 4. Source-of-Truth Order
+## 4. Sources of Truth
 
-When documentation and code disagree, investigate and update both. Use this order:
+When code and documentation disagree, investigate and update both. Use this order:
 
-1. **Current database schema and applied additive migrations**
-2. **Backend route, middleware and service behavior**
-3. **Backend tests**
-4. **Frontend route guards, contexts and pages**
-5. **Frontend source tests**
-6. **CI workflows**
-7. **This README and in-app Help**
-
-Important entrypoints:
+1. Current schema plus applied additive migrations.
+2. Backend route, middleware and service behavior.
+3. Backend tests.
+4. Frontend routes, guards, contexts and pages.
+5. Frontend source tests.
+6. CI workflows.
+7. This README and in-app Help.
 
 | Purpose | Canonical location |
 |---|---|
 | Backend route registration and middleware order | `backend/server.js` |
 | Frontend route tree and workspace shells | `frontend/src/App.jsx` |
-| Authentication and current server-side identity refresh | `backend/middleware/authMiddleware.js` |
+| Authentication and current identity refresh | `backend/middleware/authMiddleware.js` |
 | Workspace/category isolation | `backend/services/categoryIsolationService.js` |
 | Permission catalog | `backend/security/permissionCatalog.js` |
 | Effective permission overrides | `backend/services/permissionOverrideService.js` |
-| Session validation/revocation | `backend/services/accountSessionService.js` |
+| Session validation and revocation | `backend/services/accountSessionService.js` |
 | Original System Administrator identity | `backend/security/systemAdminIdentity.js` |
 | Frontend API headers and 401 handling | `frontend/src/api/axiosClient.js` |
 | Frontend authentication state | `frontend/src/context/AuthContext.jsx` |
 | Active Mining/Hire context | `frontend/src/context/WorkspaceContext.jsx` |
 | Frontend permission mappings | `frontend/src/security/permissionRules.js` |
 | Fresh local database | `database/schema.sql` |
+| Fresh-schema verification | `database/schema_verify.sql` |
 | Production-safe database evolution | `database/migrations/` and reviewed legacy migration files in `database/` |
-| Full-system backup manifest/order | `backend/routes/backupRoutes.js` |
+| Full-system backup order and manifest | `backend/routes/backupRoutes.js` |
 | Normal verification pipeline | `.github/workflows/chalin03-verification.yml` |
 | Security release audit | `.github/workflows/version-3-final-audit.yml` |
+| Live production smoke checks | `.github/workflows/version-3-production-smoke.yml` |
 | Cloudflare response headers | `frontend/public/_headers` |
 | PWA service worker | `frontend/public/sw.js` |
 
 ---
 
-## 5. Platform Architecture
+## 5. Architecture and Stack
 
 ```text
 Browser / installed PWA
   → React + Vite frontend on Cloudflare Pages
   → Axios client with Bearer token and workspace/context headers
   → https://api.chalin03.com/api
-  → Express middleware: request context, security headers, CORS, rate limits
-  → JWT + session + token-version validation
+  → Express request context, security headers, CORS and rate limits
+  → JWT, token-version and server-side session validation
   → workspace/category isolation
-  → permission/delegated-authority checks
+  → role, effective permission and delegated-authority checks
   → route/service business logic
   → Railway MySQL
-  → Activity Log / security evidence / notifications / exports
+  → audit evidence, notifications, reports and exports
   → optional Arkesel SMS
 ```
 
-### Technology stack
-
-**Frontend**
+### Frontend
 
 - React 19
 - Vite 8
 - React Router 7
 - Axios
 - CSS
-- PWA/service-worker support
-- ESLint with React Hooks rules
+- PWA/service worker
+- ESLint and React Hooks rules
 
-**Backend**
+### Backend
 
 - Node.js
 - Express 4
@@ -192,34 +194,32 @@ Browser / installed PWA
 - ExcelJS
 - Sharp
 - QR code generation
-- Arkesel SMS integration
+- Arkesel integration
 
 ---
 
-## 6. Business Workspace Boundaries
+## 6. Workspace Boundaries
 
-Workspace separation is a security and accounting boundary, not only a visual layout choice.
+Workspace separation is a security and accounting boundary, not only a layout choice.
 
 ### Spare Parts — `spare_parts`
 
-Spare Parts uses the original store/branch model. It has two operational stores. Store context controls:
+Spare Parts uses the original branch/store model with two operational stores. Store context controls:
 
 - products and quantity,
 - sales and receipts,
 - installment sales,
 - customers and debts,
-- debt payments,
 - purchases and suppliers,
 - expenses,
 - returns and refunds,
-- daily closing,
+- Daily Closing,
 - reports and exports,
-- stock adjustments,
-- stock transfers,
+- adjustments and transfers,
 - SMS,
 - activity-log scope.
 
-The Axios client sends Spare Parts branch headers only for this workspace:
+The shared Axios client sends Spare Parts branch headers only for this workspace:
 
 - `X-Chalin03-Branch-Id`
 - `X-Chalin03-Branch-Code`
@@ -229,50 +229,16 @@ Always confirm the active store before saving or testing a transaction.
 
 ### Mining Operations — `mining`
 
-Mining sites are created by administrators. They are not Spare Parts stores.
+Mining sites are administrator-created and are not Spare Parts stores. Mining covers sites, daily logs, production, stockpiles, dispatch, equipment, fuel, contractors, shift crews, expenses, incidents, closings, workers, reports and shared Fleet.
 
-Mining includes:
-
-- site administration,
-- daily logs,
-- production records,
-- stockpiles and dispatch,
-- equipment shifts,
-- fuel tanks, transactions and reconciliation,
-- expenses,
-- contractors and shift crews,
-- incidents,
-- site closing,
-- documents and reports,
-- workers,
-- shared Fleet access.
-
-The active Mining site is sent through:
+The active site is sent through:
 
 - `X-Chalin03-Workspace: mining`
 - `X-Chalin03-Context-Id: <mining_site_id>`
 
 ### Equipment Hire — `equipment_hire`
 
-Hire locations, yards and bases are administrator-created and independent from Spare Parts.
-
-Equipment Hire includes:
-
-- customers and enquiries,
-- availability,
-- quotations,
-- contracts and amendments,
-- equipment assignment,
-- dispatch,
-- work logs,
-- invoices and invoice lines,
-- deposits and payments,
-- commercial approvals,
-- evidence files and damage assessment,
-- return inspection,
-- reports and documents,
-- workers,
-- shared Fleet access.
+Hire locations, yards and bases are administrator-created and independent from Spare Parts. Hire covers customers, enquiries, availability, quotations, contracts, amendments, dispatch, work logs, invoices, deposits, payments, approvals, evidence, damage assessment, returns, workers, reports and shared Fleet.
 
 The active Hire location is sent through:
 
@@ -281,58 +247,35 @@ The active Hire location is sent through:
 
 ### Shared Fleet
 
-Fleet is shared only between Mining and Equipment Hire. A machine should be registered once. Fleet controls include:
-
-- availability,
-- current assignment and location,
-- operator,
-- meter readings,
-- fuel,
-- inspections,
-- maintenance and breakdowns,
-- service due,
-- registration/insurance/document expiry,
-- archive history.
-
-Do not create duplicate Fleet assets for the same machine in different workspaces.
+Fleet is shared only between Mining and Equipment Hire. A machine should be registered once. Do not create duplicate assets for the same machine in different workspaces.
 
 ### Group Executive Control
 
-Group Executive is a separate management shell. It is not an editing substitute for the operational workspaces. It presents consolidated operational and financial intelligence to authorized management.
+Group Executive is a separate management shell for consolidated intelligence. It does not replace operational editing in the business workspaces.
 
 ---
 
-## 7. Authentication, Sessions and Permissions
+## 7. Authentication and Authorization
 
-### Authentication model
+The browser currently stores the bearer token, user record and active Mining/Hire context identifiers. The backend does not trust stale token claims alone. Each authenticated request validates:
 
-The browser currently stores:
+1. JWT signature.
+2. Current active user record.
+3. Token version.
+4. Workspace/category access.
+5. Active server-side session.
+6. Current effective permissions.
 
-- `chalin03_token`
-- `chalin03_user`
-- active Mining/Hire context identifiers
+A new login may revoke the previous active session. Account and permission changes may revoke sessions immediately.
 
-The API client sends the JWT as a Bearer token. The backend does not trust stale token claims alone. On each authenticated request it reloads current security-sensitive state and validates:
-
-1. JWT signature,
-2. active user record,
-3. token version,
-4. category/workspace access,
-5. active server-side session,
-6. current effective permissions.
-
-A new login may revoke the prior session. Permission or account changes may revoke active sessions.
-
-### Authorization layers
-
-A protected feature may require several controls at once:
+A protected action may require several layers together:
 
 ```text
 requireAuth
   + workspace/category boundary
   + role or effective permission
-  + location/site/store access
-  + protected-action token/password window
+  + branch/site/location access
+  + protected-action password/token window
   + independent approver
 ```
 
@@ -341,46 +284,42 @@ Do not remove one layer because another exists.
 ### Permission model
 
 - Role permissions are defaults.
-- Per-user overrides may explicitly allow or deny a permission.
+- Per-user overrides may explicitly allow or deny.
 - Explicit deny takes precedence.
 - Overrides may expire.
-- Permission changes require reason and protected-action evidence.
-- Permission changes must be recorded in the Activity Log/privileged ledger.
-- Frontend route guards improve UX, but backend middleware is authoritative.
+- Sensitive changes require reason and protected-action evidence.
+- Changes must be recorded in the Activity Log or privileged ledger.
+- Frontend guards improve UX; backend middleware is authoritative.
 - The original System Administrator retains protected recovery and cross-category authority.
-- Category-specific administrators must not silently become cross-category administrators.
+- Category administrators must not silently gain cross-category control.
 
-When adding a permission-controlled feature, update all relevant places:
+When adding a permission-controlled feature, review all of these:
 
-1. backend permission catalog,
-2. role defaults,
-3. backend middleware/route checks,
-4. frontend permission rules,
-5. navigation visibility,
-6. route guard,
-7. User Permission Manager grouping/labels,
-8. tests,
-9. Help documentation where user-facing.
+1. Backend catalog.
+2. Role defaults.
+3. Backend middleware.
+4. Frontend permission rules.
+5. Navigation visibility.
+6. Route guard.
+7. User Permission Manager grouping and labels.
+8. Tests.
+9. In-app Help.
 
 ---
 
 ## 8. Core Business Invariants
 
-These rules must remain true after every change.
-
 ### Sales and stock
 
-- A valid sale must update stock exactly once.
-- A failed SMS or WhatsApp attempt must never roll back a valid sale.
-- Completed sales must not be silently rewritten.
-- Approved changes preserve before/after snapshots, reason, requester and approver.
-- Voided/cancelled sales must not count as active revenue.
-- Store context must be enforced server-side.
-- Direct quantity edits are not a substitute for purchase, sale, return, transfer or adjustment records.
+- A valid sale updates stock exactly once.
+- Communication failure must never roll back a valid sale.
+- Completed sales are not silently rewritten.
+- Approved corrections preserve before/after snapshots, reason, requester and approver.
+- Voided or cancelled sales do not count as active revenue.
+- Store context is enforced server-side.
+- Direct quantity edits do not substitute for sales, purchases, returns, transfers or adjustments.
 
 ### Stock transfers
-
-The workflow is:
 
 ```text
 Request → Approve → Dispatch → Receive
@@ -389,27 +328,13 @@ Request → Approve → Dispatch → Receive
 - Approval does not move stock.
 - Dispatch reduces the source store.
 - Receive increases the destination store.
-- Each state transition must be idempotent and auditable.
-- Source and destination cannot be confused or silently changed after movement.
+- State transitions must be idempotent and auditable.
 
 ### Returns and refunds
 
-A return may be:
+A return may be stock-only or a financial refund. A financial refund requires exact amount, channel, electronic reference where applicable, reason and independent approval. Approved refunds reduce the matching Daily Closing channel.
 
-- stock-only, or
-- financial refund.
-
-A financial refund requires:
-
-- exact amount,
-- exact payment channel,
-- electronic reference where applicable,
-- reason,
-- independent manager/administrator approval.
-
-Refunds reduce the matching Daily Closing channel.
-
-### Daily Closing and cash control
+### Daily Closing
 
 Expected physical cash is:
 
@@ -428,63 +353,49 @@ MoMo, Bank and Other are reconciled separately.
 
 Critical rules:
 
-- Never auto-copy expected values into counted values.
-- Never force a difference to zero.
+- Never auto-copy expected figures into counted figures.
+- Never force a variance to zero.
 - Variances require explanation.
-- Optional denomination counting must match the submitted cash count.
-- The closing submitter cannot verify their own closing.
-- A changed closing must preserve the original and create revision evidence.
-- Manager verification confirms review; it does not erase a real shortage or excess.
+- Optional denomination counting must match submitted cash.
+- The submitter cannot verify their own closing.
+- Changed closings preserve originals and revision evidence.
+- Verification confirms review; it does not erase a real shortage or excess.
 - Externally funded expenses remain accounting expenses but do not reduce today's drawer/channel balance.
 
 ### Debts and installments
 
 - Debt balances and payment ledgers must reconcile.
-- Installment schedules must preserve original agreement terms and subsequent controlled changes.
-- Payment allocation must not exceed received amount or outstanding balance.
-- Corrections, reschedules, waivers and delivery events require evidence and permissions.
-- Automatic installment SMS reminders remain disabled unless management deliberately enables them.
+- Installment schedules preserve original terms and controlled changes.
+- Allocations cannot exceed money received or outstanding balance.
+- Corrections, reschedules, waivers and delivery events require evidence and permission.
+- Automatic installment reminders remain disabled unless management deliberately enables them.
 
 ### Mining
 
-- Every operational record must belong to the authenticated user's authorized site.
-- Production, dispatch, stockpile and fuel algorithms must not create negative or duplicated movement.
-- Site closings and reconciliation evidence must remain historical.
-- Shared Fleet updates must preserve the machine's single identity.
+- Every record belongs to an authorized site.
+- Production, dispatch, stockpile and fuel logic must not create duplicate or negative movement.
+- Site closing and reconciliation history is preserved.
+- Fleet updates preserve one machine identity.
 
 ### Equipment Hire
 
-- Every record must belong to an authorized Hire location.
-- A machine cannot be treated as simultaneously available and actively assigned.
-- Contract, dispatch, work-log, invoice, payment, return and closure states must transition in a controlled order.
-- Financial summaries must derive from invoices, deposits, payments, voids and balances without double counting.
+- Every record belongs to an authorized Hire location.
+- A machine cannot be both available and actively assigned.
+- Contract, dispatch, work-log, invoice, payment, return and closure states follow controlled transitions.
+- Financial summaries must not double-count invoices, deposits, payments, voids or balances.
 
 ### HR and employment documents
 
 - Worker profiles are category-scoped.
-- Standalone employment documents may exist before a worker account/profile exists.
-- Documents use controlled draft, PDF, approval/signature, acknowledgement, archive and linking workflows.
+- Standalone employment documents may exist before a worker profile.
+- Draft, PDF, approval/signature, acknowledgement, archive and linking are controlled workflows.
 - Approved documents preserve an immutable signature snapshot.
-- Later signature-setting changes must not alter already approved documents.
-- Empty fields should not create blank PDF sections or trailing blank pages.
+- Later signature-setting changes do not alter approved documents.
+- Empty fields must not create blank sections or trailing PDF pages.
 
 ### Audit evidence
 
-Sensitive actions should preserve:
-
-- actor,
-- affected user/entity,
-- workspace/context,
-- branch/site/location,
-- before state,
-- after state,
-- reason,
-- approval identity,
-- request ID,
-- timestamp,
-- outcome.
-
-Do not delete underlying evidence merely because a notification is dismissed from the active UI.
+Sensitive actions should preserve actor, affected entity, workspace/context, before/after state, reason, approval identity, request ID, timestamp and outcome. Dismissing a notification must not delete underlying evidence.
 
 ---
 
@@ -495,7 +406,8 @@ chalin03-system-2/
 ├── .github/
 │   └── workflows/
 │       ├── chalin03-verification.yml
-│       └── version-3-final-audit.yml
+│       ├── version-3-final-audit.yml
+│       └── version-3-production-smoke.yml
 ├── backend/
 │   ├── config/
 │   ├── middleware/
@@ -511,8 +423,7 @@ chalin03-system-2/
 ├── database/
 │   ├── migrations/
 │   ├── schema.sql
-│   ├── schema_verify.sql
-│   └── reviewed legacy migration/verification files
+│   └── schema_verify.sql
 ├── docs/
 ├── frontend/
 │   ├── public/
@@ -537,27 +448,27 @@ chalin03-system-2/
 
 ### Route ownership
 
-- Register backend routes only in `backend/server.js`.
-- Registration order matters. Public branch loading is intentionally registered before authentication because login needs the store list.
-- More-specific HR/PDF handlers are intentionally registered before legacy catch-all handlers.
-- Add frontend routes only through `frontend/src/App.jsx` and the appropriate workspace layout/navigation.
-- Do not put a Mining or Hire page inside the Spare Parts sidebar.
+- Register backend routes in `backend/server.js`.
+- Route order matters. Branch loading is intentionally public because login needs the store list.
+- More-specific HR/PDF routes are registered before legacy catch-all handlers.
+- Add frontend routes through `frontend/src/App.jsx` and the correct workspace layout.
+- Never place a Mining or Hire page inside the Spare Parts sidebar.
 
 ---
 
-## 10. Local Development Setup
+## 10. Local Setup on Windows
 
 ### Requirements
 
 - Git
-- Node.js 20 or newer; Node.js 24 matches CI
+- Node.js 20+; Node.js 24 matches CI
 - npm
 - MySQL
-- MySQL Workbench or another trusted SQL client
+- MySQL Workbench or another trusted client
 - VS Code or equivalent
 - Chrome or Edge
 
-### Clone on Windows
+### Clone
 
 ```bat
 cd /d C:\Users\DDK\Desktop
@@ -567,36 +478,30 @@ git switch main
 git pull --ff-only origin main
 ```
 
-Do not copy `node_modules` from another machine.
+Do not copy `node_modules` from another computer.
 
 ### Install deterministic dependencies
-
-Backend:
 
 ```bat
 cd /d C:\Users\DDK\Desktop\chalin03-system\backend
 npm ci
-```
 
-Frontend:
-
-```bat
 cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
 npm ci
 ```
 
-Use `npm install` only when intentionally changing dependency versions and committing the resulting lockfile.
+Use `npm install` only when intentionally changing dependencies and committing the lockfile.
 
 ### Environment files
 
-Create local files from the examples:
+From the repository root:
 
 ```bat
 copy backend\.env.example backend\.env
 copy frontend\.env.example frontend\.env
 ```
 
-Essential local backend values:
+Essential local backend settings:
 
 ```env
 NODE_ENV=development
@@ -613,63 +518,54 @@ DB_NAME=chalin03_db
 DB_SSL=false
 
 JWT_SECRET=use_a_long_random_local_secret
-
 SYSTEM_ADMIN_USER_ID=1
 SYSTEM_ADMIN_USERNAME=admin
 
 SMS_ENABLED=true
 SMS_PROVIDER=mock
 SMS_SENDER_ID=CHALIN03
-
 INSTALLMENT_SMS_REMINDERS_ENABLED=false
 ```
 
-Essential local frontend value:
+`DB_USER` and `DB_PASSWORD` must identify an existing local MySQL account. The example `chalin03_user` is not created automatically; create it locally or use another existing local account. Never reuse Railway production credentials on a development computer.
+
+Frontend:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
 
-Use `backend/.env.example` as the complete variable reference. Never put real values in README, screenshots, issues, chat logs or commits.
+Use `backend/.env.example` as the complete variable reference. Never put real values in README, screenshots, issues, chats or commits.
 
-### Create a fresh local database
+### Fresh local database
 
-For a new blank local installation only:
+For a new empty local installation only:
 
 1. Create/select `chalin03_db`.
-2. Run:
-   ```text
-   database/schema.sql
-   ```
-3. Run:
-   ```text
-   database/schema_verify.sql
-   ```
+2. Run `database/schema.sql`.
+3. Run `database/schema_verify.sql`.
 4. Create the administrator:
+
    ```bat
    cd /d C:\Users\DDK\Desktop\chalin03-system\backend
    npm run create-admin
    ```
 
-> `database/schema.sql` must never be used as a production migration or repair tool.
+Never use `schema.sql` as a production migration or repair tool.
 
 ### Run locally
-
-Backend:
 
 ```bat
 cd /d C:\Users\DDK\Desktop\chalin03-system\backend
 npm run dev
 ```
 
-Frontend:
+In another terminal:
 
 ```bat
 cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
 npm run dev
 ```
-
-Local addresses:
 
 ```text
 Frontend: http://localhost:5173
@@ -682,67 +578,48 @@ Health:   http://localhost:5000/api/health
 
 ## 11. Environment and Deployment Security
 
-### Production frontend
+Production frontend:
 
 ```env
 VITE_API_URL=https://api.chalin03.com/api
 ```
 
-### Production backend CORS
-
-Production must allow the canonical frontends:
+Production backend CORS:
 
 ```env
 FRONTEND_URL=https://chalin03.com
 FRONTEND_URL_ALT=https://www.chalin03.com
 ```
 
-### Trusted API host controls
+`backend/.env.example` also documents trusted host controls, the optional Cloudflare origin secret, API limits, session security, recovery secrets and provider settings.
 
-`backend/.env.example` documents:
+Do not enable `CLOUDFLARE_ORIGIN_SECRET` until the identical value is configured in Railway and Cloudflare. A mismatch can block legitimate traffic.
 
-- `TRUSTED_API_HOSTS`
-- `ENFORCE_TRUSTED_API_HOSTS`
-- `CLOUDFLARE_ORIGIN_SECRET`
-
-Do not enable the Cloudflare origin secret until the identical value is configured on both sides. A mismatch can block all legitimate production traffic.
-
-### Rate limiting
-
-- A broad API ceiling protects ordinary routes.
-- Login, recovery and sensitive administration have stricter dedicated limits.
-- Do not remove rate limits to fix a client retry bug.
+- A broad rate ceiling protects ordinary routes.
+- Login, recovery and sensitive administration use stricter limits.
+- Do not remove rate limits to repair a client retry bug.
 - Health is intentionally excluded from the broad limiter.
-
-### Security headers
-
-- Backend security middleware provides API headers.
-- Cloudflare Pages headers are defined in `frontend/public/_headers`.
-- HSTS, frame denial, content-type protection, CSP, referrer policy and private-route indexing controls are release requirements.
-- Public company/division pages intentionally have different indexing rules from private application routes.
+- API headers come from backend security middleware.
+- Pages headers come from `frontend/public/_headers`.
+- HSTS, CSP, frame denial, content-type protection, referrer policy and private-route noindex behavior are release requirements.
 
 ---
 
 ## 12. Database Change Procedure
 
-### Fresh installation
+Use `database/schema.sql` only for an empty local database. Existing local and production databases must use reviewed additive migrations.
 
-Use `database/schema.sql` only for an empty local database.
+A safe migration should:
 
-### Existing local or production database
-
-Use a reviewed additive migration. A safe migration should:
-
-- use a unique chronological filename,
+- have a chronological unique filename,
 - avoid destructive statements,
-- use `IF NOT EXISTS` where appropriate,
 - preserve existing data,
 - backfill deliberately,
 - add indexes and constraints safely,
 - include verification queries,
-- be rerunnable only when explicitly designed to be idempotent,
-- document rollback or repair strategy,
-- update `schema.sql` for future fresh installs,
+- be idempotent only when explicitly designed that way,
+- document repair or rollback strategy,
+- update fresh schema,
 - update backup coverage,
 - update tests.
 
@@ -750,30 +627,25 @@ Use a reviewed additive migration. A safe migration should:
 
 1. Verify the target Railway environment and database.
 2. Download a current full-system backup.
-3. Export critical management reports if the change is financial.
-4. Review the migration and verification SQL.
+3. Export critical reports when financial data is affected.
+4. Review migration and verification SQL.
 5. Apply only the approved migration.
 6. Run verification immediately.
-7. Confirm all expected counts, constraints and problem counts.
-8. Deploy code that depends on the migration.
+7. Confirm counts, constraints and problem queries.
+8. Deploy dependent code.
 9. Test old records and new workflows.
 10. Confirm backups include every new table.
 11. Record release evidence.
 
-Some recent HR/signature tables also have guarded startup schema services:
-
-- `backend/services/workerHrLetterSchemaService.js`
-- `backend/services/employmentDocumentSchemaService.js`
-
-These are specific compatibility mechanisms. Do not treat runtime DDL as the default for unrelated features.
+`backend/services/workerHrLetterSchemaService.js` and `backend/services/employmentDocumentSchemaService.js` are specific compatibility mechanisms. Do not treat runtime DDL as the default for unrelated work.
 
 ### Transactions and concurrency
 
-Financial and stock writes should be atomic. When changing multi-table operations:
+For multi-table financial or stock writes:
 
 - use a database transaction,
 - validate state inside the transaction,
-- lock relevant rows when concurrent execution could duplicate or overspend,
+- lock relevant rows when concurrent execution can duplicate or overspend,
 - commit only after all dependent writes succeed,
 - roll back on failure,
 - write audit evidence consistently,
@@ -783,231 +655,130 @@ Financial and stock writes should be atomic. When changing multi-table operation
 
 ## 13. Backup and Restore Contract
 
-Full-system backup and restore are intentionally system-wide. Store-separated management downloads belong in export routes, not the disaster-recovery backup.
+Full-system backup/restore is intentionally system-wide. Store-separated management downloads belong in exports, not disaster recovery.
 
-Canonical backup logic:
+Canonical logic: `backend/routes/backupRoutes.js`.
 
-```text
-backend/routes/backupRoutes.js
-```
+When adding a persistent table:
 
-Rules for new tables:
-
-1. Add the table to fresh schema and migration.
+1. Add it to fresh schema and migration.
 2. Add it to backup order/manifest when it contains business or security state.
 3. Add restore validation.
 4. Add tests proving coverage.
-5. Consider foreign-key order and date serialization.
-6. Never include duplicate legacy alias tables.
-7. Never expose backup data to unauthorized users.
+5. Respect foreign-key order and date serialization.
+6. Do not include duplicate legacy aliases.
+7. Do not expose backup data to unauthorized users.
 
-Only the original System Administrator may perform the most sensitive full-system backup/restore operations.
-
-Git restores code. It does not restore MySQL data.
+The most sensitive full-system backup and restore operations require the original System Administrator. Git restores code, not MySQL data.
 
 ---
 
-## 14. Backend Development Conventions
-
-### Route design
+## 14. Backend Development Rules
 
 - Use parameterized SQL.
 - Never concatenate untrusted input into SQL.
-- Validate identifiers, numbers, dates, enums and state transitions.
+- Validate IDs, numbers, dates, enums and state transitions.
 - Return stable JSON shapes.
-- Include `request_id` in error responses where middleware provides it.
-- Do not expose stack traces, SQL, credentials or internal file paths.
-- Use the central error middleware.
+- Include `request_id` where middleware provides it.
+- Do not expose stack traces, SQL, credentials or internal paths.
+- Use central error middleware.
 - Keep public routes minimal and intentional.
-- Apply `requireAuth` and the correct workspace boundary before business routes.
-- Apply permission/delegated-authority middleware to sensitive routes.
-- Re-check permissions and state server-side even when the frontend already checks.
+- Apply `requireAuth` and the correct workspace boundary.
+- Apply permissions or delegated authority to sensitive routes.
+- Re-check state server-side even when the frontend already checks.
 
-Typical error shape:
+A money, stock, permission, backup, approval or document handler must answer:
 
-```json
-{
-  "status": "error",
-  "code": "STABLE_ERROR_CODE",
-  "message": "Safe user-facing explanation.",
-  "request_id": "request-correlation-id"
-}
-```
-
-### Financial and audit changes
-
-A handler that modifies money, stock, permissions, approvals, backups, security settings or signed documents should answer:
-
-- What is the current state?
-- Is this transition legal?
+- Is the current transition legal?
 - Who is allowed?
 - Is independent approval required?
 - What tables change?
-- What happens if step 3 fails after step 2 succeeds?
+- What happens if an intermediate step fails?
 - What evidence is preserved?
 - Can a retry duplicate the effect?
 - Does Daily Closing change?
-- Does a notification or SMS failure affect the core transaction?
-- Does backup/restore include the new state?
+- Can communication failure affect the core transaction?
+- Does backup/restore include the state?
 
-### Adding a backend route
-
-1. Create or extend a file in `backend/routes/`.
-2. Prefer services for reusable business logic.
-3. Add middleware.
-4. Register the route in `backend/server.js`.
-5. Add tests in `backend/tests/`.
-6. Update `/api` route documentation if the route group is new.
-7. Update readiness/diagnostics expected tables if schema changes.
-8. Update backup coverage if tables change.
+When adding a route, register it in `backend/server.js`, add middleware, add tests, update the API root list if the group is new, and review readiness/diagnostics plus backup coverage.
 
 ---
 
-## 15. Frontend Development Conventions
-
-### Routing and workspace shells
+## 15. Frontend Development Rules
 
 - `frontend/src/App.jsx` is the route source of truth.
-- Spare Parts, Mining and Equipment Hire use separate layouts.
+- Spare Parts, Mining and Hire use separate layouts.
 - Use `ProtectedRoute`, `WorkspaceRoute`, `PermissionRoute` and `RoleRoute` appropriately.
-- A page visible in the wrong workspace is a security/logic defect.
-- Legacy shared links should redirect into the active workspace rather than reintroduce a shared sidebar.
-
-### API requests
-
-Use:
-
-```text
-frontend/src/api/axiosClient.js
-```
-
-Do not create unconfigured Axios instances for normal authenticated API calls. The shared client adds:
-
-- Bearer token,
-- workspace code,
-- context ID,
-- Spare Parts branch headers,
-- timeout,
-- centralized 401 cleanup and login redirect.
-
-### State and hooks
-
+- A page visible in the wrong workspace is a security and logic defect.
+- Use `frontend/src/api/axiosClient.js` for normal authenticated requests.
+- Do not create an unconfigured Axios instance for ordinary API calls.
 - Follow React Hooks rules.
 - Do not suppress dependency warnings casually.
-- Use `useCallback`/`useMemo` only when they make dependencies and behavior clearer.
-- Cancel or ignore stale async results when rapid context changes can race.
+- Ignore or cancel stale asynchronous results when rapid context changes can race.
 - Clear workspace-specific state when branch/site/location changes.
-- Do not derive authorization only from stale local storage; server responses remain authoritative.
+- Do not derive authorization only from local storage.
 
 ### Mobile and accessibility
 
-Every user-facing change must be checked at:
+Check user-facing changes near 320 px, 375 px, 430 px, tablet and desktop widths.
 
-- approximately 320 px,
-- 375 px,
-- 430 px,
-- tablet width,
-- desktop width.
+Require:
 
-Requirements:
-
-- no horizontal page overflow,
+- no accidental horizontal page overflow,
 - usable touch targets,
-- readable form labels,
+- readable labels,
 - phone-safe input font sizes,
-- tables must transform into usable cards or scroll deliberately,
-- action buttons must not overlap,
-- dialogs/PDF previews must fit small screens,
-- focus and keyboard behavior must remain usable,
-- status must not depend on color alone.
+- tables that become cards or deliberately scroll,
+- no overlapping actions,
+- small-screen dialogs and PDF previews,
+- usable keyboard/focus behavior,
+- status that does not depend only on color.
 
-### PWA and caching
+### PWA
 
-Production registers `frontend/public/sw.js`.
-
-When changing assets, routes or cache-sensitive behavior:
-
-- update the service-worker cache namespace when necessary,
-- ensure old caches are removed,
-- verify install/update behavior,
-- use Incognito or hard refresh during smoke tests,
-- do not misdiagnose an old cached bundle as a backend defect.
+Production registers `frontend/public/sw.js`. For cache-sensitive changes, update the cache namespace when needed, remove obsolete caches and test installation/update behavior. Use Incognito or a hard refresh before diagnosing a stale frontend.
 
 ---
 
-## 16. PDF, Excel, Word and CSV Exports
+## 16. PDF and Export Rules
 
-Exports are business records.
+Exports are business records. Preserve workspace context, document number, dates, totals and approval/signature evidence. Omit empty optional fields, prevent blank trailing pages, use safe filenames, escape spreadsheet/CSV values and never expose private fields to unauthorized roles.
 
-When changing exports:
+Test at least one populated and one sparse record.
 
-- preserve store/site/location context,
-- preserve document number and date,
-- include approval/signature evidence where required,
-- omit empty optional fields cleanly,
-- prevent trailing blank pages,
-- use safe filenames,
-- escape spreadsheet/CSV values,
-- do not expose private fields to unauthorized roles,
-- verify totals against the API/source records,
-- test at least one populated and one sparse record.
-
-ExcelJS currently carries monitored moderate transitive dependency findings through UUID. There are no known high or critical production dependency vulnerabilities. Do not force a breaking ExcelJS downgrade without export regression testing and an approved migration/release plan.
+ExcelJS currently has monitored moderate transitive UUID advisories. There are no known high or critical production dependency vulnerabilities. Do not force a breaking ExcelJS change without export regression testing.
 
 ---
 
 ## 17. SMS and WhatsApp Rules
 
-### Development
-
-Use:
+Development should use:
 
 ```env
 SMS_PROVIDER=mock
 ```
 
-Mock mode records provider-style evidence without spending SMS credit.
+Mock mode records provider-style evidence without spending credit.
 
-### Live SMS
+Live Arkesel support includes custom messages, receipts, debt reminders, low-stock alerts, summaries, deliberately enabled installment reminders, provider references, callbacks/polling, controlled retry and archived history.
 
-Arkesel support includes:
+- Provider acceptance is not delivery.
+- Delivered requires provider evidence.
+- Unknown must not be labeled delivered.
+- Retry only clearly failed, undelivered or expired records.
+- Never create uncontrolled duplicate sends or charges.
 
-- custom SMS,
-- receipt SMS,
-- debt reminders,
-- low-stock alerts,
-- daily summaries,
-- installment reminders when deliberately enabled,
-- provider reference and response evidence,
-- callback and polling delivery confirmation,
-- controlled retry,
-- archived history.
-
-Status must remain truthful:
-
-- provider acceptance is not the same as delivery,
-- delivered requires provider evidence,
-- unknown must not be labeled delivered,
-- retry only clearly failed/undelivered/expired messages,
-- never resend automatically in a way that can create duplicate charges.
-
-### WhatsApp
-
-Keep:
+Keep WhatsApp receipts disabled until approved Meta credentials, templates and policy exist:
 
 ```env
 WHATSAPP_RECEIPT_ENABLED=false
 ```
 
-until approved Meta Cloud API credentials, templates and operational policy exist.
-
 Communication failure must not invalidate a completed business transaction.
 
 ---
 
-## 18. Required Verification Commands
-
-Run from a clean branch with deterministic dependencies.
+## 18. Required Verification
 
 ### Backend
 
@@ -1038,96 +809,39 @@ git status --short
 git diff --stat
 ```
 
-### Required CI
+### Permanent CI gates
 
-Before merge, both permanent workflows must be green:
+All must be green before merge:
 
 - **Chalin 03 Verification**
 - **Version 3 Final Security Audit**
+- **Version 3 Production Smoke**
 
-The normal workflow enforces:
+Normal verification enforces backend syntax/tests and frontend source tests, full lint and production build.
 
-- backend syntax,
-- backend tests,
-- frontend source tests,
-- full frontend lint,
-- production frontend build.
+The security audit covers production dependency gates, secret-shape scanning, CodeQL, API security headers, protected routes, sensitive paths, hostile CORS, TRACE and private-route indexing.
 
-The security workflow covers:
+Production smoke checks the live API version/readiness, database/schema/configuration health, rate-limit headers, HSTS, login release identity, service worker and PWA manifest.
 
-- production dependency audit,
-- tracked secret-shape scanning,
-- CodeQL JavaScript security-extended analysis,
-- API security headers,
-- protected-route authentication,
-- sensitive path exposure,
-- hostile-origin CORS,
-- TRACE handling,
-- public-site headers and private-route noindex behavior.
-
-Do not disable or mark a failing release gate `continue-on-error` to get a merge.
+Never weaken a failing release gate to obtain a merge.
 
 ---
 
-## 19. Tests: Where and What to Add
+## 19. Test Locations
 
-### Backend
+Backend tests: `backend/tests/*.test.js`.
 
-Tests live in:
+Add backend tests for permissions, category isolation, context filtering, transactions, calculations, migrations, audit evidence, backup coverage, security and regressions.
 
-```text
-backend/tests/*.test.js
-```
+Frontend source/contract tests: `frontend/scripts/`.
 
-Add tests for:
+Frontend `npm test` covers source contracts, permissions, public security, employment documents and Version Three identity. Extend it when changing routes, permission labels, security headers, public metadata, documents, version identity or mobile CSS contracts.
 
-- permission enforcement,
-- workspace/category isolation,
-- context filtering,
-- transaction/state transitions,
-- calculations,
-- migration presence/contract,
-- audit evidence,
-- backup coverage,
-- security headers and route order where relevant,
-- regressions from the reported bug.
-
-### Frontend
-
-Source/contract tests live in:
-
-```text
-frontend/scripts/
-```
-
-The frontend `npm test` command runs the repository's source checks, permission tests, public-security tests, employment-document tests and Version Three release tests.
-
-Add or extend tests when changing:
-
-- route visibility,
-- permission labels,
-- page source contracts,
-- security headers,
-- public metadata,
-- employment documents,
-- release identity,
-- mobile CSS source requirements.
-
-A build success alone does not prove permission or business logic correctness.
+A successful build alone does not prove business logic or permission correctness.
 
 ---
 
-## 20. Safe Feature Workflow for AI Agents
-
-### Before coding
-
-1. Restate the affected workspace and data.
-2. Identify the frontend page, backend route, tables, permissions and tests.
-3. Identify whether production migration is needed.
-4. Identify failure and rollback behavior.
-5. Confirm no unrelated files will be changed.
-
-### Branch
+## 20. Safe Feature Workflow
 
 ```bash
 git switch main
@@ -1135,16 +849,9 @@ git pull --ff-only origin main
 git switch -c agent/clear-feature-name
 ```
 
-### Implementation
+Before coding, identify the workspace, data, page, backend route, tables, permissions, tests, migration need and rollback behavior.
 
-- edit only required files,
-- preserve existing APIs where practical,
-- add tests with the code,
-- update README/Help when behavior changes,
-- update version only for an approved release,
-- do not include secrets or generated production data.
-
-### Pre-PR review
+Before committing:
 
 ```bash
 git diff --check
@@ -1152,96 +859,54 @@ git diff --stat
 git status --short
 ```
 
-Then run the complete backend and frontend gates.
-
-### Commit
-
-Stage explicit paths:
-
-```bash
-git add path/to/file1 path/to/file2
-git commit -m "Clear description of the verified change"
-git push -u origin agent/clear-feature-name
-```
-
-Open a draft pull request describing:
-
-- what changed,
-- why,
-- affected workspaces,
-- database impact,
-- security impact,
-- tests run,
-- deployment/smoke-test plan,
-- residual risks.
+Stage explicit files, commit clearly, push the isolated branch and open a draft PR describing scope, affected workspaces, database/security impact, checks, deployment plan and residual risk.
 
 Do not merge while required checks are pending or failing.
 
 ---
 
-## 21. Production Deployment and Smoke Test
+## 21. Deployment and Smoke Test
 
-Production deploys from `main`.
+After merge, verify Railway and Cloudflare deployed the merged `main` commit.
 
-After merge, verify:
+### API
 
-### Railway/API
+- `/api/health` succeeds and reports `3.0.0`.
+- `/api/readiness` is ready.
+- Database/schema/configuration checks pass.
+- Startup self-check passes.
+- Protected endpoints reject unauthenticated requests.
+- Affected routes return correct scoped records.
 
-- deployment status is successful,
-- `/api/health` returns success,
-- reported version is `3.0.0`,
-- startup self-check passes,
-- database connection succeeds,
-- no migration/startup error appears,
-- protected endpoints still reject unauthenticated requests,
-- affected API routes return correct records for authorized users.
+### Frontend
 
-### Cloudflare/frontend
+- Login displays `Version Three · v3.0.0`.
+- HSTS and other security headers remain present.
+- Private routes remain noindex.
+- Service worker and PWA update correctly.
+- Browser console has no new error.
+- Mobile layout remains usable.
 
-- production deployment is successful,
-- login displays `Version Three · v3.0.0`,
-- HSTS/security headers are present,
-- login/private routes remain noindex,
-- service worker updates,
-- no stale bundle remains after hard refresh,
-- browser console has no new error.
-
-### Functional smoke test
-
-Test with realistic roles and contexts:
-
-- original System Administrator,
-- category Administrator where relevant,
-- manager,
-- cashier for Spare Parts,
-- accountant/auditor where relevant,
-- restricted user,
-- user without the permission,
-- different branch/site/location.
-
-Test both existing records and a controlled new test record. Do not create uncontrolled financial data in production.
+Test realistic roles, permissions and different branches/sites/locations. Do not create uncontrolled financial test data in production.
 
 ---
 
 ## 22. Definition of Done
 
-A task is done only when all applicable statements are true:
+A task is done only when all applicable items are true:
 
-- scope is complete and no unrelated behavior changed,
+- scope is complete and unrelated behavior is unchanged,
 - business invariants remain true,
 - authorization is enforced server-side,
 - workspace/context isolation is verified,
 - database changes are additive and documented,
 - backup coverage includes new persistent state,
 - audit evidence is preserved,
-- backend syntax passes,
-- backend tests pass,
-- frontend tests pass,
-- full lint passes,
-- production build passes,
-- dependency audit has no unreviewed high/critical finding,
-- CI is green,
-- mobile layout is checked,
+- backend syntax and tests pass,
+- frontend tests, full lint and build pass,
+- no unreviewed high/critical dependency finding remains,
+- permanent CI gates are green,
+- mobile behavior is checked,
 - exports/PDFs are checked when affected,
 - deployment succeeds,
 - post-deploy smoke tests pass,
@@ -1252,118 +917,56 @@ A task is done only when all applicable statements are true:
 
 ## 23. Common Failure Modes
 
-### Old frontend after deployment
+### Old frontend
 
-- confirm Cloudflare deployed the latest `main`,
-- use `Ctrl + Shift + R`,
-- open Incognito,
-- close/reopen the installed PWA,
-- inspect service-worker cache version.
+Confirm the latest Cloudflare deployment, use `Ctrl + Shift + R`, open Incognito, close/reopen the installed PWA and inspect the service-worker cache version.
 
-### `API route not found`
+### API route not found
 
-- confirm Railway deployed latest `main`,
-- inspect registration in `backend/server.js`,
-- verify route ordering,
-- verify frontend `VITE_API_URL`,
-- check Railway logs.
+Confirm Railway deployed current `main`, inspect `backend/server.js`, route order, `VITE_API_URL` and Railway logs.
 
-### Redirect back to login
+### Redirect to login
 
-- inspect the API response code and error code,
-- validate session and token version,
-- verify workspace/category assignment,
-- verify local stored workspace,
-- verify the user is active,
-- do not simply remove the 401 handler.
+Inspect the response status/code, session, token version, active user state, workspace/category assignment and stored workspace. Do not remove the central 401 handler as a shortcut.
 
-### Data appears from the wrong business
+### Wrong-business data
 
-- inspect `X-Chalin03-Workspace`,
-- inspect `X-Chalin03-Context-Id`,
-- inspect Spare Parts branch headers,
-- inspect category isolation middleware,
-- inspect query filters,
-- test with a second workspace user.
+Inspect workspace and context headers, Spare Parts branch headers, category middleware, SQL filters and a second workspace user.
 
-### Port `5000` already in use on Windows
+### Port 5000 already in use
 
 ```bat
 netstat -ano | findstr :5000
 taskkill /PID ACTUAL_PID /F
 ```
 
-### Database error
-
-- confirm the intended local or Railway database,
-- inspect environment variable names,
-- do not reset production,
-- inspect migration status and schema verification,
-- check Railway logs.
-
 ### Daily Closing mismatch
 
-Review:
+Review payment allocations, voids, debt/installment collections, expense funding source, refunds, post-closing changes, physical count, revisions and verifier identity. Do not alter the formula merely to match an expected number.
 
-- payment allocations,
-- voided/cancelled sales,
-- debt collections,
-- installment collections,
-- expense funding source,
-- refunds,
-- post-closing changes,
-- physical count,
-- revision history,
-- verifier identity.
+### PDF/export failure
 
-Do not alter the formula merely to match an expected number.
-
-### Export/PDF failure
-
-- inspect the API response and Railway logs,
-- verify required tables/columns,
-- test sparse and populated records,
-- inspect page-break logic,
-- hard refresh after frontend deployment.
+Inspect API response and Railway logs, required columns/tables, sparse and populated records, page breaks and stale frontend caching.
 
 ---
 
-## 24. Security Posture and Residual Risks
+## 24. Security Posture and Residual Risk
 
-Version Three includes:
-
-- JWT verification,
-- current server-side identity refresh,
-- token-version revocation,
-- server-side sessions,
-- category isolation,
-- effective permissions and explicit denies,
-- protected-action windows,
-- independent approval for sensitive actions,
-- rate limiting,
-- CORS allowlist,
-- Helmet/API headers,
-- Cloudflare security headers and HSTS,
-- noindex protection for private routes,
-- CodeQL security analysis,
-- dependency audits,
-- secret-shape scanning,
-- passive production perimeter tests,
-- system-wide backup and validation controls.
+Version Three includes JWT verification, current server-side identity refresh, token-version revocation, server-side sessions, category isolation, effective permissions, protected-action windows, independent approval, rate limiting, CORS allowlist, Helmet/API headers, Cloudflare HSTS/CSP, private-route noindex, CodeQL, dependency audits, secret scanning, passive perimeter checks and system-wide backup controls.
 
 Known residual items:
 
-1. Browser bearer-token storage remains in local storage. CSP, React escaping, session validation and token revocation reduce risk, but a future HttpOnly-cookie architecture would further reduce token theft impact from a hypothetical XSS defect.
-2. ExcelJS has monitored moderate transitive UUID advisories. There are no known high or critical production dependency vulnerabilities. A breaking library change must be handled as a tested future release.
-3. Non-destructive CI security checks do not replace an authorized external penetration test. Never perform credential stuffing, traffic flooding, destructive data mutation or third-party infrastructure exploitation against production.
+1. Bearer-token storage remains in local storage. CSP, React escaping, session validation and revocation reduce risk, but a future HttpOnly-cookie architecture would further reduce token theft impact from a hypothetical XSS defect.
+2. ExcelJS has monitored moderate transitive UUID advisories. There are no known high or critical production dependency vulnerabilities.
+3. Non-destructive CI does not replace an authorized external penetration test. Never perform credential stuffing, traffic flooding, destructive mutation or third-party infrastructure exploitation against production.
 
-Report suspected vulnerabilities privately. Do not place exploit details or secrets in a public issue.
+Report suspected vulnerabilities privately. Never put secrets or exploit details in a public issue.
 
 ---
 
-## 25. Release and Version Rules
+## 25. Version Rules
 
-The current product identity is:
+Current identity:
 
 ```text
 Version Three
@@ -1380,15 +983,11 @@ Canonical files:
 - `backend/.env.example`
 - Version Three release tests
 
-Do not change version strings independently. A version change requires coordinated backend/frontend metadata, tests, release notes and deployment verification.
-
-Use Git tags for verified application releases where appropriate. A tag protects source history, not database contents.
+Do not change version strings independently. A version release requires coordinated metadata, tests, documentation and deployment verification. A Git tag protects source history, not database contents.
 
 ---
 
 ## 26. AI Agent Handoff Template
-
-When stopping work or handing to another agent, record:
 
 ```text
 Repository:
@@ -1415,45 +1014,24 @@ Known risks:
 Exact next action:
 ```
 
-Do not say “done” if deployment or required checks remain unverified.
+Do not say “done” while required checks or deployment remain unverified.
 
 ---
 
 ## 27. Documentation Responsibilities
 
-The in-app Help/User Guide is for operational users. This README is the engineering and AI-agent operating manual.
+Update this README when architecture, workspace boundaries, setup, environment variables, security, deployment, database procedure, required checks, version identity or known risks change.
 
-Update this README when changing:
+Update in-app Help when staff workflow changes.
 
-- architecture,
-- workspace boundaries,
-- setup commands,
-- environment variables,
-- security controls,
-- deployment process,
-- database process,
-- required checks,
-- version identity,
-- known residual risks.
-
-Update in-app Help when changing how staff perform a task.
-
-Do not append unordered release notes above the title. Keep the current operating truth near the top and preserve detailed historical material in `docs/` or Git history.
+Do not append unordered release notes above the title. Put detailed release history in `docs/` or Git history while keeping current operating truth near the top.
 
 ---
 
 ## 28. Ownership
 
-Prepared by:
+Prepared by **Eugene Amankwah Appiah** for **Chalin 03 Company Limited**.
 
-**Eugene Amankwah Appiah**
-
-For:
-
-**Chalin 03 Company Limited**
-
-Location reference:
-
-**Dunkwa Police Barrier, Ghana**
+Location reference: **Dunkwa Police Barrier, Ghana**.
 
 This repository controls a real business system. Protect the records, preserve the evidence and make every change reviewable.
