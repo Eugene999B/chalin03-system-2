@@ -1,527 +1,413 @@
-
-## Release 1.2 — SMS Delivery Report and Safe History Clearing
-
-- Recognizes Arkesel's live `message_status` field (`DELIVERED`, `SUBMITTED`, `NOT_DELIVERED`, and related states) during automatic status checks.
-- Keeps provider polling and callbacks automatic; staff do not confirm delivery manually.
-- Adds administrator-only **Clear SMS History**, which archives records from the active page rather than deleting audit evidence.
-- Adds **Archived History** viewing and controlled restoration.
-- Records clear and restore operations in the activity log.
-- Requires the additive `database/20260716_sms_report_and_history_archive_migration.sql` migration before deploying the Release 1.2 code.
-
 # Chalin 03 Group Operations Platform
+
+**Version Three · v3.0.0**
 
 Production business-control platform for **Chalin 03 Company Limited**, prepared by **Eugene Amankwah Appiah**.
 
-The platform combines:
+> **AI AGENT ENTRYPOINT**
+>
+> This repository controls a live business system with real sales, stock, debts, payments, accounting, staff and operational records. Read this README before changing code. Production data is more valuable than source code because code can be restored from GitHub, while lost business records may not be reconstructable.
 
-- Spare Parts sales and inventory for two stores
-- Mining Operations
-- Equipment Hire
-- Shared Fleet and equipment control
-- Operations documents and reports
-- Group Executive management
-- Cash Control and Audit Security
-- SMS communication
-- Backup, export and recovery tools
+---
 
-## Current Production Status
+## 1. Production Environment
 
-| Item | Current value |
+| Component | Production value |
 |---|---|
-| Frontend | `https://chalin03.com` and `https://www.chalin03.com` |
+| Primary frontend | `https://chalin03.com` |
+| Alternate frontend | `https://www.chalin03.com` |
 | Backend API | `https://api.chalin03.com/api` |
 | Frontend hosting | Cloudflare Pages |
 | Backend hosting | Railway |
 | Database | Railway MySQL |
 | Production branch | `main` |
-| Verified live release | `9024281` — Release advanced cash control and audit security |
-| Verified release tag | `cash-control-security-v2-live-20260715` |
-| Cash-control migration | `database/20260714_cash_control_security_migration.sql` |
-| Migration verification | `database/20260714_cash_control_security_verify.sql` |
-| Migration status | Applied successfully to production and verified |
-| WhatsApp receipts | Code ready; keep disabled until Meta Cloud API setup is approved |
+| Current release | `Version Three · v3.0.0` |
+| Supported backend runtime | Node.js 20+; CI uses Node.js 24 |
+| SMS | Arkesel when deliberately enabled; `mock` for development |
+| WhatsApp receipts | Keep disabled until approved Meta setup exists |
 
-The application is in real business use. Treat production data as more important than code because code can be restored from GitHub, while lost business records may be difficult to reconstruct.
+`main` deploys automatically. Never merge an unverified change into `main`.
 
-## Technology Stack
+The exact production commit changes over time. Before a release task, verify current `main`, open pull requests, workflow status, Railway deployment and Cloudflare deployment instead of trusting an old hash in documentation.
+
+---
+
+## 2. Non-Negotiable Safety Rules
+
+### Production data
+
+1. **Never run `database/schema.sql` against Railway production.** It is a fresh-install/reset schema.
+2. Never drop, truncate, reset or mass-update production tables to repair a normal application error.
+3. Production database changes must be additive, reviewed, backed up and verified.
+4. Confirm a current full-system backup before every production migration.
+5. Never expose `.env`, database credentials, JWT secrets, SMS keys, customer data, staff data or backup contents.
+6. Never silently rewrite historical audit, closing, approval, payment, signature, sale or stock evidence.
+7. Never change a financial formula merely to make figures match an expectation.
+8. Never mix Spare Parts stores with Mining sites or Equipment Hire locations.
+9. Never bypass backend authentication, category isolation, permissions or protected-action controls.
+10. A hidden frontend button is not security. The API must reject unauthorized requests independently.
+
+### Change management
+
+1. Start from current `main`.
+2. Use an isolated branch such as `agent/clear-change-name`.
+3. Make the smallest coherent change.
+4. Do not combine unrelated refactors with a production fix.
+5. Add or update tests for changed behavior, permissions, schema or security.
+6. Run all required verification gates before merge.
+7. Use a pull request; do not push feature work directly to `main`.
+8. Verify deployment and smoke-test the affected workspace after merge.
+9. Preserve backward compatibility for existing records unless an approved migration explicitly changes it.
+10. When uncertain, stop a risky write rather than guess.
+
+---
+
+## 3. First 15 Minutes for a New AI Agent
+
+Before proposing code:
+
+1. Read this README completely.
+2. Inspect repository state:
+
+   ```bash
+   git status -sb
+   git branch --show-current
+   git log --oneline -10
+   ```
+
+3. Confirm the application version in:
+   - `backend/config/version.js`
+   - `frontend/src/config/appVersion.js`
+   - `backend/package.json`
+   - `frontend/package.json`
+4. Read the main control files:
+   - `backend/server.js`
+   - `frontend/src/App.jsx`
+   - `backend/middleware/authMiddleware.js`
+   - `backend/security/permissionCatalog.js`
+   - `frontend/src/security/permissionRules.js`
+5. Identify the exact workspace affected: Spare Parts, Mining or Equipment Hire.
+6. Trace the complete request path:
+
+   ```text
+   UI page/component
+     → shared Axios client and workspace headers
+     → backend route registration
+     → authentication/category/permission middleware
+     → route/service logic
+     → database transaction
+     → audit/notification/backup effects
+     → API response and frontend state
+   ```
+
+7. Read the closest backend and frontend tests before editing.
+8. Decide whether the change affects:
+   - database migrations,
+   - backup/restore coverage,
+   - permissions,
+   - activity/audit evidence,
+   - PWA caching,
+   - PDFs or exports,
+   - mobile layout,
+   - deployment configuration.
+9. State scope and production risk before writing code.
+10. Do not claim completion until all applicable checks pass.
+
+---
+
+## 4. Sources of Truth
+
+When code and documentation disagree, investigate and update both. Use this order:
+
+1. Current schema plus applied additive migrations.
+2. Backend route, middleware and service behavior.
+3. Backend tests.
+4. Frontend routes, guards, contexts and pages.
+5. Frontend source tests.
+6. CI workflows.
+7. This README and in-app Help.
+
+| Purpose | Canonical location |
+|---|---|
+| Backend route registration and middleware order | `backend/server.js` |
+| Frontend route tree and workspace shells | `frontend/src/App.jsx` |
+| Authentication and current identity refresh | `backend/middleware/authMiddleware.js` |
+| Workspace/category isolation | `backend/services/categoryIsolationService.js` |
+| Permission catalog | `backend/security/permissionCatalog.js` |
+| Effective permission overrides | `backend/services/permissionOverrideService.js` |
+| Session validation and revocation | `backend/services/accountSessionService.js` |
+| Original System Administrator identity | `backend/security/systemAdminIdentity.js` |
+| Frontend API headers and 401 handling | `frontend/src/api/axiosClient.js` |
+| Frontend authentication state | `frontend/src/context/AuthContext.jsx` |
+| Active Mining/Hire context | `frontend/src/context/WorkspaceContext.jsx` |
+| Frontend permission mappings | `frontend/src/security/permissionRules.js` |
+| Fresh local database | `database/schema.sql` |
+| Fresh-schema verification | `database/schema_verify.sql` |
+| Production-safe database evolution | `database/migrations/` and reviewed legacy migration files in `database/` |
+| Full-system backup order and manifest | `backend/routes/backupRoutes.js` |
+| Normal verification pipeline | `.github/workflows/chalin03-verification.yml` |
+| Security release audit | `.github/workflows/version-3-final-audit.yml` |
+| Live production smoke checks | `.github/workflows/version-3-production-smoke.yml` |
+| Cloudflare response headers | `frontend/public/_headers` |
+| PWA service worker | `frontend/public/sw.js` |
+
+---
+
+## 5. Architecture and Stack
+
+```text
+Browser / installed PWA
+  → React + Vite frontend on Cloudflare Pages
+  → Axios client with Bearer token and workspace/context headers
+  → https://api.chalin03.com/api
+  → Express request context, security headers, CORS and rate limits
+  → JWT, token-version and server-side session validation
+  → workspace/category isolation
+  → role, effective permission and delegated-authority checks
+  → route/service business logic
+  → Railway MySQL
+  → audit evidence, notifications, reports and exports
+  → optional Arkesel SMS
+```
 
 ### Frontend
 
-- React
-- Vite
-- React Router
+- React 19
+- Vite 8
+- React Router 7
 - Axios
 - CSS
-- PWA/install support
+- PWA/service worker
+- ESLint and React Hooks rules
 
 ### Backend
 
 - Node.js
-- Express
-- MySQL / `mysql2`
+- Express 4
+- MySQL through `mysql2`
 - JWT authentication
 - bcrypt password hashing
+- server-side sessions and token versioning
+- Helmet security headers
+- Express rate limiting
 - PDFKit
 - ExcelJS
-- SMS provider integration
+- Sharp
+- QR code generation
+- Arkesel integration
 
-### Hosting
+---
 
-```text
-Browser
-  → Cloudflare Pages frontend
-  → https://api.chalin03.com/api
-  → Railway Express backend
-  → Railway MySQL
-  → Arkesel SMS
-```
+## 6. Workspace Boundaries
 
-## Business Workspaces
+Workspace separation is a security and accounting boundary, not only a layout choice.
 
-### Spare Parts
+### Spare Parts — `spare_parts`
 
-Spare Parts operates with two independent stores. Store selection controls:
+Spare Parts uses the original branch/store model with two operational stores. Store context controls:
 
-- Products and quantities
-- Sales and receipts
-- Customers and debts
-- Purchases and suppliers
-- Expenses
-- Returns and refunds
-- Daily Closing
-- Reports and exports
-- Stock adjustments
-- Stock transfers
-- Activity Log scope
+- products and quantity,
+- sales and receipts,
+- installment sales,
+- customers and debts,
+- purchases and suppliers,
+- expenses,
+- returns and refunds,
+- Daily Closing,
+- reports and exports,
+- adjustments and transfers,
+- SMS,
+- activity-log scope.
 
-Always confirm the active store before saving a transaction.
+The shared Axios client sends Spare Parts branch headers only for this workspace:
 
-### Mining Operations
+- `X-Chalin03-Branch-Id`
+- `X-Chalin03-Branch-Code`
+- `X-Chalin03-Branch-Name`
 
-Mining sites are created by administrators and are not Spare Parts stores.
+Always confirm the active store before saving or testing a transaction.
 
-Mining includes:
+### Mining Operations — `mining`
 
-- Site administration
-- Daily site logs
-- Production
-- Equipment shifts
-- Fuel
-- Expenses
-- Incidents
-- Reports and documents
-- Role and site access
-- Shared Fleet context
+Mining sites are administrator-created and are not Spare Parts stores. Mining covers sites, daily logs, production, stockpiles, dispatch, equipment, fuel, contractors, shift crews, expenses, incidents, closings, workers, reports and shared Fleet.
 
-### Equipment Hire
+The active site is sent through:
 
-Hire locations, yards and bases are created by administrators and are separate from Spare Parts stores.
+- `X-Chalin03-Workspace: mining`
+- `X-Chalin03-Context-Id: <mining_site_id>`
 
-Equipment Hire includes:
+### Equipment Hire — `equipment_hire`
 
-- Customers and enquiries
-- Quotations
-- Contracts
-- Equipment assignment
-- Dispatch
-- Job cards
-- Invoices
-- Deposits and payments
-- Return inspection
-- Statements and documents
-- Role and location access
-- Shared Fleet context
+Hire locations, yards and bases are administrator-created and independent from Spare Parts. Hire covers customers, enquiries, availability, quotations, contracts, amendments, dispatch, work logs, invoices, deposits, payments, approvals, evidence, damage assessment, returns, workers, reports and shared Fleet.
+
+The active Hire location is sent through:
+
+- `X-Chalin03-Workspace: equipment_hire`
+- `X-Chalin03-Context-Id: <hire_location_id>`
 
 ### Shared Fleet
 
-Each excavator or machine should be registered once. Fleet records cover:
+Fleet is shared only between Mining and Equipment Hire. A machine should be registered once. Do not create duplicate assets for the same machine in different workspaces.
 
-- Availability
-- Assignment
-- Current location
-- Operator
-- Meter readings
-- Fuel
-- Inspections
-- Maintenance
-- Breakdown
-- Service due
-- Document expiry
-- Archive history
+### Group Executive Control
 
-### Group Executive and Operations Documents
+Group Executive is a separate management shell for consolidated intelligence. It does not replace operational editing in the business workspaces.
 
-Group Executive Control is a read-only management command view. It presents group revenue, payments received, captured operating cost, receivables, an indicative operating position, business-unit scorecards, Daily Closing exceptions, financial trends, store comparison, Mining incidents, overdue Hire invoices, Fleet risks and a prioritized management action queue. Operational editing remains inside Spare Parts, Mining, Equipment Hire and Fleet. Authorized management can download the professional executive workbook.
+---
 
-## User and Permission Model
+## 7. Authentication and Authorization
 
-The platform uses one central user-account foundation. Users may receive access to one or more workspaces and then receive authorized stores, Mining sites or Hire locations.
+The browser currently stores the bearer token, user record and active Mining/Hire context identifiers. The backend does not trust stale token claims alone. Each authenticated request validates:
 
-Common roles include:
+1. JWT signature.
+2. Current active user record.
+3. Token version.
+4. Workspace/category access.
+5. Active server-side session.
+6. Current effective permissions.
 
-- Group Administrator
-- Administrator
-- Manager
-- Cashier
-- Accountant
-- Auditor
-- Mining site roles
-- Equipment Hire operational roles
-- Fleet roles
-- System Administrator
+A new login may revoke the previous active session. Account and permission changes may revoke sessions immediately.
 
-Important controls:
-
-- Staff must use their own account.
-- Cashiers remain Spare Parts-specific.
-- Mining and Hire permissions are workspace-specific.
-- Auditors remain controlled or read-only where required.
-- The creator or submitter should not approve or verify their own sensitive action.
-- A different manager or administrator is required for protected corrections, financial refunds and Daily Closing verification.
-
-## Cash Control and Audit Security V2
-
-Cash Control V2 is part of the verified live release.
-
-### Why it exists
-
-A total received amount is not always the same as physical cash in hand. The system now separates:
-
-- Cash
-- Mobile Money
-- Bank
-- Other / unallocated
-
-It also preserves evidence when a completed transaction is corrected after submission or closing.
-
-### Daily Closing calculation
-
-Expected physical cash is based on:
+A protected action may require several layers together:
 
 ```text
-Cash sales
-+ Cash part of Mixed sales
-+ Cash part-payments on Credit sales
-+ Cash debt collections
-- Cash expenses
-- Cash refunds
-= Expected physical cash
+requireAuth
+  + workspace/category boundary
+  + role or effective permission
+  + branch/site/location access
+  + protected-action password/token window
+  + independent approver
 ```
 
-The former Cash Drawer Control fields are retained only for historical database compatibility. They are not part of the current Daily Closing form or new closing calculation.
+Do not remove one layer because another exists.
 
-MoMo, Bank and Other balances are reconciled separately.
+### Permission model
 
-### Manual count rule
+- Role permissions are defaults.
+- Per-user overrides may explicitly allow or deny.
+- Explicit deny takes precedence.
+- Overrides may expire.
+- Sensitive changes require reason and protected-action evidence.
+- Changes must be recorded in the Activity Log or privileged ledger.
+- Frontend guards improve UX; backend middleware is authoritative.
+- The original System Administrator retains protected recovery and cross-category authority.
+- Category administrators must not silently gain cross-category control.
 
-The system must not automatically copy expected values into counted values.
+When adding a permission-controlled feature, review all of these:
 
-Staff must:
+1. Backend catalog.
+2. Role defaults.
+3. Backend middleware.
+4. Frontend permission rules.
+5. Navigation visibility.
+6. Route guard.
+7. User Permission Manager grouping and labels.
+8. Tests.
+9. In-app Help.
 
-1. Enter the real physical Cash count.
-2. Confirm the actual MoMo balance.
-3. Confirm the actual Bank balance.
-4. Confirm Other where applicable.
-5. Explain every shortage or excess.
-6. Confirm that the figures were independently checked.
-7. Submit the closing.
-8. Allow a different manager or administrator to verify it.
+---
 
-Never force a difference to zero merely to make the closing appear balanced.
+## 8. Core Business Invariants
 
-### Denomination counting
+### Sales and stock
 
-The physical-cash count supports:
-
-- GHS 200 notes
-- GHS 100 notes
-- GHS 50 notes
-- GHS 20 notes
-- GHS 10 notes
-- GHS 5 notes
-- GHS 2 notes
-- GHS 1 notes
-- Coins total value
-
-Denomination counting is optional. Staff may enter Cash Counted directly and save without note-and-coin quantities. When the optional counter is enabled, it calculates Cash Counted and its total must match the submitted cash figure.
-
-### Simplified closing workflow
-
-The current boss-approved workflow does not display Cash Drawer Control, opening float, deposits, withdrawals or other drawer-movement fields. New closings store neutral compatibility values for those historical columns. Cash, MoMo, Bank and Other reconciliation, variance notes, independent verification, revisions and changed-after-closing evidence remain active.
-
-### Payment allocations
-
-New sales preserve the exact amount received through:
-
-- Cash
-- MoMo
-- Bank
-- Other
-
-This is especially important for:
-
-- Mixed sales
-- Part-paid Credit sales
-- Initial payments that create a remaining debt
-
-Only the Cash allocation should enter expected physical cash.
-
-### Protected completed-sale changes
-
-Completed sales must not be silently rewritten.
-
-The protected workflow preserves:
-
-- Original sale header
-- Original items
-- Corrected sale header
-- Corrected items
-- Products
-- Quantities
-- Prices
-- Discount
-- Customer
-- Payment type
-- Payment allocations
-- Amount paid
-- Debt effect
-- Stock effect
-- Reason
-- Requesting user
-- Approving user
-- Date and time
-
-A different active manager or administrator authorizes the change with their own credentials.
-
-### Returns and refunds
-
-Returns distinguish:
-
-- Stock-only return
-- Financial refund
-
-A financial refund requires:
-
-- Exact amount
-- Exact refund channel
-- Reference for electronic refunds
-- Clear reason
-- Independent manager or administrator approval
-
-Approved refunds reduce the matching Daily Closing channel.
-
-### Closing revisions
-
-The system preserves Daily Closing evidence through revision history.
-
-- Revision 1 preserves the original or historical closing.
-- A later approved change may mark the closing `Changed After Closing`.
-- The original closing is not silently overwritten.
-- A different manager or administrator enters reconciliation notes.
-- Later revisions preserve revised expected figures and review evidence.
-- Historical closings created before Cash Control V2 remain legacy records and must not be described as independently verified.
-
-### Manager verification
-
-Daily Closing verification requires:
-
-- An active manager or administrator
-- Their own password
-- A verifier different from the original submitter
-- Review of changes and variance
-- Reconciliation first when the closing changed after submission
-
-Verification confirms that management reviewed the evidence. It does not erase a genuine shortage or excess.
-
-## Activity Log and Security Exports
-
-Activity Log supports grouped review and downloads.
-
-Categories include:
-
-- Logins & Account Security
-- Sales & Receipts
-- Products, Stock & Transfers
-- Daily Closing & Cash Control
-- Debts & Payments
-- Expenses & Purchases
-- Returns & Refunds
-- Users, Roles & Access
-- Audit, Approvals & Security
-- Backups, Restores & Exports
-- Mining Operations
-- Equipment Hire
-- Other System Activity
-
-Filters include:
-
-- Date range
-- Store or branch
-- User
-- Action
-- Category
-
-Download formats:
-
-- Excel
-- PDF
-- Word
-- CSV
-
-Use Activity Log evidence when investigating:
-
-- Login access
-- Sale corrections
-- Voids
-- Refunds
-- Post-closing changes
-- Repeated adjustments
-- Closing shortages or excesses
-- Sensitive administration
-
-## Reports and Export Centre
-
-Professional exports are available for major record groups, including:
-
-- Products and Inventory
-- Low Stock / Restock
-- Stock Adjustments
-- Stock Transfers
-- Stock Movement Ledger
-- Sales
-- Debts
-- Debt Payments
-- Expenses
-- Purchases
-- Returns
-- Daily Closings
-- Activity Logs
-
-Supported report formats include:
-
-- Excel for analysis
-- PDF for fixed management presentation
-- Word for editable notes and reports
-- CSV where supported
-
-Daily Closing reports include:
-
-- Store and date
-- Payment-channel summary
-- Expected versus counted
-- Optional denomination evidence
-- Variance
-- Exceptions
-- Returns and refunds
-- Verification
-- Revision history
-- Changed-after-closing evidence
-- Clean-hands status
-
-## Stock Control
-
-### Stock adjustments
-
-Use stock adjustment only for a genuine manual correction such as:
-
-- Damage
-- Loss
-- Physical count difference
-- Wrong entry
-- Approved count correction
-
-The system keeps:
-
-- Old quantity
-- New quantity
-- Adjustment type
-- Reason
-- User
-- Store
-- Date and time
-
-Do not use stock adjustment to imitate a sale, purchase, return or transfer.
+- A valid sale updates stock exactly once.
+- Communication failure must never roll back a valid sale.
+- Completed sales are not silently rewritten.
+- Approved corrections preserve before/after snapshots, reason, requester and approver.
+- Voided or cancelled sales do not count as active revenue.
+- Store context is enforced server-side.
+- Direct quantity edits do not substitute for sales, purchases, returns, transfers or adjustments.
 
 ### Stock transfers
-
-Transfer workflow:
 
 ```text
 Request → Approve → Dispatch → Receive
 ```
 
-Meaning:
+- Approval does not move stock.
+- Dispatch reduces the source store.
+- Receive increases the destination store.
+- State transitions must be idempotent and auditable.
 
-- Request creates the transfer.
-- Approve authorizes it.
-- Dispatch reduces source-store stock.
-- Receive increases destination-store stock.
+### Returns and refunds
 
-Approval alone does not move stock.
+A return may be stock-only or a financial refund. A financial refund requires exact amount, channel, electronic reference where applicable, reason and independent approval. Approved refunds reduce the matching Daily Closing channel.
 
-### Product detail, restock and correction separation
+### Daily Closing
 
-Product editing and stock movement are separate controls:
-
-- **Edit Product Details** changes description, pricing, barcode, low-stock level and active status without changing quantity.
-- **Receive / Restock** records stock received, supplier or source, reference number, unit cost, received date, notes and the receiving user.
-- **Adjust / Correct** records damaged stock, lost or missing stock, physical counts and authorized corrections.
-- Supplier purchases remain the preferred full-invoice restocking workflow. Quick Restock is for legitimate received stock that does not require a complete purchase transaction.
-
-Every quantity movement must appear in the Stock Movement Ledger and Activity Log.
-
-### Product stock ledger
-
-Use the product ledger to review:
-
-- Opening stock
-- Purchases
-- Sales
-- Returns
-- Adjustments
-- Transfers in
-- Transfers out
-- Running balance
-
-## SMS and WhatsApp
-
-### SMS
-
-Arkesel SMS support includes:
-
-- SMS Center
-- Custom messages
-- Receipt SMS
-- Debt reminders
-- Low-stock alerts
-- Daily summary
-- Provider reference and response evidence
-- SMS segment and estimated-credit evidence
-- Delivery-status filters and controlled retry
-
-SMS status meanings:
-
-- `Accepted by provider` means the provider accepted the submission and credit may have been used. It does not prove that the phone received the message.
-- `Delivered` is shown only after explicit delivery evidence.
-- `Delivery unknown` means the provider result cannot safely prove success or failure. Check the provider dashboard before retrying.
-- Automatic retry is limited to `Failed`, `Undelivered`, or `Expired` records to reduce duplicate charges.
-
-Keep provider credentials and the delivery callback secret private.
-
-### WhatsApp
-
-WhatsApp receipt code is prepared but should remain disabled until Meta setup is complete:
-
-```env
-WHATSAPP_RECEIPT_ENABLED=false
-```
-
-A failed SMS or WhatsApp attempt must never cancel a valid sale.
-
-## Project Structure
+Expected physical cash is:
 
 ```text
-chalin03-system/
+Cash sales
++ Cash allocation from Mixed sales
++ Cash received on part-paid Credit sales
++ Cash debt collections
++ Cash installment collections
+- Cash expenses funded from today's sales receipts
+- Cash refunds
+= Expected physical cash
+```
+
+MoMo, Bank and Other are reconciled separately.
+
+Critical rules:
+
+- Never auto-copy expected figures into counted figures.
+- Never force a variance to zero.
+- Variances require explanation.
+- Optional denomination counting must match submitted cash.
+- The submitter cannot verify their own closing.
+- Changed closings preserve originals and revision evidence.
+- Verification confirms review; it does not erase a real shortage or excess.
+- Externally funded expenses remain accounting expenses but do not reduce today's drawer/channel balance.
+
+### Debts and installments
+
+- Debt balances and payment ledgers must reconcile.
+- Installment schedules preserve original terms and controlled changes.
+- Allocations cannot exceed money received or outstanding balance.
+- Corrections, reschedules, waivers and delivery events require evidence and permission.
+- Automatic installment reminders remain disabled unless management deliberately enables them.
+
+### Mining
+
+- Every record belongs to an authorized site.
+- Production, dispatch, stockpile and fuel logic must not create duplicate or negative movement.
+- Site closing and reconciliation history is preserved.
+- Fleet updates preserve one machine identity.
+
+### Equipment Hire
+
+- Every record belongs to an authorized Hire location.
+- A machine cannot be both available and actively assigned.
+- Contract, dispatch, work-log, invoice, payment, return and closure states follow controlled transitions.
+- Financial summaries must not double-count invoices, deposits, payments, voids or balances.
+
+### HR and employment documents
+
+- Worker profiles are category-scoped.
+- Standalone employment documents may exist before a worker profile.
+- Draft, PDF, approval/signature, acknowledgement, archive and linking are controlled workflows.
+- Approved documents preserve an immutable signature snapshot.
+- Later signature-setting changes do not alter approved documents.
+- Empty fields must not create blank sections or trailing PDF pages.
+
+### Audit evidence
+
+Sensitive actions should preserve actor, affected entity, workspace/context, before/after state, reason, approval identity, request ID, timestamp and outcome. Dismissing a notification must not delete underlying evidence.
+
+---
+
+## 9. Repository Structure
+
+```text
+chalin03-system-2/
+├── .github/
+│   └── workflows/
+│       ├── chalin03-verification.yml
+│       ├── version-3-final-audit.yml
+│       └── version-3-production-smoke.yml
 ├── backend/
 │   ├── config/
 │   ├── middleware/
@@ -531,588 +417,621 @@ chalin03-system/
 │   ├── services/
 │   ├── tests/
 │   ├── utils/
-│   ├── server.js
-│   └── package.json
+│   ├── .env.example
+│   ├── package.json
+│   └── server.js
 ├── database/
 │   ├── migrations/
 │   ├── schema.sql
-│   ├── schema_verify.sql
-│   ├── 20260714_cash_control_security_migration.sql
-│   └── 20260714_cash_control_security_verify.sql
+│   └── schema_verify.sql
 ├── docs/
 ├── frontend/
+│   ├── public/
+│   ├── scripts/
 │   ├── src/
 │   │   ├── api/
 │   │   ├── components/
+│   │   ├── config/
 │   │   ├── context/
+│   │   ├── data/
+│   │   ├── layouts/
 │   │   ├── pages/
 │   │   ├── security/
-│   │   └── styles/
+│   │   ├── styles/
+│   │   └── utils/
+│   ├── .env.example
 │   ├── package.json
 │   └── vite.config.js
-├── README.md
-└── .gitignore
+├── .gitignore
+└── README.md
 ```
 
-## Local Requirements
+### Route ownership
 
-Install:
+- Register backend routes in `backend/server.js`.
+- Route order matters. Branch loading is intentionally public because login needs the store list.
+- More-specific HR/PDF routes are registered before legacy catch-all handlers.
+- Add frontend routes through `frontend/src/App.jsx` and the correct workspace layout.
+- Never place a Mining or Hire page inside the Spare Parts sidebar.
 
-- Git for Windows
-- Node.js LTS
-- MySQL Server
-- MySQL Workbench
-- VS Code
+---
+
+## 10. Local Setup on Windows
+
+### Requirements
+
+- Git
+- Node.js 20+; Node.js 24 matches CI
+- npm
+- MySQL
+- MySQL Workbench or another trusted client
+- VS Code or equivalent
 - Chrome or Edge
 
-## Current Windows Working Folder
-
-Current controlled working folder:
-
-```text
-C:\Users\DDK\Desktop\chalin03-daily-closing-development
-```
-
-Use a fresh GitHub clone on another device rather than copying `node_modules`.
-
-## New Device Setup
-
-Clone:
+### Clone
 
 ```bat
 cd /d C:\Users\DDK\Desktop
-
 git clone https://github.com/Eugene999B/chalin03-system-2.git chalin03-system
-
 cd /d C:\Users\DDK\Desktop\chalin03-system
 git switch main
 git pull --ff-only origin main
 ```
 
-Install backend:
+Do not copy `node_modules` from another computer.
+
+### Install deterministic dependencies
 
 ```bat
 cd /d C:\Users\DDK\Desktop\chalin03-system\backend
-npm install
+npm ci
+
+cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
+npm ci
 ```
 
-Install frontend:
+Use `npm install` only when intentionally changing dependencies and committing the lockfile.
+
+### Environment files
+
+From the repository root:
 
 ```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
-npm install
+copy backend\.env.example backend\.env
+copy frontend\.env.example frontend\.env
 ```
 
-Do not copy `node_modules` from another computer.
-
-## Environment Variables
-
-Never commit real `.env` files.
-
-### Backend local template
+Essential local backend settings:
 
 ```env
 NODE_ENV=development
 PORT=5000
 FRONTEND_URL=http://localhost:5173
 FRONTEND_URL_ALT=http://localhost:3000
+APP_VERSION=3.0.0
 
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_local_mysql_password
+DB_USER=chalin03_user
+DB_PASSWORD=your_local_password
 DB_NAME=chalin03_db
-DB_CONNECTION_LIMIT=10
 DB_SSL=false
 
-JWT_SECRET=generate_a_long_private_secret
-
+JWT_SECRET=use_a_long_random_local_secret
 SYSTEM_ADMIN_USER_ID=1
 SYSTEM_ADMIN_USERNAME=admin
-ALLOW_CLEAR_BUSINESS_DATA=true
 
-SMS_ENABLED=false
+SMS_ENABLED=true
 SMS_PROVIDER=mock
 SMS_SENDER_ID=CHALIN03
-SMS_ARKESEL_API_KEY=
-SMS_ARKESEL_BASE_URL=https://sms.arkesel.com/api/v2/sms/send
-SMS_TIMEOUT_MS=15000
-SMS_DELIVERY_WEBHOOK_SECRET=generate_a_long_private_callback_secret
-
-WHATSAPP_RECEIPT_ENABLED=false
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_TEMPLATE_NAME=receipt_notification
-WHATSAPP_TEMPLATE_LANGUAGE=en
+INSTALLMENT_SMS_REMINDERS_ENABLED=false
 ```
 
-### Frontend local template
+`DB_USER` and `DB_PASSWORD` must identify an existing local MySQL account. The example `chalin03_user` is not created automatically; create it locally or use another existing local account. Never reuse Railway production credentials on a development computer.
+
+Frontend:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
 
-### Production frontend
+Use `backend/.env.example` as the complete variable reference. Never put real values in README, screenshots, issues, chats or commits.
+
+### Fresh local database
+
+For a new empty local installation only:
+
+1. Create/select `chalin03_db`.
+2. Run `database/schema.sql`.
+3. Run `database/schema_verify.sql`.
+4. Create the administrator:
+
+   ```bat
+   cd /d C:\Users\DDK\Desktop\chalin03-system\backend
+   npm run create-admin
+   ```
+
+Never use `schema.sql` as a production migration or repair tool.
+
+### Run locally
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\backend
+npm run dev
+```
+
+In another terminal:
+
+```bat
+cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
+npm run dev
+```
+
+```text
+Frontend: http://localhost:5173
+Backend:  http://localhost:5000
+API:      http://localhost:5000/api
+Health:   http://localhost:5000/api/health
+```
+
+---
+
+## 11. Environment and Deployment Security
+
+Production frontend:
 
 ```env
 VITE_API_URL=https://api.chalin03.com/api
 ```
 
-### Production backend CORS
+Production backend CORS:
 
 ```env
-FRONTEND_URL=https://www.chalin03.com
-FRONTEND_URL_ALT=https://chalin03.com
+FRONTEND_URL=https://chalin03.com
+FRONTEND_URL_ALT=https://www.chalin03.com
 ```
 
-Railway MySQL variables must remain in Railway and must not be copied into README, documents, screenshots or GitHub.
+`backend/.env.example` also documents trusted host controls, the optional Cloudflare origin secret, API limits, session security, recovery secrets and provider settings.
 
-## Fresh Local Database
+Do not enable `CLOUDFLARE_ORIGIN_SECRET` until the identical value is configured in Railway and Cloudflare. A mismatch can block legitimate traffic.
 
-For a new blank local installation only, use:
+- A broad rate ceiling protects ordinary routes.
+- Login, recovery and sensitive administration use stricter limits.
+- Do not remove rate limits to repair a client retry bug.
+- Health is intentionally excluded from the broad limiter.
+- API headers come from backend security middleware.
+- Pages headers come from `frontend/public/_headers`.
+- HSTS, CSP, frame denial, content-type protection, referrer policy and private-route noindex behavior are release requirements.
 
-```text
-database/schema.sql
+---
+
+## 12. Database Change Procedure
+
+Use `database/schema.sql` only for an empty local database. Existing local and production databases must use reviewed additive migrations.
+
+A safe migration should:
+
+- have a chronological unique filename,
+- avoid destructive statements,
+- preserve existing data,
+- backfill deliberately,
+- add indexes and constraints safely,
+- include verification queries,
+- be idempotent only when explicitly designed that way,
+- document repair or rollback strategy,
+- update fresh schema,
+- update backup coverage,
+- update tests.
+
+### Production sequence
+
+1. Verify the target Railway environment and database.
+2. Download a current full-system backup.
+3. Export critical reports when financial data is affected.
+4. Review migration and verification SQL.
+5. Apply only the approved migration.
+6. Run verification immediately.
+7. Confirm counts, constraints and problem queries.
+8. Deploy dependent code.
+9. Test old records and new workflows.
+10. Confirm backups include every new table.
+11. Record release evidence.
+
+`backend/services/workerHrLetterSchemaService.js` and `backend/services/employmentDocumentSchemaService.js` are specific compatibility mechanisms. Do not treat runtime DDL as the default for unrelated work.
+
+### Transactions and concurrency
+
+For multi-table financial or stock writes:
+
+- use a database transaction,
+- validate state inside the transaction,
+- lock relevant rows when concurrent execution can duplicate or overspend,
+- commit only after all dependent writes succeed,
+- roll back on failure,
+- write audit evidence consistently,
+- make retries idempotent where possible.
+
+---
+
+## 13. Backup and Restore Contract
+
+Full-system backup/restore is intentionally system-wide. Store-separated management downloads belong in exports, not disaster recovery.
+
+Canonical logic: `backend/routes/backupRoutes.js`.
+
+When adding a persistent table:
+
+1. Add it to fresh schema and migration.
+2. Add it to backup order/manifest when it contains business or security state.
+3. Add restore validation.
+4. Add tests proving coverage.
+5. Respect foreign-key order and date serialization.
+6. Do not include duplicate legacy aliases.
+7. Do not expose backup data to unauthorized users.
+
+The most sensitive full-system backup and restore operations require the original System Administrator. Git restores code, not MySQL data.
+
+---
+
+## 14. Backend Development Rules
+
+- Use parameterized SQL.
+- Never concatenate untrusted input into SQL.
+- Validate IDs, numbers, dates, enums and state transitions.
+- Return stable JSON shapes.
+- Include `request_id` where middleware provides it.
+- Do not expose stack traces, SQL, credentials or internal paths.
+- Use central error middleware.
+- Keep public routes minimal and intentional.
+- Apply `requireAuth` and the correct workspace boundary.
+- Apply permissions or delegated authority to sensitive routes.
+- Re-check state server-side even when the frontend already checks.
+
+A money, stock, permission, backup, approval or document handler must answer:
+
+- Is the current transition legal?
+- Who is allowed?
+- Is independent approval required?
+- What tables change?
+- What happens if an intermediate step fails?
+- What evidence is preserved?
+- Can a retry duplicate the effect?
+- Does Daily Closing change?
+- Can communication failure affect the core transaction?
+- Does backup/restore include the state?
+
+When adding a route, register it in `backend/server.js`, add middleware, add tests, update the API root list if the group is new, and review readiness/diagnostics plus backup coverage.
+
+---
+
+## 15. Frontend Development Rules
+
+- `frontend/src/App.jsx` is the route source of truth.
+- Spare Parts, Mining and Hire use separate layouts.
+- Use `ProtectedRoute`, `WorkspaceRoute`, `PermissionRoute` and `RoleRoute` appropriately.
+- A page visible in the wrong workspace is a security and logic defect.
+- Use `frontend/src/api/axiosClient.js` for normal authenticated requests.
+- Do not create an unconfigured Axios instance for ordinary API calls.
+- Follow React Hooks rules.
+- Do not suppress dependency warnings casually.
+- Ignore or cancel stale asynchronous results when rapid context changes can race.
+- Clear workspace-specific state when branch/site/location changes.
+- Do not derive authorization only from local storage.
+
+### Mobile and accessibility
+
+Check user-facing changes near 320 px, 375 px, 430 px, tablet and desktop widths.
+
+Require:
+
+- no accidental horizontal page overflow,
+- usable touch targets,
+- readable labels,
+- phone-safe input font sizes,
+- tables that become cards or deliberately scroll,
+- no overlapping actions,
+- small-screen dialogs and PDF previews,
+- usable keyboard/focus behavior,
+- status that does not depend only on color.
+
+### PWA
+
+Production registers `frontend/public/sw.js`. For cache-sensitive changes, update the cache namespace when needed, remove obsolete caches and test installation/update behavior. Use Incognito or a hard refresh before diagnosing a stale frontend.
+
+---
+
+## 16. PDF and Export Rules
+
+Exports are business records. Preserve workspace context, document number, dates, totals and approval/signature evidence. Omit empty optional fields, prevent blank trailing pages, use safe filenames, escape spreadsheet/CSV values and never expose private fields to unauthorized roles.
+
+Test at least one populated and one sparse record.
+
+ExcelJS currently has monitored moderate transitive UUID advisories. There are no known high or critical production dependency vulnerabilities. Do not force a breaking ExcelJS change without export regression testing.
+
+---
+
+## 17. SMS and WhatsApp Rules
+
+Development should use:
+
+```env
+SMS_PROVIDER=mock
 ```
 
-Warning:
+Mock mode records provider-style evidence without spending credit.
 
-> `database/schema.sql` is a fresh-install/reset schema. Do not execute it against the live Railway database.
+Live Arkesel support includes custom messages, receipts, debt reminders, low-stock alerts, summaries, deliberately enabled installment reminders, provider references, callbacks/polling, controlled retry and archived history.
 
-After creating a fresh local schema, create the administrator account using the supported backend administration script.
+- Provider acceptance is not delivery.
+- Delivered requires provider evidence.
+- Unknown must not be labeled delivered.
+- Retry only clearly failed, undelivered or expired records.
+- Never create uncontrolled duplicate sends or charges.
 
-## Production Migrations
+Keep WhatsApp receipts disabled until approved Meta credentials, templates and policy exist:
 
-Production database changes must use reviewed additive migrations.
-
-General order:
-
-1. Confirm the correct production database.
-2. Download a current system backup and export important reports.
-3. Run the reviewed migration.
-4. Run its verification SQL immediately.
-5. Confirm all problem counts are zero.
-6. Deploy the backend/frontend code that depends on the migration.
-7. Test existing data and new workflows.
-8. Create a release tag.
-
-### Cash Control V2 migration
-
-Files:
-
-```text
-database/20260714_cash_control_security_migration.sql
-database/20260714_cash_control_security_verify.sql
+```env
+WHATSAPP_RECEIPT_ENABLED=false
 ```
 
-Production status:
+Communication failure must not invalidate a completed business transaction.
 
-```text
-Applied successfully and verified on 2026-07-15.
-```
+---
 
-Do not rerun it casually. Do not run `schema.sql` to repair a migration problem.
-
-### SMS Reliability and Restock Release 1 migration
-
-Files:
-
-```text
-database/20260715_sms_reliability_and_restock_migration.sql
-database/20260715_sms_reliability_and_restock_verify.sql
-```
-
-This additive migration must be executed and verified before deploying the Release 1 backend and frontend. It converts legacy SMS `sent` records to `accepted`, adds SMS delivery evidence, and adds professional stock-movement evidence. Never use `schema.sql` for this production update.
-
-## Run Locally
-
-Backend:
-
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system\backend
-npm run dev
-```
-
-Frontend:
-
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
-npm run dev
-```
-
-Addresses:
-
-```text
-Frontend: http://localhost:5173
-Backend:  http://localhost:5000
-Health:   http://localhost:5000/api/health
-```
-
-## Tests
+## 18. Required Verification
 
 ### Backend
 
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system\backend
-
+```bash
+cd backend
+npm ci
 npm run syntax-check
 npm test
-```
-
-Current Cash Control V2 acceptance result:
-
-```text
-Syntax: 72 backend JavaScript files passed
-Tests: 48 passed, 0 failed
+npm audit --omit=dev --audit-level=high
 ```
 
 ### Frontend
 
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system\frontend
-
+```bash
+cd frontend
+npm ci
 npm test
+npm run lint
 npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
-The Vite chunk-size warning is non-blocking when the build ends successfully.
+### Repository hygiene
 
-### Git quality check
-
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system
-
+```bash
 git diff --check
 git status --short
+git diff --stat
 ```
 
-LF-to-CRLF warnings on Windows are not failures when no real whitespace error is reported.
+### Permanent CI gates
 
-## Production Deployment
+All must be green before merge:
 
-Production code is deployed from `main`.
+- **Chalin 03 Verification**
+- **Version 3 Final Security Audit**
+- **Version 3 Production Smoke**
 
-Safe release pattern:
+Normal verification enforces backend syntax/tests and frontend source tests, full lint and production build.
 
-```bat
-cd /d C:\Users\DDK\Desktop\chalin03-system
+The security audit covers production dependency gates, secret-shape scanning, CodeQL, API security headers, protected routes, sensitive paths, hostile CORS, TRACE and private-route indexing.
 
+Production smoke checks the live API version/readiness, database/schema/configuration health, rate-limit headers, HSTS, login release identity, service worker and PWA manifest.
+
+Never weaken a failing release gate to obtain a merge.
+
+---
+
+## 19. Test Locations
+
+Backend tests: `backend/tests/*.test.js`.
+
+Add backend tests for permissions, category isolation, context filtering, transactions, calculations, migrations, audit evidence, backup coverage, security and regressions.
+
+Frontend source/contract tests: `frontend/scripts/`.
+
+Frontend `npm test` covers source contracts, permissions, public security, employment documents and Version Three identity. Extend it when changing routes, permission labels, security headers, public metadata, documents, version identity or mobile CSS contracts.
+
+A successful build alone does not prove business logic or permission correctness.
+
+---
+
+## 20. Safe Feature Workflow
+
+```bash
 git switch main
 git pull --ff-only origin main
+git switch -c agent/clear-feature-name
+```
+
+Before coding, identify the workspace, data, page, backend route, tables, permissions, tests, migration need and rollback behavior.
+
+Before committing:
+
+```bash
+git diff --check
+git diff --stat
 git status --short
 ```
 
-Create a feature branch:
+Stage explicit files, commit clearly, push the isolated branch and open a draft PR describing scope, affected workspaces, database/security impact, checks, deployment plan and residual risk.
 
-```bat
-git switch -c feature/clear-feature-name
-```
+Do not merge while required checks are pending or failing.
 
-After implementation and successful tests:
+---
 
-```bat
-git add exact\file\paths
-git commit -m "Clear release description"
-git push -u origin feature/clear-feature-name
-```
+## 21. Deployment and Smoke Test
 
-Merge after acceptance:
+After merge, verify Railway and Cloudflare deployed the merged `main` commit.
 
-```bat
-git switch main
-git pull --ff-only origin main
-git merge --no-ff feature/clear-feature-name -m "Release clear feature name"
-git push origin main
-```
+### API
 
-Then verify:
+- `/api/health` succeeds and reports `3.0.0`.
+- `/api/readiness` is ready.
+- Database/schema/configuration checks pass.
+- Startup self-check passes.
+- Protected endpoints reject unauthenticated requests.
+- Affected routes return correct scoped records.
 
-- Railway backend deployment
-- Cloudflare frontend deployment
-- API health
-- Login
-- Correct store/workspace
-- Existing records
-- New feature
-- Reports
-- Mobile layout
-- Browser console
+### Frontend
 
-Use Incognito or hard refresh when an old PWA/cache version remains visible.
+- Login displays `Version Three · v3.0.0`.
+- HSTS and other security headers remain present.
+- Private routes remain noindex.
+- Service worker and PWA update correctly.
+- Browser console has no new error.
+- Mobile layout remains usable.
 
-## Git Tags and Rollback
+Test realistic roles, permissions and different branches/sites/locations. Do not create uncontrolled financial test data in production.
 
-Verified release:
+---
 
-```text
-9024281 — Release advanced cash control and audit security
-cash-control-security-v2-live-20260715
-```
+## 22. Definition of Done
 
-A Git tag protects application code, not database contents.
+A task is done only when all applicable items are true:
 
-To revert a merge commit:
+- scope is complete and unrelated behavior is unchanged,
+- business invariants remain true,
+- authorization is enforced server-side,
+- workspace/context isolation is verified,
+- database changes are additive and documented,
+- backup coverage includes new persistent state,
+- audit evidence is preserved,
+- backend syntax and tests pass,
+- frontend tests, full lint and build pass,
+- no unreviewed high/critical dependency finding remains,
+- permanent CI gates are green,
+- mobile behavior is checked,
+- exports/PDFs are checked when affected,
+- deployment succeeds,
+- post-deploy smoke tests pass,
+- documentation is updated,
+- residual risk is stated honestly.
 
-```bat
-git switch main
-git pull --ff-only origin main
-git log --oneline -5
-git revert -m 1 ACTUAL_MERGE_COMMIT_HASH
-git push origin main
-```
+---
 
-Do not type placeholder brackets such as `<MERGE_COMMIT_HASH>` in Windows Command Prompt.
+## 23. Common Failure Modes
 
-Database recovery requires a database backup or controlled repair; Git cannot reverse MySQL data changes.
+### Old frontend
 
-## Backup and Recovery
-
-Keep separate copies of:
-
-- Pre-migration system backup
-- Post-migration system backup
-- Important Excel/PDF/Word exports
-- Database SQL export when available
-- Clean GitHub clone
-- Controlled documentation set
-- Migration and verification files
-- Release notes and tags
-
-Do not store secrets inside documentation or source backups.
-
-### Pen-drive structure
-
-Recommended final structure:
-
-```text
-D:\Chalin03_Final_Backup_2026-07-15\
-├── 01_Production_Source\
-├── 02_Clean_GitHub_Clone\
-├── 03_Database_Backups\
-├── 04_Complete_Documentation\
-├── 05_Installers_and_Migrations\
-├── 06_Reports_and_Release_Notes\
-└── 07_New_Device_Recovery\
-```
-
-Exclude from the production-source copy:
-
-```text
-node_modules
-frontend\dist
-.env
-temporary extraction folders
-real secrets
-```
-
-The clean GitHub clone should keep its `.git` folder so it remains an independent repository backup.
-
-## Production Operating Rules
-
-1. Use individual accounts.
-2. Confirm the active store, site or Hire location.
-3. Record transactions when they happen.
-4. Separate Cash, MoMo, Bank and Other.
-5. Enter the physical Cash count directly or use the optional denomination counter.
-6. Never force a closing to balance.
-7. Explain every shortage or excess.
-8. Use protected correction workflows.
-9. Preserve original evidence.
-10. Require independent approval.
-11. Review Activity Logs.
-12. Back up before migrations or major releases.
-13. Do not reset production to fix a normal application error.
-14. Investigate evidence before accusing staff of theft.
-
-## Troubleshooting
-
-### Old frontend after deployment
-
-- Open Incognito.
-- Use `Ctrl + Shift + R`.
-- Wait for Cloudflare deployment.
-- Confirm the latest commit.
-- Clear PWA/browser cache when needed.
+Confirm the latest Cloudflare deployment, use `Ctrl + Shift + R`, open Incognito, close/reopen the installed PWA and inspect the service-worker cache version.
 
 ### API route not found
 
-- Confirm Railway deployed the latest `main`.
-- Check route registration in `backend/server.js`.
-- Review Railway logs.
+Confirm Railway deployed current `main`, inspect `backend/server.js`, route order, `VITE_API_URL` and Railway logs.
 
-### Database connection error
+### Redirect to login
 
-- Check Railway MySQL environment variables.
-- Confirm the live backend is connected to the intended production service.
-- Do not reset the database.
+Inspect the response status/code, session, token version, active user state, workspace/category assignment and stored workspace. Do not remove the central 401 handler as a shortcut.
 
-### Export failure
+### Wrong-business data
 
-- Check the browser Network response.
-- Check Railway logs.
-- Verify required migration columns/tables exist.
-- Hard refresh after frontend deployment.
+Inspect workspace and context headers, Spare Parts branch headers, category middleware, SQL filters and a second workspace user.
+
+### Port 5000 already in use
+
+```bat
+netstat -ano | findstr :5000
+taskkill /PID ACTUAL_PID /F
+```
 
 ### Daily Closing mismatch
 
-Review:
+Review payment allocations, voids, debt/installment collections, expense funding source, refunds, post-closing changes, physical count, revisions and verifier identity. Do not alter the formula merely to match an expected number.
 
-- Physical Cash count
-- Optional denomination evidence, when used
-- Cash sales
-- Mixed/Credit cash allocations
-- Debt collections
-- Expenses
-- Refunds
-- Post-closing changes
-- Activity Logs
-- Manager verification
-- Revision history
+### PDF/export failure
 
-A mismatch may be caused by a recording error, counting error, missing transaction or genuine loss. The system preserves evidence; management determines the cause.
+Inspect API response and Railway logs, required columns/tables, sparse and populated records, page breaks and stale frontend caching.
 
-## Security
+---
 
-Never commit or publish:
+## 24. Security Posture and Residual Risk
 
-- `.env` files
-- JWT secrets
-- Railway MySQL passwords
-- SMS API keys
-- WhatsApp access tokens
-- Admin passwords
-- Customer private data
-- Production database dumps
-- Real business backups
+Version Three includes JWT verification, current server-side identity refresh, token-version revocation, server-side sessions, category isolation, effective permissions, protected-action windows, independent approval, rate limiting, CORS allowlist, Helmet/API headers, Cloudflare HSTS/CSP, private-route noindex, CodeQL, dependency audits, secret scanning, passive perimeter checks and system-wide backup controls.
 
-Rotate credentials immediately when exposed.
+Known residual items:
 
-## Documentation
+1. Bearer-token storage remains in local storage. CSP, React escaping, session validation and revocation reduce risk, but a future HttpOnly-cookie architecture would further reduce token theft impact from a hypothetical XSS defect.
+2. ExcelJS has monitored moderate transitive UUID advisories. There are no known high or critical production dependency vulnerabilities.
+3. Non-destructive CI does not replace an authorized external penetration test. Never perform credential stuffing, traffic flooding, destructive mutation or third-party infrastructure exploitation against production.
 
-The in-app Help/User Guide is designed for:
+Report suspected vulnerabilities privately. Never put secrets or exploit details in a public issue.
 
-- Cashiers
-- Managers
-- Administrators
-- Auditors
-- Mining staff
-- Equipment Hire staff
-- Fleet staff
+---
 
-This README is designed for:
+## 25. Version Rules
 
-- Developers
-- System administrators
-- Support technicians
-- Future maintainers
+Current identity:
 
-Keep both updated after every major production release.
+```text
+Version Three
+v3.0.0
+Version Three · v3.0.0
+```
 
-## Author and Ownership
+Canonical files:
 
-Prepared by:
+- `backend/config/version.js`
+- `frontend/src/config/appVersion.js`
+- `backend/package.json`
+- `frontend/package.json`
+- `backend/.env.example`
+- Version Three release tests
 
-**Eugene Amankwah Appiah**
+Do not change version strings independently. A version release requires coordinated metadata, tests, documentation and deployment verification. A Git tag protects source history, not database contents.
 
-For:
+---
 
-**Chalin 03 Company Limited**
+## 26. AI Agent Handoff Template
 
-Location reference:
+```text
+Repository:
+Branch:
+Base commit:
+Latest commit:
+PR:
+Production status:
 
-**Dunkwa Police Barrier**
+User request:
+Completed:
+Not completed:
+Files changed:
+Database impact:
+Migration required:
+Backup impact:
+Permissions affected:
+Business logic affected:
+Tests run:
+CI status:
+Deployment status:
+Smoke tests:
+Known risks:
+Exact next action:
+```
 
+Do not say “done” while required checks or deployment remain unverified.
 
-## Release 1.1 — Automatic Arkesel Delivery Confirmation
+---
 
-SMS delivery evidence is now updated automatically without staff calling customers
-or ticking a manual confirmation.
+## 27. Documentation Responsibilities
 
-- Every Arkesel send includes the protected `callback_url` when
-  `SMS_DELIVERY_WEBHOOK_SECRET` is configured.
-- The public callback accepts Arkesel's documented `sms_id` and `status` query
-  parameters.
-- The backend also polls Arkesel's official batch message-report endpoint every
-  minute as a fallback.
-- Accepted, Submitted and Queued remain awaiting delivery.
-- Delivered, Not Delivered, Prohibited and Expired update to explicit final
-  evidence.
-- Existing accepted messages with provider UUIDs are backfilled automatically
-  after deployment.
-- The process never resends an SMS and therefore does not spend another credit.
+Update this README when architecture, workspace boundaries, setup, environment variables, security, deployment, database procedure, required checks, version identity or known risks change.
 
-## Release 3F-B — Professional Installment Sales
+Update in-app Help when staff workflow changes.
 
-Release 3F-B adds controlled branch-isolated installment sales without replacing the
-existing Cash, MoMo, Bank, Credit or Mixed workflows.
+Do not append unordered release notes above the title. Put detailed release history in `docs/` or Git history while keeping current operating truth near the top.
 
-- New Sale can create a professional installment agreement with deposit, payment
-  frequency, first due date, grace period, delivery policy, guarantor details and
-  accepted terms.
-- The system generates exact weekly, fortnightly, monthly or custom payment
-  schedules and preserves the agreement, item and payment ledgers.
-- Authorized staff can approve agreements, collect partial or full payments,
-  reschedule future dues, record delivery, waive approved charges and correct a
-  payment through controlled evidence.
-- The Installment Sales workspace shows due, overdue, completed and default-risk
-  accounts with agreement PDFs, payment receipts, customer statements and Excel
-  exports.
-- Installment collections are included in Daily Closing channel totals and all new
-  tables are included in full-system and professional backups.
-- Arkesel reminders keep truthful provider evidence. Automatic scheduled reminders
-  remain disabled until `INSTALLMENT_SMS_REMINDERS_ENABLED=true` is deliberately
-  configured in production; authorized staff can run due reminders from the page.
+---
 
-Production maintenance must apply only the reviewed additive migration:
+## 28. Ownership
 
-`database/migrations/20260718_release3fb_professional_installment_sales.sql`
+Prepared by **Eugene Amankwah Appiah** for **Chalin 03 Company Limited**.
 
-Never run `database/schema.sql` against the live Railway database.
+Location reference: **Dunkwa Police Barrier, Ghana**.
 
-## Release 3F-C — User Permission Manager and Security UX
-
-Release 3F-C adds protected per-user permission control while preserving the role
-catalog as the default source of access.
-
-- Administrators can Allow, Restrict or return an individual feature, page or
-  action to its role default for one user and workspace.
-- Explicit Deny always overrides Allow. Optional expiry dates support temporary
-  duty assignments.
-- Every change requires a reason, a current-password protected-action window and
-  complete Activity Log / privileged-ledger evidence.
-- Active user sessions can be revoked immediately after a permission change.
-- Original owner-security, Break-Glass and core recovery permissions cannot be
-  removed from the original System Administrator.
-- Security Centre messages can be deleted from the active view after review;
-  underlying activity-log and ledger evidence is never deleted.
-- The login page clears remembered passwords on page open and uses browser/password
-  manager resistance controls so the password field starts empty.
-- System Operations reports active overrides, explicit restrictions, expiring
-  rules and reviewed Security Centre messages.
-
-Production maintenance must apply only the reviewed additive migration:
-
-`database/migrations/20260718_release3fc_user_permissions_security_messages.sql`
-
-Never run `database/schema.sql` against the live Railway database.
-
-## Release 3F-C2 — Independent Category Controls
-
-Release 3F-C2 makes Spare Parts, Mining Operations and Equipment Hire independent
-login and workforce domains. The original System Administrator is the only
-cross-category account. Category-specific permission catalogs and user lists are
-enforced server-side, worker profiles are scoped by category, ambiguous legacy
-assignments are preserved for protected Safe Conflict Review, each category has
-its own detailed Help/User Guide, the Equipment Hire sidebar Unicode rendering
-is corrected, and each Spare Parts store's Business Phone is the MoMo number on
-its receipts. Production uses only the additive 3F-C2 migration; `schema.sql` is
-never used against the live database.
-
-### Release 3F-C3 — Mobile UX, Worker ID Card and Expense Funding
-
-- Mobile-first Installment Sales and User Permission Manager layouts.
-- Redesigned modern Chalin 03 employee ID card in CR80 and A4 formats.
-- Explicit expense funding-source evidence.
-- Only expenses paid from today's sales receipts reduce the selected Daily
-  Closing channel; externally funded expenses remain in accounting reports.
-- Existing historical expense treatment is preserved by the additive migration.
+This repository controls a real business system. Protect the records, preserve the evidence and make every change reviewable.
