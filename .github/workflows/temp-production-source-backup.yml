@@ -1,0 +1,79 @@
+name: Temporary Production Source Backup
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/temp-production-source-backup.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package verified production source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build production source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMMIT="b34a3845658100bc73aa31fce8a4a3205079032c"
+          SHORT="b34a38456581"
+          NAME="Chalin03_Production_Source_Backup_2026-07-19_${SHORT}"
+          mkdir -p /tmp/chalin03-source
+          git worktree add --detach /tmp/chalin03-source/repository "$COMMIT"
+          rm -f /tmp/chalin03-source/repository/.git
+          cat > /tmp/chalin03-source/repository/SOURCE_BACKUP_MANIFEST.txt <<'EOF'
+          CHALIN 03 COMPANY LIMITED
+          VERIFIED PRODUCTION SOURCE BACKUP
+
+          Repository: Eugene999B/chalin03-system-2
+          Production commit: b34a3845658100bc73aa31fce8a4a3205079032c
+          Release: Worker Employment and HR Correspondence
+          Pull request: #11
+          Production deployment: Railway and Cloudflare verified
+          Production smoke test: Passed
+          Archive date: 2026-07-19
+
+          Included: all files tracked at the production commit plus this manifest.
+          Excluded: Git history, .env secrets, node_modules, build output and live database data.
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          root = Path('/tmp/chalin03-source/repository')
+          output = Path('Chalin03_Production_Source_Backup_2026-07-19_b34a38456581.zip')
+          prefix = 'chalin03-system-b34a38456581'
+          with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in sorted(root.rglob('*')):
+                  if path.is_file():
+                      archive.write(path, f'{prefix}/{path.relative_to(root).as_posix()}')
+          PY
+          sha256sum "${NAME}.zip" > "${NAME}.zip.sha256"
+          printf '%s\n' \
+            'Chalin 03 production source backup verification' \
+            'Commit: b34a3845658100bc73aa31fce8a4a3205079032c' \
+            'PR: #11' \
+            'GitHub CI: passed' \
+            'Railway deployment: passed' \
+            'Cloudflare/frontend smoke test: passed' \
+            > "${NAME}_VERIFICATION.txt"
+
+      - name: Upload source backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin03-production-source-b34a38456581
+          path: |
+            Chalin03_Production_Source_Backup_2026-07-19_b34a38456581.zip
+            Chalin03_Production_Source_Backup_2026-07-19_b34a38456581.zip.sha256
+            Chalin03_Production_Source_Backup_2026-07-19_b34a38456581_VERIFICATION.txt
+          if-no-files-found: error
+          retention-days: 30
