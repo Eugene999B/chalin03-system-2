@@ -1,0 +1,93 @@
+name: Temporary Version Three Source Export
+
+on:
+  push:
+    branches:
+      - "backup-export/version-three-ed378"
+    paths:
+      - ".github/workflows/temp-version-three-source-export.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    name: Package Version Three production source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out backup-only branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build source ZIP, manifest and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMMIT="ed378c93e8bd1263ce9efb639781d87f3482b915"
+          SHORT="ed378c93e8bd"
+          NAME="Chalin03_Production_Source_Backup_2026-07-20_${SHORT}"
+          ROOT="/tmp/chalin03-version-three-source"
+          mkdir -p "$ROOT"
+          git worktree add --detach "$ROOT/repository" "$COMMIT"
+          rm -f "$ROOT/repository/.git"
+          cat > "$ROOT/repository/SOURCE_BACKUP_MANIFEST.txt" <<'EOF'
+          CHALIN 03 COMPANY LIMITED
+          VERIFIED VERSION THREE PRODUCTION SOURCE BACKUP
+
+          Repository: Eugene999B/chalin03-system-2
+          Production identity: Version Three · v3.0.0
+          Production commit: ed378c93e8bd1263ce9efb639781d87f3482b915
+          Worker HR release included: PR #11 / b34a3845658100bc73aa31fce8a4a3205079032c
+          Version Three finalisation: PR #16
+          Railway deployment: verified successful
+          Production smoke and final security audit: passed
+          Archive date: 20 July 2026
+
+          Included: files tracked at the production commit plus this manifest.
+          Excluded: Git history, live .env secrets, node_modules, build output and live database records.
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          root = Path('/tmp/chalin03-version-three-source/repository')
+          output = Path('Chalin03_Production_Source_Backup_2026-07-20_ed378c93e8bd.zip')
+          prefix = 'chalin03-version-three-ed378c93e8bd'
+          with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in sorted(root.rglob('*')):
+                  if path.is_file():
+                      archive.write(path, f'{prefix}/{path.relative_to(root).as_posix()}')
+          PY
+          sha256sum "${NAME}.zip" > "${NAME}.zip.sha256"
+          printf '%s\n' \
+            'Chalin 03 Version Three production source verification' \
+            'Commit: ed378c93e8bd1263ce9efb639781d87f3482b915' \
+            'Worker HR release included: b34a3845658100bc73aa31fce8a4a3205079032c' \
+            'Railway deployment: success' \
+            'Production smoke: success' \
+            'Final security audit: success' \
+            > "${NAME}_VERIFICATION.txt"
+
+      - name: Upload verified source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin03-version-three-source-ed378c93e8bd
+          path: |
+            Chalin03_Production_Source_Backup_2026-07-20_ed378c93e8bd.zip
+            Chalin03_Production_Source_Backup_2026-07-20_ed378c93e8bd.zip.sha256
+            Chalin03_Production_Source_Backup_2026-07-20_ed378c93e8bd_VERIFICATION.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record workflow run ID on backup branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "${GITHUB_RUN_ID}" > TEMP_BACKUP_RUN_ID.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add TEMP_BACKUP_RUN_ID.txt
+          git commit -m "chore: record temporary source export run [skip ci]"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
