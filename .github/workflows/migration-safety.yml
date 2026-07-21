@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - "database/migrations/**"
-      - "database/schema.sql"
+      - "database/schema.*"
       - ".github/workflows/**"
       - "backend/package.json"
       - "backend/scripts/verifyMigrationSafety.js"
@@ -17,7 +17,7 @@ on:
       - main
     paths:
       - "database/migrations/**"
-      - "database/schema.sql"
+      - "database/schema.*"
       - ".github/workflows/**"
       - "backend/package.json"
       - "backend/scripts/verifyMigrationSafety.js"
