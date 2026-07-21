@@ -1,0 +1,120 @@
+        dateTimeLabel(row.date),
+        row.customer_name,
+        row.customer_phone || "-",
+        row.receipt_number,
+        row.type.replace(/_/g, " "),
+        row.description || "-",
+        money(row.amount),
+        money(row.paid),
+        money(row.balance),
+        row.status,
+      ]);
+
+  const headers = isDebt
+    ? ["Date", "Customer", "Phone", "Receipt", "Owed", "Paid", "Balance", "Status", "Due Date"]
+    : ["Date", "Customer", "Phone", "Receipt", "Type", "Items / Details", "Amount", "Paid", "Balance", "Status"];
+
+  const itemSection = isDebt
+    ? ""
+    : `<h2>Items Purchased</h2>${htmlTable(
+        ["Date", "Customer", "Receipt", "Product", "Quantity", "Unit Price", "Line Total"],
+        report.items.map((item) => [
+          dateTimeLabel(item.date),
+          item.customer_name,
+          item.receipt_number,
+          item.product_name,
+          item.quantity,
+          money(item.unit_price),
+          money(item.line_total),
+        ])
+      )}`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+body{font-family:Arial,sans-serif;color:#0f172a;margin:32px;font-size:10pt}.brand{background:#07182c;color:white;padding:18px 20px}.brand h1{margin:0;color:#f5d84a;font-size:18pt}.brand p{margin:5px 0 0}h2{color:#173b68;margin-top:24px;border-bottom:2px solid #dbe3ef;padding-bottom:6px}.meta{margin:14px 0;background:#f8fafc;padding:12px;border:1px solid #dbe3ef}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.metric{border:1px solid #dbe3ef;padding:10px}.metric strong{display:block;color:#173b68;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:8.5pt}th{background:#173b68;color:white;text-align:left;padding:6px}td{border:1px solid #cbd5e1;padding:5px;vertical-align:top}tr:nth-child(even){background:#f8fafc}.footer{margin-top:24px;color:#64748b;font-size:8pt}
+</style></head><body>
+<div class="brand"><h1>CHALIN 03 COMPANY LIMITED</h1><p>${escapeHtml(title)}</p><p>${escapeHtml(report.branch.code)} — ${escapeHtml(report.branch.name)}${report.branch.location ? ` • ${escapeHtml(report.branch.location)}` : ""}</p></div>
+<div class="meta"><strong>Period:</strong> ${escapeHtml(report.period)}<br><strong>Customer filter:</strong> ${escapeHtml(report.filters.customer || "All matching customers")}<br><strong>Generated:</strong> ${escapeHtml(dateTimeLabel(new Date()))}</div>
+<div class="summary">${summaryRows.map(([label, value]) => `<div class="metric">${escapeHtml(label)}<strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+<h2>${escapeHtml(isDebt ? "Debt Records" : "Transaction Ledger")}</h2>
+${htmlTable(headers, bodyRows)}
+${itemSection}
+<div class="footer">Generated from the exact filters applied in Chalin 03. Store isolation remains enforced.</div>
+</body></html>`;
+}
+
+async function sendWord(res, report) {
+  const slug = report.filters.reportType === "debt" ? "debt-report" : "customer-statement";
+  const filename = `chalin03-${safeFilename(report.branch.code)}-${slug}-${safeFilename(report.filters.from || "all")}-${safeFilename(report.filters.to || "all")}.doc`;
+  configureDownload(res, "application/msword; charset=utf-8", filename);
+  res.send(Buffer.from(`\ufeff${buildWordHtml(report)}`, "utf8"));
+}
+
+function styleWorksheet(sheet, currencyColumns = []) {
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.autoFilter = { from: "A1", to: sheet.getRow(1).getCell(sheet.columnCount).address };
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF173B68" } };
+  sheet.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+  sheet.getRow(1).height = 24;
+  sheet.columns.forEach((column) => {
+    let width = 12;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      width = Math.max(width, Math.min(42, String(cell.value ?? "").length + 2));
+    });
+    column.width = width;
+  });
+  currencyColumns.forEach((columnKey) => {
+    sheet.getColumn(columnKey).numFmt = '"GHS" #,##0.00';
+  });
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1 && rowNumber % 2 === 0) {
+      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+    }
+    row.alignment = { vertical: "top", wrapText: true };
+  });
+}
+
+async function sendExcel(res, report) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Chalin 03 Company Limited";
+  workbook.created = new Date();
+
+  const summary = workbook.addWorksheet("Summary");
+  summary.columns = [
+    { header: "Field", key: "field" },
+    { header: "Value", key: "value" },
+  ];
+  [
+    ["Store", `${report.branch.code} — ${report.branch.name}`],
+    ["Location", report.branch.location || "-"],
+    ["Period", report.period],
+    ["Customer Filter", report.filters.customer || "All matching customers"],
+    ["Debt Status", report.filters.debtStatus || "All"],
+    ["Customers", report.summary.customer_count],
+    ["Sales", report.summary.sales_count],
+    ["Transactions", report.summary.transaction_count],
+    ["Items Purchased", report.summary.item_quantity],
+    ["Total Sales", report.summary.total_sales],
+    ["Total Received", report.summary.total_received],
+    ["Outstanding Balance", report.summary.outstanding_balance],
+  ].forEach(([field, value]) => summary.addRow({ field, value }));
+  styleWorksheet(summary);
+  summary.getCell("B10").numFmt = '"GHS" #,##0.00';
+  summary.getCell("B11").numFmt = '"GHS" #,##0.00';
+  summary.getCell("B12").numFmt = '"GHS" #,##0.00';
+
+  const customersSheet = workbook.addWorksheet("Customer Accounts");
+  customersSheet.columns = [
+    { header: "Customer", key: "customer_name" },
+    { header: "Phone", key: "customer_phone" },
+    { header: "Sales Count", key: "sales_count" },
+    { header: "Item Quantity", key: "item_quantity" },
+    { header: "Total Sales", key: "total_sales" },
+    { header: "Total Received", key: "total_received" },
+    { header: "Outstanding", key: "outstanding_balance" },
+    { header: "Debt Records", key: "debt_count" },
+    { header: "Last Activity", key: "last_activity" },
+    { header: "Account Status", key: "account_status" },
+  ];
