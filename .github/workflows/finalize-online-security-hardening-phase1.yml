@@ -1,0 +1,607 @@
+name: Finalize Online Security Hardening Phase 1
+
+on:
+  push:
+    branches:
+      - agent/security-hardening-phase1-online
+    paths:
+      - .github/workflows/finalize-online-security-hardening-phase1.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-online-security-hardening-phase1
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: Apply and verify security hardening
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out hardening branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/security-hardening-phase1-online
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply focused security hardening
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path.cwd()
+          server_path = root / "backend/server.js"
+          env_path = root / "backend/.env.example"
+
+          startup_security = r'''const MIN_PRODUCTION_SECRET_LENGTH = 64;
+          const MIN_SECRET_VARIETY = 12;
+
+          const PLACEHOLDER_FRAGMENTS = [
+            "change_this",
+            "replace_with",
+            "your_",
+            "changeme",
+            "example",
+            "placeholder",
+            "secret_key",
+            "random_secret",
+            "put_real",
+            "<",
+            ">",
+          ];
+
+          class StartupSecurityError extends Error {
+            constructor(problems) {
+              super(`Startup security check failed: ${problems.join("; ")}`);
+              this.name = "StartupSecurityError";
+              this.code = "STARTUP_SECURITY_CHECK_FAILED";
+              this.problems = [...problems];
+            }
+          }
+
+          function cleanValue(value) {
+            return String(value || "").trim();
+          }
+
+          function booleanValue(value, fallback = false) {
+            const normalized = cleanValue(value).toLowerCase();
+
+            if (!normalized) return fallback;
+            return ["1", "true", "yes", "on"].includes(normalized);
+          }
+
+          function isProductionEnvironment(env = process.env) {
+            return cleanValue(env.NODE_ENV).toLowerCase() === "production";
+          }
+
+          function looksLikePlaceholder(value) {
+            const normalized = cleanValue(value).toLowerCase();
+            return PLACEHOLDER_FRAGMENTS.some((fragment) =>
+              normalized.includes(fragment)
+            );
+          }
+
+          function secretProblems(name, value) {
+            const secret = cleanValue(value);
+            const problems = [];
+
+            if (!secret) {
+              problems.push(`${name} is missing`);
+              return problems;
+            }
+
+            if (secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+              problems.push(
+                `${name} must contain at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`
+              );
+            }
+
+            if (looksLikePlaceholder(secret)) {
+              problems.push(`${name} still contains a placeholder value`);
+            }
+
+            if (new Set(secret).size < MIN_SECRET_VARIETY) {
+              problems.push(`${name} does not contain enough character variety`);
+            }
+
+            return problems;
+          }
+
+          function auditStartupSecurity({
+            env = process.env,
+            allowedOrigins = [],
+          } = {}) {
+            const production = isProductionEnvironment(env);
+            const strictProductionSecurity = booleanValue(
+              env.ENFORCE_PRODUCTION_SECURITY_SECRETS,
+              false
+            );
+            const errors = [];
+            const warnings = [];
+            const origins = Array.isArray(allowedOrigins)
+              ? allowedOrigins.map(cleanValue).filter(Boolean)
+              : [];
+            const jwtSecret = cleanValue(env.JWT_SECRET);
+            const otpSecret = cleanValue(env.ACCOUNT_RECOVERY_OTP_SECRET);
+            const originSecret = cleanValue(env.CLOUDFLARE_ORIGIN_SECRET);
+
+            if (!jwtSecret) {
+              errors.push("JWT_SECRET is missing");
+            }
+
+            if (origins.length === 0) {
+              errors.push("No frontend CORS origins are configured");
+            }
+
+            if (production) {
+              const productionProblems = [
+                ...secretProblems("JWT_SECRET", jwtSecret),
+                ...secretProblems(
+                  "ACCOUNT_RECOVERY_OTP_SECRET",
+                  otpSecret
+                ),
+                ...secretProblems(
+                  "CLOUDFLARE_ORIGIN_SECRET",
+                  originSecret
+                ),
+              ];
+
+              if (jwtSecret && otpSecret && jwtSecret === otpSecret) {
+                productionProblems.push(
+                  "ACCOUNT_RECOVERY_OTP_SECRET must be different from JWT_SECRET"
+                );
+              }
+
+              if (
+                cleanValue(
+                  env.ENFORCE_TRUSTED_API_HOSTS || "true"
+                ).toLowerCase() === "false"
+              ) {
+                productionProblems.push(
+                  "ENFORCE_TRUSTED_API_HOSTS cannot be false in production"
+                );
+              }
+
+              if (!origins.some((origin) => origin.startsWith("https://"))) {
+                productionProblems.push(
+                  "At least one HTTPS frontend origin is required in production"
+                );
+              }
+
+              if (strictProductionSecurity) {
+                errors.push(...productionProblems);
+              } else {
+                warnings.push(...productionProblems);
+                if (productionProblems.length > 0) {
+                  warnings.push(
+                    "Set ENFORCE_PRODUCTION_SECURITY_SECRETS=true only after Railway secrets and the Cloudflare origin-header rule are configured."
+                  );
+                }
+              }
+            } else {
+              const developmentJwtProblems = secretProblems(
+                "JWT_SECRET",
+                jwtSecret
+              );
+
+              if (jwtSecret && developmentJwtProblems.length > 0) {
+                warnings.push(
+                  "Development JWT_SECRET is not production-strength. Do not reuse it in Railway."
+                );
+              }
+
+              if (!otpSecret) {
+                warnings.push(
+                  "ACCOUNT_RECOVERY_OTP_SECRET is not set, so local OTP hashing falls back to JWT_SECRET."
+                );
+              }
+            }
+
+            return {
+              production,
+              strictProductionSecurity,
+              errors: [...new Set(errors)],
+              warnings: [...new Set(warnings)],
+            };
+          }
+
+          function validateStartupSecurity(options = {}) {
+            const result = auditStartupSecurity(options);
+
+            if (result.errors.length > 0) {
+              throw new StartupSecurityError(result.errors);
+            }
+
+            return result;
+          }
+
+          module.exports = {
+            MIN_PRODUCTION_SECRET_LENGTH,
+            MIN_SECRET_VARIETY,
+            StartupSecurityError,
+            auditStartupSecurity,
+            booleanValue,
+            isProductionEnvironment,
+            looksLikePlaceholder,
+            secretProblems,
+            validateStartupSecurity,
+          };
+          '''
+
+          startup_test = r'''const assert = require("node:assert/strict");
+          const crypto = require("node:crypto");
+          const test = require("node:test");
+
+          const {
+            StartupSecurityError,
+            auditStartupSecurity,
+            validateStartupSecurity,
+          } = require("../config/startupSecurity");
+
+          function strongSecret() {
+            return crypto.randomBytes(64).toString("hex");
+          }
+
+          function productionEnv(overrides = {}) {
+            return {
+              NODE_ENV: "production",
+              JWT_SECRET: strongSecret(),
+              ACCOUNT_RECOVERY_OTP_SECRET: strongSecret(),
+              CLOUDFLARE_ORIGIN_SECRET: strongSecret(),
+              ENFORCE_TRUSTED_API_HOSTS: "true",
+              ENFORCE_PRODUCTION_SECURITY_SECRETS: "true",
+              ...overrides,
+            };
+          }
+
+          const officialOrigins = [
+            "https://chalin03.com",
+            "https://www.chalin03.com",
+          ];
+
+          test("development remains usable while warning about weak local secrets", () => {
+            const result = validateStartupSecurity({
+              env: {
+                NODE_ENV: "development",
+                JWT_SECRET: "change_this_local_secret",
+              },
+              allowedOrigins: ["http://localhost:5173"],
+            });
+
+            assert.equal(result.production, false);
+            assert.ok(result.warnings.length >= 1);
+          });
+
+          test("production accepts separate strong secrets in strict mode", () => {
+            const result = validateStartupSecurity({
+              env: productionEnv(),
+              allowedOrigins: officialOrigins,
+            });
+
+            assert.equal(result.production, true);
+            assert.equal(result.strictProductionSecurity, true);
+            assert.deepEqual(result.warnings, []);
+          });
+
+          test("production warning mode reports missing origin protection without outage", () => {
+            const result = validateStartupSecurity({
+              env: productionEnv({
+                CLOUDFLARE_ORIGIN_SECRET: "",
+                ENFORCE_PRODUCTION_SECURITY_SECRETS: "false",
+              }),
+              allowedOrigins: officialOrigins,
+            });
+
+            assert.equal(result.errors.length, 0);
+            assert.match(
+              result.warnings.join(" "),
+              /CLOUDFLARE_ORIGIN_SECRET is missing/
+            );
+          });
+
+          test("strict production mode rejects missing Cloudflare origin protection", () => {
+            assert.throws(
+              () =>
+                validateStartupSecurity({
+                  env: productionEnv({
+                    CLOUDFLARE_ORIGIN_SECRET: "",
+                  }),
+                  allowedOrigins: officialOrigins,
+                }),
+              (error) => {
+                assert.ok(error instanceof StartupSecurityError);
+                assert.match(
+                  error.message,
+                  /CLOUDFLARE_ORIGIN_SECRET is missing/
+                );
+                return true;
+              }
+            );
+          });
+
+          test("strict production mode rejects reused and placeholder secrets", () => {
+            const repeatedSecret = "replace_with_a_long_random_secret";
+
+            assert.throws(
+              () =>
+                validateStartupSecurity({
+                  env: productionEnv({
+                    JWT_SECRET: repeatedSecret,
+                    ACCOUNT_RECOVERY_OTP_SECRET: repeatedSecret,
+                  }),
+                  allowedOrigins: officialOrigins,
+                }),
+              (error) => {
+                assert.match(error.message, /JWT_SECRET/);
+                assert.match(error.message, /placeholder/);
+                assert.match(error.message, /must be different/);
+                return true;
+              }
+            );
+          });
+
+          test("strict production mode refuses disabled trusted-host enforcement", () => {
+            assert.throws(
+              () =>
+                validateStartupSecurity({
+                  env: productionEnv({
+                    ENFORCE_TRUSTED_API_HOSTS: "false",
+                  }),
+                  allowedOrigins: officialOrigins,
+                }),
+              /ENFORCE_TRUSTED_API_HOSTS cannot be false/
+            );
+          });
+
+          test("audit function never returns duplicate findings", () => {
+            const result = auditStartupSecurity({
+              env: productionEnv({
+                JWT_SECRET: "",
+                ENFORCE_PRODUCTION_SECURITY_SECRETS: "false",
+              }),
+              allowedOrigins: officialOrigins,
+            });
+
+            assert.equal(
+              result.errors.length,
+              new Set(result.errors).size
+            );
+            assert.equal(
+              result.warnings.length,
+              new Set(result.warnings).size
+            );
+          });
+          '''
+
+          generate_secrets = r'''const crypto = require("node:crypto");
+
+          const secretNames = [
+            "JWT_SECRET",
+            "ACCOUNT_RECOVERY_OTP_SECRET",
+            "CLOUDFLARE_ORIGIN_SECRET",
+          ];
+
+          console.log(
+            "# Generated securely. Store these values only in Railway and Cloudflare secret settings."
+          );
+
+          for (const name of secretNames) {
+            console.log(`${name}=${crypto.randomBytes(64).toString("hex")}`);
+          }
+          '''
+
+          dependabot = r'''version: 2
+          updates:
+            - package-ecosystem: npm
+              directory: /backend
+              schedule:
+                interval: weekly
+                day: monday
+                time: "06:00"
+                timezone: Africa/Accra
+              open-pull-requests-limit: 5
+              groups:
+                backend-minor-and-patch:
+                  patterns:
+                    - "*"
+                  update-types:
+                    - minor
+                    - patch
+              ignore:
+                - dependency-name: "*"
+                  update-types:
+                    - version-update:semver-major
+              commit-message:
+                prefix: deps(backend)
+
+            - package-ecosystem: npm
+              directory: /frontend
+              schedule:
+                interval: weekly
+                day: monday
+                time: "06:15"
+                timezone: Africa/Accra
+              open-pull-requests-limit: 5
+              groups:
+                frontend-minor-and-patch:
+                  patterns:
+                    - "*"
+                  update-types:
+                    - minor
+                    - patch
+              ignore:
+                - dependency-name: "*"
+                  update-types:
+                    - version-update:semver-major
+              commit-message:
+                prefix: deps(frontend)
+
+            - package-ecosystem: github-actions
+              directory: /
+              schedule:
+                interval: weekly
+                day: monday
+                time: "06:30"
+                timezone: Africa/Accra
+              open-pull-requests-limit: 3
+              groups:
+                github-actions-minor-and-patch:
+                  patterns:
+                    - "*"
+                  update-types:
+                    - minor
+                    - patch
+              ignore:
+                - dependency-name: "*"
+                  update-types:
+                    - version-update:semver-major
+              commit-message:
+                prefix: deps(actions)
+          '''
+
+          def dedent(value):
+              import textwrap
+              return textwrap.dedent(value).lstrip()
+
+          (root / "backend/config/startupSecurity.js").write_text(
+              dedent(startup_security), encoding="utf-8"
+          )
+          (root / "backend/tests/startupSecurity.test.js").write_text(
+              dedent(startup_test), encoding="utf-8"
+          )
+          (root / "backend/scripts/generateProductionSecrets.js").write_text(
+              dedent(generate_secrets), encoding="utf-8"
+          )
+          (root / ".github/dependabot.yml").write_text(
+              dedent(dependabot), encoding="utf-8"
+          )
+
+          server = server_path.read_text(encoding="utf-8")
+          import_needle = 'const { testDatabaseConnection } = require("./config/db");\n'
+          import_replacement = import_needle + (
+              'const {\n'
+              '  validateStartupSecurity,\n'
+              '} = require("./config/startupSecurity");\n'
+          )
+          if 'require("./config/startupSecurity")' not in server:
+              if import_needle not in server:
+                  raise SystemExit("Could not locate database import in server.js")
+              server = server.replace(import_needle, import_replacement, 1)
+
+          old_check = '''async function runStartupSelfCheck() {
+            const missing = [];
+
+            if (!process.env.JWT_SECRET) {
+              missing.push("JWT_SECRET");
+            }
+
+            if (allowedOrigins.length === 0) {
+              missing.push("FRONTEND_URL or local frontend origin");
+            }
+
+            if (missing.length > 0) {
+              throw new Error(`Startup safety check failed. Missing: ${missing.join(", ")}`);
+            }
+
+            console.log("Startup self-check passed: auth secret and CORS origins configured.");
+          }
+          '''
+          new_check = '''async function runStartupSelfCheck() {
+            const result = validateStartupSecurity({
+              env: process.env,
+              allowedOrigins,
+            });
+
+            for (const warning of result.warnings) {
+              console.warn(`Startup security warning: ${warning}`);
+            }
+
+            console.log(
+              result.production
+                ? result.strictProductionSecurity
+                  ? "Startup self-check passed: strict production secret enforcement is active."
+                  : "Startup self-check passed: production secret audit is in warning mode."
+                : "Startup self-check passed: development configuration is usable."
+            );
+
+            return result;
+          }
+          '''
+          old_check = dedent(old_check)
+          new_check = dedent(new_check)
+          if old_check not in server:
+              raise SystemExit("Could not locate the original startup self-check")
+          server = server.replace(old_check, new_check, 1)
+          server_path.write_text(server, encoding="utf-8")
+
+          env_text = env_path.read_text(encoding="utf-8")
+          replacements = {
+              '''# Leave blank until the identical secret is configured in Railway and injected by
+          # a Cloudflare request-header transform rule as x-chalin-origin-key.
+          CLOUDFLARE_ORIGIN_SECRET=
+          ''': '''# Use a unique 64+ character random value in Railway and inject the identical
+          # value through Cloudflare as x-chalin-origin-key. Keep strict enforcement
+          # false until both sides are configured and verified.
+          CLOUDFLARE_ORIGIN_SECRET=replace_with_at_least_64_random_characters
+          ENFORCE_PRODUCTION_SECURITY_SECRETS=false
+          ''',
+              'JWT_SECRET=change_this_to_a_very_long_secret_key\n': '''# Production requires a unique random value of at least 64 characters.
+          # Generate all three security values with: node scripts/generateProductionSecrets.js
+          JWT_SECRET=replace_with_at_least_64_random_characters
+          ''',
+              '''# Use a different long random value from JWT_SECRET in production.
+          ACCOUNT_RECOVERY_OTP_SECRET=replace_with_a_different_long_random_secret
+          ''': '''# Production requires a different 64+ character random value from JWT_SECRET.
+          ACCOUNT_RECOVERY_OTP_SECRET=replace_with_a_different_64_character_random_secret
+          ''',
+          }
+          for old, new in replacements.items():
+              old = dedent(old)
+              new = dedent(new)
+              if old not in env_text:
+                  raise SystemExit(f"Could not locate expected .env.example block: {old!r}")
+              env_text = env_text.replace(old, new, 1)
+          env_path.write_text(env_text, encoding="utf-8")
+          PY
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run focused syntax and security tests
+        working-directory: backend
+        run: |
+          node --check config/startupSecurity.js
+          node --check scripts/generateProductionSecrets.js
+          node --check server.js
+          node --test tests/startupSecurity.test.js
+
+      - name: Run complete backend verification
+        working-directory: backend
+        run: npm run syntax-check && npm test
+
+      - name: Check final diff
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Remove temporary finalizer and commit verified source
+        shell: bash
+        run: |
+          rm .github/workflows/finalize-online-security-hardening-phase1.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: harden production secret configuration"
+          git push origin HEAD:agent/security-hardening-phase1-online
