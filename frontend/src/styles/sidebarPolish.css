@@ -1,0 +1,299 @@
+/* Desktop sidebar polish: preserve mobile behaviour while giving navigation more room. */
+@media (min-width: 921px) {
+  .premium-sidebar {
+    width: 270px !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  }
+
+  .premium-brand {
+    padding: 13px 14px !important;
+    gap: 10px !important;
+  }
+
+  .premium-brand-logo {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 15px !important;
+  }
+
+  .premium-brand h2 {
+    font-size: 20px !important;
+  }
+
+  .premium-brand p {
+    margin-top: 3px !important;
+    font-size: 10px !important;
+  }
+
+  .premium-sidebar-tools {
+    padding: 9px 10px !important;
+  }
+
+  .premium-store-card-compact {
+    margin: 0 !important;
+    padding: 9px 10px !important;
+    border-radius: 15px !important;
+    box-shadow: none !important;
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+  }
+
+  .premium-store-card-compact > label {
+    grid-row: 1 / span 2;
+    width: 54px;
+    min-height: 45px;
+    display: grid !important;
+    place-items: center;
+    border-radius: 12px;
+    background: rgba(224, 186, 40, 0.18);
+    color: #f5d84a !important;
+    font-size: 12px !important;
+  }
+
+  .premium-store-card-compact h3 {
+    margin: 0 !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .premium-store-card-compact p {
+    margin: 2px 0 0 !important;
+    font-size: 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .premium-store-card-compact p:last-child {
+    display: none;
+  }
+
+  .premium-nav-scroll {
+    padding: 8px 9px 10px !important;
+    scrollbar-gutter: stable;
+  }
+
+  .premium-nav-link {
+    grid-template-columns: 30px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    min-height: 40px !important;
+    padding: 6px 8px !important;
+    margin-bottom: 4px !important;
+    border-radius: 12px !important;
+    font-size: 12px !important;
+  }
+
+  .premium-nav-icon {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 10px !important;
+    font-size: 14px !important;
+  }
+
+  .premium-nav-text {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.25 !important;
+    overflow-wrap: anywhere;
+  }
+
+  .premium-user-panel {
+    padding: 8px 9px 10px !important;
+  }
+}
+
+.compact-sidebar-navigation {
+  display: grid;
+  gap: 7px;
+}
+
+.compact-nav-section {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.compact-nav-section.active-section {
+  border-color: rgba(224, 186, 40, 0.22);
+  background: rgba(224, 186, 40, 0.04);
+}
+
+.compact-nav-section-button {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 7px;
+  align-items: center;
+  border: 0;
+  padding: 8px 9px;
+  background: rgba(7, 24, 44, 0.96);
+  color: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.compact-nav-section-button small {
+  min-width: 22px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+  text-align: center;
+  font-size: 9px;
+}
+
+.compact-nav-section-button b {
+  color: #e0ba28;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.compact-nav-items {
+  padding: 5px;
+}
+
+.compact-account-shell {
+  position: relative;
+}
+
+.compact-account-trigger {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.compact-account-trigger.open {
+  border-color: rgba(224, 186, 40, 0.4);
+  background: rgba(224, 186, 40, 0.1);
+}
+
+.compact-account-trigger .premium-avatar {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+  font-size: 12px !important;
+}
+
+.compact-account-copy,
+.compact-account-copy strong,
+.compact-account-copy small {
+  display: block;
+  min-width: 0;
+}
+
+.compact-account-copy strong,
+.compact-account-copy small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-account-copy strong {
+  font-size: 13px;
+}
+
+.compact-account-copy small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+}
+
+.compact-account-trigger > b {
+  color: #e0ba28;
+}
+
+.compact-account-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgba(224, 186, 40, 0.28);
+  border-radius: 16px;
+  background: #081a30;
+  box-shadow: 0 -22px 55px rgba(0, 0, 0, 0.38);
+}
+
+.compact-account-store {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.compact-account-store small {
+  color: #e0ba28;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compact-account-store strong {
+  font-size: 11px;
+}
+
+.compact-account-store span {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+}
+
+.compact-account-menu .install-app-button,
+.compact-account-menu button {
+  width: 100%;
+}
+
+.compact-account-action {
+  border: 0;
+  border-radius: 11px;
+  padding: 9px 10px;
+  color: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.compact-account-action.password {
+  background: #164777;
+}
+
+.compact-account-action.logout {
+  background: #c3261d;
+}
+
+@media (max-width: 920px) {
+  .premium-store-card-compact {
+    margin-top: 0 !important;
+  }
+
+  .compact-account-menu {
+    bottom: calc(100% + 6px);
+  }
+}

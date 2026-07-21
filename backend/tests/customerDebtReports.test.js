@@ -3,18 +3,25 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const backendRoute = fs.readFileSync(
-  path.resolve(__dirname, "../routes/customerDebtReportRoutes.js"),
+const workspaceRoute = fs.readFileSync(
+  path.resolve(__dirname, "../routes/customerStatementWorkspaceRoutes.js"),
   "utf8"
 );
 const serverSource = fs.readFileSync(
   path.resolve(__dirname, "../server.js"),
   "utf8"
 );
-const statementPage = fs.readFileSync(
+const statementEntry = fs.readFileSync(
   path.resolve(
     __dirname,
     "../../frontend/src/pages/CustomerStatementPage.jsx"
+  ),
+  "utf8"
+);
+const statementWorkspace = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    "../../frontend/src/pages/CustomerStatementWorkspacePage.jsx"
   ),
   "utf8"
 );
@@ -31,35 +38,41 @@ const printPanel = fs.readFileSync(
 );
 
 test("customer statement data includes purchased sale items", () => {
-  assert.match(backendRoute, /FROM sale_items si/);
-  assert.match(backendRoute, /sale\.items =/);
-  assert.match(statementPage, /Items Bought/);
-  assert.match(statementPage, /sale\.items/);
-  assert.match(statementPage, /customer-debt-reports\/statement/);
+  assert.match(workspaceRoute, /FROM sale_items si/);
+  assert.match(workspaceRoute, /sale\.items =/);
+  assert.match(statementWorkspace, /Items Purchased/);
+  assert.match(statementWorkspace, /report\?\.items/);
+  assert.match(statementWorkspace, /customer-statement-workspace\/report/);
+  assert.match(statementEntry, /CustomerStatementWorkspacePage/);
 });
 
-test("print API supports document choice, date ranges and customer scope", () => {
-  assert.match(backendRoute, /router\.get\("\/pdf"/);
-  assert.match(backendRoute, /reportType === "statement"/);
-  assert.match(backendRoute, /\["selected", "all"\]/);
-  assert.match(backendRoute, /DATE\(\$\{alias\}\.\$\{column\}\) >= \?/);
-  assert.match(backendRoute, /DATE\(\$\{alias\}\.\$\{column\}\) <= \?/);
-  assert.match(backendRoute, /Customer Debt Report/);
-  assert.match(backendRoute, /clauses\.join\(" OR "\)/);
-  assert.match(backendRoute, /writeAuditEvent\([\s\S]*\)\.catch/);
-  assert.match(serverSource, /customerDebtReportRoutes/);
-  assert.match(serverSource, /\/api\/customer-debt-reports/);
+test("filter API supports date ranges, optional customer and all export formats", () => {
+  assert.match(workspaceRoute, /router\.get\("\/report"/);
+  assert.match(workspaceRoute, /router\.get\("\/export\/:format"/);
+  assert.match(workspaceRoute, /appendDateFilter/);
+  assert.match(workspaceRoute, /appendCustomerFilter/);
+  assert.match(workspaceRoute, /\["pdf", "print", "word", "excel"\]/);
+  assert.match(workspaceRoute, /application\/msword/);
+  assert.match(workspaceRoute, /ExcelJS\.Workbook/);
+  assert.match(workspaceRoute, /writeAuditEvent/);
+  assert.match(serverSource, /customerStatementWorkspaceRoutes/);
+  assert.match(serverSource, /\/api\/customer-statement-workspace/);
 });
 
-test("shared print panel is available from statements and debts", () => {
-  assert.match(printPanel, /Customer Statement/);
-  assert.match(printPanel, /Debt Report/);
-  assert.match(printPanel, /Selected Customer/);
-  assert.match(printPanel, /All Customers/);
-  assert.match(printPanel, /type="date"/);
-  assert.match(printPanel, /Open Printable PDF/);
-  assert.match(printPanel, /window\.open\(blobUrl/);
-  assert.match(printPanel, /PDF was downloaded/);
-  assert.match(statementPage, /<CustomerDebtPrintPanel/);
+test("filtered export controls are available from statements and debts", () => {
+  assert.match(statementWorkspace, /Customer Name or Phone/);
+  assert.match(statementWorkspace, /Leave blank for all customers/);
+  assert.match(statementWorkspace, /Apply Filters/);
+  assert.match(statementWorkspace, /exportReport\("print"\)/);
+  assert.match(statementWorkspace, /exportReport\("pdf"\)/);
+  assert.match(statementWorkspace, /exportReport\("word"\)/);
+  assert.match(statementWorkspace, /exportReport\("excel"\)/);
+  assert.match(printPanel, /Customer Name or Phone/);
+  assert.match(printPanel, /Leave blank for all customers/);
+  assert.match(printPanel, /Debt Status/);
+  assert.match(printPanel, /createReport\("print"\)/);
+  assert.match(printPanel, /createReport\("word"\)/);
+  assert.match(printPanel, /createReport\("excel"\)/);
   assert.match(debtsPage, /<CustomerDebtPrintPanel/);
+  assert.match(debtsPage, /reportType="debt"/);
 });

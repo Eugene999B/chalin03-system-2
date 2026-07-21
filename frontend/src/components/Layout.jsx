@@ -1,6 +1,8 @@
-import InstallAppButton from "./InstallAppButton";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
+import CompactSidebarNavigation from "./CompactSidebarNavigation";
+import SidebarAccountMenu from "./SidebarAccountMenu";
+import "../styles/sidebarPolish.css";
 import { useAuth } from "../context/AuthContext";
 
 function getStoreCode(store) {
@@ -1607,96 +1609,35 @@ export default function Layout() {
         </div>
 
         <div className="premium-sidebar-tools">
-          <button
-            type="button"
-            className="premium-command-button"
-            onClick={openCommandCenter}
-          >
-            <div className="premium-command-button-grid">
-              <span className="premium-command-icon">🔎</span>
-
-              <span style={{ minWidth: 0 }}>
-                <strong>Smart Command</strong>
-                <small>Search pages, reports and tools</small>
-              </span>
-
-              {!isMobile && (
-                <span className="premium-command-shortcut">Ctrl K</span>
-              )}
+          <div className="premium-store-card premium-store-card-compact">
+            <label>{currentStoreCode}</label>
+            <div style={{ minWidth: 0 }}>
+              <h3>{currentStoreName}</h3>
+              <p>{storeAccessLabel}</p>
             </div>
-          </button>
-
-          <div className="premium-store-card">
-            <label>Current Store</label>
-            <h3>
-              {currentStoreCode} — {currentStoreName}
-            </h3>
-            <p>{currentStoreLocation}</p>
-            <p>{storeAccessLabel}</p>
           </div>
         </div>
 
         <div className="premium-nav-scroll">
-          <nav>
-            {navigationSections.map((section) => (
-              <div key={section.title}>
-                <p className="premium-nav-section-title">{section.title}</p>
-
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/"}
-                    className={({ isActive }) =>
-                      `premium-nav-link ${isActive ? "active" : ""}`
-                    }
-                    onClick={closeMobileMenu}
-                  >
-                    <span className="premium-nav-icon">{item.icon}</span>
-                    <span className="premium-nav-text">{item.title}</span>
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-          </nav>
+          <CompactSidebarNavigation
+            sections={navigationSections}
+            onNavigate={closeMobileMenu}
+          />
         </div>
 
         <div className="premium-user-panel">
-          <div className="premium-user-row">
-            <div className="premium-avatar">{userInitials}</div>
-
-            <div style={{ minWidth: 0 }}>
-              <p className="premium-user-name">{displayName}</p>
-              <span className="premium-user-role">{user?.role || "role"}</span>
-            </div>
-          </div>
-
-          <div className="premium-working-branch">
-            <label>Working Branch</label>
-            <strong>{currentStoreName}</strong>
-            <span>
-              {currentStoreCode} • {storeAccessLabel}
-            </span>
-          </div>
-
-          <InstallAppButton />
-
-          <button
-            type="button"
-            className="premium-side-action premium-password-button"
-            onClick={goToChangePassword}
-          >
-            Change Password
-          </button>
-
-          <button
-            type="button"
-            className="premium-side-action premium-logout-button"
-            onClick={handleLogout}
-          >
-            Logout
-          </button>
+          <SidebarAccountMenu
+            displayName={displayName}
+            userInitials={userInitials}
+            role={user?.role}
+            currentStoreCode={currentStoreCode}
+            currentStoreName={currentStoreName}
+            storeAccessLabel={storeAccessLabel}
+            onChangePassword={goToChangePassword}
+            onLogout={handleLogout}
+          />
         </div>
+
       </aside>
 
       <main className="premium-main">

@@ -763,6 +763,7 @@ Thank you.`;
       <CustomerDebtPrintPanel
         currentStoreCode={currentStoreCode}
         preferredCustomer={selectedDebt}
+        reportType="debt"
       />
 
       {message && <div className="success-box">{message}</div>}
