@@ -37,55 +37,55 @@ jobs:
 
           expense = Path("backend/routes/expenseRoutes.js")
           source = expense.read_text()
-          source = one(
-              source,
-              '''      const {
-    category,
-    description,
-    amount: cleanAmount,
-    payment_method: paymentMethod,
-    funding_source: fundingSource,
-    affects_daily_closing: affectsDailyClosing,
-    closing_treatment_note: closingTreatmentNote,
-    expense_date: expenseDate,
-  } = req.validated.body;
-
-      if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {''',
-              '''      const {
-        category,
-        description,
-        amount: cleanAmount,
-        payment_method: paymentMethod,
-        funding_source: fundingSource,
-        affects_daily_closing: affectsDailyClosing,
-        closing_treatment_note: closingTreatmentNote,
-        expense_date: expenseDate,
-      } = req.validated.body;
-
-      if (!category || !expenseDate || cleanAmount === undefined || cleanAmount === null) {''',
-              "expense cleanup",
-          )
-          expense.write_text(source)
+          old_expense = "\n".join([
+              "      const {",
+              "    category,",
+              "    description,",
+              "    amount: cleanAmount,",
+              "    payment_method: paymentMethod,",
+              "    funding_source: fundingSource,",
+              "    affects_daily_closing: affectsDailyClosing,",
+              "    closing_treatment_note: closingTreatmentNote,",
+              "    expense_date: expenseDate,",
+              "  } = req.validated.body;",
+              "",
+              "      if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {",
+          ])
+          new_expense = "\n".join([
+              "      const {",
+              "        category,",
+              "        description,",
+              "        amount: cleanAmount,",
+              "        payment_method: paymentMethod,",
+              "        funding_source: fundingSource,",
+              "        affects_daily_closing: affectsDailyClosing,",
+              "        closing_treatment_note: closingTreatmentNote,",
+              "        expense_date: expenseDate,",
+              "      } = req.validated.body;",
+              "",
+              "      if (!category || !expenseDate || cleanAmount === undefined || cleanAmount === null) {",
+          ])
+          expense.write_text(one(source, old_expense, new_expense, "expense cleanup"))
 
           transfer = Path("backend/routes/stockTransferRoutes.js")
           source = transfer.read_text()
-          source = one(
-              source,
-              '''    const {
-    from_branch_id: fromBranchId,
-    to_branch_id: toBranchId,
-    request_note: requestNote,
-    items,
-  } = req.validated.body;''',
-              '''    const {
-      from_branch_id: fromBranchId,
-      to_branch_id: toBranchId,
-      request_note: requestNote,
-      items,
-    } = req.validated.body;''',
-              "transfer cleanup",
-          )
-          transfer.write_text(source)
+          old_transfer = "\n".join([
+              "    const {",
+              "    from_branch_id: fromBranchId,",
+              "    to_branch_id: toBranchId,",
+              "    request_note: requestNote,",
+              "    items,",
+              "  } = req.validated.body;",
+          ])
+          new_transfer = "\n".join([
+              "    const {",
+              "      from_branch_id: fromBranchId,",
+              "      to_branch_id: toBranchId,",
+              "      request_note: requestNote,",
+              "      items,",
+              "    } = req.validated.body;",
+          ])
+          transfer.write_text(one(source, old_transfer, new_transfer, "transfer cleanup"))
           PY
       - name: Verify backend
         working-directory: backend
