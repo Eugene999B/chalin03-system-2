@@ -1,0 +1,88 @@
+name: Production Migration Safety
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "database/migrations/**"
+      - "database/schema.*"
+      - ".github/workflows/**"
+      - "backend/package.json"
+      - "backend/scripts/verifyMigrationSafety.js"
+      - "backend/tests/migrationSafety.test.js"
+  push:
+    branches:
+      - main
+    paths:
+      - "database/migrations/**"
+      - "database/schema.*"
+      - ".github/workflows/**"
+      - "backend/package.json"
+      - "backend/scripts/verifyMigrationSafety.js"
+      - "backend/tests/migrationSafety.test.js"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-policy:
+    name: Additive SQL and deployment guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve comparison range
+        id: range
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$BASE_SHA"
+          head="$HEAD_SHA"
+
+          if [ -z "$head" ]; then
+            head="$(git rev-parse HEAD)"
+          fi
+
+          if [ -z "$base" ] || printf '%s' "$base" | grep -qE '^0+$'; then
+            base="$(git rev-parse "${head}^")"
+          fi
+
+          git cat-file -e "${base}^{commit}"
+          git cat-file -e "${head}^{commit}"
+
+          printf 'base=%s\n' "$base" >> "$GITHUB_OUTPUT"
+          printf 'head=%s\n' "$head" >> "$GITHUB_OUTPUT"
+          printf 'Checking migration safety from `%s` to `%s`.\n' "$base" "$head" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check migration verifier syntax
+        run: node --check backend/scripts/verifyMigrationSafety.js
+
+      - name: Run migration safety unit tests
+        run: node --test backend/tests/migrationSafety.test.js
+
+      - name: Enforce changed-file migration policy
+        working-directory: backend
+        run: >-
+          npm run migration-safety --
+          --base "${{ steps.range.outputs.base }}"
+          --head "${{ steps.range.outputs.head }}"
+          --repo-root "${{ github.workspace }}"
