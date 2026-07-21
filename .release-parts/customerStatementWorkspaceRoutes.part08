@@ -1,0 +1,147 @@
+  report.customers.forEach((row) => customersSheet.addRow(row));
+  styleWorksheet(customersSheet, ["E", "F", "G"]);
+
+  const transactionsSheet = workbook.addWorksheet("Transactions");
+  transactionsSheet.columns = [
+    { header: "Date", key: "date" },
+    { header: "Customer", key: "customer_name" },
+    { header: "Phone", key: "customer_phone" },
+    { header: "Receipt", key: "receipt_number" },
+    { header: "Type", key: "type" },
+    { header: "Items / Details", key: "description" },
+    { header: "Amount", key: "amount" },
+    { header: "Paid", key: "paid" },
+    { header: "Balance", key: "balance" },
+    { header: "Payment Method", key: "payment_method" },
+    { header: "Staff", key: "staff_name" },
+    { header: "Status", key: "status" },
+  ];
+  report.transactions.forEach((row) => transactionsSheet.addRow(row));
+  styleWorksheet(transactionsSheet, ["G", "H", "I"]);
+
+  const itemsSheet = workbook.addWorksheet("Items Purchased");
+  itemsSheet.columns = [
+    { header: "Date", key: "date" },
+    { header: "Customer", key: "customer_name" },
+    { header: "Phone", key: "customer_phone" },
+    { header: "Receipt", key: "receipt_number" },
+    { header: "Product", key: "product_name" },
+    { header: "Quantity", key: "quantity" },
+    { header: "Unit Price", key: "unit_price" },
+    { header: "Line Total", key: "line_total" },
+    { header: "Status", key: "status" },
+  ];
+  report.items.forEach((row) => itemsSheet.addRow(row));
+  styleWorksheet(itemsSheet, ["G", "H"]);
+
+  const debtsSheet = workbook.addWorksheet("Debts");
+  debtsSheet.columns = [
+    { header: "Date", key: "created_at" },
+    { header: "Customer", key: "customer_name" },
+    { header: "Phone", key: "customer_phone" },
+    { header: "Receipt", key: "receipt_number" },
+    { header: "Amount Owed", key: "amount_owed" },
+    { header: "Amount Paid", key: "amount_paid" },
+    { header: "Balance", key: "balance" },
+    { header: "Status", key: "status" },
+    { header: "Due Date", key: "due_date" },
+  ];
+  report.debts.forEach((row) => debtsSheet.addRow(row));
+  styleWorksheet(debtsSheet, ["E", "F", "G"]);
+
+  const paymentsSheet = workbook.addWorksheet("Debt Payments");
+  paymentsSheet.columns = [
+    { header: "Paid At", key: "paid_at" },
+    { header: "Customer", key: "customer_name" },
+    { header: "Phone", key: "customer_phone" },
+    { header: "Receipt", key: "receipt_number" },
+    { header: "Amount", key: "amount" },
+    { header: "Method", key: "payment_method" },
+    { header: "Received By", key: "received_by_name" },
+    { header: "Notes", key: "notes" },
+  ];
+  report.debt_payments.forEach((row) => paymentsSheet.addRow(row));
+  styleWorksheet(paymentsSheet, ["E"]);
+
+  const slug = report.filters.reportType === "debt" ? "debt-report" : "customer-statement";
+  const filename = `chalin03-${safeFilename(report.branch.code)}-${slug}-${safeFilename(report.filters.from || "all")}-${safeFilename(report.filters.to || "all")}.xlsx`;
+  configureDownload(
+    res,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    filename
+  );
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
+function auditReport(req, report, format) {
+  writeAuditEvent({
+    req,
+    branchId: report.branch.id,
+    userId: req.user?.id || null,
+    workspaceCode: "spare_parts",
+    action: "FILTERED_CUSTOMER_REPORT_EXPORTED",
+    actionType: "FILTERED_CUSTOMER_REPORT_EXPORTED",
+    entityType: report.filters.reportType === "debt" ? "debt_report" : "customer_statement",
+    details: `${report.filters.reportType} report exported as ${format} for ${report.period}.`,
+    metadata: {
+      report_type: report.filters.reportType,
+      format,
+      from: report.filters.from,
+      to: report.filters.to,
+      customer: report.filters.customer,
+      debt_status: report.filters.debtStatus,
+      customer_count: report.summary.customer_count,
+      transaction_count: report.summary.transaction_count,
+    },
+    outcome: "success",
+    severity: "info",
+  }).catch((error) => console.error("Customer report audit error:", error));
+}
+
+router.get("/report", async (req, res) => {
+  try {
+    const report = await loadFilteredData(req);
+    return res.json({ status: "success", ...report });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode || 500);
+    if (statusCode >= 500) console.error("Customer statement workspace error:", error);
+    return res.status(statusCode).json({
+      status: "error",
+      message: error?.message || "Unable to load the filtered customer report.",
+    });
+  }
+});
+
+router.get("/export/:format", async (req, res) => {
+  try {
+    const format = cleanText(req.params.format, 20).toLowerCase();
+    if (!["pdf", "print", "word", "excel"].includes(format)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Choose PDF, Word, Excel or Print.",
+      });
+    }
+
+    const report = await loadFilteredData(req);
+    auditReport(req, report, format);
+
+    if (format === "pdf") return sendPdf(res, report, false);
+    if (format === "print") return sendPdf(res, report, true);
+    if (format === "word") return sendWord(res, report);
+    return sendExcel(res, report);
+  } catch (error) {
+    if (res.headersSent) {
+      console.error("Customer report export stream error:", error);
+      return res.end();
+    }
+    const statusCode = Number(error?.statusCode || 500);
+    if (statusCode >= 500) console.error("Customer report export error:", error);
+    return res.status(statusCode).json({
+      status: "error",
+      message: error?.message || "Unable to export the filtered customer report.",
+    });
+  }
+});
+
+module.exports = router;
