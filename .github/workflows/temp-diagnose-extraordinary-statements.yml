@@ -1,0 +1,49 @@
+name: Diagnose Extraordinary Statements Finalizer
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Identify finalizer verification failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/extraordinary-customer-statements-sidebar
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Assemble and integrate source
+        run: python3 scripts/finalizeExtraordinaryStatements.py
+
+      - name: Check diff formatting
+        run: git diff --check
+
+      - name: Check workspace route syntax
+        run: node --check backend/routes/customerStatementWorkspaceRoutes.js
+
+      - name: Check server syntax
+        run: node --check backend/server.js
+
+      - name: Run workspace regression tests
+        run: node --test backend/tests/customerStatementWorkspace.test.js
+
+      - name: Check temporary-file cleanup
+        shell: bash
+        run: |
+          test ! -e .release-parts
+          test ! -e scripts/finalizeExtraordinaryStatements.py
+          test ! -e .github/workflows/temp-finalize-extraordinary-statements.yml
+          test ! -e .github/workflows/temp-finalize-extraordinary-statements-pr.yml
