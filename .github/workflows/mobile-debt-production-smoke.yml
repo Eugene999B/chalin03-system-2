@@ -1,0 +1,55 @@
+name: Mobile Debt Production Smoke
+
+on:
+  push:
+    branches:
+      - agent/mobile-debt-production-smoke
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify compact mobile debt CSS live
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify Railway health and Cloudflare stylesheet
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          success=0
+          for attempt in $(seq 1 24); do
+            health_code="$(curl --silent --output /tmp/health.json --write-out '%{http_code}' https://api.chalin03.com/api/health || true)"
+            frontend_code="$(curl --silent --location --output /tmp/index.html --write-out '%{http_code}' https://chalin03.com/ || true)"
+            : > /tmp/app.css
+
+            grep -oE 'href="[^"]+\.css"' /tmp/index.html 2>/dev/null | cut -d'"' -f2 | while read -r asset_path; do
+              case "$asset_path" in
+                http*) asset_url="$asset_path" ;;
+                /*) asset_url="https://chalin03.com${asset_path}" ;;
+                *) asset_url="https://chalin03.com/${asset_path}" ;;
+              esac
+              curl --fail --silent --location "$asset_url" >> /tmp/app.css || true
+            done
+
+            if [[ "$health_code" == "200" ]] \
+              && [[ "$frontend_code" == "200" ]] \
+              && grep -q 'body:has(.customer-debt-print-panel)' /tmp/app.css \
+              && grep -q 'word-break:break-word' /tmp/app.css \
+              && grep -q 'grid-template-columns:repeat(2,minmax(0,1fr))' /tmp/app.css; then
+              success=1
+              break
+            fi
+
+            echo "attempt=${attempt} health=${health_code} frontend=${frontend_code} css_bytes=$(wc -c < /tmp/app.css)"
+            sleep 10
+          done
+
+          test "$success" = "1"
+          echo "Railway API health: PASS"
+          echo "Cloudflare mobile debt stylesheet: PASS"
