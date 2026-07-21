@@ -1,0 +1,170 @@
+          setItemsPage(1);
+          setExpandedCustomer("");
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setReport(null);
+          setError(
+            requestError.response?.data?.message ||
+              "Unable to load the filtered customer statement."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedFilters, branchId]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips = [
+      `Store: ${currentStoreCode}`,
+      `Period: ${report?.period || `${appliedFilters.from || "All"} to ${appliedFilters.to || "All"}`}`,
+      appliedFilters.customer
+        ? `Customer: ${appliedFilters.customer}`
+        : "Customer: All matching customers",
+      `Results: ${Number(report?.summary?.transaction_count || 0)} transactions`,
+    ];
+    return chips;
+  }, [appliedFilters, currentStoreCode, report]);
+
+  const pagedTransactions = useMemo(() => {
+    const rows = report?.transactions || [];
+    return rows.slice((ledgerPage - 1) * PAGE_SIZE, ledgerPage * PAGE_SIZE);
+  }, [ledgerPage, report]);
+
+  const pagedItems = useMemo(() => {
+    const rows = report?.items || [];
+    return rows.slice((itemsPage - 1) * PAGE_SIZE, itemsPage * PAGE_SIZE);
+  }, [itemsPage, report]);
+
+  const topCustomers = useMemo(() => (report?.customers || []).slice(0, 6), [report]);
+
+  function applyFilters(event) {
+    event.preventDefault();
+    setError("");
+    if (draftFilters.from && draftFilters.to && draftFilters.from > draftFilters.to) {
+      setError("The start date cannot be after the end date.");
+      return;
+    }
+    setAppliedFilters({
+      from: draftFilters.from,
+      to: draftFilters.to,
+      customer: draftFilters.customer.trim(),
+    });
+  }
+
+  function clearFilters() {
+    const cleared = { from: "", to: "", customer: "" };
+    setDraftFilters(cleared);
+    setAppliedFilters(cleared);
+  }
+
+  async function exportReport(format) {
+    setExporting(format);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await axiosClient.get(
+        `/customer-statement-workspace/export/${format}`,
+        {
+          params: {
+            report_type: "statement",
+            from: appliedFilters.from,
+            to: appliedFilters.to,
+            customer: appliedFilters.customer,
+          },
+          responseType: "blob",
+        }
+      );
+
+      if (format === "print") {
+        const url = window.URL.createObjectURL(
+          new Blob([response.data], { type: "application/pdf" })
+        );
+        const printWindow = window.open(url, "_blank", "noopener,noreferrer");
+        if (!printWindow) {
+          downloadBlob(response, "chalin03-customer-statement.pdf");
+          setMessage(
+            "The browser blocked the print tab, so the PDF was downloaded. Open it and choose Print."
+          );
+        } else {
+          setMessage("The printer-ready statement opened in a new tab.");
+        }
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
+      } else {
+        const extension = format === "word" ? "doc" : format === "excel" ? "xlsx" : "pdf";
+        downloadBlob(
+          response,
+          `chalin03-${currentStoreCode.toLowerCase()}-customer-statement.${extension}`
+        );
+        setMessage(`${titleCase(format)} export downloaded using the current filters.`);
+      }
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          `Unable to create the ${format} customer statement.`
+      );
+    } finally {
+      setExporting("");
+    }
+  }
+
+  const summary = report?.summary || {};
+
+  return (
+    <div className="csw-page">
+      <section className="csw-hero">
+        <div className="csw-hero-copy">
+          <p>Customer Financial Intelligence • {currentStoreCode}</p>
+          <h1>Customer Statement & Account Analysis</h1>
+          <span>
+            Apply one set of filters, view the exact result beautifully, then print or export that same result to PDF, Word or Excel.
+          </span>
+        </div>
+        <div className="csw-store-context">
+          <small>Selected Store</small>
+          <strong>{currentStoreCode} — {currentStoreName}</strong>
+          <span>{currentStoreLocation || "Store location not set"}</span>
+        </div>
+      </section>
+
+      <section className="csw-filter-card">
+        <div className="csw-filter-heading">
+          <div>
+            <p>One Filter Engine</p>
+            <h2>Filter the report before viewing or exporting</h2>
+          </div>
+          <span className="csw-filter-badge">Screen = Export</span>
+        </div>
+
+        <form className="csw-filter-grid" onSubmit={applyFilters}>
+          <label>
+            <span>From Date</span>
+            <input
+              type="date"
+              value={draftFilters.from}
+              onChange={(event) =>
+                setDraftFilters((current) => ({ ...current, from: event.target.value }))
+              }
+            />
+          </label>
+
+          <label>
+            <span>To Date</span>
+            <input
+              type="date"
+              value={draftFilters.to}
+              onChange={(event) =>
+                setDraftFilters((current) => ({ ...current, to: event.target.value }))
+              }
+            />
+          </label>
+
+          <label className="csw-customer-filter">
+            <span>Customer Name or Phone</span>
