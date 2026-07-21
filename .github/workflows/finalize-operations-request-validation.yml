@@ -46,129 +46,125 @@ jobs:
                   raise SystemExit(f"{label}: expected exactly one match, found {count}")
               return text.replace(old, new, 1)
 
-          def patch_section(path, marker, transform):
+          def section(path, marker, next_marker=None):
               source = path.read_text()
-              index = source.find(marker)
-              if index < 0:
+              start = source.find(marker)
+              if start < 0:
                   raise SystemExit(f"{path}: marker not found: {marker}")
-              prefix = source[:index]
-              section = source[index:]
-              updated = transform(section)
-              if updated == section:
-                  raise SystemExit(f"{path}: section was not changed")
-              path.write_text(prefix + updated)
+              if next_marker:
+                  end = source.find(next_marker, start + len(marker))
+                  if end < 0:
+                      end = len(source)
+              else:
+                  end = len(source)
+              return source, start, end, source[start:end]
+
+          def write_section(path, source, start, end, updated):
+              path.write_text(source[:start] + updated + source[end:])
 
           purchase = Path("backend/routes/purchaseRoutes.js")
-          purchase_source = purchase.read_text()
-          purchase_source = replace_once(
-              purchase_source,
+          source = purchase.read_text()
+          source = replace_once(
+              source,
               'const { writeAuditEvent } = require("../services/auditTrailService");\n',
               'const { writeAuditEvent } = require("../services/auditTrailService");\n'
               'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
               'const { validatePurchaseCreateRequest } = require("../validation/operationsRequestValidators");\n',
               "purchase imports",
           )
-          purchase.write_text(purchase_source)
-
-          def patch_purchase(section):
-              section = replace_once(
-                  section,
-                  '  requireRole("admin", "manager"),\n  async (req, res) => {',
-                  '  requireRole("admin", "manager"),\n  validateRequest(validatePurchaseCreateRequest),\n  async (req, res) => {',
-                  "purchase middleware",
-              )
-              return replace_once(
-                  section,
-                  '      } = req.body;',
-                  '      } = req.validated.body;',
-                  "purchase sanitized body",
-              )
-
-          patch_section(purchase, "// POST /api/purchases", patch_purchase)
+          purchase.write_text(source)
+          source, start, end, block = section(purchase, "// POST /api/purchases")
+          block = replace_once(
+              block,
+              '  requireRole("admin", "manager"),\n  async (req, res) => {',
+              '  requireRole("admin", "manager"),\n  validateRequest(validatePurchaseCreateRequest),\n  async (req, res) => {',
+              "purchase middleware",
+          )
+          block = replace_once(
+              block,
+              '      } = req.body;',
+              '      } = req.validated.body;',
+              "purchase sanitized body",
+          )
+          write_section(purchase, source, start, end, block)
 
           expense = Path("backend/routes/expenseRoutes.js")
-          expense_source = expense.read_text()
-          expense_source = replace_once(
-              expense_source,
+          source = expense.read_text()
+          source = replace_once(
+              source,
               'const { markClosingStale } = require("../services/dailyClosingSecurityService");\n',
               'const { markClosingStale } = require("../services/dailyClosingSecurityService");\n'
               'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
               'const { validateExpenseCreateRequest } = require("../validation/operationsRequestValidators");\n',
               "expense imports",
           )
-          expense.write_text(expense_source)
-
-          def patch_expense(section):
-              section = replace_once(
-                  section,
-                  '  requireRole("admin", "manager"),\n  async (req, res) => {',
-                  '  requireRole("admin", "manager"),\n  validateRequest(validateExpenseCreateRequest),\n  async (req, res) => {',
-                  "expense middleware",
-              )
-              old = '''      const category = cleanText(req.body.category);
-              const description = cleanText(req.body.description);
-              const expenseDate = cleanText(req.body.expense_date);
-              const paymentMethod = cleanText(req.body.payment_method || "cash").toLowerCase();
-              const fundingSource = cleanText(req.body.funding_source).toLowerCase();
-              const affectsDailyClosing = parseRequiredBoolean(
-                req.body.affects_daily_closing
-              );
-              const closingTreatmentNote = cleanText(
-                req.body.closing_treatment_note
-              ).slice(0, 500);
-              const cleanAmount = Number(req.body.amount);'''
-              new = '''      const {
-                category,
-                description,
-                amount: cleanAmount,
-                payment_method: paymentMethod,
-                funding_source: fundingSource,
-                affects_daily_closing: affectsDailyClosing,
-                closing_treatment_note: closingTreatmentNote,
-                expense_date: expenseDate,
-              } = req.validated.body;'''
-              return replace_once(section, old, new, "expense sanitized body")
-
-          patch_section(expense, "// POST /api/expenses", patch_expense)
+          expense.write_text(source)
+          source, start, end, block = section(expense, "// POST /api/expenses")
+          block = replace_once(
+              block,
+              '  requireRole("admin", "manager"),\n  async (req, res) => {',
+              '  requireRole("admin", "manager"),\n  validateRequest(validateExpenseCreateRequest),\n  async (req, res) => {',
+              "expense middleware",
+          )
+          body_start = block.find('      const category = cleanText(req.body.category);')
+          body_end = block.find('\n\n      if (!category', body_start)
+          if body_start < 0 or body_end < 0:
+              raise SystemExit("expense sanitized body anchors not found")
+          clean_body = (
+              '      const {\n'
+              '        category,\n'
+              '        description,\n'
+              '        amount: cleanAmount,\n'
+              '        payment_method: paymentMethod,\n'
+              '        funding_source: fundingSource,\n'
+              '        affects_daily_closing: affectsDailyClosing,\n'
+              '        closing_treatment_note: closingTreatmentNote,\n'
+              '        expense_date: expenseDate,\n'
+              '      } = req.validated.body;'
+          )
+          block = block[:body_start] + clean_body + block[body_end:]
+          write_section(expense, source, start, end, block)
 
           product = Path("backend/routes/productRoutes.js")
-          product_source = product.read_text()
-          product_source = replace_once(
-              product_source,
+          source = product.read_text()
+          source = replace_once(
+              source,
               'const { writeAuditEvent } = require("../services/auditTrailService");\n',
               'const { writeAuditEvent } = require("../services/auditTrailService");\n'
               'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
               'const { validateStockAdjustmentRequest } = require("../validation/operationsRequestValidators");\n',
               "product imports",
           )
-          product.write_text(product_source)
-
-          def patch_product(section):
-              section = replace_once(
-                  section,
-                  '  requireRole("admin", "manager"),\n  async (req, res) => {',
-                  '  requireRole("admin", "manager"),\n  validateRequest(validateStockAdjustmentRequest),\n  async (req, res) => {',
-                  "stock adjustment middleware",
-              )
-              section = replace_once(
-                  section,
-                  '      const { id } = req.params;',
-                  '      const { id } = req.validated.params;',
-                  "stock adjustment sanitized params",
-              )
-              return replace_once(
-                  section,
-                  '      } = req.body;',
-                  '      } = req.validated.body;',
-                  "stock adjustment sanitized body",
-              )
-
-          patch_section(product, "// PATCH /api/products/:id/stock-adjustment", patch_product)
+          product.write_text(source)
+          source, start, end, block = section(
+              product,
+              "// PATCH /api/products/:id/stock-adjustment",
+              "// DELETE /api/products/:id",
+          )
+          block = replace_once(
+              block,
+              '  requireRole("admin", "manager"),\n  async (req, res) => {',
+              '  requireRole("admin", "manager"),\n  validateRequest(validateStockAdjustmentRequest),\n  async (req, res) => {',
+              "stock adjustment middleware",
+          )
+          block = replace_once(
+              block,
+              '      const { id } = req.params;',
+              '      const { id } = req.validated.params;',
+              "stock adjustment sanitized params",
+          )
+          block = replace_once(
+              block,
+              '      } = req.body;',
+              '      } = req.validated.body;',
+              "stock adjustment sanitized body",
+          )
+          write_section(product, source, start, end, block)
 
           transfer = Path("backend/routes/stockTransferRoutes.js")
-          transfer_source = transfer.read_text()
-          transfer_source = replace_once(
-              transfer_source,
+          source = transfer.read_text()
+          source = replace_once(
+              source,
               'const { requireAuth } = require("../middleware/authMiddleware");\n',
               'const { requireAuth } = require("../middleware/authMiddleware");\n'
               'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
@@ -178,82 +174,67 @@ jobs:
               '} = require("../validation/operationsRequestValidators");\n',
               "transfer imports",
           )
-          transfer.write_text(transfer_source)
+          transfer.write_text(source)
 
-          def patch_transfer_create(section):
-              section = replace_once(
-                  section,
-                  'router.post(\n  "/",\n  asyncHandler(async (req, res) => {',
-                  'router.post(\n  "/",\n  validateRequest(validateStockTransferCreateRequest),\n  asyncHandler(async (req, res) => {',
-                  "transfer create middleware",
-              )
-              old = '''    const fromBranchId = toPositiveInt(req.body.from_branch_id);
-              const toBranchId = toPositiveInt(req.body.to_branch_id);
-              const requestNote = cleanText(req.body.request_note || req.body.note);
-              const items = normalizeTransferItems(req.body.items);'''
-              new = '''    const {
-                from_branch_id: fromBranchId,
-                to_branch_id: toBranchId,
-                request_note: requestNote,
-                items,
-              } = req.validated.body;'''
-              return replace_once(section, old, new, "transfer create sanitized body")
+          source, start, end, block = section(
+              transfer,
+              'router.post(\n  "/",',
+              '\nrouter.post(\n  "/:id/approve",',
+          )
+          block = replace_once(
+              block,
+              'router.post(\n  "/",\n  asyncHandler(async (req, res) => {',
+              'router.post(\n  "/",\n  validateRequest(validateStockTransferCreateRequest),\n  asyncHandler(async (req, res) => {',
+              "transfer create middleware",
+          )
+          body_start = block.find('    const fromBranchId = toPositiveInt(req.body.from_branch_id);')
+          body_end = block.find('\n\n    if (!fromBranchId', body_start)
+          if body_start < 0 or body_end < 0:
+              raise SystemExit("transfer create sanitized body anchors not found")
+          clean_body = (
+              '    const {\n'
+              '      from_branch_id: fromBranchId,\n'
+              '      to_branch_id: toBranchId,\n'
+              '      request_note: requestNote,\n'
+              '      items,\n'
+              '    } = req.validated.body;'
+          )
+          block = block[:body_start] + clean_body + block[body_end:]
+          write_section(transfer, source, start, end, block)
 
-          patch_section(transfer, 'router.post(\n  "/",', patch_transfer_create)
-
-          actions = {
-              "approve": "approval_note",
-              "reject": "reject_note",
-              "dispatch": "dispatch_note",
-              "receive": "receive_note",
-              "cancel": "cancel_note",
+          action_notes = {
+              "approve": ("approval_note", "approvalNote"),
+              "reject": ("reject_note", "rejectNote"),
+              "dispatch": ("dispatch_note", "dispatchNote"),
+              "receive": ("receive_note", "receiveNote"),
+              "cancel": ("cancel_note", "cancelNote"),
           }
 
-          for action, note_key in actions.items():
-              source = transfer.read_text()
-              marker = f'router.post(\n  "/:id/{action}",'
-              index = source.find(marker)
-              if index < 0:
-                  raise SystemExit(f"transfer {action}: route marker not found")
-              next_index = source.find("\nrouter.", index + len(marker))
-              if next_index < 0:
-                  next_index = len(source)
-              prefix = source[:index]
-              section = source[index:next_index]
-              suffix = source[next_index:]
-              section = replace_once(
-                  section,
+          for action, (note_key, variable) in action_notes.items():
+              source, start, end, block = section(
+                  transfer,
+                  f'router.post(\n  "/:id/{action}",',
+                  "\nrouter.",
+              )
+              block = replace_once(
+                  block,
                   f'router.post(\n  "/:id/{action}",\n  asyncHandler(async (req, res) => {{',
                   f'router.post(\n  "/:id/{action}",\n  validateRequest(validateStockTransferActionRequest("{action}")),\n  asyncHandler(async (req, res) => {{',
                   f"transfer {action} middleware",
               )
-              section = replace_once(
-                  section,
+              block = replace_once(
+                  block,
                   '    const transferId = toPositiveInt(req.params.id);',
                   '    const { id: transferId } = req.validated.params;',
                   f"transfer {action} sanitized params",
               )
-              section = replace_once(
-                  section,
-                  f'    const {"" if False else ""}{action if False else ""}{""}\n' if False else f'    const {note_key.replace("_note", "Note") if False else "__never__"};',
-                  '__never__',
-                  f"transfer {action} impossible placeholder",
-              ) if False else section
-              old_note_names = {
-                  "approval_note": "approvalNote",
-                  "reject_note": "rejectNote",
-                  "dispatch_note": "dispatchNote",
-                  "receive_note": "receiveNote",
-                  "cancel_note": "cancelNote",
-              }
-              variable = old_note_names[note_key]
-              section = replace_once(
-                  section,
+              block = replace_once(
+                  block,
                   f'    const {variable} = cleanText(req.body.{note_key} || req.body.note);',
                   f'    const {{ {note_key}: {variable} }} = req.validated.body;',
                   f"transfer {action} sanitized note",
               )
-              transfer.write_text(prefix + section + suffix)
+              write_section(transfer, source, start, end, block)
 
           print("Operations routes integrated with centralized validation.")
           PY
