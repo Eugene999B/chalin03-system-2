@@ -14,6 +14,8 @@ const { sendSaleReceiptWhatsApp } = require("../services/whatsappService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { createAgreementForSale } = require("../services/installmentService");
 const { sendInstallmentEventSms } = require("../services/installmentReminderService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");
 
 const router = express.Router();
 
@@ -786,7 +788,7 @@ async function findOrCreateCustomer(
 }
 
 // POST /api/sales
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
@@ -807,7 +809,7 @@ router.post("/", requireAuth, async (req, res) => {
       payment_allocations,
       installment_plan,
       items,
-    } = req.body;
+    } = req.validated.body;
 
     const cleanCustomerName = cleanText(customer_name);
     const cleanCustomerPhone = cleanText(customer_phone);

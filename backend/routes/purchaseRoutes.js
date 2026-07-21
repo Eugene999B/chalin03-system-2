@@ -4,6 +4,8 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validatePurchasePaymentRequest } = require("../validation/financialRequestValidators");
 
 const router = express.Router();
 
@@ -417,13 +419,14 @@ router.patch(
   "/:id/pay",
   requireAuth,
   requireRole("admin", "manager"),
+  validateRequest(validatePurchasePaymentRequest),
   async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
       const branchId = getBranchId(req);
-      const { id } = req.params;
-      const { amount, payment_method, notes } = req.body;
+      const { id } = req.validated.params;
+      const { amount, payment_method, notes } = req.validated.body;
 
       const paymentAmount = toPositiveMoney(amount);
       const cleanPaymentMethod = cleanPurchasePaymentMethod(payment_method);
