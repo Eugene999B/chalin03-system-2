@@ -1,0 +1,120 @@
+      last_activity: lastActivity,
+      account_status: outstanding <= 0 ? "clear" : outstanding >= totalSales * 0.5 ? "high_follow_up" : "watch",
+    });
+
+    group.sales.forEach((sale) => {
+      const valid = isValidSale(sale);
+      transactions.push({
+        id: `sale-${sale.id}`,
+        source_id: Number(sale.id),
+        type: "sale",
+        date: sale.created_at,
+        customer_key: group.key,
+        customer_name: group.customer_name,
+        customer_phone: group.customer_phone,
+        receipt_number: sale.receipt_number || "-",
+        description: (sale.items || []).map((item) => `${item.product_name} × ${item.quantity}`).join(", ") || "Sale",
+        items: sale.items || [],
+        amount: valid ? roundMoney(sale.total) : 0,
+        paid: valid ? roundMoney(sale.amount_paid) : 0,
+        balance: valid ? roundMoney(sale.balance) : 0,
+        payment_method: sale.payment_type || "-",
+        staff_name: sale.staff_name || "-",
+        status: valid ? sale.sale_status || "completed" : "voided",
+      });
+
+      (sale.items || []).forEach((item) => {
+        itemRows.push({
+          id: Number(item.id),
+          sale_id: Number(sale.id),
+          date: sale.created_at,
+          customer_key: group.key,
+          customer_name: group.customer_name,
+          customer_phone: group.customer_phone,
+          receipt_number: sale.receipt_number || "-",
+          product_name: item.product_name,
+          quantity: toNumber(item.quantity),
+          unit_price: roundMoney(item.unit_price),
+          line_total: valid ? roundMoney(item.line_total) : 0,
+          status: valid ? "valid" : "voided",
+        });
+      });
+    });
+
+    group.debts.forEach((debt) => {
+      transactions.push({
+        id: `debt-${debt.id}`,
+        source_id: Number(debt.id),
+        type: "debt",
+        date: debt.created_at,
+        customer_key: group.key,
+        customer_name: group.customer_name,
+        customer_phone: group.customer_phone,
+        receipt_number: debt.receipt_number || "-",
+        description: `Debt record • Due ${dateLabel(debt.due_date)}`,
+        items: [],
+        amount: roundMoney(debt.amount_owed),
+        paid: roundMoney(debt.amount_paid),
+        balance: roundMoney(debt.balance),
+        payment_method: "Credit",
+        staff_name: "-",
+        status: debt.status || "unpaid",
+        due_date: debt.due_date,
+      });
+    });
+
+    group.debt_payments.forEach((payment) => {
+      transactions.push({
+        id: `payment-${payment.id}`,
+        source_id: Number(payment.id),
+        type: "debt_payment",
+        date: payment.paid_at,
+        customer_key: group.key,
+        customer_name: group.customer_name,
+        customer_phone: group.customer_phone,
+        receipt_number: payment.receipt_number || "-",
+        description: payment.notes || "Debt payment",
+        items: [],
+        amount: roundMoney(payment.amount),
+        paid: roundMoney(payment.amount),
+        balance: 0,
+        payment_method: payment.payment_method || "-",
+        staff_name: payment.received_by_name || "-",
+        status: "received",
+      });
+    });
+  });
+
+  customerSummaries.sort((a, b) => b.total_sales - a.total_sales || a.customer_name.localeCompare(b.customer_name));
+  transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  itemRows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const validSales = sales.filter(isValidSale);
+  const summary = {
+    customer_count: customerSummaries.length,
+    sales_count: validSales.length,
+    transaction_count: transactions.length,
+    item_line_count: itemRows.length,
+    item_quantity: roundMoney(itemRows.reduce((sum, item) => sum + toNumber(item.quantity), 0)),
+    total_sales: roundMoney(validSales.reduce((sum, sale) => sum + toNumber(sale.total), 0)),
+    paid_on_sales: roundMoney(validSales.reduce((sum, sale) => sum + toNumber(sale.amount_paid), 0)),
+    debt_payments: roundMoney(debtPayments.reduce((sum, payment) => sum + toNumber(payment.amount), 0)),
+    total_received: roundMoney(
+      validSales.reduce((sum, sale) => sum + toNumber(sale.amount_paid), 0) +
+        debtPayments.reduce((sum, payment) => sum + toNumber(payment.amount), 0)
+    ),
+    outstanding_balance: roundMoney(debts.reduce((sum, debt) => sum + toNumber(debt.balance), 0)),
+    debt_count: debts.length,
+  };
+
+  return {
+    branch,
+    filters,
+    period: periodLabel(filters),
+    summary,
+    customers: customerSummaries,
+    transactions,
+    items: itemRows,
+    debts,
+    debt_payments: debtPayments,
+    capped: sales.length >= MAX_ROWS || debts.length >= MAX_ROWS || debtPayments.length >= MAX_ROWS,
