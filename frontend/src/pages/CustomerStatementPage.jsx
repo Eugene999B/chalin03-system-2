@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import CustomerDebtPrintPanel from "../components/CustomerDebtPrintPanel";
 
 function MobilePageFix() {
   return (
@@ -368,7 +369,7 @@ export default function CustomerStatementPage() {
     setLoadingStatement(true);
 
     try {
-      const response = await axiosClient.get("/customer-statements", {
+      const response = await axiosClient.get("/customer-debt-reports/statement", {
         params: {
           name: customer.customer_name || "",
           phone: customer.customer_phone || "",
@@ -578,6 +579,11 @@ export default function CustomerStatementPage() {
         </div>
       </div>
 
+      <CustomerDebtPrintPanel
+        currentStoreCode={currentStoreCode}
+        preferredCustomer={statement?.customer || null}
+      />
+
       {error && <div className="error-box">{error}</div>}
 
       <div style={styles.workspaceGrid}>
@@ -773,6 +779,7 @@ export default function CustomerStatementPage() {
                             <th>Date</th>
                             <th>Receipt</th>
                             <th>Store</th>
+                            <th>Items Bought</th>
                             <th>Total</th>
                             <th>Paid</th>
                             <th>Balance</th>
@@ -795,6 +802,31 @@ export default function CustomerStatementPage() {
                                   <small>{getRecordStoreName(sale)}</small>
                                 </td>
                                 <td>{getRecordStoreCode(sale)}</td>
+                                <td>
+                                  {sale.items?.length ? (
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gap: "5px",
+                                        minWidth: "220px",
+                                      }}
+                                    >
+                                      {sale.items.map((item) => (
+                                        <div key={item.id}>
+                                          <strong>
+                                            {item.product_name || "Item"} × {Number(item.quantity || 0)}
+                                          </strong>
+                                          <br />
+                                          <small>
+                                            {formatMoney(item.unit_price)} each • {formatMoney(item.line_total)}
+                                          </small>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    "-"
+                                  )}
+                                </td>
                                 <td>{voided ? "VOIDED" : formatMoney(sale.total)}</td>
                                 <td>
                                   {voided ? "VOIDED" : formatMoney(sale.amount_paid)}

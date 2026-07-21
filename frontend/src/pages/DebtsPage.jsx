@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import CustomerDebtPrintPanel from "../components/CustomerDebtPrintPanel";
 
 export default function DebtsPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
@@ -758,6 +759,11 @@ Thank you.`;
           </p>
         </div>
       </div>
+
+      <CustomerDebtPrintPanel
+        currentStoreCode={currentStoreCode}
+        preferredCustomer={selectedDebt}
+      />
 
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}

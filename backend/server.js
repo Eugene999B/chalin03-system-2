@@ -46,6 +46,7 @@ const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
+const customerDebtReportRoutes = require("./routes/customerDebtReportRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const auditSignoffRoutes = require("./routes/auditSignoffRoutes");
 const auditUnlockRequestRoutes = require("./routes/auditUnlockRequestRoutes");
@@ -189,6 +190,7 @@ app.get("/api", (req, res) => {
       "/api/backups",
       "/api/daily-closing",
       "/api/customer-statements",
+      "/api/customer-debt-reports",
       "/api/maintenance",
       "/api/audit-signoffs",
       "/api/audit-unlock-requests",
@@ -291,6 +293,12 @@ app.use("/api/backups", delegatedBackupRoutes);
 app.use("/api/backups", backupRoutes);
 app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
 app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
+app.use(
+  "/api/customer-debt-reports",
+  requireAuth,
+  sparePartsBoundary,
+  customerDebtReportRoutes
+);
 app.use("/api/maintenance", requireAuth, sparePartsBoundary, maintenanceRoutes);
 app.use("/api/audit-signoffs", requireAuth, sparePartsBoundary, auditSignoffRoutes);
 app.use("/api/audit-unlock-requests", requireAuth, sparePartsBoundary, auditUnlockRequestRoutes);
