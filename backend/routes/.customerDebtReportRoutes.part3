@@ -1,0 +1,279 @@
+    ["Outstanding", money(balance)],
+  ]);
+
+  if (allDebts.length === 0) {
+    doc.fillColor("#64748b").font("Helvetica-Oblique").fontSize(10);
+    doc.text(
+      "No debt records were found for the selected customer scope and date range.",
+      { align: "center" }
+    );
+    return;
+  }
+
+  groups.forEach((group) => {
+    if (group.debts.length === 0) return;
+    ensureSpace(doc, 46, branch, title, subtitle);
+    const headerY = doc.y;
+    doc
+      .rect(doc.page.margins.left, headerY, 507, 24)
+      .fillAndStroke("#173b68", "#173b68");
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
+    doc.text(
+      customerLabel(group.customer),
+      doc.page.margins.left + 7,
+      headerY + 8,
+      { width: 493 }
+    );
+    doc.y = headerY + 30;
+
+    group.debts.forEach((debt) => {
+      ensureSpace(doc, 43, branch, title, subtitle);
+      const y = doc.y;
+      doc
+        .rect(doc.page.margins.left, y, 507, 37)
+        .fillAndStroke("#f8fafc", "#d8e1ea");
+      doc.fillColor("#172033").font("Helvetica-Bold").fontSize(7.8);
+      doc.text(
+        `${dateLabel(debt.created_at)} | Receipt ${
+          debt.receipt_number || "-"
+        }`,
+        doc.page.margins.left + 6,
+        y + 6,
+        { width: 495 }
+      );
+      doc.font("Helvetica").fontSize(7.5);
+      doc.text(
+        `Owed ${money(debt.amount_owed)} | Paid ${money(
+          debt.amount_paid
+        )} | Balance ${money(debt.balance)} | Status ${
+          debt.status || "-"
+        } | Due ${dateLabel(debt.due_date)}`,
+        doc.page.margins.left + 6,
+        y + 20,
+        { width: 495 }
+      );
+      doc.y = y + 43;
+    });
+  });
+}
+
+function addPageFooters(doc, branch, title) {
+  const range = doc.bufferedPageRange();
+  for (let index = 0; index < range.count; index += 1) {
+    doc.switchToPage(index);
+    const y = doc.page.height - 20;
+    const original = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.fillColor("#64748b").font("Helvetica").fontSize(7);
+    doc.text(
+      `Chalin 03 | ${branch.branch_code} | ${title} | Page ${
+        index + 1
+      } of ${range.count}`,
+      doc.page.margins.left,
+      y,
+      {
+        width:
+          doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        align: "center",
+        lineBreak: false,
+      }
+    );
+    doc.page.margins.bottom = original;
+  }
+}
+
+router.get("/customers", async (req, res) => {
+  try {
+    const branchId = getBranchId(req);
+    if (!branchId) {
+      return res.status(400).json({
+        status: "error",
+        message: "No store was selected for this session.",
+      });
+    }
+
+    const range = getDateRange(req);
+    const reportType = cleanText(
+      req.query.report_type || "statement",
+      20
+    ).toLowerCase();
+    const params = [branchId];
+
+    let sql;
+    if (reportType === "debt") {
+      sql = `
+        SELECT
+          MAX(d.customer_id) AS customer_id,
+          d.customer_name,
+          d.customer_phone,
+          COUNT(*) AS record_count,
+          COALESCE(SUM(d.balance), 0) AS outstanding_balance
+        FROM debts d
+        WHERE d.branch_id = ?
+      `;
+      sql += buildDateFilter("d", "created_at", range, params);
+      sql += `
+        GROUP BY d.customer_name, d.customer_phone
+        ORDER BY d.customer_name ASC, d.customer_phone ASC
+        LIMIT 500
+      `;
+    } else {
+      sql = `
+        SELECT
+          MAX(s.customer_id) AS customer_id,
+          s.customer_name,
+          s.customer_phone,
+          COUNT(*) AS record_count,
+          COALESCE(SUM(CASE
+            WHEN COALESCE(s.is_voided, 0) = 0
+             AND s.sale_status NOT IN ('cancelled', 'voided')
+            THEN s.total ELSE 0 END), 0) AS total_sales
+        FROM sales s
+        WHERE s.branch_id = ?
+      `;
+      sql += buildDateFilter("s", "created_at", range, params);
+      sql += `
+        GROUP BY s.customer_name, s.customer_phone
+        ORDER BY s.customer_name ASC, s.customer_phone ASC
+        LIMIT 500
+      `;
+    }
+
+    const [customers] = await pool.query(sql, params);
+
+    return res.json({
+      status: "success",
+      branch: branchInfo(req),
+      period: periodLabel(range),
+      customers,
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to load printable-report customers.");
+  }
+});
+
+router.get("/statement", async (req, res) => {
+  try {
+    req.query.scope = "selected";
+    const data = await loadReportData(req);
+    const group = data.groups[0] || {
+      customer: {
+        id: data.selection.customerId,
+        name: data.selection.name || "Customer",
+        phone: data.selection.phone || "",
+      },
+      sales: [],
+      debts: [],
+      debt_payments: [],
+    };
+
+    return res.json({
+      status: "success",
+      branch: data.branch,
+      customer: group.customer,
+      period: periodLabel(data.range),
+      summary: statementSummary(group),
+      sales: group.sales,
+      debts: group.debts,
+      debt_payments: group.debt_payments,
+    });
+  } catch (error) {
+    return sendError(res, error, "Unable to load customer statement details.");
+  }
+});
+
+router.get("/pdf", async (req, res) => {
+  try {
+    const reportType = cleanText(
+      req.query.report_type || "statement",
+      20
+    ).toLowerCase();
+    if (!["statement", "debt"].includes(reportType)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Choose Customer Statement or Debt Report.",
+      });
+    }
+
+    const data = await loadReportData(req, {
+      includeItems: reportType === "statement",
+    });
+    const period = periodLabel(data.range);
+    const reportTitle =
+      reportType === "statement" ? "Customer Statement" : "Customer Debt Report";
+    const reportSlug =
+      reportType === "statement" ? "customer-statements" : "debt-report";
+    const filename = `chalin03-${data.branch.branch_code.toLowerCase()}-${reportSlug}-${
+      data.range.from || "all"
+    }-${data.range.to || "all"}.pdf`;
+
+    configurePdfResponse(res, filename);
+
+    const doc = new PDFDocument({
+      size: "A4",
+      margins: { top: 28, right: 44, bottom: 34, left: 44 },
+      bufferPages: true,
+      info: {
+        Title: reportTitle,
+        Author: "Chalin 03 Company Limited",
+        Subject: `${reportTitle} - ${data.branch.branch_code} - ${period}`,
+      },
+    });
+
+    doc.pipe(res);
+
+    if (reportType === "statement") {
+      data.groups.forEach((group, index) =>
+        drawStatementCustomer(doc, group, data.branch, period, index)
+      );
+      if (data.groups.length === 0) {
+        addPageHeader(doc, data.branch, reportTitle, `Period: ${period}`);
+        doc.text("No customer records were found for the selected filters.", {
+          align: "center",
+        });
+      }
+    } else {
+      drawDebtReport(doc, data.groups, data.branch, period);
+    }
+
+    addPageFooters(doc, data.branch, reportTitle);
+
+    doc.end();
+
+    writeAuditEvent({
+      req,
+      branchId: data.branch.id,
+      userId: req.user?.id || null,
+      workspaceCode: "spare_parts",
+      action: "CUSTOMER_FINANCIAL_REPORT_PRINTED",
+      actionType: "CUSTOMER_FINANCIAL_REPORT_PRINTED",
+      entityType:
+        reportType === "statement" ? "customer_statement" : "debt_report",
+      details: `${reportTitle} opened for printing: ${
+        data.selection.scope
+      } customer scope, ${period}.`,
+      metadata: {
+        report_type: reportType,
+        scope: data.selection.scope,
+        customer_id: data.selection.customerId,
+        customer_name: data.selection.name,
+        customer_phone: data.selection.phone,
+        from: data.range.from,
+        to: data.range.to,
+        customer_count: data.groups.length,
+      },
+      outcome: "success",
+      severity: "info",
+    }).catch((auditError) => {
+      console.error("Customer financial report audit error:", auditError);
+    });
+  } catch (error) {
+    if (!res.headersSent) {
+      return sendError(res, error, "Unable to generate the printable report.");
+    }
+    console.error("Customer/debt PDF stream error:", error);
+    res.end();
+  }
+});
+
+module.exports = router;
