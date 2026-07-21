@@ -1,0 +1,120 @@
+  };
+}
+
+function configureDownload(res, contentType, filename, disposition = "attachment") {
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+}
+
+function pdfHeader(doc, report, title) {
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  doc.rect(doc.page.margins.left, 28, width, 58).fill("#07182c");
+  doc.fillColor("#f5d84a").font("Helvetica-Bold").fontSize(9);
+  doc.text("CHALIN 03 COMPANY LIMITED", doc.page.margins.left + 12, 39, { width: width - 24 });
+  doc.fillColor("#ffffff").fontSize(16);
+  doc.text(title, doc.page.margins.left + 12, 53, { width: width - 24 });
+  doc.font("Helvetica").fontSize(8.5);
+  doc.text(
+    `${report.branch.code} — ${report.branch.name}${report.branch.location ? ` • ${report.branch.location}` : ""}`,
+    doc.page.margins.left + 12,
+    72,
+    { width: width - 24 }
+  );
+  doc.y = 100;
+}
+
+function ensurePdfSpace(doc, report, title, required = 55) {
+  if (doc.y + required < doc.page.height - doc.page.margins.bottom - 24) return;
+  doc.addPage();
+  pdfHeader(doc, report, title);
+}
+
+function pdfMeta(doc, report) {
+  const customerLabel = report.filters.customer || "All matching customers";
+  doc.fillColor("#334155").font("Helvetica").fontSize(9);
+  doc.text(`Period: ${report.period}`);
+  doc.text(`Customer filter: ${customerLabel}`);
+  if (report.filters.debtStatus) doc.text(`Debt status: ${report.filters.debtStatus}`);
+  doc.text(`Generated: ${dateTimeLabel(new Date())}`);
+  doc.moveDown(0.7);
+}
+
+function pdfMetrics(doc, report) {
+  const metrics = [
+    ["Customers", report.summary.customer_count],
+    ["Sales", report.summary.sales_count],
+    ["Total Sales", money(report.summary.total_sales)],
+    ["Received", money(report.summary.total_received)],
+    ["Outstanding", money(report.summary.outstanding_balance)],
+  ];
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const cellWidth = width / metrics.length;
+  const y = doc.y;
+  metrics.forEach(([label, value], index) => {
+    const x = doc.page.margins.left + index * cellWidth;
+    doc.rect(x, y, cellWidth, 42).fillAndStroke(index % 2 ? "#ffffff" : "#f1f5f9", "#cbd5e1");
+    doc.fillColor("#64748b").font("Helvetica-Bold").fontSize(6.8);
+    doc.text(label, x + 4, y + 7, { width: cellWidth - 8, align: "center" });
+    doc.fillColor("#173b68").fontSize(8.3);
+    doc.text(String(value), x + 4, y + 23, { width: cellWidth - 8, align: "center" });
+  });
+  doc.y = y + 52;
+}
+
+function drawStatementPdf(doc, report) {
+  const title = "Filtered Customer Statement";
+  pdfHeader(doc, report, title);
+  pdfMeta(doc, report);
+  pdfMetrics(doc, report);
+
+  report.customers.forEach((customer, customerIndex) => {
+    ensurePdfSpace(doc, report, title, 80);
+    if (customerIndex > 0) doc.moveDown(0.25);
+    const y = doc.y;
+    doc.rect(doc.page.margins.left, y, 507, 30).fill("#173b68");
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(10);
+    doc.text(
+      `${customer.customer_name}${customer.customer_phone ? ` • ${customer.customer_phone}` : ""}`,
+      doc.page.margins.left + 8,
+      y + 7,
+      { width: 330 }
+    );
+    doc.fontSize(8.2).text(
+      `Sales ${money(customer.total_sales)} • Balance ${money(customer.outstanding_balance)}`,
+      doc.page.margins.left + 342,
+      y + 8,
+      { width: 157, align: "right" }
+    );
+    doc.y = y + 38;
+
+    const customerTransactions = report.transactions.filter((row) => row.customer_key === customer.customer_key);
+    customerTransactions.forEach((row) => {
+      ensurePdfSpace(doc, report, title, row.items?.length ? 62 + row.items.length * 11 : 44);
+      doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(8);
+      doc.text(
+        `${dateTimeLabel(row.date)} | ${row.type.replace(/_/g, " ").toUpperCase()} | ${row.receipt_number}`
+      );
+      doc.fillColor("#475569").font("Helvetica").fontSize(7.6);
+      doc.text(
+        `${row.description || "-"} | Amount ${money(row.amount)} | Paid ${money(row.paid)} | Balance ${money(row.balance)} | ${row.status}`
+      );
+      (row.items || []).forEach((item) => {
+        doc.text(
+          `• ${item.product_name} — Qty ${item.quantity} × ${money(item.unit_price)} = ${money(item.line_total)}`,
+          { indent: 10 }
+        );
+      });
+      doc.moveDown(0.35);
+    });
+  });
+
+  if (report.customers.length === 0) {
+    doc.fillColor("#64748b").font("Helvetica-Oblique").fontSize(10);
+    doc.text("No records matched the applied filters.", { align: "center" });
+  }
+}
+
+function drawDebtPdf(doc, report) {
+  const title = "Filtered Customer Debt Report";
