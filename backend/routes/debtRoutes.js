@@ -4,6 +4,8 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { markClosingStale } = require("../services/dailyClosingSecurityService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validateDebtPaymentRequest } = require("../validation/requestValidators");
 
 const router = express.Router();
 
@@ -343,24 +345,21 @@ router.get("/:id", requireAuth, async (req, res) => {
 });
 
 // POST /api/debts/:id/payments
-router.post("/:id/payments", requireAuth, async (req, res) => {
+router.post(
+  "/:id/payments",
+  requireAuth,
+  validateRequest(validateDebtPaymentRequest),
+  async (req, res) => {
   const connection = await pool.getConnection();
 
   try {
     const branchId = getBranchId(req);
-    const { id } = req.params;
-    const { amount, payment_method, notes } = req.body;
-
-    const paymentAmount = toPositiveMoney(amount);
-    const cleanMethod = cleanPaymentMethod(payment_method);
-    const cleanNotes = cleanText(notes);
-
-    if (paymentAmount === null) {
-      return res.status(400).json({
-        status: "error",
-        message: "Payment amount must be greater than zero.",
-      });
-    }
+    const { id } = req.validated.params;
+    const {
+      amount: paymentAmount,
+      payment_method: cleanMethod,
+      notes: cleanNotes,
+    } = req.validated.body;
 
     await connection.beginTransaction();
 
