@@ -149,6 +149,7 @@ shutil.rmtree(ROOT / ".release-parts")
 for relative_path in [
     ".github/workflows/temp-finalize-extraordinary-statements.yml",
     ".github/workflows/temp-finalize-extraordinary-statements-pr.yml",
+    ".github/workflows/temp-diagnose-extraordinary-statements.yml",
     "scripts/finalizeExtraordinaryStatements.py",
 ]:
     path = ROOT / relative_path
