@@ -10,6 +10,11 @@ const {
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const {
+  validateBackupDryRunRequest,
+  validateBackupRestoreRequest,
+} = require("../validation/requestValidators");
 
 const router = express.Router();
 
@@ -754,11 +759,12 @@ router.post(
   "/restore/dry-run",
   requireAuth,
   requireOriginalSystemAdministrator,
+  validateRequest(validateBackupDryRunRequest),
   async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-      const backup = req.body?.backup || req.body;
+      const backup = req.validated.backup;
       const report = await validateBackupForRestore(connection, backup);
 
       return res.status(report.valid ? 200 : 400).json({
@@ -788,15 +794,18 @@ router.post(
 );
 
 // POST /api/backups/restore
-router.post("/restore", requireAuth, requireOriginalSystemAdministrator, async (req, res) => {
+router.post(
+  "/restore",
+  requireAuth,
+  requireOriginalSystemAdministrator,
+  validateRequest(validateBackupRestoreRequest),
+  async (req, res) => {
   const connection = await pool.getConnection();
   let transactionStarted = false;
 
   try {
     const branchId = getBranchId(req);
-    const payload = req.body;
-    const confirmation = payload?.confirmation || payload?.restore_confirmation;
-    const backup = payload?.backup || payload;
+    const { backup, confirmation } = req.validated;
 
     if (String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() !== "true") {
       return res.status(403).json({
