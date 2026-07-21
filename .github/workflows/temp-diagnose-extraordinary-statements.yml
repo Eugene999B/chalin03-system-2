@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   diagnose:
-    name: Identify finalizer verification failure
+    name: Capture finalizer exception
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -20,39 +20,39 @@ jobs:
           ref: agent/extraordinary-customer-statements-sidebar
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Assemble and integrate source
-        run: python3 scripts/finalizeExtraordinaryStatements.py
-
-      - name: Check diff formatting
-        run: git diff --check
-
-      - name: Check workspace route syntax
-        run: node --check backend/routes/customerStatementWorkspaceRoutes.js
-
-      - name: Check server syntax
-        run: node --check backend/server.js
-
-      - name: Test unified filter dataset
-        run: node --test --test-name-pattern="customer statement uses one filter-driven report dataset" backend/tests/customerStatementWorkspace.test.js
-
-      - name: Test redesigned statement views
-        run: node --test --test-name-pattern="the redesigned page shows filtered views and purchased items" backend/tests/customerStatementWorkspace.test.js
-
-      - name: Test filtered exports
-        run: node --test --test-name-pattern="exports use the same filters for print PDF Word and Excel" backend/tests/customerStatementWorkspace.test.js
-
-      - name: Test compact sidebar
-        run: node --test --test-name-pattern="desktop sidebar removes duplicate command card and uses compact sections" backend/tests/customerStatementWorkspace.test.js
-
-      - name: Check temporary-file cleanup
+      - name: Run finalizer and capture exception
+        id: finalizer
         shell: bash
         run: |
-          test ! -e .release-parts
-          test ! -e scripts/finalizeExtraordinaryStatements.py
-          test ! -e .github/workflows/temp-finalize-extraordinary-statements.yml
-          test ! -e .github/workflows/temp-finalize-extraordinary-statements-pr.yml
+          set +e
+          mkdir -p diagnostic-output
+          python3 scripts/finalizeExtraordinaryStatements.py > diagnostic-output/finalizer.log 2>&1
+          status=$?
+          echo "exit_code=${status}" >> "$GITHUB_OUTPUT"
+          cat diagnostic-output/finalizer.log
+          exit 0
+
+      - name: Record source state
+        shell: bash
+        run: |
+          {
+            echo "Finalizer exit: ${{ steps.finalizer.outputs.exit_code }}"
+            echo
+            echo "Git status:"
+            git status --short
+            echo
+            echo "Relevant paths:"
+            find .release-parts scripts .github/workflows -maxdepth 2 -type f 2>/dev/null | sort
+          } > diagnostic-output/state.txt
+
+      - name: Upload diagnostic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: extraordinary-statements-finalizer-diagnostic
+          path: diagnostic-output
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Fail after evidence upload
+        shell: bash
+        run: test "${{ steps.finalizer.outputs.exit_code }}" = "0"
