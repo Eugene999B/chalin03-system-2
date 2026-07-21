@@ -1,0 +1,120 @@
+  if (Number.isNaN(date.getTime())) return cleanText(value, 60) || "-";
+  return date.toLocaleString("en-GB");
+}
+
+function periodLabel(filters) {
+  if (filters.from && filters.to) return `${dateLabel(filters.from)} to ${dateLabel(filters.to)}`;
+  if (filters.from) return `From ${dateLabel(filters.from)}`;
+  if (filters.to) return `Up to ${dateLabel(filters.to)}`;
+  return "All available dates";
+}
+
+function customerKey(record) {
+  const id = positiveId(record?.customer_id);
+  if (id) return `id:${id}`;
+  const phone = cleanText(record?.customer_phone, 80).toLowerCase();
+  if (phone) return `phone:${phone}`;
+  return `name:${cleanText(record?.customer_name || "Customer", 180).toLowerCase()}`;
+}
+
+function isValidSale(sale) {
+  const status = cleanText(sale?.sale_status, 30).toLowerCase();
+  return Number(sale?.is_voided || 0) !== 1 && !["cancelled", "voided"].includes(status);
+}
+
+function safeFilename(value) {
+  return cleanText(value, 180)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "report";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function loadFilteredData(req) {
+  const branch = branchInfo(req);
+  if (!branch.id) {
+    const error = new Error("No store was selected for this session.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const filters = parseFilters(req);
+
+  const saleParams = [branch.id];
+  let saleSql = `
+    SELECT
+      s.id,
+      s.customer_id,
+      s.customer_name,
+      s.customer_phone,
+      s.receipt_number,
+      s.subtotal,
+      s.discount_amount,
+      s.tax_amount,
+      s.total,
+      s.payment_type,
+      s.amount_paid,
+      s.balance,
+      s.sale_status,
+      s.is_voided,
+      s.created_at,
+      u.full_name AS staff_name
+    FROM sales s
+    LEFT JOIN users u ON u.id = s.staff_id
+    WHERE s.branch_id = ?
+  `;
+  saleSql = appendDateFilter(saleSql, saleParams, "s", "created_at", filters);
+  saleSql = appendCustomerFilter(saleSql, saleParams, "s", filters);
+  saleSql += ` ORDER BY s.created_at DESC, s.id DESC LIMIT ${MAX_ROWS}`;
+
+  const debtParams = [branch.id];
+  let debtSql = `
+    SELECT
+      d.id,
+      d.customer_id,
+      d.customer_name,
+      d.customer_phone,
+      d.sale_id,
+      d.amount_owed,
+      d.amount_paid,
+      d.balance,
+      d.status,
+      d.due_date,
+      d.created_at,
+      s.receipt_number
+    FROM debts d
+    LEFT JOIN sales s ON s.id = d.sale_id AND s.branch_id = d.branch_id
+    WHERE d.branch_id = ?
+  `;
+  debtSql = appendDateFilter(debtSql, debtParams, "d", "created_at", filters);
+  debtSql = appendCustomerFilter(debtSql, debtParams, "d", filters);
+  if (filters.debtStatus) {
+    if (filters.debtStatus === "overdue") {
+      debtSql += " AND d.balance > 0 AND d.due_date IS NOT NULL AND DATE(d.due_date) < CURRENT_DATE";
+    } else {
+      debtSql += " AND LOWER(COALESCE(d.status, '')) = ?";
+      debtParams.push(filters.debtStatus);
+    }
+  }
+  debtSql += ` ORDER BY d.created_at DESC, d.id DESC LIMIT ${MAX_ROWS}`;
+
+  const paymentParams = [branch.id];
+  let paymentSql = `
+    SELECT
+      dp.id,
+      dp.debt_id,
+      dp.amount,
+      dp.payment_method,
+      dp.paid_at,
+      dp.notes,
+      d.customer_id,
+      d.customer_name,
