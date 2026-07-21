@@ -1,0 +1,930 @@
+name: Finalize Critical Request Validation
+
+on:
+  push:
+    branches:
+      - agent/critical-request-validation
+    paths:
+      - .github/workflows/finalize-critical-request-validation.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-critical-request-validation
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: Apply and verify centralized validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out validation branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/critical-request-validation
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply centralized validation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path.cwd()
+
+          validation_middleware = r'''
+          function validateRequest(validator) {
+            if (typeof validator !== "function") {
+              throw new TypeError("A request validator function is required.");
+            }
+
+            return function requestValidationMiddleware(req, res, next) {
+              const result = validator({
+                params: req.params,
+                query: req.query,
+                body: req.body,
+              });
+
+              if (!result || result.ok !== true) {
+                const errors = Array.isArray(result?.errors) ? result.errors : [];
+                const firstMessage =
+                  errors[0]?.message || "The request contains invalid data.";
+
+                return res.status(400).json({
+                  status: "error",
+                  code: "REQUEST_VALIDATION_FAILED",
+                  message: firstMessage,
+                  validation_errors: errors,
+                });
+              }
+
+              req.validated = {
+                ...(req.validated || {}),
+                ...(result.value || {}),
+              };
+
+              return next();
+            };
+          }
+
+          module.exports = {
+            validateRequest,
+          };
+          '''
+
+          validators = r'''
+          const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
+          const PAYMENT_METHODS = new Set(["cash", "momo", "bank"]);
+          const RESERVED_OBJECT_KEYS = new Set([
+            "__proto__",
+            "prototype",
+            "constructor",
+          ]);
+          const SAFE_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_]+$/;
+          const MONEY_PATTERN = /^\d{1,9}(?:\.\d{1,2})?$/;
+          const CHECKSUM_PATTERN = /^[a-f0-9]{64}$/i;
+          const MAX_PAYMENT_AMOUNT = 999999999.99;
+          const MAX_NOTES_LENGTH = 500;
+          const MAX_BACKUP_TABLES = 500;
+          const MAX_BACKUP_ROWS = 5000000;
+
+          function isPlainObject(value) {
+            return (
+              value !== null &&
+              typeof value === "object" &&
+              !Array.isArray(value) &&
+              Object.getPrototypeOf(value) === Object.prototype
+            );
+          }
+
+          function hasOwn(value, key) {
+            return Object.prototype.hasOwnProperty.call(value, key);
+          }
+
+          function addError(errors, field, message, code = "INVALID_VALUE") {
+            errors.push({ field, code, message });
+          }
+
+          function success(value) {
+            return { ok: true, value, errors: [] };
+          }
+
+          function failure(errors) {
+            return { ok: false, value: null, errors };
+          }
+
+          function parsePositiveInteger(value) {
+            const normalized = String(value ?? "").trim();
+
+            if (!/^\d+$/.test(normalized)) {
+              return null;
+            }
+
+            const number = Number(normalized);
+            return Number.isSafeInteger(number) && number > 0 ? number : null;
+          }
+
+          function parseMoney(value) {
+            const normalized = String(value ?? "").trim();
+
+            if (!MONEY_PATTERN.test(normalized)) {
+              return null;
+            }
+
+            const number = Number(normalized);
+            if (!Number.isFinite(number) || number <= 0 || number > MAX_PAYMENT_AMOUNT) {
+              return null;
+            }
+
+            return Number(number.toFixed(2));
+          }
+
+          function unknownKeys(object, allowedKeys) {
+            return Object.keys(object).filter((key) => !allowedKeys.has(key));
+          }
+
+          function validateDebtPaymentRequest({ params, body }) {
+            const errors = [];
+            const debtId = parsePositiveInteger(params?.id);
+
+            if (debtId === null) {
+              addError(
+                errors,
+                "params.id",
+                "Debt ID must be a positive whole number.",
+                "INVALID_DEBT_ID"
+              );
+            }
+
+            if (!isPlainObject(body)) {
+              addError(
+                errors,
+                "body",
+                "Payment details must be sent as a JSON object.",
+                "INVALID_JSON_OBJECT"
+              );
+              return failure(errors);
+            }
+
+            const allowedKeys = new Set(["amount", "payment_method", "notes"]);
+            for (const key of unknownKeys(body, allowedKeys)) {
+              addError(
+                errors,
+                `body.${key}`,
+                `Unknown payment field: ${key}.`,
+                "UNKNOWN_FIELD"
+              );
+            }
+
+            const amount = parseMoney(body.amount);
+            if (amount === null) {
+              addError(
+                errors,
+                "body.amount",
+                "Payment amount must be greater than zero and contain no more than two decimal places.",
+                "INVALID_PAYMENT_AMOUNT"
+              );
+            }
+
+            const rawMethod = body.payment_method;
+            const paymentMethod =
+              rawMethod === undefined || rawMethod === null || rawMethod === ""
+                ? "cash"
+                : String(rawMethod).trim().toLowerCase();
+
+            if (!PAYMENT_METHODS.has(paymentMethod)) {
+              addError(
+                errors,
+                "body.payment_method",
+                "Payment method must be cash, momo or bank.",
+                "INVALID_PAYMENT_METHOD"
+              );
+            }
+
+            let notes = null;
+            if (body.notes !== undefined && body.notes !== null) {
+              if (typeof body.notes !== "string") {
+                addError(
+                  errors,
+                  "body.notes",
+                  "Payment notes must be text.",
+                  "INVALID_NOTES"
+                );
+              } else {
+                notes = body.notes.trim() || null;
+                if (notes && notes.length > MAX_NOTES_LENGTH) {
+                  addError(
+                    errors,
+                    "body.notes",
+                    `Payment notes cannot exceed ${MAX_NOTES_LENGTH} characters.`,
+                    "NOTES_TOO_LONG"
+                  );
+                }
+              }
+            }
+
+            if (errors.length > 0) {
+              return failure(errors);
+            }
+
+            return success({
+              params: { id: debtId },
+              body: {
+                amount,
+                payment_method: paymentMethod,
+                notes,
+              },
+            });
+          }
+
+          function validateIdentifier(value, field, errors) {
+            const normalized = String(value ?? "");
+
+            if (
+              !SAFE_IDENTIFIER_PATTERN.test(normalized) ||
+              RESERVED_OBJECT_KEYS.has(normalized)
+            ) {
+              addError(
+                errors,
+                field,
+                `${field} contains an unsafe identifier.`,
+                "UNSAFE_IDENTIFIER"
+              );
+              return false;
+            }
+
+            return true;
+          }
+
+          function validateBackupShape(backup, errors) {
+            if (!isPlainObject(backup)) {
+              addError(
+                errors,
+                "backup",
+                "Backup data must be a JSON object.",
+                "INVALID_BACKUP_OBJECT"
+              );
+              return;
+            }
+
+            for (const key of Object.keys(backup)) {
+              if (RESERVED_OBJECT_KEYS.has(key)) {
+                addError(
+                  errors,
+                  `backup.${key}`,
+                  "Backup data contains a reserved object key.",
+                  "RESERVED_OBJECT_KEY"
+                );
+              }
+            }
+
+            if (backup.backup_type !== "full_system_backup") {
+              addError(
+                errors,
+                "backup.backup_type",
+                "Only a Chalin 03 full-system backup can be validated or restored.",
+                "INVALID_BACKUP_TYPE"
+              );
+            }
+
+            if (!isPlainObject(backup.tables)) {
+              addError(
+                errors,
+                "backup.tables",
+                "Backup tables must be a JSON object.",
+                "INVALID_BACKUP_TABLES"
+              );
+              return;
+            }
+
+            const tableNames = Object.keys(backup.tables);
+            if (tableNames.length === 0) {
+              addError(
+                errors,
+                "backup.tables",
+                "Backup does not contain any tables.",
+                "EMPTY_BACKUP"
+              );
+            }
+
+            if (tableNames.length > MAX_BACKUP_TABLES) {
+              addError(
+                errors,
+                "backup.tables",
+                `Backup cannot contain more than ${MAX_BACKUP_TABLES} tables.`,
+                "TOO_MANY_TABLES"
+              );
+            }
+
+            let totalRows = 0;
+            for (const tableName of tableNames) {
+              if (!validateIdentifier(tableName, `backup.tables.${tableName}`, errors)) {
+                continue;
+              }
+
+              const rows = backup.tables[tableName];
+              if (!Array.isArray(rows)) {
+                addError(
+                  errors,
+                  `backup.tables.${tableName}`,
+                  `Backup table ${tableName} must contain an array of rows.`,
+                  "INVALID_TABLE_ROWS"
+                );
+                continue;
+              }
+
+              totalRows += rows.length;
+              if (totalRows > MAX_BACKUP_ROWS) {
+                addError(
+                  errors,
+                  "backup.tables",
+                  `Backup cannot contain more than ${MAX_BACKUP_ROWS} total rows.`,
+                  "TOO_MANY_ROWS"
+                );
+                break;
+              }
+
+              for (let index = 0; index < rows.length; index += 1) {
+                const row = rows[index];
+                if (!isPlainObject(row)) {
+                  addError(
+                    errors,
+                    `backup.tables.${tableName}[${index}]`,
+                    "Every backup row must be a JSON object.",
+                    "INVALID_BACKUP_ROW"
+                  );
+                  continue;
+                }
+
+                for (const columnName of Object.keys(row)) {
+                  validateIdentifier(
+                    columnName,
+                    `backup.tables.${tableName}[${index}].${columnName}`,
+                    errors
+                  );
+                }
+              }
+            }
+
+            if (
+              backup.checksum_sha256 !== undefined &&
+              backup.checksum_sha256 !== null &&
+              !CHECKSUM_PATTERN.test(String(backup.checksum_sha256).trim())
+            ) {
+              addError(
+                errors,
+                "backup.checksum_sha256",
+                "Backup checksum must be a 64-character SHA-256 value.",
+                "INVALID_CHECKSUM"
+              );
+            }
+
+            if (backup.included_tables !== undefined) {
+              if (!Array.isArray(backup.included_tables)) {
+                addError(
+                  errors,
+                  "backup.included_tables",
+                  "Included tables must be an array.",
+                  "INVALID_INCLUDED_TABLES"
+                );
+              } else {
+                const seen = new Set();
+                for (let index = 0; index < backup.included_tables.length; index += 1) {
+                  const tableName = backup.included_tables[index];
+                  validateIdentifier(
+                    tableName,
+                    `backup.included_tables[${index}]`,
+                    errors
+                  );
+                  if (seen.has(tableName)) {
+                    addError(
+                      errors,
+                      `backup.included_tables[${index}]`,
+                      `Duplicate included table: ${tableName}.`,
+                      "DUPLICATE_TABLE"
+                    );
+                  }
+                  seen.add(tableName);
+                }
+              }
+            }
+
+            if (backup.table_counts !== undefined) {
+              if (!isPlainObject(backup.table_counts)) {
+                addError(
+                  errors,
+                  "backup.table_counts",
+                  "Backup table counts must be a JSON object.",
+                  "INVALID_TABLE_COUNTS"
+                );
+              } else {
+                for (const [tableName, value] of Object.entries(backup.table_counts)) {
+                  validateIdentifier(tableName, `backup.table_counts.${tableName}`, errors);
+                  const count = Number(value);
+                  if (!Number.isSafeInteger(count) || count < 0) {
+                    addError(
+                      errors,
+                      `backup.table_counts.${tableName}`,
+                      "Backup table counts must be non-negative whole numbers.",
+                      "INVALID_TABLE_COUNT"
+                    );
+                  }
+                }
+              }
+            }
+
+            if (backup.total_record_count !== undefined) {
+              const totalRecordCount = Number(backup.total_record_count);
+              if (!Number.isSafeInteger(totalRecordCount) || totalRecordCount < 0) {
+                addError(
+                  errors,
+                  "backup.total_record_count",
+                  "Total record count must be a non-negative whole number.",
+                  "INVALID_TOTAL_RECORD_COUNT"
+                );
+              }
+            }
+
+            if (
+              backup.created_at !== undefined &&
+              Number.isNaN(new Date(backup.created_at).getTime())
+            ) {
+              addError(
+                errors,
+                "backup.created_at",
+                "Backup creation date is invalid.",
+                "INVALID_BACKUP_DATE"
+              );
+            }
+          }
+
+          function validateBackupEnvelope({ body, requireConfirmation }) {
+            const errors = [];
+
+            if (!isPlainObject(body)) {
+              addError(
+                errors,
+                "body",
+                "Backup request must be sent as a JSON object.",
+                "INVALID_JSON_OBJECT"
+              );
+              return failure(errors);
+            }
+
+            const wrapped = hasOwn(body, "backup");
+            let backup = body;
+
+            if (wrapped) {
+              const allowedEnvelopeKeys = new Set([
+                "backup",
+                "confirmation",
+                "restore_confirmation",
+              ]);
+
+              for (const key of unknownKeys(body, allowedEnvelopeKeys)) {
+                addError(
+                  errors,
+                  `body.${key}`,
+                  `Unknown backup request field: ${key}.`,
+                  "UNKNOWN_FIELD"
+                );
+              }
+
+              backup = body.backup;
+            }
+
+            const confirmation = body.confirmation ?? body.restore_confirmation;
+            if (
+              hasOwn(body, "confirmation") &&
+              hasOwn(body, "restore_confirmation") &&
+              body.confirmation !== body.restore_confirmation
+            ) {
+              addError(
+                errors,
+                "body.confirmation",
+                "Restore confirmation fields do not match.",
+                "CONFIRMATION_MISMATCH"
+              );
+            }
+
+            if (requireConfirmation && confirmation !== RESTORE_CONFIRMATION_TEXT) {
+              addError(
+                errors,
+                "body.confirmation",
+                "Restore confirmation is required. Type RESTORE_FULL_SYSTEM_BACKUP before restoring.",
+                "RESTORE_CONFIRMATION_REQUIRED"
+              );
+            }
+
+            validateBackupShape(backup, errors);
+
+            if (errors.length > 0) {
+              return failure(errors);
+            }
+
+            return success({
+              backup,
+              confirmation: confirmation || null,
+            });
+          }
+
+          function validateBackupDryRunRequest({ body }) {
+            return validateBackupEnvelope({ body, requireConfirmation: false });
+          }
+
+          function validateBackupRestoreRequest({ body }) {
+            return validateBackupEnvelope({ body, requireConfirmation: true });
+          }
+
+          module.exports = {
+            MAX_BACKUP_ROWS,
+            MAX_BACKUP_TABLES,
+            MAX_NOTES_LENGTH,
+            MAX_PAYMENT_AMOUNT,
+            RESTORE_CONFIRMATION_TEXT,
+            isPlainObject,
+            parseMoney,
+            parsePositiveInteger,
+            validateBackupDryRunRequest,
+            validateBackupRestoreRequest,
+            validateDebtPaymentRequest,
+          };
+          '''
+
+          tests = r'''
+          const assert = require("node:assert/strict");
+          const test = require("node:test");
+
+          const { validateRequest } = require("../middleware/requestValidationMiddleware");
+          const {
+            validateBackupDryRunRequest,
+            validateBackupRestoreRequest,
+            validateDebtPaymentRequest,
+          } = require("../validation/requestValidators");
+
+          function validBackup(overrides = {}) {
+            return {
+              backup_type: "full_system_backup",
+              created_at: "2026-07-21T18:00:00.000Z",
+              included_tables: ["branches"],
+              table_counts: { branches: 1 },
+              total_record_count: 1,
+              tables: {
+                branches: [{ id: 1, name: "Main" }],
+              },
+              ...overrides,
+            };
+          }
+
+          test("debt payment validator sanitizes a valid request", () => {
+            const result = validateDebtPaymentRequest({
+              params: { id: "17" },
+              body: {
+                amount: "125.50",
+                payment_method: " MoMo ",
+                notes: " Customer paid at counter ",
+              },
+            });
+
+            assert.equal(result.ok, true);
+            assert.deepEqual(result.value, {
+              params: { id: 17 },
+              body: {
+                amount: 125.5,
+                payment_method: "momo",
+                notes: "Customer paid at counter",
+              },
+            });
+          });
+
+          test("debt payment validator preserves cash as the default", () => {
+            const result = validateDebtPaymentRequest({
+              params: { id: 2 },
+              body: { amount: 10 },
+            });
+
+            assert.equal(result.ok, true);
+            assert.equal(result.value.body.payment_method, "cash");
+            assert.equal(result.value.body.notes, null);
+          });
+
+          test("debt payment validator rejects invalid method and unknown fields", () => {
+            const result = validateDebtPaymentRequest({
+              params: { id: "2" },
+              body: {
+                amount: "10.00",
+                payment_method: "crypto",
+                branch_id: 99,
+              },
+            });
+
+            assert.equal(result.ok, false);
+            assert.ok(result.errors.some((error) => error.code === "INVALID_PAYMENT_METHOD"));
+            assert.ok(result.errors.some((error) => error.code === "UNKNOWN_FIELD"));
+          });
+
+          test("debt payment validator rejects exponent notation and invalid IDs", () => {
+            const result = validateDebtPaymentRequest({
+              params: { id: "1 OR 1=1" },
+              body: { amount: "1e3" },
+            });
+
+            assert.equal(result.ok, false);
+            assert.ok(result.errors.some((error) => error.code === "INVALID_DEBT_ID"));
+            assert.ok(result.errors.some((error) => error.code === "INVALID_PAYMENT_AMOUNT"));
+          });
+
+          test("backup dry-run accepts direct and wrapped full-system backups", () => {
+            const direct = validateBackupDryRunRequest({ body: validBackup() });
+            const wrapped = validateBackupDryRunRequest({
+              body: { backup: validBackup() },
+            });
+
+            assert.equal(direct.ok, true);
+            assert.equal(wrapped.ok, true);
+            assert.equal(wrapped.value.backup.backup_type, "full_system_backup");
+          });
+
+          test("backup validator rejects unsafe table and row identifiers", () => {
+            const result = validateBackupDryRunRequest({
+              body: validBackup({
+                tables: {
+                  "branches; DROP TABLE users": [{ "__proto__": "unsafe" }],
+                },
+              }),
+            });
+
+            assert.equal(result.ok, false);
+            assert.ok(result.errors.some((error) => error.code === "UNSAFE_IDENTIFIER"));
+          });
+
+          test("backup validator rejects non-array table rows and invalid checksum", () => {
+            const result = validateBackupDryRunRequest({
+              body: validBackup({
+                checksum_sha256: "not-a-checksum",
+                tables: { branches: { id: 1 } },
+              }),
+            });
+
+            assert.equal(result.ok, false);
+            assert.ok(result.errors.some((error) => error.code === "INVALID_TABLE_ROWS"));
+            assert.ok(result.errors.some((error) => error.code === "INVALID_CHECKSUM"));
+          });
+
+          test("restore validator requires the exact confirmation phrase", () => {
+            const missing = validateBackupRestoreRequest({
+              body: { backup: validBackup() },
+            });
+            const accepted = validateBackupRestoreRequest({
+              body: {
+                confirmation: "RESTORE_FULL_SYSTEM_BACKUP",
+                backup: validBackup(),
+              },
+            });
+
+            assert.equal(missing.ok, false);
+            assert.ok(
+              missing.errors.some(
+                (error) => error.code === "RESTORE_CONFIRMATION_REQUIRED"
+              )
+            );
+            assert.equal(accepted.ok, true);
+          });
+
+          test("restore validator rejects conflicting confirmation fields", () => {
+            const result = validateBackupRestoreRequest({
+              body: {
+                confirmation: "RESTORE_FULL_SYSTEM_BACKUP",
+                restore_confirmation: "WRONG",
+                backup: validBackup(),
+              },
+            });
+
+            assert.equal(result.ok, false);
+            assert.ok(result.errors.some((error) => error.code === "CONFIRMATION_MISMATCH"));
+          });
+
+          test("request middleware returns 400 and never calls next on invalid data", () => {
+            const middleware = validateRequest(validateDebtPaymentRequest);
+            const req = {
+              params: { id: "bad" },
+              query: {},
+              body: { amount: -1 },
+            };
+            let nextCalled = false;
+            let statusCode = null;
+            let responseBody = null;
+            const res = {
+              status(code) {
+                statusCode = code;
+                return this;
+              },
+              json(body) {
+                responseBody = body;
+                return body;
+              },
+            };
+
+            middleware(req, res, () => {
+              nextCalled = true;
+            });
+
+            assert.equal(nextCalled, false);
+            assert.equal(statusCode, 400);
+            assert.equal(responseBody.code, "REQUEST_VALIDATION_FAILED");
+            assert.ok(responseBody.validation_errors.length >= 2);
+          });
+
+          test("request middleware attaches sanitized values before next", () => {
+            const middleware = validateRequest(validateDebtPaymentRequest);
+            const req = {
+              params: { id: "3" },
+              query: {},
+              body: { amount: "20.00", payment_method: "BANK" },
+            };
+            let nextCalled = false;
+            const res = {
+              status() {
+                throw new Error("status should not be called");
+              },
+            };
+
+            middleware(req, res, () => {
+              nextCalled = true;
+            });
+
+            assert.equal(nextCalled, true);
+            assert.equal(req.validated.params.id, 3);
+            assert.equal(req.validated.body.amount, 20);
+            assert.equal(req.validated.body.payment_method, "bank");
+          });
+          '''
+
+          def write(path, content):
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
+
+          write(root / "backend/middleware/requestValidationMiddleware.js", validation_middleware)
+          write(root / "backend/validation/requestValidators.js", validators)
+          write(root / "backend/tests/requestValidation.test.js", tests)
+
+          debt_path = root / "backend/routes/debtRoutes.js"
+          debt = debt_path.read_text(encoding="utf-8")
+          debt_import = 'const { markClosingStale } = require("../services/dailyClosingSecurityService");\n'
+          debt_import_replacement = debt_import + '''const { validateRequest } = require("../middleware/requestValidationMiddleware");
+          const { validateDebtPaymentRequest } = require("../validation/requestValidators");
+          '''
+          debt_import_replacement = textwrap.dedent(debt_import_replacement)
+          if 'require("../validation/requestValidators")' not in debt:
+              if debt_import not in debt:
+                  raise SystemExit("Debt route import anchor not found")
+              debt = debt.replace(debt_import, debt_import_replacement, 1)
+
+          old_debt_route = 'router.post("/:id/payments", requireAuth, async (req, res) => {'
+          new_debt_route = '''router.post(
+            "/:id/payments",
+            requireAuth,
+            validateRequest(validateDebtPaymentRequest),
+            async (req, res) => {
+          '''
+          new_debt_route = textwrap.dedent(new_debt_route).rstrip()
+          if old_debt_route not in debt:
+              raise SystemExit("Debt payment route anchor not found")
+          debt = debt.replace(old_debt_route, new_debt_route, 1)
+
+          old_debt_body = '''    const branchId = getBranchId(req);
+              const { id } = req.params;
+              const { amount, payment_method, notes } = req.body;
+
+              const paymentAmount = toPositiveMoney(amount);
+              const cleanMethod = cleanPaymentMethod(payment_method);
+              const cleanNotes = cleanText(notes);
+
+              if (paymentAmount === null) {
+                return res.status(400).json({
+                  status: "error",
+                  message: "Payment amount must be greater than zero.",
+                });
+              }
+          '''
+          old_debt_body = textwrap.dedent(old_debt_body)
+          new_debt_body = '''    const branchId = getBranchId(req);
+              const { id } = req.validated.params;
+              const {
+                amount: paymentAmount,
+                payment_method: cleanMethod,
+                notes: cleanNotes,
+              } = req.validated.body;
+          '''
+          new_debt_body = textwrap.dedent(new_debt_body)
+          if old_debt_body not in debt:
+              raise SystemExit("Debt payment body anchor not found")
+          debt = debt.replace(old_debt_body, new_debt_body, 1)
+          debt_path.write_text(debt, encoding="utf-8")
+
+          backup_path = root / "backend/routes/backupRoutes.js"
+          backup = backup_path.read_text(encoding="utf-8")
+          backup_import = 'const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");\n'
+          backup_import_replacement = backup_import + '''const { validateRequest } = require("../middleware/requestValidationMiddleware");
+          const {
+            validateBackupDryRunRequest,
+            validateBackupRestoreRequest,
+          } = require("../validation/requestValidators");
+          '''
+          backup_import_replacement = textwrap.dedent(backup_import_replacement)
+          if 'validateBackupRestoreRequest' not in backup:
+              if backup_import not in backup:
+                  raise SystemExit("Backup route import anchor not found")
+              backup = backup.replace(backup_import, backup_import_replacement, 1)
+
+          old_dry_route = '''  requireAuth,
+            requireOriginalSystemAdministrator,
+            async (req, res) => {
+          '''
+          old_dry_route = textwrap.dedent(old_dry_route)
+          new_dry_route = '''  requireAuth,
+            requireOriginalSystemAdministrator,
+            validateRequest(validateBackupDryRunRequest),
+            async (req, res) => {
+          '''
+          new_dry_route = textwrap.dedent(new_dry_route)
+          if old_dry_route not in backup:
+              raise SystemExit("Backup dry-run middleware anchor not found")
+          backup = backup.replace(old_dry_route, new_dry_route, 1)
+          backup = backup.replace(
+              '      const backup = req.body?.backup || req.body;\n',
+              '      const backup = req.validated.backup;\n',
+              1,
+          )
+
+          old_restore_route = 'router.post("/restore", requireAuth, requireOriginalSystemAdministrator, async (req, res) => {'
+          new_restore_route = '''router.post(
+            "/restore",
+            requireAuth,
+            requireOriginalSystemAdministrator,
+            validateRequest(validateBackupRestoreRequest),
+            async (req, res) => {
+          '''
+          new_restore_route = textwrap.dedent(new_restore_route).rstrip()
+          if old_restore_route not in backup:
+              raise SystemExit("Backup restore route anchor not found")
+          backup = backup.replace(old_restore_route, new_restore_route, 1)
+
+          old_restore_body = '''    const branchId = getBranchId(req);
+              const payload = req.body;
+              const confirmation = payload?.confirmation || payload?.restore_confirmation;
+              const backup = payload?.backup || payload;
+          '''
+          old_restore_body = textwrap.dedent(old_restore_body)
+          new_restore_body = '''    const branchId = getBranchId(req);
+              const { backup, confirmation } = req.validated;
+          '''
+          new_restore_body = textwrap.dedent(new_restore_body)
+          if old_restore_body not in backup:
+              raise SystemExit("Backup restore body anchor not found")
+          backup = backup.replace(old_restore_body, new_restore_body, 1)
+          backup_path.write_text(backup, encoding="utf-8")
+          PY
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run focused validation checks
+        working-directory: backend
+        run: |
+          node --check middleware/requestValidationMiddleware.js
+          node --check validation/requestValidators.js
+          node --check routes/debtRoutes.js
+          node --check routes/backupRoutes.js
+          node --test tests/requestValidation.test.js
+
+      - name: Run complete backend verification
+        working-directory: backend
+        run: npm run syntax-check && npm test
+
+      - name: Check final source diff
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Remove finalizer and commit verified validation
+        shell: bash
+        run: |
+          rm .github/workflows/finalize-critical-request-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add critical request validation"
+          git push origin HEAD:agent/critical-request-validation
