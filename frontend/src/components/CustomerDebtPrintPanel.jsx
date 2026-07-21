@@ -7,16 +7,10 @@ function dateInputValue(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function defaultStartDate() {
+function defaultFromDate() {
   const date = new Date();
   date.setDate(date.getDate() - 30);
   return dateInputValue(date);
-}
-
-function customerKey(customer) {
-  if (customer?.customer_id) return `id:${customer.customer_id}`;
-  if (customer?.customer_phone) return `phone:${customer.customer_phone}`;
-  return `name:${customer?.customer_name || ""}`;
 }
 
 function getDispositionFilename(response, fallback) {
@@ -25,166 +19,104 @@ function getDispositionFilename(response, fallback) {
   return match?.[1] || fallback;
 }
 
+function downloadBlob(response, fallbackName) {
+  const blob = new Blob([response.data], {
+    type: response.headers?.["content-type"] || "application/octet-stream",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = getDispositionFilename(response, fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
 export default function CustomerDebtPrintPanel({
   currentStoreCode = "STORE",
   preferredCustomer = null,
+  reportType = "debt",
 }) {
-  const [reportType, setReportType] = useState("statement");
-  const [scope, setScope] = useState("selected");
-  const [from, setFrom] = useState(defaultStartDate);
-  const [to, setTo] = useState(() => dateInputValue(new Date()));
-  const [customers, setCustomers] = useState([]);
-  const [selectedKey, setSelectedKey] = useState("");
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
-  const [printing, setPrinting] = useState(false);
+  const preferredSearch = useMemo(
+    () =>
+      preferredCustomer?.customer_phone ||
+      preferredCustomer?.phone ||
+      preferredCustomer?.customer_name ||
+      preferredCustomer?.name ||
+      "",
+    [preferredCustomer]
+  );
+
+  const [filters, setFilters] = useState({
+    from: defaultFromDate(),
+    to: dateInputValue(new Date()),
+    customer: preferredSearch,
+    debt_status: "",
+  });
+  const [exporting, setExporting] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const selectedCustomer = useMemo(
-    () =>
-      customers.find((customer) => customerKey(customer) === selectedKey) || null,
-    [customers, selectedKey]
-  );
-
   useEffect(() => {
-    let cancelled = false;
+    if (!preferredSearch) return;
+    setFilters((current) => ({ ...current, customer: preferredSearch }));
+  }, [preferredSearch]);
 
-    async function loadCustomers() {
-      setLoadingCustomers(true);
-      setError("");
-      try {
-        const response = await axiosClient.get(
-          "/customer-debt-reports/customers",
-          {
-            params: {
-              report_type: reportType,
-              from,
-              to,
-            },
-          }
-        );
-
-        if (cancelled) return;
-        const nextCustomers = response.data.customers || [];
-        setCustomers(nextCustomers);
-
-        const preferredKey = preferredCustomer
-          ? customerKey({
-              customer_id: preferredCustomer.id || preferredCustomer.customer_id,
-              customer_name:
-                preferredCustomer.name || preferredCustomer.customer_name,
-              customer_phone:
-                preferredCustomer.phone || preferredCustomer.customer_phone,
-            })
-          : "";
-
-        if (
-          preferredKey &&
-          nextCustomers.some(
-            (customer) => customerKey(customer) === preferredKey
-          )
-        ) {
-          setSelectedKey(preferredKey);
-        } else {
-          setSelectedKey((current) =>
-            nextCustomers.some(
-              (customer) => customerKey(customer) === current
-            )
-              ? current
-              : customerKey(nextCustomers[0])
-          );
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setCustomers([]);
-          setSelectedKey("");
-          setError(
-            requestError.response?.data?.message ||
-              "Unable to load customers for the printable report."
-          );
-        }
-      } finally {
-        if (!cancelled) setLoadingCustomers(false);
-      }
-    }
-
-    loadCustomers();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reportType, from, to, preferredCustomer]);
-
-  async function openPrintablePdf() {
-    setMessage("");
+  async function createReport(format) {
     setError("");
+    setMessage("");
 
-    if (from && to && from > to) {
+    if (filters.from && filters.to && filters.from > filters.to) {
       setError("The start date cannot be after the end date.");
       return;
     }
 
-    if (scope === "selected" && !selectedCustomer) {
-      setError(
-        "Choose a customer or switch the customer scope to All Customers."
-      );
-      return;
-    }
-
-    setPrinting(true);
-
+    setExporting(format);
     try {
-      const params = {
-        report_type: reportType,
-        scope,
-        from,
-        to,
-      };
-
-      if (scope === "selected" && selectedCustomer) {
-        params.customer_id = selectedCustomer.customer_id || "";
-        params.name = selectedCustomer.customer_name || "";
-        params.phone = selectedCustomer.customer_phone || "";
-      }
-
-      const response = await axiosClient.get("/customer-debt-reports/pdf", {
-        params,
-        responseType: "blob",
-      });
-
-      const blobUrl = window.URL.createObjectURL(
-        new Blob([response.data], { type: "application/pdf" })
+      const response = await axiosClient.get(
+        `/customer-statement-workspace/export/${format}`,
+        {
+          params: {
+            report_type: reportType,
+            from: filters.from,
+            to: filters.to,
+            customer: filters.customer.trim(),
+            debt_status: reportType === "debt" ? filters.debt_status : "",
+          },
+          responseType: "blob",
+        }
       );
-      const filename = getDispositionFilename(
-        response,
-        `chalin03-${String(currentStoreCode).toLowerCase()}-${reportType}-report.pdf`
-      );
-      const printWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
 
-      if (!printWindow) {
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setMessage(
-          "Your browser blocked the print tab, so the PDF was downloaded. Open it and choose Print."
+      if (format === "print") {
+        const url = window.URL.createObjectURL(
+          new Blob([response.data], { type: "application/pdf" })
         );
+        const printWindow = window.open(url, "_blank", "noopener,noreferrer");
+        if (!printWindow) {
+          downloadBlob(response, `chalin03-${reportType}-report.pdf`);
+          setMessage(
+            "The browser blocked the print tab, so the PDF was downloaded. Open it and choose Print."
+          );
+        } else {
+          setMessage("The printer-ready filtered report opened in a new tab.");
+        }
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 120000);
       } else {
-        setMessage(
-          "Printable PDF opened. Use the PDF viewer's Print button to choose a printer."
+        const extension = format === "word" ? "doc" : format === "excel" ? "xlsx" : "pdf";
+        downloadBlob(
+          response,
+          `chalin03-${currentStoreCode.toLowerCase()}-${reportType}-report.${extension}`
         );
+        setMessage(`${format.toUpperCase()} downloaded using the filters shown here.`);
       }
-
-      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 120000);
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-          "Unable to generate the printable customer report."
+          "Unable to generate the filtered customer report."
       );
     } finally {
-      setPrinting(false);
+      setExporting("");
     }
   }
 
@@ -192,52 +124,27 @@ export default function CustomerDebtPrintPanel({
     <section className="customer-debt-print-panel">
       <div className="customer-debt-print-heading">
         <div>
-          <p>Customer Financial Printing</p>
-          <h2>Choose exactly what to print</h2>
+          <p>Filtered Financial Export</p>
+          <h2>{reportType === "debt" ? "Debt Report" : "Customer Statement"}</h2>
           <span>
-            Print a customer statement or debt report for a selected date range,
-            one customer or all customers in {currentStoreCode}.
+            Date only prints the whole date range. Adding a customer name or phone narrows that same result.
           </span>
         </div>
-        <div className="customer-debt-print-badge">PDF / Printer Ready</div>
+        <div className="customer-debt-print-badge">Screen Filters → Export</div>
       </div>
 
-      {message ? (
-        <div className="customer-debt-print-message success">{message}</div>
-      ) : null}
-      {error ? (
-        <div className="customer-debt-print-message error">{error}</div>
-      ) : null}
+      {message ? <div className="customer-debt-print-message success">{message}</div> : null}
+      {error ? <div className="customer-debt-print-message error">{error}</div> : null}
 
-      <div className="customer-debt-print-grid">
-        <label>
-          <span>Document Type</span>
-          <select
-            value={reportType}
-            onChange={(event) => setReportType(event.target.value)}
-          >
-            <option value="statement">Customer Statement</option>
-            <option value="debt">Debt Report</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Customer Scope</span>
-          <select
-            value={scope}
-            onChange={(event) => setScope(event.target.value)}
-          >
-            <option value="selected">Selected Customer</option>
-            <option value="all">All Customers</option>
-          </select>
-        </label>
-
+      <div className="customer-debt-print-grid customer-debt-print-grid-filtered">
         <label>
           <span>From Date</span>
           <input
             type="date"
-            value={from}
-            onChange={(event) => setFrom(event.target.value)}
+            value={filters.from}
+            onChange={(event) =>
+              setFilters((current) => ({ ...current, from: event.target.value }))
+            }
           />
         </label>
 
@@ -245,49 +152,61 @@ export default function CustomerDebtPrintPanel({
           <span>To Date</span>
           <input
             type="date"
-            value={to}
-            onChange={(event) => setTo(event.target.value)}
+            value={filters.to}
+            onChange={(event) =>
+              setFilters((current) => ({ ...current, to: event.target.value }))
+            }
           />
         </label>
 
         <label className="customer-debt-print-customer">
-          <span>Customer</span>
-          <select
-            value={selectedKey}
-            disabled={scope === "all" || loadingCustomers}
-            onChange={(event) => setSelectedKey(event.target.value)}
-          >
-            {customers.length === 0 ? (
-              <option value="">
-                {loadingCustomers
-                  ? "Loading customers..."
-                  : "No customers in this date range"}
-              </option>
-            ) : (
-              customers.map((customer) => (
-                <option
-                  key={customerKey(customer)}
-                  value={customerKey(customer)}
-                >
-                  {customer.customer_name || "Customer"}
-                  {customer.customer_phone
-                    ? ` — ${customer.customer_phone}`
-                    : ""}
-                </option>
-              ))
-            )}
-          </select>
+          <span>Customer Name or Phone</span>
+          <input
+            type="search"
+            value={filters.customer}
+            onChange={(event) =>
+              setFilters((current) => ({ ...current, customer: event.target.value }))
+            }
+            placeholder="Leave blank for all customers"
+          />
         </label>
 
-        <button type="button" onClick={openPrintablePdf} disabled={printing}>
-          {printing ? "Preparing PDF..." : "Open Printable PDF"}
+        {reportType === "debt" ? (
+          <label>
+            <span>Debt Status</span>
+            <select
+              value={filters.debt_status}
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, debt_status: event.target.value }))
+              }
+            >
+              <option value="">All Statuses</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partial">Partial</option>
+              <option value="paid">Paid</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </label>
+        ) : null}
+      </div>
+
+      <div className="customer-debt-export-actions">
+        <button type="button" onClick={() => createReport("print")} disabled={Boolean(exporting)}>
+          🖨️ {exporting === "print" ? "Opening..." : "Print"}
+        </button>
+        <button type="button" onClick={() => createReport("pdf")} disabled={Boolean(exporting)}>
+          📄 {exporting === "pdf" ? "Preparing..." : "PDF"}
+        </button>
+        <button type="button" onClick={() => createReport("word")} disabled={Boolean(exporting)}>
+          📝 {exporting === "word" ? "Preparing..." : "Word"}
+        </button>
+        <button type="button" onClick={() => createReport("excel")} disabled={Boolean(exporting)}>
+          📊 {exporting === "excel" ? "Preparing..." : "Excel"}
         </button>
       </div>
 
       <small className="customer-debt-print-note">
-        Customer Statements include every purchased item, quantity, unit price
-        and line total. Debt Reports show debt value, payments, balance, status
-        and due date.
+        The generated file contains the exact selected store, date range, customer search and debt status shown above.
       </small>
     </section>
   );
