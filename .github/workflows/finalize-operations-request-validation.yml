@@ -1,0 +1,186 @@
+name: Finalize Operations Request Validation
+
+on:
+  push:
+    branches:
+      - agent/operations-request-validation
+    paths:
+      - .github/workflows/finalize-operations-request-validation.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-operations-request-validation
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/operations-request-validation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Wire exact operations routes
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def one(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          def bounds(source, start_marker, end_marker=None):
+              start = source.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f"missing start marker: {start_marker!r}")
+              if end_marker is None:
+                  end = len(source)
+              else:
+                  end = source.find(end_marker, start + len(start_marker))
+                  if end < 0:
+                      raise SystemExit(f"missing end marker: {end_marker!r}")
+              return start, end, source[start:end]
+
+          def replace_block(source, start, end, block):
+              return source[:start] + block + source[end:]
+
+          purchase = Path("backend/routes/purchaseRoutes.js")
+          source = purchase.read_text()
+          source = one(
+              source,
+              'const { validatePurchasePaymentRequest } = require("../validation/financialRequestValidators");\n',
+              'const { validatePurchasePaymentRequest } = require("../validation/financialRequestValidators");\n'
+              'const { validatePurchaseCreateRequest } = require("../validation/operationsRequestValidators");\n',
+              "purchase import",
+          )
+          start, end, block = bounds(source, "// POST /api/purchases\nrouter.post(")
+          block = one(block, '  requireRole("admin", "manager"),\n  async (req, res) => {', '  requireRole("admin", "manager"),\n  validateRequest(validatePurchaseCreateRequest),\n  async (req, res) => {', "purchase middleware")
+          block = one(block, '      } = req.body;', '      } = req.validated.body;', "purchase body")
+          purchase.write_text(replace_block(source, start, end, block))
+
+          expense = Path("backend/routes/expenseRoutes.js")
+          source = expense.read_text()
+          source = one(
+              source,
+              'const { markClosingStale } = require("../services/dailyClosingSecurityService");\n',
+              'const { markClosingStale } = require("../services/dailyClosingSecurityService");\n'
+              'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
+              'const { validateExpenseCreateRequest } = require("../validation/operationsRequestValidators");\n',
+              "expense imports",
+          )
+          start, end, block = bounds(source, "// POST /api/expenses\nrouter.post(", "// DELETE /api/expenses/:id")
+          block = one(block, '  requireRole("admin", "manager"),\n  async (req, res) => {', '  requireRole("admin", "manager"),\n  validateRequest(validateExpenseCreateRequest),\n  async (req, res) => {', "expense middleware")
+          body_start = block.find('      const category = cleanText(req.body.category);')
+          body_end = block.find('\n\n      if (!category', body_start)
+          if body_start < 0 or body_end < 0:
+              raise SystemExit("expense body anchors missing")
+          clean = '''      const {
+              category,
+              description,
+              amount: cleanAmount,
+              payment_method: paymentMethod,
+              funding_source: fundingSource,
+              affects_daily_closing: affectsDailyClosing,
+              closing_treatment_note: closingTreatmentNote,
+              expense_date: expenseDate,
+            } = req.validated.body;'''
+          block = block[:body_start] + clean + block[body_end:]
+          expense.write_text(replace_block(source, start, end, block))
+
+          product = Path("backend/routes/productRoutes.js")
+          source = product.read_text()
+          source = one(
+              source,
+              'const { writeAuditEvent } = require("../services/auditTrailService");\n',
+              'const { writeAuditEvent } = require("../services/auditTrailService");\n'
+              'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
+              'const { validateStockAdjustmentRequest } = require("../validation/operationsRequestValidators");\n',
+              "product imports",
+          )
+          start, end, block = bounds(source, "// PATCH /api/products/:id/stock-adjustment\nrouter.patch(", "// DELETE /api/products/:id")
+          block = one(block, '  requireRole("admin", "manager"),\n  async (req, res) => {', '  requireRole("admin", "manager"),\n  validateRequest(validateStockAdjustmentRequest),\n  async (req, res) => {', "stock middleware")
+          block = one(block, '      const { id } = req.params;', '      const { id } = req.validated.params;', "stock params")
+          block = one(block, '      } = req.body;', '      } = req.validated.body;', "stock body")
+          product.write_text(replace_block(source, start, end, block))
+
+          transfer = Path("backend/routes/stockTransferRoutes.js")
+          source = transfer.read_text()
+          source = one(
+              source,
+              'const { requireAuth } = require("../middleware/authMiddleware");\n',
+              'const { requireAuth } = require("../middleware/authMiddleware");\n'
+              'const { validateRequest } = require("../middleware/requestValidationMiddleware");\n'
+              'const {\n'
+              '  validateStockTransferActionRequest,\n'
+              '  validateStockTransferCreateRequest,\n'
+              '} = require("../validation/operationsRequestValidators");\n',
+              "transfer imports",
+          )
+          start, end, block = bounds(source, 'router.post(\n  "/",', '\nrouter.post(\n  "/:id/approve",')
+          block = one(block, 'router.post(\n  "/",\n  asyncHandler(async (req, res) => {', 'router.post(\n  "/",\n  validateRequest(validateStockTransferCreateRequest),\n  asyncHandler(async (req, res) => {', "transfer create middleware")
+          body_start = block.find('    const fromBranchId = toPositiveInt(req.body.from_branch_id);')
+          body_end = block.find('\n\n    if (!fromBranchId', body_start)
+          if body_start < 0 or body_end < 0:
+              raise SystemExit("transfer create body anchors missing")
+          clean = '''    const {
+              from_branch_id: fromBranchId,
+              to_branch_id: toBranchId,
+              request_note: requestNote,
+              items,
+            } = req.validated.body;'''
+          block = block[:body_start] + clean + block[body_end:]
+          transfer.write_text(replace_block(source, start, end, block))
+
+          for action, note_key, variable in [
+              ("approve", "approval_note", "approvalNote"),
+              ("reject", "reject_note", "rejectNote"),
+              ("dispatch", "dispatch_note", "dispatchNote"),
+              ("receive", "receive_note", "receiveNote"),
+              ("cancel", "cancel_note", "cancelNote"),
+          ]:
+              source = transfer.read_text()
+              end_marker = None if action == "cancel" else "\nrouter."
+              start, end, block = bounds(source, f'router.post(\n  "/:id/{action}",', end_marker)
+              block = one(block, f'router.post(\n  "/:id/{action}",\n  asyncHandler(async (req, res) => {{', f'router.post(\n  "/:id/{action}",\n  validateRequest(validateStockTransferActionRequest("{action}")),\n  asyncHandler(async (req, res) => {{', f"{action} middleware")
+              block = one(block, '    const transferId = toPositiveInt(req.params.id);', '    const { id: transferId } = req.validated.params;', f"{action} params")
+              block = one(block, f'    const {variable} = cleanText(req.body.{note_key} || req.body.note);', f'    const {{ {note_key}: {variable} }} = req.validated.body;', f"{action} note")
+              transfer.write_text(replace_block(source, start, end, block))
+          PY
+
+      - name: Install and run focused checks
+        working-directory: backend
+        run: |
+          npm ci
+          node --check validation/operationsRequestValidators.js
+          node --check tests/operationsRequestValidation.test.js
+          node --check routes/purchaseRoutes.js
+          node --check routes/expenseRoutes.js
+          node --check routes/productRoutes.js
+          node --check routes/stockTransferRoutes.js
+          node --test tests/operationsRequestValidation.test.js
+
+      - name: Run complete backend verification
+        working-directory: backend
+        run: npm run syntax-check && npm test
+
+      - name: Publish verified source only
+        run: |
+          rm -f .github/operations-anchor-diagnostics.txt .github/operations-exact-patterns.txt
+          rm .github/workflows/finalize-operations-request-validation.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/purchaseRoutes.js backend/routes/expenseRoutes.js backend/routes/productRoutes.js backend/routes/stockTransferRoutes.js backend/validation/operationsRequestValidators.js backend/tests/operationsRequestValidation.test.js .github/operations-anchor-diagnostics.txt .github/operations-exact-patterns.txt .github/workflows/finalize-operations-request-validation.yml
+          git commit -m "validate purchases expenses stock and transfers"
+          git push origin HEAD:agent/operations-request-validation
