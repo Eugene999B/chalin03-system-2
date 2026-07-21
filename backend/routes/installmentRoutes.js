@@ -24,6 +24,8 @@ const {
   runInstallmentReminderSync,
   sendInstallmentEventSms,
 } = require("../services/installmentReminderService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validateInstallmentPaymentRequest } = require("../validation/financialRequestValidators");
 
 const router = express.Router();
 
@@ -563,11 +565,17 @@ router.post(
 router.post(
   "/agreements/:agreementId/payments",
   requirePermission("installments.collect"),
+  validateRequest(validateInstallmentPaymentRequest),
   async (req, res) => {
     const branchId = requireBranch(req, res);
-    const agreementId = positiveInteger(req.params.agreementId);
-    const amount = money(req.body?.amount);
-    const method = paymentMethod(req.body?.payment_method);
+    const { agreementId } = req.validated.params;
+    const {
+      amount,
+      payment_method: method,
+      payment_reference: paymentReference,
+      notes: paymentNotes,
+      send_sms: sendSms,
+    } = req.validated.body;
 
     if (!branchId) return;
     if (!agreementId || amount === null || amount <= 0 || !method) {
@@ -628,8 +636,8 @@ router.post(
           temporaryReceipt,
           amount,
           method,
-          cleanText(req.body?.payment_reference, 150),
-          cleanText(req.body?.notes, 500),
+          paymentReference,
+          paymentNotes,
           req.user.id,
         ]
       );
@@ -707,7 +715,7 @@ router.post(
       await connection.commit();
 
       let sms = null;
-      if (req.body?.send_sms !== false) {
+      if (sendSms) {
         try {
           sms = await sendInstallmentEventSms({
             agreementId,
