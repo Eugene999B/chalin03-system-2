@@ -1,0 +1,133 @@
+                          <div><span>Outstanding</span><strong>{formatMoney(customer.outstanding_balance)}</strong></div>
+                          <div><span>Transactions</span><strong>{rows.length}</strong></div>
+                        </div>
+                        <div className="csw-customer-meta">
+                          <span>{customer.item_quantity} item(s)</span>
+                          <span>Last activity {formatDate(customer.last_activity)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="csw-expand-button"
+                          onClick={() => setExpandedCustomer(expanded ? "" : customer.customer_key)}
+                        >
+                          {expanded ? "Hide Account Details" : "View Account Details"}
+                        </button>
+                        {expanded ? (
+                          <div className="csw-customer-details">
+                            {rows.slice(0, 12).map((row) => (
+                              <div key={row.id}>
+                                <span>{formatDate(row.date, true)}</span>
+                                <strong>{titleCase(row.type)} • {row.receipt_number}</strong>
+                                <small>{row.description}</small>
+                                <b>{formatMoney(row.amount)}</b>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                  {(report?.customers || []).length === 0 ? (
+                    <EmptyState title="No matching customer accounts" note="Apply a wider date range or clear the customer search." />
+                  ) : null}
+                </div>
+              ) : null}
+
+              {activeTab === "ledger" ? (
+                <div>
+                  <div className="csw-table-wrap">
+                    <table className="csw-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Customer</th>
+                          <th>Receipt</th>
+                          <th>Type</th>
+                          <th>Items / Details</th>
+                          <th>Amount</th>
+                          <th>Paid</th>
+                          <th>Balance</th>
+                          <th>Method</th>
+                          <th>Staff</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedTransactions.map((row) => (
+                          <tr key={row.id}>
+                            <td>{formatDate(row.date, true)}</td>
+                            <td><strong>{row.customer_name}</strong><small>{row.customer_phone || "-"}</small></td>
+                            <td>{row.receipt_number}</td>
+                            <td><span className={`csw-type csw-type-${row.type}`}>{titleCase(row.type)}</span></td>
+                            <td>
+                              <div className="csw-items-cell">
+                                {(row.items || []).length ? row.items.map((item) => (
+                                  <span key={item.id}>{item.product_name} × {item.quantity} <small>{formatMoney(item.line_total)}</small></span>
+                                )) : <span>{row.description || "-"}</span>}
+                              </div>
+                            </td>
+                            <td>{formatMoney(row.amount)}</td>
+                            <td>{formatMoney(row.paid)}</td>
+                            <td>{formatMoney(row.balance)}</td>
+                            <td>{titleCase(row.payment_method)}</td>
+                            <td>{row.staff_name}</td>
+                            <td>{titleCase(row.status)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(report?.transactions || []).length === 0 ? (
+                    <EmptyState title="No ledger records" note="No sales, debts or payments matched the applied filters." />
+                  ) : (
+                    <Pagination page={ledgerPage} total={(report?.transactions || []).length} onChange={setLedgerPage} />
+                  )}
+                </div>
+              ) : null}
+
+              {activeTab === "items" ? (
+                <div>
+                  <div className="csw-table-wrap">
+                    <table className="csw-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Customer</th>
+                          <th>Receipt</th>
+                          <th>Product</th>
+                          <th>Quantity</th>
+                          <th>Unit Price</th>
+                          <th>Line Total</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedItems.map((item) => (
+                          <tr key={`${item.sale_id}-${item.id}`}>
+                            <td>{formatDate(item.date, true)}</td>
+                            <td><strong>{item.customer_name}</strong><small>{item.customer_phone || "-"}</small></td>
+                            <td>{item.receipt_number}</td>
+                            <td><strong>{item.product_name}</strong></td>
+                            <td>{item.quantity}</td>
+                            <td>{formatMoney(item.unit_price)}</td>
+                            <td>{formatMoney(item.line_total)}</td>
+                            <td>{titleCase(item.status)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {(report?.items || []).length === 0 ? (
+                    <EmptyState title="No purchased items" note="No sale item lines matched the applied filters." />
+                  ) : (
+                    <Pagination page={itemsPage} total={(report?.items || []).length} onChange={setItemsPage} />
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
