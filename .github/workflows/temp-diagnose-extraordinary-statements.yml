@@ -37,8 +37,17 @@ jobs:
       - name: Check server syntax
         run: node --check backend/server.js
 
-      - name: Run workspace regression tests
-        run: node --test backend/tests/customerStatementWorkspace.test.js
+      - name: Test unified filter dataset
+        run: node --test --test-name-pattern="customer statement uses one filter-driven report dataset" backend/tests/customerStatementWorkspace.test.js
+
+      - name: Test redesigned statement views
+        run: node --test --test-name-pattern="the redesigned page shows filtered views and purchased items" backend/tests/customerStatementWorkspace.test.js
+
+      - name: Test filtered exports
+        run: node --test --test-name-pattern="exports use the same filters for print PDF Word and Excel" backend/tests/customerStatementWorkspace.test.js
+
+      - name: Test compact sidebar
+        run: node --test --test-name-pattern="desktop sidebar removes duplicate command card and uses compact sections" backend/tests/customerStatementWorkspace.test.js
 
       - name: Check temporary-file cleanup
         shell: bash
