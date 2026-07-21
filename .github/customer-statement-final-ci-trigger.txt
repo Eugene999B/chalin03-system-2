@@ -1,1 +1,0 @@
-Trigger a fresh final CI and CodeQL cycle for PR #21 after all source and test corrections.
