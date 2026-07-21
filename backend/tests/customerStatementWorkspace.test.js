@@ -41,7 +41,7 @@ test("the redesigned page shows filtered views and purchased items", () => {
   assert.match(page, /Transaction Ledger/);
   assert.match(page, /Items Purchased/);
   assert.match(page, /PAGE_SIZE = 25/);
-  assert.match(page, /report\.items/);
+  assert.match(page, /report\?\.items/);
 });
 
 test("exports use the same filters for print PDF Word and Excel", () => {
