@@ -270,17 +270,17 @@ router.post(
       const branchId = getBranchId(req);
 
       const {
-    category,
-    description,
-    amount: cleanAmount,
-    payment_method: paymentMethod,
-    funding_source: fundingSource,
-    affects_daily_closing: affectsDailyClosing,
-    closing_treatment_note: closingTreatmentNote,
-    expense_date: expenseDate,
-  } = req.validated.body;
+        category,
+        description,
+        amount: cleanAmount,
+        payment_method: paymentMethod,
+        funding_source: fundingSource,
+        affects_daily_closing: affectsDailyClosing,
+        closing_treatment_note: closingTreatmentNote,
+        expense_date: expenseDate,
+      } = req.validated.body;
 
-      if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {
+      if (!category || !expenseDate || cleanAmount === undefined || cleanAmount === null) {
         return res.status(400).json({
           status: "error",
           message: "Category, amount and expense date are required.",

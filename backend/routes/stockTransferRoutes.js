@@ -1044,11 +1044,11 @@ router.post(
   validateRequest(validateStockTransferCreateRequest),
   asyncHandler(async (req, res) => {
     const {
-    from_branch_id: fromBranchId,
-    to_branch_id: toBranchId,
-    request_note: requestNote,
-    items,
-  } = req.validated.body;
+      from_branch_id: fromBranchId,
+      to_branch_id: toBranchId,
+      request_note: requestNote,
+      items,
+    } = req.validated.body;
 
     if (!fromBranchId || !toBranchId) {
       return res.status(400).json({
