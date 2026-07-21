@@ -1,0 +1,50 @@
+name: Customer Statement Sidebar Production Smoke
+
+on:
+  push:
+    branches:
+      - agent/customer-statement-sidebar-production-smoke
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify redesigned statements and sidebar live
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify API and Cloudflare bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for attempt in $(seq 1 24); do
+            health_code="$(curl --silent --output /tmp/health.json --write-out '%{http_code}' https://api.chalin03.com/api/health || true)"
+            readiness_code="$(curl --silent --output /tmp/readiness.json --write-out '%{http_code}' https://api.chalin03.com/api/readiness || true)"
+            protected_code="$(curl --silent --output /tmp/protected.json --write-out '%{http_code}' 'https://api.chalin03.com/api/customer-statement-workspace/report?report_type=statement' || true)"
+            frontend_code="$(curl --silent --location --output /tmp/index.html --write-out '%{http_code}' https://chalin03.com/ || true)"
+            asset_path="$(grep -oE 'src="[^"]+\.js"' /tmp/index.html 2>/dev/null | head -n 1 | cut -d'"' -f2 || true)"
+            if [[ -n "$asset_path" ]]; then
+              case "$asset_path" in
+                http*) asset_url="$asset_path" ;;
+                /*) asset_url="https://chalin03.com${asset_path}" ;;
+                *) asset_url="https://chalin03.com/${asset_path}" ;;
+              esac
+              curl --fail --silent --location "$asset_url" --output /tmp/app.js || true
+            else
+              : > /tmp/app.js
+            fi
+            if [[ "$health_code" == "200" ]] && [[ "$readiness_code" == "200" ]] && grep -q '"ready":true' /tmp/readiness.json && [[ "$protected_code" =~ ^(401|403)$ ]] && [[ "$frontend_code" == "200" ]] && grep -q 'Customer Statement & Account Analysis' /tmp/app.js && grep -q 'Screen = Export' /tmp/app.js && grep -q 'Items Purchased' /tmp/app.js && grep -q 'Customer Name or Phone' /tmp/app.js && grep -q 'compact-nav-section-button' /tmp/app.js; then
+              success=1
+              break
+            fi
+            echo "health=${health_code} readiness=${readiness_code} protected=${protected_code} frontend=${frontend_code} asset=${asset_path:-missing}"
+            sleep 10
+          done
+          test "$success" = "1"
+          echo "API health: PASS"
+          echo "Database readiness: PASS"
+          echo "New workspace route authentication: PASS"
+          echo "Cloudflare statement workspace bundle: PASS"
+          echo "Cloudflare compact sidebar bundle: PASS"
