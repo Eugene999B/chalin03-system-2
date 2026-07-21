@@ -5,6 +5,9 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 
 const { testDatabaseConnection } = require("./config/db");
+const {
+  validateStartupSecurity,
+} = require("./config/startupSecurity");
 const { requestContext } = require("./middleware/requestContext");
 const {
   notFoundHandler,
@@ -372,21 +375,24 @@ if (require.main === module) {
 }
 
 async function runStartupSelfCheck() {
-  const missing = [];
+  const result = validateStartupSecurity({
+    env: process.env,
+    allowedOrigins,
+  });
 
-  if (!process.env.JWT_SECRET) {
-    missing.push("JWT_SECRET");
+  for (const warning of result.warnings) {
+    console.warn(`Startup security warning: ${warning}`);
   }
 
-  if (allowedOrigins.length === 0) {
-    missing.push("FRONTEND_URL or local frontend origin");
-  }
+  console.log(
+    result.production
+      ? result.strictProductionSecurity
+        ? "Startup self-check passed: strict production secret enforcement is active."
+        : "Startup self-check passed: production secret audit is in warning mode."
+      : "Startup self-check passed: development configuration is usable."
+  );
 
-  if (missing.length > 0) {
-    throw new Error(`Startup safety check failed. Missing: ${missing.join(", ")}`);
-  }
-
-  console.log("Startup self-check passed: auth secret and CORS origins configured.");
+  return result;
 }
 
 module.exports = {
