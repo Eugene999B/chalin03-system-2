@@ -1,10 +1,10 @@
 .customer-debt-print-panel {
   margin: 18px 0;
-  padding: 22px;
+  padding: 20px;
   border: 1px solid #cbd5e1;
   border-radius: 24px;
   background:
-    radial-gradient(circle at top right, rgba(14, 116, 144, 0.12), transparent 34%),
+    radial-gradient(circle at top right, rgba(224, 186, 40, 0.15), transparent 30%),
     linear-gradient(135deg, #ffffff, #f8fafc);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
 }
@@ -14,15 +14,15 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .customer-debt-print-heading p {
   margin: 0 0 4px;
-  color: #0f766e;
+  color: #a16207;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  font-weight: 950;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
@@ -34,27 +34,31 @@
 
 .customer-debt-print-heading span {
   display: block;
-  max-width: 780px;
+  max-width: 760px;
   margin-top: 6px;
   color: #475569;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .customer-debt-print-badge {
   flex: 0 0 auto;
   padding: 9px 12px;
   border-radius: 999px;
-  background: #0f766e;
+  background: #173b68;
   color: #ffffff;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 950;
 }
 
 .customer-debt-print-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
   align-items: end;
+}
+
+.customer-debt-print-grid-filtered .customer-debt-print-customer {
+  grid-column: span 1;
 }
 
 .customer-debt-print-grid label {
@@ -62,7 +66,7 @@
   gap: 6px;
   color: #334155;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 .customer-debt-print-grid input,
@@ -78,32 +82,43 @@
   font: inherit;
 }
 
-.customer-debt-print-customer {
-  grid-column: span 3;
+.customer-debt-export-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
-.customer-debt-print-grid button {
-  min-height: 44px;
-  padding: 11px 16px;
+.customer-debt-export-actions button {
+  min-width: 96px;
   border: 0;
   border-radius: 12px;
+  padding: 11px 15px;
   background: #173b68;
   color: #ffffff;
-  font-weight: 900;
+  font-weight: 950;
   cursor: pointer;
 }
 
-.customer-debt-print-grid button:disabled {
+.customer-debt-export-actions button:nth-child(3) {
+  background: #2563eb;
+}
+
+.customer-debt-export-actions button:nth-child(4) {
+  background: #15803d;
+}
+
+.customer-debt-export-actions button:disabled {
   cursor: wait;
-  opacity: 0.65;
+  opacity: 0.62;
 }
 
 .customer-debt-print-message {
-  margin-bottom: 14px;
+  margin-bottom: 13px;
   padding: 11px 13px;
   border-radius: 12px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 800;
 }
 
 .customer-debt-print-message.success {
@@ -120,7 +135,7 @@
 
 .customer-debt-print-note {
   display: block;
-  margin-top: 14px;
+  margin-top: 13px;
   color: #64748b;
   line-height: 1.5;
 }
@@ -130,7 +145,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .customer-debt-print-customer {
+  .customer-debt-print-grid-filtered .customer-debt-print-customer {
     grid-column: span 2;
   }
 }
@@ -149,13 +164,17 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .customer-debt-print-customer {
+  .customer-debt-print-grid-filtered .customer-debt-print-customer {
     grid-column: auto;
   }
 
   .customer-debt-print-grid input,
   .customer-debt-print-grid select,
-  .customer-debt-print-grid button {
+  .customer-debt-export-actions button {
     font-size: 16px;
+  }
+
+  .customer-debt-export-actions button {
+    flex: 1 1 calc(50% - 9px);
   }
 }
