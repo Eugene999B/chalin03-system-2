@@ -1,0 +1,120 @@
+  pdfHeader(doc, report, title);
+  pdfMeta(doc, report);
+  pdfMetrics(doc, report);
+
+  report.debts.forEach((debt) => {
+    ensurePdfSpace(doc, report, title, 52);
+    const y = doc.y;
+    doc.rect(doc.page.margins.left, y, 507, 44).fillAndStroke("#f8fafc", "#cbd5e1");
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(8.4);
+    doc.text(
+      `${debt.customer_name || "Customer"}${debt.customer_phone ? ` • ${debt.customer_phone}` : ""}`,
+      doc.page.margins.left + 7,
+      y + 7,
+      { width: 270 }
+    );
+    doc.fillColor("#173b68").text(
+      `Balance ${money(debt.balance)}`,
+      doc.page.margins.left + 350,
+      y + 7,
+      { width: 150, align: "right" }
+    );
+    doc.fillColor("#475569").font("Helvetica").fontSize(7.6);
+    doc.text(
+      `${dateLabel(debt.created_at)} | Receipt ${debt.receipt_number || "-"} | Owed ${money(debt.amount_owed)} | Paid ${money(debt.amount_paid)} | ${debt.status || "-"} | Due ${dateLabel(debt.due_date)}`,
+      doc.page.margins.left + 7,
+      y + 24,
+      { width: 493 }
+    );
+    doc.y = y + 51;
+  });
+
+  if (report.debts.length === 0) {
+    doc.fillColor("#64748b").font("Helvetica-Oblique").fontSize(10);
+    doc.text("No debt records matched the applied filters.", { align: "center" });
+  }
+}
+
+function addPdfFooters(doc, report, title) {
+  const range = doc.bufferedPageRange();
+  for (let index = 0; index < range.count; index += 1) {
+    doc.switchToPage(index);
+    const bottom = doc.page.height - 18;
+    const originalBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.fillColor("#64748b").font("Helvetica").fontSize(7);
+    doc.text(
+      `Chalin 03 • ${report.branch.code} • ${title} • Page ${index + 1} of ${range.count}`,
+      doc.page.margins.left,
+      bottom,
+      {
+        width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+        align: "center",
+        lineBreak: false,
+      }
+    );
+    doc.page.margins.bottom = originalBottom;
+  }
+}
+
+async function sendPdf(res, report, inline = false) {
+  const title = report.filters.reportType === "debt" ? "Customer Debt Report" : "Customer Statement";
+  const slug = report.filters.reportType === "debt" ? "debt-report" : "customer-statement";
+  const filename = `chalin03-${safeFilename(report.branch.code)}-${slug}-${safeFilename(report.filters.from || "all")}-${safeFilename(report.filters.to || "all")}.pdf`;
+  configureDownload(res, "application/pdf", filename, inline ? "inline" : "attachment");
+
+  const doc = new PDFDocument({
+    size: "A4",
+    margins: { top: 28, right: 44, bottom: 34, left: 44 },
+    bufferPages: true,
+    info: {
+      Title: title,
+      Author: "Chalin 03 Company Limited",
+      Subject: `${title} — ${report.period}`,
+    },
+  });
+  doc.pipe(res);
+  if (report.filters.reportType === "debt") drawDebtPdf(doc, report);
+  else drawStatementPdf(doc, report);
+  addPdfFooters(doc, report, title);
+  doc.end();
+}
+
+function htmlTable(headers, rows) {
+  return `
+    <table>
+      <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+      <tbody>${rows
+        .map(
+          (row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`
+        )
+        .join("")}</tbody>
+    </table>
+  `;
+}
+
+function buildWordHtml(report) {
+  const isDebt = report.filters.reportType === "debt";
+  const title = isDebt ? "Filtered Customer Debt Report" : "Filtered Customer Statement";
+  const summaryRows = [
+    ["Customers", report.summary.customer_count],
+    ["Sales", report.summary.sales_count],
+    ["Items Purchased", report.summary.item_quantity],
+    ["Total Sales", money(report.summary.total_sales)],
+    ["Total Received", money(report.summary.total_received)],
+    ["Outstanding", money(report.summary.outstanding_balance)],
+  ];
+
+  const bodyRows = isDebt
+    ? report.debts.map((debt) => [
+        dateLabel(debt.created_at),
+        debt.customer_name || "Customer",
+        debt.customer_phone || "-",
+        debt.receipt_number || "-",
+        money(debt.amount_owed),
+        money(debt.amount_paid),
+        money(debt.balance),
+        debt.status || "-",
+        dateLabel(debt.due_date),
+      ])
+    : report.transactions.map((row) => [
