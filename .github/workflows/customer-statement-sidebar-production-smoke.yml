@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/customer-statement-sidebar-production-smoke
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -35,7 +38,16 @@ jobs:
             else
               : > /tmp/app.js
             fi
-            if [[ "$health_code" == "200" ]] && [[ "$readiness_code" == "200" ]] && grep -q '"ready":true' /tmp/readiness.json && [[ "$protected_code" =~ ^(401|403)$ ]] && [[ "$frontend_code" == "200" ]] && grep -q 'Customer Statement & Account Analysis' /tmp/app.js && grep -q 'Screen = Export' /tmp/app.js && grep -q 'Items Purchased' /tmp/app.js && grep -q 'Customer Name or Phone' /tmp/app.js && grep -q 'compact-nav-section-button' /tmp/app.js; then
+            if [[ "$health_code" == "200" ]] \
+              && [[ "$readiness_code" == "200" ]] \
+              && grep -q '"ready":true' /tmp/readiness.json \
+              && [[ "$protected_code" =~ ^(401|403)$ ]] \
+              && [[ "$frontend_code" == "200" ]] \
+              && grep -q 'Customer Statement & Account Analysis' /tmp/app.js \
+              && grep -q 'Screen = Export' /tmp/app.js \
+              && grep -q 'Items Purchased' /tmp/app.js \
+              && grep -q 'Customer Name or Phone' /tmp/app.js \
+              && grep -q 'compact-nav-section-button' /tmp/app.js; then
               success=1
               break
             fi
