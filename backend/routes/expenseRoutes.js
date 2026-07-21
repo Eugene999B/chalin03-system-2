@@ -5,6 +5,8 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { markClosingStale } = require("../services/dailyClosingSecurityService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validateExpenseCreateRequest } = require("../validation/operationsRequestValidators");
 
 const router = express.Router();
 
@@ -260,24 +262,23 @@ router.post(
   "/",
   requireAuth,
   requireRole("admin", "manager"),
+  validateRequest(validateExpenseCreateRequest),
   async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
       const branchId = getBranchId(req);
 
-      const category = cleanText(req.body.category);
-      const description = cleanText(req.body.description);
-      const expenseDate = cleanText(req.body.expense_date);
-      const paymentMethod = cleanText(req.body.payment_method || "cash").toLowerCase();
-      const fundingSource = cleanText(req.body.funding_source).toLowerCase();
-      const affectsDailyClosing = parseRequiredBoolean(
-        req.body.affects_daily_closing
-      );
-      const closingTreatmentNote = cleanText(
-        req.body.closing_treatment_note
-      ).slice(0, 500);
-      const cleanAmount = Number(req.body.amount);
+      const {
+    category,
+    description,
+    amount: cleanAmount,
+    payment_method: paymentMethod,
+    funding_source: fundingSource,
+    affects_daily_closing: affectsDailyClosing,
+    closing_treatment_note: closingTreatmentNote,
+    expense_date: expenseDate,
+  } = req.validated.body;
 
       if (!category || !expenseDate || req.body.amount === undefined || req.body.amount === null) {
         return res.status(400).json({

@@ -10,6 +10,8 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const { validateStockAdjustmentRequest } = require("../validation/operationsRequestValidators");
 const {
   MOVEMENT_TYPES,
   calculateStockAfter,
@@ -1628,6 +1630,7 @@ router.patch(
   "/:id/stock-adjustment",
   requireAuth,
   requireRole("admin", "manager"),
+  validateRequest(validateStockAdjustmentRequest),
   async (req, res) => {
     const connection = await pool.getConnection();
 
@@ -1638,7 +1641,7 @@ router.patch(
         return;
       }
 
-      const { id } = req.params;
+      const { id } = req.validated.params;
       const {
         adjustment_type,
         movement_type,
@@ -1647,7 +1650,7 @@ router.patch(
         reference_number,
         movement_date,
         notes,
-      } = req.body;
+      } = req.validated.body;
 
       if (!["increase", "decrease", "set"].includes(adjustment_type)) {
         return res.status(400).json({
