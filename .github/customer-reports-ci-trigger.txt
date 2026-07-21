@@ -1,1 +1,0 @@
-Trigger authenticated CI for PR #19 after verified transitive dependency lock refresh.
