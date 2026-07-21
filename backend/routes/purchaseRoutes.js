@@ -6,6 +6,7 @@ const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validatePurchasePaymentRequest } = require("../validation/financialRequestValidators");
+const { validatePurchaseCreateRequest } = require("../validation/operationsRequestValidators");
 
 const router = express.Router();
 
@@ -579,6 +580,7 @@ router.post(
   "/",
   requireAuth,
   requireRole("admin", "manager"),
+  validateRequest(validatePurchaseCreateRequest),
   async (req, res) => {
     const connection = await pool.getConnection();
 
@@ -592,7 +594,7 @@ router.post(
         amount_paid,
         notes,
         items,
-      } = req.body;
+      } = req.validated.body;
 
       if (!purchase_date) {
         return res.status(400).json({

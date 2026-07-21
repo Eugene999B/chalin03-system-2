@@ -3,6 +3,11 @@ const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const {
+  validateStockTransferActionRequest,
+  validateStockTransferCreateRequest,
+} = require("../validation/operationsRequestValidators");
 
 const router = express.Router();
 
@@ -1036,11 +1041,14 @@ router.get(
 
 router.post(
   "/",
+  validateRequest(validateStockTransferCreateRequest),
   asyncHandler(async (req, res) => {
-    const fromBranchId = toPositiveInt(req.body.from_branch_id);
-    const toBranchId = toPositiveInt(req.body.to_branch_id);
-    const requestNote = cleanText(req.body.request_note || req.body.note);
-    const items = normalizeTransferItems(req.body.items);
+    const {
+      from_branch_id: fromBranchId,
+      to_branch_id: toBranchId,
+      request_note: requestNote,
+      items,
+    } = req.validated.body;
 
     if (!fromBranchId || !toBranchId) {
       return res.status(400).json({
@@ -1187,9 +1195,10 @@ router.post(
 
 router.post(
   "/:id/approve",
+  validateRequest(validateStockTransferActionRequest("approve")),
   asyncHandler(async (req, res) => {
-    const transferId = toPositiveInt(req.params.id);
-    const approvalNote = cleanText(req.body.approval_note || req.body.note);
+    const { id: transferId } = req.validated.params;
+    const { approval_note: approvalNote } = req.validated.body;
 
     if (!transferId) {
       return res.status(400).json({
@@ -1282,9 +1291,10 @@ router.post(
 
 router.post(
   "/:id/reject",
+  validateRequest(validateStockTransferActionRequest("reject")),
   asyncHandler(async (req, res) => {
-    const transferId = toPositiveInt(req.params.id);
-    const rejectNote = cleanText(req.body.reject_note || req.body.note);
+    const { id: transferId } = req.validated.params;
+    const { reject_note: rejectNote } = req.validated.body;
 
     if (!transferId) {
       return res.status(400).json({
@@ -1377,9 +1387,10 @@ router.post(
 
 router.post(
   "/:id/dispatch",
+  validateRequest(validateStockTransferActionRequest("dispatch")),
   asyncHandler(async (req, res) => {
-    const transferId = toPositiveInt(req.params.id);
-    const dispatchNote = cleanText(req.body.dispatch_note || req.body.note);
+    const { id: transferId } = req.validated.params;
+    const { dispatch_note: dispatchNote } = req.validated.body;
 
     if (!transferId) {
       return res.status(400).json({
@@ -1535,9 +1546,10 @@ router.post(
 
 router.post(
   "/:id/receive",
+  validateRequest(validateStockTransferActionRequest("receive")),
   asyncHandler(async (req, res) => {
-    const transferId = toPositiveInt(req.params.id);
-    const receiveNote = cleanText(req.body.receive_note || req.body.note);
+    const { id: transferId } = req.validated.params;
+    const { receive_note: receiveNote } = req.validated.body;
 
     if (!transferId) {
       return res.status(400).json({
@@ -1715,9 +1727,10 @@ router.post(
 
 router.post(
   "/:id/cancel",
+  validateRequest(validateStockTransferActionRequest("cancel")),
   asyncHandler(async (req, res) => {
-    const transferId = toPositiveInt(req.params.id);
-    const cancelNote = cleanText(req.body.cancel_note || req.body.note);
+    const { id: transferId } = req.validated.params;
+    const { cancel_note: cancelNote } = req.validated.body;
 
     if (!transferId) {
       return res.status(400).json({
