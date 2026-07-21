@@ -1,0 +1,47 @@
+purchase validator import: 1
+start '// POST /api/purchases\nrouter.post(': 14470
+purchase middleware exact: 1
+purchase body exact: 1
+expense import exact: 1
+start '// POST /api/expenses\nrouter.post(': 6690
+end '// DELETE /api/expenses/:id': 13049
+expense middleware exact: 1
+expense body start exact: 1
+expense body end exact: 1
+product import exact: 1
+start '// PATCH /api/products/:id/stock-adjustment\nrouter.patch(': 44786
+end '// DELETE /api/products/:id': 51584
+product middleware exact: 1
+product params exact: 1
+product body exact: 1
+transfer import exact: 1
+start 'router.post(\n  "/",': 24671
+end '\nrouter.post(\n  "/:id/approve",': 28649
+transfer create middleware exact: 1
+transfer create body start exact: 1
+transfer create body end exact: 1
+start 'router.post(\n  "/:id/approve",': 28650
+end '\nrouter.': 30793
+approve middleware exact: 1
+approve params exact: 1
+approve note exact: 1
+start 'router.post(\n  "/:id/reject",': 30794
+end '\nrouter.': 32961
+reject middleware exact: 1
+reject params exact: 1
+reject note exact: 1
+start 'router.post(\n  "/:id/dispatch",': 32962
+end '\nrouter.': 36807
+dispatch middleware exact: 1
+dispatch params exact: 1
+dispatch note exact: 1
+start 'router.post(\n  "/:id/receive",': 36808
+end '\nrouter.': 41201
+receive middleware exact: 1
+receive params exact: 1
+receive note exact: 1
+start 'router.post(\n  "/:id/cancel",': 41202
+end '\nrouter.': -1
+cancel middleware exact: 0
+cancel params exact: 0
+cancel note exact: 0
