@@ -1,0 +1,120 @@
+const express = require("express");
+const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
+
+const { pool } = require("../config/db");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
+
+const router = express.Router();
+
+router.use(requireAuth, requireRole("admin", "manager", "cashier", "auditor"));
+
+const MAX_ROWS = 5000;
+
+function cleanText(value, maxLength = 255) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function positiveId(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function getBranchId(req) {
+  return positiveId(req.user?.branch_id || req.user?.default_branch_id);
+}
+
+function branchInfo(req) {
+  return {
+    id: getBranchId(req),
+    code: cleanText(req.user?.branch_code || "STORE", 40),
+    name: cleanText(req.user?.branch_name || "Selected Store", 160),
+    location: cleanText(req.user?.branch_location || "", 255),
+  };
+}
+
+function parseDate(value) {
+  const text = cleanText(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function parseFilters(req) {
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  const customer = cleanText(req.query.customer || req.query.query, 160);
+  const debtStatus = cleanText(req.query.debt_status, 30).toLowerCase();
+  const reportType = cleanText(req.query.report_type || "statement", 20).toLowerCase();
+
+  if (from && to && from > to) {
+    const error = new Error("The start date cannot be after the end date.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!["statement", "debt"].includes(reportType)) {
+    const error = new Error("Choose Customer Statement or Debt Report.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const allowedStatuses = ["", "unpaid", "partial", "paid", "overdue"];
+  if (!allowedStatuses.includes(debtStatus)) {
+    const error = new Error("Choose a valid debt status filter.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { from, to, customer, debtStatus, reportType };
+}
+
+function appendDateFilter(sql, params, alias, column, filters) {
+  let nextSql = sql;
+  if (filters.from) {
+    nextSql += ` AND DATE(${alias}.${column}) >= ?`;
+    params.push(filters.from);
+  }
+  if (filters.to) {
+    nextSql += ` AND DATE(${alias}.${column}) <= ?`;
+    params.push(filters.to);
+  }
+  return nextSql;
+}
+
+function appendCustomerFilter(sql, params, alias, filters) {
+  if (!filters.customer) return sql;
+  const pattern = `%${filters.customer.toLowerCase()}%`;
+  params.push(pattern, pattern);
+  return `${sql} AND (
+    LOWER(COALESCE(${alias}.customer_name, '')) LIKE ?
+    OR LOWER(COALESCE(${alias}.customer_phone, '')) LIKE ?
+  )`;
+}
+
+function toNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function roundMoney(value) {
+  return Number(toNumber(value).toFixed(2));
+}
+
+function money(value) {
+  return `GHS ${toNumber(value).toLocaleString("en-GH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function dateLabel(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return cleanText(value, 40) || "-";
+  return date.toLocaleDateString("en-GB");
+}
+
+function dateTimeLabel(value) {
+  if (!value) return "-";
+  const date = new Date(value);
