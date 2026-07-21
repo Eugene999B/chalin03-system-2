@@ -33,19 +33,24 @@ jobs:
           exit 0
 
       - name: Record source state
+        if: always()
         shell: bash
         run: |
+          mkdir -p diagnostic-output
           {
             echo "Finalizer exit: ${{ steps.finalizer.outputs.exit_code }}"
             echo
             echo "Git status:"
-            git status --short
+            git status --short || true
             echo
             echo "Relevant paths:"
-            find .release-parts scripts .github/workflows -maxdepth 2 -type f 2>/dev/null | sort
+            find .release-parts -maxdepth 2 -type f 2>/dev/null | sort || true
+            find scripts -maxdepth 2 -type f 2>/dev/null | sort || true
+            find .github/workflows -maxdepth 1 -type f 2>/dev/null | sort || true
           } > diagnostic-output/state.txt
 
       - name: Upload diagnostic evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: extraordinary-statements-finalizer-diagnostic
@@ -54,5 +59,6 @@ jobs:
           retention-days: 2
 
       - name: Fail after evidence upload
+        if: always()
         shell: bash
         run: test "${{ steps.finalizer.outputs.exit_code }}" = "0"
