@@ -1,0 +1,170 @@
+import { useEffect, useMemo, useState } from "react";
+
+import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
+import "../styles/customerStatementWorkspace.css";
+
+const PAGE_SIZE = 25;
+
+function dateInputValue(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function defaultFromDate() {
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  return dateInputValue(date);
+}
+
+function formatMoney(value) {
+  return `GHS ${Number(value || 0).toLocaleString("en-GH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatDate(value, includeTime = false) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return includeTime ? date.toLocaleString("en-GB") : date.toLocaleDateString("en-GB");
+}
+
+function titleCase(value) {
+  return String(value || "-")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getDispositionFilename(response, fallback) {
+  const disposition = response.headers?.["content-disposition"] || "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return match?.[1] || fallback;
+}
+
+function downloadBlob(response, fallbackName) {
+  const blob = new Blob([response.data], {
+    type: response.headers?.["content-type"] || "application/octet-stream",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = getDispositionFilename(response, fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
+function MetricCard({ icon, label, value, note, tone = "navy" }) {
+  return (
+    <article className={`csw-metric csw-tone-${tone}`}>
+      <span className="csw-metric-icon">{icon}</span>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+        <small>{note}</small>
+      </div>
+    </article>
+  );
+}
+
+function Pagination({ page, total, onChange }) {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(total, page * PAGE_SIZE);
+
+  return (
+    <div className="csw-pagination">
+      <span>
+        Showing {start}–{end} of {total}
+      </span>
+      <div>
+        <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+          Previous
+        </button>
+        <b>
+          Page {page} of {totalPages}
+        </b>
+        <button
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onChange(page + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, note }) {
+  return (
+    <div className="csw-empty">
+      <span>📄</span>
+      <h3>{title}</h3>
+      <p>{note}</p>
+    </div>
+  );
+}
+
+export default function CustomerStatementWorkspacePage() {
+  const {
+    branchId,
+    branchCode,
+    branchName,
+    branchLocation,
+    selectedBranch,
+    user,
+  } = useAuth();
+
+  const currentStoreCode =
+    branchCode || user?.branch_code || selectedBranch?.code || selectedBranch?.branch_code || "STORE";
+  const currentStoreName =
+    branchName || user?.branch_name || selectedBranch?.name || selectedBranch?.branch_name || "Selected Store";
+  const currentStoreLocation =
+    branchLocation || user?.branch_location || selectedBranch?.location || selectedBranch?.branch_location || "";
+
+  const initialFilters = useMemo(
+    () => ({ from: defaultFromDate(), to: dateInputValue(new Date()), customer: "" }),
+    []
+  );
+
+  const [draftFilters, setDraftFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [itemsPage, setItemsPage] = useState(1);
+  const [expandedCustomer, setExpandedCustomer] = useState("");
+
+  useEffect(() => {
+    setAppliedFilters(initialFilters);
+    setDraftFilters(initialFilters);
+  }, [branchId, initialFilters]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadReport() {
+      setLoading(true);
+      setError("");
+      setMessage("");
+
+      try {
+        const response = await axiosClient.get("/customer-statement-workspace/report", {
+          params: {
+            report_type: "statement",
+            from: appliedFilters.from,
+            to: appliedFilters.to,
+            customer: appliedFilters.customer,
+          },
+        });
+
+        if (!cancelled) {
+          setReport(response.data);
+          setLedgerPage(1);
