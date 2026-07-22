@@ -6,6 +6,10 @@ const {
   resolveHireLocationScope,
   sendHireLocationScopeError,
 } = require("../services/hireLocationScope");
+const {
+  ensureEquipmentSalesSchema,
+} = require("../services/equipmentSalesSchemaService");
+const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 
 const HIRE_PURPOSES = new Set(["hire_only", "company_operations"]);
 const SALE_PURPOSES = new Set(["sale_only", "sale_or_hire"]);
@@ -44,6 +48,8 @@ const ALLOWED_PHOTO_MIME_TYPES = new Set([
   "image/webp",
 ]);
 const MAX_PROTECTED_PHOTO_BYTES = 44 * 1024;
+
+let foundationPromise = null;
 
 function normalizeEnum(value) {
   if (value === undefined || value === null || value === "") return null;
@@ -92,6 +98,30 @@ function securePhotoUploadMatch(req) {
   if (!match) return null;
   const fileUrl = String(req.body?.file_url || "");
   return fileUrl.startsWith("data:image/") ? match : null;
+}
+
+function isEquipmentSalesRequest(req) {
+  return /^\/sales(?:\/|$)/.test(String(req.path || ""));
+}
+
+async function ensureFoundationOnce() {
+  if (!foundationPromise) {
+    foundationPromise = ensureEquipmentSalesSchema().catch((error) => {
+      foundationPromise = null;
+      throw error;
+    });
+  }
+  return foundationPromise;
+}
+
+function dispatchEquipmentSalesRouter(req, res, next) {
+  const originalUrl = req.url;
+  req.url = req.url.replace(/^\/sales(?=\/|\?|$)/, "") || "/";
+
+  return equipmentSalesRoutes(req, res, (error) => {
+    req.url = originalUrl;
+    return next(error);
+  });
 }
 
 function decodeProtectedPhoto(dataUrl) {
@@ -329,6 +359,22 @@ async function handleSecurePhotoUpload(req, res, match) {
 }
 
 async function enforceEquipmentCatalogueWriteIntegrity(req, res, next) {
+  try {
+    await ensureFoundationOnce();
+  } catch (error) {
+    console.error("Equipment Sales foundation preparation failed:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "EQUIPMENT_SALES_FOUNDATION_STARTUP_FAILED",
+      message:
+        "Equipment Sales could not be prepared safely. Existing Hire and Spare Parts operations remain available.",
+    });
+  }
+
+  if (isEquipmentSalesRequest(req)) {
+    return dispatchEquipmentSalesRouter(req, res, next);
+  }
+
   const uploadMatch = securePhotoUploadMatch(req);
   if (uploadMatch) {
     return handleSecurePhotoUpload(req, res, uploadMatch);
