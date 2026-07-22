@@ -1,5 +1,6 @@
 /* Dedicated mobile operating layer for Chalin 03.
-   Desktop layouts remain untouched. */
+   Desktop layouts remain untouched. This file intentionally uses conservative
+   selectors so the production CSS pipeline and older business devices remain safe. */
 
 @media (max-width: 920px) {
   :root {
@@ -26,7 +27,7 @@
       linear-gradient(180deg, #edf2f8 0%, #f8fafc 48%, #edf3f8 100%);
   }
 
-  /* Login: keep the clean structure, but give sections stronger contrast. */
+  /* Login contrast: less plain white, while retaining the approved structure. */
   body.chalin-route-login .gate4 {
     background:
       radial-gradient(circle at 9% 3%, rgba(232, 193, 47, 0.20), transparent 25%),
@@ -41,14 +42,6 @@
       radial-gradient(circle at 96% 1%, rgba(79, 191, 230, 0.14), transparent 22%),
       radial-gradient(circle at 4% 18%, rgba(232, 193, 47, 0.12), transparent 24%),
       linear-gradient(180deg, #f7fafc 0%, #eef4fa 48%, #f8fafc 100%) !important;
-  }
-
-  body.chalin-route-login .gate4__access::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: inherit;
     box-shadow: inset 0 0 0 1px rgba(16, 34, 58, 0.06);
   }
 
@@ -64,24 +57,25 @@
   }
 
   body.chalin-route-login .gate4__context-strip {
-    background: linear-gradient(145deg, #eaf1f8, #f9fbfd) !important;
-    border-color: #d5dfeb !important;
+    background: linear-gradient(145deg, #e7f0f8, #f9fbfd) !important;
+    border-color: #cfdae7 !important;
+    box-shadow: 0 9px 22px rgba(16, 34, 58, 0.05);
   }
 
   body.chalin-route-login .gate4__field input,
   body.chalin-route-login .gate4__field select,
   body.chalin-route-login .gate4__password {
     background: #ffffff !important;
-    border-color: #cbd7e4 !important;
+    border-color: #c4d1df !important;
     box-shadow: inset 0 1px 2px rgba(16, 34, 58, 0.04);
   }
 
   body.chalin-route-login .gate4__form {
     margin-top: 10px;
     padding: 12px;
-    border: 1px solid rgba(16, 34, 58, 0.08);
+    border: 1px solid rgba(16, 34, 58, 0.09);
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.58);
+    background: rgba(255, 255, 255, 0.62);
     box-shadow: 0 12px 28px rgba(16, 34, 58, 0.05);
   }
 
@@ -89,7 +83,7 @@
     box-shadow: 0 16px 32px rgba(220, 168, 15, 0.20) !important;
   }
 
-  /* Mobile application bar. */
+  /* Compact mobile application bar. */
   .premium-mobile-bar {
     height: 56px !important;
     grid-template-columns: 82px minmax(0, 1fr) 56px !important;
@@ -134,7 +128,7 @@
     box-shadow: 0 8px 18px rgba(174, 31, 26, 0.22);
   }
 
-  /* Shorter mobile drawer: one accordion section at a time, two-column links. */
+  /* One open section at a time, with compact two-column page tiles. */
   .premium-sidebar.mobile {
     width: min(92vw, 356px) !important;
     grid-template-rows: auto auto minmax(0, 1fr) auto !important;
@@ -223,9 +217,8 @@
   }
 
   .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link.active {
-    background:
-      radial-gradient(circle at 12% 8%, rgba(232, 193, 47, 0.28), transparent 42%),
-      linear-gradient(145deg, rgba(21, 67, 113, 0.94), rgba(10, 35, 63, 0.94)) !important;
+    background: linear-gradient(145deg, rgba(21, 67, 113, 0.96), rgba(10, 35, 63, 0.96)) !important;
+    border-color: rgba(232, 193, 47, 0.34) !important;
   }
 
   .compact-sidebar-navigation.is-mobile-navigation .premium-nav-icon {
@@ -236,14 +229,12 @@
   }
 
   .compact-sidebar-navigation.is-mobile-navigation .premium-nav-text {
-    display: -webkit-box;
     max-width: 100%;
     white-space: normal !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     overflow-wrap: anywhere;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    line-height: 1.2 !important;
   }
 
   .premium-sidebar.mobile .premium-user-panel {
@@ -269,7 +260,9 @@
     overflow-x: hidden;
   }
 
-  .premium-main :is(input, select, textarea) {
+  .premium-main input,
+  .premium-main select,
+  .premium-main textarea {
     min-height: 48px !important;
     margin-bottom: 10px !important;
     padding: 11px 12px !important;
@@ -300,7 +293,9 @@
     font-size: 13px !important;
   }
 
-  .premium-main :is(.success-box, .error-box, .warning-box) {
+  .premium-main .success-box,
+  .premium-main .error-box,
+  .premium-main .warning-box {
     margin: 8px 0 10px !important;
     padding: 11px 12px !important;
     border-radius: 14px !important;
@@ -322,13 +317,20 @@
     line-height: 1.45;
   }
 
-  .premium-main :is(.stat-card, .section-card) {
+  .premium-main .stat-card,
+  .premium-main .section-card {
     padding: 13px !important;
     border-radius: 17px !important;
     box-shadow: 0 10px 26px rgba(16, 34, 58, 0.065) !important;
   }
 
-  .premium-main :is(.cards-grid, .dashboard-grid, .reports-grid, .purchase-summary-grid) {
+  .premium-main .cards-grid,
+  .premium-main .dashboard-grid,
+  .premium-main .reports-grid,
+  .premium-main .purchase-summary-grid,
+  .premium-main .expense-summary-grid,
+  .premium-main .returns-summary-grid,
+  .premium-main .activity-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
   }
@@ -341,20 +343,28 @@
     font-size: 11px !important;
   }
 
-  .premium-main :is(.two-column, .reports-two-column, .users-settings-grid, .expenses-grid, .purchases-grid, .returns-grid, .backup-grid) {
+  .premium-main .two-column,
+  .premium-main .reports-two-column,
+  .premium-main .users-settings-grid,
+  .premium-main .expenses-grid,
+  .premium-main .purchases-grid,
+  .premium-main .returns-grid,
+  .premium-main .backup-grid,
+  .premium-main .exports-grid {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
-  .premium-main :is(.form-grid-2, .form-grid-3, .filter-grid, .activity-filter-grid) {
+  .premium-main .form-grid-2,
+  .premium-main .form-grid-3,
+  .premium-main .filter-grid,
+  .premium-main .activity-filter-grid,
+  .premium-main .export-filter-grid {
     grid-template-columns: 1fr !important;
     gap: 8px !important;
   }
 
-  .premium-main section {
-    max-width: 100%;
-  }
-
+  .premium-main section,
   .premium-main form > div {
     max-width: 100%;
   }
@@ -364,13 +374,13 @@
     font-size: 12px !important;
   }
 
-  .premium-main :is(th, td) {
+  .premium-main th,
+  .premium-main td {
     padding: 8px !important;
     font-size: 11px !important;
   }
 
-  .premium-main .section-card:has(table),
-  .premium-main div:has(> table) {
+  .premium-main .section-card {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
   }
@@ -384,9 +394,10 @@
     border-radius: 18px !important;
   }
 
-  /* Dashboard, New Sale and Products use the same compact mobile hero language. */
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child {
+  /* Compact hero language for the three busiest phone pages. */
+  body.chalin-route-dashboard .premium-main > div > div:first-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child,
+  body.chalin-route-products .premium-main > div > div:first-child {
     min-height: 0 !important;
     margin: 0 0 12px !important;
     padding: 18px 14px !important;
@@ -394,172 +405,121 @@
     box-shadow: 0 18px 40px rgba(7, 24, 44, 0.20) !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child > div:last-child {
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child {
     padding: 0 !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child > div:last-child > div:first-child {
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:first-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:first-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:first-child {
     display: grid !important;
     grid-template-columns: 1fr !important;
     gap: 12px !important;
     align-items: start !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child h1 {
+  body.chalin-route-dashboard .premium-main > div > div:first-child h1,
+  body.chalin-route-new-sale .premium-main > div > div:first-child h1,
+  body.chalin-route-products .premium-main > div > div:first-child h1 {
     margin-top: 5px !important;
-    font-size: clamp(31px, 9vw, 42px) !important;
-    line-height: 1.03 !important;
-    letter-spacing: -0.045em !important;
+    font-size: 34px !important;
+    line-height: 1.04 !important;
+    letter-spacing: -0.04em !important;
     text-align: left !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child p {
+  body.chalin-route-dashboard .premium-main > div > div:first-child p,
+  body.chalin-route-new-sale .premium-main > div > div:first-child p,
+  body.chalin-route-products .premium-main > div > div:first-child p {
     max-width: none !important;
     margin-top: 10px !important;
     font-size: 15px !important;
-    line-height: 1.55 !important;
+    line-height: 1.52 !important;
     text-align: left !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child img {
-    width: 82px !important;
-    height: 82px !important;
-    border-radius: 21px !important;
+  body.chalin-route-dashboard .premium-main > div > div:first-child img,
+  body.chalin-route-new-sale .premium-main > div > div:first-child img,
+  body.chalin-route-products .premium-main > div > div:first-child img {
+    width: 78px !important;
+    height: 78px !important;
+    border-radius: 20px !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child div:has(> button) {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-    width: 100% !important;
-  }
-
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child div:has(> button) > button {
-    width: 100% !important;
-    min-height: 48px !important;
-    padding: 10px 9px !important;
-  }
-
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child > div:last-child > div:last-child {
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:last-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:last-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:last-child {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
     margin-top: 14px !important;
   }
 
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:first-child > div:last-child > div:last-child > * {
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:last-child > div,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:last-child > div,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:last-child > div {
     min-width: 0 !important;
-    min-height: 74px !important;
+    min-height: 72px !important;
     padding: 11px 12px !important;
     border-radius: 16px !important;
     font-size: 13px !important;
     line-height: 1.35 !important;
   }
 
-  /* Direct action and summary groups become compact two-column mobile tiles. */
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:not(:first-child):has(> button:nth-child(3)) {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-  }
-
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:not(:first-child):has(> button:nth-child(3)) > button {
-    width: 100% !important;
-    min-height: 52px !important;
-    margin: 0 !important;
-  }
-
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:not(:first-child):has(> div:nth-child(4)) {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
-  }
-
-  body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-    .premium-main > div > div:not(:first-child):has(> div:nth-child(4)) > div {
-    min-width: 0 !important;
-    min-height: 104px !important;
-    margin: 0 !important;
-    padding: 12px !important;
-    border-radius: 18px !important;
-  }
-
-  /* Forms and command panels: tighter, clearer, and no desktop-style sticky sidebars. */
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main section {
+  /* Product and sales forms become shorter and easier to scan. */
+  body.chalin-route-new-sale .premium-main section,
+  body.chalin-route-products .premium-main section {
     padding: 14px !important;
     border-radius: 19px !important;
   }
 
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main form > div {
+  body.chalin-route-new-sale .premium-main form > div,
+  body.chalin-route-products .premium-main form > div {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }
 
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main section[style*="sticky"],
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main div[style*="sticky"] {
-    position: static !important;
-    top: auto !important;
-  }
-
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main h2 {
+  body.chalin-route-new-sale .premium-main h2,
+  body.chalin-route-products .premium-main h2 {
     font-size: 21px !important;
     line-height: 1.15 !important;
   }
 
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main h3 {
+  body.chalin-route-new-sale .premium-main h3,
+  body.chalin-route-products .premium-main h3 {
     font-size: 17px !important;
   }
 
-  body:is(.chalin-route-new-sale, .chalin-route-products)
-    .premium-main p {
+  body.chalin-route-new-sale .premium-main p,
+  body.chalin-route-products .premium-main p {
     font-size: 12px !important;
     line-height: 1.5 !important;
   }
+}
 
-  body.chalin-route-products .premium-main form {
-    padding-bottom: 12px;
+@media (max-width: 430px) {
+  .premium-mobile-bar {
+    grid-template-columns: 72px minmax(0, 1fr) 52px !important;
   }
 
-  /* Very small phones. */
-  @media (max-width: 430px) {
-    .premium-mobile-bar {
-      grid-template-columns: 72px minmax(0, 1fr) 52px !important;
-    }
+  .premium-mobile-button {
+    font-size: 11px !important;
+  }
 
-    .premium-mobile-button {
-      font-size: 11px !important;
-    }
+  .compact-sidebar-navigation.is-mobile-navigation .compact-nav-items {
+    gap: 5px !important;
+  }
 
-    .compact-sidebar-navigation.is-mobile-navigation .compact-nav-items {
-      gap: 5px !important;
-    }
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link {
+    min-height: 64px !important;
+    padding: 7px 5px !important;
+  }
 
-    .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link {
-      min-height: 64px !important;
-      padding: 7px 5px !important;
-    }
-
-    body:is(.chalin-route-dashboard, .chalin-route-new-sale, .chalin-route-products)
-      .premium-main > div > div:first-child > div:last-child > div:last-child {
-      grid-template-columns: 1fr 1fr !important;
-    }
+  body.chalin-route-dashboard .premium-main > div > div:first-child h1,
+  body.chalin-route-new-sale .premium-main > div > div:first-child h1,
+  body.chalin-route-products .premium-main > div > div:first-child h1 {
+    font-size: 31px !important;
   }
 }
