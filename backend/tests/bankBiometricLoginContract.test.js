@@ -81,7 +81,7 @@ test("password starts blank and consent follows successful login", () => {
 
 test("service worker ignores third-party requests and CSP allows Cloudflare", () => {
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /chalin03-bank-biometric-login-v1/);
+  assert.match(serviceWorker, /chalin03-bank-biometric-login-v2/);
   assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
   assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 });
