@@ -1,0 +1,20 @@
+@keyframes gate4-center-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes gate4-center-spin-reverse {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+.gate4-intro__orbit--one,
+.gate4-intro__orbit--three,
+.gate4-sequence__ring--one {
+  animation-name: gate4-center-spin !important;
+}
+
+.gate4-intro__orbit--two,
+.gate4-sequence__ring--two {
+  animation-name: gate4-center-spin-reverse !important;
+}
