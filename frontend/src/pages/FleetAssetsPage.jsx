@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import EquipmentCataloguePage from "./EquipmentCataloguePage";
-import EquipmentSalesPage from "./EquipmentSalesPage";
+import EquipmentSalesWorkspacePage from "./EquipmentSalesWorkspacePage";
 import SharedFleetAssetsPage from "./SharedFleetAssetsPage";
 
 export default function FleetAssetsPage() {
@@ -13,7 +13,7 @@ export default function FleetAssetsPage() {
   }
 
   return searchParams.get("view") === "sales" ? (
-    <EquipmentSalesPage />
+    <EquipmentSalesWorkspacePage />
   ) : (
     <EquipmentCataloguePage />
   );
