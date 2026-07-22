@@ -1,6 +1,7 @@
 -- CHALIN 03 EQUIPMENT SALES & HIRE FOUNDATION
 -- Heavy-equipment catalogue, media, sales, installment schedules, delivery and ownership transfer.
--- ADDITIVE / IDEMPOTENT MIGRATION ONLY.
+-- ADDITIVE MIGRATION ONLY.
+-- Idempotent: rerunning this migration must preserve existing records.
 -- BACKUP REQUIRED BEFORE PRODUCTION EXECUTION.
 -- Existing Spare Parts sales, installments, Hire contracts, payments and fleet records are preserved.
 -- Never run database/schema.sql against production.
