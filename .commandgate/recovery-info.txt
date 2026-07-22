@@ -1,0 +1,5 @@
+member=apply_command_gate.py
+expected_bytes=146330
+recovered_bytes=115368
+missing_bytes=30962
+recovered_sha256=abf69658b687445df0d9699feb5d323edd1b2231f36fc04a3991ed8bd4d9702b
