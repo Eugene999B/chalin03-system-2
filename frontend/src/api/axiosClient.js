@@ -1,5 +1,8 @@
 import axios from "axios";
 import "../utils/equipmentMediaCaptureBridge";
+import {
+  assertSparePartsInstallmentRequestAllowed,
+} from "../utils/sparePartsInstallmentRetirementBridge";
 
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
@@ -19,7 +22,6 @@ function getStoredUser() {
     return null;
   }
 }
-
 
 function getStoredWorkspaceContextId(workspaceCode) {
   const keyMap = {
@@ -75,6 +77,8 @@ function getStoredSessionInfo() {
 }
 
 axiosClient.interceptors.request.use((config) => {
+  assertSparePartsInstallmentRequestAllowed(config);
+
   const token = localStorage.getItem("chalin03_token");
   const { workspaceCode, branchId, branchCode, branchName } =
     getStoredSessionInfo();
