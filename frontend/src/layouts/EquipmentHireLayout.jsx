@@ -21,6 +21,13 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Sales & Installments",
+        description: "Enquiries, quotations, agreements, payments, delivery and ownership",
+        path: "/equipment-hire-operations/fleet?view=sales",
+        icon: "🏷️",
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Notification Centre",
         description: "Commercial approvals, overdue finance and contract alerts",
         path: "/equipment-hire-operations/notifications",
