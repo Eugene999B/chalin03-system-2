@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
+import { openEmergencyCommand } from "../components/EmergencyCommandOverlay";
 import { useAuth } from "../context/AuthContext";
 import { businessWorkspaces, getBusinessWorkspace } from "../data/businessWorkspaces";
 import { collectDeviceEvidence } from "../utils/deviceEvidence";
@@ -19,6 +20,8 @@ import "../styles/appVersion.css";
 import "../styles/commandGate.css";
 
 const DEFAULT_WORKSPACE = "spare_parts";
+const TOKEN_KEY = "chalin03_token";
+const USER_KEY = "chalin03_user";
 
 const WORKSPACE_VISUALS = {
   spare_parts: {
@@ -39,12 +42,6 @@ const WORKSPACE_VISUALS = {
     atmosphere: "hire",
     signal: "Enquiries, contracts and dispatch operations",
   },
-};
-
-const EMERGENCY_ROUTES = {
-  spare_parts: "/emergency-operations",
-  mining: "/mining/emergency-operations",
-  equipment_hire: "/equipment-hire-operations/emergency-operations",
 };
 
 const COMMAND_CHECKS = [
@@ -89,9 +86,29 @@ function friendlyRole(user) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function persistPasskeySession(payload, fallbackWorkspaceCode) {
+  const token = String(payload?.token || "").trim();
+  const rawUser = payload?.user;
+
+  if (!token || !rawUser) {
+    throw new Error("The secure session response is incomplete.");
+  }
+
+  const user = {
+    ...rawUser,
+    workspace_code:
+      rawUser.workspace_code || payload?.workspace?.code || fallbackWorkspaceCode,
+    active_workspace: rawUser.active_workspace || payload?.workspace || null,
+  };
+
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+
+  return { ...payload, token, user };
+}
+
 export default function LoginPage() {
-  const { establishSession, isLoggedIn, login, user: activeUser, workspaceCode } = useAuth();
-  const navigate = useNavigate();
+  const { isLoggedIn, login, user: activeUser, workspaceCode } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const passwordInputRef = useRef(null);
 
@@ -146,7 +163,8 @@ export default function LoginPage() {
     () => getStationModes(selectedWorkspaceCode),
     [selectedWorkspaceCode]
   );
-  const selectedStation = stationModes.find((item) => item.code === stationCode) || stationModes[0];
+  const selectedStation =
+    stationModes.find((item) => item.code === stationCode) || stationModes[0];
   const lastWork = getLastWork(selectedWorkspaceCode);
 
   useEffect(() => {
@@ -246,14 +264,16 @@ export default function LoginPage() {
 
   async function finishCommand(sessionPayload) {
     const authenticatedUser = sessionPayload.user;
-    const destination = emergencyMode
-      ? EMERGENCY_ROUTES[selectedWorkspaceCode]
-      : getPostLoginDestination({
-          user: authenticatedUser,
-          workspaceCode: selectedWorkspaceCode,
-          stationCode,
-          preferResume: stationCode === "auto",
-        });
+    const destination = getPostLoginDestination({
+      user: authenticatedUser,
+      workspaceCode: selectedWorkspaceCode,
+      stationCode,
+      preferResume: stationCode === "auto",
+    });
+
+    if (emergencyMode) {
+      openEmergencyCommand(selectedWorkspaceCode);
+    }
 
     setCommandUser(authenticatedUser);
     setCommandDestination(destination);
@@ -263,7 +283,7 @@ export default function LoginPage() {
       setCommandStage(index);
     }
     await new Promise((resolve) => window.setTimeout(resolve, 260));
-    navigate(destination, { replace: true });
+    window.location.assign(destination);
   }
 
   async function handlePasswordLogin(event) {
@@ -279,7 +299,9 @@ export default function LoginPage() {
 
     setLoadingMode("password");
     try {
-      const deviceEvidence = await collectDeviceEvidence({ requestLocation: sharePreciseLocation });
+      const deviceEvidence = await collectDeviceEvidence({
+        requestLocation: sharePreciseLocation,
+      });
       const result = await login({
         identifier: username.trim(),
         username: username.trim(),
@@ -317,13 +339,13 @@ export default function LoginPage() {
 
     setLoadingMode("passkey");
     try {
-      const result = await authenticateWithPasskey({
+      const response = await authenticateWithPasskey({
         workspaceCode: selectedWorkspaceCode,
         branchId: isSpareParts ? Number(selectedBranchId) : null,
         collectDeviceEvidence: () =>
           collectDeviceEvidence({ requestLocation: sharePreciseLocation }),
       });
-      establishSession(result);
+      const result = persistPasskeySession(response, selectedWorkspaceCode);
       await finishCommand(result);
     } catch (requestError) {
       const data = requestError.response?.data || {};
@@ -332,7 +354,9 @@ export default function LoginPage() {
       setError(
         cancelled
           ? "Device verification was cancelled. Use Unlock again or open password login."
-          : data.message || requestError.message || "Device unlock could not be verified."
+          : data.message ||
+              requestError.message ||
+              "Device unlock could not be verified."
       );
       if (data.code === "NO_PASSKEYS_REGISTERED") setPasswordPanelOpen(true);
     } finally {
@@ -360,7 +384,8 @@ export default function LoginPage() {
       setForgotStage("verify");
     } catch (requestError) {
       setForgotError(
-        requestError.response?.data?.message || "Password recovery is temporarily unavailable."
+        requestError.response?.data?.message ||
+          "Password recovery is temporarily unavailable."
       );
     } finally {
       setForgotLoading(false);
@@ -404,7 +429,8 @@ export default function LoginPage() {
       setRecoveryConfirmPassword("");
     } catch (requestError) {
       setForgotError(
-        requestError.response?.data?.message || "Password recovery could not be completed."
+        requestError.response?.data?.message ||
+          "Password recovery could not be completed."
       );
     } finally {
       setForgotLoading(false);
@@ -497,7 +523,9 @@ export default function LoginPage() {
                 </select>
               </label>
             )}
-            {branchesError && <div className="command-alert command-alert--error">{branchesError}</div>}
+            {branchesError && (
+              <div className="command-alert command-alert--error">{branchesError}</div>
+            )}
           </div>
 
           <div className="command-gate__access">
@@ -541,7 +569,10 @@ export default function LoginPage() {
               disabled={busy || branchesLoading}
             >
               <span className="command-unlock__icon">◎</span>
-              <span><strong>{loadingMode === "passkey" ? "Verifying device…" : "Unlock Chalin 03"}</strong><small>Fingerprint, face, Windows Hello or device PIN</small></span>
+              <span>
+                <strong>{loadingMode === "passkey" ? "Verifying device…" : "Unlock Chalin 03"}</strong>
+                <small>Fingerprint, face, Windows Hello or device PIN</small>
+              </span>
               <b>→</b>
             </button>
 
@@ -556,10 +587,13 @@ export default function LoginPage() {
               >
                 Emergency operations
               </button>
-              <button type="button" onClick={() => {
-                setForgotUsername(username);
-                setShowForgotPassword(true);
-              }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotUsername(username);
+                  setShowForgotPassword(true);
+                }}
+              >
                 Recovery
               </button>
             </div>
@@ -609,7 +643,9 @@ export default function LoginPage() {
               <div className="command-alert command-alert--error" role="alert">
                 <strong>{errorCode === "ACCOUNT_LOCKED" ? "Workspace protected" : "Command not granted"}</strong>
                 <span>{error}</span>
-                {attemptsRemaining !== null && <small>{attemptsRemaining} attempt(s) remaining</small>}
+                {attemptsRemaining !== null && (
+                  <small>{attemptsRemaining} attempt(s) remaining</small>
+                )}
               </div>
             )}
           </div>
@@ -636,7 +672,9 @@ export default function LoginPage() {
                 </span>
               ))}
             </div>
-            <small>Opening {emergencyMode ? "Emergency Operations" : describeResumePath(commandDestination)}</small>
+            <small>
+              Opening {emergencyMode ? "Emergency Operations" : describeResumePath(commandDestination)}
+            </small>
             <b>Command granted</b>
           </div>
         </div>
@@ -645,34 +683,90 @@ export default function LoginPage() {
       {showForgotPassword && (
         <div className="command-modal" role="dialog" aria-modal="true" aria-label="Account recovery">
           <div className="command-modal__card">
-            <button className="command-modal__close" type="button" onClick={() => setShowForgotPassword(false)}>×</button>
+            <button
+              className="command-modal__close"
+              type="button"
+              onClick={() => setShowForgotPassword(false)}
+            >
+              ×
+            </button>
             <span className="command-modal__eyebrow">Secure recovery</span>
             <h2>Recover your Chalin account</h2>
+
             {forgotStage === "request" && (
               <form onSubmit={requestRecoveryCode}>
                 <label className="command-field">
                   <span>Username or phone number</span>
-                  <input value={forgotUsername} onChange={(event) => setForgotUsername(event.target.value)} />
+                  <input
+                    value={forgotUsername}
+                    onChange={(event) => setForgotUsername(event.target.value)}
+                  />
                 </label>
                 <button className="password-console__submit" disabled={forgotLoading} type="submit">
                   {forgotLoading ? "Requesting…" : "Send recovery code"}
                 </button>
               </form>
             )}
+
             {forgotStage === "verify" && (
               <form onSubmit={resetRecoveredPassword}>
-                <label className="command-field"><span>6-digit recovery code</span><input value={recoveryCode} inputMode="numeric" maxLength={6} onChange={(event) => setRecoveryCode(event.target.value.replace(/\D/g, ""))} /></label>
-                <label className="command-field"><span>New password</span><input type={showRecoveryPasswords ? "text" : "password"} value={recoveryNewPassword} onChange={(event) => setRecoveryNewPassword(event.target.value)} /></label>
-                <label className="command-field"><span>Confirm new password</span><input type={showRecoveryPasswords ? "text" : "password"} value={recoveryConfirmPassword} onChange={(event) => setRecoveryConfirmPassword(event.target.value)} /></label>
-                <label className="command-checkbox"><input type="checkbox" checked={showRecoveryPasswords} onChange={(event) => setShowRecoveryPasswords(event.target.checked)} /><span>Show recovery passwords</span></label>
-                <button className="password-console__submit" disabled={forgotLoading} type="submit">{forgotLoading ? "Verifying…" : "Reset password"}</button>
+                <label className="command-field">
+                  <span>6-digit recovery code</span>
+                  <input
+                    value={recoveryCode}
+                    inputMode="numeric"
+                    maxLength={6}
+                    onChange={(event) =>
+                      setRecoveryCode(event.target.value.replace(/\D/g, ""))
+                    }
+                  />
+                </label>
+                <label className="command-field">
+                  <span>New password</span>
+                  <input
+                    type={showRecoveryPasswords ? "text" : "password"}
+                    value={recoveryNewPassword}
+                    onChange={(event) => setRecoveryNewPassword(event.target.value)}
+                  />
+                </label>
+                <label className="command-field">
+                  <span>Confirm new password</span>
+                  <input
+                    type={showRecoveryPasswords ? "text" : "password"}
+                    value={recoveryConfirmPassword}
+                    onChange={(event) => setRecoveryConfirmPassword(event.target.value)}
+                  />
+                </label>
+                <label className="command-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={showRecoveryPasswords}
+                    onChange={(event) => setShowRecoveryPasswords(event.target.checked)}
+                  />
+                  <span>Show recovery passwords</span>
+                </label>
+                <button className="password-console__submit" disabled={forgotLoading} type="submit">
+                  {forgotLoading ? "Verifying…" : "Reset password"}
+                </button>
               </form>
             )}
+
             {forgotStage === "complete" && (
-              <button className="password-console__submit" type="button" onClick={() => setShowForgotPassword(false)}>Return to Command Gate</button>
+              <button
+                className="password-console__submit"
+                type="button"
+                onClick={() => setShowForgotPassword(false)}
+              >
+                Return to Command Gate
+              </button>
             )}
-            {forgotMessage && <div className="command-alert command-alert--success">{forgotMessage}</div>}
-            {forgotError && <div className="command-alert command-alert--error">{forgotError}</div>}
+
+            {forgotMessage && (
+              <div className="command-alert command-alert--success">{forgotMessage}</div>
+            )}
+            {forgotError && (
+              <div className="command-alert command-alert--error">{forgotError}</div>
+            )}
           </div>
         </div>
       )}
