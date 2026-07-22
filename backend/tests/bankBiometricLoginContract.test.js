@@ -10,8 +10,10 @@ const read = (relativePath) =>
 const schemaService = read("backend/services/passkeySchemaService.js");
 const biometricRoutes = read("backend/routes/biometricRoutes.js");
 const loginEntry = read("frontend/src/pages/LoginPage.jsx");
-const loginPage = read("frontend/src/pages/LoginPageBiometricBank.jsx");
+const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
 const biometricClient = read("frontend/src/utils/biometricAccess.js");
+const groupStyles = read("frontend/src/styles/groupOperationsLogin.css");
+const mobileAdminStyles = read("frontend/src/styles/adminMobileHotfix.css");
 const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
@@ -77,7 +79,21 @@ test("biometric login is bound to one browser token, credential and account", ()
 });
 
 
-test("password starts blank, works on first tap and consent follows login", () => {
+test("setup is offered only when a platform authenticator is reported", () => {
+  assert.match(
+    biometricClient,
+    /isUserVerifyingPlatformAuthenticatorAvailable/
+  );
+  assert.match(biometricClient, /platformAvailabilityResolved/);
+  assert.match(biometricClient, /PLATFORM_BIOMETRIC_UNAVAILABLE/);
+  assert.match(loginPage, /const \[biometricAvailable, setBiometricAvailable\]/);
+  assert.match(loginPage, /if \(biometricAvailable && !sameBoundAccount\)/);
+  assert.match(loginPage, /consentOpen && biometricAvailable/);
+});
+
+
+test("password starts blank, group story is shown and every login opens a dashboard", () => {
+  assert.match(loginEntry, /LoginPageGroupOperations/);
   assert.match(loginPage, /const \[password, setPassword\] = useState\(""\)/);
   assert.match(loginPage, /autoComplete="off"/);
   assert.match(loginPage, /autoComplete="new-password"/);
@@ -89,18 +105,39 @@ test("password starts blank, works on first tap and consent follows login", () =
   assert.match(loginEntry, /unlockPasswordOnFirstTap/);
   assert.match(loginEntry, /input\.readOnly = false/);
   assert.match(loginEntry, /openEmergencyCommand/);
+  assert.match(loginPage, /Chalin 03 Group Operations/);
+  assert.match(loginPage, /Three connected businesses/);
+  assert.match(loginPage, /DASHBOARD_PATHS/);
+  assert.match(loginPage, /Opening your dashboard/);
   assert.match(loginPage, /Use fingerprint or face on this device\?/);
   assert.match(loginPage, /Set up fingerprint or face/);
   assert.match(loginPage, /Not now/);
   assert.match(loginPage, /sameBoundAccount/);
+  assert.doesNotMatch(loginPage, /Password first\. Fingerprint/i);
   assert.doesNotMatch(loginPage, /device PIN/i);
   assert.doesNotMatch(loginPage, /Windows Hello/i);
+  assert.match(groupStyles, /group-operations-map/);
 });
 
 
-test("service worker ignores third-party requests and CSP allows Cloudflare", () => {
+test("mobile administration layouts override route-level desktop widths", () => {
+  assert.match(
+    mobileAdminStyles,
+    /\.upm-table-wrap \.upm-permission-table/
+  );
+  assert.match(mobileAdminStyles, /min-width:\s*0 !important/);
+  assert.match(
+    mobileAdminStyles,
+    /delegate-capability-grid input\[type="checkbox"\]/
+  );
+  assert.match(mobileAdminStyles, /users-store-strip/);
+  assert.match(mobileAdminStyles, /grid-template-columns:\s*repeat\(2/);
+});
+
+
+test("service worker ignores third-party requests and refreshes the mobile release", () => {
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /chalin03-bank-biometric-login-v2/);
+  assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v3/);
   assert.match(
     headers,
     /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/
