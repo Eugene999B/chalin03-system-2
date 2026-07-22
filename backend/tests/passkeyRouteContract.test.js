@@ -56,3 +56,23 @@ test("passkey schema stores credentials and compact challenge records only", () 
   assert.match(schema, /CREATE TABLE IF NOT EXISTS passkey_challenges/);
   assert.doesNotMatch(schema, /\b(video|image|photo|audio)_/i);
 });
+
+
+test("auth routes expose only the helpers required by Command Gate", () => {
+  const source = read("routes/authRoutes.js");
+
+  assert.match(source, /router\.commandGateAuth\s*=\s*Object\.freeze/);
+  assert.match(source, /resolveLoginWorkspace/);
+  assert.match(source, /resolveLoginBranch/);
+  assert.match(source, /createToken/);
+});
+
+test("passkey dependencies are declared for backend and browser", () => {
+  const backendPackage = JSON.parse(read("package.json"));
+  const frontendPackage = JSON.parse(
+    fs.readFileSync(path.resolve(root, "../frontend/package.json"), "utf8")
+  );
+
+  assert.ok(backendPackage.dependencies["@simplewebauthn/server"]);
+  assert.ok(frontendPackage.dependencies["@simplewebauthn/browser"]);
+});
