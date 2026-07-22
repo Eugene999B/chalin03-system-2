@@ -1,0 +1,428 @@
+/* Bank-style presentation layered over the proven Command Gate V4 engine. */
+
+.gate4__version {
+  display: none !important;
+}
+
+.gate4__logo {
+  overflow: hidden;
+  border: 0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2) !important;
+}
+
+.gate4__logo img,
+.gate4__logo span {
+  display: none !important;
+}
+
+.gate4__logo::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 12px;
+  background: #ffffff url("/chalin03-logo.png") center / contain no-repeat;
+}
+
+.gate4-intro__logo,
+.gate4-sequence__brand > div {
+  border: 0 !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  background: #ffffff url("/chalin03-logo.png") center / contain no-repeat !important;
+}
+
+.gate4__topbar {
+  min-height: 68px;
+  padding: 10px 14px !important;
+  background: linear-gradient(
+    135deg,
+    rgba(5, 19, 35, 0.96),
+    rgba(10, 49, 84, 0.96)
+  );
+}
+
+.gate4__brand strong {
+  font-size: 16px !important;
+}
+
+.gate4__status {
+  gap: 5px !important;
+}
+
+.gate4__online {
+  min-height: 29px !important;
+  padding: 0 10px !important;
+}
+
+.gate4__access {
+  background:
+    radial-gradient(circle at 96% 0%, rgba(86, 204, 242, 0.11), transparent 26%),
+    linear-gradient(180deg, #ffffff, #f7f9fc) !important;
+}
+
+.gate4__access-heading h2 {
+  color: #10223a;
+  font-size: clamp(30px, 4vw, 39px) !important;
+}
+
+.gate4__access-heading p {
+  color: #68778b !important;
+}
+
+.gate4__access-shield {
+  border-color: rgba(36, 182, 108, 0.23) !important;
+  background: linear-gradient(145deg, #ebfff4, #ffffff) !important;
+  box-shadow: 0 12px 28px rgba(36, 182, 108, 0.1);
+}
+
+.gate4__workspace-tabs button {
+  min-height: 74px !important;
+  border-color: #dce4ee !important;
+  box-shadow: 0 8px 22px rgba(16, 34, 58, 0.05) !important;
+}
+
+.gate4__workspace-tabs button.is-selected {
+  border-color: #efc23b !important;
+  background: linear-gradient(
+    145deg,
+    rgba(245, 197, 66, 0.22),
+    #ffffff 76%
+  ) !important;
+  box-shadow:
+    0 14px 30px rgba(245, 197, 66, 0.13),
+    inset 0 0 0 1px rgba(245, 197, 66, 0.15) !important;
+}
+
+.gate4__context-strip {
+  min-height: 56px !important;
+  border-color: #dfe6ef !important;
+  box-shadow: 0 8px 20px rgba(16, 34, 58, 0.035);
+}
+
+.gate4__field input,
+.gate4__field select {
+  border-color: #cfd8e4 !important;
+  background: #ffffff !important;
+}
+
+.gate4__passkey {
+  min-height: 64px !important;
+  border: 1px solid rgba(47, 128, 237, 0.28) !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(circle at 92% 18%, rgba(86, 204, 242, 0.42), transparent 28%),
+    linear-gradient(135deg, #0a4c7d, #153b6e) !important;
+  box-shadow: 0 15px 34px rgba(16, 67, 113, 0.2) !important;
+}
+
+.gate4__passkey strong {
+  font-size: 0 !important;
+}
+
+.gate4__passkey strong::after {
+  content: "Sign in with face or fingerprint";
+  font-size: 12px;
+}
+
+.gate4__passkey small {
+  font-size: 0 !important;
+}
+
+.gate4__passkey small::after {
+  content: "Fresh face, fingerprint or device-PIN verification is required";
+  font-size: 8px;
+}
+
+.gate4__submit {
+  min-height: 56px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, #ffe37c, #f5c542 55%, #e8ad22) !important;
+  box-shadow:
+    0 15px 30px rgba(211, 154, 20, 0.21),
+    inset 0 1px rgba(255, 255, 255, 0.62) !important;
+}
+
+.gate4__quick-links button {
+  color: #5d6d82 !important;
+}
+
+.gate4-sequence__content {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 197, 66, 0.11), transparent 28%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.055)) !important;
+}
+
+.bank-bio {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: grid;
+  place-items: end center;
+  background: rgba(2, 9, 17, 0.76);
+  backdrop-filter: blur(15px);
+}
+
+.bank-bio__sheet {
+  width: min(510px, 100%);
+  padding: 24px 22px 30px;
+  text-align: center;
+  color: #10223a;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 30px 30px 0 0;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(86, 204, 242, 0.13), transparent 29%),
+    #ffffff;
+  box-shadow: 0 -30px 95px rgba(0, 0, 0, 0.42);
+  animation: bank-sheet-up 260ms ease;
+}
+
+.bank-bio__sheet > img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 17px;
+  background: #ffffff;
+  box-shadow: 0 11px 27px rgba(16, 34, 58, 0.13);
+}
+
+.bank-bio__fingerprint {
+  width: 118px;
+  height: 118px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 20px auto 17px;
+  color: #0c5d95;
+  border: 1px solid rgba(47, 128, 237, 0.2);
+  border-radius: 39px;
+  background: linear-gradient(145deg, #edf8ff, #ffffff);
+  box-shadow: 0 22px 58px rgba(18, 104, 168, 0.17);
+}
+
+.bank-bio__fingerprint svg {
+  width: 59px;
+  height: 59px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bank-bio__fingerprint > i {
+  position: absolute;
+  inset: -8px;
+  border: 2px solid rgba(47, 128, 237, 0.25);
+  border-top-color: #2f80ed;
+  border-radius: 45px;
+  animation: bank-spin 900ms linear infinite;
+}
+
+.bank-bio__sheet.is-verified .bank-bio__fingerprint {
+  color: #147c48;
+  border-color: rgba(36, 182, 108, 0.23);
+  background: #edfff4;
+}
+
+.bank-bio__sheet.is-verified .bank-bio__fingerprint > i {
+  border-color: rgba(36, 182, 108, 0.28);
+  border-top-color: #24b66c;
+  animation: none;
+}
+
+.bank-bio__sheet > small {
+  color: #748398;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.bank-bio__sheet h2 {
+  margin: 7px 0 0;
+  font-size: 31px;
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.bank-bio__sheet p {
+  max-width: 370px;
+  margin: 10px auto 0;
+  color: #65758a;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.bank-bio__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 17px;
+  padding: 8px 11px;
+  color: #31587e;
+  border-radius: 999px;
+  background: #eef7ff;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.bank-bio__status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f80ed;
+  box-shadow: 0 0 12px rgba(47, 128, 237, 0.6);
+}
+
+.bank-bio__sheet.is-verified .bank-bio__status {
+  color: #12633a;
+  background: #edfff4;
+}
+
+.bank-bio__sheet.is-verified .bank-bio__status i {
+  background: #24b66c;
+}
+
+@keyframes bank-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bank-sheet-up {
+  from {
+    transform: translateY(34px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .gate4__topbar {
+    min-height: 60px !important;
+    padding: 7px 10px !important;
+  }
+
+  .gate4__logo {
+    width: 40px !important;
+    height: 40px !important;
+    flex-basis: 40px !important;
+    border-radius: 12px !important;
+  }
+
+  .gate4__logo::before {
+    inset: 3px;
+    border-radius: 10px;
+  }
+
+  .gate4__brand strong {
+    max-width: 205px;
+    font-size: 13px !important;
+  }
+
+  .gate4__brand small {
+    display: block !important;
+    font-size: 6px !important;
+  }
+
+  .gate4__online {
+    width: 27px !important;
+    min-height: 27px !important;
+    justify-content: center;
+    padding: 0 !important;
+    overflow: hidden;
+    color: transparent !important;
+    font-size: 0 !important;
+  }
+
+  .gate4__access {
+    padding: 14px 12px 22px !important;
+    border-radius: 23px 23px 0 0 !important;
+  }
+
+  .gate4__access-heading h2 {
+    font-size: 28px !important;
+  }
+
+  .gate4__access-heading p {
+    margin-top: 4px !important;
+    font-size: 9px !important;
+  }
+
+  .gate4__workspace-tabs {
+    gap: 6px !important;
+    margin-top: 12px !important;
+  }
+
+  .gate4__workspace-tabs button {
+    min-height: 62px !important;
+    gap: 3px !important;
+    padding: 6px 3px !important;
+    border-radius: 13px !important;
+  }
+
+  .gate4__workspace-tabs button > span {
+    width: 29px !important;
+    height: 29px !important;
+    border-radius: 9px !important;
+  }
+
+  .gate4__workspace-tabs svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .gate4__workspace-tabs strong {
+    font-size: 8px !important;
+  }
+
+  .gate4__context-strip {
+    min-height: 49px !important;
+    margin-top: 7px !important;
+    padding: 6px 8px !important;
+    border-radius: 12px !important;
+  }
+
+  .gate4__field {
+    margin-top: 8px !important;
+  }
+
+  .gate4__field input,
+  .gate4__field select {
+    height: 43px !important;
+    border-radius: 12px !important;
+    font-size: 12px !important;
+  }
+
+  .gate4__passkey {
+    min-height: 58px !important;
+    margin-top: 9px !important;
+    border-radius: 15px !important;
+  }
+
+  .gate4__passkey strong::after {
+    font-size: 10px;
+  }
+
+  .gate4__passkey small::after {
+    font-size: 6px;
+  }
+
+  .gate4__submit {
+    min-height: 50px !important;
+    margin-top: 11px !important;
+    border-radius: 14px !important;
+  }
+
+  .gate4__quick-links {
+    margin-top: 8px !important;
+  }
+
+  .bank-bio__sheet {
+    padding: 22px 18px 27px;
+  }
+}

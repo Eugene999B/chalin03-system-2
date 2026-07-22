@@ -1,3 +1,1 @@
-import "../styles/commandGateV4MotionFix.css";
-
-export { default } from "./LoginPageV4.jsx";
+export { default } from "./LoginPageBank.jsx";
