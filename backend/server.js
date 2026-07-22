@@ -20,6 +20,9 @@ const {
   sensitiveAdminLimiter,
 } = require("./middleware/securityMiddleware");
 const { requireAuth } = require("./middleware/authMiddleware");
+const {
+  enforceEquipmentCatalogueWriteIntegrity,
+} = require("./middleware/equipmentCatalogueIntegrityMiddleware");
 const { requireWorkerCategoryRecord } = require("./middleware/workerCategoryMiddleware");
 const {
   delegatedUserAdministrationGate,
@@ -332,6 +335,7 @@ app.use(
   "/api/equipment-catalogue",
   requireAuth,
   hireBoundary,
+  enforceEquipmentCatalogueWriteIntegrity,
   equipmentCatalogueRoutes
 );
 app.use("/api/notifications", notificationRoutes);
