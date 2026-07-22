@@ -8,6 +8,10 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const BINDING_KEY = "chalin03_biometric_binding_v2";
 
+let platformAvailabilityPromise = null;
+let platformAvailabilityResolved = false;
+let platformAuthenticatorAvailable = false;
+
 function token() {
   return localStorage.getItem("chalin03_token") || "";
 }
@@ -37,11 +41,54 @@ async function parse(response) {
   return body;
 }
 
-export function supportsBiometricAccess() {
+function hasBasicWebAuthnSupport() {
   return (
     typeof window !== "undefined" &&
     window.isSecureContext &&
-    browserSupportsWebAuthn()
+    browserSupportsWebAuthn() &&
+    typeof window.PublicKeyCredential !== "undefined"
+  );
+}
+
+export async function isBiometricAccessAvailable() {
+  if (!hasBasicWebAuthnSupport()) {
+    platformAvailabilityResolved = true;
+    platformAuthenticatorAvailable = false;
+    return false;
+  }
+
+  if (
+    typeof window.PublicKeyCredential
+      .isUserVerifyingPlatformAuthenticatorAvailable !== "function"
+  ) {
+    platformAvailabilityResolved = true;
+    platformAuthenticatorAvailable = false;
+    return false;
+  }
+
+  if (!platformAvailabilityPromise) {
+    platformAvailabilityPromise = window.PublicKeyCredential
+      .isUserVerifyingPlatformAuthenticatorAvailable()
+      .then((available) => Boolean(available))
+      .catch(() => false)
+      .then((available) => {
+        platformAvailabilityResolved = true;
+        platformAuthenticatorAvailable = available;
+        return available;
+      });
+  }
+
+  return platformAvailabilityPromise;
+}
+
+// Synchronous compatibility helper. The active login page first resolves
+// isBiometricAccessAvailable(), so this returns true only after the browser has
+// confirmed a built-in user-verifying platform authenticator.
+export function supportsBiometricAccess() {
+  return (
+    hasBasicWebAuthnSupport() &&
+    platformAvailabilityResolved &&
+    platformAuthenticatorAvailable
   );
 }
 
@@ -65,9 +112,11 @@ export function saveStoredBiometricBinding(binding) {
 }
 
 export async function validateStoredBiometricBinding() {
+  const available = await isBiometricAccessAvailable();
   const stored = getStoredBiometricBinding();
-  if (!stored?.bindingToken || !supportsBiometricAccess()) {
-    return { valid: false, stored: null };
+
+  if (!available || !stored?.bindingToken) {
+    return { valid: false, stored: null, available };
   }
 
   const response = await fetch(`${API_BASE_URL}/auth/biometrics/binding/status`, {
@@ -79,7 +128,7 @@ export async function validateStoredBiometricBinding() {
 
   if (!body.valid) {
     clearStoredBiometricBinding();
-    return { valid: false, stored: null };
+    return { valid: false, stored: null, available: true };
   }
 
   const refreshed = saveStoredBiometricBinding({
@@ -87,10 +136,27 @@ export async function validateStoredBiometricBinding() {
     account: body.account,
     device: body.device,
   });
-  return { valid: true, stored: refreshed, account: body.account };
+  return {
+    valid: true,
+    stored: refreshed,
+    account: body.account,
+    available: true,
+  };
+}
+
+async function requirePlatformAuthenticator() {
+  if (await isBiometricAccessAvailable()) return;
+
+  const error = new Error(
+    "This device does not report a built-in fingerprint or face authenticator. Use the account password on this device."
+  );
+  error.code = "PLATFORM_BIOMETRIC_UNAVAILABLE";
+  throw error;
 }
 
 export async function registerBiometricDevice({ displayName }) {
+  await requirePlatformAuthenticator();
+
   const optionsResponse = await fetch(
     `${API_BASE_URL}/auth/biometrics/registration/options`,
     {
@@ -131,6 +197,8 @@ export async function authenticateWithBiometric({
   branchId,
   deviceEvidence,
 }) {
+  await requirePlatformAuthenticator();
+
   const stored = getStoredBiometricBinding();
   if (!stored?.bindingToken) {
     const error = new Error(
