@@ -31,6 +31,7 @@ const {
 } = require("./services/categoryIsolationService");
 
 const authRoutes = require("./routes/authRoutes");
+const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
@@ -88,6 +89,7 @@ const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
+const { ensurePasskeySchema } = require("./services/passkeySchemaService");
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
@@ -176,6 +178,7 @@ app.get("/api", (req, res) => {
     message: "Chalin 03 API root is working",
     routes: [
       "/api/auth",
+      "/api/auth/passkeys",
       "/api/branches",
       "/api/products",
       "/api/sales",
@@ -225,6 +228,7 @@ app.get("/api", (req, res) => {
 app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth/login", loginLimiter);
+app.use("/api/auth/passkeys/authentication", loginLimiter);
 app.use("/api/auth/forgot-password", loginLimiter);
 app.use("/api/auth/recovery", loginLimiter);
 app.use("/api/backups/restore", sensitiveAdminLimiter);
@@ -263,6 +267,7 @@ app.use(
 );
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
@@ -356,6 +361,7 @@ async function startServer() {
     await runStartupSelfCheck();
     await ensureWorkerHrLetterSchema();
     await ensureEmploymentDocumentSchema();
+    await ensurePasskeySchema();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

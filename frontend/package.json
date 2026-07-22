@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs && node scripts/versionThreeReleaseTests.mjs",
+    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs && node scripts/versionThreeReleaseTests.mjs && node scripts/commandGateReleaseTests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
     "axios": "^1.18.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -1,0 +1,153 @@
+.command-emergency-overlay {
+  z-index: 12000;
+}
+
+.command-emergency-panel {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 26px;
+  color: #f8fafc;
+  border: 1px solid rgba(229, 189, 53, 0.35);
+  border-radius: 28px;
+  background: linear-gradient(145deg, #08111e, #03070e);
+  box-shadow: 0 36px 110px rgba(0, 0, 0, 0.68);
+}
+
+.command-emergency-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.command-emergency-header p {
+  margin: 0 0 8px;
+  color: #e5bd35;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.command-emergency-header h2 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 48px);
+  letter-spacing: -0.05em;
+}
+
+.command-emergency-header span {
+  display: block;
+  margin-top: 8px;
+  color: rgba(248, 250, 252, 0.62);
+}
+
+.command-emergency-header > button {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.command-emergency-notice {
+  margin: 20px 0;
+  padding: 13px 15px;
+  color: #d9e3f0;
+  border: 1px solid rgba(229, 189, 53, 0.2);
+  border-radius: 14px;
+  background: rgba(229, 189, 53, 0.08);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.command-emergency-panel .emergency-action {
+  color: #172033;
+  background: #f8fafc;
+}
+
+.command-emergency-panel > .command-page__button {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.command-checkbox--light {
+  color: #5b6575;
+}
+
+.command-page__station {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e7ef;
+}
+
+.command-page__station h3 {
+  margin: 0;
+}
+
+.command-page__station p {
+  color: #687386;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.command-page__station label {
+  display: grid;
+  gap: 7px;
+  color: #4a5568;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.command-page__station select {
+  min-height: 46px;
+  border: 1px solid #d7dde7;
+  border-radius: 12px;
+  padding: 0 13px;
+  background: #fff;
+}
+
+.command-empty-state {
+  margin-top: 16px;
+  padding: 18px;
+  color: #687386;
+  border: 1px dashed #cfd7e3;
+  border-radius: 15px;
+  background: #fafbfc;
+  text-align: center;
+}
+
+.command-security-note {
+  background: linear-gradient(145deg, #fbfcfe, #f3f6fa);
+}
+
+.command-security-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.command-security-grid span {
+  padding: 12px;
+  color: #354154;
+  border: 1px solid #e0e6ef;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .command-emergency-panel {
+    padding: 19px;
+    border-radius: 21px;
+  }
+
+  .command-security-grid {
+    grid-template-columns: 1fr;
+  }
+}

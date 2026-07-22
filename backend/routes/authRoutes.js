@@ -1327,4 +1327,15 @@ router.post(
   }
 );
 
+router.commandGateAuth = Object.freeze({
+  buildUserSelectByWhere,
+  createToken,
+  isLoginLocked,
+  loadUserCategoryState,
+  normalizeWorkspaceCode,
+  recordSuccessfulLogin,
+  resolveLoginBranch,
+  resolveLoginWorkspace,
+});
+
 module.exports = router;
