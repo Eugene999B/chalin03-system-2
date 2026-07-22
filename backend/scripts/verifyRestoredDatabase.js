@@ -8,6 +8,9 @@ try {
   // dotenv is optional when DB variables are injected by the environment.
 }
 
+const EQUIPMENT_SALES_MIGRATION_NAME =
+  "20260722_equipment_sales_installments_foundation";
+
 const APPLICATION_TABLES = [
   "branches",
   "users",
@@ -117,6 +120,19 @@ const APPLICATION_TABLES = [
   "installment_payment_allocations",
   "installment_reschedules",
   "installment_reminder_log",
+  "equipment_media",
+  "equipment_sales_enquiries",
+  "equipment_sales_quotations",
+  "equipment_sales_quotation_items",
+  "equipment_sale_agreements",
+  "equipment_asset_sale_locks",
+  "equipment_installment_schedule",
+  "equipment_sale_payments",
+  "equipment_sale_payment_allocations",
+  "equipment_deliveries",
+  "equipment_ownership_transfers",
+  "equipment_sales_reminder_log",
+  "equipment_legacy_installment_migrations",
 ];
 
 const HIRE_TRIGGERS = [
@@ -136,6 +152,34 @@ const HIRE_TRIGGERS = [
   "trg_hire_invoice_location_before_update",
   "trg_hire_payment_location_before_update",
   "trg_hire_return_location_before_update",
+  "trg_hire_contract_asset_sale_guard_before_insert",
+  "trg_hire_contract_asset_sale_guard_before_update",
+  "trg_equipment_sale_agreement_hire_guard_before_insert",
+  "trg_equipment_sale_agreement_hire_guard_before_update",
+];
+
+const REQUIRED_EQUIPMENT_COLUMNS = [
+  ["fleet_assets", "hire_location_id"],
+  ["fleet_assets", "equipment_category"],
+  ["fleet_assets", "model_year"],
+  ["fleet_assets", "chassis_number"],
+  ["fleet_assets", "engine_number"],
+  ["fleet_assets", "condition_status"],
+  ["fleet_assets", "operational_purpose"],
+  ["fleet_assets", "sale_status"],
+  ["fleet_assets", "acquisition_cost"],
+  ["fleet_assets", "target_selling_price"],
+  ["fleet_assets", "standard_hire_rate"],
+  ["fleet_assets", "main_image_url"],
+  ["sms_log", "workspace_code"],
+  ["sms_log", "business_unit_id"],
+  ["sms_log", "hire_location_id"],
+  ["sms_log", "entity_type"],
+  ["sms_log", "entity_id"],
+  ["sms_log", "template_code"],
+  ["sms_log", "deduplication_key"],
+  ["sms_log", "scheduled_for"],
+  ["sms_log", "consent_basis"],
 ];
 
 function env(primaryName, fallbackName, defaultValue = undefined) {
@@ -203,8 +247,8 @@ function splitSqlStatements(sqlText) {
   return statements;
 }
 
-async function runSchemaVerifySql(connection) {
-  const filePath = path.resolve(__dirname, "../../database/schema_verify.sql");
+async function runReadOnlySqlFile(connection, relativePath) {
+  const filePath = path.resolve(__dirname, relativePath);
   const statements = splitSqlStatements(fs.readFileSync(filePath, "utf8"));
   let resultSets = 0;
 
@@ -255,6 +299,13 @@ async function main() {
        WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'schema_migrations'`
     );
+    const equipmentMigrationRecord = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM schema_migrations
+       WHERE migration_name = ?`,
+      [EQUIPMENT_SALES_MIGRATION_NAME]
+    );
     const triggerCount = await scalar(
       connection,
       `SELECT COUNT(*) AS count_value
@@ -273,14 +324,24 @@ async function main() {
     const coreColumnConditions = requiredCoreColumns
       .map(() => "(TABLE_NAME = ? AND COLUMN_NAME = ?)")
       .join(" OR ");
-    const coreColumnParams = requiredCoreColumns.flat();
     const coreColumnsFound = await scalar(
       connection,
       `SELECT COUNT(*) AS count_value
        FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
        AND (${coreColumnConditions})`,
-      coreColumnParams
+      requiredCoreColumns.flat()
+    );
+    const equipmentColumnConditions = REQUIRED_EQUIPMENT_COLUMNS
+      .map(() => "(TABLE_NAME = ? AND COLUMN_NAME = ?)")
+      .join(" OR ");
+    const equipmentColumnsFound = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+       AND (${equipmentColumnConditions})`,
+      REQUIRED_EQUIPMENT_COLUMNS.flat()
     );
     const userRoleSupportsStaff = await scalar(
       connection,
@@ -306,6 +367,59 @@ async function main() {
        LEFT JOIN sales s ON s.id = si.sale_id
        WHERE s.id IS NULL`
     );
+    const orphanEquipmentMedia = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM equipment_media em
+       LEFT JOIN fleet_assets fa ON fa.id = em.asset_id
+       WHERE fa.id IS NULL`
+    );
+    const orphanEquipmentAgreements = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM equipment_sale_agreements esa
+       LEFT JOIN hire_customers hc ON hc.id = esa.customer_id
+       LEFT JOIN fleet_assets fa ON fa.id = esa.asset_id
+       LEFT JOIN business_locations bl ON bl.id = esa.hire_location_id
+       WHERE hc.id IS NULL OR fa.id IS NULL OR bl.id IS NULL`
+    );
+    const activeHireSaleConflicts = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM hire_contract_assets hca
+       INNER JOIN equipment_asset_sale_locks easl
+         ON easl.asset_id = hca.asset_id
+        AND easl.released_at IS NULL
+       WHERE hca.status IN ('assigned', 'dispatched', 'active')`
+    );
+    const scheduleTotalMismatches = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM equipment_sale_agreements esa
+       WHERE esa.sale_type = 'installment'
+         AND ABS(
+           esa.scheduled_total - COALESCE((
+             SELECT SUM(eis.scheduled_amount + eis.late_charge_amount - eis.waived_charge_amount)
+             FROM equipment_installment_schedule eis
+             WHERE eis.agreement_id = esa.id
+               AND eis.schedule_status <> 'cancelled'
+           ), 0)
+         ) > 0.01`
+    );
+    const paymentAllocationMismatches = await scalar(
+      connection,
+      `SELECT COUNT(*) AS count_value
+       FROM equipment_sale_payments esp
+       WHERE esp.is_voided = FALSE
+         AND esp.payment_category IN ('installment', 'settlement')
+         AND ABS(
+           esp.amount - COALESCE((
+             SELECT SUM(espa.allocated_amount)
+             FROM equipment_sale_payment_allocations espa
+             WHERE espa.payment_id = esp.id
+           ), 0)
+         ) > 0.01`
+    );
     const aliasObjects = await scalar(
       connection,
       `SELECT COUNT(*) AS count_value
@@ -314,34 +428,58 @@ async function main() {
        AND TABLE_NAME IN ('stores', 'user_store_access', 'activity_logs')`
     );
 
-    const resultSets = await runSchemaVerifySql(connection);
+    const schemaVerifyResultSets = await runReadOnlySqlFile(
+      connection,
+      "../../database/schema_verify.sql"
+    );
+    const equipmentVerifyResultSets = await runReadOnlySqlFile(
+      connection,
+      "../../database/migrations/20260722_equipment_sales_installments_verify.sql"
+    );
+
     const summary = {
-      applicationTablesExpected: 54,
+      applicationTablesExpected: 67,
       applicationTablesFound: appTableCount,
       schemaMigrationsFound: schemaMigrations === 1,
-      hireTriggersExpected: 16,
+      equipmentMigrationRecordFound: equipmentMigrationRecord === 1,
+      hireTriggersExpected: 20,
       hireTriggersFound: triggerCount,
       requiredCoreColumnsExpected: 5,
       requiredCoreColumnsFound: coreColumnsFound,
+      requiredEquipmentColumnsExpected: REQUIRED_EQUIPMENT_COLUMNS.length,
+      requiredEquipmentColumnsFound: equipmentColumnsFound,
       userRoleSupportsStaff: userRoleSupportsStaff === 1,
       duplicateUsers,
       duplicateReceipts,
       orphanSaleItems,
+      orphanEquipmentMedia,
+      orphanEquipmentAgreements,
+      activeHireSaleConflicts,
+      scheduleTotalMismatches,
+      paymentAllocationMismatches,
       legacyAliasObjects: aliasObjects,
-      schemaVerifyResultSets: resultSets,
+      schemaVerifyResultSets,
+      equipmentVerifyResultSets,
     };
 
     console.log(JSON.stringify(summary, null, 2));
 
     if (
-      appTableCount !== 54 ||
+      appTableCount !== 67 ||
       schemaMigrations !== 1 ||
-      triggerCount !== 16 ||
+      equipmentMigrationRecord !== 1 ||
+      triggerCount !== 20 ||
       coreColumnsFound !== 5 ||
+      equipmentColumnsFound !== REQUIRED_EQUIPMENT_COLUMNS.length ||
       userRoleSupportsStaff !== 1 ||
       duplicateUsers > 0 ||
       duplicateReceipts > 0 ||
       orphanSaleItems > 0 ||
+      orphanEquipmentMedia > 0 ||
+      orphanEquipmentAgreements > 0 ||
+      activeHireSaleConflicts > 0 ||
+      scheduleTotalMismatches > 0 ||
+      paymentAllocationMismatches > 0 ||
       aliasObjects > 0
     ) {
       throw new Error("Verification found blocking database problems.");
