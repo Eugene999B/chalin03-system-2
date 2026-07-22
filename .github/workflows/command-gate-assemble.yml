@@ -33,89 +33,13 @@ jobs:
           show-progress: false
 
       - name: Decode and verify package
-        shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from __future__ import annotations
-
-          import base64
-          import binascii
-          import gzip
-          import hashlib
-          import re
-          import tarfile
-          from pathlib import Path
-
-          chunk_dir = Path('.commandgate')
-          output = Path('/tmp/chalin-command-gate.tar.gz')
-
-          def natural_key(path: Path):
-              return [int(part) if part.isdigit() else part.lower()
-                      for part in re.split(r'(\d+)', path.name)]
-
-          chunks = sorted(chunk_dir.glob('chunk*.txt'), key=natural_key)
-          if not chunks:
-              raise SystemExit('::error::No Command Gate package chunks were found.')
-
-          encoded_parts: list[str] = []
-          for chunk in chunks:
-              raw = chunk.read_text(encoding='utf-8-sig')
-              normalized = ''.join(raw.split())
-              if not normalized:
-                  raise SystemExit(f'::error::{chunk} is empty.')
-              invalid = re.search(r'[^A-Za-z0-9+/=]', normalized)
-              if invalid:
-                  raise SystemExit(
-                      f'::error::{chunk} contains an invalid base64 character at offset {invalid.start()}.'
-                  )
-              encoded_parts.append(normalized)
-              print(f'{chunk}: {len(normalized)} encoded characters')
-
-          encoded = ''.join(encoded_parts)
-          print(f'Total encoded characters: {len(encoded)}; remainder: {len(encoded) % 4}')
-          padding = (-len(encoded)) % 4
-          if padding:
-              print(f'Adding {padding} base64 padding character(s).')
-              encoded += '=' * padding
-
-          try:
-              payload = base64.b64decode(encoded, validate=True)
-          except binascii.Error as exc:
-              raise SystemExit(f'::error::Command Gate package base64 is invalid: {exc}') from exc
-
-          output.write_bytes(payload)
-          print(f'Decoded bytes: {len(payload)}')
-          print(f'SHA-256: {hashlib.sha256(payload).hexdigest()}')
-
-          try:
-              with gzip.open(output, 'rb') as stream:
-                  while stream.read(1024 * 1024):
-                      pass
-          except (OSError, EOFError) as exc:
-              raise SystemExit(f'::error::Command Gate gzip verification failed: {exc}') from exc
-
-          with tarfile.open(output, mode='r:gz') as archive:
-              members = archive.getmembers()
-              if not members:
-                  raise SystemExit('::error::Command Gate package archive is empty.')
-              unsafe = [
-                  member.name for member in members
-                  if member.name.startswith('/') or '..' in Path(member.name).parts
-              ]
-              if unsafe:
-                  raise SystemExit(f'::error::Unsafe archive paths detected: {unsafe[:5]}')
-              Path('/tmp/chalin-command-gate-files.txt').write_text(
-                  '\n'.join(member.name for member in members) + '\n',
-                  encoding='utf-8',
-              )
-              print(f'Archive members: {len(members)}')
-          PY
+          python .commandgate/assemble.py
           echo "Package files:"
           cat /tmp/chalin-command-gate-files.txt
 
       - name: Apply package and remove staging files
-        shell: bash
         run: |
           set -euo pipefail
           tar -xzf /tmp/chalin-command-gate.tar.gz -C .
@@ -123,7 +47,6 @@ jobs:
           rm -f .github/workflows/command-gate-assemble.yml
 
       - name: Commit assembled implementation
-        shell: bash
         run: |
           set -euo pipefail
           git config user.name "Chalin 03 Release Agent"
