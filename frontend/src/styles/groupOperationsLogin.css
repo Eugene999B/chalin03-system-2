@@ -23,6 +23,16 @@
   max-width: 610px;
 }
 
+.group-login .biometric-login__continue strong,
+.group-login .biometric-login__continue small {
+  font-size: inherit !important;
+}
+
+.group-login .biometric-login__continue strong::after,
+.group-login .biometric-login__continue small::after {
+  content: none !important;
+}
+
 .group-operations-map {
   position: relative;
   width: min(430px, 92%);
