@@ -69,7 +69,7 @@ assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
 assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricRoutes\)/);
 
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-assert.match(serviceWorker, /chalin03-bank-biometric-login-v1/);
+assert.match(serviceWorker, /chalin03-bank-biometric-login-v2/);
 assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 
