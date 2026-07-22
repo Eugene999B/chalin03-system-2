@@ -104,8 +104,22 @@ async function verifyFoundation(connection) {
   }
 }
 
+async function removeAnsiQuotesForMigration(connection) {
+  const [rows] = await connection.query("SELECT @@SESSION.sql_mode AS sql_mode");
+  const modes = String(rows[0]?.sql_mode || "")
+    .split(",")
+    .map((mode) => mode.trim())
+    .filter(Boolean)
+    .filter((mode) => mode.toUpperCase() !== "ANSI_QUOTES");
+
+  await connection.query("SET SESSION sql_mode = ?", [modes.join(",")]);
+}
+
 async function ensureEquipmentSalesSchema() {
-  if (String(process.env.DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION || "").toLowerCase() === "true") {
+  if (
+    String(process.env.DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION || "").toLowerCase() ===
+    "true"
+  ) {
     console.warn("Equipment Sales startup migration is disabled by environment configuration.");
     return { applied: false, skipped: true, reason: "disabled" };
   }
@@ -114,7 +128,9 @@ async function ensureEquipmentSalesSchema() {
   let lockAcquired = false;
 
   try {
-    const [lockRows] = await connection.query("SELECT GET_LOCK(?, 60) AS acquired", [LOCK_NAME]);
+    const [lockRows] = await connection.query("SELECT GET_LOCK(?, 60) AS acquired", [
+      LOCK_NAME,
+    ]);
     lockAcquired = Number(lockRows[0]?.acquired || 0) === 1;
     if (!lockAcquired) {
       throw new Error("Could not acquire the Equipment Sales migration lock.");
@@ -129,11 +145,10 @@ async function ensureEquipmentSalesSchema() {
       throw new Error(`Equipment Sales migration file is missing: ${MIGRATION_FILE}`);
     }
 
-    // The migration contains standard SQL string literals. Remove ANSI_QUOTES
-    // only for this connection so double-quoted definitions remain portable.
-    await connection.query(
-      "SET SESSION sql_mode = REPLACE(REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES,', ''), ',ANSI_QUOTES', '')"
-    );
+    // The migration contains standard SQL string literals. ANSI_QUOTES is
+    // removed only for this dedicated connection and does not affect other
+    // application sessions or the database server's global SQL mode.
+    await removeAnsiQuotesForMigration(connection);
 
     const statements = splitSqlStatements(fs.readFileSync(MIGRATION_FILE, "utf8"));
     if (statements.length < 20) {
@@ -162,6 +177,7 @@ async function ensureEquipmentSalesSchema() {
 module.exports = {
   MIGRATION_NAME,
   ensureEquipmentSalesSchema,
+  removeAnsiQuotesForMigration,
   splitSqlStatements,
   verifyFoundation,
 };
