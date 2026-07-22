@@ -1,0 +1,525 @@
+/* Dedicated mobile operating layer for Chalin 03.
+   Desktop layouts remain untouched. This file intentionally uses conservative
+   selectors so the production CSS pipeline and older business devices remain safe. */
+
+@media (max-width: 920px) {
+  :root {
+    --mobile-navy: #07182c;
+    --mobile-blue: #104d7f;
+    --mobile-gold: #e8c12f;
+    --mobile-paper: #f4f7fb;
+    --mobile-line: #d8e1ec;
+    --mobile-text: #10223a;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 8% 0%, rgba(232, 193, 47, 0.12), transparent 28%),
+      radial-gradient(circle at 94% 8%, rgba(47, 128, 237, 0.10), transparent 30%),
+      linear-gradient(180deg, #edf2f8 0%, #f8fafc 48%, #edf3f8 100%);
+  }
+
+  /* Login contrast: less plain white, while retaining the approved structure. */
+  body.chalin-route-login .gate4 {
+    background:
+      radial-gradient(circle at 9% 3%, rgba(232, 193, 47, 0.20), transparent 25%),
+      radial-gradient(circle at 96% 16%, rgba(55, 159, 222, 0.18), transparent 28%),
+      linear-gradient(155deg, #07182c 0%, #0a3154 52%, #07182c 100%) !important;
+  }
+
+  body.chalin-route-login .gate4__access {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 96% 1%, rgba(79, 191, 230, 0.14), transparent 22%),
+      radial-gradient(circle at 4% 18%, rgba(232, 193, 47, 0.12), transparent 24%),
+      linear-gradient(180deg, #f7fafc 0%, #eef4fa 48%, #f8fafc 100%) !important;
+    box-shadow: inset 0 0 0 1px rgba(16, 34, 58, 0.06);
+  }
+
+  body.chalin-route-login .gate4__workspace-tabs button {
+    background: linear-gradient(160deg, #ffffff, #edf3f8) !important;
+    border-color: #d5deea !important;
+  }
+
+  body.chalin-route-login .gate4__workspace-tabs button.is-selected {
+    background:
+      radial-gradient(circle at 12% 12%, rgba(232, 193, 47, 0.24), transparent 42%),
+      linear-gradient(155deg, #fffdf5, #ffffff 70%) !important;
+  }
+
+  body.chalin-route-login .gate4__context-strip {
+    background: linear-gradient(145deg, #e7f0f8, #f9fbfd) !important;
+    border-color: #cfdae7 !important;
+    box-shadow: 0 9px 22px rgba(16, 34, 58, 0.05);
+  }
+
+  body.chalin-route-login .gate4__field input,
+  body.chalin-route-login .gate4__field select,
+  body.chalin-route-login .gate4__password {
+    background: #ffffff !important;
+    border-color: #c4d1df !important;
+    box-shadow: inset 0 1px 2px rgba(16, 34, 58, 0.04);
+  }
+
+  body.chalin-route-login .gate4__form {
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid rgba(16, 34, 58, 0.09);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.62);
+    box-shadow: 0 12px 28px rgba(16, 34, 58, 0.05);
+  }
+
+  body.chalin-route-login .gate4__submit {
+    box-shadow: 0 16px 32px rgba(220, 168, 15, 0.20) !important;
+  }
+
+  /* Compact mobile application bar. */
+  .premium-mobile-bar {
+    height: 56px !important;
+    grid-template-columns: 82px minmax(0, 1fr) 56px !important;
+    gap: 7px !important;
+    padding: 0 8px !important;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(232, 193, 47, 0.15), transparent 42%),
+      linear-gradient(135deg, rgba(7, 24, 44, 0.98), rgba(13, 55, 94, 0.98)) !important;
+    border-bottom-color: rgba(232, 193, 47, 0.28) !important;
+    box-shadow: 0 10px 28px rgba(7, 24, 44, 0.24) !important;
+  }
+
+  .premium-mobile-button {
+    min-height: 42px !important;
+    padding: 8px 9px !important;
+    border-radius: 13px !important;
+    font-size: 12px !important;
+  }
+
+  .premium-mobile-menu-button {
+    background: linear-gradient(145deg, rgba(232, 193, 47, 0.18), rgba(255, 255, 255, 0.06)) !important;
+  }
+
+  .premium-mobile-search {
+    min-height: 42px !important;
+    padding: 6px 10px !important;
+    border-radius: 14px !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .premium-mobile-search span {
+    font-size: 12px !important;
+  }
+
+  .premium-mobile-search small {
+    font-size: 9px !important;
+  }
+
+  .premium-mobile-out-button {
+    border-radius: 14px !important;
+    background: linear-gradient(145deg, #d3322b, #ae1f1a) !important;
+    box-shadow: 0 8px 18px rgba(174, 31, 26, 0.22);
+  }
+
+  /* One open section at a time, with compact two-column page tiles. */
+  .premium-sidebar.mobile {
+    width: min(92vw, 356px) !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  }
+
+  .premium-sidebar.mobile .premium-brand {
+    min-height: 58px;
+    padding: 8px 10px !important;
+  }
+
+  .premium-sidebar.mobile .premium-brand-logo {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 13px !important;
+  }
+
+  .premium-sidebar.mobile .premium-brand h2 {
+    font-size: 17px !important;
+  }
+
+  .premium-sidebar.mobile .premium-brand p {
+    font-size: 9px !important;
+  }
+
+  .premium-sidebar.mobile .premium-sidebar-tools {
+    padding: 7px 8px !important;
+  }
+
+  .premium-sidebar.mobile .premium-store-card-compact {
+    min-height: 44px;
+    padding: 7px 8px !important;
+  }
+
+  .premium-sidebar.mobile .premium-nav-scroll {
+    padding: 8px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation {
+    gap: 8px;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .compact-nav-section {
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .compact-nav-section-button {
+    position: relative;
+    min-height: 42px;
+    padding: 9px 10px !important;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(9, 35, 63, 0.98), rgba(13, 56, 95, 0.96));
+    font-size: 10px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .active-section .compact-nav-section-button {
+    color: #ffffff;
+    background:
+      radial-gradient(circle at 92% 0%, rgba(232, 193, 47, 0.18), transparent 38%),
+      linear-gradient(135deg, #0b3158, #123f6d);
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .compact-nav-items {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    padding: 7px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link {
+    min-width: 0;
+    min-height: 68px !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px !important;
+    margin: 0 !important;
+    padding: 8px 6px !important;
+    border-radius: 14px !important;
+    text-align: center;
+    font-size: 10px !important;
+    line-height: 1.15 !important;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.065);
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link.active {
+    background: linear-gradient(145deg, rgba(21, 67, 113, 0.96), rgba(10, 35, 63, 0.96)) !important;
+    border-color: rgba(232, 193, 47, 0.34) !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-icon {
+    width: 31px !important;
+    height: 31px !important;
+    border-radius: 10px !important;
+    font-size: 15px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-text {
+    max-width: 100%;
+    white-space: normal !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    overflow-wrap: anywhere;
+    line-height: 1.2 !important;
+  }
+
+  .premium-sidebar.mobile .premium-user-panel {
+    padding: 8px !important;
+  }
+
+  /* Shared mobile page system. */
+  .premium-main {
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 66px 8px 24px !important;
+    overflow-x: hidden !important;
+    background:
+      radial-gradient(circle at 4% 0%, rgba(232, 193, 47, 0.08), transparent 24%),
+      radial-gradient(circle at 96% 6%, rgba(47, 128, 237, 0.08), transparent 28%),
+      linear-gradient(180deg, #edf2f8 0%, #f8fafc 48%, #edf3f8 100%);
+  }
+
+  .premium-main > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 4px !important;
+    overflow-x: hidden;
+  }
+
+  .premium-main input,
+  .premium-main select,
+  .premium-main textarea {
+    min-height: 48px !important;
+    margin-bottom: 10px !important;
+    padding: 11px 12px !important;
+    border: 1px solid #cbd6e3 !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    color: var(--mobile-text) !important;
+    font-size: 16px !important;
+    line-height: 1.25 !important;
+    box-shadow: inset 0 1px 2px rgba(16, 34, 58, 0.035);
+  }
+
+  .premium-main textarea {
+    min-height: 92px !important;
+  }
+
+  .premium-main label {
+    margin-bottom: 5px !important;
+    color: #24364d !important;
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+    letter-spacing: 0.015em;
+  }
+
+  .premium-main button {
+    min-height: 44px;
+    border-radius: 13px !important;
+    font-size: 13px !important;
+  }
+
+  .premium-main .success-box,
+  .premium-main .error-box,
+  .premium-main .warning-box {
+    margin: 8px 0 10px !important;
+    padding: 11px 12px !important;
+    border-radius: 14px !important;
+    font-size: 12px !important;
+    line-height: 1.45;
+  }
+
+  .premium-main .page-header {
+    margin-bottom: 12px !important;
+    padding: 2px 2px 0;
+  }
+
+  .premium-main .page-header h1 {
+    font-size: 25px !important;
+  }
+
+  .premium-main .page-header p {
+    font-size: 12px !important;
+    line-height: 1.45;
+  }
+
+  .premium-main .stat-card,
+  .premium-main .section-card {
+    padding: 13px !important;
+    border-radius: 17px !important;
+    box-shadow: 0 10px 26px rgba(16, 34, 58, 0.065) !important;
+  }
+
+  .premium-main .cards-grid,
+  .premium-main .dashboard-grid,
+  .premium-main .reports-grid,
+  .premium-main .purchase-summary-grid,
+  .premium-main .expense-summary-grid,
+  .premium-main .returns-summary-grid,
+  .premium-main .activity-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .premium-main .stat-card strong {
+    font-size: 20px !important;
+  }
+
+  .premium-main .stat-card p {
+    font-size: 11px !important;
+  }
+
+  .premium-main .two-column,
+  .premium-main .reports-two-column,
+  .premium-main .users-settings-grid,
+  .premium-main .expenses-grid,
+  .premium-main .purchases-grid,
+  .premium-main .returns-grid,
+  .premium-main .backup-grid,
+  .premium-main .exports-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .premium-main .form-grid-2,
+  .premium-main .form-grid-3,
+  .premium-main .filter-grid,
+  .premium-main .activity-filter-grid,
+  .premium-main .export-filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .premium-main section,
+  .premium-main form > div {
+    max-width: 100%;
+  }
+
+  .premium-main table {
+    min-width: 680px;
+    font-size: 12px !important;
+  }
+
+  .premium-main th,
+  .premium-main td {
+    padding: 8px !important;
+    font-size: 11px !important;
+  }
+
+  .premium-main .section-card {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .premium-main .modal-backdrop {
+    padding: 8px !important;
+  }
+
+  .premium-main .receipt-modal {
+    padding: 13px !important;
+    border-radius: 18px !important;
+  }
+
+  /* Compact hero language for the three busiest phone pages. */
+  body.chalin-route-dashboard .premium-main > div > div:first-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child,
+  body.chalin-route-products .premium-main > div > div:first-child {
+    min-height: 0 !important;
+    margin: 0 0 12px !important;
+    padding: 18px 14px !important;
+    border-radius: 24px !important;
+    box-shadow: 0 18px 40px rgba(7, 24, 44, 0.20) !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child {
+    padding: 0 !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:first-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:first-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:first-child {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    align-items: start !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child h1,
+  body.chalin-route-new-sale .premium-main > div > div:first-child h1,
+  body.chalin-route-products .premium-main > div > div:first-child h1 {
+    margin-top: 5px !important;
+    font-size: 34px !important;
+    line-height: 1.04 !important;
+    letter-spacing: -0.04em !important;
+    text-align: left !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child p,
+  body.chalin-route-new-sale .premium-main > div > div:first-child p,
+  body.chalin-route-products .premium-main > div > div:first-child p {
+    max-width: none !important;
+    margin-top: 10px !important;
+    font-size: 15px !important;
+    line-height: 1.52 !important;
+    text-align: left !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child img,
+  body.chalin-route-new-sale .premium-main > div > div:first-child img,
+  body.chalin-route-products .premium-main > div > div:first-child img {
+    width: 78px !important;
+    height: 78px !important;
+    border-radius: 20px !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:last-child,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:last-child,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:last-child {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 14px !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child > div:last-child > div:last-child > div,
+  body.chalin-route-new-sale .premium-main > div > div:first-child > div:last-child > div:last-child > div,
+  body.chalin-route-products .premium-main > div > div:first-child > div:last-child > div:last-child > div {
+    min-width: 0 !important;
+    min-height: 72px !important;
+    padding: 11px 12px !important;
+    border-radius: 16px !important;
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Product and sales forms become shorter and easier to scan. */
+  body.chalin-route-new-sale .premium-main section,
+  body.chalin-route-products .premium-main section {
+    padding: 14px !important;
+    border-radius: 19px !important;
+  }
+
+  body.chalin-route-new-sale .premium-main form > div,
+  body.chalin-route-products .premium-main form > div {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  body.chalin-route-new-sale .premium-main h2,
+  body.chalin-route-products .premium-main h2 {
+    font-size: 21px !important;
+    line-height: 1.15 !important;
+  }
+
+  body.chalin-route-new-sale .premium-main h3,
+  body.chalin-route-products .premium-main h3 {
+    font-size: 17px !important;
+  }
+
+  body.chalin-route-new-sale .premium-main p,
+  body.chalin-route-products .premium-main p {
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .premium-mobile-bar {
+    grid-template-columns: 72px minmax(0, 1fr) 52px !important;
+  }
+
+  .premium-mobile-button {
+    font-size: 11px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .compact-nav-items {
+    gap: 5px !important;
+  }
+
+  .compact-sidebar-navigation.is-mobile-navigation .premium-nav-link {
+    min-height: 64px !important;
+    padding: 7px 5px !important;
+  }
+
+  body.chalin-route-dashboard .premium-main > div > div:first-child h1,
+  body.chalin-route-new-sale .premium-main > div > div:first-child h1,
+  body.chalin-route-products .premium-main > div > div:first-child h1 {
+    font-size: 31px !important;
+  }
+}
