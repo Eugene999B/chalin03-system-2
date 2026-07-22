@@ -5,6 +5,7 @@ import EmergencyCommandOverlay from "./components/EmergencyCommandOverlay.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import "./index.css";
 import "./styles/userPermissionManager.mobile.css";
+import "./styles/commandGateExtensions.css";
 
 installCommandGateHistoryTracker();
 
