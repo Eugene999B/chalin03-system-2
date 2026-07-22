@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: command-gate-assemble-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   assemble:
     runs-on: ubuntu-latest
@@ -31,9 +35,80 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .commandgate/chunk*.txt | tr -d '\n\r' | base64 --decode > /tmp/chalin-command-gate.tar.gz
-          gzip -t /tmp/chalin-command-gate.tar.gz
-          tar -tzf /tmp/chalin-command-gate.tar.gz > /tmp/chalin-command-gate-files.txt
+          python - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import binascii
+          import gzip
+          import hashlib
+          import re
+          import tarfile
+          from pathlib import Path
+
+          chunk_dir = Path('.commandgate')
+          output = Path('/tmp/chalin-command-gate.tar.gz')
+
+          def natural_key(path: Path):
+              return [int(part) if part.isdigit() else part.lower()
+                      for part in re.split(r'(\d+)', path.name)]
+
+          chunks = sorted(chunk_dir.glob('chunk*.txt'), key=natural_key)
+          if not chunks:
+              raise SystemExit('No Command Gate package chunks were found.')
+
+          encoded_parts: list[str] = []
+          for chunk in chunks:
+              raw = chunk.read_text(encoding='utf-8-sig')
+              normalized = ''.join(raw.split())
+              if not normalized:
+                  raise SystemExit(f'{chunk} is empty.')
+              invalid = re.search(r'[^A-Za-z0-9+/=]', normalized)
+              if invalid:
+                  raise SystemExit(
+                      f'{chunk} contains an invalid base64 character at offset {invalid.start()}.'
+                  )
+              encoded_parts.append(normalized)
+              print(f'{chunk}: {len(normalized)} encoded characters')
+
+          encoded = ''.join(encoded_parts)
+          padding = (-len(encoded)) % 4
+          if padding:
+              print(f'Adding {padding} base64 padding character(s).')
+              encoded += '=' * padding
+
+          try:
+              payload = base64.b64decode(encoded, validate=True)
+          except binascii.Error as exc:
+              raise SystemExit(f'Command Gate package base64 is invalid: {exc}') from exc
+
+          output.write_bytes(payload)
+          print(f'Decoded bytes: {len(payload)}')
+          print(f'SHA-256: {hashlib.sha256(payload).hexdigest()}')
+
+          try:
+              with gzip.open(output, 'rb') as stream:
+                  while stream.read(1024 * 1024):
+                      pass
+          except (OSError, EOFError) as exc:
+              raise SystemExit(f'Command Gate gzip verification failed: {exc}') from exc
+
+          with tarfile.open(output, mode='r:gz') as archive:
+              members = archive.getmembers()
+              if not members:
+                  raise SystemExit('Command Gate package archive is empty.')
+              unsafe = [
+                  member.name for member in members
+                  if member.name.startswith('/') or '..' in Path(member.name).parts
+              ]
+              if unsafe:
+                  raise SystemExit(f'Unsafe archive paths detected: {unsafe[:5]}')
+              Path('/tmp/chalin-command-gate-files.txt').write_text(
+                  '\n'.join(member.name for member in members) + '\n',
+                  encoding='utf-8',
+              )
+              print(f'Archive members: {len(members)}')
+          PY
           echo "Package files:"
           cat /tmp/chalin-command-gate-files.txt
 
