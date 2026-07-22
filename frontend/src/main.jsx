@@ -7,6 +7,7 @@ import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTrac
 import "./index.css";
 import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
+import "./styles/mobileExperience.css";
 
 installCommandGateHistoryTracker();
 
