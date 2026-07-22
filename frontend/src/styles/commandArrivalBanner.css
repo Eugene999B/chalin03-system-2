@@ -1,0 +1,107 @@
+.command-arrival {
+  position: fixed;
+  z-index: 15000;
+  top: 18px;
+  left: 50%;
+  width: min(620px, calc(100% - 28px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 16px;
+  color: #10223a;
+  border: 1px solid rgba(39, 174, 96, 0.36);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.985);
+  box-shadow: 0 24px 70px rgba(3, 18, 36, 0.28);
+  animation: commandArrivalIn 260ms ease-out;
+}
+
+@keyframes commandArrivalIn {
+  from { opacity: 0; transform: translate(-50%, -18px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.command-arrival__icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #2ecc71, #1e9f54);
+  box-shadow: 0 10px 24px rgba(39, 174, 96, 0.24);
+  font-weight: 950;
+}
+
+.command-arrival__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.command-arrival__copy small,
+.command-arrival__copy strong,
+.command-arrival__copy span,
+.command-arrival__copy em {
+  display: block;
+}
+
+.command-arrival__copy small {
+  color: #9a6b00;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.command-arrival__copy strong {
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.command-arrival__copy span {
+  margin-top: 3px;
+  color: #516177;
+  font-size: 12px;
+}
+
+.command-arrival__copy em {
+  margin-top: 6px;
+  color: #16864a;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.command-arrival > button {
+  border: 0;
+  color: #68778b;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+@media (max-width: 700px) {
+  .command-arrival {
+    top: 8px;
+    width: calc(100% - 16px);
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .command-arrival__icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    border-radius: 12px;
+  }
+
+  .command-arrival__copy strong {
+    font-size: 15px;
+  }
+
+  .command-arrival__copy span {
+    font-size: 11px;
+  }
+}
