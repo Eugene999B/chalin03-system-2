@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
-import { clearStoredBiometricBinding } from "../utils/biometricAccess";
 import {
-  getSavedStationMode,
-  getStationModes,
-  saveStationMode,
-} from "../utils/commandGate";
+  clearStoredBiometricBinding,
+  isBiometricAccessAvailable,
+} from "../utils/biometricAccess";
 import "../styles/commandGate.css";
 
 function formatDate(value) {
@@ -32,7 +30,6 @@ export default function ChangePasswordPage() {
   const {
     user,
     logout,
-    workspaceCode,
     workspaceName,
     branchCode,
     branchName,
@@ -47,16 +44,10 @@ export default function ChangePasswordPage() {
   const [devices, setDevices] = useState([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [deviceWorking, setDeviceWorking] = useState(false);
-  const [stationCode, setStationCode] = useState(() =>
-    getSavedStationMode(workspaceCode)
-  );
+  const [biometricAvailable, setBiometricAvailable] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const stationModes = useMemo(
-    () => getStationModes(workspaceCode),
-    [workspaceCode]
-  );
   const accountName = user?.full_name || user?.username || "Authorised user";
   const contextName = isSparePartsWorkspace
     ? `${branchCode || "STORE"} — ${branchName || "Selected Store"}`
@@ -82,8 +73,18 @@ export default function ChangePasswordPage() {
   }, [loadDevices]);
 
   useEffect(() => {
-    setStationCode(getSavedStationMode(workspaceCode));
-  }, [workspaceCode]);
+    let cancelled = false;
+    isBiometricAccessAvailable()
+      .then((available) => {
+        if (!cancelled) setBiometricAvailable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setBiometricAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function clearNotices() {
     setMessage("");
@@ -171,13 +172,6 @@ export default function ChangePasswordPage() {
     }
   }
 
-  function handleStationChange(event) {
-    const saved = saveStationMode(workspaceCode, event.target.value);
-    setStationCode(saved);
-    setMessage("This device entrance profile has been updated.");
-    setError("");
-  }
-
   return (
     <main className="command-page">
       <div className="command-page__shell">
@@ -187,8 +181,8 @@ export default function ChangePasswordPage() {
             <h1>Password, Fingerprint & Face</h1>
           </div>
           <span>
-            {accountName} · {contextName}. Manage the account password, linked
-            biometric devices and this browser&apos;s entrance station.
+            {accountName} · {contextName}. Manage the account password and linked
+            biometric devices. Every login opens the selected business dashboard first.
           </span>
         </header>
 
@@ -253,29 +247,29 @@ export default function ChangePasswordPage() {
           </section>
 
           <section className="command-page__card">
-            <h2>Add fingerprint or face login</h2>
-            <p>
-              For safety, adding a new device starts only after a fresh password login.
-              Sign out, sign in with the password, then choose
-              <strong> Set up fingerprint or face</strong> when Chalin 03 asks.
-            </p>
+            <h2>Fingerprint or face availability</h2>
+            {biometricAvailable === null ? (
+              <p>Checking this device for built-in fingerprint or face access…</p>
+            ) : biometricAvailable ? (
+              <p>
+                This device reports a built-in user-verifying authenticator. To link it,
+                sign out, sign in with the password, then choose
+                <strong> Set up fingerprint or face</strong> when Chalin 03 asks.
+              </p>
+            ) : (
+              <p>
+                This device does not report a built-in fingerprint or face authenticator.
+                Chalin 03 will use password login only and will not show a biometric setup
+                invitation on this device.
+              </p>
+            )}
 
             <div className="command-page__station">
-              <h3>Entrance station</h3>
+              <h3>Dashboard-first entry</h3>
               <p>
-                This browser opens directly to the selected operation after login. It
-                never grants extra permissions.
+                Spare Parts, Mining Operations and Equipment Sales & Hire always open
+                their own dashboard immediately after successful login.
               </p>
-              <label>
-                Entrance profile
-                <select value={stationCode} onChange={handleStationChange}>
-                  {stationModes.map((station) => (
-                    <option key={station.code} value={station.code}>
-                      {station.title} — {station.description}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
           </section>
 
@@ -290,8 +284,8 @@ export default function ChangePasswordPage() {
               <p>Loading biometric devices…</p>
             ) : devices.length === 0 ? (
               <div className="command-empty-state">
-                No fingerprint or face device is linked. Sign in with the password to
-                set up this device.
+                No fingerprint or face device is linked. A capable device can be linked
+                after a successful password login.
               </div>
             ) : (
               <div className="device-list">
@@ -321,6 +315,7 @@ export default function ChangePasswordPage() {
             <h3>Security guarantees</h3>
             <div className="command-security-grid">
               <span>✓ New devices must use the password first.</span>
+              <span>✓ Setup appears only when a platform authenticator is available.</span>
               <span>✓ The browser link opens only its specific account.</span>
               <span>✓ Workspace and store access are checked again at login.</span>
               <span>✓ Password changes and device removal revoke biometric access.</span>

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { openEmergencyCommand } from "../components/EmergencyCommandOverlay";
-import LoginPageBiometricBank from "./LoginPageBiometricBank.jsx";
+import LoginPageGroupOperations from "./LoginPageGroupOperations.jsx";
 
 export default function LoginPage() {
   useEffect(() => {
@@ -40,5 +40,5 @@ export default function LoginPage() {
     };
   }, []);
 
-  return <LoginPageBiometricBank />;
+  return <LoginPageGroupOperations />;
 }

@@ -1,0 +1,283 @@
+/* Final mobile overrides for administration pages.
+   These rules use targeted !important declarations because route-level CSS is
+   loaded after the shared mobile bundle in production. */
+
+@media (max-width: 760px) {
+  /* Users & Settings: keep the control room compact and readable. */
+  .users-control-page {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .users-control-page > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .users-hero {
+    margin: 0 0 12px !important;
+    padding: 16px !important;
+    border-radius: 20px !important;
+  }
+
+  .users-hero-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 13px !important;
+  }
+
+  .users-hero h1 {
+    font-size: clamp(2rem, 10vw, 2.6rem) !important;
+    line-height: 1 !important;
+  }
+
+  .users-hero p:not(.users-eyebrow) {
+    margin-top: 9px !important;
+    font-size: 0.92rem !important;
+    line-height: 1.48 !important;
+  }
+
+  .users-hero-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .users-hero-actions button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 48px !important;
+    padding: 10px 8px !important;
+    font-size: 0.86rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .users-store-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 12px !important;
+  }
+
+  .users-store-pill {
+    min-width: 0 !important;
+    padding: 11px !important;
+    border-radius: 16px !important;
+  }
+
+  .users-store-pill label {
+    color: rgba(255, 255, 255, 0.72) !important;
+    font-size: 0.66rem !important;
+  }
+
+  .users-store-pill strong {
+    color: #ffffff !important;
+    font-size: 0.94rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .users-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .users-stat-card {
+    min-width: 0 !important;
+    padding: 13px !important;
+    border-radius: 18px !important;
+  }
+
+  .users-stat-card strong {
+    font-size: 1.65rem !important;
+  }
+
+  .users-stat-card small {
+    font-size: 0.72rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .users-layout-grid,
+  .users-form-grid,
+  .users-role-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .users-card {
+    min-width: 0 !important;
+    border-radius: 20px !important;
+  }
+
+  .users-card-header,
+  .users-card-body {
+    min-width: 0 !important;
+    padding: 14px !important;
+  }
+
+  .users-panel-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .users-panel-tab {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 10px 7px !important;
+    font-size: 0.82rem !important;
+  }
+
+  .users-table-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overscroll-behavior-inline: contain;
+  }
+
+  .users-table {
+    min-width: 760px !important;
+  }
+
+  /* User Permission Manager: defeat the desktop table width after route CSS loads. */
+  .upm-page,
+  .upm-page > *,
+  .upm-card,
+  .upm-table-wrap {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  .upm-table-wrap .upm-permission-table,
+  .upm-table-wrap .upm-history-table,
+  .upm-table-wrap table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .upm-permission-table tbody,
+  .upm-history-table tbody {
+    display: grid !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    gap: 12px !important;
+  }
+
+  .upm-permission-table tr,
+  .upm-history-table tr {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .upm-permission-table td,
+  .upm-history-table td {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .upm-permission-table td:first-child {
+    min-width: 0 !important;
+  }
+
+  .upm-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .upm-actions button {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: normal !important;
+  }
+
+  .upm-actions .is-reset {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Delegated System Administrator capability cards: restore native checkboxes. */
+  .delegate-panel,
+  .delegate-capability-grid,
+  .delegate-capability-grid label {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .delegate-panel {
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .delegate-capability-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    margin: 14px 0 !important;
+  }
+
+  .delegate-capability-grid label,
+  .delegate-capability-grid.is-readonly > div {
+    display: grid !important;
+    grid-template-columns: 24px minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 11px !important;
+    padding: 13px !important;
+    border-radius: 15px !important;
+  }
+
+  .delegate-capability-grid input[type="checkbox"] {
+    display: block !important;
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    padding: 0 !important;
+    margin: 2px 0 0 !important;
+    border-radius: 3px !important;
+    flex: 0 0 20px !important;
+  }
+
+  .delegate-capability-grid label > span {
+    min-width: 0 !important;
+  }
+
+  .delegate-capability-grid strong,
+  .delegate-capability-grid small {
+    overflow-wrap: anywhere !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .users-hero-actions,
+  .users-store-strip,
+  .users-stats-grid,
+  .users-panel-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .upm-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .upm-actions .is-reset {
+    grid-column: auto !important;
+  }
+}
