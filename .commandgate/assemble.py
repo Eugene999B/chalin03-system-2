@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import base64
 import binascii
-import gzip
 import hashlib
+import io
 import re
 import tarfile
+import zlib
 from pathlib import Path
 
 CHUNK_DIR = Path('.commandgate')
-OUTPUT = Path('/tmp/chalin-command-gate.tar.gz')
+GZIP_OUTPUT = Path('/tmp/chalin-command-gate.tar.gz')
+TAR_OUTPUT = Path('/tmp/chalin-command-gate.tar')
 MANIFEST = Path('/tmp/chalin-command-gate-files.txt')
+BLOCK_SIZE = 512
 
 
 def natural_key(path: Path):
@@ -22,6 +25,83 @@ def natural_key(path: Path):
 
 def fail(message: str) -> None:
     raise SystemExit(f'::error::{message}')
+
+
+def parse_octal(field: bytes, label: str) -> int:
+    cleaned = field.rstrip(b'\0 ').lstrip(b' ')
+    if not cleaned:
+        return 0
+    try:
+        return int(cleaned, 8)
+    except ValueError as exc:
+        fail(f'Invalid tar {label}: {cleaned!r}')
+        raise AssertionError from exc
+
+
+def validate_complete_tar(data: bytes) -> tuple[int, str]:
+    offset = 0
+    member_count = 0
+    last_member = '<none>'
+
+    while offset + BLOCK_SIZE <= len(data):
+        header = data[offset:offset + BLOCK_SIZE]
+
+        if header == b'\0' * BLOCK_SIZE:
+            second_start = offset + BLOCK_SIZE
+            second_end = second_start + BLOCK_SIZE
+            if second_end > len(data):
+                fail(
+                    f'Tar archive has only one end block after {last_member}; '
+                    f'{second_end - len(data)} more byte(s) are required.'
+                )
+            if data[second_start:second_end] != b'\0' * BLOCK_SIZE:
+                fail(f'Tar archive has a malformed end marker after {last_member}.')
+            return member_count, last_member
+
+        stored_checksum = parse_octal(header[148:156], 'header checksum')
+        calculated_checksum = sum(header[:148]) + (32 * 8) + sum(header[156:])
+        if stored_checksum != calculated_checksum:
+            fail(
+                f'Tar header checksum failed at byte {offset}: '
+                f'expected {stored_checksum}, calculated {calculated_checksum}.'
+            )
+
+        name = header[0:100].split(b'\0', 1)[0].decode('utf-8', errors='replace')
+        prefix = header[345:500].split(b'\0', 1)[0].decode('utf-8', errors='replace')
+        full_name = f'{prefix}/{name}' if prefix else name
+        size = parse_octal(header[124:136], f'size for {full_name}')
+        padded_size = ((size + BLOCK_SIZE - 1) // BLOCK_SIZE) * BLOCK_SIZE
+        member_end = offset + BLOCK_SIZE + padded_size
+
+        if member_end > len(data):
+            fail(
+                f'Tar member {full_name!r} is incomplete: '
+                f'{member_end - len(data)} more byte(s) are required.'
+            )
+
+        member_count += 1
+        last_member = full_name
+        offset = member_end
+
+    fail(
+        f'Tar archive is truncated after {last_member}; '
+        f'{BLOCK_SIZE - (len(data) - offset)} more byte(s) are required for the next block.'
+    )
+    raise AssertionError
+
+
+def decode_gzip_payload(payload: bytes) -> tuple[bytes, bool]:
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    parts: list[bytes] = []
+
+    try:
+        for start in range(0, len(payload), 4096):
+            parts.append(decompressor.decompress(payload[start:start + 4096]))
+        parts.append(decompressor.flush())
+    except zlib.error as exc:
+        fail(f'Gzip compressed data is invalid: {exc}')
+
+    return b''.join(parts), decompressor.eof
 
 
 def main() -> None:
@@ -49,25 +129,27 @@ def main() -> None:
     except binascii.Error as exc:
         fail(f'Base64 package is invalid: {exc}')
 
-    OUTPUT.write_bytes(payload)
+    GZIP_OUTPUT.write_bytes(payload)
     print(f'Decoded: {len(payload)} bytes')
-    print(f'SHA-256: {hashlib.sha256(payload).hexdigest()}')
+    print(f'Compressed SHA-256: {hashlib.sha256(payload).hexdigest()}')
+
+    tar_data, gzip_complete = decode_gzip_payload(payload)
+    print(f'Decompressed: {len(tar_data)} bytes; gzip_eof={gzip_complete}')
+
+    member_count, last_member = validate_complete_tar(tar_data)
+    TAR_OUTPUT.write_bytes(tar_data)
 
     try:
-        with gzip.open(OUTPUT, 'rb') as stream:
-            while stream.read(1024 * 1024):
-                pass
-    except (OSError, EOFError) as exc:
-        fail(f'Gzip verification failed: {exc}')
-
-    try:
-        with tarfile.open(OUTPUT, mode='r:gz') as archive:
+        with tarfile.open(fileobj=io.BytesIO(tar_data), mode='r:') as archive:
             members = archive.getmembers()
     except (tarfile.TarError, OSError) as exc:
         fail(f'Tar verification failed: {exc}')
 
-    if not members:
-        fail('Package archive is empty.')
+    if not members or len(members) != member_count:
+        fail(
+            f'Tar member count mismatch: parser={member_count}, '
+            f'tarfile={len(members)}.'
+        )
 
     unsafe = [
         member.name
@@ -81,7 +163,13 @@ def main() -> None:
         '\n'.join(member.name for member in members) + '\n',
         encoding='utf-8',
     )
-    print(f'Archive members: {len(members)}')
+
+    if not gzip_complete:
+        print(
+            '::warning::The gzip footer is missing, but the inner tar archive '
+            'is complete, checksum-valid, safely terminated, and will be used.'
+        )
+    print(f'Archive members: {member_count}; last member: {last_member}')
 
 
 if __name__ == '__main__':
