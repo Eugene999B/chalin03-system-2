@@ -9,12 +9,9 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const loginEntry = read("src/pages/LoginPage.jsx");
-const login = read("src/pages/LoginPageV5.jsx");
-const loginStyles = [
-  read("src/styles/commandGateV5.css"),
-  read("src/styles/commandGateV5Overlays.css"),
-  read("src/styles/commandGateV5Mobile.css"),
-].join("\n");
+const bankLayer = read("src/pages/LoginPageBank.jsx");
+const loginEngine = read("src/pages/LoginPageV4.jsx");
+const bankStyles = read("src/styles/commandGateBankPolish.css");
 const serviceWorker = read("public/sw.js");
 const security = read("src/pages/ChangePasswordPage.jsx");
 const main = read("src/main.jsx");
@@ -24,31 +21,30 @@ const server = read("../backend/server.js");
 const authRoutes = read("../backend/routes/authRoutes.js");
 const migration = read("../database/migrations/20260722_command_gate_passkeys.sql");
 
-assert.match(loginEntry, /LoginPageV5/);
-assert.match(login, /Sign in to Chalin 03/);
-assert.match(login, /Sign in with face or fingerprint/);
-assert.match(login, /Fresh verification is required every time/);
-assert.match(login, /authenticateWithPasskey/);
-assert.match(login, /registerPasskey/);
-assert.match(login, /automaticDeviceSetup/);
-assert.match(login, /biometricState/);
-assert.match(login, /Waiting for device verification/);
-assert.match(login, /Secure verification complete/);
-assert.match(login, /FLOW_STEPS/);
-assert.match(login, /Operations ready/);
-assert.match(login, /window\.setTimeout\(resolve, 520\)/);
-assert.match(login, /isLoggedIn && !postLoginProcessing/);
-assert.match(login, /request-otp/);
-assert.match(login, /getPostLoginDestination/);
-assert.match(login, /Emergency Operations/);
-assert.match(login, /\/chalin03-logo\.png/);
-assert.doesNotMatch(login, /src="\/logo\.png"/);
-assert.doesNotMatch(login, />C03</);
-assert.match(loginStyles, /@media\(max-width:640px\)/);
-assert.match(loginStyles, /grid-template-columns:repeat\(3,1fr\)/);
-assert.match(loginStyles, /gate5-bio/);
-assert.match(loginStyles, /gate5-flow/);
-assert.match(loginStyles, /gate5-intro/);
+assert.match(loginEntry, /LoginPageBank/);
+assert.match(bankLayer, /LoginPageV4/);
+assert.match(bankLayer, /biometricState/);
+assert.match(bankLayer, /Verify to continue/);
+assert.match(bankLayer, /Identity verified/);
+assert.match(bankLayer, /Waiting for device verification/);
+assert.match(bankLayer, /Secure verification complete/);
+assert.match(bankLayer, /\.gate4__passkey/);
+assert.match(bankLayer, /\/chalin03-logo\.png/);
+assert.match(loginEngine, /authenticateWithPasskey/);
+assert.match(loginEngine, /registerPasskey/);
+assert.match(loginEngine, /automaticDeviceSetup/);
+assert.match(loginEngine, /isLoggedIn && !postLoginProcessing/);
+assert.match(loginEngine, /request-otp/);
+assert.match(loginEngine, /getPostLoginDestination/);
+assert.match(loginEngine, /Emergency Operations/);
+assert.match(loginEngine, /window\.setTimeout\(resolve, 360\)/);
+assert.match(loginEngine, /window\.setTimeout\(resolve, 850\)/);
+assert.match(bankStyles, /Sign in with face or fingerprint/);
+assert.match(bankStyles, /Fresh face, fingerprint or device-PIN verification is required/);
+assert.match(bankStyles, /\/chalin03-logo\.png/);
+assert.match(bankStyles, /\.gate4__version[\s\S]*display:\s*none/);
+assert.match(bankStyles, /\.gate4__logo span[\s\S]*display:\s*none/);
+assert.match(bankStyles, /@media \(max-width: 640px\)/);
 assert.match(serviceWorker, /command-gate-v5/);
 assert.match(security, /registerPasskey/);
 assert.match(security, /auth\/passkeys/);
@@ -66,4 +62,4 @@ assert.match(migration, /ADDITIVE MIGRATION ONLY/);
 assert.match(migration, /BACKUP REQUIRED/);
 assert.match(migration, /schema_migrations/);
 
-console.log("Command Gate V5 biometric, logo and workflow contracts passed.");
+console.log("Bank-style biometric login and workflow contracts passed.");
