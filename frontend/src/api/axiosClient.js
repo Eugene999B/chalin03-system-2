@@ -113,7 +113,19 @@ axiosClient.interceptors.request.use((config) => {
 });
 
 axiosClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const requestUrl = String(response.config?.url || "").replace(/\?.*$/, "");
+    if (
+      /\/equipment-catalogue\/sales\/agreements\/\d+$/.test(requestUrl) &&
+      response.data &&
+      typeof response.data === "object"
+    ) {
+      response.data.delivery = response.data.delivery || response.data.deliveries?.[0] || null;
+      response.data.ownership =
+        response.data.ownership || response.data.ownership_transfers?.[0] || null;
+    }
+    return response;
+  },
   (error) => {
     const statusCode = error.response?.status;
     const errorCode = String(error.response?.data?.code || "");
