@@ -7,6 +7,12 @@ on:
     paths:
       - '.commandgate/integrate_backend.py'
       - '.github/workflows/command-gate-assemble.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.commandgate/integrate_backend.py'
+      - '.github/workflows/command-gate-assemble.yml'
 
 permissions:
   contents: write
