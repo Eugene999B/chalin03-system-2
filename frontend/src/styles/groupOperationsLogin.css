@@ -1,0 +1,166 @@
+.group-login__story {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 15% 12%, rgba(245, 197, 66, 0.17), transparent 28%),
+    radial-gradient(circle at 86% 76%, rgba(41, 182, 246, 0.14), transparent 32%),
+    linear-gradient(155deg, #071628, #0a223a 62%, #071321) !important;
+}
+
+.group-login__story .gate4__story-copy small {
+  color: #f7c83d;
+}
+
+.group-login__story .gate4__story-copy h1 {
+  max-width: 640px;
+}
+
+.group-login__story .gate4__story-copy h1 span {
+  color: #f7c83d;
+}
+
+.group-login__story .gate4__story-copy p {
+  max-width: 610px;
+}
+
+.group-operations-map {
+  position: relative;
+  width: min(430px, 92%);
+  aspect-ratio: 360 / 250;
+  margin: 20px auto 12px;
+}
+
+.group-operations-map > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.group-operations-map > svg path {
+  fill: none;
+  stroke: rgba(247, 200, 61, 0.72);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 7 8;
+  filter: drop-shadow(0 0 8px rgba(247, 200, 61, 0.3));
+}
+
+.group-operations-map__centre,
+.group-operations-map__node {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+}
+
+.group-operations-map__centre {
+  left: 50%;
+  top: 48%;
+  width: 104px;
+  height: 104px;
+  transform: translate(-50%, -50%);
+  border-radius: 34px;
+  color: #fff;
+  background: linear-gradient(145deg, rgba(255,255,255,.17), rgba(255,255,255,.06));
+}
+
+.group-operations-map__centre img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.group-operations-map__centre strong {
+  margin-top: 5px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.group-operations-map__centre small {
+  color: #f7c83d;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.group-operations-map__node {
+  width: 132px;
+  min-height: 74px;
+  padding: 9px 10px;
+  border-radius: 22px;
+  color: #eef8ff;
+  background: rgba(13, 43, 72, 0.9);
+}
+
+.group-operations-map__node > span {
+  font-size: 22px;
+}
+
+.group-operations-map__node strong {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.group-operations-map__node small {
+  margin-top: 2px;
+  color: rgba(232, 244, 255, 0.68);
+  font-size: 9px;
+}
+
+.group-operations-map__node.is-parts {
+  left: 1%;
+  top: 0;
+}
+
+.group-operations-map__node.is-mining {
+  right: 1%;
+  top: 0;
+}
+
+.group-operations-map__node.is-hire {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+}
+
+.group-login__dashboard-note {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #dbe3ef;
+  border-radius: 15px;
+  background: #f8fafc;
+}
+
+.group-login__dashboard-note strong {
+  color: #10223a;
+  font-size: 13px;
+}
+
+.group-login__dashboard-note small {
+  color: #68778b;
+  line-height: 1.45;
+}
+
+@media (max-width: 980px) {
+  .group-operations-map {
+    width: min(380px, 96%);
+  }
+
+  .group-operations-map__node {
+    width: 116px;
+  }
+}
+
+@media (max-width: 760px) {
+  .group-login__story {
+    display: none !important;
+  }
+}
