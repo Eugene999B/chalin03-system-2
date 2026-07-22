@@ -334,12 +334,26 @@ module.exports = {
 process.nextTick(() => {
   try {
     const express = require("express");
+    const rateLimit = require("express-rate-limit");
     const authRoutes = require("../routes/authRoutes");
     const biometricRoutes = require("../routes/biometricRoutes");
     const legacyPasskeyRoutes = require("../routes/passkeyRoutes");
 
     if (!authRoutes.__chalin03BiometricRoutesMounted) {
-      authRoutes.use("/biometrics", biometricRoutes);
+      const biometricLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: 40,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: {
+          status: "error",
+          code: "BIOMETRIC_RATE_LIMITED",
+          message:
+            "Too many fingerprint or face requests. Wait briefly and try again.",
+        },
+      });
+
+      authRoutes.use("/biometrics", biometricLimiter, biometricRoutes);
       Object.defineProperty(authRoutes, "__chalin03BiometricRoutesMounted", {
         value: true,
         enumerable: false,
