@@ -2,13 +2,46 @@ const fs = require("fs");
 const path = require("path");
 
 const { pool } = require("../config/db");
+const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
+const equipmentSalesFinalizationRoutes = require("../routes/equipmentSalesFinalizationRoutes");
+const {
+  startEquipmentSalesReminderScheduler,
+} = require("./equipmentSalesReminderService");
 
 const MIGRATION_NAME = "20260722_equipment_sales_installments_foundation";
 const MIGRATION_FILE = path.resolve(
   __dirname,
   "../../database/migrations/20260722_equipment_sales_installments_foundation.sql"
 );
-const LOCK_NAME = "chalin03_equipment_sales_foundation_v1";
+const RETIREMENT_MIGRATION_NAME = "20260722_retire_spare_parts_installments";
+const RETIREMENT_MIGRATION_FILE = path.resolve(
+  __dirname,
+  "../../database/migrations/20260722_retire_spare_parts_installments.sql"
+);
+const LOCK_NAME = "chalin03_equipment_sales_finalization_v2";
+
+const MIGRATIONS = [
+  {
+    name: MIGRATION_NAME,
+    file: MIGRATION_FILE,
+    verify: verifyFoundation,
+  },
+  {
+    name: RETIREMENT_MIGRATION_NAME,
+    file: RETIREMENT_MIGRATION_FILE,
+    verify: verifyRetirement,
+  },
+];
+
+if (!equipmentSalesRoutes.__chalin03FinalizationMounted) {
+  equipmentSalesRoutes.use(equipmentSalesFinalizationRoutes);
+  Object.defineProperty(equipmentSalesRoutes, "__chalin03FinalizationMounted", {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+}
 
 function splitSqlStatements(sqlText) {
   const statements = [];
@@ -36,19 +69,22 @@ function splitSqlStatements(sqlText) {
   return statements;
 }
 
-async function migrationApplied(connection) {
-  const [tableRows] = await connection.query(
+async function migrationsTableExists(connection) {
+  const [rows] = await connection.query(
     `SELECT COUNT(*) AS total
      FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'schema_migrations'`
   );
+  return Number(rows[0]?.total || 0) === 1;
+}
 
-  if (Number(tableRows[0]?.total || 0) === 0) return false;
+async function migrationApplied(connection, migrationName) {
+  if (!(await migrationsTableExists(connection))) return false;
 
   const [rows] = await connection.query(
     "SELECT id FROM schema_migrations WHERE migration_name = ? LIMIT 1",
-    [MIGRATION_NAME]
+    [migrationName]
   );
   return rows.length > 0;
 }
@@ -74,6 +110,7 @@ async function verifyFoundation(connection) {
     `SELECT COUNT(*) AS total
      FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_TYPE = 'BASE TABLE'
        AND TABLE_NAME IN (${expectedTables.map(() => "?").join(",")})`,
     expectedTables
   );
@@ -102,6 +139,46 @@ async function verifyFoundation(connection) {
   if (Number(columnRows[0]?.total || 0) !== 12) {
     throw new Error("Equipment Sales foundation verification found missing columns.");
   }
+
+  const expectedTriggers = [
+    "trg_hire_contract_asset_sale_guard_before_insert",
+    "trg_hire_contract_asset_sale_guard_before_update",
+    "trg_equipment_sale_agreement_hire_guard_before_insert",
+    "trg_equipment_sale_agreement_hire_guard_before_update",
+  ];
+  const [triggerRows] = await connection.query(
+    `SELECT COUNT(*) AS total
+     FROM information_schema.TRIGGERS
+     WHERE TRIGGER_SCHEMA = DATABASE()
+       AND TRIGGER_NAME IN (${expectedTriggers.map(() => "?").join(",")})`,
+    expectedTriggers
+  );
+  if (Number(triggerRows[0]?.total || 0) !== expectedTriggers.length) {
+    throw new Error("Equipment Sales foundation verification found missing sale/Hire guards.");
+  }
+}
+
+async function verifyRetirement(connection) {
+  const expectedTriggers = [
+    "trg_spare_parts_installment_retired_sales_insert",
+    "trg_spare_parts_installment_retired_agreement_insert",
+  ];
+
+  const [triggerRows] = await connection.query(
+    `SELECT COUNT(*) AS total
+     FROM information_schema.TRIGGERS
+     WHERE TRIGGER_SCHEMA = DATABASE()
+       AND TRIGGER_NAME IN (?, ?)`,
+    expectedTriggers
+  );
+
+  if (Number(triggerRows[0]?.total || 0) !== expectedTriggers.length) {
+    throw new Error("Spare Parts installment retirement verification found missing guards.");
+  }
+
+  if (!(await migrationApplied(connection, RETIREMENT_MIGRATION_NAME))) {
+    throw new Error("Spare Parts installment retirement migration marker is missing.");
+  }
 }
 
 async function removeAnsiQuotesForMigration(connection) {
@@ -115,13 +192,62 @@ async function removeAnsiQuotesForMigration(connection) {
   await connection.query("SET SESSION sql_mode = ?", [modes.join(",")]);
 }
 
+async function executeMigration(connection, migration) {
+  if (!fs.existsSync(migration.file)) {
+    throw new Error(`Required migration file is missing: ${migration.file}`);
+  }
+
+  const statements = splitSqlStatements(fs.readFileSync(migration.file, "utf8"));
+  if (statements.length < 4) {
+    throw new Error(`Migration ${migration.name} did not contain the expected statements.`);
+  }
+
+  for (const statement of statements) {
+    await connection.query(statement);
+  }
+
+  await migration.verify(connection);
+  return statements.length;
+}
+
+async function ensureOneMigration(connection, migration) {
+  const alreadyApplied = await migrationApplied(connection, migration.name);
+
+  if (alreadyApplied) {
+    try {
+      await migration.verify(connection);
+      return { name: migration.name, applied: false, repaired: false, statement_count: 0 };
+    } catch (error) {
+      console.warn(
+        `Migration ${migration.name} was marked applied but verification failed; reapplying idempotently: ${error.message}`
+      );
+      const statementCount = await executeMigration(connection, migration);
+      return {
+        name: migration.name,
+        applied: false,
+        repaired: true,
+        statement_count: statementCount,
+      };
+    }
+  }
+
+  const statementCount = await executeMigration(connection, migration);
+  return {
+    name: migration.name,
+    applied: true,
+    repaired: false,
+    statement_count: statementCount,
+  };
+}
+
 async function ensureEquipmentSalesSchema() {
   if (
-    String(process.env.DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION || "").toLowerCase() ===
-    "true"
+    String(process.env.DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION || "")
+      .trim()
+      .toLowerCase() === "true"
   ) {
-    console.warn("Equipment Sales startup migration is disabled by environment configuration.");
-    return { applied: false, skipped: true, reason: "disabled" };
+    console.warn("Equipment Sales startup migrations are disabled by environment configuration.");
+    return { applied: false, skipped: true, reason: "disabled", migrations: [] };
   }
 
   const connection = await pool.getConnection();
@@ -133,35 +259,35 @@ async function ensureEquipmentSalesSchema() {
     ]);
     lockAcquired = Number(lockRows[0]?.acquired || 0) === 1;
     if (!lockAcquired) {
-      throw new Error("Could not acquire the Equipment Sales migration lock.");
+      throw new Error("Could not acquire the Equipment Sales finalization migration lock.");
     }
 
-    if (await migrationApplied(connection)) {
-      await verifyFoundation(connection);
-      return { applied: false, skipped: true, reason: "already_applied" };
-    }
-
-    if (!fs.existsSync(MIGRATION_FILE)) {
-      throw new Error(`Equipment Sales migration file is missing: ${MIGRATION_FILE}`);
-    }
-
-    // The migration contains standard SQL string literals. ANSI_QUOTES is
-    // removed only for this dedicated connection and does not affect other
-    // application sessions or the database server's global SQL mode.
     await removeAnsiQuotesForMigration(connection);
 
-    const statements = splitSqlStatements(fs.readFileSync(MIGRATION_FILE, "utf8"));
-    if (statements.length < 20) {
-      throw new Error("Equipment Sales migration file did not contain the expected statements.");
-    }
-
-    for (const statement of statements) {
-      await connection.query(statement);
+    const results = [];
+    for (const migration of MIGRATIONS) {
+      results.push(await ensureOneMigration(connection, migration));
     }
 
     await verifyFoundation(connection);
-    console.log("Equipment Sales & Hire foundation migration applied successfully.");
-    return { applied: true, skipped: false, statement_count: statements.length };
+    await verifyRetirement(connection);
+    startEquipmentSalesReminderScheduler();
+
+    const applied = results.some((result) => result.applied || result.repaired);
+    if (applied) {
+      console.log(
+        `Equipment Sales finalization migrations verified: ${results
+          .map((result) => `${result.name}:${result.applied ? "applied" : result.repaired ? "repaired" : "ready"}`)
+          .join(", ")}.`
+      );
+    }
+
+    return {
+      applied,
+      skipped: !applied,
+      reason: applied ? null : "already_applied",
+      migrations: results,
+    };
   } finally {
     if (lockAcquired) {
       try {
@@ -176,8 +302,12 @@ async function ensureEquipmentSalesSchema() {
 
 module.exports = {
   MIGRATION_NAME,
+  MIGRATION_FILE,
+  RETIREMENT_MIGRATION_NAME,
+  RETIREMENT_MIGRATION_FILE,
   ensureEquipmentSalesSchema,
   removeAnsiQuotesForMigration,
   splitSqlStatements,
   verifyFoundation,
+  verifyRetirement,
 };
