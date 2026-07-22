@@ -9,6 +9,13 @@ try {
   // dotenv is optional for environments that inject DB variables directly.
 }
 
+const EQUIPMENT_SALES_MIGRATION_NAME =
+  "20260722_equipment_sales_installments_foundation";
+const EQUIPMENT_SALES_MIGRATION_PATH = path.resolve(
+  __dirname,
+  "../../database/migrations/20260722_equipment_sales_installments_foundation.sql"
+);
+
 const CANONICAL_TABLES = [
   "branches",
   "schema_migrations",
@@ -119,6 +126,19 @@ const CANONICAL_TABLES = [
   "installment_payment_allocations",
   "installment_reschedules",
   "installment_reminder_log",
+  "equipment_media",
+  "equipment_sales_enquiries",
+  "equipment_sales_quotations",
+  "equipment_sales_quotation_items",
+  "equipment_sale_agreements",
+  "equipment_asset_sale_locks",
+  "equipment_installment_schedule",
+  "equipment_sale_payments",
+  "equipment_sale_payment_allocations",
+  "equipment_deliveries",
+  "equipment_ownership_transfers",
+  "equipment_sales_reminder_log",
+  "equipment_legacy_installment_migrations",
 ];
 
 const ALIAS_TABLES = new Set(["stores", "user_store_access", "activity_logs"]);
@@ -139,6 +159,34 @@ const HIRE_TRIGGERS = [
   "trg_hire_invoice_location_before_update",
   "trg_hire_payment_location_before_update",
   "trg_hire_return_location_before_update",
+  "trg_hire_contract_asset_sale_guard_before_insert",
+  "trg_hire_contract_asset_sale_guard_before_update",
+  "trg_equipment_sale_agreement_hire_guard_before_insert",
+  "trg_equipment_sale_agreement_hire_guard_before_update",
+];
+
+const REQUIRED_EQUIPMENT_COLUMNS = [
+  ["fleet_assets", "hire_location_id"],
+  ["fleet_assets", "equipment_category"],
+  ["fleet_assets", "model_year"],
+  ["fleet_assets", "chassis_number"],
+  ["fleet_assets", "engine_number"],
+  ["fleet_assets", "condition_status"],
+  ["fleet_assets", "operational_purpose"],
+  ["fleet_assets", "sale_status"],
+  ["fleet_assets", "acquisition_cost"],
+  ["fleet_assets", "target_selling_price"],
+  ["fleet_assets", "standard_hire_rate"],
+  ["fleet_assets", "main_image_url"],
+  ["sms_log", "workspace_code"],
+  ["sms_log", "business_unit_id"],
+  ["sms_log", "hire_location_id"],
+  ["sms_log", "entity_type"],
+  ["sms_log", "entity_id"],
+  ["sms_log", "template_code"],
+  ["sms_log", "deduplication_key"],
+  ["sms_log", "scheduled_for"],
+  ["sms_log", "consent_basis"],
 ];
 
 function env(primaryName, fallbackName, defaultValue = undefined) {
@@ -606,6 +654,16 @@ async function runVerificationSummary(connection) {
        (TABLE_NAME = 'stock_transfers' AND COLUMN_NAME = 'approval_note')
      )`
   );
+  const equipmentColumnConditions = REQUIRED_EQUIPMENT_COLUMNS
+    .map(() => "(TABLE_NAME = ? AND COLUMN_NAME = ?)")
+    .join(" OR ");
+  const [equipmentColumnRows] = await connection.query(
+    `SELECT COUNT(*) AS equipment_column_count
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND (${equipmentColumnConditions})`,
+    REQUIRED_EQUIPMENT_COLUMNS.flat()
+  );
   const [roleRows] = await connection.query(
     `SELECT COUNT(*) AS role_support_count
      FROM information_schema.COLUMNS
@@ -629,11 +687,16 @@ async function runVerificationSummary(connection) {
      WHERE s.id IS NULL`
   );
 
+  const tableCount = Number(tableRows[0]?.table_count || 0);
+
   return {
-    applicationTablesFound: Number(tableRows[0]?.table_count || 0) - 1,
-    schemaMigrationsIncluded: Number(tableRows[0]?.table_count || 0) === 55,
+    applicationTablesFound: tableCount - 1,
+    schemaMigrationsIncluded: tableCount === CANONICAL_TABLES.length,
     hireTriggersFound: Number(triggerRows[0]?.trigger_count || 0),
     requiredCoreColumnsFound: Number(coreColumnRows[0]?.core_column_count || 0),
+    requiredEquipmentColumnsFound: Number(
+      equipmentColumnRows[0]?.equipment_column_count || 0
+    ),
     userRoleSupportsStaff: Number(roleRows[0]?.role_support_count || 0) === 1,
     duplicateUsers: Number(duplicateUsers[0]?.problem_count || 0),
     duplicateReceipts: Number(duplicateReceipts[0]?.problem_count || 0),
@@ -677,7 +740,21 @@ async function main() {
   try {
     await cleanDatabase(connection);
     await executeSqlFile(connection, path.resolve(__dirname, "../../database/schema.sql"));
+
+    // Create the additive Equipment Sales tables before inserting backup rows.
+    // Remove the migration marker temporarily so an older or newer backup can
+    // restore its own schema_migrations history without a duplicate key.
+    await executeSqlFile(connection, EQUIPMENT_SALES_MIGRATION_PATH);
+    await connection.query(
+      "DELETE FROM schema_migrations WHERE migration_name = ?",
+      [EQUIPMENT_SALES_MIGRATION_NAME]
+    );
+
     const restored = await restoreRows(connection, backupInfo.backup);
+
+    // Re-run idempotently after restore to guarantee the current migration
+    // marker and all four conflict guards are present.
+    await executeSqlFile(connection, EQUIPMENT_SALES_MIGRATION_PATH);
     await executeSqlFile(connection, path.resolve(__dirname, "../../database/seed_reference_data.sql"));
     await resetAutoIncrements(connection);
     const verification = await runVerificationSummary(connection);
@@ -689,10 +766,11 @@ async function main() {
     console.log(JSON.stringify(verification, null, 2));
 
     if (
-      verification.applicationTablesFound !== 54 ||
+      verification.applicationTablesFound !== CANONICAL_TABLES.length - 1 ||
       !verification.schemaMigrationsIncluded ||
-      verification.hireTriggersFound !== 16 ||
+      verification.hireTriggersFound !== HIRE_TRIGGERS.length ||
       verification.requiredCoreColumnsFound !== 5 ||
+      verification.requiredEquipmentColumnsFound !== REQUIRED_EQUIPMENT_COLUMNS.length ||
       !verification.userRoleSupportsStaff ||
       verification.duplicateUsers > 0 ||
       verification.duplicateReceipts > 0 ||
