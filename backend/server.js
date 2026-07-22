@@ -64,6 +64,7 @@ const miningRoutes = require("./routes/miningRoutes");
 const miningControlRoutes = require("./routes/miningControlRoutes");
 const equipmentHireRoutes = require("./routes/equipmentHireRoutes");
 const hireCommercialRoutes = require("./routes/hireCommercialRoutes");
+const equipmentCatalogueRoutes = require("./routes/equipmentCatalogueRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const sharedControlRoutes = require("./routes/sharedControlRoutes");
 const operationsDocumentRoutes = require("./routes/operationsDocumentRoutes");
@@ -208,6 +209,7 @@ app.get("/api", (req, res) => {
       "/api/mining-control",
       "/api/equipment-hire",
       "/api/hire-commercial",
+      "/api/equipment-catalogue",
       "/api/notifications",
       "/api/shared-control",
       "/api/operations-documents",
@@ -326,6 +328,12 @@ app.use("/api/mining", requireAuth, miningBoundary, miningRoutes);
 app.use("/api/mining-control", requireAuth, miningBoundary, miningControlRoutes);
 app.use("/api/equipment-hire", requireAuth, hireBoundary, equipmentHireRoutes);
 app.use("/api/hire-commercial", requireAuth, hireBoundary, hireCommercialRoutes);
+app.use(
+  "/api/equipment-catalogue",
+  requireAuth,
+  hireBoundary,
+  equipmentCatalogueRoutes
+);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/shared-control", sharedControlRoutes);
 app.use("/api/operations-documents", operationsDocumentRoutes);
