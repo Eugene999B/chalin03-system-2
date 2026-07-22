@@ -34,7 +34,7 @@ const RETIREMENT_TRIGGERS = [
 
 test("Spare Parts installment retirement is additive and preserves recovery", () => {
   assert.match(retirementMigration, /ADDITIVE MIGRATION ONLY/i);
-  assert.match(retirementMigration, /historical records are preserved/i);
+  assert.match(retirementMigration, /history are preserved/i);
   assert.match(retirementMigration, /FOREIGN_KEY_CHECKS=0/i);
   assert.match(retirementMigration, /@@SESSION\.FOREIGN_KEY_CHECKS = 1/);
   assert.match(retirementMigration, /INSERT INTO schema_migrations/i);
