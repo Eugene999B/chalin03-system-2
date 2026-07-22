@@ -7,6 +7,12 @@ on:
     paths:
       - '.hotfix/apply_command_gate_mobile_hotfix.py'
       - '.github/workflows/command-gate-mobile-hotfix.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.hotfix/apply_command_gate_mobile_hotfix.py'
+      - '.github/workflows/command-gate-mobile-hotfix.yml'
 
 permissions:
   contents: write
