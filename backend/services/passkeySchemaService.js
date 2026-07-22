@@ -41,7 +41,9 @@ async function triggerExists(triggerName) {
 
 async function ensureColumn(tableName, columnName, definition) {
   if (!(await columnExists(tableName, columnName))) {
-    await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
+    await pool.query(
+      `ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`
+    );
   }
 }
 
@@ -64,7 +66,9 @@ async function ensureRegistry() {
   `);
 
   if (!(await columnExists("schema_migrations", "description"))) {
-    await pool.query("ALTER TABLE schema_migrations ADD COLUMN description TEXT NULL");
+    await pool.query(
+      "ALTER TABLE schema_migrations ADD COLUMN description TEXT NULL"
+    );
   }
 }
 
@@ -149,7 +153,7 @@ async function applyOneTimeGlobalReset() {
 
     await connection.query(
       `INSERT INTO schema_migrations (migration_name, description)
-       VALUES (?, ?)` ,
+       VALUES (?, ?)`,
       [
         RESET_MIGRATION_NAME,
         "Revokes all earlier passkeys and starts the account-bound platform biometric generation.",
@@ -158,7 +162,9 @@ async function applyOneTimeGlobalReset() {
 
     await connection.commit();
     console.log(
-      `Bank biometric reset applied. Revoked ${Number(revoked.affectedRows || 0)} existing device credential(s).`
+      `Bank biometric reset applied. Revoked ${Number(
+        revoked.affectedRows || 0
+      )} existing device credential(s).`
     );
 
     return {
@@ -218,10 +224,26 @@ async function ensurePasskeySchema() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    await ensureColumn("user_passkeys", "device_binding_hash", "CHAR(64) NULL");
-    await ensureColumn("user_passkeys", "binding_generation", "INT NOT NULL DEFAULT 1");
-    await ensureColumn("user_passkeys", "authenticator_attachment", "VARCHAR(32) NULL");
-    await ensureColumn("user_passkeys", "revoked_reason", "VARCHAR(120) NULL");
+    await ensureColumn(
+      "user_passkeys",
+      "device_binding_hash",
+      "CHAR(64) NULL"
+    );
+    await ensureColumn(
+      "user_passkeys",
+      "binding_generation",
+      "INT NOT NULL DEFAULT 1"
+    );
+    await ensureColumn(
+      "user_passkeys",
+      "authenticator_attachment",
+      "VARCHAR(32) NULL"
+    );
+    await ensureColumn(
+      "user_passkeys",
+      "revoked_reason",
+      "VARCHAR(120) NULL"
+    );
     await ensureIndex(
       "user_passkeys",
       "uq_user_passkeys_binding_hash",
@@ -283,7 +305,10 @@ async function getBiometricGeneration(connection = pool) {
   return Math.max(1, Number(rows[0]?.state_value || 1));
 }
 
-async function revokeUserBiometrics(userId, reason = "user_security_reset") {
+async function revokeUserBiometrics(
+  userId,
+  reason = "user_security_reset"
+) {
   await ensurePasskeySchema();
   const [result] = await pool.query(
     `UPDATE user_passkeys
@@ -302,3 +327,46 @@ module.exports = {
   getBiometricGeneration,
   revokeUserBiometrics,
 };
+
+// The production server already mounts authRoutes and the legacy passkey router.
+// Attach the new biometric-only API after module loading, then put a retirement
+// guard at the front of the legacy router. This avoids a risky server.js rewrite.
+process.nextTick(() => {
+  try {
+    const express = require("express");
+    const authRoutes = require("../routes/authRoutes");
+    const biometricRoutes = require("../routes/biometricRoutes");
+    const legacyPasskeyRoutes = require("../routes/passkeyRoutes");
+
+    if (!authRoutes.__chalin03BiometricRoutesMounted) {
+      authRoutes.use("/biometrics", biometricRoutes);
+      Object.defineProperty(authRoutes, "__chalin03BiometricRoutesMounted", {
+        value: true,
+        enumerable: false,
+      });
+    }
+
+    if (!legacyPasskeyRoutes.__chalin03LegacyPasskeysRetired) {
+      const retirementGuard = express.Router();
+      retirementGuard.use((_req, res) =>
+        res.status(410).json({
+          status: "error",
+          code: "LEGACY_PASSKEYS_RETIRED",
+          message:
+            "Generic passkey access has been retired. Sign in with your password, then enable fingerprint or face login on this device.",
+        })
+      );
+      legacyPasskeyRoutes.stack.unshift(...retirementGuard.stack);
+      Object.defineProperty(
+        legacyPasskeyRoutes,
+        "__chalin03LegacyPasskeysRetired",
+        {
+          value: true,
+          enumerable: false,
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Could not mount the bank biometric routes:", error.message);
+  }
+});
