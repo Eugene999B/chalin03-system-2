@@ -13,6 +13,8 @@ CHUNK_DIR = Path('.commandgate')
 GZIP_OUTPUT = Path('/tmp/chalin-command-gate.tar.gz')
 TAR_OUTPUT = Path('/tmp/chalin-command-gate.tar')
 MANIFEST = Path('/tmp/chalin-command-gate-files.txt')
+RECOVERED_SCRIPT = CHUNK_DIR / 'recovered_apply_command_gate.py.partial'
+RECOVERY_INFO = CHUNK_DIR / 'recovery-info.txt'
 BLOCK_SIZE = 512
 
 
@@ -36,6 +38,35 @@ def parse_octal(field: bytes, label: str) -> int:
     except ValueError as exc:
         fail(f'Invalid tar {label}: {cleaned!r}')
         raise AssertionError from exc
+
+
+def recover_incomplete_script(
+    data: bytes,
+    *,
+    content_start: int,
+    full_name: str,
+    expected_size: int,
+) -> None:
+    partial = data[content_start:]
+    RECOVERED_SCRIPT.write_bytes(partial)
+    RECOVERY_INFO.write_text(
+        '\n'.join(
+            [
+                f'member={full_name}',
+                f'expected_bytes={expected_size}',
+                f'recovered_bytes={len(partial)}',
+                f'missing_bytes={max(0, expected_size - len(partial))}',
+                f'recovered_sha256={hashlib.sha256(partial).hexdigest()}',
+            ]
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+    print(
+        f'::warning::Recovered {len(partial)} of {expected_size} bytes from '
+        f'{full_name}; missing {max(0, expected_size - len(partial))} bytes.'
+    )
+    raise SystemExit(42)
 
 
 def validate_complete_tar(data: bytes) -> tuple[int, str]:
@@ -71,9 +102,17 @@ def validate_complete_tar(data: bytes) -> tuple[int, str]:
         full_name = f'{prefix}/{name}' if prefix else name
         size = parse_octal(header[124:136], f'size for {full_name}')
         padded_size = ((size + BLOCK_SIZE - 1) // BLOCK_SIZE) * BLOCK_SIZE
-        member_end = offset + BLOCK_SIZE + padded_size
+        content_start = offset + BLOCK_SIZE
+        member_end = content_start + padded_size
 
         if member_end > len(data):
+            if full_name == 'apply_command_gate.py':
+                recover_incomplete_script(
+                    data,
+                    content_start=content_start,
+                    full_name=full_name,
+                    expected_size=size,
+                )
             fail(
                 f'Tar member {full_name!r} is incomplete: '
                 f'{member_end - len(data)} more byte(s) are required.'
