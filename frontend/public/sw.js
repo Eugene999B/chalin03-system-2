@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-bank-biometric-login-v1";
+const CACHE_NAME = "chalin03-bank-biometric-login-v2";
 
 const CORE_ASSETS = [
   "/",
