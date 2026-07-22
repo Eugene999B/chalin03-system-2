@@ -11,10 +11,10 @@
 .gate4-intro__orbit--one,
 .gate4-intro__orbit--three,
 .gate4-sequence__ring--one {
-  animation-name: gate4-center-spin;
+  animation-name: gate4-center-spin !important;
 }
 
 .gate4-intro__orbit--two,
 .gate4-sequence__ring--two {
-  animation-name: gate4-center-spin-reverse;
+  animation-name: gate4-center-spin-reverse !important;
 }
