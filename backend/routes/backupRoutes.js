@@ -35,7 +35,7 @@ const router = express.Router();
 */
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const BACKUP_MANIFEST_VERSION = "chalin03-final-local-6b-6f-v1";
+const BACKUP_MANIFEST_VERSION = "chalin03-equipment-sales-foundation-v1";
 const LEGACY_ALIAS_TABLES = new Set(["stores", "user_store_access", "activity_logs"]);
 
 function requireOriginalSystemAdministrator(req, res, next) {
@@ -161,6 +161,19 @@ const PREFERRED_TABLE_ORDER = [
   "installment_payment_allocations",
   "installment_reschedules",
   "installment_reminder_log",
+  "equipment_media",
+  "equipment_sales_enquiries",
+  "equipment_sales_quotations",
+  "equipment_sales_quotation_items",
+  "equipment_sale_agreements",
+  "equipment_asset_sale_locks",
+  "equipment_installment_schedule",
+  "equipment_sale_payments",
+  "equipment_sale_payment_allocations",
+  "equipment_deliveries",
+  "equipment_ownership_transfers",
+  "equipment_sales_reminder_log",
+  "equipment_legacy_installment_migrations",
 ];
 
 const DATE_ONLY_COLUMNS = new Set([
@@ -173,15 +186,18 @@ const DATE_ONLY_COLUMNS = new Set([
   "review_date",
   "registration_expiry",
   "insurance_expiry",
+  "acquisition_date",
   "log_date",
   "work_date",
   "shift_date",
   "enquiry_date",
+  "expected_purchase_date",
   "requested_start_date",
   "expected_end_date",
   "start_date",
   "actual_end_date",
   "validity_date",
+  "quotation_date",
   "invoice_date",
   "effective_from",
   "effective_to",
@@ -193,6 +209,7 @@ const DATE_ONLY_COLUMNS = new Set([
   "final_due_date",
   "new_first_due_date",
   "old_next_due_date",
+  "transfer_date",
 ]);
 
 const DATE_TIME_COLUMNS = new Set([
@@ -236,13 +253,19 @@ const DATE_TIME_COLUMNS = new Set([
   "transaction_date",
   "captured_at",
   "decided_at",
-  "voided_at",
   "settled_at",
   "delivered_at",
-  "cancelled_at",
-  "completed_at",
-  "requested_at",
-  "decided_at",
+  "delivery_datetime",
+  "sale_reserved_until",
+  "sold_at",
+  "archived_at",
+  "scheduled_for",
+  "locked_at",
+  "expires_at",
+  "released_at",
+  "fully_paid_at",
+  "revoked_at",
+  "migrated_at",
 ]);
 
 function getBranchId(req) {
@@ -698,7 +721,7 @@ router.get("/download", requireAuth, requireOriginalSystemAdministrator, async (
       notes: [
         "This is a full-system backup, not a selected-store export.",
         "Stock Movement Ledger does not have one separate table; it is rebuilt from sales, purchases, returns, stock adjustments, and stock transfers.",
-        "Shared fleet equipment, meter, fuel, maintenance, and inspection tables are included automatically when they exist.",
+        "Shared fleet equipment, meter, fuel, maintenance, inspection, equipment sales, installments, deliveries, ownership transfers and media records are included when they exist.",
         "Use Exports for accountant/boss reports. Use Backups only for system recovery.",
       ],
       included_tables: existingTables,
