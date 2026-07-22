@@ -22,6 +22,14 @@ def replace_once(content: str, old: str, new: str, label: str) -> str:
     return content.replace(old, new, 1)
 
 
+def replace_first(content: str, old: str, new: str, label: str) -> str:
+    count = content.count(old)
+    if count < 1:
+        raise SystemExit(f'{label}: expected at least one match, found {count}')
+    print(f'{label}: using the first of {count} matching block(s)')
+    return content.replace(old, new, 1)
+
+
 def update_auth_context() -> None:
     path = 'frontend/src/context/AuthContext.jsx'
     content = read(path)
@@ -31,7 +39,6 @@ def update_auth_context() -> None:
 
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
-
     setToken(newToken);
     setUser(normalizedUser);
   }
@@ -95,15 +102,15 @@ def update_app() -> None:
             'App Command Gate page imports',
         )
 
-    if '          <LastWorkTracker />\n          <Routes>' not in content:
+    if '<LastWorkTracker />' not in content:
         content = replace_once(
             content,
             '        <BrowserRouter>\n        <Routes>\n',
-            '        <BrowserRouter>\n          <LastWorkTracker />\n        <Routes>\n',
+            '        <BrowserRouter>\n          <LastWorkTracker />\n          <Routes>\n',
             'App work tracker mount',
         )
 
-    if 'path="device-access"' not in content:
+    if content.count('path="device-access"') == 0:
         content = replace_once(
             content,
             '            <Route path="change-password" element={safe(<ChangePasswordPage />)} />\n',
@@ -117,7 +124,7 @@ def update_app() -> None:
             />
           </Route>
 '''
-    if 'path="/mining/device-access"' not in content:
+    if content.count('path="device-access"') < 2:
         mining_replacement = '''            <Route
               path="change-password"
               element={safe(<ChangePasswordPage />)}
@@ -126,7 +133,12 @@ def update_app() -> None:
             <Route path="emergency-operations" element={safe(<EmergencyOperationsPage />)} />
           </Route>
 '''
-        content = replace_once(content, mining_anchor, mining_replacement, 'App Mining Command Gate routes')
+        content = replace_first(
+            content,
+            mining_anchor,
+            mining_replacement,
+            'App Mining Command Gate routes',
+        )
 
     hire_anchor = '''            <Route
               path="change-password"
@@ -145,7 +157,12 @@ def update_app() -> None:
           </Route>
 
           {/* Group Executive'''
-        content = replace_once(content, hire_anchor, hire_replacement, 'App Hire Command Gate routes')
+        content = replace_once(
+            content,
+            hire_anchor,
+            hire_replacement,
+            'App Hire Command Gate routes',
+        )
 
     write(path, content)
 
