@@ -7,6 +7,12 @@ on:
     paths:
       - '.commandgate/**'
       - '.github/workflows/command-gate-assemble.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.commandgate/**'
+      - '.github/workflows/command-gate-assemble.yml'
 
 permissions:
   contents: write
@@ -15,9 +21,10 @@ jobs:
   assemble:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout implementation branch
         uses: actions/checkout@v4
         with:
+          ref: agent/chalin-command-gate
           fetch-depth: 0
 
       - name: Decode and verify package
