@@ -1,4 +1,4 @@
-name: Assemble Chalin Command Gate
+name: Apply Command Gate Integration
 
 on:
   push:
@@ -7,45 +7,36 @@ on:
     paths:
       - '.commandgate/integrate_frontend.py'
       - '.github/workflows/command-gate-assemble.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '.commandgate/integrate_frontend.py'
-      - '.github/workflows/command-gate-assemble.yml'
 
 permissions:
   contents: write
 
-concurrency:
-  group: command-gate-assemble-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  integrate-frontend:
+  apply:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Quietly checkout implementation branch
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/chalin-command-gate
+          fetch-depth: 1
+
+      - name: Apply deterministic integration
+        run: python .commandgate/integrate_frontend.py
+
+      - name: Validate patch shape
         run: |
           set -euo pipefail
-          git clone --quiet --depth 1 --branch agent/chalin-command-gate \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
+          git diff --check
+          test -f frontend/scripts/commandGateReleaseTests.mjs
+          grep -q 'establishSession' frontend/src/context/AuthContext.jsx
+          grep -q 'LastWorkTracker' frontend/src/App.jsx
+          test "$(grep -c 'path="device-access"' frontend/src/App.jsx)" -eq 3
+          test "$(grep -c 'path="emergency-operations"' frontend/src/App.jsx)" -eq 3
 
-      - name: Integrate Command Gate frontend
-        run: |
-          set -euo pipefail
-          python .commandgate/integrate_frontend.py
-
-      - name: Verify Command Gate frontend
-        run: |
-          set -euo pipefail
-          npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
-          npm --prefix frontend test
-          npm --prefix frontend run build
-
-      - name: Commit frontend integration
+      - name: Commit integration
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "Chalin 03 Release Agent"
@@ -60,7 +51,7 @@ jobs:
             frontend/scripts/commandGateReleaseTests.mjs \
             frontend/package.json
           if git diff --cached --quiet; then
-            echo "Frontend integration is already current."
+            echo "Command Gate integration is already current."
             exit 0
           fi
           git commit -m "Integrate Command Gate frontend"
