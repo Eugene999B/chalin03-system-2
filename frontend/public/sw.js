@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-version-3-v4-mobile-experience";
+const CACHE_NAME = "chalin03-equipment-sales-finalization-v1";
 
 const CORE_ASSETS = [
   "/",
