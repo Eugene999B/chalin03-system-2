@@ -6,6 +6,7 @@ const INITIAL_MAX_DIMENSION = 1200;
 const MIN_DIMENSION = 520;
 const QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.44, 0.36];
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PROTECTED_MIME_TYPE = "image/jpeg";
 
 let installed = false;
 let observer = null;
@@ -75,16 +76,16 @@ async function optimizeEquipmentPhoto(file) {
     context.drawImage(image, 0, 0, size.width, size.height);
 
     for (const quality of QUALITY_STEPS) {
-      const blob = await canvasBlob(canvas, "image/webp", quality);
+      const blob = await canvasBlob(canvas, PROTECTED_MIME_TYPE, quality);
       if (!blob) continue;
       bestBlob = blob;
       if (blob.size <= MAX_STORED_BYTES) {
         return {
           dataUrl: await blobToDataUrl(blob),
-          mimeType: "image/webp",
+          mimeType: PROTECTED_MIME_TYPE,
           fileName: String(file.name || "equipment-photo")
             .replace(/\.[^.]+$/, "")
-            .concat(".webp"),
+            .concat(".jpg"),
           sizeBytes: blob.size,
           width: size.width,
           height: size.height,
@@ -103,8 +104,8 @@ async function optimizeEquipmentPhoto(file) {
 
   return {
     dataUrl: await blobToDataUrl(bestBlob),
-    mimeType: "image/webp",
-    fileName: "equipment-photo.webp",
+    mimeType: PROTECTED_MIME_TYPE,
+    fileName: "equipment-photo.jpg",
     sizeBytes: bestBlob.size,
   };
 }
@@ -141,7 +142,7 @@ function prepareEquipmentPhotoField(fileInput) {
   const hint = field.querySelector("small");
   if (hint) {
     hint.textContent =
-      "Take a photo or choose one. Chalin compresses and protects it automatically.";
+      "Take a photo or choose one. Chalin compresses it securely for mobile use and PDF documents.";
   }
   secureUrlInput(fileInput);
 }
@@ -181,7 +182,7 @@ async function handleEquipmentPhotoSelection(fileInput) {
   const detail = preview.querySelector("small");
   preview.classList.remove("is-error", "is-ready");
   title.textContent = "Compressing securely…";
-  detail.textContent = "Optimising for mobile upload";
+  detail.textContent = "Optimising for mobile upload and PDF documents";
 
   try {
     const optimized = await optimizeEquipmentPhoto(file);
