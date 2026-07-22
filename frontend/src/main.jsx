@@ -9,6 +9,7 @@ import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 
+// Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
