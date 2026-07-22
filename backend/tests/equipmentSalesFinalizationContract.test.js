@@ -26,6 +26,7 @@ const catalogueMiddleware = read(
 );
 const backupRoutes = read("backend/routes/backupRoutes.js");
 const resetScript = read("backend/scripts/resetDatabaseFromBackup.js");
+const cloudflareHeaders = read("frontend/public/_headers");
 
 const RETIREMENT_TRIGGERS = [
   "trg_spare_parts_installment_retired_sales_insert",
@@ -58,21 +59,56 @@ test("Spare Parts installment retirement is additive and preserves recovery", ()
   assert.match(resetScript, /SET FOREIGN_KEY_CHECKS = 0/);
 });
 
-test("finalization schema service applies, verifies and repairs both migrations", () => {
-  assert.match(schemaService, /MIGRATION_NAME/);
-  assert.match(schemaService, /RETIREMENT_MIGRATION_NAME/);
-  assert.match(schemaService, /RETIREMENT_MIGRATION_FILE/);
-  assert.match(schemaService, /chalin03_equipment_sales_finalization_v2/);
+test("catalogue foundation is required while optional legacy retirement cannot cause 503", () => {
+  assert.match(schemaService, /FOUNDATION_MIGRATION/);
+  assert.match(schemaService, /RETIREMENT_MIGRATION/);
+  assert.match(schemaService, /required: true/);
+  assert.match(schemaService, /required: false/);
+  assert.match(schemaService, /chalin03_equipment_sales_finalization_v3/);
   assert.match(schemaService, /GET_LOCK\(\?, 60\)/);
-  assert.match(schemaService, /removeAnsiQuotesForMigration/);
-  assert.match(schemaService, /verifyFoundation/);
-  assert.match(schemaService, /verifyRetirement/);
+  assert.match(schemaService, /ensureMigrationRegistryShape/);
+  assert.match(schemaService, /normalizeFoundationSqlForProduction/);
+  assert.match(schemaService, /Removing AFTER clauses/);
+  assert.match(schemaService, /fk_equipment_legacy_migration_legacy/);
+  assert.match(schemaService, /ensureOptionalMigration/);
+  assert.match(schemaService, /will not block Equipment Catalogue/);
+  assert.match(schemaService, /verifyFoundationCore/);
+  assert.match(schemaService, /verifyFoundationSafety/);
+  assert.match(schemaService, /database trigger reinforcement remains pending/);
   assert.match(schemaService, /marked applied but verification failed/);
   assert.match(schemaService, /executeMigration/);
   assert.match(schemaService, /startEquipmentSalesReminderScheduler/);
-  assert.match(schemaService, /equipmentSalesRoutes\.use\(equipmentSalesFinalizationRoutes\)/);
-  assert.match(schemaService, /trg_hire_contract_asset_sale_guard_before_insert/);
-  assert.match(schemaService, /trg_spare_parts_installment_retired_sales_insert/);
+  assert.match(
+    schemaService,
+    /equipmentSalesRoutes\.use\(equipmentSalesFinalizationRoutes\)/
+  );
+  assert.match(
+    schemaService,
+    /trg_hire_contract_asset_sale_guard_before_insert/
+  );
+  assert.match(
+    schemaService,
+    /trg_spare_parts_installment_retired_sales_insert/
+  );
+  assert.match(schemaService, /EQUIPMENT_SALES_MIGRATION_LOCK_TIMEOUT/);
+  assert.match(schemaService, /statementIndex/);
+});
+
+test("Cloudflare Insights is explicitly permitted without widening the whole CSP", () => {
+  assert.match(
+    cloudflareHeaders,
+    /script-src 'self' 'unsafe-inline' https:\/\/static\.cloudflareinsights\.com/
+  );
+  assert.match(
+    cloudflareHeaders,
+    /script-src-elem 'self' 'unsafe-inline' https:\/\/static\.cloudflareinsights\.com/
+  );
+  assert.match(
+    cloudflareHeaders,
+    /connect-src 'self' https:\/\/api\.chalin03\.com https:\/\/cloudflareinsights\.com/
+  );
+  assert.match(cloudflareHeaders, /object-src 'none'/);
+  assert.match(cloudflareHeaders, /frame-ancestors 'none'/);
 });
 
 test("automatic Equipment Sales reminders are deduplicated and location aware", () => {
