@@ -5,13 +5,13 @@ on:
     branches:
       - agent/chalin-command-gate
     paths:
-      - '.commandgate/integrate_backend.py'
+      - '.commandgate/integrate_frontend.py'
       - '.github/workflows/command-gate-assemble.yml'
   pull_request:
     branches:
       - main
     paths:
-      - '.commandgate/integrate_backend.py'
+      - '.commandgate/integrate_frontend.py'
       - '.github/workflows/command-gate-assemble.yml'
 
 permissions:
@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  integrate-backend:
+  integrate-frontend:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -33,42 +33,35 @@ jobs:
           git clone --quiet --depth 1 --branch agent/chalin-command-gate \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
-      - name: Integrate passkey backend and dependency locks
+      - name: Integrate Command Gate frontend
         run: |
           set -euo pipefail
-          python .commandgate/integrate_backend.py
-          npm --prefix backend install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm --prefix frontend install --package-lock-only --ignore-scripts --no-audit --no-fund
+          python .commandgate/integrate_frontend.py
 
-      - name: Verify backend integration
+      - name: Verify Command Gate frontend
         run: |
           set -euo pipefail
-          npm --prefix backend ci --ignore-scripts --no-audit --no-fund
-          npm --prefix backend run syntax-check
-          node --test backend/tests/passkeyRouteContract.test.js
-          BASE_SHA="$(git merge-base HEAD origin/main 2>/dev/null || true)"
-          if [ -n "$BASE_SHA" ]; then
-            MIGRATION_SAFETY_BASE="$BASE_SHA" npm --prefix backend run migration-safety
-          fi
+          npm --prefix frontend ci --ignore-scripts --no-audit --no-fund
+          npm --prefix frontend test
+          npm --prefix frontend run build
 
-      - name: Commit backend integration
+      - name: Commit frontend integration
         run: |
           set -euo pipefail
           git config user.name "Chalin 03 Release Agent"
           git config user.email "actions@users.noreply.github.com"
           git add \
-            backend/routes/authRoutes.js \
-            backend/server.js \
-            backend/package.json \
-            backend/package-lock.json \
-            backend/tests/passkeyRouteContract.test.js \
-            frontend/package.json \
-            frontend/package-lock.json \
-            database/migrations/20260722_command_gate_passkeys.sql \
-            database/migrations/20260722_command_gate_passkeys_verify.sql
+            frontend/src/App.jsx \
+            frontend/src/context/AuthContext.jsx \
+            frontend/src/components/LastWorkTracker.jsx \
+            frontend/src/components/Layout.jsx \
+            frontend/src/layouts/MiningLayout.jsx \
+            frontend/src/layouts/EquipmentHireLayout.jsx \
+            frontend/scripts/commandGateReleaseTests.mjs \
+            frontend/package.json
           if git diff --cached --quiet; then
-            echo "Backend integration is already current."
+            echo "Frontend integration is already current."
             exit 0
           fi
-          git commit -m "Integrate Command Gate passkey backend"
+          git commit -m "Integrate Command Gate frontend"
           git push origin HEAD:agent/chalin-command-gate
