@@ -19,6 +19,8 @@ const RETIREMENT_MIGRATION_FILE = path.resolve(
   "../../database/migrations/20260722_retire_spare_parts_installments.sql"
 );
 const LOCK_NAME = "chalin03_equipment_sales_finalization_v2";
+const RUNTIME_BOOT_DELAY_MS = 15 * 1000;
+const RUNTIME_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 const MIGRATIONS = [
   {
@@ -32,6 +34,9 @@ const MIGRATIONS = [
     verify: verifyRetirement,
   },
 ];
+
+let runtimeBootstrapTimer = null;
+let runtimeBootstrapReady = false;
 
 if (!equipmentSalesRoutes.__chalin03FinalizationMounted) {
   equipmentSalesRoutes.use(equipmentSalesFinalizationRoutes);
@@ -300,6 +305,45 @@ async function ensureEquipmentSalesSchema() {
   }
 }
 
+function runtimeBootstrapDisabled() {
+  return (
+    String(process.env.NODE_ENV || "").trim().toLowerCase() === "test" ||
+    String(process.env.DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION || "")
+      .trim()
+      .toLowerCase() === "true" ||
+    String(process.env.DISABLE_EQUIPMENT_SALES_RUNTIME_BOOTSTRAP || "")
+      .trim()
+      .toLowerCase() === "true"
+  );
+}
+
+function scheduleEquipmentSalesRuntimeBootstrap(delayMs = RUNTIME_BOOT_DELAY_MS) {
+  if (runtimeBootstrapDisabled() || runtimeBootstrapReady || runtimeBootstrapTimer) {
+    return false;
+  }
+
+  runtimeBootstrapTimer = setTimeout(async () => {
+    runtimeBootstrapTimer = null;
+
+    try {
+      await ensureEquipmentSalesSchema();
+      runtimeBootstrapReady = true;
+      console.log("Equipment Sales finalization runtime is ready.");
+    } catch (error) {
+      console.error(
+        "Equipment Sales finalization runtime bootstrap failed; existing workspaces remain available:",
+        error.message
+      );
+      scheduleEquipmentSalesRuntimeBootstrap(RUNTIME_RETRY_DELAY_MS);
+    }
+  }, Math.max(1000, Number(delayMs) || RUNTIME_BOOT_DELAY_MS));
+
+  runtimeBootstrapTimer.unref?.();
+  return true;
+}
+
+scheduleEquipmentSalesRuntimeBootstrap();
+
 module.exports = {
   MIGRATION_NAME,
   MIGRATION_FILE,
@@ -307,6 +351,7 @@ module.exports = {
   RETIREMENT_MIGRATION_FILE,
   ensureEquipmentSalesSchema,
   removeAnsiQuotesForMigration,
+  scheduleEquipmentSalesRuntimeBootstrap,
   splitSqlStatements,
   verifyFoundation,
   verifyRetirement,
