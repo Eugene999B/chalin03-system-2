@@ -17,7 +17,39 @@ function readWorkspaceCode() {
   }
 }
 
+function routeClassForPath(pathname) {
+  if (!pathname || pathname === "/") return "dashboard";
+
+  return pathname
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase() || "dashboard";
+}
+
+function updateRoutePresentation() {
+  const body = document.body;
+  if (!body) return;
+
+  Array.from(body.classList)
+    .filter((className) => className.startsWith("chalin-route-"))
+    .forEach((className) => body.classList.remove(className));
+
+  const pathname = window.location.pathname || "/";
+  const routeClass = `chalin-route-${routeClassForPath(pathname)}`;
+
+  body.classList.add(routeClass);
+  body.dataset.chalinRoute = pathname;
+  window.dispatchEvent(
+    new CustomEvent("chalin:route-change", {
+      detail: { pathname, routeClass },
+    })
+  );
+}
+
 function captureCurrentPath() {
+  updateRoutePresentation();
+
   if (!localStorage.getItem("chalin03_token")) return;
 
   const pathname = window.location.pathname;
