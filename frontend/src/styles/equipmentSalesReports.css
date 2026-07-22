@@ -1,0 +1,646 @@
+.equipment-sales-reports {
+  display: grid;
+  gap: 18px;
+  padding: 4px 0 28px;
+  color: #13213d;
+}
+
+.equipment-sales-reports__hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 85% 15%, rgba(255, 200, 72, 0.34), transparent 30%),
+    linear-gradient(135deg, #11203c, #1b3d72 62%, #27588c);
+  box-shadow: 0 18px 40px rgba(20, 42, 79, 0.2);
+  color: #fff;
+}
+
+.equipment-sales-reports__hero p,
+.equipment-sales-reports__panel header p,
+.equipment-sales-reports__documents header p {
+  margin: 0 0 6px;
+  color: #e7b94b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.equipment-sales-reports__hero h1 {
+  margin: 0;
+  font-size: clamp(25px, 4vw, 38px);
+  line-height: 1.06;
+}
+
+.equipment-sales-reports__hero span {
+  display: block;
+  max-width: 710px;
+  margin-top: 10px;
+  color: #dbe8ff;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.equipment-sales-reports__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 265px;
+}
+
+.equipment-sales-reports button,
+.equipment-sales-reports select,
+.equipment-sales-reports input {
+  font: inherit;
+}
+
+.equipment-sales-reports__hero-actions button,
+.equipment-sales-reports__document-actions button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.equipment-sales-reports__hero-actions button:hover,
+.equipment-sales-reports__document-actions button:hover {
+  background: #e8b94c;
+  border-color: #e8b94c;
+  color: #14213d;
+}
+
+.equipment-sales-reports button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.equipment-sales-reports__retirement {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #c7d7ef;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #eef5ff, #fffdf7);
+}
+
+.equipment-sales-reports__retirement > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.equipment-sales-reports__retirement > div:first-child strong {
+  color: #18563a;
+  font-size: 14px;
+}
+
+.equipment-sales-reports__retirement > div:first-child span {
+  color: #5e6b82;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.equipment-sales-reports__retirement > div:not(:first-child) {
+  min-width: 105px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 6px 18px rgba(31, 57, 99, 0.08);
+}
+
+.equipment-sales-reports__retirement small,
+.equipment-sales-reports__metrics small {
+  display: block;
+  color: #718097;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.equipment-sales-reports__retirement b {
+  display: block;
+  margin-top: 3px;
+  font-size: 19px;
+}
+
+.equipment-sales-reports__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dce3ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(26, 51, 91, 0.06);
+}
+
+.equipment-sales-reports__filters label {
+  display: grid;
+  gap: 5px;
+  min-width: 180px;
+  color: #4e5c72;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.equipment-sales-reports__filters input,
+.equipment-sales-reports__documents select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #cdd6e4;
+  border-radius: 11px;
+  background: #fff;
+  color: #14213d;
+  outline: none;
+}
+
+.equipment-sales-reports__filters input:focus,
+.equipment-sales-reports__documents select:focus {
+  border-color: #3265a4;
+  box-shadow: 0 0 0 3px rgba(50, 101, 164, 0.13);
+}
+
+.equipment-sales-reports__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.equipment-sales-reports__metrics article {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 92px;
+  padding: 16px;
+  border: 1px solid #dde4ef;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 9px 24px rgba(27, 53, 92, 0.07);
+}
+
+.equipment-sales-reports__metrics article > span {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #edf3fc;
+  font-size: 21px;
+}
+
+.equipment-sales-reports__metrics strong {
+  display: block;
+  margin-top: 5px;
+  font-size: clamp(16px, 2vw, 22px);
+  line-height: 1.1;
+}
+
+.equipment-sales-reports__collection-rate {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #14233f;
+  color: #fff;
+}
+
+.equipment-sales-reports__collection-rate strong {
+  display: block;
+  font-size: 24px;
+}
+
+.equipment-sales-reports__collection-rate span {
+  color: #cbd8ed;
+  font-size: 11px;
+}
+
+.equipment-sales-reports__progress,
+.equipment-sales-reports__bar {
+  overflow: hidden;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.equipment-sales-reports__progress i,
+.equipment-sales-reports__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e4ae3f, #ffd776);
+}
+
+.equipment-sales-reports__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.equipment-sales-reports__panel,
+.equipment-sales-reports__documents {
+  border: 1px solid #dce3ed;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(25, 49, 84, 0.07);
+}
+
+.equipment-sales-reports__panel {
+  padding: 18px;
+}
+
+.equipment-sales-reports__panel header,
+.equipment-sales-reports__documents > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.equipment-sales-reports__panel h2,
+.equipment-sales-reports__documents h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.equipment-sales-reports__panel header > strong {
+  color: #214b7e;
+  font-size: 16px;
+}
+
+.equipment-sales-reports__aging,
+.equipment-sales-reports__list {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.equipment-sales-reports__aging article,
+.equipment-sales-reports__list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 12px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  background: #f7f9fc;
+}
+
+.equipment-sales-reports__aging article div:first-child,
+.equipment-sales-reports__list article div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.equipment-sales-reports__aging article strong,
+.equipment-sales-reports__list article strong {
+  font-size: 12px;
+}
+
+.equipment-sales-reports__aging article span,
+.equipment-sales-reports__list article span {
+  color: #748197;
+  font-size: 10px;
+}
+
+.equipment-sales-reports__aging article b,
+.equipment-sales-reports__list article b {
+  color: #183d6c;
+  font-size: 12px;
+}
+
+.equipment-sales-reports__bar {
+  grid-column: 1 / -1;
+  height: 5px;
+  background: #dfe6f0;
+}
+
+.equipment-sales-reports__muted,
+.equipment-sales-reports__empty {
+  margin: 0;
+  padding: 24px;
+  color: #708096;
+  text-align: center;
+  font-size: 13px;
+}
+
+.equipment-sales-reports__documents {
+  overflow: hidden;
+}
+
+.equipment-sales-reports__documents > header {
+  padding: 20px;
+}
+
+.equipment-sales-reports__documents > header > div {
+  max-width: 650px;
+}
+
+.equipment-sales-reports__documents > header span {
+  display: block;
+  margin-top: 6px;
+  color: #66758b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.equipment-sales-reports__documents select {
+  width: min(430px, 100%);
+}
+
+.equipment-sales-reports__document-body {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.equipment-sales-reports__agreement-card {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f3f6fb;
+}
+
+.equipment-sales-reports__agreement-card img,
+.equipment-sales-reports__image-placeholder {
+  width: 120px;
+  height: 88px;
+  border-radius: 13px;
+  object-fit: cover;
+  background: #dce6f4;
+}
+
+.equipment-sales-reports__image-placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+}
+
+.equipment-sales-reports__agreement-card small {
+  color: #7b879b;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.equipment-sales-reports__agreement-card h3 {
+  margin: 4px 0;
+  font-size: 18px;
+}
+
+.equipment-sales-reports__agreement-card p {
+  margin: 0;
+  color: #647188;
+  font-size: 12px;
+}
+
+.equipment-sales-reports__agreement-card > div > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.equipment-sales-reports__agreement-card > div > div span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: #244876;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.equipment-sales-reports__document-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.equipment-sales-reports__document-actions button {
+  color: #17355f;
+  border-color: #cbd7e7;
+  background: #f7faff;
+}
+
+.equipment-sales-reports__receipts {
+  display: grid;
+  gap: 8px;
+}
+
+.equipment-sales-reports__receipts h3 {
+  margin: 4px 0;
+  font-size: 15px;
+}
+
+.equipment-sales-reports__receipts button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  background: #fff;
+  color: #17253d;
+  text-align: left;
+  cursor: pointer;
+}
+
+.equipment-sales-reports__receipts button span {
+  display: grid;
+  gap: 3px;
+}
+
+.equipment-sales-reports__receipts button strong {
+  font-size: 12px;
+}
+
+.equipment-sales-reports__receipts button small {
+  color: #758298;
+  font-size: 10px;
+}
+
+.equipment-sales-reports__receipts button b {
+  color: #1c4c7e;
+  font-size: 12px;
+}
+
+@media (max-width: 920px) {
+  .equipment-sales-reports__hero {
+    flex-direction: column;
+  }
+
+  .equipment-sales-reports__hero-actions {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .equipment-sales-reports__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .equipment-sales-reports__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-sales-reports__documents > header {
+    flex-direction: column;
+  }
+
+  .equipment-sales-reports__documents select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .equipment-sales-reports {
+    gap: 12px;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .equipment-sales-reports__hero {
+    gap: 14px;
+    padding: 18px 15px;
+    border-radius: 18px;
+  }
+
+  .equipment-sales-reports__hero h1 {
+    font-size: 25px;
+  }
+
+  .equipment-sales-reports__hero span {
+    font-size: 12px;
+  }
+
+  .equipment-sales-reports__hero-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .equipment-sales-reports__hero-actions button:last-child:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .equipment-sales-reports__retirement {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    padding: 13px;
+  }
+
+  .equipment-sales-reports__retirement > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .equipment-sales-reports__retirement > div:not(:first-child) {
+    min-width: 0;
+  }
+
+  .equipment-sales-reports__filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 11px;
+  }
+
+  .equipment-sales-reports__filters label {
+    min-width: 0;
+  }
+
+  .equipment-sales-reports__filters input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .equipment-sales-reports__metrics {
+    gap: 8px;
+  }
+
+  .equipment-sales-reports__metrics article {
+    min-height: 76px;
+    gap: 9px;
+    padding: 11px;
+    border-radius: 14px;
+  }
+
+  .equipment-sales-reports__metrics article > span {
+    width: 35px;
+    height: 35px;
+    border-radius: 11px;
+    font-size: 17px;
+  }
+
+  .equipment-sales-reports__metrics strong {
+    font-size: 14px;
+  }
+
+  .equipment-sales-reports__metrics small {
+    font-size: 8px;
+  }
+
+  .equipment-sales-reports__collection-rate {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .equipment-sales-reports__panel {
+    padding: 13px;
+    border-radius: 16px;
+  }
+
+  .equipment-sales-reports__panel h2,
+  .equipment-sales-reports__documents h2 {
+    font-size: 17px;
+  }
+
+  .equipment-sales-reports__documents > header,
+  .equipment-sales-reports__document-body {
+    padding: 14px;
+  }
+
+  .equipment-sales-reports__agreement-card {
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 11px;
+    padding: 10px;
+  }
+
+  .equipment-sales-reports__agreement-card img,
+  .equipment-sales-reports__image-placeholder {
+    width: 82px;
+    height: 72px;
+  }
+
+  .equipment-sales-reports__agreement-card h3 {
+    font-size: 14px;
+  }
+
+  .equipment-sales-reports__document-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .equipment-sales-reports__document-actions button {
+    min-height: 46px;
+    padding: 7px;
+    font-size: 11px;
+  }
+}
