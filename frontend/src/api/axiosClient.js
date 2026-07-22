@@ -1,5 +1,8 @@
 import axios from "axios";
 import "../utils/equipmentMediaCaptureBridge";
+import {
+  assertSparePartsInstallmentRequestAllowed,
+} from "../utils/sparePartsInstallmentRetirementBridge";
 
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
@@ -19,7 +22,6 @@ function getStoredUser() {
     return null;
   }
 }
-
 
 function getStoredWorkspaceContextId(workspaceCode) {
   const keyMap = {
@@ -75,6 +77,8 @@ function getStoredSessionInfo() {
 }
 
 axiosClient.interceptors.request.use((config) => {
+  assertSparePartsInstallmentRequestAllowed(config);
+
   const token = localStorage.getItem("chalin03_token");
   const { workspaceCode, branchId, branchCode, branchName } =
     getStoredSessionInfo();
@@ -109,7 +113,19 @@ axiosClient.interceptors.request.use((config) => {
 });
 
 axiosClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const requestUrl = String(response.config?.url || "").replace(/\?.*$/, "");
+    if (
+      /\/equipment-catalogue\/sales\/agreements\/\d+$/.test(requestUrl) &&
+      response.data &&
+      typeof response.data === "object"
+    ) {
+      response.data.delivery = response.data.delivery || response.data.deliveries?.[0] || null;
+      response.data.ownership =
+        response.data.ownership || response.data.ownership_transfers?.[0] || null;
+    }
+    return response;
+  },
   (error) => {
     const statusCode = error.response?.status;
     const errorCode = String(error.response?.data?.code || "");

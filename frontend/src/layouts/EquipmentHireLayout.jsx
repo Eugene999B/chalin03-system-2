@@ -28,6 +28,13 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Sales Documents & Reports",
+        description: "PDFs, receipts, aging, collections, profit and expected payments",
+        path: "/equipment-hire-operations/fleet?view=reports",
+        icon: "📊",
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Notification Centre",
         description: "Commercial approvals, overdue finance and contract alerts",
         path: "/equipment-hire-operations/notifications",
@@ -101,7 +108,7 @@ const navigationSections = [
         title: "Reports",
         description: "Outstanding balances, aging and equipment utilization",
         path: "/equipment-hire-operations/reports",
-        icon: "📊",
+        icon: "📈",
         permissions: ["hire.reports.view"],
       },
     ],
@@ -118,7 +125,7 @@ const navigationSections = [
       },
       {
         title: "Sales & Hire Documents",
-        description: "Quotations, agreements, invoices, receipts and statements",
+        description: "Hire quotations, contracts, invoices and shared operational documents",
         path: "/equipment-hire-operations/documents",
         icon: "📄",
         permissions: ["operations.documents.view"],
