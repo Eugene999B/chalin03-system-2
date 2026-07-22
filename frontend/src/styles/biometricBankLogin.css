@@ -38,8 +38,22 @@
   margin-top: 18px;
 }
 
-.biometric-login__continue strong {
+/* Override the retired Command Gate bank layer, which used CSS-generated
+   passkey/device-PIN wording. The active page shows only account-specific
+   fingerprint and face language from the React markup. */
+.biometric-login .gate4__passkey strong {
+  font-size: 13px !important;
   text-transform: none;
+}
+
+.biometric-login .gate4__passkey strong::after,
+.biometric-login .gate4__passkey small::after {
+  content: none !important;
+  display: none !important;
+}
+
+.biometric-login .gate4__passkey small {
+  font-size: 9px !important;
 }
 
 .biometric-consent {
