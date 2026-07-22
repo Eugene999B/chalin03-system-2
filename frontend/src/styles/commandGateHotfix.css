@@ -1,0 +1,1055 @@
+:root {
+  --gate2-gold: #f2c94c;
+  --gate2-navy: #07182c;
+  --gate2-blue: #2f80ed;
+  --gate2-green: #27ae60;
+  --gate2-text: #10223a;
+  --gate2-muted: #66758a;
+}
+
+.gate2,
+.gate2 *,
+.gate2 *::before,
+.gate2 *::after {
+  box-sizing: border-box;
+}
+
+.gate2 {
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  padding: 18px;
+  color: #f8fbff;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(242, 201, 76, 0.5), transparent 31%),
+    radial-gradient(circle at 92% 9%, rgba(47, 128, 237, 0.42), transparent 34%),
+    radial-gradient(circle at 78% 95%, rgba(39, 174, 96, 0.24), transparent 35%),
+    linear-gradient(145deg, #031225 0%, #0b3157 48%, #07182c 100%);
+}
+
+.gate2--mining {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(242, 153, 74, 0.58), transparent 32%),
+    radial-gradient(circle at 91% 10%, rgba(242, 201, 76, 0.35), transparent 34%),
+    radial-gradient(circle at 78% 95%, rgba(39, 174, 96, 0.22), transparent 35%),
+    linear-gradient(145deg, #211204 0%, #623917 48%, #1d1308 100%);
+}
+
+.gate2--hire {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(86, 204, 242, 0.52), transparent 31%),
+    radial-gradient(circle at 92% 10%, rgba(47, 128, 237, 0.5), transparent 34%),
+    radial-gradient(circle at 78% 95%, rgba(242, 201, 76, 0.22), transparent 35%),
+    linear-gradient(145deg, #04172c 0%, #0c4c80 48%, #061a30 100%);
+}
+
+.gate2 button,
+.gate2 input,
+.gate2 select {
+  font: inherit;
+}
+
+.gate2__orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(32px);
+  pointer-events: none;
+  opacity: 0.38;
+}
+
+.gate2__orb--one {
+  width: 420px;
+  height: 420px;
+  left: -160px;
+  bottom: -150px;
+  background: #f2c94c;
+}
+
+.gate2__orb--two {
+  width: 390px;
+  height: 390px;
+  right: -150px;
+  top: -140px;
+  background: #56ccf2;
+}
+
+.gate2__shell {
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 34px;
+  background: linear-gradient(145deg, rgba(8, 28, 52, 0.92), rgba(4, 18, 36, 0.86));
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(24px);
+}
+
+.gate2__topbar,
+.gate2__brand,
+.gate2__online,
+.gate2__section-heading,
+.gate2__destination,
+.gate2__login-heading,
+.gate2__submit,
+.gate2__secondary-actions,
+.gate2__workspace-card {
+  display: flex;
+  align-items: center;
+}
+
+.gate2__topbar {
+  justify-content: space-between;
+  gap: 18px;
+  padding: 2px 3px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.gate2__brand {
+  gap: 13px;
+}
+
+.gate2__logo {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid var(--gate2-gold);
+  border-radius: 17px;
+  background: #07182c;
+  box-shadow: 0 16px 36px rgba(242, 201, 76, 0.2);
+}
+
+.gate2__logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
+}
+
+.gate2__logo span {
+  color: var(--gate2-gold);
+  font-weight: 950;
+  letter-spacing: -0.05em;
+}
+
+.gate2__brand small,
+.gate2__brand strong {
+  display: block;
+}
+
+.gate2__brand small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gate2__brand strong {
+  margin-top: 3px;
+  font-size: 20px;
+  letter-spacing: -0.035em;
+}
+
+.gate2__online {
+  gap: 9px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.gate2__online i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #39d98a;
+  box-shadow: 0 0 0 6px rgba(57, 217, 138, 0.08), 0 0 20px rgba(57, 217, 138, 0.7);
+}
+
+.gate2__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 24px;
+  align-items: end;
+  padding: 34px 5px 28px;
+}
+
+.gate2__hero-copy > p,
+.gate2__section-heading small,
+.gate2__context-card > small,
+.gate2__login-heading small,
+.gate2__modal-card > small {
+  margin: 0;
+  color: var(--gate2-gold);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.gate2__hero h1 {
+  margin: 8px 0 0;
+  max-width: 780px;
+  font-size: clamp(48px, 6.2vw, 82px);
+  line-height: 0.94;
+  letter-spacing: -0.075em;
+  font-weight: 950;
+}
+
+.gate2__hero h1 span {
+  color: var(--gate2-gold);
+  text-shadow: 0 18px 60px rgba(242, 201, 76, 0.28);
+}
+
+.gate2__hero-description {
+  max-width: 660px;
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.gate2__hero-proof {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 19px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.13);
+}
+
+.gate2__hero-proof > span {
+  width: 47px;
+  height: 47px;
+  flex: 0 0 47px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  font-size: 23px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.gate2__hero-proof strong,
+.gate2__hero-proof small {
+  display: block;
+}
+
+.gate2__hero-proof strong {
+  font-size: 15px;
+}
+
+.gate2__hero-proof small {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gate2__workspace-section {
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.gate2__section-heading {
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 13px;
+}
+
+.gate2__section-heading strong,
+.gate2__section-heading small {
+  display: block;
+}
+
+.gate2__section-heading strong {
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.gate2__section-heading > span {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.gate2__workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.gate2__workspace-card {
+  min-height: 120px;
+  position: relative;
+  gap: 14px;
+  padding: 16px;
+  text-align: left;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  cursor: pointer;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.07));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.12);
+  transition: transform 170ms ease, border-color 170ms ease, background 170ms ease;
+}
+
+.gate2__workspace-card:hover {
+  transform: translateY(-2px);
+}
+
+.gate2__workspace-card.is-selected {
+  border-color: var(--gate2-gold);
+  background: linear-gradient(145deg, rgba(242, 201, 76, 0.3), rgba(255, 255, 255, 0.11));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(242, 201, 76, 0.2);
+}
+
+.gate2__workspace-card--earth.is-selected {
+  border-color: #f2994a;
+  background: linear-gradient(145deg, rgba(242, 153, 74, 0.34), rgba(255, 255, 255, 0.1));
+}
+
+.gate2__workspace-card--blue.is-selected {
+  border-color: #56ccf2;
+  background: linear-gradient(145deg, rgba(86, 204, 242, 0.3), rgba(255, 255, 255, 0.1));
+}
+
+.gate2__workspace-icon,
+.gate2__context-icon {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(0, 0, 0, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.gate2__workspace-icon {
+  width: 57px;
+  height: 57px;
+  flex: 0 0 57px;
+  border-radius: 18px;
+  font-size: 29px;
+}
+
+.gate2__workspace-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.gate2__workspace-copy small,
+.gate2__workspace-copy strong,
+.gate2__workspace-copy em {
+  display: block;
+}
+
+.gate2__workspace-copy small {
+  color: rgba(255, 255, 255, 0.57);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gate2__workspace-copy strong {
+  margin-top: 5px;
+  font-size: 18px;
+}
+
+.gate2__workspace-copy em {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.77);
+  font-size: 10px;
+  line-height: 1.45;
+  font-style: normal;
+}
+
+.gate2__workspace-card > b {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  color: var(--gate2-gold);
+  font-size: 16px;
+}
+
+.gate2__body {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.75fr) minmax(420px, 1.25fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.gate2__context-card,
+.gate2__login-card {
+  border-radius: 24px;
+  padding: 23px;
+}
+
+.gate2__context-card {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.gate2__context-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  border-radius: 18px;
+  font-size: 28px;
+}
+
+.gate2__context-card h2 {
+  margin: 8px 0 0;
+  font-size: 25px;
+  letter-spacing: -0.045em;
+}
+
+.gate2__context-card > p {
+  margin: 8px 0 18px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.gate2__login-card {
+  color: var(--gate2-text);
+  background: rgba(255, 255, 255, 0.985);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.22);
+}
+
+.gate2__login-heading {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 17px;
+}
+
+.gate2__login-heading h2 {
+  margin: 4px 0 0;
+  font-size: 29px;
+  letter-spacing: -0.05em;
+}
+
+.gate2__login-heading > span {
+  padding: 8px 10px;
+  color: #157a46;
+  border: 1px solid #bce8ce;
+  border-radius: 999px;
+  background: #ecfbf2;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.gate2__form {
+  display: grid;
+  gap: 13px;
+}
+
+.gate2__field {
+  display: grid;
+  gap: 7px;
+}
+
+.gate2__field > span {
+  color: #4c5d73;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gate2__context-card .gate2__field > span {
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.gate2__field input,
+.gate2__field select {
+  width: 100%;
+  min-height: 49px;
+  color: var(--gate2-text);
+  border: 1px solid #cfd9e6;
+  border-radius: 13px;
+  outline: none;
+  padding: 0 13px;
+  background: #fff;
+}
+
+.gate2__context-card .gate2__field select {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.gate2__context-card .gate2__field option {
+  color: #10223a;
+}
+
+.gate2__field input:focus,
+.gate2__field select:focus {
+  border-color: #d9a900;
+  box-shadow: 0 0 0 3px rgba(242, 201, 76, 0.14);
+}
+
+.gate2__password {
+  position: relative;
+}
+
+.gate2__password input {
+  padding-right: 63px;
+}
+
+.gate2__password button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: 0;
+  color: #996c00;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.gate2__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #627187;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.gate2__check input {
+  margin-top: 1px;
+  accent-color: #d2a400;
+}
+
+.gate2__submit {
+  width: 100%;
+  min-height: 58px;
+  justify-content: flex-start;
+  gap: 13px;
+  padding: 12px 15px;
+  text-align: left;
+  color: #0a1424;
+  border: 0;
+  border-radius: 15px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #f7da63, #e4b72b);
+  box-shadow: 0 14px 30px rgba(212, 166, 24, 0.26);
+}
+
+.gate2__submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.gate2__submit > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.35);
+  font-size: 19px;
+}
+
+.gate2__submit strong,
+.gate2__submit small {
+  display: block;
+}
+
+.gate2__submit strong {
+  font-size: 14px;
+}
+
+.gate2__submit small {
+  margin-top: 3px;
+  color: rgba(10, 20, 36, 0.63);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.gate2__submit--simple {
+  justify-content: center;
+  text-align: center;
+  font-weight: 900;
+}
+
+.gate2__secondary-actions {
+  justify-content: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.gate2__secondary-actions button,
+.gate2__destination button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.gate2__secondary-actions button {
+  color: #52647a;
+}
+
+.gate2__secondary-actions button:hover,
+.gate2__secondary-actions button.is-selected,
+.gate2__destination button:hover {
+  color: #9a6b00;
+}
+
+.gate2__secondary-actions span {
+  margin-right: 4px;
+  font-size: 14px;
+}
+
+.gate2__destination {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.gate2__destination small,
+.gate2__destination strong,
+.gate2__destination span {
+  display: block;
+}
+
+.gate2__destination small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gate2__destination strong {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.gate2__destination span {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+}
+
+.gate2__destination button {
+  color: var(--gate2-gold);
+}
+
+.gate2__stations {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.gate2__stations button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px;
+  text-align: left;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.gate2__stations button.is-selected {
+  border-color: var(--gate2-gold);
+  background: rgba(242, 201, 76, 0.18);
+}
+
+.gate2__stations strong,
+.gate2__stations small {
+  display: block;
+}
+
+.gate2__stations strong {
+  font-size: 11px;
+}
+
+.gate2__stations small {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 8px;
+}
+
+.gate2__alert {
+  display: grid;
+  gap: 3px;
+  margin-top: 13px;
+  padding: 12px 13px;
+  border-radius: 13px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.gate2__alert strong,
+.gate2__alert span,
+.gate2__alert small {
+  display: block;
+}
+
+.gate2__alert--error {
+  color: #9d2731;
+  border: 1px solid #f1c5c8;
+  background: #fff1f2;
+}
+
+.gate2__context-card .gate2__alert--error {
+  color: #ffd3d6;
+  border-color: rgba(255, 130, 140, 0.3);
+  background: rgba(124, 25, 34, 0.28);
+}
+
+.gate2__alert--success {
+  color: #177a46;
+  border: 1px solid #bfe6cf;
+  background: #effaf4;
+}
+
+.gate2__sequence,
+.gate2__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 16000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(2, 12, 25, 0.82);
+  backdrop-filter: blur(18px);
+}
+
+.gate2__sequence-card,
+.gate2__modal-card {
+  width: min(510px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(242, 201, 76, 0.35);
+  border-radius: 26px;
+  background: linear-gradient(145deg, #0a2440, #061426);
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.58);
+}
+
+.gate2__sequence-card {
+  text-align: center;
+}
+
+.gate2__sequence-logo {
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 21px;
+  background: linear-gradient(145deg, #39d98a, #1f9b59);
+  box-shadow: 0 18px 40px rgba(39, 174, 96, 0.25);
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.gate2__sequence-card > small {
+  color: var(--gate2-gold);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gate2__sequence-card h2 {
+  margin: 7px 0 4px;
+  font-size: 31px;
+  letter-spacing: -0.05em;
+}
+
+.gate2__sequence-card p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+}
+
+.gate2__sequence-list {
+  display: grid;
+  gap: 7px;
+  margin: 22px 0;
+  text-align: left;
+}
+
+.gate2__sequence-list span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 10px;
+}
+
+.gate2__sequence-list span.is-complete {
+  color: #d9fbe7;
+  border-color: rgba(57, 217, 138, 0.22);
+}
+
+.gate2__sequence-list i {
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-style: normal;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gate2__sequence-list span.is-complete i {
+  color: #07180f;
+  background: #39d98a;
+}
+
+.gate2__sequence-card > strong {
+  color: var(--gate2-gold);
+  font-size: 11px;
+}
+
+.gate2__modal-card {
+  position: relative;
+  color: var(--gate2-text);
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.gate2__modal-card h2 {
+  margin: 6px 0 20px;
+  font-size: 28px;
+  letter-spacing: -0.045em;
+}
+
+.gate2__modal-close {
+  position: absolute;
+  top: 15px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d9e1eb;
+  border-radius: 11px;
+  color: #54647a;
+  background: #f5f7fa;
+  cursor: pointer;
+  font-size: 21px;
+}
+
+@media (max-width: 980px) {
+  .gate2__hero,
+  .gate2__body {
+    grid-template-columns: 1fr;
+  }
+
+  .gate2__context-card {
+    order: 2;
+  }
+
+  .gate2__login-card {
+    order: 1;
+  }
+
+  .gate2__workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .gate2 {
+    overflow: auto;
+    padding: 7px;
+  }
+
+  .gate2__orb,
+  .gate2__hero-proof,
+  .gate2__section-heading > span {
+    display: none;
+  }
+
+  .gate2__shell {
+    padding: 11px;
+    border-radius: 21px;
+  }
+
+  .gate2__topbar {
+    align-items: flex-start;
+    padding-bottom: 13px;
+  }
+
+  .gate2__logo {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+    border-radius: 14px;
+  }
+
+  .gate2__brand small {
+    display: none;
+  }
+
+  .gate2__brand strong {
+    font-size: 17px;
+  }
+
+  .gate2__online {
+    font-size: 8px;
+    letter-spacing: 0.07em;
+  }
+
+  .gate2__hero {
+    display: block;
+    padding: 23px 3px 18px;
+  }
+
+  .gate2__hero h1 {
+    max-width: 100%;
+    font-size: clamp(42px, 14vw, 58px);
+    line-height: 0.97;
+  }
+
+  .gate2__hero-description {
+    margin-top: 13px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .gate2__workspace-section {
+    padding: 13px;
+    border-radius: 20px;
+  }
+
+  .gate2__workspace-grid {
+    display: flex;
+    gap: 9px;
+    overflow-x: auto;
+    padding: 1px 1px 8px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .gate2__workspace-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .gate2__workspace-card {
+    min-width: min(82vw, 310px);
+    min-height: 116px;
+    flex: 0 0 auto;
+    padding: 14px;
+    border-radius: 18px;
+    scroll-snap-align: center;
+  }
+
+  .gate2__workspace-icon {
+    width: 51px;
+    height: 51px;
+    flex-basis: 51px;
+    border-radius: 16px;
+    font-size: 26px;
+  }
+
+  .gate2__workspace-copy strong {
+    font-size: 17px;
+  }
+
+  .gate2__workspace-copy em {
+    max-width: 190px;
+    font-size: 9px;
+  }
+
+  .gate2__body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .gate2__login-card {
+    order: 1;
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .gate2__context-card {
+    order: 2;
+    padding: 17px;
+    border-radius: 19px;
+  }
+
+  .gate2__login-heading h2 {
+    font-size: 25px;
+  }
+
+  .gate2__submit {
+    min-height: 61px;
+  }
+
+  .gate2__secondary-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    margin-top: 10px;
+  }
+
+  .gate2__secondary-actions button {
+    min-height: 39px;
+    padding: 0 10px;
+    border: 1px solid #e0e6ee;
+    border-radius: 11px;
+    background: #f7f9fc;
+  }
+
+  .gate2__context-icon {
+    width: 49px;
+    height: 49px;
+    margin-bottom: 12px;
+    border-radius: 15px;
+    font-size: 24px;
+  }
+
+  .gate2__context-card h2 {
+    font-size: 21px;
+  }
+
+  .gate2__sequence-card,
+  .gate2__modal-card {
+    padding: 22px;
+    border-radius: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate2__workspace-card {
+    transition: none;
+  }
+}
