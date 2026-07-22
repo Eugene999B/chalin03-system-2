@@ -1,0 +1,53 @@
+name: Assemble Chalin Command Gate
+
+on:
+  push:
+    branches:
+      - agent/chalin-command-gate
+    paths:
+      - '.commandgate/**'
+      - '.github/workflows/command-gate-assemble.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and verify package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .commandgate/chunk*.txt | tr -d '\n\r' | base64 --decode > /tmp/chalin-command-gate.tar.gz
+          gzip -t /tmp/chalin-command-gate.tar.gz
+          tar -tzf /tmp/chalin-command-gate.tar.gz > /tmp/chalin-command-gate-files.txt
+          echo "Package files:"
+          cat /tmp/chalin-command-gate-files.txt
+
+      - name: Apply package and remove staging files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf /tmp/chalin-command-gate.tar.gz -C .
+          rm -rf .commandgate
+          rm -f .github/workflows/command-gate-assemble.yml
+
+      - name: Commit assembled implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Chalin 03 Release Agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No assembled changes to commit."
+            exit 0
+          fi
+          git commit -m "Build Chalin Command Gate"
+          git push origin HEAD:agent/chalin-command-gate
