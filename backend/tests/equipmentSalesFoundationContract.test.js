@@ -187,6 +187,18 @@ test("equipment pictures remain auditable instead of being deleted", () => {
   assert.doesNotMatch(catalogueRoutes, /DELETE\s+FROM\s+equipment_media/i);
 });
 
+test("secure mobile equipment photos are compressed, validated and checksummed", () => {
+  assert.match(catalogueIntegrityMiddleware, /MAX_PROTECTED_PHOTO_BYTES = 44 \* 1024/);
+  assert.match(catalogueIntegrityMiddleware, /image\\\/\(\?:jpeg\|png\|webp\)/);
+  assert.match(catalogueIntegrityMiddleware, /crypto\.createHash\("sha256"\)/);
+  assert.match(catalogueIntegrityMiddleware, /database-data-url:/);
+  assert.match(catalogueIntegrityMiddleware, /EQUIPMENT_SECURE_PHOTO_UPLOADED/);
+  assert.match(catalogueIntegrityMiddleware, /requireSelection: true/);
+  assert.match(catalogueIntegrityMiddleware, /fleet\.assets\.manage/);
+  assert.match(catalogueIntegrityMiddleware, /UPDATE equipment_media[\s\S]*is_primary = FALSE/);
+  assert.match(catalogueIntegrityMiddleware, /UPDATE fleet_assets[\s\S]*main_image_url = \?/);
+});
+
 test("catalogue blocks direct sold registration and controlled-sale bypasses", () => {
   assert.match(catalogueRoutes, /New equipment cannot be registered as sold/);
   assert.match(catalogueRoutes, /EQUIPMENT_ACTIVE_ON_HIRE/);
