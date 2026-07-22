@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import { clearStoredBiometricBinding } from "../utils/biometricAccess";
 import {
   getSavedStationMode,
   getStationModes,
-  registerPasskey,
   saveStationMode,
-  supportsPasskeys,
 } from "../utils/commandGate";
 import "../styles/commandGate.css";
 
@@ -45,16 +44,12 @@ export default function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [passwordWorking, setPasswordWorking] = useState(false);
-
-  const [passkeys, setPasskeys] = useState([]);
-  const [passkeysLoading, setPasskeysLoading] = useState(true);
+  const [devices, setDevices] = useState([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
   const [deviceWorking, setDeviceWorking] = useState(false);
-  const [deviceName, setDeviceName] = useState("");
-  const [devicePassword, setDevicePassword] = useState("");
   const [stationCode, setStationCode] = useState(() =>
     getSavedStationMode(workspaceCode)
   );
-
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -62,30 +57,29 @@ export default function ChangePasswordPage() {
     () => getStationModes(workspaceCode),
     [workspaceCode]
   );
-
   const accountName = user?.full_name || user?.username || "Authorised user";
   const contextName = isSparePartsWorkspace
     ? `${branchCode || "STORE"} — ${branchName || "Selected Store"}`
     : workspaceName || user?.active_workspace?.name || "Chalin 03";
 
-  const loadPasskeys = useCallback(async () => {
-    setPasskeysLoading(true);
+  const loadDevices = useCallback(async () => {
+    setDevicesLoading(true);
     try {
-      const response = await axiosClient.get("/auth/passkeys");
-      setPasskeys(Array.isArray(response.data?.passkeys) ? response.data.passkeys : []);
+      const response = await axiosClient.get("/auth/biometrics/devices");
+      setDevices(Array.isArray(response.data?.devices) ? response.data.devices : []);
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-          "Could not load trusted devices. Password security is still available."
+          "Could not load fingerprint and face devices. Password security remains available."
       );
     } finally {
-      setPasskeysLoading(false);
+      setDevicesLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadPasskeys();
-  }, [loadPasskeys]);
+    loadDevices();
+  }, [loadDevices]);
 
   useEffect(() => {
     setStationCode(getSavedStationMode(workspaceCode));
@@ -110,19 +104,17 @@ export default function ChangePasswordPage() {
       setError(policyError);
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setError("New password and confirmation do not match.");
       return;
     }
-
     if (currentPassword === newPassword) {
       setError("New password must be different from the current password.");
       return;
     }
 
     const confirmed = window.confirm(
-      "Change this account-wide password and sign out of Chalin 03?"
+      "Change this account password? All fingerprint and face devices will be revoked and you will be signed out."
     );
     if (!confirmed) return;
 
@@ -133,7 +125,10 @@ export default function ChangePasswordPage() {
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
-      setMessage("Password changed successfully. Opening Command Gate for a fresh login.");
+      clearStoredBiometricBinding();
+      setMessage(
+        "Password changed. Fingerprint and face devices were revoked. Opening a fresh login."
+      );
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -148,60 +143,29 @@ export default function ChangePasswordPage() {
     }
   }
 
-  async function handleRegisterDevice(event) {
-    event.preventDefault();
-    clearNotices();
-
-    if (!supportsPasskeys()) {
-      setError(
-        "This browser or connection does not support secure device unlock. Use an updated browser over HTTPS."
-      );
-      return;
-    }
-
-    if (!devicePassword) {
-      setError("Enter your current password to approve this trusted device.");
-      return;
-    }
-
-    setDeviceWorking(true);
-    try {
-      const response = await registerPasskey({
-        currentPassword: devicePassword,
-        displayName: deviceName.trim() || "Trusted device",
-      });
-      setMessage(response.message || "This device can now unlock Chalin 03.");
-      setDeviceName("");
-      setDevicePassword("");
-      await loadPasskeys();
-    } catch (requestError) {
-      const cancelled = String(requestError.name || "").includes("NotAllowed");
-      setError(
-        cancelled
-          ? "Device registration was cancelled."
-          : requestError.response?.data?.message ||
-              requestError.message ||
-              "Could not register this device."
-      );
-    } finally {
-      setDeviceWorking(false);
-    }
-  }
-
-  async function handleRevoke(passkeyId) {
+  async function handleRevoke(deviceId) {
     const confirmed = window.confirm(
-      "Remove this trusted device? Password login will continue to work."
+      "Remove fingerprint or face login from this device? Password login will continue to work."
     );
     if (!confirmed) return;
 
     clearNotices();
     setDeviceWorking(true);
     try {
-      const response = await axiosClient.delete(`/auth/passkeys/${passkeyId}`);
-      setMessage(response.data?.message || "Trusted device removed.");
-      await loadPasskeys();
+      const response = await axiosClient.delete(
+        `/auth/biometrics/devices/${deviceId}`
+      );
+      clearStoredBiometricBinding();
+      setMessage(
+        response.data?.message ||
+          "Fingerprint or face login was removed from the device."
+      );
+      await loadDevices();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "Could not remove the device.");
+      setError(
+        requestError.response?.data?.message ||
+          "Could not remove the fingerprint or face device."
+      );
     } finally {
       setDeviceWorking(false);
     }
@@ -219,24 +183,28 @@ export default function ChangePasswordPage() {
       <div className="command-page__shell">
         <header className="command-page__hero">
           <div>
-            <p>Command Gate security</p>
-            <h1>Account Security Centre</h1>
+            <p>Account security</p>
+            <h1>Password, Fingerprint & Face</h1>
           </div>
           <span>
-            {accountName} · {contextName}. Manage your password, biometric/device unlock and
-            this device&apos;s station entrance without changing business records or permissions.
+            {accountName} · {contextName}. Manage the account password, linked
+            biometric devices and this browser&apos;s entrance station.
           </span>
         </header>
 
-        {message && <div className="command-alert command-alert--success">{message}</div>}
-        {error && <div className="command-alert command-alert--error">{error}</div>}
+        {message && (
+          <div className="command-alert command-alert--success">{message}</div>
+        )}
+        {error && (
+          <div className="command-alert command-alert--error">{error}</div>
+        )}
 
         <div className="command-page__grid">
           <section className="command-page__card">
             <h2>Change account password</h2>
             <p>
-              This password is account-wide. After a successful change, Chalin signs you out so
-              the new password can establish a fresh secure session.
+              A password change signs the account out and immediately revokes every
+              linked fingerprint and face device.
             </p>
             <form className="command-page__form" onSubmit={handleChangePassword}>
               <label>
@@ -274,47 +242,29 @@ export default function ChangePasswordPage() {
                 />
                 <span>Show passwords while typing</span>
               </label>
-              <button className="command-page__button" disabled={passwordWorking} type="submit">
+              <button
+                className="command-page__button"
+                disabled={passwordWorking}
+                type="submit"
+              >
                 {passwordWorking ? "Changing password…" : "Change password securely"}
               </button>
             </form>
           </section>
 
           <section className="command-page__card">
-            <h2>Register this trusted device</h2>
+            <h2>Add fingerprint or face login</h2>
             <p>
-              Use fingerprint, face, Windows Hello or device PIN at Command Gate. Biometric data
-              remains on your device; Chalin stores only the public passkey credential.
+              For safety, adding a new device starts only after a fresh password login.
+              Sign out, sign in with the password, then choose
+              <strong> Set up fingerprint or face</strong> when Chalin 03 asks.
             </p>
-            <form className="command-page__form" onSubmit={handleRegisterDevice}>
-              <label>
-                Device name
-                <input
-                  value={deviceName}
-                  onChange={(event) => setDeviceName(event.target.value)}
-                  placeholder="Example: Front Desk Windows PC"
-                  maxLength={120}
-                />
-              </label>
-              <label>
-                Current password for approval
-                <input
-                  type="password"
-                  value={devicePassword}
-                  onChange={(event) => setDevicePassword(event.target.value)}
-                  autoComplete="current-password"
-                />
-              </label>
-              <button className="command-page__button" disabled={deviceWorking} type="submit">
-                {deviceWorking ? "Verifying device…" : "Register device unlock"}
-              </button>
-            </form>
 
             <div className="command-page__station">
-              <h3>Temporary station mode</h3>
+              <h3>Entrance station</h3>
               <p>
-                This browser opens directly to the selected operation after login. It never grants
-                extra permissions.
+                This browser opens directly to the selected operation after login. It
+                never grants extra permissions.
               </p>
               <label>
                 Entrance profile
@@ -330,37 +280,36 @@ export default function ChangePasswordPage() {
           </section>
 
           <section className="command-page__card command-page__card--wide">
-            <h2>Registered trusted devices</h2>
-            <p>Revoke a device immediately when it is lost, replaced or no longer authorised.</p>
+            <h2>Linked fingerprint and face devices</h2>
+            <p>
+              Remove a device immediately when it is lost, replaced or no longer
+              authorised.
+            </p>
 
-            {passkeysLoading ? (
-              <p>Loading trusted devices…</p>
-            ) : passkeys.length === 0 ? (
+            {devicesLoading ? (
+              <p>Loading biometric devices…</p>
+            ) : devices.length === 0 ? (
               <div className="command-empty-state">
-                No passkey is registered yet. Password login remains available.
+                No fingerprint or face device is linked. Sign in with the password to
+                set up this device.
               </div>
             ) : (
               <div className="device-list">
-                {passkeys.map((passkey) => (
-                  <div className="device-row" key={passkey.id}>
+                {devices.map((device) => (
+                  <div className="device-row" key={device.id}>
                     <div>
-                      <strong>{passkey.display_name || "Trusted device"}</strong>
-                      <span>
-                        {passkey.device_type || "Passkey"}
-                        {passkey.backed_up
-                          ? " · Synced passkey"
-                          : " · Device-bound passkey"}
-                      </span>
+                      <strong>{device.display_name || "Personal device"}</strong>
+                      <span>Account-bound fingerprint or face login</span>
                       <small>
-                        Registered {formatDate(passkey.created_at)} · Last used {formatDate(passkey.last_used_at)}
+                        Linked {formatDate(device.created_at)} · Last used {formatDate(device.last_used_at)}
                       </small>
                     </div>
                     <button
                       type="button"
                       disabled={deviceWorking}
-                      onClick={() => handleRevoke(passkey.id)}
+                      onClick={() => handleRevoke(device.id)}
                     >
-                      Revoke
+                      Remove
                     </button>
                   </div>
                 ))}
@@ -371,10 +320,10 @@ export default function ChangePasswordPage() {
           <section className="command-page__card command-page__card--wide command-security-note">
             <h3>Security guarantees</h3>
             <div className="command-security-grid">
-              <span>✓ Password fallback always remains available.</span>
-              <span>✓ Passkeys are tied to the authorised account.</span>
-              <span>✓ Workspace and location access are checked again at login.</span>
-              <span>✓ Revoked devices cannot unlock a new session.</span>
+              <span>✓ New devices must use the password first.</span>
+              <span>✓ The browser link opens only its specific account.</span>
+              <span>✓ Workspace and store access are checked again at login.</span>
+              <span>✓ Password changes and device removal revoke biometric access.</span>
             </div>
           </section>
         </div>

@@ -1,0 +1,183 @@
+.biometric-login {
+  min-height: 100vh;
+}
+
+.biometric-login__story {
+  position: relative;
+  overflow: hidden;
+}
+
+.biometric-login__fingerprint {
+  width: min(220px, 60vw);
+  aspect-ratio: 1;
+  margin: 28px auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: radial-gradient(circle, rgba(86, 204, 242, 0.18), transparent 68%);
+  box-shadow: inset 0 0 50px rgba(86, 204, 242, 0.12), 0 20px 70px rgba(0, 0, 0, 0.2);
+}
+
+.biometric-login__fingerprint svg,
+.biometric-consent__icon svg,
+.biometric-login__continue svg {
+  width: 56%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.biometric-login__fingerprint svg {
+  color: #72d8ff;
+}
+
+.biometric-login__continue {
+  margin-top: 18px;
+}
+
+/* Override the retired Command Gate bank layer, which used CSS-generated
+   passkey/device-PIN wording. The active page shows only account-specific
+   fingerprint and face language from the React markup. */
+.biometric-login .gate4__passkey strong {
+  font-size: 13px !important;
+  text-transform: none;
+}
+
+.biometric-login .gate4__passkey strong::after,
+.biometric-login .gate4__passkey small::after {
+  content: none !important;
+  display: none !important;
+}
+
+.biometric-login .gate4__passkey small {
+  font-size: 9px !important;
+}
+
+.biometric-consent {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 10, 20, 0.82);
+  backdrop-filter: blur(18px);
+}
+
+.biometric-consent__card {
+  width: min(440px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 26px;
+  color: #eef8ff;
+  background: linear-gradient(155deg, #10233b, #091525 72%);
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.52);
+  text-align: center;
+}
+
+.biometric-consent__icon {
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #67d5ff;
+  background: rgba(86, 204, 242, 0.12);
+  border: 1px solid rgba(86, 204, 242, 0.32);
+}
+
+.biometric-consent__card > small {
+  display: block;
+  color: #8fdfff;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.biometric-consent__card h2 {
+  margin: 10px 0 12px;
+  font-size: clamp(1.45rem, 5vw, 2rem);
+}
+
+.biometric-consent__card p {
+  margin: 0 0 18px;
+  color: #c3d2e1;
+  line-height: 1.65;
+}
+
+.biometric-consent__notice {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #d9f4ff;
+  background: rgba(86, 204, 242, 0.1);
+  border: 1px solid rgba(86, 204, 242, 0.24);
+  text-align: left;
+}
+
+.biometric-consent__card form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.biometric-consent__card input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.biometric-consent__card input:focus {
+  border-color: #67d5ff;
+  box-shadow: 0 0 0 3px rgba(103, 213, 255, 0.14);
+}
+
+.biometric-consent__accept,
+.biometric-consent__skip {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.biometric-consent__accept {
+  margin-top: 8px;
+  color: #06131f;
+  background: linear-gradient(135deg, #78ddff, #4fb7ef);
+}
+
+.biometric-consent__skip {
+  margin-top: 10px;
+  color: #dbe8f4;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.biometric-consent button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+@media (max-width: 760px) {
+  .biometric-login__story {
+    display: none;
+  }
+
+  .biometric-consent__card {
+    padding: 24px 18px;
+    border-radius: 22px;
+  }
+}

@@ -7,7 +7,7 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   X-Permitted-Cross-Domain-Policies: none
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com https://cloudflareinsights.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com https://cloudflareinsights.com https://static.cloudflareinsights.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests
   X-Robots-Tag: noindex, nofollow, noarchive
 
 /company
@@ -17,43 +17,3 @@
 /company/*
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
-
-/mining-operations
-  ! X-Robots-Tag
-  X-Robots-Tag: index, follow, max-image-preview:large
-
-/mining-operations/*
-  ! X-Robots-Tag
-  X-Robots-Tag: index, follow, max-image-preview:large
-
-/equipment-hire
-  ! X-Robots-Tag
-  X-Robots-Tag: index, follow, max-image-preview:large
-
-/equipment-hire/*
-  ! X-Robots-Tag
-  X-Robots-Tag: index, follow, max-image-preview:large
-
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/favicon.ico
-  Cache-Control: public, max-age=86400, must-revalidate
-
-/favicon-192x192.png
-  Cache-Control: public, max-age=86400, must-revalidate
-
-/favicon-512x512.png
-  Cache-Control: public, max-age=86400, must-revalidate
-
-/chalin03-logo.png
-  Cache-Control: public, max-age=86400, must-revalidate
-
-/site.webmanifest
-  Cache-Control: public, max-age=3600, must-revalidate
-
-https://chalin03-system-2.pages.dev/*
-  X-Robots-Tag: noindex, nofollow, noarchive
-
-https://:version.chalin03-system-2.pages.dev/*
-  X-Robots-Tag: noindex, nofollow, noarchive

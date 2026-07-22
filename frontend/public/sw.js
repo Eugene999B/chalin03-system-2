@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-equipment-catalogue-503-hotfix-v1";
+const CACHE_NAME = "chalin03-bank-biometric-login-v2";
 
 const CORE_ASSETS = [
   "/",
@@ -38,6 +38,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // The Chalin service worker must never proxy, fetch or cache Cloudflare
+  // Analytics, the API host, or any other third-party origin. External requests
+  // continue through the browser under their own CSP directives.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (!/^https?:$/.test(url.protocol)) {
+    return;
+  }
+
   if (url.pathname.startsWith("/api")) {
     return;
   }
@@ -65,6 +76,10 @@ self.addEventListener("fetch", (event) => {
       return (
         cachedResponse ||
         fetch(request).then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
+          }
+
           const responseClone = networkResponse.clone();
 
           caches.open(CACHE_NAME).then((cache) => {
