@@ -12,17 +12,24 @@ const wrapper = read("src/pages/FleetAssetsPage.jsx");
 const sharedFleet = read("src/pages/SharedFleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
 const salesWorkspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
+const reportsPage = read("src/pages/EquipmentSalesReportsPage.jsx");
 const catalogueStyles = read("src/styles/equipmentCatalogue.css");
 const salesStyles = read("src/styles/equipmentSales.css");
+const reportsStyles = read("src/styles/equipmentSalesReports.css");
 const secureUpload = read("src/utils/equipmentMediaCaptureBridge.js");
 const secureUploadStyles = read("src/styles/equipmentSecureUpload.css");
+const retirementBridge = read(
+  "src/utils/sparePartsInstallmentRetirementBridge.js"
+);
 const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
 const axiosClient = read("src/api/axiosClient.js");
 
 assert.match(wrapper, /isEquipmentHireWorkspace/);
 assert.match(wrapper, /EquipmentCataloguePage/);
 assert.match(wrapper, /EquipmentSalesWorkspacePage/);
-assert.match(wrapper, /searchParams\.get\("view"\) === "sales"/);
+assert.match(wrapper, /EquipmentSalesReportsPage/);
+assert.match(wrapper, /view === "sales"/);
+assert.match(wrapper, /view === "reports"/);
 assert.match(wrapper, /SharedFleetAssetsPage/);
 assert.doesNotMatch(wrapper, /EquipmentSalesPage/);
 assert.match(sharedFleet, /axiosClient\.get\("\/fleet\/summary"\)/);
@@ -55,10 +62,12 @@ assert.match(secureUpload, /async function optimizeEquipmentPhoto/);
 assert.match(secureUpload, /MAX_SOURCE_BYTES = 15 \* 1024 \* 1024/);
 assert.match(secureUpload, /MAX_STORED_BYTES = 44 \* 1024/);
 assert.match(secureUpload, /canvas\.toBlob/);
-assert.match(secureUpload, /image\/webp/);
+assert.match(secureUpload, /PROTECTED_MIME_TYPE = "image\/jpeg"/);
+assert.match(secureUpload, /\.concat\("\.jpg"\)/);
 assert.match(secureUpload, /setReactInputValue/);
 assert.match(secureUpload, /equipment-secure-upload__preview/);
 assert.match(secureUpload, /Take a photo or choose one/);
+assert.match(secureUpload, /PDF documents/);
 assert.match(secureUploadStyles, /equipment-secure-upload__legacy-url/);
 assert.match(secureUploadStyles, /display: none !important/);
 assert.match(secureUploadStyles, /equipment-secure-upload__preview\.is-ready/);
@@ -91,17 +100,56 @@ assert.match(salesStyles, /@media \(max-width: 640px\)/);
 assert.match(salesStyles, /max-height: 94dvh/);
 assert.match(salesStyles, /env\(safe-area-inset-bottom\)/);
 
+assert.match(reportsPage, /Documents &amp; Management Reports/);
+assert.match(reportsPage, /\/reports\/management/);
+assert.match(reportsPage, /\/reports\/export\.csv/);
+assert.match(reportsPage, /\/retirement-status/);
+assert.match(reportsPage, /\/reminders\/run/);
+assert.match(reportsPage, /\/quotation\.pdf/);
+assert.match(reportsPage, /documents\/agreement\.pdf/);
+assert.match(reportsPage, /documents\/statement\.pdf/);
+assert.match(reportsPage, /documents\/delivery\.pdf/);
+assert.match(reportsPage, /documents\/ownership\.pdf/);
+assert.match(reportsPage, /documents\/overdue\.pdf/);
+assert.match(reportsPage, /\/receipt\.pdf/);
+assert.match(reportsPage, /Installment Aging/);
+assert.match(reportsPage, /Expected Collections/);
+assert.match(reportsPage, /Sales by Staff/);
+assert.match(reportsPage, /Spare Parts installments retired/);
+
+assert.match(reportsStyles, /\.equipment-sales-reports\s*\{/);
+assert.match(reportsStyles, /\.equipment-sales-reports__metrics/);
+assert.match(reportsStyles, /\.equipment-sales-reports__documents/);
+assert.match(reportsStyles, /@media \(max-width: 560px\)/);
+assert.match(reportsStyles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+assert.match(reportsStyles, /env\(safe-area-inset-bottom\)/);
+
+assert.match(retirementBridge, /Spare Parts installment sales have moved/);
+assert.match(retirementBridge, /payment_type/);
+assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
+assert.match(retirementBridge, /window\.location\.pathname !== "\/installments"/);
+assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
+assert.match(retirementBridge, /option\[value="installment"\]/);
+assert.match(retirementBridge, /installment agreement/);
+assert.match(retirementBridge, /Historical/);
+
 assert.match(hireLayout, /workspaceName="Equipment Sales & Hire"/);
 assert.match(hireLayout, /title: "Equipment Catalogue"/);
 assert.match(hireLayout, /title: "Sales & Installments"/);
+assert.match(hireLayout, /title: "Sales Documents & Reports"/);
 assert.match(hireLayout, /fleet\?view=sales/);
+assert.match(hireLayout, /fleet\?view=reports/);
 assert.match(hireLayout, /permissions: \["fleet\.assets\.view"\]/);
 assert.match(hireLayout, /Spare Parts stores are never used here/);
 
 assert.match(axiosClient, /equipmentMediaCaptureBridge/);
+assert.match(axiosClient, /sparePartsInstallmentRetirementBridge/);
+assert.match(axiosClient, /assertSparePartsInstallmentRequestAllowed/);
 assert.match(axiosClient, /equipment_hire: "chalin03_active_context_equipment_hire"/);
 assert.match(axiosClient, /X-Chalin03-Context-Id/);
+assert.match(axiosClient, /response\.data\.delivery/);
+assert.match(axiosClient, /response\.data\.ownership/);
 
 console.log(
-  "Equipment Sales & Hire catalogue, secure camera and commercial lifecycle contracts passed."
+  "Equipment Sales & Hire final catalogue, sales, documents, reports, secure photos, reminders and Spare Parts retirement contracts passed."
 );
