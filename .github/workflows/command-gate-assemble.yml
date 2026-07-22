@@ -24,13 +24,14 @@ concurrency:
 jobs:
   assemble:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout implementation branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/chalin-command-gate
-          fetch-depth: 1
-          show-progress: false
+      - name: Quietly checkout implementation branch
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch agent/chalin-command-gate \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
       - name: Decode and verify package
         run: |
