@@ -8,6 +8,7 @@ const QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.44, 0.36];
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 let installed = false;
+let observer = null;
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -118,16 +119,43 @@ function setReactInputValue(input, value) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function ensurePreview(fileInput) {
-  const field = fileInput.closest(".equipment-catalogue__field");
-  if (!field) return null;
-  field.classList.add("equipment-secure-upload__picker");
+function secureUrlInput(fileInput) {
+  const form = fileInput.closest("form");
+  const urlInput = form?.querySelector('input[type="url"]');
+  if (!urlInput) return null;
+  urlInput.closest(".equipment-catalogue__field")?.classList.add(
+    "equipment-secure-upload__legacy-url"
+  );
+  return urlInput;
+}
 
+function prepareEquipmentPhotoField(fileInput) {
+  if (!(fileInput instanceof HTMLInputElement)) return;
+  if (fileInput.type !== "file") return;
+  if (!fileInput.closest(".equipment-catalogue")) return;
+
+  const field = fileInput.closest(".equipment-catalogue__field");
+  if (!field) return;
+
+  field.classList.add("equipment-secure-upload__picker");
   const hint = field.querySelector("small");
   if (hint) {
     hint.textContent =
       "Take a photo or choose one. Chalin compresses and protects it automatically.";
   }
+  secureUrlInput(fileInput);
+}
+
+function prepareEquipmentPhotoForms(root = document) {
+  root
+    .querySelectorAll?.('.equipment-catalogue input[type="file"]')
+    .forEach(prepareEquipmentPhotoField);
+}
+
+function ensurePreview(fileInput) {
+  prepareEquipmentPhotoField(fileInput);
+  const field = fileInput.closest(".equipment-catalogue__field");
+  if (!field) return null;
 
   let preview = field.querySelector(".equipment-secure-upload__preview");
   if (!preview) {
@@ -138,16 +166,6 @@ function ensurePreview(fileInput) {
     field.appendChild(preview);
   }
   return preview;
-}
-
-function secureUrlInput(fileInput) {
-  const form = fileInput.closest("form");
-  const urlInput = form?.querySelector('input[type="url"]');
-  if (!urlInput) return null;
-  urlInput.closest(".equipment-catalogue__field")?.classList.add(
-    "equipment-secure-upload__legacy-url"
-  );
-  return urlInput;
 }
 
 async function handleEquipmentPhotoSelection(fileInput) {
@@ -175,11 +193,6 @@ async function handleEquipmentPhotoSelection(fileInput) {
     preview.classList.add("is-ready");
 
     setReactInputValue(urlInput, optimized.dataUrl);
-
-    const form = fileInput.closest("form");
-    const mimeInput = form?.querySelector('input[name="equipment-secure-mime"]');
-    if (mimeInput) setReactInputValue(mimeInput, optimized.mimeType);
-
     fileInput.dataset.secureEquipmentMime = optimized.mimeType;
     fileInput.dataset.secureEquipmentName = optimized.fileName;
     fileInput.dataset.secureEquipmentSize = String(optimized.sizeBytes);
@@ -196,6 +209,20 @@ function installEquipmentMediaCaptureBridge() {
   if (installed || typeof document === "undefined") return;
   installed = true;
 
+  prepareEquipmentPhotoForms();
+  observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches?.('.equipment-catalogue input[type="file"]')) {
+          prepareEquipmentPhotoField(node);
+        }
+        prepareEquipmentPhotoForms(node);
+      }
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
   document.addEventListener(
     "change",
     (event) => {
@@ -211,4 +238,8 @@ function installEquipmentMediaCaptureBridge() {
 
 installEquipmentMediaCaptureBridge();
 
-export { installEquipmentMediaCaptureBridge, optimizeEquipmentPhoto };
+export {
+  installEquipmentMediaCaptureBridge,
+  optimizeEquipmentPhoto,
+  prepareEquipmentPhotoForms,
+};
