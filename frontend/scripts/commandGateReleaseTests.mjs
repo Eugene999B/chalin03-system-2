@@ -87,7 +87,7 @@ assert.match(schemaService, /max:\s*40/);
 assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/);
 
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v3/);
+assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v4/);
 assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 
