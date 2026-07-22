@@ -3,15 +3,22 @@ import { HIRE_VIEW_PERMISSIONS } from "../security/permissionRules";
 
 const navigationSections = [
   {
-    title: "Equipment Hire",
+    title: "Equipment Sales & Hire",
     items: [
       {
-        title: "Hire Dashboard",
-        description: "Contracts, revenue, balances and availability",
+        title: "Sales & Hire Dashboard",
+        description: "Equipment, contracts, sales, revenue, balances and availability",
         path: "/equipment-hire-operations",
         icon: "🏗️",
         end: true,
         anyPermissions: HIRE_VIEW_PERMISSIONS,
+      },
+      {
+        title: "Equipment Catalogue",
+        description: "Excavators, pictures, identity, selling prices and Hire rates",
+        path: "/equipment-hire-operations/fleet",
+        icon: "🚜",
+        permissions: ["fleet.assets.view"],
       },
       {
         title: "Notification Centre",
@@ -22,27 +29,27 @@ const navigationSections = [
       },
       {
         title: "Customers",
-        description: "Hire customers, contacts and credit terms",
+        description: "Sales and Hire customers, contacts and credit terms",
         path: "/equipment-hire-operations/customers",
         icon: "👥",
         permissions: ["hire.customers.view"],
       },
       {
-        title: "Enquiries",
-        description: "Customer equipment requests",
+        title: "Hire Enquiries",
+        description: "Customer equipment Hire requests",
         path: "/equipment-hire-operations/enquiries",
         icon: "✉️",
         permissions: ["hire.enquiries.view"],
       },
       {
-        title: "Availability",
-        description: "Machines ready, assigned or unavailable",
+        title: "Hire Availability",
+        description: "Machines ready, assigned, sale-locked or unavailable",
         path: "/equipment-hire-operations/availability",
         icon: "🟢",
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Quotations",
+        title: "Hire Quotations",
         description: "Rates, mobilization and commercial terms",
         path: "/equipment-hire-operations/quotations",
         icon: "🧾",
@@ -70,7 +77,7 @@ const navigationSections = [
         anyPermissions: ["hire.dispatch.view", "hire.work_logs.view"],
       },
       {
-        title: "Invoices & Payments",
+        title: "Hire Invoices & Payments",
         description: "Billing, receipts, balances and debt",
         path: "/equipment-hire-operations/finance",
         icon: "💰",
@@ -85,7 +92,7 @@ const navigationSections = [
       },
       {
         title: "Reports",
-        description: "Outstanding, aging and Fleet utilization",
+        description: "Outstanding balances, aging and equipment utilization",
         path: "/equipment-hire-operations/reports",
         icon: "📊",
         permissions: ["hire.reports.view"],
@@ -93,18 +100,18 @@ const navigationSections = [
     ],
   },
   {
-    title: "Hire Resources",
+    title: "Business Resources",
     items: [
       {
-        title: "Fleet & Maintenance",
-        description: "Hire equipment, meters and service history",
+        title: "Maintenance Register",
+        description: "Meters, fuel, inspections and service history",
         path: "/equipment-hire-operations/fleet",
         icon: "🔧",
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Hire Documents",
-        description: "Quotations, agreements, invoices and statements",
+        title: "Sales & Hire Documents",
+        description: "Quotations, agreements, invoices, receipts and statements",
         path: "/equipment-hire-operations/documents",
         icon: "📄",
         permissions: ["operations.documents.view"],
@@ -117,7 +124,7 @@ const navigationSections = [
         permissions: ["shared.control.view"],
       },
       {
-        title: "Hire Workforce",
+        title: "Sales & Hire Workforce",
         description: "Worker profiles, location assignments, licences and expiries",
         path: "/equipment-hire-operations/workers",
         icon: "👷",
@@ -137,13 +144,13 @@ const navigationSections = [
     items: [
       {
         title: "Document Signature Settings",
-        description: "Boss signature for approved employment and HR documents",
+        description: "Boss signature for approved employment and business documents",
         path: "/equipment-hire-operations/document-signature-settings",
         icon: "🖋️",
         permissions: ["security.admin"],
       },
       {
-        title: "Hire Administration",
+        title: "Sales & Hire Administration",
         description: "Bases, yards and staff workspace access",
         path: "/equipment-hire-operations/administration",
         icon: "⚙️",
@@ -155,8 +162,8 @@ const navigationSections = [
     title: "Account",
     items: [
       {
-        title: "Equipment Hire Help",
-        description: "Guide for the Equipment Hire workspace",
+        title: "Equipment Sales & Hire Help",
+        description: "Guide for equipment sales, installments and Hire operations",
         path: "/equipment-hire-operations/help",
         icon: "❓",
       },
@@ -174,10 +181,10 @@ export default function EquipmentHireLayout() {
   return (
     <BusinessWorkspaceLayout
       workspaceCode="equipment_hire"
-      workspaceName="Equipment Hire"
+      workspaceName="Equipment Sales & Hire"
       icon="🏗️"
       theme="blue"
-      description="Independent Equipment Hire workspace. Hire bases and yards are administrator-managed. Spare Parts stores are never used here."
+      description="Independent heavy-equipment sales, installment and Hire workspace. Bases and yards are administrator-managed; Spare Parts stores are never used here."
       navigationSections={navigationSections}
     />
   );
