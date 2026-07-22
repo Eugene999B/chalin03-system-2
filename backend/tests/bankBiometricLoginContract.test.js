@@ -9,6 +9,7 @@ const read = (relativePath) =>
 
 const schemaService = read("backend/services/passkeySchemaService.js");
 const biometricRoutes = read("backend/routes/biometricRoutes.js");
+const loginEntry = read("frontend/src/pages/LoginPage.jsx");
 const loginPage = read("frontend/src/pages/LoginPageBiometricBank.jsx");
 const biometricClient = read("frontend/src/utils/biometricAccess.js");
 const serviceWorker = read("frontend/public/sw.js");
@@ -29,14 +30,23 @@ test("all earlier device credentials are revoked exactly once", () => {
 test("password changes revoke every linked biometric device", () => {
   assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
   assert.match(schemaService, /NEW\.password_hash <=> OLD\.password_hash/);
-  assert.match(schemaService, /revoked_reason = COALESCE\(revoked_reason, 'password_changed'\)/);
+  assert.match(
+    schemaService,
+    /revoked_reason = COALESCE\(revoked_reason, 'password_changed'\)/
+  );
 });
 
 
-test("legacy generic passkey API is retired", () => {
+test("legacy generic passkey API is retired and biometrics are rate limited", () => {
   assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
   assert.match(schemaService, /legacyPasskeyRoutes\.stack\.unshift/);
-  assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricRoutes\)/);
+  assert.match(schemaService, /BIOMETRIC_RATE_LIMITED/);
+  assert.match(schemaService, /windowMs:\s*15 \* 60 \* 1000/);
+  assert.match(schemaService, /max:\s*40/);
+  assert.match(
+    schemaService,
+    /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/
+  );
 });
 
 
@@ -58,18 +68,27 @@ test("biometric login is bound to one browser token, credential and account", ()
   assert.match(biometricRoutes, /allowCredentials/);
   assert.match(biometricRoutes, /passkey_id/);
   assert.match(biometricRoutes, /credential\.credential_id !== response\.id/);
-  assert.match(biometricRoutes, /This device is not linked to the requested account/);
+  assert.match(
+    biometricRoutes,
+    /This device is not linked to the requested account/
+  );
   assert.match(biometricClient, /chalin03_biometric_binding_v2/);
   assert.match(biometricClient, /binding_token/);
 });
 
 
-test("password starts blank and consent follows successful login", () => {
+test("password starts blank, works on first tap and consent follows login", () => {
   assert.match(loginPage, /const \[password, setPassword\] = useState\(""\)/);
   assert.match(loginPage, /autoComplete="off"/);
   assert.match(loginPage, /autoComplete="new-password"/);
   assert.match(loginPage, /readOnly=\{!passwordUnlocked\}/);
-  assert.match(loginPage, /window\.addEventListener\("pageshow", clearPasswordField\)/);
+  assert.match(
+    loginPage,
+    /window\.addEventListener\("pageshow", clearPasswordField\)/
+  );
+  assert.match(loginEntry, /unlockPasswordOnFirstTap/);
+  assert.match(loginEntry, /input\.readOnly = false/);
+  assert.match(loginEntry, /openEmergencyCommand/);
   assert.match(loginPage, /Use fingerprint or face on this device\?/);
   assert.match(loginPage, /Set up fingerprint or face/);
   assert.match(loginPage, /Not now/);
@@ -82,6 +101,12 @@ test("password starts blank and consent follows successful login", () => {
 test("service worker ignores third-party requests and CSP allows Cloudflare", () => {
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
   assert.match(serviceWorker, /chalin03-bank-biometric-login-v2/);
-  assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
-  assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
+  assert.match(
+    headers,
+    /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/
+  );
+  assert.match(
+    headers,
+    /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/
+  );
 });
