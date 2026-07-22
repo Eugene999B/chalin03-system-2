@@ -43,7 +43,7 @@ jobs:
       - name: Apply package and remove staging files
         run: |
           set -euo pipefail
-          tar -xzf /tmp/chalin-command-gate.tar.gz -C .
+          tar -xf /tmp/chalin-command-gate.tar -C .
           rm -rf .commandgate
           rm -f .github/workflows/command-gate-assemble.yml
 
