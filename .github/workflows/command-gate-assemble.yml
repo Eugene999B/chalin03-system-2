@@ -5,19 +5,7 @@ on:
     branches:
       - agent/chalin-command-gate
     paths:
-      - '.commandgate/chunk*.txt'
-      - '.commandgate/assemble.py'
-      - '.commandgate/analyze_recovered_entries.py'
-      - '.commandgate/apply_complete_entries.py'
-      - '.github/workflows/command-gate-assemble.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '.commandgate/chunk*.txt'
-      - '.commandgate/assemble.py'
-      - '.commandgate/analyze_recovered_entries.py'
-      - '.commandgate/apply_complete_entries.py'
+      - '.commandgate/integrate_backend.py'
       - '.github/workflows/command-gate-assemble.yml'
 
 permissions:
@@ -28,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  assemble:
+  integrate-backend:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -39,107 +27,42 @@ jobs:
           git clone --quiet --depth 1 --branch agent/chalin-command-gate \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
-      - name: Apply complete recovered files
-        id: foundation
+      - name: Integrate passkey backend and dependency locks
         run: |
           set -euo pipefail
-          if [ ! -f .commandgate/recovered_apply_command_gate.py.partial ]; then
-            echo "apply_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          python .commandgate/integrate_backend.py
+          npm --prefix backend install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm --prefix frontend install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Verify backend integration
+        run: |
+          set -euo pipefail
+          npm --prefix backend ci --ignore-scripts --no-audit --no-fund
+          npm --prefix backend run syntax-check
+          node --test backend/tests/passkeyRouteContract.test.js
+          BASE_SHA="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+          if [ -n "$BASE_SHA" ]; then
+            MIGRATION_SAFETY_BASE="$BASE_SHA" npm --prefix backend run migration-safety
           fi
-          python .commandgate/apply_complete_entries.py
+
+      - name: Commit backend integration
+        run: |
+          set -euo pipefail
           git config user.name "Chalin 03 Release Agent"
           git config user.email "actions@users.noreply.github.com"
           git add \
-            backend/routes/passkeyRoutes.js \
-            backend/services/passkeySchemaService.js \
+            backend/routes/authRoutes.js \
+            backend/server.js \
+            backend/package.json \
+            backend/package-lock.json \
             backend/tests/passkeyRouteContract.test.js \
+            frontend/package.json \
+            frontend/package-lock.json \
             database/migrations/20260722_command_gate_passkeys.sql \
-            frontend/src/utils/commandGate.js \
-            frontend/src/components/LastWorkTracker.jsx
+            database/migrations/20260722_command_gate_passkeys_verify.sql
           if git diff --cached --quiet; then
-            echo "apply_only=false" >> "$GITHUB_OUTPUT"
+            echo "Backend integration is already current."
             exit 0
           fi
-          git commit -m "Apply recovered Command Gate foundation"
-          git push origin HEAD:agent/chalin-command-gate
-          echo "apply_only=true" >> "$GITHUB_OUTPUT"
-
-      - name: Analyze recovered implementation entries
-        if: steps.foundation.outputs.apply_only != 'true'
-        id: analysis
-        run: |
-          set -euo pipefail
-          if [ ! -f .commandgate/recovered_apply_command_gate.py.partial ]; then
-            echo "analysis_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          python .commandgate/analyze_recovered_entries.py
-          git config user.name "Chalin 03 Release Agent"
-          git config user.email "actions@users.noreply.github.com"
-          git add .commandgate/recovered-manifest.json
-          if [ -f .commandgate/recovered_DeviceAccessPage.jsx.partial ]; then
-            git add .commandgate/recovered_DeviceAccessPage.jsx.partial
-          fi
-          if git diff --cached --quiet; then
-            echo "analysis_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git commit -m "Analyze recovered Command Gate entries"
-          git push origin HEAD:agent/chalin-command-gate
-          echo "analysis_only=true" >> "$GITHUB_OUTPUT"
-
-      - name: Decode, verify or recover package
-        if: steps.foundation.outputs.apply_only != 'true' && steps.analysis.outputs.analysis_only != 'true'
-        id: decode
-        run: |
-          set +e
-          python .commandgate/assemble.py
-          status=$?
-          set -e
-          if [ "$status" -eq 42 ]; then
-            echo "recovered=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-          echo "recovered=false" >> "$GITHUB_OUTPUT"
-          echo "Package files:"
-          cat /tmp/chalin-command-gate-files.txt
-
-      - name: Commit recovered implementation script
-        if: steps.foundation.outputs.apply_only != 'true' && steps.analysis.outputs.analysis_only != 'true' && steps.decode.outputs.recovered == 'true'
-        run: |
-          set -euo pipefail
-          git config user.name "Chalin 03 Release Agent"
-          git config user.email "actions@users.noreply.github.com"
-          git add .commandgate/recovered_apply_command_gate.py.partial .commandgate/recovery-info.txt
-          if git diff --cached --quiet; then
-            echo "Recovered script is already committed."
-            exit 0
-          fi
-          git commit -m "Recover interrupted Command Gate script"
-          git push origin HEAD:agent/chalin-command-gate
-
-      - name: Apply package and remove staging files
-        if: steps.foundation.outputs.apply_only != 'true' && steps.analysis.outputs.analysis_only != 'true' && steps.decode.outputs.recovered != 'true'
-        run: |
-          set -euo pipefail
-          tar -xf /tmp/chalin-command-gate.tar -C .
-          rm -rf .commandgate
-          rm -f .github/workflows/command-gate-assemble.yml
-
-      - name: Commit assembled implementation
-        if: steps.foundation.outputs.apply_only != 'true' && steps.analysis.outputs.analysis_only != 'true' && steps.decode.outputs.recovered != 'true'
-        run: |
-          set -euo pipefail
-          git config user.name "Chalin 03 Release Agent"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No assembled changes to commit."
-            exit 0
-          fi
-          git commit -m "Build Chalin Command Gate"
+          git commit -m "Integrate Command Gate passkey backend"
           git push origin HEAD:agent/chalin-command-gate
