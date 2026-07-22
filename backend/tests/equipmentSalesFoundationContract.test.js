@@ -17,6 +17,9 @@ const backupRoutes = read("backend/routes/backupRoutes.js");
 const resetScript = read("backend/scripts/resetDatabaseFromBackup.js");
 const restoreVerifier = read("backend/scripts/verifyRestoredDatabase.js");
 const catalogueRoutes = read("backend/routes/equipmentCatalogueRoutes.js");
+const catalogueIntegrityMiddleware = read(
+  "backend/middleware/equipmentCatalogueIntegrityMiddleware.js"
+);
 const server = read("backend/server.js");
 const implementationGuide = read(
   "docs/EQUIPMENT_SALES_AND_HIRE_IMPLEMENTATION.md"
@@ -155,8 +158,12 @@ test("Equipment Catalogue API is location scoped and explicitly protected", () =
   assert.match(catalogueRoutes, /requirePermission\("fleet\.assets\.manage"\)/);
   assert.match(catalogueRoutes, /workspaceCode:\s*"equipment_hire"/);
   assert.match(server, /require\("\.\/routes\/equipmentCatalogueRoutes"\)/);
+  assert.match(server, /enforceEquipmentCatalogueWriteIntegrity/);
   assert.match(server, /"\/api\/equipment-catalogue"/);
-  assert.match(server, /hireBoundary,\s*equipmentCatalogueRoutes/);
+  assert.match(
+    server,
+    /hireBoundary,\s*enforceEquipmentCatalogueWriteIntegrity,\s*equipmentCatalogueRoutes/s
+  );
 });
 
 test("Equipment Catalogue writes always settle their transactions", () => {
@@ -180,12 +187,21 @@ test("equipment pictures remain auditable instead of being deleted", () => {
   assert.doesNotMatch(catalogueRoutes, /DELETE\s+FROM\s+equipment_media/i);
 });
 
-test("catalogue blocks direct sold registration and cross-purpose conflicts", () => {
+test("catalogue blocks direct sold registration and controlled-sale bypasses", () => {
   assert.match(catalogueRoutes, /New equipment cannot be registered as sold/);
   assert.match(catalogueRoutes, /EQUIPMENT_ACTIVE_ON_HIRE/);
   assert.match(catalogueRoutes, /EQUIPMENT_ACTIVE_SALE_LOCK/);
   assert.match(catalogueRoutes, /active_hire_assignment_count/);
   assert.match(catalogueRoutes, /active_sale_lock_status/);
+  assert.match(catalogueIntegrityMiddleware, /CONTROLLED_EQUIPMENT_SALE_REQUIRED/);
+  assert.match(catalogueIntegrityMiddleware, /requestedSaleStatus === "sold"/);
+  assert.match(catalogueIntegrityMiddleware, /requestedCurrentStatus === "sold"/);
+  assert.match(catalogueIntegrityMiddleware, /body\.sale_status = "not_for_sale"/);
+  assert.match(catalogueIntegrityMiddleware, /body\.sale_status = "available"/);
+  assert.match(
+    catalogueIntegrityMiddleware,
+    /EQUIPMENT_PURPOSE_SALE_STATUS_CONFLICT/
+  );
 });
 
 test("implementation guide preserves workspace separation and legacy records", () => {
