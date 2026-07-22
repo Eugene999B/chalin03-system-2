@@ -19,60 +19,67 @@ function FingerprintIcon() {
 
 export default function LoginPageBank() {
   const [biometricState, setBiometricState] = useState(null);
+  const biometricStateRef = useRef(null);
   const startingTokenRef = useRef("");
-  const timersRef = useRef([]);
+  const timeoutRef = useRef(null);
+  const verifiedTimeoutRef = useRef(null);
 
   useEffect(() => {
+    function setState(nextState) {
+      biometricStateRef.current = nextState;
+      setBiometricState(nextState);
+    }
+
     function clearTimers() {
-      timersRef.current.forEach((timer) => window.clearTimeout(timer));
-      timersRef.current = [];
+      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+      if (verifiedTimeoutRef.current) {
+        window.clearTimeout(verifiedTimeoutRef.current);
+      }
+      timeoutRef.current = null;
+      verifiedTimeoutRef.current = null;
+    }
+
+    function closeOverlay() {
+      clearTimers();
+      setState(null);
     }
 
     function showWaitingState() {
       clearTimers();
       startingTokenRef.current = localStorage.getItem(TOKEN_KEY) || "";
-      setBiometricState("waiting");
-
-      const timeout = window.setTimeout(() => {
-        setBiometricState(null);
-      }, 15000);
-      timersRef.current.push(timeout);
+      setState("waiting");
+      timeoutRef.current = window.setTimeout(closeOverlay, 15000);
     }
 
-    function handleClick(event) {
-      const button = event.target.closest(
-        ".gate2__secondary-actions button:first-child"
-      );
-      if (button && !button.disabled) {
-        showWaitingState();
-      }
-    }
-
-    const observer = new MutationObserver(() => {
-      if (!biometricState) return;
+    function inspectAuthenticationState() {
+      if (!biometricStateRef.current) return;
 
       const currentToken = localStorage.getItem(TOKEN_KEY) || "";
       const arrivalReady = Boolean(sessionStorage.getItem(ARRIVAL_KEY));
-      const hasError = Boolean(document.querySelector(".gate2__alert--error"));
+      const hasError = Boolean(document.querySelector(".gate4__alert--error"));
 
       if (
         (currentToken && currentToken !== startingTokenRef.current) ||
         arrivalReady
       ) {
-        clearTimers();
-        setBiometricState("verified");
-        const verifiedTimer = window.setTimeout(() => {
-          setBiometricState(null);
-        }, 700);
-        timersRef.current.push(verifiedTimer);
+        if (biometricStateRef.current !== "verified") {
+          clearTimers();
+          setState("verified");
+          verifiedTimeoutRef.current = window.setTimeout(closeOverlay, 700);
+        }
         return;
       }
 
-      if (hasError) {
-        clearTimers();
-        setBiometricState(null);
-      }
-    });
+      if (hasError) closeOverlay();
+    }
+
+    function handleClick(event) {
+      const button = event.target.closest(".gate4__passkey");
+      if (button && !button.disabled) showWaitingState();
+    }
+
+    const observer = new MutationObserver(inspectAuthenticationState);
+    const interval = window.setInterval(inspectAuthenticationState, 120);
 
     document.addEventListener("click", handleClick, true);
     observer.observe(document.documentElement, {
@@ -83,10 +90,11 @@ export default function LoginPageBank() {
 
     return () => {
       clearTimers();
+      window.clearInterval(interval);
       document.removeEventListener("click", handleClick, true);
       observer.disconnect();
     };
-  }, [biometricState]);
+  }, []);
 
   return (
     <>
