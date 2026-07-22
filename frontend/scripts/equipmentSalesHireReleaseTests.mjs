@@ -11,7 +11,9 @@ const read = (relativePath) =>
 const wrapper = read("src/pages/FleetAssetsPage.jsx");
 const sharedFleet = read("src/pages/SharedFleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
+const salesWorkspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
 const catalogueStyles = read("src/styles/equipmentCatalogue.css");
+const salesStyles = read("src/styles/equipmentSales.css");
 const secureUpload = read("src/utils/equipmentMediaCaptureBridge.js");
 const secureUploadStyles = read("src/styles/equipmentSecureUpload.css");
 const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
@@ -19,7 +21,10 @@ const axiosClient = read("src/api/axiosClient.js");
 
 assert.match(wrapper, /isEquipmentHireWorkspace/);
 assert.match(wrapper, /EquipmentCataloguePage/);
+assert.match(wrapper, /EquipmentSalesWorkspacePage/);
+assert.match(wrapper, /searchParams\.get\("view"\) === "sales"/);
 assert.match(wrapper, /SharedFleetAssetsPage/);
+assert.doesNotMatch(wrapper, /EquipmentSalesPage/);
 assert.match(sharedFleet, /axiosClient\.get\("\/fleet\/summary"\)/);
 assert.match(sharedFleet, /FleetAssetsPage/);
 
@@ -58,9 +63,38 @@ assert.match(secureUploadStyles, /equipment-secure-upload__legacy-url/);
 assert.match(secureUploadStyles, /display: none !important/);
 assert.match(secureUploadStyles, /equipment-secure-upload__preview\.is-ready/);
 
+assert.match(salesWorkspace, /Equipment Sales &amp; Installments/);
+assert.match(salesWorkspace, /\/equipment-catalogue\/sales/);
+assert.match(salesWorkspace, /\/summary/);
+assert.match(salesWorkspace, /\/reference/);
+assert.match(salesWorkspace, /\/enquiries/);
+assert.match(salesWorkspace, /\/quotations/);
+assert.match(salesWorkspace, /\/agreements/);
+assert.match(salesWorkspace, /\/payments/);
+assert.match(salesWorkspace, /\/delivery/);
+assert.match(salesWorkspace, /\/ownership-transfer/);
+assert.match(salesWorkspace, /\/sms/);
+assert.match(salesWorkspace, /payment_frequency/);
+assert.match(salesWorkspace, /installment_count/);
+assert.match(salesWorkspace, /guarantor_name/);
+assert.match(salesWorkspace, /terms_accepted/);
+assert.match(salesWorkspace, /delivery_status/);
+assert.match(salesWorkspace, /ownership_status/);
+assert.match(salesWorkspace, /effectivePermissions\.includes\("fleet\.assets\.manage"\)/);
+assert.doesNotMatch(salesWorkspace, /setSelected\w*\([^)]*\)\s*;\s*return\s*\{/);
+
+assert.match(salesStyles, /\.equipment-sales\s*\{/);
+assert.match(salesStyles, /\.equipment-sales__tabs/);
+assert.match(salesStyles, /\.equipment-sales__sheet/);
+assert.match(salesStyles, /\.equipment-sales__progress/);
+assert.match(salesStyles, /@media \(max-width: 640px\)/);
+assert.match(salesStyles, /max-height: 94dvh/);
+assert.match(salesStyles, /env\(safe-area-inset-bottom\)/);
+
 assert.match(hireLayout, /workspaceName="Equipment Sales & Hire"/);
 assert.match(hireLayout, /title: "Equipment Catalogue"/);
-assert.match(hireLayout, /path: "\/equipment-hire-operations\/fleet"/);
+assert.match(hireLayout, /title: "Sales & Installments"/);
+assert.match(hireLayout, /fleet\?view=sales/);
 assert.match(hireLayout, /permissions: \["fleet\.assets\.view"\]/);
 assert.match(hireLayout, /Spare Parts stores are never used here/);
 
@@ -68,4 +102,6 @@ assert.match(axiosClient, /equipmentMediaCaptureBridge/);
 assert.match(axiosClient, /equipment_hire: "chalin03_active_context_equipment_hire"/);
 assert.match(axiosClient, /X-Chalin03-Context-Id/);
 
-console.log("Equipment Sales & Hire mobile catalogue and secure camera contracts passed.");
+console.log(
+  "Equipment Sales & Hire catalogue, secure camera and commercial lifecycle contracts passed."
+);
