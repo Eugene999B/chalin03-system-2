@@ -49,6 +49,9 @@ jobs:
           git config user.name "Chalin 03 Release Agent"
           git config user.email "actions@users.noreply.github.com"
           git add .commandgate/recovered-manifest.json
+          if [ -f .commandgate/recovered_DeviceAccessPage.jsx.partial ]; then
+            git add .commandgate/recovered_DeviceAccessPage.jsx.partial
+          fi
           if git diff --cached --quiet; then
             echo "analysis_only=false" >> "$GITHUB_OUTPUT"
             exit 0
