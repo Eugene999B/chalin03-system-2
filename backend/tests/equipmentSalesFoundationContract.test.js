@@ -16,6 +16,8 @@ const verification = read(
 const backupRoutes = read("backend/routes/backupRoutes.js");
 const resetScript = read("backend/scripts/resetDatabaseFromBackup.js");
 const restoreVerifier = read("backend/scripts/verifyRestoredDatabase.js");
+const catalogueRoutes = read("backend/routes/equipmentCatalogueRoutes.js");
+const server = read("backend/server.js");
 const implementationGuide = read(
   "docs/EQUIPMENT_SALES_AND_HIRE_IMPLEMENTATION.md"
 );
@@ -34,6 +36,13 @@ const REQUIRED_TABLES = [
   "equipment_ownership_transfers",
   "equipment_sales_reminder_log",
   "equipment_legacy_installment_migrations",
+];
+
+const SALE_HIRE_GUARDS = [
+  "trg_hire_contract_asset_sale_guard_before_insert",
+  "trg_hire_contract_asset_sale_guard_before_update",
+  "trg_equipment_sale_agreement_hire_guard_before_insert",
+  "trg_equipment_sale_agreement_hire_guard_before_update",
 ];
 
 test("equipment sales migration remains additive and production guarded", () => {
@@ -79,26 +88,27 @@ test("equipment sale and installment lifecycle tables are complete", () => {
   }
 
   assert.match(migration, /sale_type ENUM\('cash','installment'\)/i);
-  assert.match(migration, /payment_frequency ENUM\('weekly','fortnightly','monthly','custom'\)/i);
+  assert.match(
+    migration,
+    /payment_frequency ENUM\('weekly','fortnightly','monthly','custom'\)/i
+  );
   assert.match(migration, /delivery_policy ENUM/i);
   assert.match(migration, /ownership_status ENUM/i);
   assert.match(migration, /legacy_installment_agreement_id/i);
 });
 
 test("database guards prevent the same unit being sold and hired", () => {
-  for (const triggerName of [
-    "trg_hire_contract_asset_sale_guard_before_insert",
-    "trg_hire_contract_asset_sale_guard_before_update",
-    "trg_equipment_sale_agreement_hire_guard_before_insert",
-    "trg_equipment_sale_agreement_hire_guard_before_update",
-  ]) {
+  for (const triggerName of SALE_HIRE_GUARDS) {
     assert.match(migration, new RegExp(triggerName));
     assert.match(verification, new RegExp(`'${triggerName}'`));
+    assert.match(resetScript, new RegExp(`"${triggerName}"`));
+    assert.match(restoreVerifier, new RegExp(`"${triggerName}"`));
   }
 
   assert.match(migration, /assigned','dispatched','active/);
   assert.match(migration, /reserved','installment_active','sold/);
   assert.match(verification, /active_hire_and_sale_conflicts/);
+  assert.match(restoreVerifier, /activeHireSaleConflicts/);
 });
 
 test("central SMS log receives workspace and Equipment Hire context", () => {
@@ -119,11 +129,63 @@ test("central SMS log receives workspace and Equipment Hire context", () => {
 
 test("backup and restore contracts include every new equipment sales table", () => {
   for (const tableName of REQUIRED_TABLES) {
-    const tablePattern = new RegExp(`['\"]${tableName}['\"]`);
+    const tablePattern = new RegExp(`['"]${tableName}['"]`);
     assert.match(backupRoutes, tablePattern, `${tableName} missing from backup order`);
     assert.match(resetScript, tablePattern, `${tableName} missing from reset contract`);
-    assert.match(restoreVerifier, tablePattern, `${tableName} missing from restore verification`);
+    assert.match(
+      restoreVerifier,
+      tablePattern,
+      `${tableName} missing from restore verification`
+    );
   }
+
+  assert.match(backupRoutes, /chalin03-equipment-sales-foundation-v1/);
+  assert.match(resetScript, /database\.endsWith\("_test"\)/);
+  assert.match(resetScript, /EQUIPMENT_SALES_MIGRATION_PATH/);
+  assert.match(restoreVerifier, /applicationTablesExpected:\s*67/);
+  assert.match(restoreVerifier, /hireTriggersExpected:\s*20/);
+});
+
+test("Equipment Catalogue API is location scoped and explicitly protected", () => {
+  assert.match(catalogueRoutes, /resolveHireLocationScope/);
+  assert.match(catalogueRoutes, /requireSelectedLocation/);
+  assert.match(catalogueRoutes, /appendHireLocationFilter/);
+  assert.match(catalogueRoutes, /assertRecordInHireLocation/);
+  assert.match(catalogueRoutes, /requirePermission\("fleet\.assets\.view"\)/);
+  assert.match(catalogueRoutes, /requirePermission\("fleet\.assets\.manage"\)/);
+  assert.match(catalogueRoutes, /workspaceCode:\s*"equipment_hire"/);
+  assert.match(server, /require\("\.\/routes\/equipmentCatalogueRoutes"\)/);
+  assert.match(server, /"\/api\/equipment-catalogue"/);
+  assert.match(server, /hireBoundary,\s*equipmentCatalogueRoutes/);
+});
+
+test("Equipment Catalogue writes always settle their transactions", () => {
+  assert.match(catalogueRoutes, /async function withTransaction/);
+  assert.match(catalogueRoutes, /await connection\.beginTransaction\(\)/);
+  assert.match(catalogueRoutes, /await connection\.commit\(\)/);
+  assert.match(catalogueRoutes, /await connection\.rollback\(\)/);
+  assert.match(catalogueRoutes, /connection\.release\(\)/);
+  assert.doesNotMatch(catalogueRoutes, /beginTransaction[\s\S]{0,500}return res\./);
+});
+
+test("equipment pictures remain auditable instead of being deleted", () => {
+  assert.match(catalogueRoutes, /\/assets\/:id\/media/);
+  assert.match(catalogueRoutes, /media\/:mediaId\/primary/);
+  assert.match(catalogueRoutes, /media\/:mediaId\/archive/);
+  assert.match(catalogueRoutes, /archived_at = NOW\(\)/);
+  assert.match(catalogueRoutes, /archive_reason/);
+  assert.match(catalogueRoutes, /EQUIPMENT_MEDIA_ARCHIVED/);
+  assert.match(catalogueRoutes, /main_image_url/);
+  assert.doesNotMatch(catalogueRoutes, /router\.delete\s*\(/i);
+  assert.doesNotMatch(catalogueRoutes, /DELETE\s+FROM\s+equipment_media/i);
+});
+
+test("catalogue blocks direct sold registration and cross-purpose conflicts", () => {
+  assert.match(catalogueRoutes, /New equipment cannot be registered as sold/);
+  assert.match(catalogueRoutes, /EQUIPMENT_ACTIVE_ON_HIRE/);
+  assert.match(catalogueRoutes, /EQUIPMENT_ACTIVE_SALE_LOCK/);
+  assert.match(catalogueRoutes, /active_hire_assignment_count/);
+  assert.match(catalogueRoutes, /active_sale_lock_status/);
 });
 
 test("implementation guide preserves workspace separation and legacy records", () => {
