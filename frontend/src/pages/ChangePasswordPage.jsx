@@ -1,894 +1,384 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import {
+  getSavedStationMode,
+  getStationModes,
+  registerPasskey,
+  saveStationMode,
+  supportsPasskeys,
+} from "../utils/commandGate";
+import "../styles/commandGate.css";
+
+function formatDate(value) {
+  if (!value) return "Never used";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
+
+function validateNewPassword(password) {
+  const text = String(password || "");
+  if (text.length < 8) return "New password must be at least 8 characters long.";
+  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
+    return "Use both uppercase and lowercase letters.";
+  }
+  if (!/\d/.test(text)) return "Include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(text)) return "Include at least one symbol.";
+  return "";
+}
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
   const {
     user,
     logout,
-    branchCode,
-    branchName,
-    branchLocation,
     workspaceCode,
     workspaceName,
+    branchCode,
+    branchName,
     isSparePartsWorkspace,
-    isMiningWorkspace,
-    isEquipmentHireWorkspace,
   } = useAuth();
-
-  const currentContextCode = isSparePartsWorkspace
-    ? branchCode ||
-      user?.branch_code ||
-      user?.selected_branch?.branch_code ||
-      user?.selected_branch?.code ||
-      "STORE"
-    : isMiningWorkspace
-    ? "MINING"
-    : isEquipmentHireWorkspace
-    ? "HIRE"
-    : String(workspaceCode || "ACCOUNT").toUpperCase();
-
-  const currentContextName = isSparePartsWorkspace
-    ? branchName ||
-      user?.branch_name ||
-      user?.selected_branch?.branch_name ||
-      user?.selected_branch?.name ||
-      "Selected Store"
-    : workspaceName ||
-      user?.business_unit_name ||
-      user?.active_workspace?.name ||
-      (isMiningWorkspace
-        ? "Mining Operations"
-        : isEquipmentHireWorkspace
-        ? "Equipment Hire"
-        : "Chalin 03 Group Platform");
-
-  const currentContextLocation = isSparePartsWorkspace
-    ? branchLocation ||
-      user?.branch_location ||
-      user?.selected_branch?.branch_location ||
-      user?.selected_branch?.location ||
-      ""
-    : "";
-
-  const accountScopeText = isSparePartsWorkspace
-    ? "every store your account is allowed to access"
-    : isMiningWorkspace
-    ? "every Mining site your account is allowed to access"
-    : isEquipmentHireWorkspace
-    ? "every Equipment Hire location your account is allowed to access"
-    : "every business workspace your account is allowed to access";
-
-  const protectedBusinessDataText = isSparePartsWorkspace
-    ? "sales, stock adjustments, debt payments, audit records, reports and branch data"
-    : isMiningWorkspace
-    ? "production, equipment, fuel, expense, incident, approval and Mining report data"
-    : isEquipmentHireWorkspace
-    ? "enquiries, quotations, contracts, dispatches, work logs, invoices, payments, returns and Fleet data"
-    : "business records, approvals, reports and account data";
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [showPasswords, setShowPasswords] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth <= 760 : false
+  const [passwordWorking, setPasswordWorking] = useState(false);
+
+  const [passkeys, setPasskeys] = useState([]);
+  const [passkeysLoading, setPasskeysLoading] = useState(true);
+  const [deviceWorking, setDeviceWorking] = useState(false);
+  const [deviceName, setDeviceName] = useState("");
+  const [devicePassword, setDevicePassword] = useState("");
+  const [stationCode, setStationCode] = useState(() =>
+    getSavedStationMode(workspaceCode)
   );
 
-  const accountName = user?.full_name || user?.username || "your account";
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    function handleResize() {
-      setIsMobile(window.innerWidth <= 760);
+  const stationModes = useMemo(
+    () => getStationModes(workspaceCode),
+    [workspaceCode]
+  );
+
+  const accountName = user?.full_name || user?.username || "Authorised user";
+  const contextName = isSparePartsWorkspace
+    ? `${branchCode || "STORE"} — ${branchName || "Selected Store"}`
+    : workspaceName || user?.active_workspace?.name || "Chalin 03";
+
+  const loadPasskeys = useCallback(async () => {
+    setPasskeysLoading(true);
+    try {
+      const response = await axiosClient.get("/auth/passkeys");
+      setPasskeys(Array.isArray(response.data?.passkeys) ? response.data.passkeys : []);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Could not load trusted devices. Password security is still available."
+      );
+    } finally {
+      setPasskeysLoading(false);
     }
-
-    handleResize();
-
-    window.addEventListener("resize", handleResize);
-
-    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const passwordStrength = useMemo(() => {
-    let score = 0;
+  useEffect(() => {
+    loadPasskeys();
+  }, [loadPasskeys]);
 
-    if (newPassword.length >= 6) score += 25;
-    if (newPassword.length >= 10) score += 20;
-    if (/[A-Z]/.test(newPassword)) score += 15;
-    if (/[0-9]/.test(newPassword)) score += 15;
-    if (/[^A-Za-z0-9]/.test(newPassword)) score += 15;
-    if (newPassword && newPassword !== currentPassword) score += 10;
+  useEffect(() => {
+    setStationCode(getSavedStationMode(workspaceCode));
+  }, [workspaceCode]);
 
-    const safeScore = Math.min(score, 100);
-
-    if (!newPassword) {
-      return {
-        score: 0,
-        label: "Waiting",
-        note: "Enter a new password to check strength.",
-        tone: "neutral",
-      };
-    }
-
-    if (safeScore >= 80) {
-      return {
-        score: safeScore,
-        label: "Strong",
-        note: "Good password strength.",
-        tone: "strong",
-      };
-    }
-
-    if (safeScore >= 55) {
-      return {
-        score: safeScore,
-        label: "Good",
-        note: "Acceptable, but can be stronger.",
-        tone: "good",
-      };
-    }
-
-    return {
-      score: safeScore,
-      label: "Weak",
-      note: "Use more characters, numbers, capital letters or symbols.",
-      tone: "weak",
-    };
-  }, [newPassword, currentPassword]);
+  function clearNotices() {
+    setMessage("");
+    setError("");
+  }
 
   async function handleChangePassword(event) {
     event.preventDefault();
-
-    setMessage("");
-    setError("");
+    clearNotices();
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("All password fields are required.");
+      setError("Complete all password fields.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters long.");
+    const policyError = validateNewPassword(newPassword);
+    if (policyError) {
+      setError(policyError);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("New password and confirm password do not match.");
+      setError("New password and confirmation do not match.");
       return;
     }
 
     if (currentPassword === newPassword) {
-      setError("New password must be different from current password.");
+      setError("New password must be different from the current password.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to change your password? This password is account-wide and will apply whenever you log in to ${accountScopeText}.`
+      "Change this account-wide password and sign out of Chalin 03?"
     );
+    if (!confirmed) return;
 
-    if (!confirmed) {
-      return;
-    }
-
-    setSaving(true);
-
+    setPasswordWorking(true);
     try {
       await axiosClient.post("/auth/change-password", {
         current_password: currentPassword,
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
-
-      setMessage(
-        "Password changed successfully. Please login again with your new password."
-      );
-
+      setMessage("Password changed successfully. Opening Command Gate for a fresh login.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-
-      setTimeout(() => {
+      window.setTimeout(() => {
         logout();
-        navigate("/login");
-      }, 1500);
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to change password.");
+        navigate("/login", { replace: true });
+      }, 900);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Failed to change password.");
     } finally {
-      setSaving(false);
+      setPasswordWorking(false);
     }
   }
 
+  async function handleRegisterDevice(event) {
+    event.preventDefault();
+    clearNotices();
+
+    if (!supportsPasskeys()) {
+      setError(
+        "This browser or connection does not support secure device unlock. Use an updated browser over HTTPS."
+      );
+      return;
+    }
+
+    if (!devicePassword) {
+      setError("Enter your current password to approve this trusted device.");
+      return;
+    }
+
+    setDeviceWorking(true);
+    try {
+      const response = await registerPasskey({
+        currentPassword: devicePassword,
+        displayName: deviceName.trim() || "Trusted device",
+      });
+      setMessage(response.message || "This device can now unlock Chalin 03.");
+      setDeviceName("");
+      setDevicePassword("");
+      await loadPasskeys();
+    } catch (requestError) {
+      const cancelled = String(requestError.name || "").includes("NotAllowed");
+      setError(
+        cancelled
+          ? "Device registration was cancelled."
+          : requestError.response?.data?.message ||
+              requestError.message ||
+              "Could not register this device."
+      );
+    } finally {
+      setDeviceWorking(false);
+    }
+  }
+
+  async function handleRevoke(passkeyId) {
+    const confirmed = window.confirm(
+      "Remove this trusted device? Password login will continue to work."
+    );
+    if (!confirmed) return;
+
+    clearNotices();
+    setDeviceWorking(true);
+    try {
+      const response = await axiosClient.delete(`/auth/passkeys/${passkeyId}`);
+      setMessage(response.data?.message || "Trusted device removed.");
+      await loadPasskeys();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || "Could not remove the device.");
+    } finally {
+      setDeviceWorking(false);
+    }
+  }
+
+  function handleStationChange(event) {
+    const saved = saveStationMode(workspaceCode, event.target.value);
+    setStationCode(saved);
+    setMessage("This device entrance profile has been updated.");
+    setError("");
+  }
+
   return (
-    <div style={styles.page}>
-      <section
-        style={{
-          ...styles.hero,
-          ...(isMobile ? styles.heroMobile : {}),
-        }}
-      >
-        <div
-          style={{
-            ...styles.heroGlowOne,
-            ...(isMobile ? styles.heroGlowOneMobile : {}),
-          }}
-        />
+    <main className="command-page">
+      <div className="command-page__shell">
+        <header className="command-page__hero">
+          <div>
+            <p>Command Gate security</p>
+            <h1>Account Security Centre</h1>
+          </div>
+          <span>
+            {accountName} · {contextName}. Manage your password, biometric/device unlock and
+            this device&apos;s station entrance without changing business records or permissions.
+          </span>
+        </header>
 
-        <div
-          style={{
-            ...styles.heroGlowTwo,
-            ...(isMobile ? styles.heroGlowTwoMobile : {}),
-          }}
-        />
+        {message && <div className="command-alert command-alert--success">{message}</div>}
+        {error && <div className="command-alert command-alert--error">{error}</div>}
 
-        <div
-          style={{
-            ...styles.heroContent,
-            ...(isMobile ? styles.heroContentMobile : {}),
-          }}
-        >
-          <div style={isMobile ? styles.fullWidth : undefined}>
-            <p style={styles.eyebrow}>Account Security Center</p>
-
-            <h1
-              style={{
-                ...styles.heroTitle,
-                ...(isMobile ? styles.heroTitleMobile : {}),
-              }}
-            >
-              Change Password
-            </h1>
-
-            <p
-              style={{
-                ...styles.heroSubtitle,
-                ...(isMobile ? styles.heroSubtitleMobile : {}),
-              }}
-            >
-              Securely update the login password for{" "}
-              <strong>{accountName}</strong>. This password is account-wide and
-              will work for {accountScopeText}.
+        <div className="command-page__grid">
+          <section className="command-page__card">
+            <h2>Change account password</h2>
+            <p>
+              This password is account-wide. After a successful change, Chalin signs you out so
+              the new password can establish a fresh secure session.
             </p>
-          </div>
-
-          <div
-            style={{
-              ...styles.heroCard,
-              ...(isMobile ? styles.heroCardMobile : {}),
-            }}
-          >
-            <span>🔐</span>
-
-            <div style={styles.heroCardText}>
-              <strong>{currentContextCode}</strong>
-              <small>{currentContextName}</small>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div
-        style={{
-          ...styles.storeNotice,
-          ...(isMobile ? styles.storeNoticeMobile : {}),
-        }}
-      >
-        <span style={styles.noticeIcon}>{isSparePartsWorkspace ? "🏬" : isMiningWorkspace ? "⛏️" : "🚜"}</span>
-
-        <div style={styles.noticeText}>
-          <strong>
-            {currentContextCode} — {currentContextName}
-          </strong>
-
-          {currentContextLocation ? <p>{currentContextLocation}</p> : null}
-
-          <p>
-            Password changes are account-wide. After changing your password, you
-            will be logged out and must login again.
-          </p>
-        </div>
-      </div>
-
-      {message && <div className="success-box">{message}</div>}
-      {error && <div className="error-box">{error}</div>}
-
-      <div
-        style={{
-          ...styles.mainGrid,
-          ...(isMobile ? styles.mainGridMobile : {}),
-        }}
-      >
-        <section
-          style={{
-            ...styles.formPanel,
-            ...(isMobile ? styles.formPanelMobile : {}),
-          }}
-        >
-          <div style={styles.panelHeader}>
-            <div>
-              <p style={styles.eyebrowDark}>Password Update</p>
-
-              <h2
-                style={{
-                  ...styles.panelTitle,
-                  ...(isMobile ? styles.panelTitleMobile : {}),
-                }}
-              >
-                Enter Password Details
-              </h2>
-
-              <p style={styles.panelSubtitle}>
-                Use a password that is not easy for staff, friends or customers
-                to guess.
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleChangePassword}>
-            <label>Current Password</label>
-
-            <div style={styles.inputWrap}>
-              <input
-                type={showPasswords ? "text" : "password"}
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Enter current password"
-                autoComplete="current-password"
-              />
-            </div>
-
-            <label>New Password</label>
-
-            <div style={styles.inputWrap}>
-              <input
-                type={showPasswords ? "text" : "password"}
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="Enter new password"
-                autoComplete="new-password"
-              />
-            </div>
-
-            <div style={styles.strengthBox}>
-              <div
-                style={{
-                  ...styles.strengthTop,
-                  ...(isMobile ? styles.strengthTopMobile : {}),
-                }}
-              >
-                <strong>Password strength: {passwordStrength.label}</strong>
-                <span>{passwordStrength.score}%</span>
-              </div>
-
-              <div style={styles.strengthTrack}>
-                <div
-                  style={{
-                    ...styles.strengthFill,
-                    ...strengthToneStyles[passwordStrength.tone],
-                    width: `${passwordStrength.score}%`,
-                  }}
+            <form className="command-page__form" onSubmit={handleChangePassword}>
+              <label>
+                Current password
+                <input
+                  type={showPasswords ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
                 />
+              </label>
+              <label>
+                New password
+                <input
+                  type={showPasswords ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label>
+                Confirm new password
+                <input
+                  type={showPasswords ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label className="command-checkbox command-checkbox--light">
+                <input
+                  type="checkbox"
+                  checked={showPasswords}
+                  onChange={(event) => setShowPasswords(event.target.checked)}
+                />
+                <span>Show passwords while typing</span>
+              </label>
+              <button className="command-page__button" disabled={passwordWorking} type="submit">
+                {passwordWorking ? "Changing password…" : "Change password securely"}
+              </button>
+            </form>
+          </section>
+
+          <section className="command-page__card">
+            <h2>Register this trusted device</h2>
+            <p>
+              Use fingerprint, face, Windows Hello or device PIN at Command Gate. Biometric data
+              remains on your device; Chalin stores only the public passkey credential.
+            </p>
+            <form className="command-page__form" onSubmit={handleRegisterDevice}>
+              <label>
+                Device name
+                <input
+                  value={deviceName}
+                  onChange={(event) => setDeviceName(event.target.value)}
+                  placeholder="Example: Front Desk Windows PC"
+                  maxLength={120}
+                />
+              </label>
+              <label>
+                Current password for approval
+                <input
+                  type="password"
+                  value={devicePassword}
+                  onChange={(event) => setDevicePassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+              </label>
+              <button className="command-page__button" disabled={deviceWorking} type="submit">
+                {deviceWorking ? "Verifying device…" : "Register device unlock"}
+              </button>
+            </form>
+
+            <div className="command-page__station">
+              <h3>Temporary station mode</h3>
+              <p>
+                This browser opens directly to the selected operation after login. It never grants
+                extra permissions.
+              </p>
+              <label>
+                Entrance profile
+                <select value={stationCode} onChange={handleStationChange}>
+                  {stationModes.map((station) => (
+                    <option key={station.code} value={station.code}>
+                      {station.title} — {station.description}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="command-page__card command-page__card--wide">
+            <h2>Registered trusted devices</h2>
+            <p>Revoke a device immediately when it is lost, replaced or no longer authorised.</p>
+
+            {passkeysLoading ? (
+              <p>Loading trusted devices…</p>
+            ) : passkeys.length === 0 ? (
+              <div className="command-empty-state">
+                No passkey is registered yet. Password login remains available.
               </div>
+            ) : (
+              <div className="device-list">
+                {passkeys.map((passkey) => (
+                  <div className="device-row" key={passkey.id}>
+                    <div>
+                      <strong>{passkey.display_name || "Trusted device"}</strong>
+                      <span>
+                        {passkey.device_type || "Passkey"}
+                        {passkey.backed_up
+                          ? " · Synced passkey"
+                          : " · Device-bound passkey"}
+                      </span>
+                      <small>
+                        Registered {formatDate(passkey.created_at)} · Last used {formatDate(passkey.last_used_at)}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={deviceWorking}
+                      onClick={() => handleRevoke(passkey.id)}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-              <small>{passwordStrength.note}</small>
+          <section className="command-page__card command-page__card--wide command-security-note">
+            <h3>Security guarantees</h3>
+            <div className="command-security-grid">
+              <span>✓ Password fallback always remains available.</span>
+              <span>✓ Passkeys are tied to the authorised account.</span>
+              <span>✓ Workspace and location access are checked again at login.</span>
+              <span>✓ Revoked devices cannot unlock a new session.</span>
             </div>
-
-            <label>Confirm New Password</label>
-
-            <div style={styles.inputWrap}>
-              <input
-                type={showPasswords ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Confirm new password"
-                autoComplete="new-password"
-              />
-            </div>
-
-            <label
-              style={{
-                ...styles.checkboxLabel,
-                ...(isMobile ? styles.checkboxLabelMobile : {}),
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showPasswords}
-                onChange={(event) => setShowPasswords(event.target.checked)}
-                style={{ width: "auto", flexShrink: 0 }}
-              />
-              <span>Show passwords while typing</span>
-            </label>
-
-            <button type="submit" disabled={saving} style={styles.submitButton}>
-              {saving ? "Changing Password..." : "Change Password"}
-            </button>
-          </form>
-        </section>
-
-        <aside
-          style={{
-            ...styles.sideStack,
-            ...(isMobile ? styles.sideStackMobile : {}),
-          }}
-        >
-          <div
-            style={{
-              ...styles.securityPanel,
-              ...(isMobile ? styles.sidePanelMobile : {}),
-            }}
-          >
-            <p style={styles.eyebrowDark}>Security Checklist</p>
-            <h2 style={isMobile ? styles.sideHeadingMobile : undefined}>
-              Before You Continue
-            </h2>
-
-            <div style={styles.checkList}>
-              <SecurityCheck text="Do not use the default admin password." />
-              <SecurityCheck text="Do not share your password with staff." />
-              <SecurityCheck text="Use a password different from your phone number." />
-              <SecurityCheck text="Logout after changing your password on a shared computer." />
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...styles.warningPanel,
-              ...(isMobile ? styles.sidePanelMobile : {}),
-            }}
-          >
-            <strong>Forgotten password?</strong>
-            <p>
-              Contact the admin to reset your password. After the admin gives
-              you a temporary password, login and change it here.
-            </p>
-          </div>
-
-          <div
-            style={{
-              ...styles.darkPanel,
-              ...(isMobile ? styles.sidePanelMobile : {}),
-            }}
-          >
-            <h2 style={isMobile ? styles.sideHeadingMobile : undefined}>
-              Boss Security Note
-            </h2>
-
-            <p>
-              Password security protects {protectedBusinessDataText}. Keep
-              your login private.
-            </p>
-          </div>
-        </aside>
+          </section>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
-
-function SecurityCheck({ text }) {
-  return (
-    <div style={styles.securityCheck}>
-      <span style={styles.checkIcon}>✓</span>
-      <p>{text}</p>
-    </div>
-  );
-}
-
-const strengthToneStyles = {
-  neutral: {
-    background: "#94a3b8",
-  },
-  weak: {
-    background: "linear-gradient(90deg, #ef4444, #f97316)",
-  },
-  good: {
-    background: "linear-gradient(90deg, #f59e0b, #e0ba28)",
-  },
-  strong: {
-    background: "linear-gradient(90deg, #22c55e, #16a34a)",
-  },
-};
-
-const styles = {
-  page: {
-    width: "100%",
-    maxWidth: "1280px",
-    margin: "0 auto",
-    paddingBottom: "42px",
-    minWidth: 0,
-  },
-
-  fullWidth: {
-    width: "100%",
-    minWidth: 0,
-  },
-
-  hero: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: "28px",
-    padding: "26px",
-    marginBottom: "18px",
-    background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 48%, #111827 100%)",
-    color: "#ffffff",
-    boxShadow: "0 24px 60px rgba(7, 24, 44, 0.26)",
-    minWidth: 0,
-  },
-
-  heroMobile: {
-    borderRadius: "20px",
-    padding: "18px",
-    marginBottom: "14px",
-  },
-
-  heroGlowOne: {
-    position: "absolute",
-    width: "260px",
-    height: "260px",
-    right: "-90px",
-    top: "-90px",
-    borderRadius: "50%",
-    background: "rgba(224, 186, 40, 0.30)",
-    filter: "blur(18px)",
-  },
-
-  heroGlowOneMobile: {
-    width: "180px",
-    height: "180px",
-    right: "-75px",
-    top: "-80px",
-  },
-
-  heroGlowTwo: {
-    position: "absolute",
-    width: "180px",
-    height: "180px",
-    left: "35%",
-    bottom: "-110px",
-    borderRadius: "50%",
-    background: "rgba(37, 99, 235, 0.34)",
-    filter: "blur(18px)",
-  },
-
-  heroGlowTwoMobile: {
-    width: "130px",
-    height: "130px",
-    left: "12%",
-    bottom: "-90px",
-  },
-
-  heroContent: {
-    position: "relative",
-    zIndex: 2,
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "18px",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-    minWidth: 0,
-  },
-
-  heroContentMobile: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: "14px",
-  },
-
-  eyebrow: {
-    margin: 0,
-    color: "#e0ba28",
-    fontWeight: "950",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    fontSize: "12px",
-    overflowWrap: "anywhere",
-  },
-
-  eyebrowDark: {
-    margin: 0,
-    color: "#b45309",
-    fontWeight: "950",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    fontSize: "11px",
-    overflowWrap: "anywhere",
-  },
-
-  heroTitle: {
-    margin: "6px 0 0",
-    fontSize: "clamp(30px, 4vw, 50px)",
-    lineHeight: 1.03,
-    fontWeight: "950",
-    overflowWrap: "anywhere",
-  },
-
-  heroTitleMobile: {
-    fontSize: "32px",
-    lineHeight: 1.08,
-  },
-
-  heroSubtitle: {
-    margin: "10px 0 0",
-    maxWidth: "760px",
-    color: "rgba(255,255,255,0.78)",
-    fontSize: "15px",
-    lineHeight: 1.6,
-    overflowWrap: "anywhere",
-  },
-
-  heroSubtitleMobile: {
-    fontSize: "13px",
-    lineHeight: 1.55,
-    maxWidth: "100%",
-  },
-
-  heroCard: {
-    display: "flex",
-    gap: "12px",
-    alignItems: "center",
-    minWidth: "210px",
-    padding: "14px",
-    borderRadius: "18px",
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.15)",
-  },
-
-  heroCardMobile: {
-    width: "100%",
-    minWidth: 0,
-    boxSizing: "border-box",
-    padding: "12px",
-  },
-
-  heroCardText: {
-    display: "grid",
-    gap: "2px",
-    minWidth: 0,
-    overflowWrap: "anywhere",
-  },
-
-  storeNotice: {
-    display: "flex",
-    gap: "12px",
-    alignItems: "flex-start",
-    marginBottom: "18px",
-    padding: "14px 16px",
-    borderRadius: "18px",
-    background: "linear-gradient(135deg, #eff6ff, #ffffff)",
-    border: "1px solid #bfdbfe",
-    color: "#1e3a8a",
-    boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
-    minWidth: 0,
-  },
-
-  storeNoticeMobile: {
-    padding: "12px",
-    borderRadius: "16px",
-    gap: "10px",
-    marginBottom: "14px",
-  },
-
-  noticeIcon: {
-    fontSize: "22px",
-    flexShrink: 0,
-  },
-
-  noticeText: {
-    minWidth: 0,
-    overflowWrap: "anywhere",
-  },
-
-  mainGrid: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 0.7fr)",
-    gap: "18px",
-    alignItems: "start",
-    minWidth: 0,
-  },
-
-  mainGridMobile: {
-    gridTemplateColumns: "1fr",
-    gap: "14px",
-  },
-
-  formPanel: {
-    background: "#ffffff",
-    borderRadius: "24px",
-    padding: "22px",
-    border: "1px solid rgba(226, 232, 240, 0.95)",
-    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-    minWidth: 0,
-    boxSizing: "border-box",
-  },
-
-  formPanelMobile: {
-    borderRadius: "20px",
-    padding: "16px",
-    width: "100%",
-  },
-
-  panelHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-    marginBottom: "16px",
-    minWidth: 0,
-  },
-
-  panelTitle: {
-    margin: "4px 0 0",
-    color: "#0f172a",
-    fontSize: "24px",
-    fontWeight: "950",
-    overflowWrap: "anywhere",
-  },
-
-  panelTitleMobile: {
-    fontSize: "21px",
-  },
-
-  panelSubtitle: {
-    margin: "5px 0 0",
-    color: "#64748b",
-    fontSize: "13px",
-    lineHeight: 1.5,
-    overflowWrap: "anywhere",
-  },
-
-  inputWrap: {
-    marginBottom: "12px",
-    minWidth: 0,
-  },
-
-  checkboxLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    marginTop: "12px",
-    marginBottom: "16px",
-    fontWeight: "800",
-    color: "#0f172a",
-    minWidth: 0,
-  },
-
-  checkboxLabelMobile: {
-    alignItems: "flex-start",
-    lineHeight: 1.4,
-  },
-
-  strengthBox: {
-    marginTop: "6px",
-    marginBottom: "14px",
-    padding: "12px",
-    borderRadius: "16px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    color: "#475569",
-    minWidth: 0,
-  },
-
-  strengthTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "10px",
-    alignItems: "center",
-    marginBottom: "8px",
-    color: "#0f172a",
-    minWidth: 0,
-  },
-
-  strengthTopMobile: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: "4px",
-    alignItems: "start",
-  },
-
-  strengthTrack: {
-    height: "11px",
-    borderRadius: "999px",
-    background: "#e2e8f0",
-    overflow: "hidden",
-    marginBottom: "8px",
-  },
-
-  strengthFill: {
-    height: "100%",
-    borderRadius: "999px",
-    transition: "width 0.2s ease",
-  },
-
-  submitButton: {
-    width: "100%",
-    border: "none",
-    borderRadius: "16px",
-    padding: "13px 16px",
-    background: "#e0ba28",
-    color: "#07182c",
-    fontWeight: "950",
-    cursor: "pointer",
-    boxShadow: "0 12px 28px rgba(224, 186, 40, 0.22)",
-  },
-
-  sideStack: {
-    display: "grid",
-    gap: "18px",
-    minWidth: 0,
-  },
-
-  sideStackMobile: {
-    gap: "14px",
-  },
-
-  securityPanel: {
-    background: "#ffffff",
-    borderRadius: "24px",
-    padding: "20px",
-    border: "1px solid rgba(226, 232, 240, 0.95)",
-    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-    minWidth: 0,
-    boxSizing: "border-box",
-  },
-
-  sidePanelMobile: {
-    borderRadius: "20px",
-    padding: "16px",
-    width: "100%",
-  },
-
-  sideHeadingMobile: {
-    fontSize: "20px",
-    lineHeight: 1.2,
-  },
-
-  checkList: {
-    display: "grid",
-    gap: "10px",
-    marginTop: "14px",
-  },
-
-  securityCheck: {
-    display: "flex",
-    gap: "10px",
-    alignItems: "flex-start",
-    padding: "11px",
-    borderRadius: "16px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    color: "#334155",
-    minWidth: 0,
-  },
-
-  checkIcon: {
-    flexShrink: 0,
-  },
-
-  warningPanel: {
-    padding: "16px",
-    borderRadius: "20px",
-    background: "#fff7ed",
-    border: "1px solid #fed7aa",
-    color: "#9a3412",
-    minWidth: 0,
-    boxSizing: "border-box",
-  },
-
-  darkPanel: {
-    borderRadius: "24px",
-    padding: "20px",
-    background:
-      "linear-gradient(135deg, #07182c 0%, #0d2f55 58%, #111827 100%)",
-    color: "#ffffff",
-    boxShadow: "0 20px 50px rgba(7, 24, 44, 0.25)",
-    minWidth: 0,
-    boxSizing: "border-box",
-  },
-};
