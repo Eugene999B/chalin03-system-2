@@ -131,7 +131,7 @@ assert.match(retirementBridge, /window\.location\.pathname !== "\/installments"/
 assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
 assert.match(retirementBridge, /option\[value="installment"\]/);
 assert.match(retirementBridge, /installment agreement/);
-assert.match(retirementBridge, /Historical/);
+assert.match(retirementBridge, /Heavy-equipment installment sales/);
 
 assert.match(hireLayout, /workspaceName="Equipment Sales & Hire"/);
 assert.match(hireLayout, /title: "Equipment Catalogue"/);
