@@ -25,6 +25,9 @@ const schemaService = read("../backend/services/passkeySchemaService.js");
 const authRoutes = read("../backend/routes/authRoutes.js");
 
 assert.match(loginEntry, /LoginPageBiometricBank/);
+assert.match(loginEntry, /unlockPasswordOnFirstTap/);
+assert.match(loginEntry, /openEmergencyCommand/);
+assert.match(loginEntry, /arrival\.emergencyMode/);
 assert.match(loginPage, /Use fingerprint or face on this device\?/);
 assert.match(loginPage, /Set up fingerprint or face/);
 assert.match(loginPage, /Not now/);
@@ -66,7 +69,9 @@ assert.match(schemaService, /UPDATE passkey_challenges/);
 assert.match(schemaService, /bank_biometric_generation/);
 assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
 assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
-assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricRoutes\)/);
+assert.match(schemaService, /BIOMETRIC_RATE_LIMITED/);
+assert.match(schemaService, /max:\s*40/);
+assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/);
 
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
 assert.match(serviceWorker, /chalin03-bank-biometric-login-v2/);
