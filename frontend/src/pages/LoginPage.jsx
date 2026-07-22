@@ -1,1 +1,1 @@
-export { default } from "./LoginPageBank.jsx";
+export { default } from "./LoginPageBiometricBank.jsx";
