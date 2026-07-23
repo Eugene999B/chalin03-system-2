@@ -22,6 +22,8 @@ function normalizedText(element) {
     .toLowerCase();
 }
 
+const MAX_PANEL_REVEAL_ATTEMPTS = 6;
+
 function hideExactRetiredControl(element) {
   if (!element || element.dataset.chalinInstallmentRetired === "1") return;
   element.dataset.chalinInstallmentRetired = "1";
@@ -98,17 +100,19 @@ function removeRetirementAttributes(element) {
   );
 }
 
-function showPaymentGuidance(method) {
+function showPaymentGuidance(method, messageOverride = "") {
   document.querySelector("[data-chalin-credit-mixed-guidance='1']")?.remove();
 
   const banner = document.createElement("div");
   banner.dataset.chalinCreditMixedGuidance = "1";
   banner.setAttribute("role", "status");
   banner.textContent =
-    method === "credit"
+    messageOverride ||
+    (method === "credit"
       ? "Credit sale selected. Enter the customer details. Leave payment channels at 0.00 when nothing is collected now; the unpaid amount becomes the customer debt."
-      : "Mixed payment selected. Enter the amount received under Cash, MoMo, Bank or Other. The channel total becomes the amount paid now and any remainder becomes customer debt.";
+      : "Mixed payment selected. Enter the amount received under Cash, MoMo, Bank or Other. The channel total becomes the amount paid now and any remainder becomes customer debt.");
 
+  const isError = Boolean(messageOverride);
   Object.assign(banner.style, {
     position: "fixed",
     left: "50%",
@@ -118,9 +122,13 @@ function showPaymentGuidance(method) {
     width: "min(520px, calc(100% - 28px))",
     padding: "13px 15px",
     borderRadius: "14px",
-    border: method === "credit" ? "1px solid #f59e0b" : "1px solid #2563eb",
-    background: method === "credit" ? "#fffbeb" : "#eff6ff",
-    color: method === "credit" ? "#78350f" : "#1e3a8a",
+    border: isError
+      ? "1px solid #dc2626"
+      : method === "credit"
+      ? "1px solid #f59e0b"
+      : "1px solid #2563eb",
+    background: isError ? "#fef2f2" : method === "credit" ? "#fffbeb" : "#eff6ff",
+    color: isError ? "#991b1b" : method === "credit" ? "#78350f" : "#1e3a8a",
     boxShadow: "0 18px 44px rgba(15, 23, 42, 0.22)",
     fontSize: "13px",
     fontWeight: "800",
@@ -131,7 +139,7 @@ function showPaymentGuidance(method) {
   window.setTimeout(() => banner.remove(), 7000);
 }
 
-function revealCreditOrMixedPanel(method) {
+function revealCreditOrMixedPanel(method, attempt = 0) {
   if (!isSparePartsWorkspace() || window.location.pathname !== "/new-sale") return;
   if (!new Set(["credit", "mixed"]).has(method)) return;
 
@@ -140,8 +148,14 @@ function revealCreditOrMixedPanel(method) {
   );
 
   if (!splitLabel) {
-    // React may still be committing the payment-type state. Try once more.
-    window.setTimeout(() => revealCreditOrMixedPanel(method), 80);
+    if (attempt < MAX_PANEL_REVEAL_ATTEMPTS) {
+      window.setTimeout(() => revealCreditOrMixedPanel(method, attempt + 1), 80);
+    } else {
+      showPaymentGuidance(
+        method,
+        "The Credit or Mixed payment section did not open. Refresh New Sale once and try again."
+      );
+    }
     return;
   }
 
