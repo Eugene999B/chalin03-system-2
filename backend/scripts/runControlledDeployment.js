@@ -5,9 +5,11 @@ const {
   HISTORY_TABLE,
   LOCK_NAME,
   parseArguments,
-  productionApproval,
   run,
 } = require("./runControlledMigrations");
+const {
+  verifyProductionBackupAttestation,
+} = require("../services/migrationBackupAttestationService");
 
 async function historyTableExists(connection) {
   const [rows] = await connection.query(
@@ -40,7 +42,7 @@ async function bootstrapHistoryTable() {
       return { created: false };
     }
 
-    const approval = productionApproval({
+    const approval = await verifyProductionBackupAttestation(connection, {
       name: "controlled_migration_history_bootstrap",
       mode: "sql",
       backupRequired: true,
@@ -56,13 +58,17 @@ async function bootstrapHistoryTable() {
          manifest_version VARCHAR(40) NOT NULL,
          application_version VARCHAR(40) NULL,
          backup_attestation_sha256 CHAR(64) NULL,
+         backup_source VARCHAR(40) NULL,
+         backup_reference VARCHAR(180) NULL,
+         backup_created_at DATETIME NULL,
          approved_by VARCHAR(180) NULL,
          change_ticket VARCHAR(180) NULL,
          verification_status VARCHAR(30) NOT NULL,
          verification_summary TEXT NULL,
          applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
          INDEX idx_controlled_migration_applied (applied_at),
-         INDEX idx_controlled_migration_status (verification_status, applied_at)
+         INDEX idx_controlled_migration_status (verification_status, applied_at),
+         INDEX idx_controlled_migration_backup (backup_source, backup_created_at)
        )`
     );
 
@@ -70,24 +76,32 @@ async function bootstrapHistoryTable() {
       `INSERT INTO controlled_migration_history (
          migration_name, migration_mode, migration_checksum_sha256,
          verification_checksum_sha256, manifest_version, application_version,
-         backup_attestation_sha256, approved_by, change_ticket,
+         backup_attestation_sha256, backup_source, backup_reference,
+         backup_created_at, approved_by, change_ticket,
          verification_status, verification_summary, applied_at
        ) VALUES (
          'controlled_migration_history_bootstrap', 'bootstrap',
          SHA2('controlled_migration_history_bootstrap_v1', 256),
          SHA2('controlled_migration_history_bootstrap_verified_v1', 256),
-         '1', NULL, ?, ?, ?, 'passed',
-         'Migration history ledger created under the controlled deployment lock before any release migration.',
+         '1', NULL, ?, ?, ?, ?, ?, ?, 'passed',
+         'Migration history ledger created under the controlled deployment lock after backup evidence verification.',
          NOW()
        )`,
       [
         approval.backupAttestation,
+        approval.backupSource,
+        approval.backupReference,
+        approval.backupCreatedAt,
         approval.approvedBy,
         approval.changeTicket,
       ]
     );
 
-    return { created: true };
+    return {
+      created: true,
+      backup_source: approval.backupSource,
+      backup_reference: approval.backupReference,
+    };
   } finally {
     if (lockAcquired) {
       try {
@@ -107,7 +121,7 @@ async function main(argv = process.argv.slice(2)) {
   if (options.mode === "apply") {
     await bootstrapHistoryTable();
   }
-  return run(options);
+  return run({ ...options, authorizedApply: options.mode === "apply" });
 }
 
 if (require.main === module) {
@@ -115,6 +129,8 @@ if (require.main === module) {
     console.error("Controlled deployment failed:", {
       code: error?.code,
       message: error?.message,
+      backup_created_at: error?.backupCreatedAt,
+      max_age_hours: error?.maxAgeHours,
     });
     try {
       await pool.end();
