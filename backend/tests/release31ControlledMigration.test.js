@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const {
+  applyMigrations,
   loadManifest,
   parseArguments,
   productionApproval,
@@ -71,19 +72,21 @@ test("verification result evaluation fails closed", () => {
   assert.equal(verificationRowProblems([{ ready: 0 }]).length, 1);
 });
 
-test("production SQL migration requires backup, approver and change ticket", () => {
-  const original = {
-    NODE_ENV: process.env.NODE_ENV,
-    MIGRATION_BACKUP_SHA256: process.env.MIGRATION_BACKUP_SHA256,
-    MIGRATION_APPROVED_BY: process.env.MIGRATION_APPROVED_BY,
-    MIGRATION_CHANGE_TICKET: process.env.MIGRATION_CHANGE_TICKET,
-  };
+test("production SQL migration requires source, checksum, reference, timestamp and approval", () => {
+  const keys = [
+    "NODE_ENV",
+    "MIGRATION_BACKUP_SOURCE",
+    "MIGRATION_BACKUP_SHA256",
+    "MIGRATION_BACKUP_REFERENCE",
+    "MIGRATION_BACKUP_CREATED_AT",
+    "MIGRATION_APPROVED_BY",
+    "MIGRATION_CHANGE_TICKET",
+  ];
+  const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
   try {
     process.env.NODE_ENV = "production";
-    delete process.env.MIGRATION_BACKUP_SHA256;
-    delete process.env.MIGRATION_APPROVED_BY;
-    delete process.env.MIGRATION_CHANGE_TICKET;
+    for (const key of keys.slice(1)) delete process.env[key];
 
     assert.throws(
       () =>
@@ -92,10 +95,13 @@ test("production SQL migration requires backup, approver and change ticket", () 
           mode: "sql",
           backupRequired: true,
         }),
-      /MIGRATION_BACKUP_SHA256/
+      /MIGRATION_BACKUP_SOURCE/
     );
 
+    process.env.MIGRATION_BACKUP_SOURCE = "railway_snapshot";
     process.env.MIGRATION_BACKUP_SHA256 = "a".repeat(64);
+    process.env.MIGRATION_BACKUP_REFERENCE = "railway-snapshot-release31";
+    process.env.MIGRATION_BACKUP_CREATED_AT = new Date().toISOString();
     process.env.MIGRATION_APPROVED_BY = "Original System Administrator";
     process.env.MIGRATION_CHANGE_TICKET = "CHALIN03-REL31";
     const approval = productionApproval({
@@ -104,12 +110,26 @@ test("production SQL migration requires backup, approver and change ticket", () 
       backupRequired: true,
     });
     assert.equal(approval.backupAttestation, "a".repeat(64));
+    assert.equal(approval.backupSource, "railway_snapshot");
+    assert.equal(approval.backupReference, "railway-snapshot-release31");
   } finally {
     for (const [key, value] of Object.entries(original)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
   }
+});
+
+test("direct apply is rejected before any database query", async () => {
+  const connection = {
+    query() {
+      throw new Error("database query must not run");
+    },
+  };
+  await assert.rejects(
+    () => applyMigrations(connection, { migrations: [] }),
+    /Direct migration apply is disabled/
+  );
 });
 
 test("Railway startup runs guarded controlled migrations and never preloads repair code", () => {
@@ -120,10 +140,12 @@ test("Railway startup runs guarded controlled migrations and never preloads repa
   assert.doesNotMatch(packageJson.scripts.start, /equipmentSalesCommercialBootstrap/);
 
   const bootstrap = readBackend("scripts/runControlledDeployment.js");
-  assert.match(bootstrap, /productionApproval/);
+  assert.match(bootstrap, /verifyProductionBackupAttestation/);
   assert.match(bootstrap, /controlled_migration_history_bootstrap/);
-  assert.match(bootstrap, /MIGRATION_BACKUP_SHA256|backupAttestation/);
+  assert.match(bootstrap, /backup_source/);
+  assert.match(bootstrap, /backup_reference/);
   assert.match(bootstrap, /GET_LOCK/);
+  assert.match(bootstrap, /authorizedApply/);
 
   const server = readBackend("server.js");
   assert.match(server, /requireEquipmentSalesReadiness/);
