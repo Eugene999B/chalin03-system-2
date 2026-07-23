@@ -30,7 +30,6 @@ test("controlled migration manifest is ordered, checksummed and fully paired", (
     manifest.migrations.map((entry) => entry.name),
     [
       "20260723_release31_database_safety_guards",
-      "20260723_release31_worker_identity_readiness",
       "20260723_release31_runtime_schema_baseline",
     ]
   );
@@ -152,28 +151,25 @@ test("startup schema services are verification-only", () => {
 });
 
 test("controlled Release 3.1 SQL is additive, backed up and verified read-only", () => {
-  for (const migrationName of [
-    "20260723_release31_database_safety_guards",
-    "20260723_release31_worker_identity_readiness",
-  ]) {
-    const migration = readRepo(`database/migrations/${migrationName}.sql`);
-    const verification = readRepo(
-      `database/migrations/${migrationName}_verify.sql`
-    );
+  const migrationName = "20260723_release31_database_safety_guards";
+  const migration = readRepo(`database/migrations/${migrationName}.sql`);
+  const verification = readRepo(
+    `database/migrations/${migrationName}_verify.sql`
+  );
 
-    assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
-    assert.match(migration, /BACKUP REQUIRED/i);
-    assert.match(migration, /INSERT (?:IGNORE )?INTO schema_migrations/i);
-    assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
-    assert.doesNotMatch(migration, /TRUNCATE/i);
-    assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+  assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
+  assert.match(migration, /BACKUP REQUIRED/i);
+  assert.match(migration, /INSERT IGNORE INTO worker_identity_sequences/i);
+  assert.match(migration, /INSERT INTO schema_migrations/i);
+  assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
+  assert.doesNotMatch(migration, /TRUNCATE/i);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
 
-    const executableVerification = stripSqlComments(verification);
-    assert.doesNotMatch(
-      executableVerification,
-      /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
-    );
-  }
+  const executableVerification = stripSqlComments(verification);
+  assert.doesNotMatch(
+    executableVerification,
+    /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
+  );
 });
 
 test("equipment and installment guards permit only the protected restore session", () => {
