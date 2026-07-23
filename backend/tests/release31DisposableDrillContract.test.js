@@ -58,8 +58,14 @@ test("backend package exposes the guarded drill and evidence verifier", () => {
   const packageJson = JSON.parse(read("backend/package.json"));
   assert.equal(
     packageJson.scripts["drill:release31"],
-    "node scripts/runRelease31DisposableDrill.js && node scripts/assertRelease31DrillEvidence.js"
+    "node scripts/runRelease31DisposableDrillWithEvidence.js && node scripts/assertRelease31DrillEvidence.js"
   );
+
+  const wrapper = read("backend/scripts/runRelease31DisposableDrillWithEvidence.js");
+  assert.match(wrapper, /require\("\.\/runRelease31DisposableDrill"\)/);
+  assert.match(wrapper, /release31-disposable-drill-evidence\.json/);
+  assert.match(wrapper, /status: "failed"/);
+  assert.match(wrapper, /process\.exitCode = 1/);
 });
 
 test("CI runs the drill only inside a disposable MySQL service", () => {
