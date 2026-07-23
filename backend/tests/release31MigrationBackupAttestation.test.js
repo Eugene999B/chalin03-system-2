@@ -6,6 +6,7 @@ const { loadCanonicalContract } = require("../services/fullSystemBackupService")
 const {
   readProductionAttestationEnvironment,
   snapshotAttestationChecksum,
+  verifyPrereleaseBackup,
   verifyProductionBackupAttestation,
 } = require("../services/migrationBackupAttestationService");
 
@@ -115,6 +116,34 @@ test("Railway snapshot checksum is deterministic and bound to exact evidence", (
   );
 });
 
+test("pre-release full-system backup evidence is checksum-bound and complete", async () => {
+  const checksum =
+    "7b833caf679ca48a3b78a6ae882963abe5e8efdabadaa45aa89b8794f97f482e";
+  const createdAt = new Date();
+  const evidence = await verifyPrereleaseBackup({
+    source: "chalin03_prerelease_backup",
+    checksum,
+    reference: "chalin03-prerelease-v1:7b833caf679ca48a:122:3340",
+    createdAt,
+  });
+
+  assert.equal(evidence.source, "chalin03_prerelease_backup");
+  assert.equal(evidence.checksum, checksum);
+  assert.equal(evidence.canonicalTableCount, 122);
+  assert.equal(evidence.totalRecordCount, 3340);
+
+  await assert.rejects(
+    () =>
+      verifyPrereleaseBackup({
+        source: "chalin03_prerelease_backup",
+        checksum: "a".repeat(64),
+        reference: "chalin03-prerelease-v1:7b833caf679ca48a:122:3340",
+        createdAt,
+      }),
+    /not bound to the supplied package checksum/
+  );
+});
+
 test("stale migration evidence is rejected before database access", async () => {
   const createdAt = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const reference = "railway-snapshot-stale";
@@ -153,6 +182,37 @@ test("Railway snapshot checksum mismatch fails closed", async () => {
         () => verifyProductionBackupAttestation({}, productionEntry()),
         /not bound to the supplied Railway snapshot/
       )
+  );
+});
+
+test("pre-release backup source is accepted only with its exact checksum reference", async () => {
+  const createdAt = new Date();
+  const checksum =
+    "7b833caf679ca48a3b78a6ae882963abe5e8efdabadaa45aa89b8794f97f482e";
+
+  await withEnvironment(
+    {
+      NODE_ENV: "production",
+      MIGRATION_BACKUP_SOURCE: "chalin03_prerelease_backup",
+      MIGRATION_BACKUP_REFERENCE:
+        "chalin03-prerelease-v1:7b833caf679ca48a:122:3340",
+      MIGRATION_BACKUP_CREATED_AT: createdAt.toISOString(),
+      MIGRATION_BACKUP_SHA256: checksum,
+      MIGRATION_APPROVED_BY: "Original System Administrator",
+      MIGRATION_CHANGE_TICKET: "CHALIN03-REL31",
+    },
+    async () => {
+      const evidence = await verifyProductionBackupAttestation(
+        {},
+        productionEntry()
+      );
+      assert.equal(evidence.backupSource, "chalin03_prerelease_backup");
+      assert.equal(evidence.backupAttestation, checksum);
+      assert.equal(
+        evidence.backupReference,
+        "chalin03-prerelease-v1:7b833caf679ca48a:122:3340"
+      );
+    }
   );
 });
 
