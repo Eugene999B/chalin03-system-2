@@ -3,6 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const {
+  transformAuditRouteSource,
+} = require("../routes/auditRouteReadinessLoader");
+
 const backendRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(backendRoot, "..");
 
@@ -20,6 +24,28 @@ test("audit readiness contract is read-only and complete", () => {
   assert.match(source, /audit_unlock_requests/);
   assert.match(source, /audit_reapproval_log/);
   assert.doesNotMatch(source, /CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE/i);
+});
+
+test("audit compatibility sources transform to readiness-only runtime routes", () => {
+  const forbidden = [
+    /CREATE\s+(?:TABLE|TRIGGER|PROCEDURE|FUNCTION|EVENT|VIEW)/i,
+    /ALTER\s+TABLE/i,
+    /DROP\s+(?:TABLE|TRIGGER|PROCEDURE|FUNCTION|EVENT|VIEW|DATABASE|SCHEMA)/i,
+    /TRUNCATE\s+TABLE/i,
+    /RENAME\s+TABLE/i,
+  ];
+
+  for (const [kind, relativePath] of [
+    ["signoff", "backend/routes/auditSignoffRoutes.legacy-source"],
+    ["unlock", "backend/routes/auditUnlockRequestRoutes.legacy-source"],
+  ]) {
+    const transformed = transformAuditRouteSource(kind, read(relativePath));
+    assert.match(transformed, /assertAuditSchemaReady/);
+    assert.match(transformed, /sendAuditSchemaReadinessError/);
+    for (const pattern of forbidden) {
+      assert.doesNotMatch(transformed, pattern, `${kind} transformed route contains runtime DDL`);
+    }
+  }
 });
 
 test("controlled manifest applies and records the audit schema contract", () => {
