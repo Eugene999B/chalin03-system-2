@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const { BACKUP_MANIFEST_VERSION } = require("../config/version");
 const { loadCanonicalContract } = require("./fullSystemBackupService");
 
@@ -6,6 +8,7 @@ const ALLOWED_SOURCES = new Set([
   "railway_snapshot",
 ]);
 const DEFAULT_MAX_AGE_HOURS = 24;
+const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
 
 function cleanText(value, maxLength = 500) {
   return String(value ?? "").trim().slice(0, maxLength);
@@ -28,6 +31,42 @@ function maxAgeHours() {
   return Number.isFinite(configured) && configured >= 1 && configured <= 168
     ? configured
     : DEFAULT_MAX_AGE_HOURS;
+}
+
+function assertFreshTimestamp(date, label) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw attestationError(
+      `${label} is invalid.`,
+      "MIGRATION_BACKUP_TIMESTAMP_INVALID"
+    );
+  }
+  const ageMs = Date.now() - date.getTime();
+  const maxAgeMs = maxAgeHours() * 60 * 60 * 1000;
+  if (ageMs < -CLOCK_TOLERANCE_MS || ageMs > maxAgeMs) {
+    throw attestationError(
+      `${label} is outside the approved ${maxAgeHours()}-hour change window.`,
+      "MIGRATION_BACKUP_STALE",
+      {
+        backupCreatedAt: date.toISOString(),
+        maxAgeHours: maxAgeHours(),
+      }
+    );
+  }
+}
+
+function snapshotAttestationChecksum(reference, createdAt) {
+  const timestamp =
+    createdAt instanceof Date ? createdAt.toISOString() : parseTimestamp(createdAt)?.toISOString();
+  if (!timestamp) {
+    throw attestationError(
+      "Railway snapshot timestamp is invalid.",
+      "MIGRATION_BACKUP_TIMESTAMP_INVALID"
+    );
+  }
+  return crypto
+    .createHash("sha256")
+    .update(`railway_snapshot:${cleanText(reference, 180)}:${timestamp}`)
+    .digest("hex");
 }
 
 function readProductionAttestationEnvironment(entry) {
@@ -89,18 +128,7 @@ function readProductionAttestationEnvironment(entry) {
     );
   }
 
-  const ageMs = Date.now() - createdAt.getTime();
-  const maxAgeMs = maxAgeHours() * 60 * 60 * 1000;
-  if (ageMs < -5 * 60 * 1000 || ageMs > maxAgeMs) {
-    throw attestationError(
-      `The migration backup evidence is outside the approved ${maxAgeHours()}-hour change window.`,
-      "MIGRATION_BACKUP_STALE",
-      {
-        backupCreatedAt: createdAt.toISOString(),
-        maxAgeHours: maxAgeHours(),
-      }
-    );
-  }
+  assertFreshTimestamp(createdAt, "Migration backup evidence");
 
   return {
     required: true,
@@ -143,6 +171,12 @@ async function verifyChalin03Backup(connection, attestation) {
       "MIGRATION_BACKUP_MANIFEST_MISMATCH"
     );
   }
+  if (String(record.status || "").toLowerCase() !== "validated") {
+    throw attestationError(
+      "The recorded Chalin 03 backup has not completed protected validation.",
+      "MIGRATION_BACKUP_STATUS_INVALID"
+    );
+  }
   if (String(record.verification_status || "").toLowerCase() !== "verified") {
     throw attestationError(
       "The recorded Chalin 03 backup has not passed protected dry-run verification.",
@@ -153,6 +187,26 @@ async function verifyChalin03Backup(connection, attestation) {
     throw attestationError(
       "The recorded Chalin 03 backup does not contain verification evidence.",
       "MIGRATION_BACKUP_VERIFICATION_EVIDENCE_MISSING"
+    );
+  }
+
+  const recordedCreatedAt = parseTimestamp(record.created_at);
+  const recordedVerifiedAt = parseTimestamp(record.verified_at);
+  assertFreshTimestamp(recordedCreatedAt, "Recorded Chalin 03 backup");
+  assertFreshTimestamp(recordedVerifiedAt, "Recorded Chalin 03 verification");
+  if (
+    Math.abs(recordedCreatedAt.getTime() - attestation.createdAt.getTime()) >
+    CLOCK_TOLERANCE_MS
+  ) {
+    throw attestationError(
+      "MIGRATION_BACKUP_CREATED_AT does not match the recorded Chalin 03 backup.",
+      "MIGRATION_BACKUP_TIMESTAMP_MISMATCH"
+    );
+  }
+  if (recordedVerifiedAt.getTime() + CLOCK_TOLERANCE_MS < recordedCreatedAt.getTime()) {
+    throw attestationError(
+      "The backup verification timestamp predates the backup package.",
+      "MIGRATION_BACKUP_VERIFICATION_TIMESTAMP_INVALID"
     );
   }
 
@@ -172,8 +226,8 @@ async function verifyChalin03Backup(connection, attestation) {
     source: attestation.source,
     checksum: attestation.checksum,
     reference: record.backup_id,
-    createdAt: new Date(record.created_at),
-    verifiedAt: new Date(record.verified_at),
+    createdAt: recordedCreatedAt,
+    verifiedAt: recordedVerifiedAt,
     schemaFingerprintSha256: record.schema_version,
   };
 }
@@ -183,6 +237,18 @@ async function verifyRailwaySnapshot(attestation) {
     throw attestationError(
       "Railway snapshot reference contains unsupported characters or is too short.",
       "MIGRATION_RAILWAY_SNAPSHOT_REFERENCE_INVALID"
+    );
+  }
+
+  const expectedChecksum = snapshotAttestationChecksum(
+    attestation.reference,
+    attestation.createdAt
+  );
+  if (attestation.checksum !== expectedChecksum) {
+    throw attestationError(
+      "MIGRATION_BACKUP_SHA256 is not bound to the supplied Railway snapshot reference and timestamp.",
+      "MIGRATION_RAILWAY_SNAPSHOT_CHECKSUM_MISMATCH",
+      { expectedChecksum }
     );
   }
 
@@ -230,9 +296,12 @@ async function verifyProductionBackupAttestation(connection, entry) {
 
 module.exports = {
   ALLOWED_SOURCES,
+  CLOCK_TOLERANCE_MS,
   DEFAULT_MAX_AGE_HOURS,
+  assertFreshTimestamp,
   maxAgeHours,
   parseTimestamp,
   readProductionAttestationEnvironment,
+  snapshotAttestationChecksum,
   verifyProductionBackupAttestation,
 };
