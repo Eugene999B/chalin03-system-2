@@ -4,8 +4,10 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./services/equipmentSalesCommercialBootstrap.js server.js",
+    "start": "node scripts/runControlledMigrations.js --deployment && node server.js",
     "dev": "nodemon server.js",
+    "migrate:plan": "node scripts/runControlledMigrations.js --plan",
+    "migrate:apply": "node scripts/runControlledMigrations.js --apply",
     "create-admin": "node scripts/createAdmin.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
