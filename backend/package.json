@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "migrate:plan": "node scripts/runControlledMigrations.js --plan",
     "migrate:apply": "node scripts/runControlledDeployment.js --apply",
+    "migrate:snapshot-attestation": "node scripts/createMigrationSnapshotAttestation.js",
     "create-admin": "node scripts/createAdmin.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
