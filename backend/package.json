@@ -18,7 +18,8 @@
     "chalin03",
     "sales",
     "inventory",
-    "mysql"
+    "mysql",
+    "express"
   ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
