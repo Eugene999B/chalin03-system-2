@@ -9,336 +9,126 @@ const {
   formatSecurityDateTime,
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
-const { writeAuditEvent } = require("../services/auditTrailService");
-const { normalizedPhoneForStorage } = require("../services/loginIdentityService");
+const {
+  SYSTEM_ADMIN_ID,
+  SYSTEM_ADMIN_USERNAME,
+  isOriginalSystemAdministrator,
+} = require("../security/systemAdminIdentity");
 const {
   resetAccountBySystemAdministrator,
 } = require("../services/accountRecoveryService");
+const {
+  activeAdminCountExcluding,
+} = require("../services/categoryIsolationService");
+const { normalizePhoneForLogin } = require("../services/phoneIdentityService");
+const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  ensureUserAdministrationSchema,
+} = require("../services/userAdministrationSchemaService");
 
 const router = express.Router();
+const SPARE_PARTS_ROLES = new Set(["admin", "manager", "cashier", "auditor"]);
+const EDITABLE_ROLES = new Set(["admin", "manager", "staff", "cashier", "auditor"]);
 
-const SYSTEM_ADMIN_ID = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
-const SYSTEM_ADMIN_USERNAME = String(
-  process.env.SYSTEM_ADMIN_USERNAME || "admin"
-).toLowerCase();
-
-function getBranchId(req) {
-  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
-
-  if (!Number.isInteger(branchId) || branchId <= 0) {
-    return 1;
-  }
-
-  return branchId;
-}
-
-async function logActivity(userId, branchId, action, details) {
-  await writeAuditEvent({
-    userId: userId || null,
-    branchId: branchId || null,
-    action,
-    details,
-    workspaceCode: "spare_parts",
-    entityType: "user",
-    actionType: action,
-    outcome: "success",
-    severity:
-      action.includes("PASSWORD") || action.includes("DEACTIVATE")
-        ? "critical"
-        : "notice",
-  });
-}
-
-function cleanText(value) {
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  return String(value).trim();
+function cleanText(value, maxLength = 255) {
+  return String(value ?? "").trim().slice(0, maxLength);
 }
 
 function cleanBoolean(value) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
+function positiveId(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function getBranchId(req) {
+  return positiveId(req.user?.branch_id || req.user?.default_branch_id);
+}
+
 function strongPasswordError(password) {
-  const text = String(password || "");
-
-  if (text.length < 8) return "Password must be at least 8 characters long.";
-  if (!/[a-z]/.test(text) || !/[A-Z]/.test(text)) {
-    return "Password must include uppercase and lowercase letters.";
-  }
-  if (!/\d/.test(text)) return "Password must include at least one number.";
-  if (!/[^A-Za-z0-9]/.test(text)) {
-    return "Password must include at least one symbol.";
-  }
-
-  return "";
+  const value = String(password || "");
+  if (value.length < 8) return "Password must be at least 8 characters.";
+  if (!/[A-Z]/.test(value)) return "Password must contain an uppercase letter.";
+  if (!/[a-z]/.test(value)) return "Password must contain a lowercase letter.";
+  if (!/[0-9]/.test(value)) return "Password must contain a number.";
+  if (!/[^A-Za-z0-9]/.test(value)) return "Password must contain a symbol.";
+  return null;
 }
 
-function isOriginalSystemAdministrator(user) {
-  return (
-    Number(user?.id) === SYSTEM_ADMIN_ID &&
-    String(user?.username || "").toLowerCase() === SYSTEM_ADMIN_USERNAME &&
-    String(user?.role || "").toLowerCase() === "admin"
-  );
+function sendSchemaError(res, error, fallbackMessage) {
+  if (error?.code === "USER_ADMINISTRATION_SCHEMA_NOT_READY") {
+    return res.status(503).json({
+      status: "error",
+      code: error.code,
+      message:
+        "User administration is unavailable because the approved database migration is incomplete.",
+      missing_tables: error.missingTables || [],
+      missing_columns: error.missingColumns || [],
+      invalid_columns: error.invalidColumns || [],
+    });
+  }
+
+  return res.status(Number(error?.statusCode || 500)).json({
+    status: "error",
+    code: error?.code || "USER_ADMINISTRATION_FAILED",
+    message:
+      Number(error?.statusCode || 500) < 500 ? error.message : fallbackMessage,
+  });
 }
 
-async function tableExists(connection, tableName) {
+async function activeBranches(connection = pool, lock = false) {
   const [rows] = await connection.query(
-    `SELECT TABLE_NAME
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-     AND TABLE_NAME = ?
-     LIMIT 1`,
-    [tableName]
+    `SELECT id, code, branch_code, name, location, phone, is_active
+     FROM branches
+     WHERE is_active = TRUE
+     ORDER BY name ASC, id ASC${lock ? " FOR UPDATE" : ""}`
   );
-
-  return rows.length > 0;
+  return rows;
 }
 
-async function columnExists(connection, tableName, columnName) {
-  try {
-    const [columns] = await connection.query(
-      `SHOW COLUMNS FROM \`${tableName}\` LIKE ?`,
-      [columnName]
-    );
-
-    return columns.length > 0;
-  } catch (error) {
-    if (error.code === "ER_NO_SUCH_TABLE") {
-      return false;
-    }
-
+async function resolveBranchIds(
+  connection,
+  rawBranchIds,
+  fallbackBranchId,
+  accessAllBranches
+) {
+  const branches = await activeBranches(connection, true);
+  if (!branches.length) {
+    const error = new Error("At least one active Spare Parts store is required.");
+    error.code = "ACTIVE_BRANCH_REQUIRED";
+    error.statusCode = 503;
     throw error;
   }
-}
 
-async function activeAdminCountExcluding(connection, userId) {
-  const [rows] = await connection.query(
-    `SELECT COUNT(*) AS active_admins
-     FROM users
-     WHERE role = 'admin'
-       AND is_active = TRUE
-       AND id <> ?`,
-    [userId]
-  );
+  const activeIds = new Set(branches.map((branch) => Number(branch.id)));
+  if (accessAllBranches) return branches.map((branch) => Number(branch.id));
 
-  return Number(rows[0]?.active_admins || 0);
-}
-
-async function ensureColumn(connection, tableName, columnName, columnDefinition) {
-  const exists = await columnExists(connection, tableName, columnName);
-
-  if (!exists) {
-    await connection.query(`ALTER TABLE \`${tableName}\` ADD COLUMN ${columnDefinition}`);
-  }
-}
-
-
-async function ensureUserRoleSupportsAuditor(connection = pool) {
-  const [columns] = await connection.query(`SHOW COLUMNS FROM users LIKE 'role'`);
-
-  if (columns.length === 0) {
-    return;
-  }
-
-  const roleColumn = columns[0];
-  const roleType = String(roleColumn.Type || "").toLowerCase();
-
-  // Live MySQL can have role as ENUM('admin','manager','cashier').
-  // If we insert "auditor" before expanding the enum, MySQL throws:
-  // Data truncated for column 'role'.
-  if (roleType.startsWith("enum(")) {
-    if (!roleType.includes("'auditor'") || !roleType.includes("'staff'")) {
-      await connection.query(`
-        ALTER TABLE users
-        MODIFY role ENUM('admin', 'manager', 'staff', 'cashier', 'auditor') NOT NULL DEFAULT 'cashier'
-      `);
-    }
-
-    return;
-  }
-
-  const varcharMatch = roleType.match(/varchar\((\d+)\)/);
-
-  if (varcharMatch && Number(varcharMatch[1]) < 30) {
-    await connection.query(`
-      ALTER TABLE users
-      MODIFY role VARCHAR(30) NOT NULL DEFAULT 'cashier'
-    `);
-  }
-}
-
-async function ensureUserBranchSetup(connection = pool) {
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS user_branch_access (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NOT NULL,
-      branch_id INT NOT NULL,
-      can_access BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_user_branch_access (user_id, branch_id),
-      INDEX idx_user_branch_access_user (user_id),
-      INDEX idx_user_branch_access_branch (branch_id),
-      INDEX idx_user_branch_access_active (can_access)
+  const requested = Array.from(
+    new Set(
+      (Array.isArray(rawBranchIds) ? rawBranchIds : [])
+        .map(positiveId)
+        .filter(Boolean)
     )
-  `);
-
-  // Older live databases may already have user_branch_access without these
-  // newer columns. CREATE TABLE IF NOT EXISTS will not add missing columns,
-  // so we repair the existing table before any SELECT uses uba.can_access.
-  await ensureColumn(
-    connection,
-    "user_branch_access",
-    "can_access",
-    "can_access BOOLEAN NOT NULL DEFAULT TRUE AFTER branch_id"
   );
-
-  await ensureColumn(
-    connection,
-    "user_branch_access",
-    "created_at",
-    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER can_access"
-  );
-
-  await ensureColumn(
-    connection,
-    "user_branch_access",
-    "updated_at",
-    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "default_branch_id",
-    "default_branch_id INT NULL AFTER role"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "can_access_all_branches",
-    "can_access_all_branches BOOLEAN NOT NULL DEFAULT FALSE AFTER default_branch_id"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "phone",
-    "phone VARCHAR(30) NULL AFTER can_access_all_branches"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "is_active",
-    "is_active BOOLEAN NOT NULL DEFAULT TRUE AFTER phone"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "created_at",
-    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER is_active"
-  );
-
-  await ensureColumn(
-    connection,
-    "users",
-    "updated_at",
-    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at"
-  );
-
-  await ensureUserRoleSupportsAuditor(connection);
-}
-
-async function getBranchColumnMap(connection = pool) {
-  if (!(await tableExists(connection, "branches"))) {
-    return null;
+  const selected = requested.length
+    ? requested
+    : fallbackBranchId
+      ? [fallbackBranchId]
+      : [];
+  const invalid = selected.filter((branchId) => !activeIds.has(branchId));
+  if (!selected.length || invalid.length) {
+    const error = new Error(
+      invalid.length
+        ? `Selected store IDs are invalid or inactive: ${invalid.join(", ")}.`
+        : "Choose at least one active Spare Parts store."
+    );
+    error.code = "INVALID_BRANCH_ASSIGNMENT";
+    error.statusCode = 400;
+    throw error;
   }
-
-  const [columns] = await connection.query(`SHOW COLUMNS FROM branches`);
-  const columnNames = columns.map((column) => column.Field);
-
-  const pickColumn = (...names) => {
-    return names.find((name) => columnNames.includes(name)) || null;
-  };
-
-  return {
-    code: pickColumn("code", "branch_code", "store_code"),
-    name: pickColumn("name", "branch_name", "store_name"),
-    location: pickColumn("location", "branch_location", "store_location"),
-    isActive: pickColumn("is_active", "active"),
-  };
-}
-
-function branchColumnExpression(map, alias, key, fallbackSql) {
-  if (!map || !map[key]) {
-    return fallbackSql;
-  }
-
-  return `${alias}.\`${map[key]}\``;
-}
-
-function buildBranchDetailsSelect(map, alias = "b") {
-  const codeExpression = branchColumnExpression(map, alias, "code", "NULL");
-  const nameExpression = branchColumnExpression(
-    map,
-    alias,
-    "name",
-    `CONCAT('Store ', ${alias}.id)`
-  );
-  const locationExpression = branchColumnExpression(map, alias, "location", "NULL");
-
-  return `
-    ${codeExpression} AS code,
-    ${nameExpression} AS name,
-    ${locationExpression} AS location
-  `;
-}
-
-
-async function getAllBranchIds(connection = pool) {
-  if (!(await tableExists(connection, "branches"))) {
-    return [1];
-  }
-
-  const branchMap = await getBranchColumnMap(connection);
-  const activeWhere = branchMap?.isActive
-    ? `WHERE \`${branchMap.isActive}\` = TRUE`
-    : "";
-
-  const [branches] = await connection.query(
-    `SELECT id
-     FROM branches
-     ${activeWhere}
-     ORDER BY id ASC`
-  );
-
-  if (branches.length === 0) {
-    return [1];
-  }
-
-  return branches.map((branch) => Number(branch.id));
-}
-
-function normalizeBranchIds(rawBranchIds, fallbackBranchId) {
-  const source = Array.isArray(rawBranchIds) ? rawBranchIds : [];
-
-  const branchIds = source
-    .map((branchId) => Number(branchId))
-    .filter((branchId) => Number.isInteger(branchId) && branchId > 0);
-
-  const uniqueBranchIds = [...new Set(branchIds)];
-
-  if (uniqueBranchIds.length > 0) {
-    return uniqueBranchIds;
-  }
-
-  return [fallbackBranchId];
+  return selected;
 }
 
 async function setUserBranchAccess(
@@ -347,205 +137,79 @@ async function setUserBranchAccess(
   branchIds,
   canAccessAllBranches
 ) {
-  await ensureUserBranchSetup(connection);
-
-  const finalBranchIds = canAccessAllBranches
-    ? await getAllBranchIds(connection)
-    : branchIds;
-
   await connection.query(
-    `DELETE FROM user_branch_access
-     WHERE user_id = ?`,
+    `DELETE FROM user_branch_access WHERE user_id = ?`,
     [userId]
   );
 
-  for (const branchId of finalBranchIds) {
+  for (const branchId of branchIds) {
     await connection.query(
       `INSERT INTO user_branch_access (user_id, branch_id, can_access)
-       VALUES (?, ?, TRUE)
-       ON DUPLICATE KEY UPDATE
-        can_access = TRUE,
-        updated_at = CURRENT_TIMESTAMP`,
+       VALUES (?, ?, TRUE)`,
       [userId, branchId]
     );
   }
-
-  const defaultBranchId = finalBranchIds[0] || null;
 
   await connection.query(
     `UPDATE users
      SET default_branch_id = ?,
          can_access_all_branches = ?
      WHERE id = ?`,
-    [defaultBranchId, canAccessAllBranches ? 1 : 0, userId]
+    [branchIds[0] || null, canAccessAllBranches ? 1 : 0, userId]
   );
 }
 
-async function getUserBranches(userId) {
-  await ensureUserBranchSetup(pool);
-
-  if (!(await tableExists(pool, "branches"))) {
-    const [branches] = await pool.query(
-      `SELECT
-        uba.branch_id,
-        uba.can_access,
-        NULL AS code,
-        CONCAT('Store ', uba.branch_id) AS name,
-        NULL AS location
-       FROM user_branch_access uba
-       WHERE uba.user_id = ?
-       AND uba.can_access = TRUE
-       ORDER BY uba.branch_id ASC`,
-      [userId]
-    );
-
-    return branches;
-  }
-
-  const branchMap = await getBranchColumnMap(pool);
-  const branchDetailsSelect = buildBranchDetailsSelect(branchMap, "b");
-  const orderColumn = branchMap?.name ? `b.\`${branchMap.name}\`` : "uba.branch_id";
-
-  const [branches] = await pool.query(
+async function getUserBranches(userId, connection = pool) {
+  const [rows] = await connection.query(
     `SELECT
-      uba.branch_id,
-      uba.can_access,
-      ${branchDetailsSelect}
+       uba.branch_id,
+       uba.can_access,
+       b.code,
+       b.branch_code,
+       b.name,
+       b.location,
+       b.phone
      FROM user_branch_access uba
-     LEFT JOIN branches b ON uba.branch_id = b.id
+     INNER JOIN branches b ON b.id = uba.branch_id
      WHERE uba.user_id = ?
-     AND uba.can_access = TRUE
-     ORDER BY ${orderColumn} ASC, uba.branch_id ASC`,
+       AND uba.can_access = TRUE
+       AND b.is_active = TRUE
+     ORDER BY b.name ASC, b.id ASC`,
     [userId]
   );
-
-  return branches;
+  return rows.map((row) => ({
+    branch_id: Number(row.branch_id),
+    can_access: Boolean(row.can_access),
+    code: row.code || row.branch_code,
+    name: row.name,
+    location: row.location,
+    phone: row.phone,
+  }));
 }
 
-async function getUserById(userId) {
-  await ensureUserBranchSetup(pool);
+async function getUserById(userId, connection = pool) {
+  const id = positiveId(userId);
+  if (!id) return null;
+  await ensureUserAdministrationSchema(connection);
 
-  const [users] = await pool.query(
+  const [rows] = await connection.query(
     `SELECT
-      id,
-      full_name,
-      username,
-      role,
-      default_branch_id,
-      can_access_all_branches,
-      phone,
-      is_active,
-      failed_login_attempts,
-      is_login_locked,
-      login_locked_at,
-      login_lock_reason,
-      last_failed_login_at,
-      last_failed_login_ip,
-      primary_workspace_code,
-      category_assignment_status,
-      category_conflict_reason,
-      created_at,
-      updated_at
+       id, full_name, username, role, default_branch_id,
+       can_access_all_branches, phone, is_active,
+       failed_login_attempts, is_login_locked, login_locked_at,
+       login_lock_reason, last_failed_login_at, last_failed_login_ip,
+       token_version, primary_workspace_code, category_assignment_status,
+       category_conflict_reason, created_at, updated_at
      FROM users
      WHERE id = ?
      LIMIT 1`,
-    [userId]
+    [id]
   );
-
-  if (users.length === 0) {
-    return null;
-  }
-
-  const user = users[0];
-  user.branches = await getUserBranches(user.id);
-
-  return user;
-}
-
-async function sendNewUserCreatedSecuritySmsAlert({
-  createdUser,
-  createdByUser,
-  branchId,
-  selectedBranchIds,
-  accessAllBranches,
-}) {
-  try {
-    const { businessName, branch } = await buildOwnerAlertContext(branchId);
-
-    const creatorName =
-      createdByUser?.full_name || createdByUser?.username || "Admin";
-    const createdUserName =
-      createdUser?.full_name || createdUser?.username || "New user";
-    const createdUsername = createdUser?.username || "-";
-    const createdRole = createdUser?.role || "-";
-
-    const accessText = accessAllBranches
-      ? "Access: all stores"
-      : `Access store IDs: ${(selectedBranchIds || []).join(", ")}`;
-
-    const message = `${businessName}: Security alert. New user account created: ${createdUserName} (${createdUsername}), role ${createdRole}. ${accessText}. Created by ${creatorName} at ${branch.name} (${branch.code}) on ${formatSecurityDateTime()}.`;
-
-    await sendOwnerSmsAlert({
-      branchId,
-      message,
-      smsType: "security_alert",
-      sentBy: createdByUser?.id || null,
-    });
-  } catch (error) {
-    console.warn("New user SMS alert skipped:", error.message);
-  }
-}
-
-async function setUserReferenceToNull(connection, tableName, columnName, userId) {
-  const exists = await columnExists(connection, tableName, columnName);
-
-  if (!exists) {
-    return;
-  }
-
-  await connection.query(
-    `UPDATE \`${tableName}\`
-     SET \`${columnName}\` = NULL
-     WHERE \`${columnName}\` = ?`,
-    [userId]
-  );
-}
-
-async function clearUserReferencesBeforeDelete(connection, userId) {
-  const references = [
-    { table: "sales", columns: ["staff_id", "voided_by"] },
-    { table: "returns", columns: ["returned_by"] },
-    { table: "expenses", columns: ["recorded_by"] },
-    { table: "debt_payments", columns: ["received_by"] },
-    { table: "purchase_payments", columns: ["paid_by", "received_by"] },
-    { table: "purchases", columns: ["created_by"] },
-    { table: "daily_closings", columns: ["closed_by"] },
-    { table: "stock_adjustments", columns: ["adjusted_by", "approved_by"] },
-    { table: "sms_log", columns: ["sent_by"] },
-    { table: "audit_signoffs", columns: ["created_by", "approved_by"] },
-    { table: "audit_unlock_requests", columns: ["requested_by", "reviewed_by"] },
-    { table: "audit_reapproval_log", columns: ["reapproved_by"] },
-    { table: "activity_log", columns: ["user_id"] },
-  ];
-
-  for (const reference of references) {
-    for (const column of reference.columns) {
-      await setUserReferenceToNull(
-        connection,
-        reference.table,
-        column,
-        userId
-      );
-    }
-  }
-
-  if (await tableExists(connection, "user_branch_access")) {
-    await connection.query(
-      `DELETE FROM user_branch_access
-       WHERE user_id = ?`,
-      [userId]
-    );
-  }
+  if (!rows.length) return null;
+  return {
+    ...rows[0],
+    branches: await getUserBranches(id, connection),
+  };
 }
 
 function normalizeUserRow(user) {
@@ -558,18 +222,12 @@ function normalizeUserRow(user) {
     can_access_all_branches: Boolean(user.can_access_all_branches),
     phone: user.phone,
     is_active: Boolean(user.is_active),
-    failed_login_attempts:
-      Number(user.failed_login_attempts || 0),
-    is_login_locked:
-      Boolean(user.is_login_locked),
-    login_locked_at:
-      user.login_locked_at || null,
-    login_lock_reason:
-      user.login_lock_reason || null,
-    last_failed_login_at:
-      user.last_failed_login_at || null,
-    last_failed_login_ip:
-      user.last_failed_login_ip || null,
+    failed_login_attempts: Number(user.failed_login_attempts || 0),
+    is_login_locked: Boolean(user.is_login_locked),
+    login_locked_at: user.login_locked_at || null,
+    login_lock_reason: user.login_lock_reason || null,
+    last_failed_login_at: user.last_failed_login_at || null,
+    last_failed_login_ip: user.last_failed_login_ip || null,
     created_at: user.created_at,
     updated_at: user.updated_at,
     primary_workspace_code: user.primary_workspace_code || "spare_parts",
@@ -579,32 +237,70 @@ function normalizeUserRow(user) {
   };
 }
 
-// GET /api/users
+async function auditUserAction(
+  connection,
+  req,
+  action,
+  targetUserId,
+  details,
+  metadata = {}
+) {
+  await writeAuditEvent({
+    connection,
+    req,
+    action,
+    actionType: `user.${action.toLowerCase()}`,
+    entityType: "user",
+    entityId: targetUserId,
+    workspaceCode: "spare_parts",
+    branchId: getBranchId(req),
+    severity: "critical",
+    outcome: "success",
+    details,
+    metadata,
+  });
+}
+
+async function sendNewUserCreatedSecuritySmsAlert({
+  createdUser,
+  createdByUser,
+  branchId,
+  selectedBranchIds,
+  accessAllBranches,
+}) {
+  try {
+    const { businessName, branch } = await buildOwnerAlertContext(branchId);
+    const creatorName =
+      createdByUser?.full_name || createdByUser?.username || "Admin";
+    const createdUserName =
+      createdUser?.full_name || createdUser?.username || "New user";
+    const accessText = accessAllBranches
+      ? "Access: all stores"
+      : `Access store IDs: ${(selectedBranchIds || []).join(", ")}`;
+    const message = `${businessName}: Security alert. New user account created: ${createdUserName} (${createdUser?.username || "-"}), role ${createdUser?.role || "-"}. ${accessText}. Created by ${creatorName} at ${branch.name} (${branch.code}) on ${formatSecurityDateTime()}.`;
+
+    await sendOwnerSmsAlert({
+      branchId,
+      message,
+      smsType: "security_alert",
+      sentBy: createdByUser?.id || null,
+    });
+  } catch (error) {
+    console.warn("New user SMS alert skipped:", error.message);
+  }
+}
+
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    await ensureUserBranchSetup(pool);
-
+    await ensureUserAdministrationSchema(pool);
     const [users] = await pool.query(
       `SELECT
-        id,
-        full_name,
-        username,
-        role,
-        default_branch_id,
-        can_access_all_branches,
-        phone,
-        is_active,
-        failed_login_attempts,
-        is_login_locked,
-        login_locked_at,
-        login_lock_reason,
-        last_failed_login_at,
-        last_failed_login_ip,
-        primary_workspace_code,
-        category_assignment_status,
-        category_conflict_reason,
-        created_at,
-        updated_at
+         id, full_name, username, role, default_branch_id,
+         can_access_all_branches, phone, is_active,
+         failed_login_attempts, is_login_locked, login_locked_at,
+         login_lock_reason, last_failed_login_at, last_failed_login_ip,
+         primary_workspace_code, category_assignment_status,
+         category_conflict_reason, created_at, updated_at
        FROM users
        WHERE primary_workspace_code = 'spare_parts'
           OR (id = ? AND username = ? AND role = 'admin')
@@ -612,716 +308,529 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
       [SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
     );
 
-    const userIds = users.map((user) => user.id);
-    const branchesByUserId = new Map();
-
-    if (userIds.length > 0) {
-      const placeholders = userIds.map(() => "?").join(",");
-
-      let branchRows = [];
-
-      if (await tableExists(pool, "branches")) {
-        const branchMap = await getBranchColumnMap(pool);
-        const branchDetailsSelect = buildBranchDetailsSelect(branchMap, "b");
-        const orderColumn = branchMap?.name
-          ? `b.\`${branchMap.name}\``
-          : "uba.branch_id";
-
-        const [rows] = await pool.query(
-          `SELECT
-            uba.user_id,
-            uba.branch_id,
-            uba.can_access,
-            ${branchDetailsSelect}
-           FROM user_branch_access uba
-           LEFT JOIN branches b ON uba.branch_id = b.id
-           WHERE uba.user_id IN (${placeholders})
+    const ids = users.map((user) => Number(user.id));
+    const branchesByUser = new Map(ids.map((id) => [id, []]));
+    if (ids.length) {
+      const [branchRows] = await pool.query(
+        `SELECT
+           uba.user_id, uba.branch_id, uba.can_access,
+           b.code, b.branch_code, b.name, b.location, b.phone
+         FROM user_branch_access uba
+         INNER JOIN branches b ON b.id = uba.branch_id
+         WHERE uba.user_id IN (${ids.map(() => "?").join(", ")})
            AND uba.can_access = TRUE
-           ORDER BY ${orderColumn} ASC, uba.branch_id ASC`,
-          userIds
-        );
-
-        branchRows = rows;
-      } else {
-        const [rows] = await pool.query(
-          `SELECT
-            uba.user_id,
-            uba.branch_id,
-            uba.can_access,
-            NULL AS code,
-            CONCAT('Store ', uba.branch_id) AS name,
-            NULL AS location
-           FROM user_branch_access uba
-           WHERE uba.user_id IN (${placeholders})
-           AND uba.can_access = TRUE
-           ORDER BY uba.branch_id ASC`,
-          userIds
-        );
-
-        branchRows = rows;
-      }
-
-      for (const branch of branchRows) {
-        if (!branchesByUserId.has(branch.user_id)) {
-          branchesByUserId.set(branch.user_id, []);
-        }
-
-        branchesByUserId.get(branch.user_id).push({
-          branch_id: branch.branch_id,
-          can_access: Boolean(branch.can_access),
-          code: branch.code,
-          name: branch.name,
-          location: branch.location,
+         ORDER BY b.name ASC, b.id ASC`,
+        ids
+      );
+      for (const row of branchRows) {
+        branchesByUser.get(Number(row.user_id))?.push({
+          branch_id: Number(row.branch_id),
+          can_access: Boolean(row.can_access),
+          code: row.code || row.branch_code,
+          name: row.name,
+          location: row.location,
+          phone: row.phone,
         });
       }
     }
 
-    const usersWithBranches = users.map((user) =>
+    const result = users.map((user) =>
       normalizeUserRow({
         ...user,
-        branches: branchesByUserId.get(user.id) || [],
+        branches: branchesByUser.get(Number(user.id)) || [],
       })
     );
-
-    return res.json({
-      status: "success",
-      count: usersWithBranches.length,
-      users: usersWithBranches,
-    });
+    return res.json({ status: "success", count: result.length, users: result });
   } catch (error) {
     console.error("Get users error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while fetching users.",
-    });
+    return sendSchemaError(res, error, "Something went wrong while fetching users.");
   }
 });
 
-// POST /api/users
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
+  let transactionStarted = false;
 
   try {
-    await ensureUserBranchSetup(connection);
-
+    await ensureUserAdministrationSchema(connection);
     const branchId = getBranchId(req);
-
-    const {
-      full_name,
-      username,
-      password,
-      role,
-      phone,
-      branch_ids,
-      can_access_all_branches,
-    } = req.body;
-
-    const allowedRoles = ["admin", "manager", "cashier", "auditor"];
-
-    const cleanFullName = cleanText(full_name);
-    const cleanUsername = cleanText(username);
-    const cleanPhone = cleanText(phone);
-    const normalizedLoginPhone = normalizedPhoneForStorage(cleanPhone);
-    const cleanRole = cleanText(role).toLowerCase();
-    const accessAllBranches =
-      cleanBoolean(can_access_all_branches) || cleanRole === "admin";
-
-    if (cleanPhone && !normalizedLoginPhone) {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Enter a valid Ghana phone number such as 0241234567 or +233241234567.",
-      });
+    if (!branchId) {
+      const error = new Error("Choose a valid Spare Parts store first.");
+      error.code = "VALID_BRANCH_REQUIRED";
+      error.statusCode = 400;
+      throw error;
     }
 
-    if (!cleanFullName || !cleanUsername || !password || !cleanRole) {
-      return res.status(400).json({
-        status: "error",
-        message: "Full name, username, password and role are required.",
-      });
+    const fullName = cleanText(req.body.full_name, 150);
+    const username = cleanText(req.body.username, 80);
+    const password = String(req.body.password || "");
+    const role = cleanText(req.body.role, 30).toLowerCase();
+    const phoneText = cleanText(req.body.phone, 40);
+    const normalizedPhone = phoneText ? normalizePhoneForLogin(phoneText) : null;
+    if (!fullName || !username || !password || !role) {
+      const error = new Error("Full name, username, password and role are required.");
+      error.code = "USER_FIELDS_REQUIRED";
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!SPARE_PARTS_ROLES.has(role)) {
+      const error = new Error("Role must be admin, manager, cashier, or auditor.");
+      error.code = "INVALID_SPARE_PARTS_ROLE";
+      error.statusCode = 400;
+      throw error;
+    }
+    if (phoneText && !normalizedPhone) {
+      const error = new Error(
+        "Enter a valid Ghana phone number such as 0241234567 or +233241234567."
+      );
+      error.code = "INVALID_LOGIN_PHONE";
+      error.statusCode = 400;
+      throw error;
+    }
+    const passwordError = strongPasswordError(password);
+    if (passwordError) {
+      const error = new Error(passwordError);
+      error.code = "WEAK_PASSWORD";
+      error.statusCode = 400;
+      throw error;
     }
 
-    if (!allowedRoles.includes(cleanRole)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Role must be admin, manager, cashier, or auditor.",
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        status: "error",
-        message: "Password must be at least 6 characters.",
-      });
-    }
-
-    const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
-    const passwordHash = await bcrypt.hash(password, 10);
-
+    const accessAll = cleanBoolean(req.body.can_access_all_branches) || role === "admin";
     await connection.beginTransaction();
-
-    const [result] = await connection.query(
+    transactionStarted = true;
+    const branchIds = await resolveBranchIds(
+      connection,
+      req.body.branch_ids,
+      branchId,
+      accessAll
+    );
+    const passwordHash = await bcrypt.hash(password, 12);
+    const [insertResult] = await connection.query(
       `INSERT INTO users (
-        full_name,
-        username,
-        password_hash,
-        role,
-        default_branch_id,
-        can_access_all_branches,
-        phone,
-        is_active,
-        primary_workspace_code,
-        category_assignment_status,
-        category_assignment_reviewed_at,
-        category_assignment_reviewed_by
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, 'spare_parts', 'assigned', NOW(), ?)`,
+         full_name, username, password_hash, role, phone,
+         default_branch_id, can_access_all_branches, is_active,
+         primary_workspace_code, category_assignment_status,
+         category_assignment_reviewed_at, category_assignment_reviewed_by,
+         must_change_password, password_changed_at, token_version, created_by
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE,
+         'spare_parts', 'assigned', NOW(), ?, TRUE, NOW(), 0, ?)`,
       [
-        cleanFullName,
-        cleanUsername,
+        fullName,
+        username,
         passwordHash,
-        cleanRole,
-        selectedBranchIds[0],
-        accessAllBranches ? 1 : 0,
-        cleanPhone || null,
+        role,
+        normalizedPhone,
+        branchIds[0],
+        accessAll ? 1 : 0,
+        req.user.id,
         req.user.id,
       ]
     );
-
     await setUserBranchAccess(
       connection,
-      result.insertId,
-      selectedBranchIds,
-      accessAllBranches
+      insertResult.insertId,
+      branchIds,
+      accessAll
     );
-
-    await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        branchId,
-        req.user.id,
-        "CREATE_USER",
-        `Created user "${cleanUsername}" with role "${cleanRole}"`,
-      ]
+    await auditUserAction(
+      connection,
+      req,
+      "CREATE_USER",
+      insertResult.insertId,
+      `Created Spare Parts user ${username}.`,
+      { role, branch_ids: branchIds, can_access_all_branches: accessAll }
     );
-
     await connection.commit();
+    transactionStarted = false;
 
-    const createdUser = await getUserById(result.insertId);
-
+    const createdUser = await getUserById(insertResult.insertId);
     await sendNewUserCreatedSecuritySmsAlert({
       createdUser,
       createdByUser: req.user,
       branchId,
-      selectedBranchIds,
-      accessAllBranches,
+      selectedBranchIds: branchIds,
+      accessAllBranches: accessAll,
     });
-
     return res.status(201).json({
       status: "success",
-      message: "User created successfully.",
+      message:
+        "User created successfully. The user must change the temporary password after login.",
       user: normalizeUserRow(createdUser),
     });
   } catch (error) {
-    await connection.rollback();
-
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Preserve the original failure.
+      }
+    }
     console.error("Create user error:", error);
-
-    if (error.code === "ER_DUP_ENTRY") {
-      const duplicatePhone = String(error.message || "").includes(
-        "uq_users_login_phone_normalized"
-      );
-
+    if (error?.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         status: "error",
-        message: duplicatePhone
+        code: "DUPLICATE_USER_IDENTITY",
+        message: String(error.message || "").includes("phone")
           ? "This phone number is already attached to another login account."
           : "This username already exists.",
       });
     }
-
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while creating user.",
-    });
+    return sendSchemaError(res, error, "Something went wrong while creating user.");
   } finally {
     connection.release();
   }
 });
 
-// PUT /api/users/:id
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
+  let transactionStarted = false;
 
   try {
-    await ensureUserBranchSetup(connection);
-
+    await ensureUserAdministrationSchema(connection);
+    const targetId = positiveId(req.params.id);
     const branchId = getBranchId(req);
-    const { id } = req.params;
-
-    const {
-      full_name,
-      username,
-      role,
-      phone,
-      is_active,
-      password,
-      branch_ids,
-      can_access_all_branches,
-    } = req.body;
-
-    const allowedRoles = ["admin", "manager", "staff", "cashier", "auditor"];
-
-    const cleanFullName = cleanText(full_name);
-    const cleanUsername = cleanText(username);
-    const cleanPhone = cleanText(phone);
-    const normalizedLoginPhone = normalizedPhoneForStorage(cleanPhone);
-    const cleanRole = cleanText(role).toLowerCase();
-
-    if (cleanPhone && !normalizedLoginPhone) {
-      return res.status(400).json({
-        status: "error",
-        message:
-          "Enter a valid Ghana phone number such as 0241234567 or +233241234567.",
-      });
+    if (!targetId || !branchId) {
+      const error = new Error("Choose a valid user and Spare Parts store.");
+      error.code = "VALID_USER_AND_BRANCH_REQUIRED";
+      error.statusCode = 400;
+      throw error;
     }
 
-    if (!cleanFullName || !cleanUsername || !cleanRole) {
-      return res.status(400).json({
-        status: "error",
-        message: "Full name, username and role are required.",
-      });
-    }
-
-    if (!allowedRoles.includes(cleanRole)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Role must be admin, manager, staff, cashier, or auditor.",
-      });
-    }
-
-    const existingUser = await getUserById(id);
-
+    const existingUser = await getUserById(targetId);
     if (!existingUser) {
-      return res.status(404).json({
-        status: "error",
-        message: "User not found.",
-      });
+      const error = new Error("User not found.");
+      error.code = "USER_NOT_FOUND";
+      error.statusCode = 404;
+      throw error;
     }
-
     if (
       !isOriginalSystemAdministrator(existingUser) &&
       String(existingUser.primary_workspace_code || "") !== "spare_parts"
     ) {
-      return res.status(409).json({
-        status: "error",
-        message: "This user belongs to another independent business category.",
-      });
+      const error = new Error(
+        "This user belongs to another independent business category."
+      );
+      error.code = "USER_CATEGORY_MISMATCH";
+      error.statusCode = 409;
+      throw error;
     }
 
-    if (isOriginalSystemAdministrator(existingUser)) {
-      const requester = await getUserById(req.user.id);
+    const requester = await getUserById(req.user.id);
+    if (
+      isOriginalSystemAdministrator(existingUser) &&
+      !isOriginalSystemAdministrator(requester)
+    ) {
+      const error = new Error(
+        "Only the original System Administrator can edit that protected account."
+      );
+      error.code = "ORIGINAL_OWNER_PROTECTED";
+      error.statusCode = 403;
+      throw error;
+    }
 
-      if (!isOriginalSystemAdministrator(requester)) {
-        return res.status(403).json({
-          status: "error",
-          message:
-            "Only the original System Administrator can edit the original System Administrator account.",
-        });
+    const fullName = cleanText(req.body.full_name, 150);
+    const username = cleanText(req.body.username, 80);
+    const role = cleanText(req.body.role, 30).toLowerCase();
+    const phoneText = cleanText(req.body.phone, 40);
+    const normalizedPhone = phoneText ? normalizePhoneForLogin(phoneText) : null;
+    const password = String(req.body.password || "");
+    if (!fullName || !username || !role) {
+      const error = new Error("Full name, username and role are required.");
+      error.code = "USER_FIELDS_REQUIRED";
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!EDITABLE_ROLES.has(role)) {
+      const error = new Error(
+        "Role must be admin, manager, staff, cashier, or auditor."
+      );
+      error.code = "INVALID_USER_ROLE";
+      error.statusCode = 400;
+      throw error;
+    }
+    if (phoneText && !normalizedPhone) {
+      const error = new Error("Enter a valid Ghana login phone number.");
+      error.code = "INVALID_LOGIN_PHONE";
+      error.statusCode = 400;
+      throw error;
+    }
+    if (password) {
+      const passwordError = strongPasswordError(password);
+      if (passwordError) {
+        const error = new Error(passwordError);
+        error.code = "WEAK_PASSWORD";
+        error.statusCode = 400;
+        throw error;
       }
     }
 
-    const preserveExistingBranchAccess = cleanRole === "staff";
-    const accessAllBranches = preserveExistingBranchAccess
-      ? cleanBoolean(existingUser.can_access_all_branches)
-      : cleanBoolean(can_access_all_branches) ||
-        cleanRole === "admin" ||
-        isOriginalSystemAdministrator(existingUser);
-
-    const selectedBranchIds = preserveExistingBranchAccess
-      ? []
-      : normalizeBranchIds(branch_ids, branchId);
-    const nextDefaultBranchId = preserveExistingBranchAccess
-      ? existingUser.default_branch_id || null
-      : selectedBranchIds[0] || null;
+    const owner = isOriginalSystemAdministrator(existingUser);
+    const nextRole = owner ? "admin" : role;
+    const nextUsername = owner ? SYSTEM_ADMIN_USERNAME : username;
+    const nextActive = owner ? true : req.body.is_active !== false;
+    const preserveBranchAccess = nextRole === "staff";
+    const accessAll = owner
+      ? true
+      : preserveBranchAccess
+        ? Boolean(existingUser.can_access_all_branches)
+        : cleanBoolean(req.body.can_access_all_branches) || nextRole === "admin";
 
     await connection.beginTransaction();
-
-    if (password && password.trim() !== "") {
-      if (password.length < 6) {
-        await connection.rollback();
-
-        return res.status(400).json({
-          status: "error",
-          message: "Password must be at least 6 characters.",
-        });
-      }
-
-      const passwordHash = await bcrypt.hash(password, 10);
-
-      await connection.query(
-        `UPDATE users
-         SET full_name = ?,
-             username = ?,
-             role = ?,
-             default_branch_id = ?,
-             can_access_all_branches = ?,
-             phone = ?,
-             is_active = ?,
-             password_hash = ?
-         WHERE id = ?`,
-        [
-          cleanFullName,
-          cleanUsername,
-          cleanRole,
-          nextDefaultBranchId,
-          accessAllBranches ? 1 : 0,
-          cleanPhone || null,
-          is_active === false ? false : true,
-          passwordHash,
-          id,
-        ]
-      );
-    } else {
-      await connection.query(
-        `UPDATE users
-         SET full_name = ?,
-             username = ?,
-             role = ?,
-             default_branch_id = ?,
-             can_access_all_branches = ?,
-             phone = ?,
-             is_active = ?
-         WHERE id = ?`,
-        [
-          cleanFullName,
-          cleanUsername,
-          cleanRole,
-          nextDefaultBranchId,
-          accessAllBranches ? 1 : 0,
-          cleanPhone || null,
-          is_active === false ? false : true,
-          id,
-        ]
-      );
+    transactionStarted = true;
+    const branchIds = preserveBranchAccess
+      ? existingUser.branches.map((branch) => Number(branch.branch_id))
+      : await resolveBranchIds(
+          connection,
+          req.body.branch_ids,
+          branchId,
+          accessAll
+        );
+    if (!branchIds.length) {
+      const error = new Error("The user must retain at least one valid store.");
+      error.code = "USER_BRANCH_ACCESS_REQUIRED";
+      error.statusCode = 400;
+      throw error;
     }
 
-    if (!preserveExistingBranchAccess) {
-      await setUserBranchAccess(
-        connection,
-        Number(id),
-        selectedBranchIds,
-        accessAllBranches
+    const updateFields = [
+      "full_name = ?",
+      "username = ?",
+      "role = ?",
+      "phone = ?",
+      "is_active = ?",
+      "default_branch_id = ?",
+      "can_access_all_branches = ?",
+      "token_version = COALESCE(token_version, 0) + 1",
+    ];
+    const updateParams = [
+      fullName,
+      nextUsername,
+      nextRole,
+      normalizedPhone,
+      nextActive ? 1 : 0,
+      branchIds[0],
+      accessAll ? 1 : 0,
+    ];
+    if (password) {
+      updateFields.push(
+        "password_hash = ?",
+        "must_change_password = TRUE",
+        "password_changed_at = NOW()"
       );
+      updateParams.push(await bcrypt.hash(password, 12));
     }
-
+    updateParams.push(targetId);
     await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        branchId,
-        req.user.id,
-        "UPDATE_USER",
-        `Updated user "${cleanUsername}" with ID ${id}`,
-      ]
+      `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+      updateParams
     );
 
+    if (!preserveBranchAccess) {
+      await setUserBranchAccess(connection, targetId, branchIds, accessAll);
+    }
+    await auditUserAction(
+      connection,
+      req,
+      "UPDATE_USER",
+      targetId,
+      `Updated user ${nextUsername}; existing sessions were invalidated.`,
+      {
+        role: nextRole,
+        is_active: nextActive,
+        branch_ids: branchIds,
+        can_access_all_branches: accessAll,
+        password_reset: Boolean(password),
+      }
+    );
     await connection.commit();
+    transactionStarted = false;
 
-    const updatedUser = await getUserById(id);
-
+    const updatedUser = await getUserById(targetId);
     return res.json({
       status: "success",
-      message: "User updated successfully.",
+      message: "User updated successfully. Existing sessions were signed out.",
       user: normalizeUserRow(updatedUser),
     });
   } catch (error) {
-    await connection.rollback();
-
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Preserve the original failure.
+      }
+    }
     console.error("Update user error:", error);
-
-    if (error.code === "ER_DUP_ENTRY") {
-      const duplicatePhone = String(error.message || "").includes(
-        "uq_users_login_phone_normalized"
-      );
-
+    if (error?.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         status: "error",
-        message: duplicatePhone
+        code: "DUPLICATE_USER_IDENTITY",
+        message: String(error.message || "").includes("phone")
           ? "This phone number is already attached to another login account."
           : "This username already exists.",
       });
     }
-
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while updating user.",
-    });
+    return sendSchemaError(res, error, "Something went wrong while updating user.");
   } finally {
     connection.release();
   }
 });
 
-// PATCH /api/users/:id/reset-password
 router.patch(
   "/:id/reset-password",
   requireAuth,
   requireRole("admin"),
   async (req, res) => {
     try {
-      const {
-        password,
-        confirm_password,
-      } = req.body;
-
-      if (!password || !confirm_password) {
+      await ensureUserAdministrationSchema(pool);
+      const password = String(req.body.password || "");
+      const confirmation = String(req.body.confirm_password || "");
+      if (!password || !confirmation) {
         return res.status(400).json({
           status: "error",
-          message:
-            "New password and confirm password are required.",
+          code: "PASSWORD_CONFIRMATION_REQUIRED",
+          message: "New password and confirm password are required.",
+        });
+      }
+      if (password !== confirmation) {
+        return res.status(400).json({
+          status: "error",
+          code: "PASSWORD_CONFIRMATION_MISMATCH",
+          message: "New password and confirm password do not match.",
+        });
+      }
+      const passwordError = strongPasswordError(password);
+      if (passwordError) {
+        return res.status(400).json({
+          status: "error",
+          code: "WEAK_PASSWORD",
+          message: passwordError,
         });
       }
 
-      if (password !== confirm_password) {
-        return res.status(400).json({
-          status: "error",
-          message:
-            "New password and confirm password do not match.",
-        });
-      }
-
-      const result =
-        await resetAccountBySystemAdministrator({
-          req,
-          targetUserId: req.params.id,
-          newPassword: password,
-        });
-
-      return res.json({
-        status: "success",
-        message: result.message,
+      const result = await resetAccountBySystemAdministrator({
+        req,
+        targetUserId: req.params.id,
+        newPassword: password,
       });
+      return res.json({ status: "success", message: result.message });
     } catch (error) {
-      console.error(
-        "Reset user password error:",
-        error.code || error.message
+      console.error("Reset user password error:", error.code || error.message);
+      return sendSchemaError(
+        res,
+        error,
+        "Something went wrong while resetting the user account."
       );
-
-      return res
-        .status(error.statusCode || 500)
-        .json({
-          status: "error",
-          code:
-            error.code ||
-            "ACCOUNT_RESET_FAILED",
-          message:
-            error.statusCode && error.statusCode < 500
-              ? error.message
-              : "Something went wrong while resetting the user account.",
-        });
     }
   }
 );
-// PATCH /api/users/:id/toggle-status
+
 router.patch(
   "/:id/toggle-status",
   requireAuth,
   requireRole("admin"),
   async (req, res) => {
+    const connection = await pool.getConnection();
+    let transactionStarted = false;
     try {
-      const branchId = getBranchId(req);
-      const { id } = req.params;
-
-      if (Number(id) === Number(req.user.id)) {
-        return res.status(400).json({
-          status: "error",
-          message: "You cannot disable your own account while logged in.",
-        });
+      await ensureUserAdministrationSchema(connection);
+      const targetId = positiveId(req.params.id);
+      if (!targetId) {
+        const error = new Error("Invalid user ID.");
+        error.code = "INVALID_USER_ID";
+        error.statusCode = 400;
+        throw error;
+      }
+      if (targetId === Number(req.user.id)) {
+        const error = new Error("You cannot disable your own active session.");
+        error.code = "SELF_DISABLE_NOT_ALLOWED";
+        error.statusCode = 400;
+        throw error;
       }
 
-      const user = await getUserById(id);
-
+      const user = await getUserById(targetId);
       if (!user) {
-        return res.status(404).json({
-          status: "error",
-          message: "User not found.",
-        });
+        const error = new Error("User not found.");
+        error.code = "USER_NOT_FOUND";
+        error.statusCode = 404;
+        throw error;
       }
-
       if (isOriginalSystemAdministrator(user)) {
-        return res.status(403).json({
-          status: "error",
-          message: "The original System Administrator account cannot be disabled.",
-        });
+        const error = new Error(
+          "The original System Administrator account cannot be disabled."
+        );
+        error.code = "ORIGINAL_OWNER_PROTECTED";
+        error.statusCode = 403;
+        throw error;
       }
 
-      const newStatus = !user.is_active;
-
+      const newStatus = !Boolean(user.is_active);
       if (
         !newStatus &&
         String(user.role || "").toLowerCase() === "admin" &&
-        (await activeAdminCountExcluding(pool, user.id)) < 1
+        (await activeAdminCountExcluding(connection, user.id)) < 1
       ) {
-        return res.status(400).json({
-          status: "error",
-          message: "At least one active administrator must remain.",
-        });
+        const error = new Error("At least one active administrator must remain.");
+        error.code = "LAST_ADMIN_REQUIRED";
+        error.statusCode = 400;
+        throw error;
       }
 
-      const updateFields = ["is_active = ?"];
-      const updateParams = [newStatus];
-
-      if (!newStatus && (await columnExists(pool, "users", "token_version"))) {
-        updateFields.push("token_version = token_version + 1");
-      }
-
-      await pool.query(
-        `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
-        [...updateParams, id]
+      await connection.beginTransaction();
+      transactionStarted = true;
+      await connection.query(
+        `UPDATE users
+         SET is_active = ?,
+             token_version = COALESCE(token_version, 0) + 1
+         WHERE id = ?`,
+        [newStatus ? 1 : 0, targetId]
       );
-
-      await logActivity(
-        req.user.id,
-        branchId,
+      await auditUserAction(
+        connection,
+        req,
         "TOGGLE_USER_STATUS",
-        `${newStatus ? "Activated" : "Disabled"} user "${user.username}"`
+        targetId,
+        `${newStatus ? "Activated" : "Disabled"} user ${user.username}; existing sessions were invalidated.`,
+        { is_active: newStatus }
       );
+      await connection.commit();
+      transactionStarted = false;
 
       return res.json({
         status: "success",
         message: newStatus
           ? "User account activated successfully."
-          : "User account disabled successfully.",
+          : "User account disabled and existing sessions signed out.",
         is_active: newStatus,
       });
     } catch (error) {
+      if (transactionStarted) {
+        try {
+          await connection.rollback();
+        } catch {
+          // Preserve the original failure.
+        }
+      }
       console.error("Toggle user status error:", error);
-
-      return res.status(500).json({
-        status: "error",
-        message: "Something went wrong while changing user status.",
-      });
+      return sendSchemaError(
+        res,
+        error,
+        "Something went wrong while changing user status."
+      );
+    } finally {
+      connection.release();
     }
   }
 );
 
-// DELETE /api/users/:id
-router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const connection = await pool.getConnection();
-
-  try {
-    const branchId = getBranchId(req);
-    const { id } = req.params;
-    const targetUserId = Number(id);
-
-    if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid user ID.",
-      });
-    }
-
-    const requester = await getUserById(req.user.id);
-
-    if (!isOriginalSystemAdministrator(requester)) {
-      return res.status(403).json({
-        status: "error",
-        message:
-          "Only the original System Administrator can permanently delete user accounts.",
-      });
-    }
-
-    if (targetUserId === Number(req.user.id)) {
-      return res.status(400).json({
-        status: "error",
-        message: "You cannot delete your own account while logged in.",
-      });
-    }
-
-    const targetUser = await getUserById(targetUserId);
-
-    if (!targetUser) {
-      return res.status(404).json({
-        status: "error",
-        message: "User not found.",
-      });
-    }
-
-    if (isOriginalSystemAdministrator(targetUser)) {
-      return res.status(403).json({
-        status: "error",
-        message: "The original System Administrator account cannot be deleted.",
-      });
-    }
-
-    const [managedWorkspaceRows] = await connection.query(
-      `SELECT
-         uba.id,
-         bu.code
-       FROM user_business_access uba
-       INNER JOIN business_units bu ON bu.id = uba.business_unit_id
-       WHERE uba.user_id = ?
-         AND bu.code IN ('mining', 'equipment_hire')
-       LIMIT 1`,
-      [targetUserId]
-    );
-
-    if (
-      String(targetUser.role || "").toLowerCase() === "staff" ||
-      managedWorkspaceRows.length > 0
-    ) {
-      return res.status(409).json({
-        status: "error",
-        message:
-          "Mining and Equipment Hire staff accounts must be deactivated or have workspace access revoked. They cannot be permanently deleted because historical records must remain linked.",
-      });
-    }
-
-    await connection.beginTransaction();
-
-    await clearUserReferencesBeforeDelete(connection, targetUserId);
-
-    await connection.query(`DELETE FROM users WHERE id = ?`, [targetUserId]);
-
-    await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        branchId,
-        req.user.id,
-        "DELETE_USER",
-        `Permanently deleted user "${targetUser.username}" with role "${targetUser.role}" and ID ${targetUser.id}`,
-      ]
-    );
-
-    await connection.commit();
-
-    return res.json({
-      status: "success",
-      message: `User account "${targetUser.username}" deleted permanently.`,
-    });
-  } catch (error) {
-    await connection.rollback();
-
-    console.error("Delete user error:", error);
-
-    if (error.code === "ER_ROW_IS_REFERENCED_2") {
-      return res.status(409).json({
-        status: "error",
-        message:
-          "This user account is connected to business records and could not be deleted. Disable the account instead, or contact the developer to update the linked records safely.",
-      });
-    }
-
-    return res.status(500).json({
-      status: "error",
-      message: error.message || "Something went wrong while deleting user.",
-    });
-  } finally {
-    connection.release();
-  }
-});
+// Historical users must remain linked to business and audit records. Permanent
+// deletion is retired; deactivate the account or revoke workspace access instead.
+router.delete("/:id", requireAuth, requireRole("admin"), (_req, res) =>
+  res.status(410).json({
+    status: "error",
+    code: "PERMANENT_USER_DELETION_RETIRED",
+    message:
+      "Permanent user deletion is unavailable. Disable the account or revoke its workspace and store access so historical records remain attributable.",
+  })
+);
 
 module.exports = router;
