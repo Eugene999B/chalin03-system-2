@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-equipment-navigation-hotfix-v1";
+const CACHE_NAME = "chalin03-equipment-navigation-hotfix-v2";
 
 const CORE_ASSETS = [
   "/",
