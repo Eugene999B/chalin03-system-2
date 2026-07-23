@@ -9,6 +9,7 @@ const RETRY_DELAY_MS = 60 * 1000;
 let timer = null;
 let ready = false;
 let running = false;
+let requestRepairPromise = null;
 
 function disabled() {
   return (
@@ -19,6 +20,57 @@ function disabled() {
   );
 }
 
+function commercialRepairOnce() {
+  if (!requestRepairPromise) {
+    requestRepairPromise = ensureCommercialSalesSchema().catch((error) => {
+      requestRepairPromise = null;
+      throw error;
+    });
+  }
+  return requestRepairPromise;
+}
+
+function installEquipmentSalesRequestGate() {
+  if (disabled()) return false;
+
+  const schemaService = require("./equipmentSalesSchemaService");
+  if (schemaService.__chalin03CommercialColumnGateInstalled) return true;
+
+  const ensureCatalogueFoundation = schemaService.ensureEquipmentSalesSchema;
+
+  schemaService.ensureEquipmentSalesSchema = async function ensureEquipmentSalesSchemaWithCommercialColumns(
+    ...args
+  ) {
+    const catalogueStatus = await ensureCatalogueFoundation(...args);
+    const commercialStatus = await commercialRepairOnce();
+    ready = Boolean(commercialStatus?.ready);
+
+    if (ready && timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+
+    return {
+      ...catalogueStatus,
+      full_ready: ready,
+      commercial: commercialStatus,
+    };
+  };
+
+  Object.defineProperty(
+    schemaService,
+    "__chalin03CommercialColumnGateInstalled",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
+
+  return true;
+}
+
 function schedule(delayMs = BOOT_DELAY_MS) {
   if (disabled() || ready || running || timer) return false;
 
@@ -27,7 +79,7 @@ function schedule(delayMs = BOOT_DELAY_MS) {
     running = true;
 
     try {
-      const result = await ensureCommercialSalesSchema();
+      const result = await commercialRepairOnce();
       ready = Boolean(result?.ready);
       console.log(
         `Equipment Sales commercial schema ${ready ? "ready" : "pending"}; ` +
@@ -51,10 +103,13 @@ function schedule(delayMs = BOOT_DELAY_MS) {
   return true;
 }
 
+installEquipmentSalesRequestGate();
 schedule();
 
 module.exports = {
   BOOT_DELAY_MS,
   RETRY_DELAY_MS,
+  commercialRepairOnce,
+  installEquipmentSalesRequestGate,
   schedule,
 };
