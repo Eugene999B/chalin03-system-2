@@ -4,8 +4,10 @@ const { pool } = require("../config/db");
 const {
   HISTORY_TABLE,
   LOCK_NAME,
+  applyMigrations,
+  loadManifest,
   parseArguments,
-  run,
+  planMigrations,
 } = require("./runControlledMigrations");
 const {
   verifyProductionBackupAttestation,
@@ -126,12 +128,44 @@ async function bootstrapHistoryTable() {
   }
 }
 
+async function runControlledMigrationCore(options) {
+  const manifest = loadManifest();
+  const connection = await pool.getConnection();
+
+  try {
+    if (options.mode === "plan") {
+      const plan = await planMigrations(connection, manifest);
+      console.log(JSON.stringify({ status: "success", mode: "plan", plan }, null, 2));
+      return { mode: "plan", plan };
+    }
+
+    const result = await applyMigrations(connection, manifest, {
+      authorizedApply: true,
+    });
+    console.log(
+      JSON.stringify(
+        {
+          status: "success",
+          mode: options.deployment ? "deployment" : "apply",
+          ...result,
+        },
+        null,
+        2
+      )
+    );
+    return result;
+  } finally {
+    connection.release();
+    await pool.end();
+  }
+}
+
 async function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   if (options.mode === "apply") {
     await bootstrapHistoryTable();
   }
-  return run({ ...options, authorizedApply: options.mode === "apply" });
+  return runControlledMigrationCore(options);
 }
 
 if (require.main === module) {
@@ -155,4 +189,5 @@ module.exports = {
   bootstrapHistoryTable,
   historyTableExists,
   main,
+  runControlledMigrationCore,
 };
