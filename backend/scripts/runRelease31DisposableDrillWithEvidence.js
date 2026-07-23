@@ -7,11 +7,23 @@ const SCHEMA_PATH = path.resolve(__dirname, "../../database/schema.sql");
 const HISTORICAL_BASELINE_FILES = [
   path.resolve(
     __dirname,
+    "../../database/migrations/20260716_release2a1_one_active_session.sql"
+  ),
+  path.resolve(
+    __dirname,
+    "../../database/migrations/20260716_release2a2_account_lock_otp.sql"
+  ),
+  path.resolve(
+    __dirname,
     "../../database/migrations/20260716_release2_final_security_backup_workers_executive.sql"
   ),
   path.resolve(
     __dirname,
     "../../database/migrations/20260716_release3_group_command_configuration.sql"
+  ),
+  path.resolve(
+    __dirname,
+    "../../database/migrations/20260718_release3fa_authentication_sessions_ux.sql"
   ),
   path.resolve(
     __dirname,
