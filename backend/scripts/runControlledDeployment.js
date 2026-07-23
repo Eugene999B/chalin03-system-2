@@ -156,7 +156,6 @@ async function runControlledMigrationCore(options) {
     return result;
   } finally {
     connection.release();
-    await pool.end();
   }
 }
 
@@ -169,20 +168,24 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 if (require.main === module) {
-  main().catch(async (error) => {
-    console.error("Controlled deployment failed:", {
-      code: error?.code,
-      message: error?.message,
-      backup_created_at: error?.backupCreatedAt,
-      max_age_hours: error?.maxAgeHours,
-    });
-    try {
+  main()
+    .then(async () => {
       await pool.end();
-    } catch {
-      // Process is already failing closed.
-    }
-    process.exitCode = 1;
-  });
+    })
+    .catch(async (error) => {
+      console.error("Controlled deployment failed:", {
+        code: error?.code,
+        message: error?.message,
+        backup_created_at: error?.backupCreatedAt,
+        max_age_hours: error?.maxAgeHours,
+      });
+      try {
+        await pool.end();
+      } catch {
+        // Process is already failing closed.
+      }
+      process.exitCode = 1;
+    });
 }
 
 module.exports = {
