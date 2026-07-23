@@ -52,11 +52,15 @@ async function bootstrapHistoryTable() {
 
     const production =
       String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
-    if (production && approval.backupSource !== "railway_snapshot") {
+    const allowedBootstrapSources = new Set([
+      "railway_snapshot",
+      "chalin03_prerelease_backup",
+    ]);
+    if (production && !allowedBootstrapSources.has(approval.backupSource)) {
       const error = new Error(
-        "The one-time controlled migration ledger bootstrap requires a fresh Railway database snapshot. After the ledger exists, later migrations may use a verified Chalin 03 backup."
+        "The one-time controlled migration ledger bootstrap requires either a fresh Railway database snapshot or the checksum-bound Chalin 03 pre-release full-system backup. After the ledger exists, later migrations require a verified Version 3 backup or a fresh Railway snapshot."
       );
-      error.code = "MIGRATION_LEDGER_RAILWAY_SNAPSHOT_REQUIRED";
+      error.code = "MIGRATION_LEDGER_BOOTSTRAP_BACKUP_REQUIRED";
       throw error;
     }
 
@@ -96,7 +100,7 @@ async function bootstrapHistoryTable() {
          SHA2('controlled_migration_history_bootstrap_v1', 256),
          SHA2('controlled_migration_history_bootstrap_verified_v1', 256),
          '1', NULL, ?, ?, ?, ?, ?, ?, 'passed',
-         'Migration history ledger created under the controlled deployment lock after Railway snapshot evidence verification.',
+         'Migration history ledger created under the controlled deployment lock after approved pre-migration backup evidence verification.',
          NOW()
        )`,
       [
