@@ -101,6 +101,29 @@ test("recovery service fails closed and invalidates restored security state", ()
   assert.match(source, /UPDATE user_passkeys/);
 });
 
+test("enhanced validation checks the original package and manifest checksum", () => {
+  const source = read("services/fullSystemBackupService.js");
+
+  assert.match(source, /const checksum = String\(backup\.checksum_sha256/);
+  assert.match(source, /A valid SHA-256 backup checksum is required/);
+  assert.match(source, /stableBackupChecksum\(backup\) !== checksum/);
+  assert.match(source, /Backup checksum does not match the enhanced recovery package/);
+  assert.match(source, /Backup manifest checksum does not match the package checksum/);
+});
+
+test("successful and failed restores write durable backup history outcomes", () => {
+  const source = read("services/fullSystemBackupService.js");
+
+  assert.match(source, /async function recordRestoreOutcome/);
+  assert.match(source, /status: "restored"/);
+  assert.match(source, /verificationStatus: "verified"/);
+  assert.match(source, /status: "restore_failed"/);
+  assert.match(source, /verificationStatus: "failed"/);
+  assert.match(source, /backupHistoryRecorded/);
+  assert.match(source, /backupHistoryWarning/);
+  assert.match(source, /recordBackupHistory\(connection/);
+});
+
 test("schema fingerprints include indexes and triggers", () => {
   const source = read("services/fullSystemBackupService.js");
 
