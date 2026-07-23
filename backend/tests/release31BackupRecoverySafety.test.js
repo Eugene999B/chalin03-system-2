@@ -110,3 +110,22 @@ test("backup routes delegate all data work to the protected recovery service", (
   assert.doesNotMatch(source, /ALTER\s+TABLE/i);
   assert.doesNotMatch(source, /CREATE\s+TABLE/i);
 });
+
+test("large recovery parser is authenticated and isolated from the normal API limit", () => {
+  const server = read("server.js");
+  const backupMount = server.indexOf('"/api/backups",\n  requireAuth');
+  const backupParser = server.indexOf("express.json({ limit: backupBodyLimit })");
+  const normalParser = server.indexOf("express.json({ limit: bodyLimit })");
+  const backupRouter = server.indexOf("delegatedBackupRoutes\n);");
+
+  assert.ok(backupMount >= 0);
+  assert.ok(backupParser > backupMount);
+  assert.ok(backupRouter > backupParser);
+  assert.ok(normalParser > backupRouter);
+  assert.match(server, /const backupBodyLimit = process\.env\.BACKUP_BODY_LIMIT \|\| "100mb"/);
+  assert.match(server, /const bodyLimit = process\.env\.API_BODY_LIMIT \|\| "10mb"/);
+  assert.doesNotMatch(
+    server.slice(normalParser),
+    /app\.use\("\/api\/backups", delegatedBackupRoutes\)/
+  );
+});
