@@ -9,7 +9,7 @@
     "migrate:plan": "node scripts/runControlledMigrations.js --plan",
     "migrate:apply": "node scripts/runControlledDeployment.js --apply",
     "migrate:snapshot-attestation": "node scripts/createMigrationSnapshotAttestation.js",
-    "drill:release31": "node scripts/runRelease31DisposableDrill.js && node scripts/assertRelease31DrillEvidence.js",
+    "drill:release31": "node scripts/runRelease31DisposableDrillWithEvidence.js && node scripts/assertRelease31DrillEvidence.js",
     "create-admin": "node scripts/createAdmin.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
