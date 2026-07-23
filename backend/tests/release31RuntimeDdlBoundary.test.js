@@ -21,26 +21,52 @@ function javascriptFiles(relativeDirectory) {
   return output.sort();
 }
 
-const RUNTIME_SCHEMA_SENSITIVE_FILES = Object.freeze([
-  "server.js",
-  ...javascriptFiles("routes"),
-  ...javascriptFiles("middleware"),
-  "services/accountRecoveryService.js",
-  "services/accountSessionService.js",
-  "services/auditSchemaReadinessService.js",
-  "services/auditTrailService.js",
-  "services/branchSchemaReadinessService.js",
-  "services/categoryIsolationService.js",
-  "services/delegatedAdministrationService.js",
-  "services/employmentDocumentSchemaService.js",
-  "services/equipmentSalesSchemaService.js",
-  "services/groupCommandCentreService.js",
-  "services/groupConfigurationService.js",
-  "services/passkeySchemaService.js",
-  "services/permissionOverrideService.js",
-  "services/workerHrLetterSchemaService.js",
-  "services/workerIdentityService.js",
-]);
+function resolveRelativeModule(fromFile, request) {
+  const base = path.resolve(path.dirname(fromFile), request);
+  const candidates = [base, `${base}.js`, path.join(base, "index.js")];
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.startsWith(backendRoot) &&
+        fs.existsSync(candidate) &&
+        fs.statSync(candidate).isFile()
+    ) || null
+  );
+}
+
+function runtimeDependencyGraph() {
+  const queue = [path.join(backendRoot, "server.js")];
+  const visited = new Set();
+  const relativeRequire = /require\(["'](\.{1,2}\/[^"']+)["']\)/g;
+
+  while (queue.length) {
+    const absolutePath = queue.shift();
+    if (visited.has(absolutePath)) continue;
+    visited.add(absolutePath);
+
+    const source = fs.readFileSync(absolutePath, "utf8");
+    for (const match of source.matchAll(relativeRequire)) {
+      const resolved = resolveRelativeModule(absolutePath, match[1]);
+      if (resolved && !visited.has(resolved)) queue.push(resolved);
+    }
+  }
+
+  return Array.from(visited)
+    .map((absolutePath) =>
+      path.relative(backendRoot, absolutePath).replaceAll("\\", "/")
+    )
+    .sort();
+}
+
+const RUNTIME_SCHEMA_SENSITIVE_FILES = Object.freeze(
+  Array.from(
+    new Set([
+      ...runtimeDependencyGraph(),
+      ...javascriptFiles("routes"),
+      ...javascriptFiles("middleware"),
+    ])
+  ).sort()
+);
 
 function executableSource(relativePath) {
   return fs
@@ -51,7 +77,26 @@ function executableSource(relativePath) {
     .join("\n");
 }
 
-test("mounted runtime paths never perform database definition changes", () => {
+test("runtime graph includes critical mounted safety modules", () => {
+  for (const relativePath of [
+    "server.js",
+    "routes/auditSignoffRoutes.js",
+    "routes/auditUnlockRequestRoutes.js",
+    "routes/branchRoutes.js",
+    "routes/delegatedBackupRoutes.js",
+    "routes/userRoutes.js",
+    "services/fullSystemBackupService.js",
+    "services/fullSystemBackupCoreService.js",
+    "services/workerIdentityService.js",
+  ]) {
+    assert.ok(
+      RUNTIME_SCHEMA_SENSITIVE_FILES.includes(relativePath),
+      `${relativePath} is missing from the runtime DDL boundary`
+    );
+  }
+});
+
+test("mounted runtime dependency graph never performs database definition changes", () => {
   const forbidden = [
     /CREATE\s+(?:TABLE|TRIGGER|PROCEDURE|FUNCTION|EVENT|VIEW)/i,
     /ALTER\s+TABLE/i,
