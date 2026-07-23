@@ -1,0 +1,172 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const {
+  loadManifest,
+  parseArguments,
+  productionApproval,
+  splitSqlStatements,
+  stripSqlComments,
+  verificationRowProblems,
+} = require("../scripts/runControlledMigrations");
+
+const backendRoot = path.resolve(__dirname, "..");
+const repoRoot = path.resolve(backendRoot, "..");
+
+function readBackend(relativePath) {
+  return fs.readFileSync(path.join(backendRoot, relativePath), "utf8");
+}
+
+function readRepo(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+}
+
+test("controlled migration manifest is ordered, checksummed and fully paired", () => {
+  const manifest = loadManifest();
+  assert.equal(manifest.manifestVersion, "1");
+  assert.deepEqual(
+    manifest.migrations.map((entry) => entry.name),
+    [
+      "20260723_release31_database_safety_guards",
+      "20260723_release31_runtime_schema_baseline",
+    ]
+  );
+
+  for (const entry of manifest.migrations) {
+    assert.match(entry.migrationChecksum, /^[a-f0-9]{64}$/);
+    assert.match(entry.verificationChecksum, /^[a-f0-9]{64}$/);
+    assert.ok(fs.existsSync(entry.verifyPath));
+    if (entry.mode === "sql") assert.ok(fs.existsSync(entry.migrationPath));
+  }
+});
+
+test("SQL splitter preserves trigger bodies under custom delimiters", () => {
+  const source = `
+DELIMITER $$
+CREATE TRIGGER example BEFORE INSERT ON sales
+FOR EACH ROW
+BEGIN
+  IF NEW.id IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'blocked';
+  END IF;
+END $$
+DELIMITER ;
+SELECT 'PASS' AS status;
+`;
+  const statements = splitSqlStatements(source);
+  assert.equal(statements.length, 2);
+  assert.match(statements[0], /CREATE TRIGGER example/);
+  assert.match(statements[0], /END IF;/);
+  assert.match(statements[1], /SELECT 'PASS'/);
+});
+
+test("verification result evaluation fails closed", () => {
+  assert.deepEqual(verificationRowProblems([{ status: "PASS", problem_count: 0 }]), []);
+  assert.equal(
+    verificationRowProblems([{ status: "FAIL", problem_count: 2 }]).length,
+    1
+  );
+  assert.equal(verificationRowProblems([{ ready: 0 }]).length, 1);
+});
+
+test("production SQL migration requires backup, approver and change ticket", () => {
+  const original = {
+    NODE_ENV: process.env.NODE_ENV,
+    MIGRATION_BACKUP_SHA256: process.env.MIGRATION_BACKUP_SHA256,
+    MIGRATION_APPROVED_BY: process.env.MIGRATION_APPROVED_BY,
+    MIGRATION_CHANGE_TICKET: process.env.MIGRATION_CHANGE_TICKET,
+  };
+
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.MIGRATION_BACKUP_SHA256;
+    delete process.env.MIGRATION_APPROVED_BY;
+    delete process.env.MIGRATION_CHANGE_TICKET;
+
+    assert.throws(
+      () =>
+        productionApproval({
+          name: "20260723_release31_database_safety_guards",
+          mode: "sql",
+          backupRequired: true,
+        }),
+      /MIGRATION_BACKUP_SHA256/
+    );
+
+    process.env.MIGRATION_BACKUP_SHA256 = "a".repeat(64);
+    process.env.MIGRATION_APPROVED_BY = "Original System Administrator";
+    process.env.MIGRATION_CHANGE_TICKET = "CHALIN03-REL31";
+    const approval = productionApproval({
+      name: "20260723_release31_database_safety_guards",
+      mode: "sql",
+      backupRequired: true,
+    });
+    assert.equal(approval.backupAttestation, "a".repeat(64));
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("Railway startup runs controlled migrations and never preloads repair code", () => {
+  const packageJson = JSON.parse(readBackend("package.json"));
+  assert.match(packageJson.scripts.start, /runControlledMigrations\.js --deployment/);
+  assert.match(packageJson.scripts.start, /&& node server\.js$/);
+  assert.doesNotMatch(packageJson.scripts.start, /equipmentSalesCommercialBootstrap/);
+
+  const server = readBackend("server.js");
+  assert.match(server, /requireEquipmentSalesReadiness/);
+  assert.match(server, /\/api\/auth\/biometrics/);
+  assert.match(server, /LEGACY_PASSKEYS_RETIRED/);
+  assert.doesNotMatch(server, /passkeyRoutes/);
+  assert.doesNotMatch(server, /backupRoutes/);
+});
+
+test("startup schema services are verification-only", () => {
+  for (const relativePath of [
+    "services/branchSchemaReadinessService.js",
+    "services/workerHrLetterSchemaService.js",
+    "services/employmentDocumentSchemaService.js",
+    "services/passkeySchemaService.js",
+    "services/equipmentSalesSchemaService.js",
+  ]) {
+    const source = stripSqlComments(readBackend(relativePath));
+    assert.doesNotMatch(source, /CREATE\s+TABLE/i, relativePath);
+    assert.doesNotMatch(source, /ALTER\s+TABLE/i, relativePath);
+    assert.doesNotMatch(source, /DROP\s+(?:TABLE|TRIGGER|PROCEDURE)/i, relativePath);
+  }
+});
+
+test("new safety migration is additive, backed up and verified read-only", () => {
+  const migration = readRepo(
+    "database/migrations/20260723_release31_database_safety_guards.sql"
+  );
+  const verification = readRepo(
+    "database/migrations/20260723_release31_database_safety_guards_verify.sql"
+  );
+
+  assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
+  assert.match(migration, /BACKUP REQUIRED/i);
+  assert.match(migration, /INSERT INTO schema_migrations/i);
+  assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
+  assert.doesNotMatch(migration, /TRUNCATE/i);
+  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+
+  const executableVerification = stripSqlComments(verification);
+  assert.doesNotMatch(
+    executableVerification,
+    /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
+  );
+});
+
+test("argument parser defaults to plan and recognizes deployment apply", () => {
+  assert.deepEqual(parseArguments([]), { mode: "plan", deployment: false });
+  assert.deepEqual(parseArguments(["--deployment"]), {
+    mode: "apply",
+    deployment: true,
+  });
+});
