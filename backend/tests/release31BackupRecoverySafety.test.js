@@ -55,7 +55,7 @@ test("full-system table ordering restores parents before children", () => {
 test("backup checksum covers schema identity, counts and table contents", () => {
   const backup = {
     app: "Chalin 03 Group Operations Platform",
-    version: "test-v2",
+    version: "test-v3",
     backup_id: "11111111-1111-4111-8111-111111111111",
     backup_type: "full_system_backup",
     created_at: "2026-07-23T12:00:00.000Z",
@@ -83,7 +83,10 @@ test("binary credential evidence survives JSON backup restoration", () => {
 });
 
 test("recovery service fails closed and invalidates restored security state", () => {
-  const source = read("services/fullSystemBackupService.js");
+  const source = [
+    read("services/fullSystemBackupService.js"),
+    read("services/fullSystemBackupCoreService.js"),
+  ].join("\n");
 
   assert.match(source, /The backup is incomplete and cannot replace the current database/);
   assert.match(source, /A valid SHA-256 backup checksum is required/);
@@ -96,6 +99,19 @@ test("recovery service fails closed and invalidates restored security state", ()
   assert.match(source, /UPDATE password_recovery_otps/);
   assert.match(source, /UPDATE passkey_challenges/);
   assert.match(source, /UPDATE user_passkeys/);
+});
+
+test("schema fingerprints include indexes and triggers", () => {
+  const source = read("services/fullSystemBackupService.js");
+
+  assert.match(source, /SCHEMA_CONTRACT_VERSION/);
+  assert.match(source, /information_schema\.STATISTICS/);
+  assert.match(source, /information_schema\.TRIGGERS/);
+  assert.match(source, /schema_index_entry_count/);
+  assert.match(source, /schema_trigger_count/);
+  assert.match(source, /contract\.indexes/);
+  assert.match(source, /contract\.triggers/);
+  assert.match(source, /stableSchemaFingerprint\(schemaContract\)/);
 });
 
 test("backup routes delegate all data work to the protected recovery service", () => {
