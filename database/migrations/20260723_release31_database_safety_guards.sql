@@ -1,7 +1,8 @@
--- CHALIN 03 RELEASE 3.1 DATABASE SAFETY GUARDS
+-- CHALIN 03 RELEASE 3.1 DATABASE SAFETY AND READINESS
 -- ADDITIVE MIGRATION ONLY.
 -- BACKUP REQUIRED: create and validate a fresh Version 3.1 full-system backup before production execution.
--- Replaces trigger definitions only; no business rows are deleted or rewritten.
+-- Replaces trigger definitions and seeds missing worker identity counters only.
+-- Existing business rows, worker identities and sequence counters are preserved.
 -- Normal application sessions use FOREIGN_KEY_CHECKS=1 and remain fully protected.
 -- The protected full-system restore is the only workflow that temporarily uses FOREIGN_KEY_CHECKS=0.
 
@@ -185,9 +186,22 @@ END $$
 
 DELIMITER ;
 
+INSERT IGNORE INTO worker_identity_sequences (workspace_code, last_number)
+VALUES
+  ('spare_parts', 0),
+  ('mining', 0),
+  ('equipment_hire', 0);
+
+UPDATE settings
+SET worker_id_card_validity_months = COALESCE(worker_id_card_validity_months, 24),
+    worker_employee_number_prefix = COALESCE(NULLIF(worker_employee_number_prefix, ''), 'CH03')
+WHERE worker_id_card_validity_months IS NULL
+   OR worker_employee_number_prefix IS NULL
+   OR worker_employee_number_prefix = '';
+
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
     '20260723_release31_database_safety_guards',
-    'Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards and Spare Parts installment retirement guards through the controlled migration process.'
+    'Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and worker identity readiness through the controlled migration process.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
