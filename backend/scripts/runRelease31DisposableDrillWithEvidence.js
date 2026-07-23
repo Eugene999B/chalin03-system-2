@@ -7,6 +7,10 @@ const SCHEMA_PATH = path.resolve(__dirname, "../../database/schema.sql");
 const HISTORICAL_BASELINE_FILES = [
   path.resolve(
     __dirname,
+    "../../database/migrations/20260716_release2_final_security_backup_workers_executive.sql"
+  ),
+  path.resolve(
+    __dirname,
     "../../database/migrations/20260722_equipment_sales_installments_foundation.sql"
   ),
 ];
