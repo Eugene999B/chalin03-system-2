@@ -12,7 +12,11 @@ function decodeBase64Url(value) {
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
 
   if (typeof globalThis.atob === "function") {
-    return globalThis.atob(padded);
+    const binary = globalThis.atob(padded);
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0)
+    );
+    return new TextDecoder().decode(bytes);
   }
 
   if (typeof Buffer !== "undefined") {
@@ -125,8 +129,14 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
   const check = () => {
     const storedToken = localStorage.getItem(TOKEN_KEY);
 
-    if (!storedToken || storedToken !== token) {
-      expire("Your secure session changed or ended. Please login again.");
+    if (!storedToken) {
+      expire("Your secure session ended. Please login again.");
+      return true;
+    }
+
+    if (storedToken !== token) {
+      completed = true;
+      window.location.reload();
       return true;
     }
 
