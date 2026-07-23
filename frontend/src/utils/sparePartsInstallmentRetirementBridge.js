@@ -22,7 +22,9 @@ function normalizedText(element) {
     .toLowerCase();
 }
 
-function hideElement(element) {
+const MAX_PANEL_REVEAL_ATTEMPTS = 6;
+
+function hideExactRetiredControl(element) {
   if (!element || element.dataset.chalinInstallmentRetired === "1") return;
   element.dataset.chalinInstallmentRetired = "1";
   element.hidden = true;
@@ -31,65 +33,30 @@ function hideElement(element) {
   element.style.setProperty("display", "none", "important");
 }
 
-function retirePaymentButtons() {
-  const buttons = document.querySelectorAll("button");
-  let installmentWasActive = false;
-
-  buttons.forEach((button) => {
-    const text = normalizedText(button);
-    if (text === "installment") {
-      installmentWasActive =
-        button.getAttribute("aria-pressed") === "true" ||
-        /active|selected/i.test(button.className || "") ||
-        /#1|rgb\(/i.test(button.style?.background || "");
-      hideElement(button);
+function retireInstallmentPaymentButton() {
+  document.querySelectorAll("button").forEach((button) => {
+    if (normalizedText(button) === "installment") {
+      hideExactRetiredControl(button);
     }
   });
 
   document.querySelectorAll('option[value="installment"]').forEach((option) => {
     option.remove();
   });
-
-  if (installmentWasActive) {
-    const cashButton = [...document.querySelectorAll("button")].find(
-      (button) => normalizedText(button) === "cash" && !button.hidden
-    );
-    cashButton?.click();
-  }
 }
 
-function retireInstallmentForms() {
-  document.querySelectorAll("strong, h2, h3, legend").forEach((heading) => {
-    const text = normalizedText(heading);
-    if (text !== "installment agreement") return;
-
-    let container = heading.parentElement;
-    while (container && container !== document.body) {
-      const containerText = normalizedText(container);
-      if (
-        containerText.includes("payment frequency") &&
-        containerText.includes("number of payments")
-      ) {
-        hideElement(container);
-        break;
-      }
-      container = container.parentElement;
-    }
-  });
-}
-
-function retireNavigation() {
+function retireInstallmentNavigation() {
   document.querySelectorAll("a, button, [role='link']").forEach((element) => {
     const text = normalizedText(element);
     const href = String(element.getAttribute?.("href") || "");
+
     if (
       text === "installment sales" ||
       text === "installments" ||
       href === "/installments" ||
       href.endsWith("/installments")
     ) {
-      const item = element.closest("li") || element;
-      hideElement(item);
+      hideExactRetiredControl(element.closest("li") || element);
     }
   });
 }
@@ -106,7 +73,7 @@ function addRetirementNotice() {
   const notice = document.createElement("div");
   notice.dataset.chalinSparePartsRetirementNotice = "1";
   notice.textContent =
-    "Heavy-equipment installment sales are now handled in Equipment Sales & Hire. Spare Parts continues with Cash, MoMo, Bank, Credit and Mixed sales.";
+    "Equipment installments are handled in Equipment Sales & Hire. Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales.";
   Object.assign(notice.style, {
     margin: "10px 0 4px",
     padding: "10px 12px",
@@ -119,6 +86,111 @@ function addRetirementNotice() {
     lineHeight: "1.45",
   });
   paymentLabel.parentElement.insertBefore(notice, paymentLabel.nextSibling);
+}
+
+function removeRetirementAttributes(element) {
+  if (!element) return;
+  element.hidden = false;
+  element.removeAttribute("aria-hidden");
+  element.removeAttribute("disabled");
+  delete element.dataset.chalinInstallmentRetired;
+
+  ["display", "visibility", "opacity", "height", "max-height", "overflow"].forEach(
+    (property) => element.style.removeProperty(property)
+  );
+}
+
+function showPaymentGuidance(method, messageOverride = "") {
+  document.querySelector("[data-chalin-credit-mixed-guidance='1']")?.remove();
+
+  const banner = document.createElement("div");
+  banner.dataset.chalinCreditMixedGuidance = "1";
+  banner.setAttribute("role", "status");
+  banner.textContent =
+    messageOverride ||
+    (method === "credit"
+      ? "Credit sale selected. Enter the customer details. Leave payment channels at 0.00 when nothing is collected now; the unpaid amount becomes the customer debt."
+      : "Mixed payment selected. Enter the amount received under Cash, MoMo, Bank or Other. The channel total becomes the amount paid now and any remainder becomes customer debt.");
+
+  const isError = Boolean(messageOverride);
+  Object.assign(banner.style, {
+    position: "fixed",
+    left: "50%",
+    bottom: "20px",
+    transform: "translateX(-50%)",
+    zIndex: "30000",
+    width: "min(520px, calc(100% - 28px))",
+    padding: "13px 15px",
+    borderRadius: "14px",
+    border: isError
+      ? "1px solid #dc2626"
+      : method === "credit"
+      ? "1px solid #f59e0b"
+      : "1px solid #2563eb",
+    background: isError ? "#fef2f2" : method === "credit" ? "#fffbeb" : "#eff6ff",
+    color: isError ? "#991b1b" : method === "credit" ? "#78350f" : "#1e3a8a",
+    boxShadow: "0 18px 44px rgba(15, 23, 42, 0.22)",
+    fontSize: "13px",
+    fontWeight: "800",
+    lineHeight: "1.45",
+  });
+
+  document.body.appendChild(banner);
+  window.setTimeout(() => banner.remove(), 7000);
+}
+
+function revealCreditOrMixedPanel(method, attempt = 0) {
+  if (!isSparePartsWorkspace() || window.location.pathname !== "/new-sale") return;
+  if (!new Set(["credit", "mixed"]).has(method)) return;
+
+  const splitLabel = [...document.querySelectorAll("label")].find((label) =>
+    normalizedText(label).startsWith("amount paid now")
+  );
+
+  if (!splitLabel) {
+    if (attempt < MAX_PANEL_REVEAL_ATTEMPTS) {
+      window.setTimeout(() => revealCreditOrMixedPanel(method, attempt + 1), 80);
+    } else {
+      showPaymentGuidance(
+        method,
+        "The Credit or Mixed payment section did not open. Refresh New Sale once and try again."
+      );
+    }
+    return;
+  }
+
+  const panel = splitLabel.parentElement;
+  removeRetirementAttributes(panel);
+  removeRetirementAttributes(panel?.parentElement);
+  panel.dataset.chalinCreditMixedPanel = method;
+
+  panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  const firstAmountInput = panel.querySelector('input[type="number"]');
+  window.setTimeout(() => firstAmountInput?.focus({ preventScroll: true }), 180);
+  showPaymentGuidance(method);
+}
+
+function paymentMethodFromClick(target) {
+  const button = target?.closest?.("button");
+  if (!button) return "";
+  const method = normalizedText(button);
+  return new Set(["cash", "momo", "bank", "credit", "mixed"]).has(method)
+    ? method
+    : "";
+}
+
+function handlePaymentMethodClick(event) {
+  if (!isSparePartsWorkspace() || window.location.pathname !== "/new-sale") return;
+  const method = paymentMethodFromClick(event.target);
+  if (!method) return;
+
+  if (method === "credit" || method === "mixed") {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => revealCreditOrMixedPanel(method), 0);
+    });
+  } else {
+    document.querySelector("[data-chalin-credit-mixed-guidance='1']")?.remove();
+  }
 }
 
 function redirectRetiredRoute() {
@@ -134,9 +206,8 @@ function redirectRetiredRoute() {
 function applyRetirementUi() {
   if (!isSparePartsWorkspace()) return;
   if (redirectRetiredRoute()) return;
-  retirePaymentButtons();
-  retireInstallmentForms();
-  retireNavigation();
+  retireInstallmentPaymentButton();
+  retireInstallmentNavigation();
   addRetirementNotice();
 }
 
@@ -161,7 +232,19 @@ export function assertSparePartsInstallmentRequestAllowed(config) {
 if (typeof window !== "undefined" && typeof document !== "undefined") {
   const start = () => {
     applyRetirementUi();
-    const observer = new MutationObserver(() => applyRetirementUi());
+    document.addEventListener("click", handlePaymentMethodClick, true);
+
+    // Observe only so newly rendered exact Installment controls can be retired.
+    // Never hide or mutate a Credit or Mixed payment-form container.
+    let scheduled = false;
+    const observer = new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        applyRetirementUi();
+      });
+    });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener("popstate", applyRetirementUi);
     window.addEventListener("storage", applyRetirementUi);
