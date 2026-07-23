@@ -1,33 +1,30 @@
 const express = require("express");
-const crypto = require("crypto");
 
 const { pool } = require("../config/db");
-const { BACKUP_MANIFEST_VERSION } = require("../config/version");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { validateRequest } = require("../middleware/requestValidationMiddleware");
+const {
+  validateBackupDryRunRequest,
+  validateBackupRestoreRequest,
+} = require("../validation/requestValidators");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   hasDelegatedCapability,
   loadUser,
 } = require("../services/delegatedAdministrationService");
+const {
+  createFullSystemBackup,
+  recordBackupHistory,
+  restoreFullSystemBackup,
+  validateFullSystemBackup,
+} = require("../services/fullSystemBackupService");
 const release2FinalRoutes = require("./release2FinalRoutes");
 
 const { requireProtectedAction, appendLedger } = release2FinalRoutes;
 const router = express.Router();
-
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const MANIFEST_VERSION = BACKUP_MANIFEST_VERSION;
-const LEGACY_ALIAS_TABLES = new Set([
-  "stores",
-  "user_store_access",
-  "activity_logs",
-]);
-const EPHEMERAL_SECURITY_TABLES = Object.freeze([
-  "auth_sessions",
-  "protected_action_sessions",
-  "owner_recovery_sessions",
-]);
 
 function asyncHandler(handler) {
   return (req, res, next) =>
@@ -38,255 +35,33 @@ function cleanText(value, maxLength = 500) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
 
-function isSafeIdentifier(value) {
-  return /^[a-zA-Z0-9_]+$/.test(String(value || ""));
+function authorityLabel(req) {
+  return req.backupAuthority?.isOriginalOwner
+    ? "original_system_administrator"
+    : "delegated_system_administrator";
 }
 
-function safeTableName(value) {
-  if (!isSafeIdentifier(value)) {
-    throw new Error("Unsafe database table identifier.");
-  }
-  return `\`${value}\``;
-}
-
-function backupChecksum(backup) {
-  const payload = JSON.stringify({
-    backup_type: backup.backup_type,
-    included_tables: backup.included_tables,
-    table_counts: backup.table_counts,
-    tables: backup.tables,
-  });
-  return crypto.createHash("sha256").update(payload).digest("hex");
-}
-
-async function existingTables(connection) {
-  const [rows] = await connection.query(
-    `SELECT TABLE_NAME
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_TYPE = 'BASE TABLE'
-     ORDER BY TABLE_NAME`
-  );
-  return rows
-    .map((row) => row.TABLE_NAME)
-    .filter(isSafeIdentifier)
-    .filter((name) => !LEGACY_ALIAS_TABLES.has(name));
-}
-
-async function tableColumns(connection, tableName) {
-  const [rows] = await connection.query(
-    `SHOW COLUMNS FROM ${safeTableName(tableName)}`
-  );
-  return rows.map((row) => row.Field).filter(isSafeIdentifier);
-}
-
-async function tableCounts(connection, tableNames) {
-  const counts = {};
-  for (const tableName of tableNames) {
-    const [rows] = await connection.query(
-      `SELECT COUNT(*) AS total_count FROM ${safeTableName(tableName)}`
-    );
-    counts[tableName] = Number(rows[0]?.total_count || 0);
-  }
-  return counts;
-}
-
-function normalizeValue(value) {
-  if (value === undefined) return null;
-  if (value instanceof Date) {
-    return value.toISOString().slice(0, 19).replace("T", " ");
-  }
-  if (value && typeof value === "object") return JSON.stringify(value);
-  return value;
-}
-
-async function insertRows(connection, tableName, rows) {
-  if (!Array.isArray(rows) || rows.length === 0) return;
-  const allowedColumns = new Set(await tableColumns(connection, tableName));
-  const columns = Object.keys(rows[0]).filter(
-    (column) => isSafeIdentifier(column) && allowedColumns.has(column)
-  );
-  if (!columns.length) return;
-
-  const sql = `INSERT INTO ${safeTableName(tableName)} (${columns
-    .map((column) => safeTableName(column))
-    .join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`;
-
-  for (const row of rows) {
-    await connection.query(
-      sql,
-      columns.map((column) => normalizeValue(row[column]))
-    );
-  }
-}
-
-async function resetAutoIncrement(connection, tableName) {
-  const columns = await tableColumns(connection, tableName);
-  if (!columns.includes("id")) return;
-  const [rows] = await connection.query(
-    `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM ${safeTableName(
-      tableName
-    )}`
-  );
-  const nextId = Math.max(1, Number(rows[0]?.next_id || 1));
-  await connection.query(
-    `ALTER TABLE ${safeTableName(tableName)} AUTO_INCREMENT = ${nextId}`
-  );
-}
-
-function configuredOwnerPresent(backup) {
-  const ownerId = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
-  const ownerUsername = String(
-    process.env.SYSTEM_ADMIN_USERNAME || "admin"
-  )
-    .trim()
-    .toLowerCase();
-  const users = Array.isArray(backup?.tables?.users)
-    ? backup.tables.users
-    : [];
-  return users.some(
-    (user) =>
-      Number(user.id) === ownerId &&
-      String(user.username || "").trim().toLowerCase() === ownerUsername &&
-      String(user.role || "").trim().toLowerCase() === "admin"
-  );
-}
-
-function requesterPresent(backup, requester) {
-  const users = Array.isArray(backup?.tables?.users)
-    ? backup.tables.users
-    : [];
-  return users.some(
-    (user) =>
-      Number(user.id) === Number(requester.id) &&
-      String(user.username || "").trim().toLowerCase() ===
-        String(requester.username || "").trim().toLowerCase() &&
-      String(user.role || "").trim().toLowerCase() === "admin" &&
-      Boolean(Number(user.is_active))
-  );
-}
-
-async function validateBackup(connection, backup, requester) {
-  const errors = [];
-  const warnings = [];
-
-  if (
-    !backup ||
-    backup.backup_type !== "full_system_backup" ||
-    !backup.tables ||
-    typeof backup.tables !== "object"
-  ) {
-    return {
-      valid: false,
-      errors: ["Invalid Chalin 03 full-system backup file."],
-      warnings,
-      restore_tables: [],
-      tables_to_restore: [],
-    };
-  }
-
-  const currentTables = (await existingTables(connection)).filter(
-    (tableName) => tableName !== "schema_migrations"
-  );
-  const backupTables = Object.keys(backup.tables).filter(isSafeIdentifier);
-  const tablesToRestore = currentTables.filter((tableName) =>
-    Array.isArray(backup.tables[tableName])
-  );
-  const missingTables = currentTables.filter(
-    (tableName) => !Array.isArray(backup.tables[tableName])
-  );
-  const unsupportedTables = backupTables.filter(
-    (tableName) => !currentTables.includes(tableName)
-  );
-
-  if (!tablesToRestore.length) {
-    errors.push("No compatible current application table was found.");
-  }
-  if (!configuredOwnerPresent(backup)) {
-    errors.push(
-      "The backup does not contain the permanently protected original System Administrator."
-    );
-  }
-  if (!requesterPresent(backup, requester)) {
-    errors.push(
-      "For delegated restore safety, this backup must contain your same active Administrator account. The original owner can restore older backups."
-    );
-  }
-
-  if (missingTables.length) {
-    warnings.push(
-      `Current tables absent from the backup will be cleared: ${missingTables.join(
-        ", "
-      )}.`
-    );
-  }
-  if (unsupportedTables.length) {
-    warnings.push(
-      `Legacy or unsupported tables will be ignored: ${unsupportedTables.join(
-        ", "
-      )}.`
-    );
-  }
-
-  for (const tableName of tablesToRestore) {
-    const rows = backup.tables[tableName];
-    const ids = new Set();
-    for (const row of rows) {
-      if (!row || typeof row !== "object" || Array.isArray(row)) {
-        errors.push(`${tableName} contains an invalid row.`);
-        break;
-      }
-      if (row.id !== undefined && row.id !== null) {
-        const id = String(row.id);
-        if (ids.has(id)) {
-          errors.push(`${tableName} contains duplicate id ${id}.`);
-          break;
-        }
-        ids.add(id);
-      }
-    }
-  }
-
-  if (backup.checksum_sha256) {
-    const actualChecksum = backupChecksum(backup);
-    if (actualChecksum !== backup.checksum_sha256) {
-      errors.push("Backup checksum does not match its contents.");
-    }
-  } else {
-    warnings.push("This backup does not contain a checksum.");
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-    restore_tables: currentTables,
-    tables_to_restore: tablesToRestore,
-    missing_tables: missingTables,
-    unsupported_tables: unsupportedTables,
-    checksum_sha256: backup.checksum_sha256 || null,
-    preview_counts: Object.fromEntries(
-      tablesToRestore.map((tableName) => [
-        tableName,
-        backup.tables[tableName].length,
-      ])
-    ),
-  };
-}
-
-function requireDelegatedBackup(capabilityCode) {
-  return async function delegatedBackupAuthority(req, res, next) {
+function requireBackupAuthority(capabilityCode) {
+  return async function backupAuthority(req, res, next) {
     try {
       const requester = await loadUser(req.user?.id);
       if (!requester) {
         return res.status(401).json({
           status: "error",
-          message: "Your account could not be verified.",
+          code: "BACKUP_REQUESTER_NOT_FOUND",
+          message: "Your Administrator account could not be verified.",
         });
       }
+
       if (isOriginalSystemAdministrator(requester)) {
-        return next("route");
+        req.backupAuthority = {
+          user: requester,
+          isOriginalOwner: true,
+          capabilityCode,
+        };
+        return next();
       }
+
       if (!(await hasDelegatedCapability(requester, capabilityCode))) {
         return res.status(403).json({
           status: "error",
@@ -295,7 +70,12 @@ function requireDelegatedBackup(capabilityCode) {
             "The original owner has not granted this delegated backup authority.",
         });
       }
-      req.delegatedSystemAdministrator = requester;
+
+      req.backupAuthority = {
+        user: requester,
+        isOriginalOwner: false,
+        capabilityCode,
+      };
       return next();
     } catch (error) {
       return next(error);
@@ -303,7 +83,46 @@ function requireDelegatedBackup(capabilityCode) {
   };
 }
 
-async function recordBackupEvent(
+function validationResponse(report) {
+  return {
+    valid: report.valid,
+    errors: report.errors,
+    warnings: report.warnings,
+    restore_tables: report.restoreTables,
+    tables_to_restore: report.tablesToRestore,
+    missing_tables: report.missingTables,
+    unsupported_tables: report.unsupportedTables,
+    checksum_sha256: report.checksumSha256,
+    preview_counts: report.previewCounts,
+  };
+}
+
+function sendBackupError(res, error, fallbackMessage) {
+  const statusCode = Number(error?.statusCode || 500);
+  const safeStatus = statusCode >= 400 && statusCode <= 599 ? statusCode : 500;
+  const payload = {
+    status: "error",
+    code: error?.code || "FULL_SYSTEM_RECOVERY_FAILED",
+    message:
+      safeStatus < 500
+        ? error.message
+        : fallbackMessage || "The protected recovery action could not be completed.",
+  };
+
+  if (Array.isArray(error?.missingTables)) {
+    payload.missing_tables = error.missingTables;
+  }
+  if (Array.isArray(error?.countMismatches)) {
+    payload.count_mismatches = error.countMismatches;
+  }
+  if (Array.isArray(error?.orphanReports)) {
+    payload.foreign_key_orphans = error.orphanReports;
+  }
+
+  return res.status(safeStatus).json(payload);
+}
+
+async function recordProtectedBackupEvent(
   req,
   action,
   details,
@@ -320,10 +139,11 @@ async function recordBackupEvent(
     details,
     metadata: {
       ...metadata,
-      delegated_system_administrator: true,
+      authority: authorityLabel(req),
       original_owner_protected: true,
     },
   });
+
   await appendLedger({
     req,
     actorUserId: req.user.id,
@@ -333,7 +153,7 @@ async function recordBackupEvent(
     entityType: "backup",
     payload: {
       ...metadata,
-      delegated_system_administrator: true,
+      authority: authorityLabel(req),
       original_owner_protected: true,
     },
   });
@@ -342,63 +162,44 @@ async function recordBackupEvent(
 router.get(
   "/download",
   requireAuth,
-  requireDelegatedBackup("backup_download"),
+  requireBackupAuthority("backup_download"),
   requirePermission("backup.download"),
   requireProtectedAction,
   asyncHandler(async (req, res) => {
     const connection = await pool.getConnection();
     try {
-      const tableNames = await existingTables(connection);
-      const createdAt = new Date().toISOString();
-      const counts = await tableCounts(connection, tableNames);
-      const backup = {
-        app: "Chalin 03 Group Operations Platform",
-        version: MANIFEST_VERSION,
-        backup_type: "full_system_backup",
-        created_at: createdAt,
-        created_by: {
+      const { backup, contract } = await createFullSystemBackup(connection, {
+        createdBy: {
           id: req.user.id,
           username: req.user.username,
-          authority: "delegated_system_administrator",
+          authority: authorityLabel(req),
         },
-        warning:
-          "Sensitive full-system recovery backup. Keep private and use only through validated restore controls.",
-        included_tables: tableNames,
-        skipped_tables: [],
-        table_counts: counts,
-        total_record_count: Object.values(counts).reduce(
-          (total, count) => total + Number(count || 0),
-          0
-        ),
-        tables: {},
-      };
+      });
 
-      for (const tableName of tableNames) {
-        const [rows] = await connection.query(
-          `SELECT * FROM ${safeTableName(tableName)}`
-        );
-        backup.tables[tableName] = rows;
-      }
-      backup.checksum_sha256 = backupChecksum(backup);
-      backup.manifest = {
-        manifest_version: MANIFEST_VERSION,
-        checksum_algorithm: "sha256",
-        checksum_sha256: backup.checksum_sha256,
-        table_count: tableNames.length,
-      };
+      await recordBackupHistory(connection, {
+        backup,
+        userId: req.user.id,
+        status: "created",
+        verificationStatus: "not_verified",
+      });
 
-      await recordBackupEvent(
+      await recordProtectedBackupEvent(
         req,
-        "DELEGATED_FULL_BACKUP_CREATED",
-        `${tableNames.length} tables were included in a delegated full-system backup.`,
+        "FULL_SYSTEM_BACKUP_CREATED",
+        `${backup.included_tables.length} canonical tables were captured in a consistent full-system recovery package.`,
         {
-          table_count: tableNames.length,
+          backup_id: backup.backup_id,
+          table_count: backup.included_tables.length,
           total_record_count: backup.total_record_count,
           checksum_sha256: backup.checksum_sha256,
+          schema_fingerprint_sha256: backup.schema_fingerprint_sha256,
+          dependency_cycle_tables: contract.cycleTables,
         }
       );
 
-      const timestamp = createdAt.replaceAll(":", "-").replaceAll(".", "-");
+      const timestamp = backup.created_at
+        .replaceAll(":", "-")
+        .replaceAll(".", "-");
       res.setHeader("Content-Type", "application/json");
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "no-store");
@@ -407,6 +208,16 @@ router.get(
         `attachment; filename="chalin03-full-system-backup-${timestamp}.json"`
       );
       return res.json(backup);
+    } catch (error) {
+      console.error("Full-system backup creation failed:", {
+        code: error?.code,
+        message: error?.message,
+      });
+      return sendBackupError(
+        res,
+        error,
+        "The full-system backup could not be created safely. No incomplete backup was downloaded."
+      );
     } finally {
       connection.release();
     }
@@ -416,40 +227,68 @@ router.get(
 router.post(
   "/restore/dry-run",
   requireAuth,
-  requireDelegatedBackup("backup_validate"),
+  requireBackupAuthority("backup_validate"),
   requirePermission("backup.validate"),
   requireProtectedAction,
+  validateRequest(validateBackupDryRunRequest),
   asyncHandler(async (req, res) => {
     const connection = await pool.getConnection();
     try {
-      const report = await validateBackup(
-        connection,
-        req.body?.backup || req.body,
-        req.delegatedSystemAdministrator
-      );
-      await recordBackupEvent(
+      const backup = req.validated.backup;
+      const report = await validateFullSystemBackup(connection, backup, {
+        requester: req.backupAuthority.user,
+        requireRequesterPresence: !req.backupAuthority.isOriginalOwner,
+      });
+
+      if (backup?.backup_id) {
+        await recordBackupHistory(connection, {
+          backup,
+          userId: backup.created_by?.id || null,
+          status: report.valid ? "validated" : "validation_failed",
+          verificationStatus: report.valid ? "verified" : "failed",
+          verificationMessage: report.valid
+            ? "Full-system checksum, table contract, schema fingerprint and row counts passed."
+            : report.errors.join(" ").slice(0, 2000),
+          verifiedBy: req.user.id,
+        });
+      }
+
+      await recordProtectedBackupEvent(
         req,
         report.valid
-          ? "DELEGATED_BACKUP_VALIDATED"
-          : "DELEGATED_BACKUP_VALIDATION_FAILED",
+          ? "FULL_SYSTEM_BACKUP_VALIDATED"
+          : "FULL_SYSTEM_BACKUP_VALIDATION_FAILED",
         report.valid
-          ? "Delegated backup compatibility validation passed."
-          : "Delegated backup compatibility validation failed.",
+          ? "Full-system recovery validation passed without changing data."
+          : "Full-system recovery validation failed before any data change.",
         {
+          backup_id: backup?.backup_id || null,
           valid: report.valid,
           error_count: report.errors.length,
           warning_count: report.warnings.length,
+          checksum_sha256: backup?.checksum_sha256 || null,
         },
         report.valid ? "success" : "failure"
       );
+
       return res.status(report.valid ? 200 : 400).json({
         status: report.valid ? "success" : "error",
         message: report.valid
-          ? "Backup validation and restore preview completed."
+          ? "Backup validation and restore preview completed. No data was changed."
           : "Backup validation failed. No data was changed.",
         dry_run: true,
-        ...report,
+        ...validationResponse(report),
       });
+    } catch (error) {
+      console.error("Full-system backup validation failed:", {
+        code: error?.code,
+        message: error?.message,
+      });
+      return sendBackupError(
+        res,
+        error,
+        "The restore preview could not be completed safely. No data was changed."
+      );
     } finally {
       connection.release();
     }
@@ -459,116 +298,122 @@ router.post(
 router.post(
   "/restore",
   requireAuth,
-  requireDelegatedBackup("backup_restore"),
+  requireBackupAuthority("backup_restore"),
   requirePermission("backup.restore"),
   requireProtectedAction,
+  validateRequest(validateBackupRestoreRequest),
   asyncHandler(async (req, res) => {
     if (String(process.env.ALLOW_WEB_RESTORE || "").toLowerCase() !== "true") {
       return res.status(403).json({
         status: "error",
+        code: "WEB_RESTORE_WINDOW_CLOSED",
         message:
           "Web restore is disabled. The original owner must open an approved Railway restore window first.",
       });
     }
-    if (
-      cleanText(req.body?.confirmation, 80) !== RESTORE_CONFIRMATION_TEXT
-    ) {
+
+    const { backup, confirmation } = req.validated;
+    if (cleanText(confirmation, 80) !== RESTORE_CONFIRMATION_TEXT) {
       return res.status(400).json({
         status: "error",
+        code: "RESTORE_CONFIRMATION_REQUIRED",
         message: `Type ${RESTORE_CONFIRMATION_TEXT} exactly before restoring.`,
       });
     }
 
     const connection = await pool.getConnection();
-    let transactionStarted = false;
-    let validation;
     try {
-      const backup = req.body?.backup || req.body;
-      validation = await validateBackup(
-        connection,
-        backup,
-        req.delegatedSystemAdministrator
-      );
-      if (!validation.valid) {
+      const report = await validateFullSystemBackup(connection, backup, {
+        requester: req.backupAuthority.user,
+        requireRequesterPresence: !req.backupAuthority.isOriginalOwner,
+      });
+      if (!report.valid) {
         return res.status(400).json({
           status: "error",
+          code: "FULL_SYSTEM_BACKUP_VALIDATION_FAILED",
           message: "Backup validation failed. No restore was started.",
-          ...validation,
+          ...validationResponse(report),
         });
       }
 
-      await connection.beginTransaction();
-      transactionStarted = true;
-      await connection.query("SET FOREIGN_KEY_CHECKS = 0");
-
-      for (const tableName of [...validation.restore_tables].reverse()) {
-        await connection.query(`DELETE FROM ${safeTableName(tableName)}`);
-      }
-      for (const tableName of validation.tables_to_restore) {
-        await insertRows(connection, tableName, backup.tables[tableName]);
-      }
-
-      const currentTableSet = new Set(validation.restore_tables);
-      for (const tableName of EPHEMERAL_SECURITY_TABLES) {
-        if (currentTableSet.has(tableName)) {
-          await connection.query(`DELETE FROM ${safeTableName(tableName)}`);
-        }
-      }
-
-      await writeAuditEvent({
+      const restoreResult = await restoreFullSystemBackup(
         connection,
-        userId: req.user.id,
-        branchId: req.user?.branch_id || req.user?.default_branch_id || 1,
-        workspaceCode: req.user?.workspace_code || "spare_parts",
-        action: "DELEGATED_FULL_BACKUP_RESTORED",
-        actionType: "backup.delegated_restore.completed",
-        outcome: "success",
-        severity: "critical",
-        entityType: "backup",
-        details: "A delegated System Administrator completed a validated full-system restore.",
-        metadata: {
-          restored_tables: validation.tables_to_restore,
-          sessions_cleared: EPHEMERAL_SECURITY_TABLES,
-          original_owner_protected: true,
-        },
-      });
-
-      await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-      await connection.commit();
-      transactionStarted = false;
-
-      const autoIncrementWarnings = [];
-      for (const tableName of validation.restore_tables) {
-        try {
-          await resetAutoIncrement(connection, tableName);
-        } catch (error) {
-          autoIncrementWarnings.push(tableName);
+        backup,
+        report,
+        {
+          writeRestoreAudit: async (restoreConnection, evidence) => {
+            await writeAuditEvent({
+              connection: restoreConnection,
+              userId: req.user.id,
+              branchId: req.user?.branch_id || req.user?.default_branch_id || 1,
+              workspaceCode: req.user?.workspace_code || "spare_parts",
+              action: "FULL_SYSTEM_BACKUP_RESTORED",
+              actionType: "backup.full_system_restore.completed",
+              outcome: "success",
+              severity: "critical",
+              entityType: "backup",
+              entityId: backup.backup_id,
+              details:
+                "A validated full-system recovery package was restored. All sessions, recovery codes in progress, fingerprint and face credentials were invalidated.",
+              metadata: {
+                backup_id: backup.backup_id,
+                restored_tables: evidence.restoredTables,
+                security_invalidation: evidence.securityInvalidation,
+                authority: authorityLabel(req),
+                original_owner_protected: true,
+              },
+            });
+          },
         }
+      );
+
+      let ledgerWarning = null;
+      try {
+        await appendLedger({
+          req,
+          actorUserId: req.user.id,
+          actionCode: "FULL_SYSTEM_BACKUP_RESTORED",
+          outcome: "success",
+          severity: "critical",
+          entityType: "backup",
+          entityId: backup.backup_id,
+          payload: {
+            backup_id: backup.backup_id,
+            restored_tables: restoreResult.restoredTables,
+            security_invalidation: restoreResult.securityInvalidation,
+            authority: authorityLabel(req),
+            original_owner_protected: true,
+          },
+        });
+      } catch (ledgerError) {
+        ledgerWarning =
+          "Restore completed, but the post-commit privileged-ledger entry requires Administrator review.";
+        console.error("Post-restore privileged ledger warning:", ledgerError);
       }
 
       return res.json({
         status: "success",
         message:
-          "The delegated full-system restore completed. All restored login and protected-action sessions were cleared; sign in again before continuing.",
-        restored_tables: validation.tables_to_restore,
-        cleared_tables: validation.restore_tables,
-        auto_increment_warnings: autoIncrementWarnings,
-        sessions_cleared: EPHEMERAL_SECURITY_TABLES,
+          "Full-system restore completed and all users were signed out. Sign in with a password before continuing; fingerprint and face access must be enrolled again.",
+        backup_id: backup.backup_id,
+        restored_tables: restoreResult.restoredTables,
+        restored_table_counts: restoreResult.restoredTableCounts,
+        security_invalidation: restoreResult.securityInvalidation,
+        foreign_key_orphans: restoreResult.orphanReports,
+        privileged_ledger_warning: ledgerWarning,
       });
     } catch (error) {
-      if (transactionStarted) {
-        try {
-          await connection.rollback();
-        } catch {
-          // Preserve the original error.
-        }
-      }
-      try {
-        await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-      } catch {
-        // Connection is released below.
-      }
-      throw error;
+      console.error("Full-system restore failed:", {
+        code: error?.code,
+        message: error?.message,
+        count_mismatches: error?.countMismatches,
+        foreign_key_orphans: error?.orphanReports,
+      });
+      return sendBackupError(
+        res,
+        error,
+        "The full-system restore failed and was rolled back. No success was reported."
+      );
     } finally {
       connection.release();
     }
