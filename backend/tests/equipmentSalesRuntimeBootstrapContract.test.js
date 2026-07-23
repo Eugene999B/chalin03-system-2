@@ -14,7 +14,7 @@ test("Equipment Sales recovery starts after Railway boot without blocking other 
   assert.match(source, /scheduleEquipmentSalesRuntimeBootstrap/);
   assert.match(source, /scheduleEquipmentSalesRuntimeBootstrap\(\);/);
   assert.match(source, /await ensureEquipmentSalesSchema\(\)/);
-  assert.match(source, /runtimeBootstrapReady = Boolean\(status\?\.core_ready\)/);
+  assert.match(source, /runtimeBootstrapReady = Boolean\(status\?\.full_ready\)/);
   assert.match(source, /existing workspaces remain available/);
   assert.match(source, /DISABLE_EQUIPMENT_SALES_RUNTIME_BOOTSTRAP/);
   assert.match(source, /NODE_ENV/);
