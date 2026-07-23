@@ -1,12 +1,37 @@
 -- CHALIN 03 RELEASE 3.1 DATABASE SAFETY AND READINESS
 -- ADDITIVE MIGRATION ONLY.
 -- BACKUP REQUIRED: create and validate a fresh Version 3.1 full-system backup before production execution.
--- Replaces trigger definitions and seeds missing worker identity counters only.
+-- Replaces trigger definitions and repairs worker identity readiness additively.
 -- Existing business rows, worker identities and sequence counters are preserved.
 -- Normal application sessions use FOREIGN_KEY_CHECKS=1 and remain fully protected.
 -- The protected full-system restore is the only workflow that temporarily uses FOREIGN_KEY_CHECKS=0.
 
 DELIMITER $$
+
+DROP PROCEDURE IF EXISTS chalin03_release31_add_column_if_missing $$
+CREATE PROCEDURE chalin03_release31_add_column_if_missing(
+    IN p_table_name VARCHAR(64),
+    IN p_column_name VARCHAR(64),
+    IN p_definition TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = p_table_name
+          AND COLUMN_NAME = p_column_name
+    ) THEN
+        SET @release31_column_sql = CONCAT(
+            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            '` ADD COLUMN `', REPLACE(p_column_name, '`', '``'),
+            '` ', p_definition
+        );
+        PREPARE release31_column_statement FROM @release31_column_sql;
+        EXECUTE release31_column_statement;
+        DEALLOCATE PREPARE release31_column_statement;
+    END IF;
+END $$
 
 DROP TRIGGER IF EXISTS trg_user_password_change_revoke_biometrics $$
 CREATE TRIGGER trg_user_password_change_revoke_biometrics
@@ -186,6 +211,35 @@ END $$
 
 DELIMITER ;
 
+CREATE TABLE IF NOT EXISTS worker_identity_sequences (
+    workspace_code VARCHAR(50) NOT NULL PRIMARY KEY,
+    last_number INT NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CALL chalin03_release31_add_column_if_missing(
+    'settings',
+    'worker_id_card_validity_months',
+    'INT NOT NULL DEFAULT 24'
+);
+CALL chalin03_release31_add_column_if_missing(
+    'settings',
+    'worker_employee_number_prefix',
+    'VARCHAR(20) NOT NULL DEFAULT ''CH03'''
+);
+CALL chalin03_release31_add_column_if_missing(
+    'worker_profiles',
+    'employee_number',
+    'VARCHAR(80) NULL AFTER `id`'
+);
+CALL chalin03_release31_add_column_if_missing(
+    'worker_profiles',
+    'workspace_code',
+    'VARCHAR(50) NOT NULL DEFAULT ''spare_parts'' AFTER `employee_number`'
+);
+
+DROP PROCEDURE IF EXISTS chalin03_release31_add_column_if_missing;
+
 INSERT IGNORE INTO worker_identity_sequences (workspace_code, last_number)
 VALUES
   ('spare_parts', 0),
@@ -202,6 +256,6 @@ WHERE worker_id_card_validity_months IS NULL
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
     '20260723_release31_database_safety_guards',
-    'Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and worker identity readiness through the controlled migration process.'
+    'Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and additive worker identity readiness through the controlled migration process.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
