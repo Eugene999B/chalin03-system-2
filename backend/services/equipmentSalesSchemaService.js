@@ -871,7 +871,7 @@ function scheduleEquipmentSalesRuntimeBootstrap(delayMs = RUNTIME_BOOT_DELAY_MS)
 
     try {
       const status = await ensureEquipmentSalesSchema();
-      runtimeBootstrapReady = Boolean(status?.core_ready);
+      runtimeBootstrapReady = Boolean(status?.full_ready);
       console.log(
         `Equipment Sales finalization runtime is ready for catalogue=${
           status?.core_ready ? "yes" : "no"
