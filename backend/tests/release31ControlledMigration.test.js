@@ -30,6 +30,7 @@ test("controlled migration manifest is ordered, checksummed and fully paired", (
     manifest.migrations.map((entry) => entry.name),
     [
       "20260723_release31_database_safety_guards",
+      "20260723_release31_worker_identity_readiness",
       "20260723_release31_runtime_schema_baseline",
     ]
   );
@@ -129,6 +130,7 @@ test("Railway startup runs controlled migrations and never preloads repair code"
 test("startup schema services are verification-only", () => {
   for (const relativePath of [
     "services/branchSchemaReadinessService.js",
+    "services/workerIdentityService.js",
     "services/workerHrLetterSchemaService.js",
     "services/employmentDocumentSchemaService.js",
     "services/passkeySchemaService.js",
@@ -141,26 +143,40 @@ test("startup schema services are verification-only", () => {
   }
 });
 
-test("new safety migration is additive, backed up and verified read-only", () => {
-  const migration = readRepo(
-    "database/migrations/20260723_release31_database_safety_guards.sql"
-  );
-  const verification = readRepo(
-    "database/migrations/20260723_release31_database_safety_guards_verify.sql"
-  );
+test("controlled Release 3.1 SQL is additive, backed up and verified read-only", () => {
+  for (const migrationName of [
+    "20260723_release31_database_safety_guards",
+    "20260723_release31_worker_identity_readiness",
+  ]) {
+    const migration = readRepo(`database/migrations/${migrationName}.sql`);
+    const verification = readRepo(
+      `database/migrations/${migrationName}_verify.sql`
+    );
 
-  assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
-  assert.match(migration, /BACKUP REQUIRED/i);
-  assert.match(migration, /INSERT INTO schema_migrations/i);
-  assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
-  assert.doesNotMatch(migration, /TRUNCATE/i);
-  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+    assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
+    assert.match(migration, /BACKUP REQUIRED/i);
+    assert.match(migration, /INSERT (?:IGNORE )?INTO schema_migrations/i);
+    assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
+    assert.doesNotMatch(migration, /TRUNCATE/i);
+    assert.doesNotMatch(migration, /DELETE\s+FROM/i);
 
-  const executableVerification = stripSqlComments(verification);
-  assert.doesNotMatch(
-    executableVerification,
-    /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
-  );
+    const executableVerification = stripSqlComments(verification);
+    assert.doesNotMatch(
+      executableVerification,
+      /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
+    );
+  }
+});
+
+test("settings reads cannot create configuration rows", () => {
+  const source = stripSqlComments(readBackend("routes/settingsRoutes.js"));
+  const getStart = source.indexOf('router.get("/"');
+  const putStart = source.indexOf('router.put("/"');
+  assert.ok(getStart >= 0 && putStart > getStart);
+  const getRoute = source.slice(getStart, putStart);
+  assert.doesNotMatch(getRoute, /INSERT\s+INTO/i);
+  assert.doesNotMatch(getRoute, /UPDATE\s+/i);
+  assert.match(getRoute, /STORE_SETTINGS_NOT_CONFIGURED/);
 });
 
 test("argument parser defaults to plan and recognizes deployment apply", () => {
