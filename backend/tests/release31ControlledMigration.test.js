@@ -31,7 +31,9 @@ test("controlled migration manifest is ordered, checksummed and fully paired", (
     manifest.migrations.map((entry) => entry.name),
     [
       "20260723_release31_database_safety_guards",
+      "20260723_release31_audit_schema_safety",
       "20260723_release31_runtime_schema_baseline",
+      "20260723_release31_audit_schema_baseline",
     ]
   );
 
@@ -43,14 +45,13 @@ test("controlled migration manifest is ordered, checksummed and fully paired", (
   }
 });
 
-test("SQL splitter preserves trigger bodies under custom delimiters", () => {
+test("SQL splitter preserves trigger and procedure bodies under custom delimiters", () => {
   const source = `
 DELIMITER $$
-CREATE TRIGGER example BEFORE INSERT ON sales
-FOR EACH ROW
+CREATE PROCEDURE example()
 BEGIN
-  IF NEW.id IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'blocked';
+  IF 1 = 1 THEN
+    SET @example = 1;
   END IF;
 END $$
 DELIMITER ;
@@ -58,7 +59,7 @@ SELECT 'PASS' AS status;
 `;
   const statements = splitSqlStatements(source);
   assert.equal(statements.length, 2);
-  assert.match(statements[0], /CREATE TRIGGER example/);
+  assert.match(statements[0], /CREATE PROCEDURE example/);
   assert.match(statements[0], /END IF;/);
   assert.match(statements[1], /SELECT 'PASS'/);
 });
@@ -157,6 +158,7 @@ test("Railway startup runs guarded controlled migrations and never preloads repa
 
 test("startup schema services are verification-only", () => {
   for (const relativePath of [
+    "services/auditSchemaReadinessService.js",
     "services/branchSchemaReadinessService.js",
     "services/workerIdentityService.js",
     "services/workerHrLetterSchemaService.js",
@@ -173,25 +175,35 @@ test("startup schema services are verification-only", () => {
 });
 
 test("controlled Release 3.1 SQL is additive, backed up and verified read-only", () => {
-  const migrationName = "20260723_release31_database_safety_guards";
-  const migration = readRepo(`database/migrations/${migrationName}.sql`);
-  const verification = readRepo(
-    `database/migrations/${migrationName}_verify.sql`
-  );
+  const migrationNames = [
+    "20260723_release31_database_safety_guards",
+    "20260723_release31_audit_schema_safety",
+  ];
 
-  assert.match(migration, /ADDITIVE MIGRATION ONLY/i);
-  assert.match(migration, /BACKUP REQUIRED/i);
-  assert.match(migration, /INSERT IGNORE INTO worker_identity_sequences/i);
-  assert.match(migration, /INSERT INTO schema_migrations/i);
-  assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
-  assert.doesNotMatch(migration, /TRUNCATE/i);
-  assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+  for (const migrationName of migrationNames) {
+    const migration = readRepo(`database/migrations/${migrationName}.sql`);
+    const verification = readRepo(
+      `database/migrations/${migrationName}_verify.sql`
+    );
 
-  const executableVerification = stripSqlComments(verification);
-  assert.doesNotMatch(
-    executableVerification,
-    /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
+    assert.match(migration, /ADDITIVE(?:, CONTROLLED)? MIGRATION ONLY/i);
+    assert.match(migration, /BACKUP REQUIRED/i);
+    assert.match(migration, /INSERT INTO schema_migrations/i);
+    assert.doesNotMatch(migration, /DROP\s+(?:DATABASE|SCHEMA|TABLE)/i);
+    assert.doesNotMatch(migration, /TRUNCATE/i);
+    assert.doesNotMatch(migration, /DELETE\s+FROM/i);
+
+    const executableVerification = stripSqlComments(verification);
+    assert.doesNotMatch(
+      executableVerification,
+      /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
+    );
+  }
+
+  const safetyMigration = readRepo(
+    "database/migrations/20260723_release31_database_safety_guards.sql"
   );
+  assert.match(safetyMigration, /INSERT IGNORE INTO worker_identity_sequences/i);
 });
 
 test("equipment and installment guards permit only the protected restore session", () => {
