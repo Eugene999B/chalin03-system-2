@@ -11,6 +11,10 @@ const HISTORICAL_BASELINE_FILES = [
   ),
   path.resolve(
     __dirname,
+    "../../database/migrations/20260716_release3_group_command_configuration.sql"
+  ),
+  path.resolve(
+    __dirname,
     "../../database/migrations/20260722_equipment_sales_installments_foundation.sql"
   ),
 ];
