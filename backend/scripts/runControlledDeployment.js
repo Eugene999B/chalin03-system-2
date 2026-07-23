@@ -48,6 +48,16 @@ async function bootstrapHistoryTable() {
       backupRequired: true,
     });
 
+    const production =
+      String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+    if (production && approval.backupSource !== "railway_snapshot") {
+      const error = new Error(
+        "The one-time controlled migration ledger bootstrap requires a fresh Railway database snapshot. After the ledger exists, later migrations may use a verified Chalin 03 backup."
+      );
+      error.code = "MIGRATION_LEDGER_RAILWAY_SNAPSHOT_REQUIRED";
+      throw error;
+    }
+
     await connection.query(
       `CREATE TABLE controlled_migration_history (
          id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -84,7 +94,7 @@ async function bootstrapHistoryTable() {
          SHA2('controlled_migration_history_bootstrap_v1', 256),
          SHA2('controlled_migration_history_bootstrap_verified_v1', 256),
          '1', NULL, ?, ?, ?, ?, ?, ?, 'passed',
-         'Migration history ledger created under the controlled deployment lock after backup evidence verification.',
+         'Migration history ledger created under the controlled deployment lock after Railway snapshot evidence verification.',
          NOW()
        )`,
       [
