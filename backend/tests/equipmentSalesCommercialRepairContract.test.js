@@ -82,3 +82,17 @@ test("Railway start preloads non-blocking repair and retries until ready", () =>
   assert.match(bootstrap, /timer\.unref/);
   assert.match(bootstrap, /Catalogue and Hire remain available/);
 });
+
+test("production preload gates every Sales request on verified commercial columns", () => {
+  assert.match(bootstrap, /require\("\.\/equipmentSalesSchemaService"\)/);
+  assert.match(bootstrap, /const ensureCatalogueFoundation/);
+  assert.match(
+    bootstrap,
+    /ensureEquipmentSalesSchemaWithCommercialColumns/
+  );
+  assert.match(bootstrap, /await ensureCatalogueFoundation/);
+  assert.match(bootstrap, /await commercialRepairOnce\(\)/);
+  assert.match(bootstrap, /full_ready: ready/);
+  assert.match(bootstrap, /__chalin03CommercialColumnGateInstalled/);
+  assert.match(bootstrap, /requestRepairPromise = null/);
+});
