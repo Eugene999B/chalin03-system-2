@@ -98,6 +98,64 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  database-drill:
+    name: Disposable migration and recovery drill
+    needs: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: release31-root
+      DB_NAME: chalin03_release31_test
+      DB_SSL: "false"
+      SYSTEM_ADMIN_USER_ID: 1
+      SYSTEM_ADMIN_USERNAME: admin
+      CONFIRM_RELEASE31_DISPOSABLE_DRILL: RUN_RELEASE31_DISPOSABLE_DRILL
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: release31-root
+          MYSQL_DATABASE: chalin03_release31_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --password=release31-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run destructive disposable drill
+        run: npm run drill:release31
+
+      - name: Preserve recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release31-disposable-recovery-evidence
+          path: backend/release31-disposable-drill-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
   frontend:
     name: Frontend source tests and production build
     runs-on: ubuntu-latest
