@@ -1,4 +1,7 @@
 const { pool } = require("../config/db");
+const {
+  ensureWorkerIdentitySchema,
+} = require("./workerIdentityService");
 
 const MIGRATION_NAME = "20260719_standalone_employment_documents_signature";
 const REQUIRED_TABLE_COLUMNS = Object.freeze({
@@ -75,6 +78,7 @@ async function ensureEmploymentDocumentSchema(connection = pool) {
   if (connection === pool && schemaPromise) return schemaPromise;
 
   const verify = async () => {
+    const workerIdentity = await ensureWorkerIdentitySchema(connection);
     const tableNames = Object.keys(REQUIRED_TABLE_COLUMNS);
     const [tableRows] = await connection.query(
       `SELECT TABLE_NAME
@@ -120,6 +124,7 @@ async function ensureEmploymentDocumentSchema(connection = pool) {
     return {
       ready: true,
       migration_name: MIGRATION_NAME,
+      worker_identity: workerIdentity,
       missing_tables: [],
       missing_columns: [],
     };
