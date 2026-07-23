@@ -2,6 +2,14 @@
   "manifest_version": "1",
   "migrations": [
     {
+      "name": "20260723_release31_database_safety_guards",
+      "mode": "sql",
+      "description": "Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards and Spare Parts installment retirement guards.",
+      "migration_file": "20260723_release31_database_safety_guards.sql",
+      "verify_file": "20260723_release31_database_safety_guards_verify.sql",
+      "backup_required": true
+    },
+    {
       "name": "20260723_release31_runtime_schema_baseline",
       "mode": "baseline",
       "description": "Verifies and records the approved schema baseline after removing runtime database repairs from application startup and requests.",
