@@ -23,11 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out repository
+      - name: Check out repository history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Reject whitespace errors
-        run: git diff --check HEAD^ HEAD
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          BASE_SHA="$PR_BASE_SHA"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "null" ]]; then
+            BASE_SHA="$PUSH_BASE_SHA"
+          fi
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git diff --check "${BASE_SHA}...HEAD"
 
   backend:
     name: Backend safety checks
@@ -37,8 +51,10 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - name: Check out repository
+      - name: Check out repository history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js LTS
         uses: actions/setup-node@v4
@@ -54,7 +70,19 @@ jobs:
         run: npm run syntax-check
 
       - name: Verify controlled migration safety
-        run: npm run migration-safety
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          BASE_SHA="$PR_BASE_SHA"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "null" ]]; then
+            BASE_SHA="$PUSH_BASE_SHA"
+          fi
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          npm run migration-safety -- --base "$BASE_SHA" --head HEAD
 
       - name: Run backend tests
         run: |
