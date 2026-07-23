@@ -10,10 +10,25 @@
       "backup_required": true
     },
     {
+      "name": "20260723_release31_audit_schema_safety",
+      "mode": "sql",
+      "description": "Moves audit sign-off, unlock-request and reapproval schema repair out of HTTP requests and establishes read-only runtime readiness checks.",
+      "migration_file": "20260723_release31_audit_schema_safety.sql",
+      "verify_file": "20260723_release31_audit_schema_safety_verify.sql",
+      "backup_required": true
+    },
+    {
       "name": "20260723_release31_runtime_schema_baseline",
       "mode": "baseline",
       "description": "Verifies and records the approved schema baseline after removing runtime database repairs from application startup and requests.",
       "verify_file": "20260723_release31_runtime_schema_baseline_verify.sql",
+      "backup_required": false
+    },
+    {
+      "name": "20260723_release31_audit_schema_baseline",
+      "mode": "baseline",
+      "description": "Records the approved audit sign-off, unlock-request and reapproval table, column, index and request-area contract without changing the immutable runtime baseline.",
+      "verify_file": "20260723_release31_audit_schema_safety_verify.sql",
       "backup_required": false
     }
   ]
