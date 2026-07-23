@@ -75,6 +75,7 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BASE_SHA: ${{ github.event.before }}
         run: |
+          set -o pipefail
           BASE_SHA="$PR_BASE_SHA"
           if [[ -z "$BASE_SHA" || "$BASE_SHA" == "null" ]]; then
             BASE_SHA="$PUSH_BASE_SHA"
@@ -82,7 +83,7 @@ jobs:
           if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             BASE_SHA="$(git rev-parse HEAD^)"
           fi
-          npm run migration-safety -- --base "$BASE_SHA" --head HEAD
+          npm run migration-safety -- --base "$BASE_SHA" --head HEAD 2>&1 | tee migration-safety.log
 
       - name: Run backend tests
         run: |
@@ -94,7 +95,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-verification-log
-          path: backend/backend-test.log
+          path: |
+            backend/migration-safety.log
+            backend/backend-test.log
           if-no-files-found: ignore
           retention-days: 14
 
