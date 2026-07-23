@@ -15,6 +15,14 @@ const HISTORICAL_BASELINE_FILES = [
   ),
   path.resolve(
     __dirname,
+    "../../database/migrations/20260719_worker_hr_letters.sql"
+  ),
+  path.resolve(
+    __dirname,
+    "../../database/migrations/20260719_standalone_employment_documents_signature.sql"
+  ),
+  path.resolve(
+    __dirname,
     "../../database/migrations/20260722_equipment_sales_installments_foundation.sql"
   ),
 ];
