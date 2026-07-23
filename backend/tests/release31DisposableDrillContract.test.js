@@ -42,11 +42,23 @@ test("Release 3.1 drill uses controlled migrations and canonical recovery", () =
   assert.match(source, /contamination_removed/);
 });
 
-test("backend package exposes the guarded disposable drill", () => {
+test("post-drill verification requires durable backup history evidence", () => {
+  const source = read("backend/scripts/assertRelease31DrillEvidence.js");
+
+  assert.match(source, /assertDisposableTarget\(config\)/);
+  assert.match(source, /FROM backup_history/);
+  assert.match(source, /status restored/);
+  assert.match(source, /verification_status verified/);
+  assert.match(source, /backup_history_recorded = true/);
+  assert.match(source, /package_checksum_sha256/);
+  assert.match(source, /verified_at/);
+});
+
+test("backend package exposes the guarded drill and evidence verifier", () => {
   const packageJson = JSON.parse(read("backend/package.json"));
   assert.equal(
     packageJson.scripts["drill:release31"],
-    "node scripts/runRelease31DisposableDrill.js"
+    "node scripts/runRelease31DisposableDrill.js && node scripts/assertRelease31DrillEvidence.js"
   );
 });
 
