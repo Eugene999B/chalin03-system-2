@@ -2,11 +2,11 @@ const crypto = require("crypto");
 
 const { pool } = require("../config/db");
 const { parseDeviceEvidence } = require("./sessionDeviceService");
-
-const SESSION_TTL_DAYS = Math.max(
-  Number(process.env.AUTH_SESSION_TTL_DAYS || 7),
-  1
-);
+const {
+  expiryResponse,
+  getEffectiveSessionExpiry,
+  getSessionPolicy,
+} = require("./sessionExpiryPolicy");
 
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
@@ -63,8 +63,11 @@ async function insertLegacySession({
        last_seen_at,
        expires_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(),
-       DATE_ADD(NOW(), INTERVAL ? DAY)
+     VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(),
+       LEAST(
+         DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR),
+         DATE_ADD(UTC_DATE(), INTERVAL 1 DAY)
+       )
      )`,
     [
       sessionId,
@@ -73,7 +76,6 @@ async function insertLegacySession({
       branchId || null,
       requestIp(req) || null,
       requestUserAgent(req) || null,
-      SESSION_TTL_DAYS,
     ]
   );
 }
@@ -124,8 +126,11 @@ async function insertRichSession({
        last_seen_at,
        expires_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(),
-       DATE_ADD(NOW(), INTERVAL ? DAY)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP(),
+       LEAST(
+         DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR),
+         DATE_ADD(UTC_DATE(), INTERVAL 1 DAY)
+       )
      )`,
     [
       sessionId,
@@ -158,7 +163,6 @@ async function insertRichSession({
       parsedEvidence.location_accuracy_m,
       parsedEvidence.location_recorded_at,
       parsedEvidence.network_country,
-      SESSION_TTL_DAYS,
     ]
   );
 }
@@ -173,6 +177,7 @@ async function createSession({
 }) {
   const connection = await pool.getConnection();
   const sessionId = createSessionId();
+  const sessionPolicy = getSessionPolicy(new Date());
   const parsedEvidence = parseDeviceEvidence({
     userAgent: requestUserAgent(req),
     evidence: deviceEvidence || {},
@@ -199,12 +204,12 @@ async function createSession({
 
     const [revokeResult] = await connection.query(
       `UPDATE auth_sessions
-       SET revoked_at = NOW(),
+       SET revoked_at = UTC_TIMESTAMP(),
            revocation_reason = 'replaced_by_new_login',
            replaced_by_session_id = ?
        WHERE user_id = ?
          AND revoked_at IS NULL
-         AND expires_at > NOW()`,
+         AND expires_at > UTC_TIMESTAMP()`,
       [sessionId, userId]
     );
 
@@ -239,7 +244,12 @@ async function createSession({
     return {
       sessionId,
       replacedSessionCount: Number(revokeResult.affectedRows || 0),
-      expiresInDays: SESSION_TTL_DAYS,
+      expiresAt: sessionPolicy.expiresAt.toISOString(),
+      expiresInSeconds: Math.max(
+        0,
+        Math.floor((sessionPolicy.expiresAt.getTime() - Date.now()) / 1000)
+      ),
+      expiryReason: sessionPolicy.reason,
       device: parsedEvidence,
     };
   } catch (error) {
@@ -271,6 +281,7 @@ async function validateSession({ userId, sessionId }) {
          id,
          session_id,
          user_id,
+         created_at,
          expires_at,
          revoked_at,
          revocation_reason
@@ -310,43 +321,47 @@ async function validateSession({ userId, sessionId }) {
       };
     }
 
-    const expiresAt = new Date(session.expires_at);
+    const effectiveExpiry = getEffectiveSessionExpiry({
+      createdAt: session.created_at,
+      storedExpiresAt: session.expires_at,
+    });
 
-    if (
-      Number.isNaN(expiresAt.getTime()) ||
-      expiresAt.getTime() <= Date.now()
-    ) {
+    if (effectiveExpiry.expiresAt.getTime() <= Date.now()) {
+      const response = expiryResponse(effectiveExpiry);
+
       await pool.query(
         `UPDATE auth_sessions
-         SET revoked_at = COALESCE(revoked_at, NOW()),
-             revocation_reason = COALESCE(
-               revocation_reason,
-               'expired'
-             )
+         SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()),
+             revocation_reason = COALESCE(revocation_reason, ?)
          WHERE id = ?`,
-        [session.id]
+        [response.revocationReason, session.id]
       );
 
       return {
         ok: false,
         statusCode: 401,
-        code: "SESSION_EXPIRED",
-        message: "Your session expired. Please login again.",
+        code: response.code,
+        message: response.message,
+        expires_at: effectiveExpiry.expiresAt.toISOString(),
       };
     }
 
     await pool.query(
       `UPDATE auth_sessions
-       SET last_seen_at = NOW()
+       SET last_seen_at = UTC_TIMESTAMP()
        WHERE id = ?
          AND revoked_at IS NULL
-         AND last_seen_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+         AND last_seen_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)`,
       [session.id]
     );
 
     return {
       ok: true,
-      session,
+      session: {
+        ...session,
+        expires_at: effectiveExpiry.expiresAt,
+        expiry_reason: effectiveExpiry.reason,
+      },
     };
   } catch (error) {
     if (error.code === "ER_NO_SUCH_TABLE") {
@@ -374,7 +389,7 @@ async function revokeSession({
 
   const [result] = await pool.query(
     `UPDATE auth_sessions
-     SET revoked_at = COALESCE(revoked_at, NOW()),
+     SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()),
          revocation_reason = COALESCE(revocation_reason, ?)
      WHERE user_id = ?
        AND session_id = ?`,
@@ -394,7 +409,7 @@ async function revokeAllUserSessions(
 
   const [result] = await pool.query(
     `UPDATE auth_sessions
-     SET revoked_at = COALESCE(revoked_at, NOW()),
+     SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP()),
          revocation_reason = COALESCE(revocation_reason, ?)
      WHERE user_id = ?
        AND revoked_at IS NULL`,
