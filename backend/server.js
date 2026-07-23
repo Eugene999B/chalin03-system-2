@@ -169,11 +169,25 @@ app.use(
 );
 
 app.use("/api", generalApiLimiter);
+app.use(safeErrorResponseMiddleware);
+
+// Full-system recovery packages can legitimately exceed the ordinary API body
+// limit because they include protected evidence and compressed equipment images.
+// Authentication and the sensitive-action limiter run before the larger parser,
+// so this exception does not widen the rest of the API attack surface.
+const backupBodyLimit = process.env.BACKUP_BODY_LIMIT || "100mb";
+app.use(
+  "/api/backups",
+  requireAuth,
+  sensitiveAdminLimiter,
+  express.json({ limit: backupBodyLimit }),
+  express.urlencoded({ extended: true, limit: backupBodyLimit }),
+  delegatedBackupRoutes
+);
 
 const bodyLimit = process.env.API_BODY_LIMIT || "10mb";
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
-app.use(safeErrorResponseMiddleware);
 
 app.get("/", (req, res) => {
   res.json({
@@ -242,7 +256,6 @@ app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth/biometrics/authentication", loginLimiter);
 app.use("/api/auth/forgot-password", loginLimiter);
 app.use("/api/auth/recovery", loginLimiter);
-app.use("/api/backups/restore", sensitiveAdminLimiter);
 app.use("/api/release2-final/owner", loginLimiter);
 app.use("/api/release2-final/security", sensitiveAdminLimiter);
 app.use("/api/release2-final/backups", sensitiveAdminLimiter);
@@ -318,7 +331,6 @@ app.use(
   activityRoutes
 );
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
-app.use("/api/backups", delegatedBackupRoutes);
 app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
 app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
 app.use(
