@@ -9,6 +9,10 @@ const read = (relativePath) =>
 
 const schemaService = read("backend/services/passkeySchemaService.js");
 const biometricRoutes = read("backend/routes/biometricRoutes.js");
+const server = read("backend/server.js");
+const safetyMigration = read(
+  "database/migrations/20260723_release31_database_safety_guards.sql"
+);
 const loginEntry = read("frontend/src/pages/LoginPage.jsx");
 const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
 const biometricClient = read("frontend/src/utils/biometricAccess.js");
@@ -18,37 +22,36 @@ const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
 
-test("all earlier device credentials are revoked exactly once", () => {
+test("biometric generation is verified without rerunning the global device reset", () => {
   assert.match(schemaService, /20260722_bank_biometric_device_reset_v1/);
-  assert.match(schemaService, /global_bank_biometric_reset/);
-  assert.match(schemaService, /UPDATE user_passkeys[\s\S]*revoked_at/);
-  assert.match(schemaService, /UPDATE passkey_challenges[\s\S]*used_at/);
-  assert.match(schemaService, /passkey_security_events/);
   assert.match(schemaService, /bank_biometric_generation/);
-  assert.match(schemaService, /INSERT INTO schema_migrations/);
+  assert.match(schemaService, /generationReady/);
+  assert.match(schemaService, /information_schema\.TABLES/);
+  assert.match(schemaService, /information_schema\.TRIGGERS/);
+  assert.doesNotMatch(schemaService, /CREATE TABLE|ALTER TABLE|DROP TRIGGER/i);
+  assert.doesNotMatch(schemaService, /INSERT INTO schema_migrations/i);
 });
 
 
-test("password changes revoke every linked biometric device", () => {
-  assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
-  assert.match(schemaService, /NEW\.password_hash <=> OLD\.password_hash/);
+test("password changes revoke every linked biometric device through controlled migration", () => {
+  assert.match(safetyMigration, /trg_user_password_change_revoke_biometrics/);
+  assert.match(safetyMigration, /NEW\.password_hash <=> OLD\.password_hash/);
   assert.match(
-    schemaService,
+    safetyMigration,
     /revoked_reason = COALESCE\(revoked_reason, 'password_changed'\)/
   );
+  assert.match(schemaService, /PASSWORD_REVOCATION_TRIGGER/);
 });
 
 
-test("legacy generic passkey API is retired and biometrics are rate limited", () => {
-  assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
-  assert.match(schemaService, /legacyPasskeyRoutes\.stack\.unshift/);
-  assert.match(schemaService, /BIOMETRIC_RATE_LIMITED/);
-  assert.match(schemaService, /windowMs:\s*15 \* 60 \* 1000/);
-  assert.match(schemaService, /max:\s*40/);
-  assert.match(
-    schemaService,
-    /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/
-  );
+test("legacy generic passkey API is explicitly retired and biometrics are rate limited", () => {
+  assert.match(server, /LEGACY_PASSKEYS_RETIRED/);
+  assert.match(server, /BIOMETRIC_RATE_LIMITED/);
+  assert.match(server, /windowMs:\s*15 \* 60 \* 1000/);
+  assert.match(server, /max:\s*40/);
+  assert.match(server, /app\.use\("\/api\/auth\/biometrics", biometricLimiter, biometricRoutes\)/);
+  assert.match(server, /app\.use\("\/api\/auth\/passkeys"/);
+  assert.doesNotMatch(server, /legacyPasskeyRoutes\.stack|process\.nextTick/);
 });
 
 
