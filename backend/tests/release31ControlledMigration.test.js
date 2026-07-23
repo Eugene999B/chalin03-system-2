@@ -113,11 +113,18 @@ test("production SQL migration requires backup, approver and change ticket", () 
   }
 });
 
-test("Railway startup runs controlled migrations and never preloads repair code", () => {
+test("Railway startup runs guarded controlled migrations and never preloads repair code", () => {
   const packageJson = JSON.parse(readBackend("package.json"));
-  assert.match(packageJson.scripts.start, /runControlledMigrations\.js --deployment/);
+  assert.match(packageJson.scripts.start, /runControlledDeployment\.js --deployment/);
   assert.match(packageJson.scripts.start, /&& node server\.js$/);
+  assert.match(packageJson.scripts["migrate:apply"], /runControlledDeployment\.js --apply/);
   assert.doesNotMatch(packageJson.scripts.start, /equipmentSalesCommercialBootstrap/);
+
+  const bootstrap = readBackend("scripts/runControlledDeployment.js");
+  assert.match(bootstrap, /productionApproval/);
+  assert.match(bootstrap, /controlled_migration_history_bootstrap/);
+  assert.match(bootstrap, /MIGRATION_BACKUP_SHA256|backupAttestation/);
+  assert.match(bootstrap, /GET_LOCK/);
 
   const server = readBackend("server.js");
   assert.match(server, /requireEquipmentSalesReadiness/);
@@ -135,6 +142,7 @@ test("startup schema services are verification-only", () => {
     "services/employmentDocumentSchemaService.js",
     "services/passkeySchemaService.js",
     "services/equipmentSalesSchemaService.js",
+    "services/groupConfigurationService.js",
   ]) {
     const source = stripSqlComments(readBackend(relativePath));
     assert.doesNotMatch(source, /CREATE\s+TABLE/i, relativePath);
@@ -166,6 +174,19 @@ test("controlled Release 3.1 SQL is additive, backed up and verified read-only",
       /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i
     );
   }
+});
+
+test("equipment and installment guards permit only the protected restore session", () => {
+  const migration = readRepo(
+    "database/migrations/20260723_release31_database_safety_guards.sql"
+  );
+  const guardCount = (
+    migration.match(/@@SESSION\.FOREIGN_KEY_CHECKS = 1/g) || []
+  ).length;
+  assert.ok(guardCount >= 6);
+  assert.match(migration, /trg_hire_contract_asset_sale_guard_before_insert/);
+  assert.match(migration, /trg_equipment_sale_agreement_hire_guard_before_insert/);
+  assert.match(migration, /trg_spare_parts_installment_retired_agreement_insert/);
 });
 
 test("settings reads cannot create configuration rows", () => {
