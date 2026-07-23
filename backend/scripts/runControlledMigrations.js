@@ -27,6 +27,10 @@ const {
 const {
   loadCanonicalContract,
 } = require("../services/fullSystemBackupService");
+const {
+  readProductionAttestationEnvironment,
+  verifyProductionBackupAttestation,
+} = require("../services/migrationBackupAttestationService");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const MIGRATION_DIR = path.join(REPO_ROOT, "database", "migrations");
@@ -75,6 +79,14 @@ function resolveMigrationFile(fileName) {
     throw new Error(`Unsafe migration manifest path: ${fileName}`);
   }
   return path.join(MIGRATION_DIR, safeName);
+}
+
+function stripSqlComments(sql) {
+  return String(sql || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
 }
 
 function loadManifest(manifestPath = MANIFEST_PATH) {
@@ -155,14 +167,6 @@ function loadManifest(manifestPath = MANIFEST_PATH) {
   };
 }
 
-function stripSqlComments(sql) {
-  return String(sql || "")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/--.*$/, ""))
-    .join("\n");
-}
-
 function splitSqlStatements(sqlText) {
   const statements = [];
   let delimiter = ";";
@@ -199,26 +203,48 @@ async function historyTableExists(connection) {
   return rows.length === 1;
 }
 
-async function ensureHistoryTable(connection) {
-  await connection.query(
-    `CREATE TABLE IF NOT EXISTS controlled_migration_history (
-       id BIGINT AUTO_INCREMENT PRIMARY KEY,
-       migration_name VARCHAR(180) NOT NULL UNIQUE,
-       migration_mode VARCHAR(30) NOT NULL,
-       migration_checksum_sha256 CHAR(64) NOT NULL,
-       verification_checksum_sha256 CHAR(64) NOT NULL,
-       manifest_version VARCHAR(40) NOT NULL,
-       application_version VARCHAR(40) NULL,
-       backup_attestation_sha256 CHAR(64) NULL,
-       approved_by VARCHAR(180) NULL,
-       change_ticket VARCHAR(180) NULL,
-       verification_status VARCHAR(30) NOT NULL,
-       verification_summary TEXT NULL,
-       applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       INDEX idx_controlled_migration_applied (applied_at),
-       INDEX idx_controlled_migration_status (verification_status, applied_at)
-     )`
+async function assertHistoryTableReady(connection) {
+  if (!(await historyTableExists(connection))) {
+    const error = new Error(
+      "Controlled migration history is missing. Apply migrations only through scripts/runControlledDeployment.js so backup evidence is verified before the ledger is created."
+    );
+    error.code = "CONTROLLED_MIGRATION_HISTORY_REQUIRED";
+    throw error;
+  }
+
+  const requiredColumns = [
+    "migration_name",
+    "migration_mode",
+    "migration_checksum_sha256",
+    "verification_checksum_sha256",
+    "manifest_version",
+    "backup_attestation_sha256",
+    "backup_source",
+    "backup_reference",
+    "backup_created_at",
+    "approved_by",
+    "change_ticket",
+    "verification_status",
+    "verification_summary",
+    "applied_at",
+  ];
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?`,
+    [HISTORY_TABLE]
   );
+  const existing = new Set(rows.map((row) => row.COLUMN_NAME));
+  const missing = requiredColumns.filter((column) => !existing.has(column));
+  if (missing.length) {
+    const error = new Error(
+      `Controlled migration history is incomplete: ${missing.join(", ")}.`
+    );
+    error.code = "CONTROLLED_MIGRATION_HISTORY_SCHEMA_INCOMPLETE";
+    error.missingColumns = missing.map((column) => `${HISTORY_TABLE}.${column}`);
+    throw error;
+  }
 }
 
 async function loadHistory(connection) {
@@ -256,7 +282,12 @@ function verificationRowProblems(rows) {
       problems.push(row);
       continue;
     }
-    for (const key of ["problem_count", "missing_count", "error_count", "orphan_count"]) {
+    for (const key of [
+      "problem_count",
+      "missing_count",
+      "error_count",
+      "orphan_count",
+    ]) {
       if (row[key] !== undefined && Number(row[key] || 0) !== 0) {
         problems.push(row);
         break;
@@ -346,39 +377,15 @@ async function runApplicationSchemaReadiness(connection) {
 }
 
 function productionApproval(entry) {
-  const production = String(process.env.NODE_ENV || "").toLowerCase() === "production";
-  if (!production || !entry.backupRequired || entry.mode !== "sql") {
-    return {
-      backupAttestation: null,
-      approvedBy: cleanText(process.env.MIGRATION_APPROVED_BY, 180) || null,
-      changeTicket: cleanText(process.env.MIGRATION_CHANGE_TICKET, 180) || null,
-    };
-  }
-
-  const backupAttestation = cleanText(
-    process.env.MIGRATION_BACKUP_SHA256,
-    64
-  ).toLowerCase();
-  const approvedBy = cleanText(process.env.MIGRATION_APPROVED_BY, 180);
-  const changeTicket = cleanText(process.env.MIGRATION_CHANGE_TICKET, 180);
-
-  if (!/^[a-f0-9]{64}$/.test(backupAttestation)) {
-    throw new Error(
-      `Production migration ${entry.name} requires MIGRATION_BACKUP_SHA256 from a freshly validated full-system backup.`
-    );
-  }
-  if (!approvedBy) {
-    throw new Error(
-      `Production migration ${entry.name} requires MIGRATION_APPROVED_BY.`
-    );
-  }
-  if (!changeTicket) {
-    throw new Error(
-      `Production migration ${entry.name} requires MIGRATION_CHANGE_TICKET.`
-    );
-  }
-
-  return { backupAttestation, approvedBy, changeTicket };
+  const environment = readProductionAttestationEnvironment(entry);
+  return {
+    backupAttestation: environment.checksum,
+    backupSource: environment.source,
+    backupReference: environment.reference,
+    backupCreatedAt: environment.createdAt,
+    approvedBy: environment.approvedBy,
+    changeTicket: environment.changeTicket,
+  };
 }
 
 async function executeSqlMigration(connection, entry) {
@@ -403,14 +410,21 @@ async function executeSqlMigration(connection, entry) {
   return statements.length;
 }
 
-async function recordMigration(connection, manifestVersion, entry, approval, verification) {
+async function recordMigration(
+  connection,
+  manifestVersion,
+  entry,
+  approval,
+  verification
+) {
   await connection.query(
     `INSERT INTO controlled_migration_history (
        migration_name, migration_mode, migration_checksum_sha256,
        verification_checksum_sha256, manifest_version, application_version,
-       backup_attestation_sha256, approved_by, change_ticket,
+       backup_attestation_sha256, backup_source, backup_reference,
+       backup_created_at, approved_by, change_ticket,
        verification_status, verification_summary, applied_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'passed', ?, NOW())`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'passed', ?, NOW())`,
     [
       entry.name,
       entry.mode,
@@ -419,6 +433,9 @@ async function recordMigration(connection, manifestVersion, entry, approval, ver
       manifestVersion,
       APP_VERSION,
       approval.backupAttestation,
+      approval.backupSource,
+      approval.backupReference,
+      approval.backupCreatedAt,
       approval.approvedBy,
       approval.changeTicket,
       JSON.stringify(verification),
@@ -449,7 +466,19 @@ async function planMigrations(connection, manifest) {
   });
 }
 
-async function applyMigrations(connection, manifest) {
+async function applyMigrations(
+  connection,
+  manifest,
+  { authorizedApply = false } = {}
+) {
+  if (!authorizedApply) {
+    const error = new Error(
+      "Direct migration apply is disabled. Use scripts/runControlledDeployment.js so production backup evidence and migration-ledger bootstrap are verified first."
+    );
+    error.code = "CONTROLLED_DEPLOYMENT_WRAPPER_REQUIRED";
+    throw error;
+  }
+
   const [lockRows] = await connection.query(
     "SELECT GET_LOCK(?, 60) AS acquired",
     [LOCK_NAME]
@@ -459,7 +488,7 @@ async function applyMigrations(connection, manifest) {
   }
 
   try {
-    await ensureHistoryTable(connection);
+    await assertHistoryTableReady(connection);
     const history = await loadHistory(connection);
     const applied = [];
     const skipped = [];
@@ -472,7 +501,7 @@ async function applyMigrations(connection, manifest) {
         continue;
       }
 
-      const approval = productionApproval(entry);
+      const approval = await verifyProductionBackupAttestation(connection, entry);
       const statementCount =
         entry.mode === "sql" ? await executeSqlMigration(connection, entry) : 0;
       const sqlVerification = await executeVerification(connection, entry);
@@ -481,6 +510,15 @@ async function applyMigrations(connection, manifest) {
         migration_statement_count: statementCount,
         sql: sqlVerification,
         application: applicationReadiness,
+        backup_evidence: {
+          required: approval.required,
+          source: approval.backupSource,
+          reference: approval.backupReference,
+          created_at: approval.backupCreatedAt,
+          verified_at: approval.backupVerifiedAt,
+          schema_fingerprint_sha256:
+            approval.backupSchemaFingerprintSha256,
+        },
       };
 
       await recordMigration(
@@ -514,7 +552,17 @@ async function run(options = parseArguments(process.argv.slice(2))) {
       return { mode: "plan", plan };
     }
 
-    const result = await applyMigrations(connection, manifest);
+    if (!options.authorizedApply) {
+      const error = new Error(
+        "Apply mode must be launched through scripts/runControlledDeployment.js."
+      );
+      error.code = "CONTROLLED_DEPLOYMENT_WRAPPER_REQUIRED";
+      throw error;
+    }
+
+    const result = await applyMigrations(connection, manifest, {
+      authorizedApply: true,
+    });
     console.log(
       JSON.stringify(
         {
@@ -560,7 +608,9 @@ module.exports = {
   WRITE_PATTERN,
   applyMigrations,
   assertHistoryIntegrity,
+  assertHistoryTableReady,
   executeVerification,
+  historyTableExists,
   loadManifest,
   parseArguments,
   planMigrations,
