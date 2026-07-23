@@ -254,6 +254,12 @@ async function recordRestoreOutcome(
     verificationMessage: String(verificationMessage || "").slice(0, 2000),
     verifiedBy,
   });
+  await connection.query(
+    `UPDATE backup_history
+     SET verified_at = COALESCE(verified_at, UTC_TIMESTAMP())
+     WHERE backup_id = ?`,
+    [backup.backup_id]
+  );
   return true;
 }
 
