@@ -1,10 +1,66 @@
 -- CHALIN 03 RELEASE 3.1 DATABASE SAFETY AND READINESS
 -- ADDITIVE MIGRATION ONLY.
 -- BACKUP REQUIRED: create and validate a fresh Version 3.1 full-system backup before production execution.
--- Replaces trigger definitions and repairs worker identity readiness additively.
--- Existing business rows, worker identities and sequence counters are preserved.
+-- Replaces trigger definitions and repairs biometric and worker identity readiness additively.
+-- Existing business rows, biometric credentials, worker identities and sequence counters are preserved.
 -- Normal application sessions use FOREIGN_KEY_CHECKS=1 and remain fully protected.
 -- The protected full-system restore is the only workflow that temporarily uses FOREIGN_KEY_CHECKS=0.
+
+CREATE TABLE IF NOT EXISTS user_passkeys (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    webauthn_user_id VARCHAR(128) NOT NULL,
+    credential_id VARCHAR(512) NOT NULL,
+    public_key LONGBLOB NOT NULL,
+    counter BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    device_type VARCHAR(32) NULL,
+    backed_up TINYINT(1) NOT NULL DEFAULT 0,
+    transports VARCHAR(255) NULL,
+    display_name VARCHAR(120) NOT NULL DEFAULT 'Trusted device',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMP NULL DEFAULT NULL,
+    revoked_at TIMESTAMP NULL DEFAULT NULL,
+    device_binding_hash CHAR(64) NULL,
+    binding_generation INT NOT NULL DEFAULT 1,
+    authenticator_attachment VARCHAR(32) NULL,
+    revoked_reason VARCHAR(120) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_user_passkeys_credential (credential_id(255)),
+    UNIQUE KEY uq_user_passkeys_binding_hash (device_binding_hash),
+    KEY idx_user_passkeys_user (user_id, revoked_at),
+    KEY idx_user_passkeys_generation (binding_generation, revoked_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS passkey_challenges (
+    id CHAR(36) NOT NULL,
+    purpose VARCHAR(32) NOT NULL,
+    user_id BIGINT UNSIGNED NULL,
+    challenge VARCHAR(512) NOT NULL,
+    context_json TEXT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_passkey_challenges_expiry (expires_at, used_at),
+    KEY idx_passkey_challenges_user (user_id, purpose)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS passkey_security_state (
+    state_key VARCHAR(80) NOT NULL PRIMARY KEY,
+    state_value BIGINT NOT NULL DEFAULT 1,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS passkey_security_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    event_type VARCHAR(80) NOT NULL,
+    affected_count INT NOT NULL DEFAULT 0,
+    user_id BIGINT UNSIGNED NULL,
+    details TEXT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_passkey_security_event_type (event_type, created_at),
+    KEY idx_passkey_security_event_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DELIMITER $$
 
@@ -32,6 +88,27 @@ BEGIN
         DEALLOCATE PREPARE release31_column_statement;
     END IF;
 END $$
+
+CALL chalin03_release31_add_column_if_missing(
+    'user_passkeys',
+    'device_binding_hash',
+    'CHAR(64) NULL'
+) $$
+CALL chalin03_release31_add_column_if_missing(
+    'user_passkeys',
+    'binding_generation',
+    'INT NOT NULL DEFAULT 1'
+) $$
+CALL chalin03_release31_add_column_if_missing(
+    'user_passkeys',
+    'authenticator_attachment',
+    'VARCHAR(32) NULL'
+) $$
+CALL chalin03_release31_add_column_if_missing(
+    'user_passkeys',
+    'revoked_reason',
+    'VARCHAR(120) NULL'
+) $$
 
 DROP TRIGGER IF EXISTS trg_user_password_change_revoke_biometrics $$
 CREATE TRIGGER trg_user_password_change_revoke_biometrics
@@ -240,6 +317,10 @@ CALL chalin03_release31_add_column_if_missing(
 
 DROP PROCEDURE IF EXISTS chalin03_release31_add_column_if_missing;
 
+INSERT INTO passkey_security_state (state_key, state_value)
+VALUES ('bank_biometric_generation', 1)
+ON DUPLICATE KEY UPDATE state_value = GREATEST(state_value, 1);
+
 INSERT IGNORE INTO worker_identity_sequences (workspace_code, last_number)
 VALUES
   ('spare_parts', 0),
@@ -256,6 +337,6 @@ WHERE worker_id_card_validity_months IS NULL
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
     '20260723_release31_database_safety_guards',
-    'Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and additive worker identity readiness through the controlled migration process.'
+    'Installs controlled biometric readiness, verified password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and additive worker identity readiness.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
