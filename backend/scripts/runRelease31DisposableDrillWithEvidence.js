@@ -34,6 +34,13 @@ function evidencePath() {
   );
 }
 
+function normalizeHistoricalSql(source) {
+  return String(source).replaceAll(
+    "PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;",
+    "PREPARE stmt FROM @sql;\nEXECUTE stmt;\nDEALLOCATE PREPARE stmt;"
+  );
+}
+
 function installDisposableBaselineOverlay() {
   const originalReadFileSync = fs.readFileSync;
 
@@ -45,7 +52,7 @@ function installDisposableBaselineOverlay() {
 
     const schemaText = Buffer.isBuffer(content) ? content.toString("utf8") : String(content);
     const historicalSql = HISTORICAL_BASELINE_FILES.map((migrationPath) =>
-      originalReadFileSync.call(fs, migrationPath, "utf8")
+      normalizeHistoricalSql(originalReadFileSync.call(fs, migrationPath, "utf8"))
     ).join("\n\n");
 
     return `${schemaText}\n\n${historicalSql}\n`;
@@ -97,4 +104,5 @@ module.exports = {
   evidencePath,
   installDisposableBaselineOverlay,
   main,
+  normalizeHistoricalSql,
 };
