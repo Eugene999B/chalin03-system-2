@@ -2,6 +2,8 @@
 -- ADDITIVE MIGRATION ONLY.
 -- BACKUP REQUIRED: create and validate a fresh Version 3.1 full-system backup before production execution.
 -- Replaces trigger definitions only; no business rows are deleted or rewritten.
+-- Normal application sessions use FOREIGN_KEY_CHECKS=1 and remain fully protected.
+-- The protected full-system restore is the only workflow that temporarily uses FOREIGN_KEY_CHECKS=0.
 
 DELIMITER $$
 
@@ -26,22 +28,24 @@ FOR EACH ROW
 BEGIN
     DECLARE blocked_count INT DEFAULT 0;
 
-    SELECT COUNT(*)
-    INTO blocked_count
-    FROM fleet_assets fa
-    LEFT JOIN equipment_asset_sale_locks easl
-      ON easl.asset_id = fa.id
-     AND easl.released_at IS NULL
-    WHERE fa.id = NEW.asset_id
-      AND (
-        fa.operational_purpose = 'sale_only'
-        OR fa.sale_status IN ('reserved','installment_active','sold')
-        OR easl.asset_id IS NOT NULL
-      );
+    IF @@SESSION.FOREIGN_KEY_CHECKS = 1 THEN
+        SELECT COUNT(*)
+        INTO blocked_count
+        FROM fleet_assets fa
+        LEFT JOIN equipment_asset_sale_locks easl
+          ON easl.asset_id = fa.id
+         AND easl.released_at IS NULL
+        WHERE fa.id = NEW.asset_id
+          AND (
+            fa.operational_purpose = 'sale_only'
+            OR fa.sale_status IN ('reserved','installment_active','sold')
+            OR easl.asset_id IS NOT NULL
+          );
 
-    IF blocked_count > 0 THEN
-        SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'This equipment is reserved, under installment sale, sold, or marked sale-only and cannot be assigned for hire.';
+        IF blocked_count > 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'This equipment is reserved, under installment sale, sold, or marked sale-only and cannot be assigned for hire.';
+        END IF;
     END IF;
 END $$
 
@@ -52,8 +56,11 @@ FOR EACH ROW
 BEGIN
     DECLARE blocked_count INT DEFAULT 0;
 
-    IF NEW.asset_id <> OLD.asset_id
-       OR NEW.status IN ('assigned','dispatched','active') THEN
+    IF @@SESSION.FOREIGN_KEY_CHECKS = 1
+       AND (
+         NEW.asset_id <> OLD.asset_id
+         OR NEW.status IN ('assigned','dispatched','active')
+       ) THEN
         SELECT COUNT(*)
         INTO blocked_count
         FROM fleet_assets fa
@@ -82,7 +89,8 @@ BEGIN
     DECLARE active_hire_count INT DEFAULT 0;
     DECLARE sale_allowed_count INT DEFAULT 0;
 
-    IF NEW.agreement_status IN ('approved','active','due_soon','payment_due','overdue','completed') THEN
+    IF @@SESSION.FOREIGN_KEY_CHECKS = 1
+       AND NEW.agreement_status IN ('approved','active','due_soon','payment_due','overdue','completed') THEN
         SELECT COUNT(*)
         INTO active_hire_count
         FROM hire_contract_assets hca
@@ -118,7 +126,8 @@ BEGIN
     DECLARE active_hire_count INT DEFAULT 0;
     DECLARE sale_allowed_count INT DEFAULT 0;
 
-    IF NEW.agreement_status IN ('approved','active','due_soon','payment_due','overdue','completed')
+    IF @@SESSION.FOREIGN_KEY_CHECKS = 1
+       AND NEW.agreement_status IN ('approved','active','due_soon','payment_due','overdue','completed')
        AND (
          NOT (OLD.agreement_status <=> NEW.agreement_status)
          OR NOT (OLD.asset_id <=> NEW.asset_id)
