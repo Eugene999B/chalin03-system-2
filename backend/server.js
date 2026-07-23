@@ -23,6 +23,9 @@ const { requireAuth } = require("./middleware/authMiddleware");
 const {
   enforceEquipmentCatalogueWriteIntegrity,
 } = require("./middleware/equipmentCatalogueIntegrityMiddleware");
+const {
+  requireEquipmentSalesReadiness,
+} = require("./middleware/equipmentSalesReadinessMiddleware");
 const { requireWorkerCategoryRecord } = require("./middleware/workerCategoryMiddleware");
 const {
   delegatedUserAdministrationGate,
@@ -34,7 +37,7 @@ const {
 } = require("./services/categoryIsolationService");
 
 const authRoutes = require("./routes/authRoutes");
-const passkeyRoutes = require("./routes/passkeyRoutes");
+const biometricRoutes = require("./routes/biometricRoutes");
 const productRoutes = require("./routes/productRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
@@ -50,7 +53,6 @@ const exportRoutes = require("./routes/exportRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
 const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
-const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
 const customerDebtReportRoutes = require("./routes/customerDebtReportRoutes");
@@ -81,17 +83,20 @@ const workerHrLetterRoutes = require("./routes/workerHrLetterRoutes");
 const workerHrPdfV2Routes = require("./routes/workerHrPdfV2Routes");
 const standaloneHrDocumentRoutes = require("./routes/standaloneHrDocumentRoutes");
 const documentSignatureRoutes = require("./routes/documentSignatureRoutes");
+const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
+const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
+const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
+const systemRoutes = require("./routes/systemRoutes");
+const installmentRoutes = require("./routes/installmentRoutes");
 const {
   ensureWorkerHrLetterSchema,
 } = require("./services/workerHrLetterSchemaService");
 const {
   ensureEmploymentDocumentSchema,
 } = require("./services/employmentDocumentSchemaService");
-const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
-const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
-const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
-const systemRoutes = require("./routes/systemRoutes");
-const installmentRoutes = require("./routes/installmentRoutes");
+const {
+  ensureEquipmentSalesSchema,
+} = require("./services/equipmentSalesSchemaService");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const { ensurePasskeySchema } = require("./services/passkeySchemaService");
 const {
@@ -136,33 +141,36 @@ const generalApiLimiter = rateLimit({
   },
 });
 
+const biometricLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "BIOMETRIC_RATE_LIMITED",
+    message:
+      "Too many fingerprint or face requests. Wait briefly and try again.",
+  },
+});
+
 app.use(requestContext);
 app.use(buildSecurityMiddleware());
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
   })
 );
 
-// A generous global ceiling protects ordinary database and reporting routes
-// from denial-of-service abuse. Login and sensitive administration retain
-// their tighter dedicated limiters below.
 app.use("/api", generalApiLimiter);
 
 const bodyLimit = process.env.API_BODY_LIMIT || "10mb";
-
 app.use(express.json({ limit: bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 app.use(safeErrorResponseMiddleware);
@@ -182,7 +190,7 @@ app.get("/api", (req, res) => {
     message: "Chalin 03 API root is working",
     routes: [
       "/api/auth",
-      "/api/auth/passkeys",
+      "/api/auth/biometrics",
       "/api/branches",
       "/api/products",
       "/api/sales",
@@ -226,14 +234,12 @@ app.get("/api", (req, res) => {
   });
 });
 
-/*
-  Branch routes are registered before auth and user routes because login needs
-  to load the store list before the user has a token.
-*/
+// Login must read the approved store schema before authentication, but may never
+// create, alter or seed that schema during a public request.
 app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth/login", loginLimiter);
-app.use("/api/auth/passkeys/authentication", loginLimiter);
+app.use("/api/auth/biometrics/authentication", loginLimiter);
 app.use("/api/auth/forgot-password", loginLimiter);
 app.use("/api/auth/recovery", loginLimiter);
 app.use("/api/backups/restore", sensitiveAdminLimiter);
@@ -271,8 +277,16 @@ app.use(
   requireDelegatedCapability("system_operations")
 );
 app.use("/api", systemRoutes);
+app.use("/api/auth/biometrics", biometricLimiter, biometricRoutes);
+app.use("/api/auth/passkeys", (_req, res) =>
+  res.status(410).json({
+    status: "error",
+    code: "LEGACY_PASSKEYS_RETIRED",
+    message:
+      "Generic passkey access has been retired. Sign in with your password, then enable fingerprint or face login on this device.",
+  })
+);
 app.use("/api/auth", authRoutes);
-app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
@@ -305,7 +319,6 @@ app.use(
 );
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
 app.use("/api/backups", delegatedBackupRoutes);
-app.use("/api/backups", backupRoutes);
 app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
 app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
 app.use(
@@ -335,6 +348,7 @@ app.use(
   "/api/equipment-catalogue",
   requireAuth,
   hireBoundary,
+  requireEquipmentSalesReadiness,
   enforceEquipmentCatalogueWriteIntegrity,
   equipmentCatalogueRoutes
 );
@@ -346,7 +360,6 @@ app.use("/api/group-configuration", groupConfigurationRoutes);
 app.use("/api/release2-final", workerCardVerificationRoutes);
 app.use("/api/release2-final", workerProfileExpansionRoutes);
 app.use("/api/release2-final", workerPrintRoutes);
-// Register the compact signed-PDF and approval handlers before the legacy HR router.
 app.use("/api/release2-final", workerHrPdfV2Routes);
 app.use("/api/release2-final", standaloneHrDocumentRoutes);
 app.use("/api/release2-final", documentSignatureRoutes);
@@ -371,9 +384,13 @@ async function startServer() {
   try {
     await testDatabaseConnection();
     await runStartupSelfCheck();
+
+    // Startup performs read-only schema verification only. Approved migrations
+    // must be applied by the controlled deployment command before this process.
     await ensureWorkerHrLetterSchema();
     await ensureEmploymentDocumentSchema();
     await ensurePasskeySchema();
+    await ensureEquipmentSalesSchema();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
@@ -383,7 +400,13 @@ async function startServer() {
       startInstallmentReminderScheduler();
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    console.error("Failed to start server:", {
+      code: error?.code,
+      message: error?.message,
+      missing_tables: error?.missingTables,
+      missing_columns: error?.missingColumns,
+      missing_triggers: error?.missingTriggers,
+    });
     process.exit(1);
   }
 }
