@@ -80,7 +80,7 @@ FROM (
   UNION ALL SELECT 'equipment_installment_schedule', 'schedule_status'
   UNION ALL SELECT 'equipment_sale_payments', 'receipt_number'
   UNION ALL SELECT 'equipment_deliveries', 'delivery_number'
-  UNION ALL SELECT 'equipment_ownership_transfers', 'ownership_certificate_number'
+  UNION ALL SELECT 'equipment_ownership_transfers', 'transfer_number'
 ) required
 LEFT JOIN information_schema.COLUMNS current_column
   ON current_column.TABLE_SCHEMA = DATABASE()
