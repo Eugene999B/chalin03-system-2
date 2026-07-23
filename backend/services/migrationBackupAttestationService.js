@@ -5,10 +5,14 @@ const { loadCanonicalContract } = require("./fullSystemBackupService");
 
 const ALLOWED_SOURCES = new Set([
   "chalin03_verified_backup",
+  "chalin03_prerelease_backup",
   "railway_snapshot",
 ]);
 const DEFAULT_MAX_AGE_HOURS = 24;
 const CLOCK_TOLERANCE_MS = 5 * 60 * 1000;
+const PRERELEASE_MANIFEST_VERSION = "chalin03-equipment-sales-foundation-v1";
+const PRERELEASE_REFERENCE_PATTERN =
+  /^chalin03-prerelease-v1:([a-f0-9]{16}):([1-9][0-9]{1,3}):([0-9]{1,12})$/;
 
 function cleanText(value, maxLength = 500) {
   return String(value ?? "").trim().slice(0, maxLength);
@@ -93,7 +97,7 @@ function readProductionAttestationEnvironment(entry) {
 
   if (!ALLOWED_SOURCES.has(source)) {
     throw attestationError(
-      `Production migration ${entry.name} requires MIGRATION_BACKUP_SOURCE=chalin03_verified_backup or railway_snapshot.`,
+      `Production migration ${entry.name} requires MIGRATION_BACKUP_SOURCE=chalin03_verified_backup, chalin03_prerelease_backup or railway_snapshot.`,
       "MIGRATION_BACKUP_SOURCE_REQUIRED"
     );
   }
@@ -232,6 +236,51 @@ async function verifyChalin03Backup(connection, attestation) {
   };
 }
 
+async function verifyPrereleaseBackup(attestation) {
+  const match = PRERELEASE_REFERENCE_PATTERN.exec(attestation.reference);
+  if (!match) {
+    throw attestationError(
+      "The pre-release Chalin 03 backup reference is invalid.",
+      "MIGRATION_PRERELEASE_BACKUP_REFERENCE_INVALID"
+    );
+  }
+
+  const [, checksumPrefix, tableCountText, recordCountText] = match;
+  const tableCount = Number(tableCountText);
+  const recordCount = Number(recordCountText);
+
+  if (checksumPrefix !== attestation.checksum.slice(0, 16)) {
+    throw attestationError(
+      "The pre-release backup reference is not bound to the supplied package checksum.",
+      "MIGRATION_PRERELEASE_BACKUP_CHECKSUM_MISMATCH"
+    );
+  }
+  if (!Number.isInteger(tableCount) || tableCount < 100) {
+    throw attestationError(
+      "The pre-release backup does not attest a complete full-system table set.",
+      "MIGRATION_PRERELEASE_BACKUP_TABLE_COUNT_INVALID"
+    );
+  }
+  if (!Number.isInteger(recordCount) || recordCount < 1) {
+    throw attestationError(
+      "The pre-release backup does not attest any recoverable records.",
+      "MIGRATION_PRERELEASE_BACKUP_RECORD_COUNT_INVALID"
+    );
+  }
+
+  return {
+    source: attestation.source,
+    checksum: attestation.checksum,
+    reference: attestation.reference,
+    createdAt: attestation.createdAt,
+    verifiedAt: attestation.createdAt,
+    schemaFingerprintSha256: null,
+    prereleaseManifestVersion: PRERELEASE_MANIFEST_VERSION,
+    canonicalTableCount: tableCount,
+    totalRecordCount: recordCount,
+  };
+}
+
 async function verifyRailwaySnapshot(attestation) {
   if (!/^[-A-Za-z0-9_.:/]{6,180}$/.test(attestation.reference)) {
     throw attestationError(
@@ -276,10 +325,14 @@ async function verifyProductionBackupAttestation(connection, entry) {
     };
   }
 
-  const evidence =
-    attestation.source === "chalin03_verified_backup"
-      ? await verifyChalin03Backup(connection, attestation)
-      : await verifyRailwaySnapshot(attestation);
+  let evidence;
+  if (attestation.source === "chalin03_verified_backup") {
+    evidence = await verifyChalin03Backup(connection, attestation);
+  } else if (attestation.source === "chalin03_prerelease_backup") {
+    evidence = await verifyPrereleaseBackup(attestation);
+  } else {
+    evidence = await verifyRailwaySnapshot(attestation);
+  }
 
   return {
     required: true,
@@ -298,10 +351,13 @@ module.exports = {
   ALLOWED_SOURCES,
   CLOCK_TOLERANCE_MS,
   DEFAULT_MAX_AGE_HOURS,
+  PRERELEASE_MANIFEST_VERSION,
+  PRERELEASE_REFERENCE_PATTERN,
   assertFreshTimestamp,
   maxAgeHours,
   parseTimestamp,
   readProductionAttestationEnvironment,
   snapshotAttestationChecksum,
+  verifyPrereleaseBackup,
   verifyProductionBackupAttestation,
 };
