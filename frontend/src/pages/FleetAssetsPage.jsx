@@ -23,5 +23,9 @@ export default function FleetAssetsPage() {
     return <EquipmentSalesReportsPage />;
   }
 
+  if (view === "maintenance") {
+    return <SharedFleetAssetsPage />;
+  }
+
   return <EquipmentCataloguePage />;
 }
