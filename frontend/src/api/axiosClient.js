@@ -142,6 +142,12 @@ axiosClient.interceptors.response.use(
           "chalin03_login_notice",
           errorMessage || "Your account was signed in on another device."
         );
+      } else if (errorCode.startsWith("SESSION_EXPIRED")) {
+        sessionStorage.setItem(
+          "chalin03_login_notice",
+          errorMessage ||
+            "Your session ended after 8 hours or at 12:00 a.m. Ghana time. Please login again."
+        );
       }
 
       localStorage.removeItem("chalin03_token");

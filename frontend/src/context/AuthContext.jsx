@@ -5,6 +5,7 @@ import {
   hasEveryPermission as permissionListHasEvery,
   hasPermission as permissionListHasOne,
 } from "../security/permissionRules";
+import { installSessionExpiryGuard } from "../security/sessionExpiryGuard";
 
 const AuthContext = createContext(null);
 
@@ -329,6 +330,19 @@ export function AuthProvider({ children }) {
     // We only want this to run once when the app opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    return installSessionExpiryGuard({
+      token,
+      onExpire() {
+        setToken(null);
+        setUser(null);
+        setLoading(false);
+      },
+    });
+  }, [token]);
 
   const authValue = useMemo(() => {
     const role = String(user?.role || "").toLowerCase();
