@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import WorkspaceContextSelector from "./WorkspaceContextSelector";
@@ -46,6 +46,28 @@ function canSee(item, role, auth) {
   return true;
 }
 
+function splitNavigationTarget(path) {
+  const [pathname, query = ""] = String(path || "").split("?");
+  return {
+    pathname: pathname || "/",
+    search: new URLSearchParams(query).toString(),
+  };
+}
+
+function isNavigationItemActive(item, location) {
+  const target = splitNavigationTarget(item.path);
+  const currentPath = location.pathname;
+  const pathMatches = item.end
+    ? currentPath === target.pathname
+    : currentPath === target.pathname || currentPath.startsWith(`${target.pathname}/`);
+
+  if (!pathMatches) return false;
+  if (!item.matchSearch) return true;
+
+  const currentSearch = new URLSearchParams(location.search).toString();
+  return currentSearch === target.search;
+}
+
 export default function BusinessWorkspaceLayout({
   workspaceName,
   icon,
@@ -62,6 +84,7 @@ export default function BusinessWorkspaceLayout({
     automaticAccess,
   } = useWorkspaceContext();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const visibleSections = useMemo(
@@ -164,25 +187,30 @@ export default function BusinessWorkspaceLayout({
             <section key={section.title}>
               <p className="bwl-section-title">{section.title}</p>
               <div className="bwl-nav-list">
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={Boolean(item.end)}
-                    className={({ isActive }) =>
-                      `bwl-nav-item ${isActive ? "is-active" : ""}`
-                    }
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <span className="bwl-nav-icon" aria-hidden="true">
-                      {item.icon}
-                    </span>
-                    <span>
-                      <strong>{item.title}</strong>
-                      {item.description ? <small>{item.description}</small> : null}
-                    </span>
-                  </NavLink>
-                ))}
+                {section.items.map((item) => {
+                  const active = isNavigationItemActive(item, location);
+
+                  return (
+                    <NavLink
+                      key={`${item.title}:${item.path}`}
+                      to={item.path}
+                      end={Boolean(item.end)}
+                      aria-current={active ? "page" : undefined}
+                      className={() =>
+                        `bwl-nav-item ${active ? "is-active" : ""}`
+                      }
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <span className="bwl-nav-icon" aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <span>
+                        <strong>{item.title}</strong>
+                        {item.description ? <small>{item.description}</small> : null}
+                      </span>
+                    </NavLink>
+                  );
+                })}
               </div>
             </section>
           ))}
