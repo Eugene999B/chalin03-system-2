@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-group-login-mobile-admin-v4";
+const CACHE_NAME = "chalin03-credit-mixed-sale-hotfix-v1";
 
 const CORE_ASSETS = [
   "/",
