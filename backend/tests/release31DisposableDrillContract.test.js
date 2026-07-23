@@ -49,3 +49,19 @@ test("backend package exposes the guarded disposable drill", () => {
     "node scripts/runRelease31DisposableDrill.js"
   );
 });
+
+test("CI runs the drill only inside a disposable MySQL service", () => {
+  const workflow = read(".github/workflows/chalin03-verification.yml");
+
+  assert.match(workflow, /database-drill:/);
+  assert.match(workflow, /image: mysql:8\.4/);
+  assert.match(workflow, /DB_HOST: 127\.0\.0\.1/);
+  assert.match(workflow, /DB_NAME: chalin03_release31_test/);
+  assert.match(
+    workflow,
+    /CONFIRM_RELEASE31_DISPOSABLE_DRILL: RUN_RELEASE31_DISPOSABLE_DRILL/
+  );
+  assert.match(workflow, /run: npm run drill:release31/);
+  assert.match(workflow, /release31-disposable-recovery-evidence/);
+  assert.doesNotMatch(workflow, /DB_HOST:.*railway/i);
+});
