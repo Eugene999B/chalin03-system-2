@@ -199,11 +199,17 @@ function enhancedValidationErrors(backup, contract) {
   ) {
     errors.push("Backup trigger-contract count does not match the current schema.");
   }
-  if (
-    /^[a-f0-9]{64}$/i.test(String(backup.checksum_sha256 || "")) &&
-    core.stableBackupChecksum(backup) !== backup.checksum_sha256
-  ) {
-    errors.push("Backup checksum does not match the enhanced recovery package.");
+
+  const checksum = String(backup.checksum_sha256 || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(checksum)) {
+    errors.push("A valid SHA-256 backup checksum is required.");
+  } else {
+    if (core.stableBackupChecksum(backup) !== checksum) {
+      errors.push("Backup checksum does not match the enhanced recovery package.");
+    }
+    if (String(backup.manifest?.checksum_sha256 || "").toLowerCase() !== checksum) {
+      errors.push("Backup manifest checksum does not match the package checksum.");
+    }
   }
 
   return errors;
@@ -228,6 +234,80 @@ async function validateFullSystemBackup(connection, backup, options = {}) {
   };
 }
 
+async function recordRestoreOutcome(
+  connection,
+  backup,
+  {
+    status,
+    verificationStatus,
+    verificationMessage,
+    verifiedBy = null,
+  }
+) {
+  if (!backup?.backup_id) return false;
+
+  await core.recordBackupHistory(connection, {
+    backup,
+    userId: backup.created_by?.id || null,
+    status,
+    verificationStatus,
+    verificationMessage: String(verificationMessage || "").slice(0, 2000),
+    verifiedBy,
+  });
+  return true;
+}
+
+async function restoreFullSystemBackup(
+  connection,
+  backup,
+  validation,
+  options = {}
+) {
+  try {
+    const result = await core.restoreFullSystemBackup(
+      connection,
+      backup,
+      validation,
+      options
+    );
+
+    let backupHistoryWarning = null;
+    let backupHistoryRecorded = false;
+    try {
+      backupHistoryRecorded = await recordRestoreOutcome(connection, backup, {
+        status: "restored",
+        verificationStatus: "verified",
+        verificationMessage: `Full-system restore completed for ${result.restoredTables.length} canonical tables. Row counts and foreign-key reconciliation passed; restored security state was invalidated.`,
+        verifiedBy: options.verifiedBy || null,
+      });
+    } catch (historyError) {
+      backupHistoryWarning =
+        "Restore completed, but backup_history completion evidence requires Administrator review.";
+      console.error("Post-restore backup history warning:", historyError);
+    }
+
+    return {
+      ...result,
+      backupHistoryRecorded,
+      backupHistoryWarning,
+    };
+  } catch (error) {
+    try {
+      await recordRestoreOutcome(connection, backup, {
+        status: "restore_failed",
+        verificationStatus: "failed",
+        verificationMessage: `Full-system restore failed and was rolled back. ${error?.code || "RESTORE_FAILED"}: ${error?.message || "Unknown restore failure."}`,
+        verifiedBy: options.verifiedBy || null,
+      });
+    } catch (historyError) {
+      error.backupHistoryWarning =
+        "The failed restore could not be recorded in backup_history.";
+      console.error("Failed-restore backup history warning:", historyError);
+    }
+    throw error;
+  }
+}
+
 module.exports = {
   ...core,
   SCHEMA_CONTRACT_VERSION,
@@ -236,5 +316,6 @@ module.exports = {
   loadIndexMetadata,
   loadTriggerMetadata,
   normalizeTriggerStatement,
+  restoreFullSystemBackup,
   validateFullSystemBackup,
 };
