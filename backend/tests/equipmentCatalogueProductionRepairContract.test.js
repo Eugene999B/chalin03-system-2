@@ -55,10 +55,11 @@ test("catalogue media and sale-lock tables can be created without FK mismatch fa
   assert.match(source, /Application transaction guards remain active/);
 });
 
-test("full commercial repair is retried but cannot return catalogue 503 after core verification", () => {
+test("full commercial repair keeps retrying after the Catalogue core is available", () => {
   assert.match(source, /verifyFullFoundation/);
   assert.match(source, /scheduleEquipmentSalesRuntimeBootstrap\(RUNTIME_RETRY_DELAY_MS\)/);
-  assert.match(source, /runtimeBootstrapReady = Boolean\(status\?\.core_ready\)/);
+  assert.match(source, /runtimeBootstrapReady = Boolean\(status\?\.full_ready\)/);
+  assert.match(source, /if \(!status\?\.full_ready\)/);
   assert.match(middleware, /await ensureFoundationOnce\(\)/);
   assert.match(middleware, /EQUIPMENT_SALES_FOUNDATION_STARTUP_FAILED/);
 });
