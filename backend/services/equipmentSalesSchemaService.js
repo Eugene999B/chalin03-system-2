@@ -19,7 +19,7 @@ const RETIREMENT_MIGRATION_FILE = path.resolve(
   "../../database/migrations/20260722_retire_spare_parts_installments.sql"
 );
 const CORE_REPAIR_MIGRATION_NAME =
-  "20260723_equipment_catalogue_core_compatibility_repair_v1";
+  "20260723_equipment_catalogue_core_compatibility_repair_v2";
 const LOCK_NAME = "chalin03_equipment_sales_finalization_v3";
 const RUNTIME_BOOT_DELAY_MS = 15 * 1000;
 const RUNTIME_RETRY_DELAY_MS = 5 * 60 * 1000;
@@ -95,6 +95,14 @@ const SMS_LOG_COLUMNS = [
 ];
 
 const EQUIPMENT_MEDIA_COLUMNS = [
+  ["asset_id", "INT NULL"],
+  ["hire_location_id", "INT NULL"],
+  ["media_category", "ENUM('photo','video','document') NOT NULL DEFAULT 'photo'"],
+  [
+    "evidence_type",
+    "ENUM('main','front','rear','left_side','right_side','cabin','engine','serial_plate','chassis_plate','attachment','inspection','damage','delivery','return','registration','insurance','ownership','other') NOT NULL DEFAULT 'other'",
+  ],
+  ["file_url", "LONGTEXT NULL"],
   ["storage_key", "VARCHAR(500) NULL"],
   ["thumbnail_url", "LONGTEXT NULL"],
   ["file_name", "VARCHAR(255) NULL"],
@@ -109,6 +117,26 @@ const EQUIPMENT_MEDIA_COLUMNS = [
   ["archived_by", "INT NULL"],
   ["archive_reason", "VARCHAR(500) NULL"],
   ["created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+  [
+    "updated_at",
+    "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+  ],
+];
+
+const EQUIPMENT_LOCK_COLUMNS = [
+  ["agreement_id", "BIGINT NULL"],
+  ["hire_location_id", "INT NULL"],
+  [
+    "lock_status",
+    "ENUM('reserved','installment_active','sold') NOT NULL DEFAULT 'reserved'",
+  ],
+  ["lock_reason", "VARCHAR(500) NULL"],
+  ["locked_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+  ["expires_at", "DATETIME NULL"],
+  ["released_at", "DATETIME NULL"],
+  ["released_by", "INT NULL"],
+  ["release_reason", "VARCHAR(500) NULL"],
+  ["created_by", "INT NULL"],
   [
     "updated_at",
     "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
@@ -153,12 +181,11 @@ function splitSqlStatements(sqlText) {
     }
 
     buffer += `${rawLine}\n`;
+    if (!buffer.trimEnd().endsWith(delimiter)) continue;
 
-    if (buffer.trimEnd().endsWith(delimiter)) {
-      const statement = buffer.trimEnd().slice(0, -delimiter.length).trim();
-      if (statement) statements.push(statement);
-      buffer = "";
-    }
+    const statement = buffer.trimEnd().slice(0, -delimiter.length).trim();
+    if (statement) statements.push(statement);
+    buffer = "";
   }
 
   if (buffer.trim()) statements.push(buffer.trim());
@@ -234,9 +261,7 @@ async function recordMigration(connection, migrationName, description) {
   await connection.query(
     `INSERT INTO schema_migrations (migration_name, description)
      VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE
-       description = VALUES(description),
-       applied_at = applied_at`,
+     ON DUPLICATE KEY UPDATE description = VALUES(description)`,
     [migrationName, description]
   );
 }
@@ -266,8 +291,6 @@ function normalizeFoundationSqlForProduction(sqlText) {
     // Removing AFTER clauses makes the additive migration compatible with
     // older but valid production schemas.
     .replace(/\s+AFTER\s+`?[A-Za-z0-9_]+`?/gi, "")
-    // The legacy mapping table must never make the catalogue depend on the
-    // retired Spare Parts installment module.
     .replace(
       /CONSTRAINT\s+fk_equipment_legacy_migration_legacy[\s\S]*?ON\s+DELETE\s+RESTRICT\s*,/i,
       ""
@@ -275,6 +298,9 @@ function normalizeFoundationSqlForProduction(sqlText) {
 }
 
 function stripForeignKeysFromCreateTable(statement) {
+  // Production databases can contain compatible referenced IDs with different
+  // signedness. Application transaction guards remain active even when
+  // optional FK reinforcement cannot be installed.
   return String(statement || "").replace(
     /,\s*CONSTRAINT\s+`?[A-Za-z0-9_]+`?\s+FOREIGN\s+KEY[\s\S]*?(?=,\s*CONSTRAINT|\n\))/gi,
     ""
@@ -282,113 +308,114 @@ function stripForeignKeysFromCreateTable(statement) {
 }
 
 function foundationCreateTableStatements(sqlText) {
-  return splitSqlStatements(normalizeFoundationSqlForProduction(sqlText))
-    .filter((statement) =>
-      /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(?:`?equipment_|`?schema_migrations)/i.test(
-        statement
-      )
-    )
+  const withoutLineComments = normalizeFoundationSqlForProduction(sqlText)
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+
+  return splitSqlStatements(withoutLineComments)
+    .map((statement) => {
+      const offset = statement.search(
+        /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(?:`?equipment_|`?schema_migrations)/i
+      );
+      return offset >= 0 ? statement.slice(offset) : "";
+    })
+    .filter(Boolean)
     .map(stripForeignKeysFromCreateTable);
 }
 
-async function ensureCatalogueCoreTables(connection) {
-  if (!(await tableExists(connection, "equipment_media"))) {
-    await connection.query(
-      `CREATE TABLE IF NOT EXISTS equipment_media (
-         id BIGINT AUTO_INCREMENT PRIMARY KEY,
-         asset_id INT NOT NULL,
-         hire_location_id INT NULL,
-         media_category ENUM('photo','video','document') NOT NULL DEFAULT 'photo',
-         evidence_type ENUM(
-           'main','front','rear','left_side','right_side','cabin','engine',
-           'serial_plate','chassis_plate','attachment','inspection','damage',
-           'delivery','return','registration','insurance','ownership','other'
-         ) NOT NULL DEFAULT 'other',
-         file_url LONGTEXT NOT NULL,
-         storage_key VARCHAR(500) NULL,
-         thumbnail_url LONGTEXT NULL,
-         file_name VARCHAR(255) NULL,
-         mime_type VARCHAR(120) NULL,
-         file_size_bytes BIGINT UNSIGNED NULL,
-         caption VARCHAR(500) NULL,
-         is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-         sort_order INT NOT NULL DEFAULT 0,
-         captured_at DATETIME NULL,
-         created_by INT NULL,
-         archived_at DATETIME NULL,
-         archived_by INT NULL,
-         archive_reason VARCHAR(500) NULL,
-         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         INDEX idx_equipment_media_asset (asset_id, archived_at, sort_order),
-         INDEX idx_equipment_media_location (hire_location_id, created_at),
-         INDEX idx_equipment_media_type (asset_id, evidence_type, archived_at),
-         INDEX idx_equipment_media_primary (asset_id, is_primary, archived_at)
-       )`
-    );
-  }
+async function createCatalogueCoreTables(connection) {
+  await connection.query(
+    `CREATE TABLE IF NOT EXISTS equipment_media (
+       id BIGINT AUTO_INCREMENT PRIMARY KEY,
+       asset_id INT NOT NULL,
+       hire_location_id INT NULL,
+       media_category ENUM('photo','video','document') NOT NULL DEFAULT 'photo',
+       evidence_type ENUM(
+         'main','front','rear','left_side','right_side','cabin','engine',
+         'serial_plate','chassis_plate','attachment','inspection','damage',
+         'delivery','return','registration','insurance','ownership','other'
+       ) NOT NULL DEFAULT 'other',
+       file_url LONGTEXT NOT NULL,
+       storage_key VARCHAR(500) NULL,
+       thumbnail_url LONGTEXT NULL,
+       file_name VARCHAR(255) NULL,
+       mime_type VARCHAR(120) NULL,
+       file_size_bytes BIGINT UNSIGNED NULL,
+       caption VARCHAR(500) NULL,
+       is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+       sort_order INT NOT NULL DEFAULT 0,
+       captured_at DATETIME NULL,
+       created_by INT NULL,
+       archived_at DATETIME NULL,
+       archived_by INT NULL,
+       archive_reason VARCHAR(500) NULL,
+       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+       INDEX idx_equipment_media_asset (asset_id, archived_at, sort_order),
+       INDEX idx_equipment_media_location (hire_location_id, created_at),
+       INDEX idx_equipment_media_type (asset_id, evidence_type, archived_at),
+       INDEX idx_equipment_media_primary (asset_id, is_primary, archived_at)
+     )`
+  );
 
-  if (!(await tableExists(connection, "equipment_asset_sale_locks"))) {
-    await connection.query(
-      `CREATE TABLE IF NOT EXISTS equipment_asset_sale_locks (
-         id BIGINT AUTO_INCREMENT PRIMARY KEY,
-         asset_id INT NOT NULL,
-         agreement_id BIGINT NULL,
-         hire_location_id INT NULL,
-         lock_status ENUM('reserved','installment_active','sold') NOT NULL DEFAULT 'reserved',
-         locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         expires_at DATETIME NULL,
-         released_at DATETIME NULL,
-         released_by INT NULL,
-         release_reason VARCHAR(500) NULL,
-         created_by INT NULL,
-         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         INDEX idx_equipment_sale_lock_asset (asset_id, released_at),
-         INDEX idx_equipment_sale_lock_agreement (agreement_id),
-         INDEX idx_equipment_sale_lock_location (hire_location_id, lock_status)
-       )`
-    );
-  }
+  await connection.query(
+    `CREATE TABLE IF NOT EXISTS equipment_asset_sale_locks (
+       asset_id INT PRIMARY KEY,
+       agreement_id BIGINT NOT NULL UNIQUE,
+       hire_location_id INT NOT NULL,
+       lock_status ENUM('reserved','installment_active','sold') NOT NULL,
+       lock_reason VARCHAR(500) NULL,
+       locked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       expires_at DATETIME NULL,
+       released_at DATETIME NULL,
+       released_by INT NULL,
+       release_reason VARCHAR(500) NULL,
+       created_by INT NULL,
+       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+       INDEX idx_equipment_sale_lock_location (hire_location_id, lock_status, expires_at),
+       INDEX idx_equipment_sale_lock_agreement (agreement_id, lock_status)
+     )`
+  );
 
-  for (const [columnName, definition] of EQUIPMENT_MEDIA_COLUMNS) {
-    await ensureColumn(connection, "equipment_media", columnName, definition);
+  for (const [name, definition] of EQUIPMENT_MEDIA_COLUMNS) {
+    await ensureColumn(connection, "equipment_media", name, definition);
+  }
+  for (const [name, definition] of EQUIPMENT_LOCK_COLUMNS) {
+    await ensureColumn(connection, "equipment_asset_sale_locks", name, definition);
   }
 }
 
 async function ensureCatalogueCoreSchema(connection) {
-  for (const baseTable of [
+  for (const tableName of [
     "fleet_assets",
     "business_locations",
     "business_units",
     "users",
     "sms_log",
   ]) {
-    if (!(await tableExists(connection, baseTable))) {
-      const error = new Error(
-        `Required base table ${baseTable} is missing from the production database.`
-      );
-      error.code = "EQUIPMENT_CATALOGUE_BASE_TABLE_MISSING";
-      error.tableName = baseTable;
-      throw error;
-    }
+    if (await tableExists(connection, tableName)) continue;
+    const error = new Error(
+      `Required base table ${tableName} is missing from the production database.`
+    );
+    error.code = "EQUIPMENT_CATALOGUE_BASE_TABLE_MISSING";
+    error.tableName = tableName;
+    throw error;
   }
 
   const changes = [];
-
-  for (const [columnName, definition] of FLEET_ASSET_COLUMNS) {
-    if (await ensureColumn(connection, "fleet_assets", columnName, definition)) {
-      changes.push(`fleet_assets.${columnName}`);
+  for (const [name, definition] of FLEET_ASSET_COLUMNS) {
+    if (await ensureColumn(connection, "fleet_assets", name, definition)) {
+      changes.push(`fleet_assets.${name}`);
+    }
+  }
+  for (const [name, definition] of SMS_LOG_COLUMNS) {
+    if (await ensureColumn(connection, "sms_log", name, definition)) {
+      changes.push(`sms_log.${name}`);
     }
   }
 
-  for (const [columnName, definition] of SMS_LOG_COLUMNS) {
-    if (await ensureColumn(connection, "sms_log", columnName, definition)) {
-      changes.push(`sms_log.${columnName}`);
-    }
-  }
-
-  await ensureCatalogueCoreTables(connection);
+  await createCatalogueCoreTables(connection);
 
   for (const [tableName, indexName, columnsSql] of [
     ["fleet_assets", "idx_fleet_asset_hire_location", "`hire_location_id`, `is_active`"],
@@ -412,21 +439,23 @@ async function ensureCatalogueCoreSchema(connection) {
   await recordMigration(
     connection,
     CORE_REPAIR_MIGRATION_NAME,
-    "Idempotent production compatibility repair for Equipment Catalogue columns and core tables."
+    "Idempotent production compatibility repair for Equipment Catalogue."
   );
-
   return { changed: changes.length > 0, changes };
 }
 
-async function verifyCatalogueCore(connection) {
-  const requiredColumns = [
-    ...FLEET_ASSET_COLUMNS.map(([name]) => ["fleet_assets", name]),
-    ...SMS_LOG_COLUMNS.map(([name]) => ["sms_log", name]),
-    ...EQUIPMENT_MEDIA_COLUMNS.map(([name]) => ["equipment_media", name]),
-  ];
+async function verifyColumns(connection, definitions, tableName) {
+  const missing = [];
+  for (const [name] of definitions) {
+    if (!(await columnExists(connection, tableName, name))) {
+      missing.push(`${tableName}.${name}`);
+    }
+  }
+  return missing;
+}
 
-  const missingTables = [];
-  for (const tableName of [
+async function verifyCatalogueCore(connection) {
+  const requiredTables = [
     "fleet_assets",
     "business_locations",
     "business_units",
@@ -434,18 +463,37 @@ async function verifyCatalogueCore(connection) {
     "sms_log",
     "equipment_media",
     "equipment_asset_sale_locks",
-  ]) {
+  ];
+  const missingTables = [];
+
+  for (const tableName of requiredTables) {
     if (!(await tableExists(connection, tableName))) missingTables.push(tableName);
   }
 
   const missingColumns = [];
-  for (const [tableName, columnName] of requiredColumns) {
-    if (
-      !missingTables.includes(tableName) &&
-      !(await columnExists(connection, tableName, columnName))
-    ) {
-      missingColumns.push(`${tableName}.${columnName}`);
-    }
+  if (!missingTables.includes("fleet_assets")) {
+    missingColumns.push(
+      ...(await verifyColumns(connection, FLEET_ASSET_COLUMNS, "fleet_assets"))
+    );
+  }
+  if (!missingTables.includes("sms_log")) {
+    missingColumns.push(
+      ...(await verifyColumns(connection, SMS_LOG_COLUMNS, "sms_log"))
+    );
+  }
+  if (!missingTables.includes("equipment_media")) {
+    missingColumns.push(
+      ...(await verifyColumns(connection, EQUIPMENT_MEDIA_COLUMNS, "equipment_media"))
+    );
+  }
+  if (!missingTables.includes("equipment_asset_sale_locks")) {
+    missingColumns.push(
+      ...(await verifyColumns(
+        connection,
+        EQUIPMENT_LOCK_COLUMNS,
+        "equipment_asset_sale_locks"
+      ))
+    );
   }
 
   if (missingTables.length || missingColumns.length) {
@@ -465,6 +513,14 @@ async function verifyCatalogueCore(connection) {
 
 async function verifyFoundationCore(connection) {
   return verifyCatalogueCore(connection);
+}
+
+async function verifyFullFoundation(connection) {
+  const missing = [];
+  for (const tableName of REQUIRED_FOUNDATION_TABLES) {
+    if (!(await tableExists(connection, tableName))) missing.push(tableName);
+  }
+  return { ready: missing.length === 0, missing_tables: missing };
 }
 
 async function verifyFoundationSafety(connection) {
@@ -501,19 +557,12 @@ async function verifyFoundationSafety(connection) {
   };
 }
 
-async function verifyFullFoundation(connection) {
-  const missing = [];
-  for (const tableName of REQUIRED_FOUNDATION_TABLES) {
-    if (!(await tableExists(connection, tableName))) missing.push(tableName);
-  }
-  return { ready: missing.length === 0, missing_tables: missing };
-}
-
 async function verifyFoundation(connection) {
-  const core = await verifyCatalogueCore(connection);
-  const full = await verifyFullFoundation(connection);
-  const safety = await verifyFoundationSafety(connection);
-  return { core, full, safety };
+  return {
+    core: await verifyCatalogueCore(connection),
+    full: await verifyFullFoundation(connection),
+    safety: await verifyFoundationSafety(connection),
+  };
 }
 
 async function verifyRetirement(connection) {
@@ -534,12 +583,13 @@ async function verifyRetirement(connection) {
 
   if (missing.length) {
     const error = new Error(
-      `Spare Parts installment retirement verification found missing guards: ${missing.join(", ")}.`
+      `Spare Parts installment retirement verification found missing guards: ${missing.join(
+        ", "
+      )}.`
     );
     error.code = "SPARE_PARTS_RETIREMENT_GUARDS_PENDING";
     throw error;
   }
-
   return { ready: true, missing: [] };
 }
 
@@ -565,15 +615,6 @@ function wrapMigrationError(error, migration, statementIndex) {
   return wrapped;
 }
 
-function isIgnorableCreateError(error) {
-  return new Set([
-    "ER_TABLE_EXISTS_ERROR",
-    "ER_DUP_FIELDNAME",
-    "ER_DUP_KEYNAME",
-    "ER_FK_DUP_NAME",
-  ]).has(error?.code);
-}
-
 async function executeMigration(connection, migration) {
   if (!fs.existsSync(migration.file)) {
     const error = new Error(`Required migration file is missing: ${migration.file}`);
@@ -581,9 +622,9 @@ async function executeMigration(connection, migration) {
     throw error;
   }
 
-  const sqlText = fs.readFileSync(migration.file, "utf8");
-  const statements = foundationCreateTableStatements(sqlText);
-
+  const statements = foundationCreateTableStatements(
+    fs.readFileSync(migration.file, "utf8")
+  );
   if (statements.length < REQUIRED_FOUNDATION_TABLES.length) {
     const error = new Error(
       `Migration ${migration.name} did not contain the expected equipment table statements.`
@@ -597,7 +638,16 @@ async function executeMigration(connection, migration) {
     try {
       await connection.query(statements[index]);
     } catch (error) {
-      if (isIgnorableCreateError(error)) continue;
+      if (
+        [
+          "ER_TABLE_EXISTS_ERROR",
+          "ER_DUP_FIELDNAME",
+          "ER_DUP_KEYNAME",
+          "ER_FK_DUP_NAME",
+        ].includes(error?.code)
+      ) {
+        continue;
+      }
       failures.push(wrapMigrationError(error, migration, index));
     }
   }
@@ -615,23 +665,17 @@ async function executeMigration(connection, migration) {
   await recordMigration(
     connection,
     migration.name,
-    "Equipment Sales & Hire tables created with production-compatible application safeguards."
+    "Equipment Sales tables created with production-compatible application safeguards."
   );
 
-  return {
-    statement_count: statements.length,
-    warnings: failures.map((failure) => ({
-      code: failure.code,
-      statement_index: failure.statementIndex,
-    })),
-  };
+  return { statement_count: statements.length, warnings: failures.length };
 }
 
 async function ensureOneMigration(connection, migration) {
   const alreadyApplied = await migrationApplied(connection, migration.name);
-  const fullBefore = await verifyFullFoundation(connection);
+  const before = await verifyFullFoundation(connection);
 
-  if (alreadyApplied && fullBefore.ready) {
+  if (alreadyApplied && before.ready) {
     return {
       name: migration.name,
       applied: false,
@@ -641,7 +685,7 @@ async function ensureOneMigration(connection, migration) {
     };
   }
 
-  if (alreadyApplied && !fullBefore.ready) {
+  if (alreadyApplied && !before.ready) {
     console.warn(
       `Migration ${migration.name} was marked applied but verification failed; reapplying idempotently.`
     );
@@ -695,13 +739,6 @@ async function ensureOptionalMigration(connection, migration) {
   }
 }
 
-async function acquireMigrationLock(connection) {
-  const [rows] = await connection.query("SELECT GET_LOCK(?, 60) AS acquired", [
-    LOCK_NAME,
-  ]);
-  return Number(rows[0]?.acquired || 0) === 1;
-}
-
 function safeStatusError(error) {
   return {
     code: error?.code || "EQUIPMENT_SCHEMA_REPAIR_PENDING",
@@ -717,20 +754,22 @@ async function ensureEquipmentSalesSchema() {
   let lockAcquired = false;
 
   try {
-    lockAcquired = await acquireMigrationLock(connection);
+    const [rows] = await connection.query("SELECT GET_LOCK(?, 60) AS acquired", [
+      LOCK_NAME,
+    ]);
+    lockAcquired = Number(rows[0]?.acquired || 0) === 1;
 
     if (!lockAcquired) {
       try {
         const core = await verifyCatalogueCore(connection);
         const full = await verifyFullFoundation(connection);
-        lastSchemaStatus = {
+        return {
           core_ready: true,
           full_ready: full.ready,
           lock_pending: true,
           core,
           full,
         };
-        return lastSchemaStatus;
       } catch {
         const error = new Error(
           "Could not acquire the Equipment Sales finalization migration lock."
@@ -775,7 +814,9 @@ async function ensureEquipmentSalesSchema() {
 
     if (!safety.ready && !safety.skipped) {
       console.warn(
-        `Equipment Sales database trigger reinforcement remains pending: ${safety.missing.join(", ")}. Application transaction guards remain active.`
+        `Equipment Sales database trigger reinforcement remains pending: ${safety.missing.join(
+          ", "
+        )}. Application transaction guards remain active.`
       );
     }
 
@@ -784,8 +825,6 @@ async function ensureEquipmentSalesSchema() {
     lastSchemaStatus = {
       applied: Boolean(coreRepair.changed || foundationResult.applied),
       skipped: !coreRepair.changed && !foundationResult.applied,
-      reason:
-        coreRepair.changed || foundationResult.applied ? null : "already_applied",
       core_ready: core.ready,
       full_ready: full.ready,
       core_repair: coreRepair,
@@ -800,7 +839,6 @@ async function ensureEquipmentSalesSchema() {
         full.ready ? "ready" : "pending"
       }.`
     );
-
     return lastSchemaStatus;
   } finally {
     if (lockAcquired) {
