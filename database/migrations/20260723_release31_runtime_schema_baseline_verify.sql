@@ -99,6 +99,7 @@ FROM (
   UNION ALL SELECT 'trg_equipment_sale_agreement_hire_guard_before_insert'
   UNION ALL SELECT 'trg_equipment_sale_agreement_hire_guard_before_update'
   UNION ALL SELECT 'trg_spare_parts_installment_retired_sales_insert'
+  UNION ALL SELECT 'trg_spare_parts_installment_retired_agreement_insert'
 ) required
 LEFT JOIN information_schema.TRIGGERS current_trigger
   ON current_trigger.TRIGGER_SCHEMA = DATABASE()
