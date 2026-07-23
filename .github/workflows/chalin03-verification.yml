@@ -5,6 +5,7 @@ on:
   pull_request:
     branches:
       - main
+      - agent/release-31-ci-validation-base
   push:
     branches:
       - main
