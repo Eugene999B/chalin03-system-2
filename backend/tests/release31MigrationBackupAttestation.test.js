@@ -80,6 +80,23 @@ function fakeSchemaConnection(recordHolder) {
         }
         return [rows];
       }
+      if (/information_schema\.STATISTICS/i.test(sql)) {
+        return [
+          tableNames.map((TABLE_NAME) => ({
+            TABLE_NAME,
+            INDEX_NAME: "PRIMARY",
+            NON_UNIQUE: 0,
+            SEQ_IN_INDEX: 1,
+            COLUMN_NAME: "id",
+            COLLATION: "A",
+            SUB_PART: null,
+            INDEX_TYPE: "BTREE",
+          })),
+        ];
+      }
+      if (/information_schema\.TRIGGERS/i.test(sql)) {
+        return [[]];
+      }
       throw new Error(`Unexpected fake query: ${sql}`);
     },
   };
