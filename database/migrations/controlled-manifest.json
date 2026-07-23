@@ -4,17 +4,9 @@
     {
       "name": "20260723_release31_database_safety_guards",
       "mode": "sql",
-      "description": "Installs verified password-change biometric revocation, Equipment Hire/Sales double-booking guards and Spare Parts installment retirement guards.",
+      "description": "Installs password-change biometric revocation, Equipment Hire/Sales double-booking guards, Spare Parts installment retirement guards and worker identity readiness.",
       "migration_file": "20260723_release31_database_safety_guards.sql",
       "verify_file": "20260723_release31_database_safety_guards_verify.sql",
-      "backup_required": true
-    },
-    {
-      "name": "20260723_release31_worker_identity_readiness",
-      "mode": "sql",
-      "description": "Seeds missing worker identity counters for Spare Parts, Mining and Equipment Hire and normalizes missing worker card settings.",
-      "migration_file": "20260723_release31_worker_identity_readiness.sql",
-      "verify_file": "20260723_release31_worker_identity_readiness_verify.sql",
       "backup_required": true
     },
     {
