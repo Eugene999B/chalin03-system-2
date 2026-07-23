@@ -7,8 +7,12 @@ const service = fs.readFileSync(
   path.resolve(__dirname, "../services/equipmentSalesCommercialRepairService.js"),
   "utf8"
 );
-const bootstrap = fs.readFileSync(
-  path.resolve(__dirname, "../services/equipmentSalesCommercialBootstrap.js"),
+const readiness = fs.readFileSync(
+  path.resolve(__dirname, "../services/equipmentSalesSchemaService.js"),
+  "utf8"
+);
+const middleware = fs.readFileSync(
+  path.resolve(__dirname, "../middleware/equipmentSalesReadinessMiddleware.js"),
   "utf8"
 );
 const packageJson = JSON.parse(
@@ -29,7 +33,7 @@ const COMMERCIAL_TABLES = [
   "equipment_legacy_installment_migrations",
 ];
 
-test("commercial repair covers every Equipment Sales table and verifies columns", () => {
+test("commercial contract covers every Equipment Sales table and required columns", () => {
   for (const tableName of COMMERCIAL_TABLES) {
     assert.match(service, new RegExp(`${tableName}: \\{`));
   }
@@ -52,47 +56,39 @@ test("commercial repair covers every Equipment Sales table and verifies columns"
     assert.match(service, new RegExp(`"${requiredColumn}"`));
   }
 
-  assert.match(service, /async function addMissingColumns/);
-  assert.match(service, /ALTER TABLE/);
-  assert.match(service, /verifyCommercialSalesSchema/);
+  assert.match(service, /async function verifyCommercialSalesSchema/);
   assert.match(service, /missing_columns/);
-  assert.match(service, /EQUIPMENT_SALES_COMMERCIAL_SCHEMA_INCOMPLETE/);
 });
 
-test("commercial repair is additive, advisory-locked and production safe", () => {
-  assert.match(service, /chalin03_equipment_sales_finalization_v3/);
-  assert.match(service, /SELECT GET_LOCK/);
-  assert.match(service, /SELECT RELEASE_LOCK/);
-  assert.match(service, /CREATE TABLE IF NOT EXISTS/);
-  assert.match(service, /ADD COLUMN/);
-  assert.doesNotMatch(service, /\bDROP\s+TABLE\b/i);
-  assert.doesNotMatch(service, /\bTRUNCATE\b/i);
-  assert.doesNotMatch(service, /\bDELETE\s+FROM\b/i);
+test("production imports only read-only Equipment Sales verification", () => {
+  assert.match(readiness, /verifyCommercialSalesSchema/);
+  assert.doesNotMatch(readiness, /ensureCommercialSalesSchema/);
+  assert.match(readiness, /verifyCatalogueCore/);
+  assert.match(readiness, /verifyFoundationSafety/);
+
+  assert.match(middleware, /EQUIPMENT_SALES_SCHEMA_NOT_READY/);
+  assert.match(middleware, /Equipment Catalogue and normal Hire operations remain available/);
+  assert.match(middleware, /status\?\.full_ready/);
 });
 
-test("Railway start preloads non-blocking repair and retries until ready", () => {
+test("Railway start uses controlled deployment and no repair preload", () => {
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/equipmentSalesCommercialBootstrap.js server.js"
+    "node scripts/runControlledDeployment.js --deployment && node server.js"
   );
-  assert.match(bootstrap, /BOOT_DELAY_MS = 2 \* 1000/);
-  assert.match(bootstrap, /RETRY_DELAY_MS = 60 \* 1000/);
-  assert.match(bootstrap, /ensureCommercialSalesSchema/);
-  assert.match(bootstrap, /if \(!ready\) schedule\(RETRY_DELAY_MS\)/);
-  assert.match(bootstrap, /timer\.unref/);
-  assert.match(bootstrap, /Catalogue and Hire remain available/);
+  assert.doesNotMatch(packageJson.scripts.start, /equipmentSalesCommercialBootstrap/);
+  assert.equal(
+    fs.existsSync(
+      path.resolve(__dirname, "../services/equipmentSalesCommercialBootstrap.js")
+    ),
+    false
+  );
 });
 
-test("production preload gates every Sales request on verified commercial columns", () => {
-  assert.match(bootstrap, /require\("\.\/equipmentSalesSchemaService"\)/);
-  assert.match(bootstrap, /const ensureCatalogueFoundation/);
-  assert.match(
-    bootstrap,
-    /ensureEquipmentSalesSchemaWithCommercialColumns/
-  );
-  assert.match(bootstrap, /await ensureCatalogueFoundation/);
-  assert.match(bootstrap, /await commercialRepairOnce\(\)/);
-  assert.match(bootstrap, /full_ready: ready/);
-  assert.match(bootstrap, /__chalin03CommercialColumnGateInstalled/);
-  assert.match(bootstrap, /requestRepairPromise = null/);
+test("legacy repair implementation has no active runtime caller", () => {
+  const server = fs.readFileSync(path.resolve(__dirname, "../server.js"), "utf8");
+  const packageSource = JSON.stringify(packageJson);
+  assert.doesNotMatch(server, /ensureCommercialSalesSchema/);
+  assert.doesNotMatch(packageSource, /ensureCommercialSalesSchema/);
+  assert.doesNotMatch(server, /CommercialRepair/);
 });
