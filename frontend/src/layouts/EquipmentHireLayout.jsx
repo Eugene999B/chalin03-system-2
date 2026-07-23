@@ -18,6 +18,7 @@ const navigationSections = [
         description: "Excavators, pictures, identity, selling prices and Hire rates",
         path: "/equipment-hire-operations/fleet",
         icon: "🚜",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
@@ -25,6 +26,7 @@ const navigationSections = [
         description: "Enquiries, quotations, agreements, payments, delivery and ownership",
         path: "/equipment-hire-operations/fleet?view=sales",
         icon: "🏷️",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
@@ -32,6 +34,7 @@ const navigationSections = [
         description: "PDFs, receipts, aging, collections, profit and expected payments",
         path: "/equipment-hire-operations/fleet?view=reports",
         icon: "📊",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
@@ -119,8 +122,9 @@ const navigationSections = [
       {
         title: "Maintenance Register",
         description: "Meters, fuel, inspections and service history",
-        path: "/equipment-hire-operations/fleet",
+        path: "/equipment-hire-operations/fleet?view=maintenance",
         icon: "🔧",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
