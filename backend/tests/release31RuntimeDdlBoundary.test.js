@@ -5,19 +5,29 @@ const test = require("node:test");
 
 const backendRoot = path.resolve(__dirname, "..");
 
+function javascriptFiles(relativeDirectory) {
+  const root = path.join(backendRoot, relativeDirectory);
+  const output = [];
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolutePath);
+      else if (entry.isFile() && entry.name.endsWith(".js")) {
+        output.push(path.relative(backendRoot, absolutePath).replaceAll("\\", "/"));
+      }
+    }
+  };
+  walk(root);
+  return output.sort();
+}
+
 const RUNTIME_SCHEMA_SENSITIVE_FILES = Object.freeze([
   "server.js",
-  "routes/branchRoutes.js",
-  "routes/settingsRoutes.js",
-  "routes/systemRoutes.js",
-  "routes/activityRoutes.js",
-  "routes/release2FinalRoutes.js",
-  "routes/biometricRoutes.js",
-  "routes/equipmentCatalogueRoutes.js",
-  "middleware/equipmentCatalogueIntegrityMiddleware.js",
-  "middleware/equipmentSalesReadinessMiddleware.js",
+  ...javascriptFiles("routes"),
+  ...javascriptFiles("middleware"),
   "services/accountRecoveryService.js",
   "services/accountSessionService.js",
+  "services/auditSchemaReadinessService.js",
   "services/auditTrailService.js",
   "services/branchSchemaReadinessService.js",
   "services/categoryIsolationService.js",
@@ -55,6 +65,18 @@ test("mounted runtime paths never perform database definition changes", () => {
     for (const pattern of forbidden) {
       assert.doesNotMatch(source, pattern, `${relativePath} contains runtime DDL`);
     }
+  }
+});
+
+test("audit routes use read-only schema readiness instead of repair helpers", () => {
+  for (const relativePath of [
+    "routes/auditSignoffRoutes.js",
+    "routes/auditUnlockRequestRoutes.js",
+  ]) {
+    const source = executableSource(relativePath);
+    assert.match(source, /assertAuditSchemaReady/);
+    assert.match(source, /sendAuditSchemaReadinessError/);
+    assert.doesNotMatch(source, /ensureAudit(?:Signoffs|UnlockRequest|ReapprovalLog)Table/);
   }
 });
 
