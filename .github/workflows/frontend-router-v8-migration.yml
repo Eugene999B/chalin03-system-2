@@ -2,15 +2,6 @@ name: Frontend Router v8 Migration
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - frontend/package.json
-      - frontend/package-lock.json
-      - frontend/src/**
-      - frontend/scripts/**
-      - .github/workflows/frontend-router-v8-migration.yml
   push:
     branches:
       - agent/phase-0-production-safety
@@ -18,14 +9,17 @@ on:
       - .github/workflows/frontend-router-v8-migration.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  migrate-and-verify:
+  migrate-verify-and-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/phase-0-production-safety
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -75,28 +69,6 @@ jobs:
                   path.write_text(updated, encoding='utf-8')
                   changed.append(str(path))
 
-          check_path = root / 'scripts' / 'checkFrontendSource.mjs'
-          check_text = check_path.read_text(encoding='utf-8')
-          check_updated = check_text.replace(
-              'assert.match(loginPage, /chalin03_login_notice/);',
-              'assert.match(axiosClient, /chalin03_login_notice/);'
-          )
-          check_updated = check_updated.replace(
-              'assert.match(loginPage, /Forgot Password \\/ Unlock Account/);',
-              'assert.match(loginPage, /Recover password/);'
-          )
-          check_updated = check_updated.replace(
-              'assert.match(loginPage, /6-Digit Recovery Code/);',
-              'assert.match(loginPage, /6-digit code/);'
-          )
-          check_updated = check_updated.replace(
-              'assert.match(loginPage, /Owner Break-Glass/);',
-              'assert.match(loginEntry, /openEmergencyCommand/);'
-          )
-          if check_updated != check_text:
-              check_path.write_text(check_updated, encoding='utf-8')
-              changed.append(str(check_path))
-
           package_path = root / 'package.json'
           package = json.loads(package_path.read_text(encoding='utf-8'))
           dependencies = package.setdefault('dependencies', {})
@@ -106,7 +78,7 @@ jobs:
           dependencies['react-dom'] = '^19.2.7'
           package_path.write_text(json.dumps(package, indent=2) + '\n', encoding='utf-8')
 
-          print(f'Updated {len(changed)} frontend files.')
+          print(f'Updated {len(changed)} frontend source files.')
           for name in changed:
               print(name)
           PY
@@ -116,52 +88,27 @@ jobs:
       - name: Verify the resolved router and production audit
         working-directory: frontend
         run: |
-          npm ls react-router | tee router-v8-tree.log
-          npm audit --omit=dev --audit-level=high | tee router-v8-audit.log
-      - id: source_tests
-        name: Run frontend source and permission tests
-        continue-on-error: true
+          npm ls react-router
+          npm audit --omit=dev --audit-level=high
+      - name: Run frontend source and permission tests
         working-directory: frontend
-        run: |
-          set -o pipefail
-          npm test 2>&1 | tee router-v8-test.log
-      - id: lint_check
-        name: Enforce frontend lint
-        continue-on-error: true
+        run: npm test
+      - name: Enforce frontend lint
         working-directory: frontend
-        run: |
-          set -o pipefail
-          npm run lint 2>&1 | tee router-v8-lint.log
-      - id: build_check
-        name: Build the production frontend
-        continue-on-error: true
+        run: npm run lint
+      - name: Build the production frontend
         working-directory: frontend
-        run: |
-          set -o pipefail
-          npm run build 2>&1 | tee router-v8-build.log
-      - name: Preserve the migration and verification evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase0-verified-router-v8-migration
-          path: |
-            frontend/package.json
-            frontend/package-lock.json
-            frontend/src
-            frontend/scripts
-            frontend/router-v8-*.log
-          if-no-files-found: error
-          retention-days: 3
-      - name: Enforce all migration checks
-        if: always()
+        run: npm run build
+      - name: Commit the verified migration
         shell: bash
-        env:
-          TEST_RESULT: ${{ steps.source_tests.outcome }}
-          LINT_RESULT: ${{ steps.lint_check.outcome }}
-          BUILD_RESULT: ${{ steps.build_check.outcome }}
         run: |
           set -euo pipefail
-          printf 'test=%s lint=%s build=%s\n' "$TEST_RESULT" "$LINT_RESULT" "$BUILD_RESULT"
-          [ "$TEST_RESULT" = "success" ]
-          [ "$LINT_RESULT" = "success" ]
-          [ "$BUILD_RESULT" = "success" ]
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/package.json frontend/package-lock.json frontend/src
+          if git diff --cached --quiet; then
+            echo 'No React Router migration changes remain to commit.'
+            exit 0
+          fi
+          git commit -m 'Migrate frontend to patched React Router 8.3.0'
+          git push origin HEAD:agent/phase-0-production-safety
