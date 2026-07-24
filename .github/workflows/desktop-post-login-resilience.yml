@@ -37,6 +37,18 @@ jobs:
       - name: Run desktop post-login contracts
         run: node scripts/desktopPostLoginResilienceTests.mjs
       - name: Lint changed authentication files
-        run: npx eslint src/api/axiosClient.js src/security/sessionExpiryGuard.js
+        id: auth-lint
+        continue-on-error: true
+        run: npx eslint src/api/axiosClient.js src/security/sessionExpiryGuard.js --format json --output-file ../desktop-auth-lint.json
+      - name: Upload authentication lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-auth-lint-report
+          path: desktop-auth-lint.json
+          if-no-files-found: error
+      - name: Enforce authentication lint result
+        if: steps.auth-lint.outcome == 'failure'
+        run: exit 1
       - name: Build production frontend
         run: npm run build
