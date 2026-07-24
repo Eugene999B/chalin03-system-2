@@ -80,18 +80,13 @@ test("Release 3B UI is routed inside Mining and does not reuse Spare Parts store
   assert.match(axios, /Branch headers are sent only for the Spare Parts workspace/);
 });
 
-test("Release 3B backup scope preserves all new Mining tables", () => {
+test("Release 3B backup scope automatically preserves every durable Mining table", () => {
   const backup = read("backend/routes/backupRoutes.js");
-  for (const table of [
-    "mining_stockpiles",
-    "mining_dispatches",
-    "mining_stockpile_movements",
-    "mining_fuel_tanks",
-    "mining_fuel_transactions",
-    "mining_fuel_reconciliations",
-    "mining_contractors",
-    "mining_shift_crews",
-    "mining_shift_crew_members",
-    "mining_site_closings",
-  ]) assert.match(backup, new RegExp(`"${table}"`));
+  const safety = read("backend/services/backupSafetyService.js");
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /information_schema\.TABLES/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(safety, /currentIncludedTables/);
+  assert.match(safety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
 });
