@@ -46,8 +46,14 @@ assert.match(catalogue, /serial_number/);
 assert.match(catalogue, /chassis_number/);
 assert.match(catalogue, /engine_number/);
 assert.match(catalogue, /capture="environment"/);
-assert.match(catalogue, /media\/:mediaId\/primary/);
-assert.match(catalogue, /media\/:mediaId\/archive/);
+assert.match(
+  catalogue,
+  /`\/equipment-catalogue\/assets\/\$\{assetId\}\/media\/\$\{mediaId\}\/primary`/
+);
+assert.match(
+  catalogue,
+  /`\/equipment-catalogue\/assets\/\$\{assetId\}\/media\/\$\{mediaId\}\/archive`/
+);
 assert.match(catalogue, /Choose an Equipment Hire location/);
 assert.match(catalogue, /effectivePermissions\.includes\("fleet\.assets\.manage"\)/);
 
