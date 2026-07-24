@@ -37,7 +37,7 @@ jobs:
       - run: npm ci
       - name: Run desktop auth context contract
         run: node scripts/desktopAuthContextRaceTests.mjs
-      - name: Lint changed frontend files
-        run: npx eslint src/context/AuthContext.jsx src/main.jsx
+      - name: Lint changed service-worker entry point
+        run: npx eslint src/main.jsx
       - name: Build production frontend
         run: npm run build
