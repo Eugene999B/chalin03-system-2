@@ -71,7 +71,7 @@ assert.doesNotMatch(security, /auth\/biometrics\/devices/);
 assert.doesNotMatch(security, /isBiometricAccessAvailable|registerBiometricDevice/);
 
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v4/);
+assert.match(serviceWorker, /chalin03-equipment-navigation-hotfix-v2/);
 assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 
