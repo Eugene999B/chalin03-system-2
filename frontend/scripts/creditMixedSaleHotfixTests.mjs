@@ -21,7 +21,7 @@ assert.match(newSale, /paymentAllocations\[channel\]/);
 assert.match(newSale, /Customer name or phone is required for credit, mixed/);
 
 assert.match(retirementBridge, /revealCreditOrMixedPanel/);
-assert.match(retirementBridge, /data-chalin-credit-mixed-panel/);
+assert.match(retirementBridge, /panel\.dataset\.chalinCreditMixedPanel = method/);
 assert.match(retirementBridge, /method === "credit"/);
 assert.match(retirementBridge, /method === "mixed"/);
 assert.match(retirementBridge, /panel\.scrollIntoView/);
