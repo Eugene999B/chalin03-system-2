@@ -240,6 +240,8 @@ export function AuthProvider({ children }) {
       return false;
     }
 
+    let preservedNewerSession = false;
+
     try {
       if (tokenBeforeLogout) {
         await axiosClient.post("/auth/logout");
@@ -248,27 +250,27 @@ export function AuthProvider({ children }) {
       // Local logout must still complete when the server session already ended.
     } finally {
       const tokenAfterRequest = localStorage.getItem(TOKEN_KEY);
-
-      if (
+      preservedNewerSession = Boolean(
         expectedToken &&
-        tokenAfterRequest &&
-        tokenAfterRequest !== expectedToken
-      ) {
+          tokenAfterRequest &&
+          tokenAfterRequest !== expectedToken
+      );
+
+      if (preservedNewerSession) {
         adoptLatestStoredSession();
-        return false;
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem("chalin03_active_context_mining");
+        localStorage.removeItem("chalin03_active_context_equipment_hire");
+
+        setToken(null);
+        setUser(null);
+        setLoading(false);
       }
-
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      localStorage.removeItem("chalin03_active_context_mining");
-      localStorage.removeItem("chalin03_active_context_equipment_hire");
-
-      setToken(null);
-      setUser(null);
-      setLoading(false);
     }
 
-    return true;
+    return !preservedNewerSession;
   }
 
   async function login(credentialsOrUsername, password, branchId) {
