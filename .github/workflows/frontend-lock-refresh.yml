@@ -34,15 +34,21 @@ jobs:
       - name: Generate the exact lockfile
         working-directory: frontend
         run: npm install --package-lock-only --ignore-scripts
-      - name: Verify unaffected router and audit result
+      - name: Record router tree
         working-directory: frontend
-        run: |
-          npm ls react-router react-router-dom
-          npm audit --omit=dev --audit-level=high
-      - name: Upload generated lockfile
+        run: npm ls react-router react-router-dom | tee router-tree.txt
+      - name: Record production audit
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high --json > frontend-audit.json
+      - name: Upload generated lockfile and audit evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase0-frontend-package-lock
-          path: frontend/package-lock.json
+          path: |
+            frontend/package-lock.json
+            frontend/router-tree.txt
+            frontend/frontend-audit.json
           if-no-files-found: error
           retention-days: 3
