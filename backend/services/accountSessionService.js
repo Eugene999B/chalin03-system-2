@@ -8,6 +8,13 @@ const {
   getSessionPolicy,
 } = require("./sessionExpiryPolicy");
 
+const configuredSessionLimit = Number(
+  process.env.MAX_ACTIVE_SESSIONS_PER_USER || 5
+);
+const MAX_ACTIVE_SESSIONS_PER_USER = Number.isInteger(configuredSessionLimit)
+  ? Math.max(2, Math.min(configuredSessionLimit, 10))
+  : 5;
+
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
 }
@@ -167,6 +174,39 @@ async function insertRichSession({
   );
 }
 
+async function retireExcessActiveSessions({ connection, userId, sessionId }) {
+  const [activeSessions] = await connection.query(
+    `SELECT id, session_id
+     FROM auth_sessions
+     WHERE user_id = ?
+       AND revoked_at IS NULL
+       AND expires_at > UTC_TIMESTAMP()
+     ORDER BY created_at DESC, id DESC
+     FOR UPDATE`,
+    [userId]
+  );
+
+  const excessSessions = activeSessions.slice(MAX_ACTIVE_SESSIONS_PER_USER);
+
+  if (excessSessions.length === 0) {
+    return 0;
+  }
+
+  const excessIds = excessSessions.map((session) => Number(session.id));
+  const placeholders = excessIds.map(() => "?").join(", ");
+  const [result] = await connection.query(
+    `UPDATE auth_sessions
+     SET revoked_at = UTC_TIMESTAMP(),
+         revocation_reason = 'session_limit_exceeded',
+         replaced_by_session_id = ?
+     WHERE id IN (${placeholders})
+       AND revoked_at IS NULL`,
+    [sessionId, ...excessIds]
+  );
+
+  return Number(result.affectedRows || 0);
+}
+
 async function createSession({
   userId,
   req,
@@ -202,17 +242,6 @@ async function createSession({
       throw error;
     }
 
-    const [revokeResult] = await connection.query(
-      `UPDATE auth_sessions
-       SET revoked_at = UTC_TIMESTAMP(),
-           revocation_reason = 'replaced_by_new_login',
-           replaced_by_session_id = ?
-       WHERE user_id = ?
-         AND revoked_at IS NULL
-         AND expires_at > UTC_TIMESTAMP()`,
-      [sessionId, userId]
-    );
-
     try {
       await insertRichSession({
         connection,
@@ -239,11 +268,18 @@ async function createSession({
       });
     }
 
+    const retiredSessionCount = await retireExcessActiveSessions({
+      connection,
+      userId,
+      sessionId,
+    });
+
     await connection.commit();
 
     return {
       sessionId,
-      replacedSessionCount: Number(revokeResult.affectedRows || 0),
+      replacedSessionCount: retiredSessionCount,
+      activeSessionLimit: MAX_ACTIVE_SESSIONS_PER_USER,
       expiresAt: sessionPolicy.expiresAt.toISOString(),
       expiresInSeconds: Math.max(
         0,
@@ -310,6 +346,16 @@ async function validateSession({ userId, sessionId }) {
           statusCode: 401,
           code: "SESSION_REPLACED",
           message: "Your account was signed in on another device.",
+        };
+      }
+
+      if (session.revocation_reason === "session_limit_exceeded") {
+        return {
+          ok: false,
+          statusCode: 401,
+          code: "SESSION_LIMIT_EXCEEDED",
+          message:
+            "This older device session ended because the account reached its active-device limit.",
         };
       }
 
