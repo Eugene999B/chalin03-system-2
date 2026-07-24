@@ -19,8 +19,8 @@ function decodeBase64Url(value) {
     return new TextDecoder().decode(bytes);
   }
 
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(padded, "base64").toString("utf8");
+  if (typeof globalThis.Buffer !== "undefined") {
+    return globalThis.Buffer.from(padded, "base64").toString("utf8");
   }
 
   throw new Error("Base64 decoder is unavailable.");
