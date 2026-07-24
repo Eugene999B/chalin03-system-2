@@ -77,7 +77,9 @@ jobs:
         run: npm ci
 
       - name: Run frontend source tests
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee frontend-test.log
 
       - name: Enforce full frontend lint
         run: |
@@ -95,6 +97,7 @@ jobs:
         with:
           name: frontend-verification-logs
           path: |
+            frontend/frontend-test.log
             frontend/frontend-lint.log
             frontend/frontend-build.log
           if-no-files-found: ignore
