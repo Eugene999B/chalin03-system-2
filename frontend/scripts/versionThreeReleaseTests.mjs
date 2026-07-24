@@ -16,7 +16,7 @@ const loginSource = readFileSync(
   "utf8"
 );
 const loginStyles = readFileSync(
-  join(root, "src/styles/groupOperationsLogin.css"),
+  join(root, "src/styles/commandGateV4.css"),
   "utf8"
 );
 const manifest = JSON.parse(
@@ -42,6 +42,7 @@ assert.match(manifest.description, /Equipment Hire/);
 assert.match(loginEntry, /LoginPageGroupOperations/);
 assert.match(loginSource, /APP_RELEASE_LABEL/);
 assert.match(loginSource, /className="gate4__version"/);
+assert.match(loginSource, /commandGateV4\.css/);
 assert.match(loginStyles, /\.gate4__version/);
 assert.match(loginStyles, /@media \(max-width:/);
 assert.match(backendVersionSource, /APP_VERSION = "3\.0\.0"/);
