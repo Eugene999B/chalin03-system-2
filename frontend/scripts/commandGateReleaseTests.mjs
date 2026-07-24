@@ -13,7 +13,6 @@ const loginPage = read("src/pages/LoginPageGroupOperations.jsx");
 const biometricClient = read("src/utils/biometricAccess.js");
 const groupStyles = read("src/styles/groupOperationsLogin.css");
 const adminMobileStyles = read("src/styles/adminMobileHotfix.css");
-const biometricStyles = read("src/styles/biometricBankLogin.css");
 const mobileStyles = read("src/styles/mobileExperience.css");
 const mobileNavigation = read("src/components/CompactSidebarNavigation.jsx");
 const historyTracker = read("src/utils/commandGateHistoryTracker.js");
@@ -22,6 +21,7 @@ const headers = read("public/_headers");
 const security = read("src/pages/ChangePasswordPage.jsx");
 const main = read("src/main.jsx");
 const arrival = read("src/components/CommandArrivalBanner.jsx");
+const passkeyRoutes = read("../backend/routes/passkeyRoutes.js");
 const biometricRoutes = read("../backend/routes/biometricRoutes.js");
 const schemaService = read("../backend/services/passkeySchemaService.js");
 const authRoutes = read("../backend/routes/authRoutes.js");
@@ -36,74 +36,46 @@ assert.match(loginPage, /Three connected businesses/);
 assert.match(loginPage, /GroupOperationsMap/);
 assert.match(loginPage, /DASHBOARD_PATHS/);
 assert.match(loginPage, /Opening your dashboard/);
-assert.match(loginPage, /Use fingerprint or face on this device\?/);
-assert.match(loginPage, /Set up fingerprint or face/);
-assert.match(loginPage, /Not now/);
-assert.match(loginPage, /Continue as \$\{boundAccountName\}/);
-assert.match(loginPage, /sameBoundAccount/);
-assert.match(loginPage, /biometricAvailable/);
-assert.match(loginPage, /isBiometricAccessAvailable/);
 assert.match(loginPage, /autoComplete="off"/);
 assert.match(loginPage, /autoComplete="new-password"/);
 assert.match(loginPage, /readOnly=\{!passwordUnlocked\}/);
 assert.match(loginPage, /data-lpignore="true"/);
 assert.match(loginPage, /data-1p-ignore="true"/);
 assert.match(loginPage, /window\.addEventListener\("pageshow", clearPasswordField\)/);
-assert.doesNotMatch(loginPage, /Password first\. Fingerprint/i);
-assert.doesNotMatch(loginPage, /device PIN/i);
-assert.doesNotMatch(loginPage, /Windows Hello/i);
-assert.doesNotMatch(loginPage, /security key/i);
-assert.doesNotMatch(loginPage, /passkey/i);
 
-assert.match(biometricClient, /isUserVerifyingPlatformAuthenticatorAvailable/);
-assert.match(biometricClient, /platformAvailabilityResolved/);
-assert.match(biometricClient, /PLATFORM_BIOMETRIC_UNAVAILABLE/);
-assert.match(biometricClient, /chalin03_biometric_binding_v2/);
-assert.match(biometricClient, /binding_token/);
-assert.match(biometricClient, /authentication\/options/);
-assert.match(biometricClient, /registration\/options/);
-assert.match(biometricClient, /startAuthentication/);
-assert.match(biometricClient, /startRegistration/);
-assert.match(biometricClient, /clearStoredBiometricBinding/);
+assert.match(biometricClient, /WEB_BIOMETRIC_ENABLED = false/);
+assert.match(biometricClient, /isBiometricAccessAvailable\(\)[\s\S]*return false/);
+assert.match(biometricClient, /WEB_BIOMETRIC_DISABLED/);
+assert.match(biometricClient, /localStorage\.removeItem\(BINDING_KEY\)/);
+assert.doesNotMatch(
+  biometricClient,
+  /isUserVerifyingPlatformAuthenticatorAvailable|startAuthentication|startRegistration/
+);
 
-assert.match(biometricRoutes, /authenticatorAttachment:\s*"platform"/);
-assert.match(biometricRoutes, /preferredAuthenticatorType:\s*"localDevice"/);
-assert.match(biometricRoutes, /userVerification:\s*"required"/);
-assert.match(biometricRoutes, /requireUserVerification:\s*true/);
-assert.match(biometricRoutes, /allowCredentials/);
-assert.match(biometricRoutes, /device_binding_hash/);
-assert.match(biometricRoutes, /RECENT_PASSWORD_LOGIN_REQUIRED/);
-assert.match(biometricRoutes, /This device is not linked to the requested account/);
-assert.doesNotMatch(biometricRoutes, /cross-platform/);
+for (const source of [passkeyRoutes, biometricRoutes]) {
+  assert.match(source, /status\(410\)/);
+  assert.match(source, /WEB_(?:PASSKEY|BIOMETRIC)_LOGIN_DISABLED/);
+  assert.doesNotMatch(source, /simplewebauthn|verifyAuthenticationResponse/i);
+}
 
-assert.match(schemaService, /global_bank_biometric_reset/);
 assert.match(schemaService, /UPDATE user_passkeys/);
 assert.match(schemaService, /UPDATE passkey_challenges/);
-assert.match(schemaService, /bank_biometric_generation/);
 assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
-assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
-assert.match(schemaService, /BIOMETRIC_RATE_LIMITED/);
-assert.match(schemaService, /max:\s*40/);
 assert.match(schemaService, /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/);
+
+assert.match(security, /Password Security/);
+assert.match(security, /Browser fingerprint, face, passkey and device screen-lock login are/);
+assert.match(security, /password login is the approved method/);
+assert.match(security, /clearStoredBiometricBinding/);
+assert.doesNotMatch(security, /auth\/biometrics\/devices/);
+assert.doesNotMatch(security, /isBiometricAccessAvailable|registerBiometricDevice/);
 
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
 assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v4/);
 assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 
-assert.match(security, /isBiometricAccessAvailable/);
-assert.match(security, /does not report a built-in fingerprint or face authenticator/i);
-assert.match(security, /Dashboard-first entry/);
-assert.match(security, /auth\/biometrics\/devices/);
-assert.match(security, /clearStoredBiometricBinding/);
-assert.match(security, /fingerprint and face devices were revoked/i);
-assert.doesNotMatch(security, /Entrance profile/i);
-assert.doesNotMatch(security, /device PIN/i);
-assert.doesNotMatch(security, /Windows Hello/i);
-assert.doesNotMatch(security, /passkey/i);
-
 assert.match(groupStyles, /group-operations-map/);
-assert.match(groupStyles, /biometric-login__continue strong::after/);
 assert.match(groupStyles, /@media \(max-width: 760px\)/);
 assert.match(adminMobileStyles, /\.upm-table-wrap \.upm-permission-table/);
 assert.match(adminMobileStyles, /min-width:\s*0 !important/);
@@ -111,7 +83,6 @@ assert.match(adminMobileStyles, /delegate-capability-grid input\[type="checkbox"
 assert.match(adminMobileStyles, /users-store-strip/);
 assert.match(adminMobileStyles, /grid-template-columns:\s*repeat\(2/);
 assert.match(main, /adminMobileHotfix\.css/);
-assert.match(biometricStyles, /biometric-consent/);
 assert.match(mobileStyles, /Dedicated mobile operating layer/);
 assert.match(mobileStyles, /\.compact-sidebar-navigation\.is-mobile-navigation/);
 assert.match(mobileNavigation, /isMobileNavigation/);
@@ -121,4 +92,4 @@ assert.match(main, /CommandArrivalBanner/);
 assert.match(arrival, /Welcome back/);
 assert.match(authRoutes, /router\.commandGateAuth\s*=\s*Object\.freeze/);
 
-console.log("Group login, biometric capability and mobile admin contracts passed.");
+console.log("Password-only group login and mobile administration contracts passed.");
