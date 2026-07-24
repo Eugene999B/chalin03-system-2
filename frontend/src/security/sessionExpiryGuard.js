@@ -19,8 +19,8 @@ function decodeBase64Url(value) {
     return new TextDecoder().decode(bytes);
   }
 
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(padded, "base64").toString("utf8");
+  if (typeof globalThis.Buffer !== "undefined") {
+    return globalThis.Buffer.from(padded, "base64").toString("utf8");
   }
 
   throw new Error("Base64 decoder is unavailable.");
@@ -102,8 +102,6 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
     return () => {};
   }
 
-  const policy = calculateSessionExpiry(token);
-  let timer = null;
   let completed = false;
 
   const expire = (notice = EXPIRY_NOTICE) => {
@@ -126,7 +124,7 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
     }
   };
 
-  const check = () => {
+  const checkStoredSession = () => {
     const storedToken = localStorage.getItem(TOKEN_KEY);
 
     if (!storedToken) {
@@ -140,38 +138,33 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
       return true;
     }
 
-    if (!policy.expiresAtMs || Date.now() >= policy.expiresAtMs) {
-      expire();
-      return true;
-    }
-
+    // The backend validates the real eight-hour, Ghana-midnight and JWT expiry
+    // policy on every authenticated request. The browser clock is deliberately
+    // not allowed to erase a valid server session because desktop clocks can be
+    // ahead, behind or temporarily misconfigured.
     return false;
   };
 
-  if (!check()) {
-    timer = window.setTimeout(
-      check,
-      Math.max(0, policy.expiresAtMs - Date.now() + 25)
-    );
-  }
+  checkStoredSession();
 
   const handleVisibility = () => {
-    if (document.visibilityState === "visible") check();
+    if (document.visibilityState === "visible") checkStoredSession();
   };
   const handleStorage = (event) => {
-    if (event.key === TOKEN_KEY && event.newValue !== token) check();
+    if (event.key === TOKEN_KEY && event.newValue !== token) {
+      checkStoredSession();
+    }
   };
 
-  window.addEventListener("focus", check);
-  window.addEventListener("pageshow", check);
+  window.addEventListener("focus", checkStoredSession);
+  window.addEventListener("pageshow", checkStoredSession);
   window.addEventListener("storage", handleStorage);
   document.addEventListener("visibilitychange", handleVisibility);
 
   return () => {
     completed = true;
-    if (timer) window.clearTimeout(timer);
-    window.removeEventListener("focus", check);
-    window.removeEventListener("pageshow", check);
+    window.removeEventListener("focus", checkStoredSession);
+    window.removeEventListener("pageshow", checkStoredSession);
     window.removeEventListener("storage", handleStorage);
     document.removeEventListener("visibilitychange", handleVisibility);
   };

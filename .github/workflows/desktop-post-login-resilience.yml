@@ -1,0 +1,54 @@
+name: Desktop Post-Login Resilience
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/src/api/axiosClient.js"
+      - "frontend/src/security/sessionExpiryGuard.js"
+      - "frontend/scripts/desktopPostLoginResilienceTests.mjs"
+      - ".github/workflows/desktop-post-login-resilience.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-post-login-resilience-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate desktop post-login continuity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Run desktop post-login contracts
+        run: node scripts/desktopPostLoginResilienceTests.mjs
+      - name: Lint changed authentication files
+        id: auth-lint
+        continue-on-error: true
+        run: npx eslint src/api/axiosClient.js src/security/sessionExpiryGuard.js --format json --output-file ../desktop-auth-lint.json
+      - name: Upload authentication lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-auth-lint-report
+          path: desktop-auth-lint.json
+          if-no-files-found: error
+      - name: Enforce authentication lint result
+        if: steps.auth-lint.outcome == 'failure'
+        run: exit 1
+      - name: Build production frontend
+        run: npm run build
