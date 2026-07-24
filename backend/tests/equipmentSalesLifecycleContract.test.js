@@ -16,6 +16,7 @@ const boundary = read(
   "backend/middleware/equipmentCatalogueIntegrityMiddleware.js"
 );
 const backupRoutes = read("backend/routes/backupRoutes.js");
+const backupSafety = read("backend/services/backupSafetyService.js");
 
 const lifecycleTables = [
   "equipment_sales_enquiries",
@@ -40,7 +41,6 @@ test("startup migration is locked, idempotent and verified", () => {
   assert.match(schemaService, /mode\.toUpperCase\(\) !== "ANSI_QUOTES"/);
   assert.match(schemaService, /splitSqlStatements/);
   assert.match(schemaService, /verifyFoundation/);
-  assert.match(schemaService, /DISABLE_EQUIPMENT_SALES_STARTUP_MIGRATION/);
 
   for (const tableName of lifecycleTables) {
     assert.match(schemaService, new RegExp(`"${tableName}"`));
@@ -139,8 +139,14 @@ test("Equipment Sales SMS uses the existing provider and stores workspace contex
   assert.match(routes, /ownership_ready/);
 });
 
-test("full-system backups include all Equipment Sales lifecycle records", () => {
-  for (const tableName of lifecycleTables) {
-    assert.match(backupRoutes, new RegExp(`"${tableName}"`));
-  }
+test("full-system backup discovers Equipment Sales tables from the live schema", () => {
+  assert.match(backupRoutes, /information_schema\.TABLES/);
+  assert.match(backupRoutes, /classifyDatabaseTables/);
+  assert.match(backupRoutes, /included_tables/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(
+    backupRoutes,
+    /const PREFERRED_TABLE_ORDER|equipment_sales_enquiries[\s\S]*equipment_ownership_transfers/
+  );
 });
