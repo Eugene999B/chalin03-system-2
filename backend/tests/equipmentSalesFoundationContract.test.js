@@ -14,6 +14,7 @@ const verification = read(
   "database/migrations/20260722_equipment_sales_installments_verify.sql"
 );
 const backupRoutes = read("backend/routes/backupRoutes.js");
+const backupSafety = read("backend/services/backupSafetyService.js");
 const resetScript = read("backend/scripts/resetDatabaseFromBackup.js");
 const restoreVerifier = read("backend/scripts/verifyRestoredDatabase.js");
 const catalogueRoutes = read("backend/routes/equipmentCatalogueRoutes.js");
@@ -130,10 +131,9 @@ test("central SMS log receives workspace and Equipment Hire context", () => {
   }
 });
 
-test("backup and restore contracts include every new equipment sales table", () => {
+test("backup dynamically covers every new equipment sales table", () => {
   for (const tableName of REQUIRED_TABLES) {
     const tablePattern = new RegExp(`['"]${tableName}['"]`);
-    assert.match(backupRoutes, tablePattern, `${tableName} missing from backup order`);
     assert.match(resetScript, tablePattern, `${tableName} missing from reset contract`);
     assert.match(
       restoreVerifier,
@@ -142,7 +142,12 @@ test("backup and restore contracts include every new equipment sales table", () 
     );
   }
 
-  assert.match(backupRoutes, /chalin03-equipment-sales-foundation-v1/);
+  assert.match(backupRoutes, /chalin03-full-system-v2/);
+  assert.match(backupRoutes, /getAllBaseTables/);
+  assert.match(backupRoutes, /classifyDatabaseTables/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backupRoutes, /const PREFERRED_TABLE_ORDER/);
   assert.match(resetScript, /database\.endsWith\("_test"\)/);
   assert.match(resetScript, /EQUIPMENT_SALES_MIGRATION_PATH/);
   assert.match(restoreVerifier, /applicationTablesExpected:\s*67/);
