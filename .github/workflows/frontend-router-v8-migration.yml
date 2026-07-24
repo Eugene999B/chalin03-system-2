@@ -2,6 +2,14 @@ name: Frontend Router v8 Migration
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - frontend/package.json
+      - frontend/package-lock.json
+      - frontend/src/**
+      - .github/workflows/frontend-router-v8-migration.yml
   push:
     branches:
       - agent/phase-0-production-safety
@@ -9,7 +17,7 @@ on:
       - .github/workflows/frontend-router-v8-migration.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   migrate-and-verify:
@@ -17,9 +25,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent/phase-0-production-safety
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -75,16 +80,13 @@ jobs:
       - name: Build the production frontend
         working-directory: frontend
         run: npm run build
-      - name: Commit the verified migration to the Phase 0 branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/package.json frontend/package-lock.json frontend/src
-          if git diff --cached --quiet; then
-            echo 'No router migration changes remain to commit.'
-            exit 0
-          fi
-          git commit -m 'Migrate frontend to patched React Router 8.3.0'
-          git push origin HEAD:agent/phase-0-production-safety
+      - name: Preserve the verified migration
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-verified-router-v8-migration
+          path: |
+            frontend/package.json
+            frontend/package-lock.json
+            frontend/src
+          if-no-files-found: error
+          retention-days: 3
