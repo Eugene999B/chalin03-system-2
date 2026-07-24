@@ -8,87 +8,52 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const schemaService = read("backend/services/passkeySchemaService.js");
+const passkeyRoutes = read("backend/routes/passkeyRoutes.js");
 const biometricRoutes = read("backend/routes/biometricRoutes.js");
 const loginEntry = read("frontend/src/pages/LoginPage.jsx");
 const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
 const biometricClient = read("frontend/src/utils/biometricAccess.js");
+const passwordPage = read("frontend/src/pages/ChangePasswordPage.jsx");
 const groupStyles = read("frontend/src/styles/groupOperationsLogin.css");
 const mobileAdminStyles = read("frontend/src/styles/adminMobileHotfix.css");
 const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
 
-test("all earlier device credentials are revoked exactly once", () => {
+test("historical biometric credentials remain revocable after web login retirement", () => {
   assert.match(schemaService, /20260722_bank_biometric_device_reset_v1/);
-  assert.match(schemaService, /global_bank_biometric_reset/);
   assert.match(schemaService, /UPDATE user_passkeys[\s\S]*revoked_at/);
-  assert.match(schemaService, /UPDATE passkey_challenges[\s\S]*used_at/);
-  assert.match(schemaService, /passkey_security_events/);
-  assert.match(schemaService, /bank_biometric_generation/);
-  assert.match(schemaService, /INSERT INTO schema_migrations/);
-});
-
-
-test("password changes revoke every linked biometric device", () => {
   assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
-  assert.match(schemaService, /NEW\.password_hash <=> OLD\.password_hash/);
-  assert.match(
-    schemaService,
-    /revoked_reason = COALESCE\(revoked_reason, 'password_changed'\)/
-  );
 });
 
 
-test("legacy generic passkey API is retired and biometrics are rate limited", () => {
-  assert.match(schemaService, /LEGACY_PASSKEYS_RETIRED/);
-  assert.match(schemaService, /legacyPasskeyRoutes\.stack\.unshift/);
-  assert.match(schemaService, /BIOMETRIC_RATE_LIMITED/);
-  assert.match(schemaService, /windowMs:\s*15 \* 60 \* 1000/);
-  assert.match(schemaService, /max:\s*40/);
-  assert.match(
-    schemaService,
-    /authRoutes\.use\("\/biometrics", biometricLimiter, biometricRoutes\)/
-  );
+test("browser passkey and biometric APIs are retired fail-closed", () => {
+  for (const source of [passkeyRoutes, biometricRoutes]) {
+    assert.match(source, /status\(410\)/);
+    assert.match(source, /WEB_(?:PASSKEY|BIOMETRIC)_LOGIN_DISABLED/);
+    assert.doesNotMatch(source, /simplewebauthn|generateAuthenticationOptions|verifyAuthenticationResponse/i);
+  }
 });
 
 
-test("registration requires a recent password session and local platform verification", () => {
-  assert.match(biometricRoutes, /RECENT_PASSWORD_LOGIN_REQUIRED/);
-  assert.match(biometricRoutes, /RECENT_PASSWORD_MINUTES = 5/);
-  assert.match(biometricRoutes, /authenticatorAttachment:\s*"platform"/);
-  assert.match(biometricRoutes, /preferredAuthenticatorType:\s*"localDevice"/);
-  assert.match(biometricRoutes, /residentKey:\s*"required"/);
-  assert.match(biometricRoutes, /userVerification:\s*"required"/);
-  assert.match(biometricRoutes, /requireUserVerification:\s*true/);
-  assert.match(biometricRoutes, /LOCAL_BIOMETRIC_REQUIRED/);
-});
-
-
-test("biometric login is bound to one browser token, credential and account", () => {
-  assert.match(biometricRoutes, /device_binding_hash/);
-  assert.match(biometricRoutes, /bindingHash\(rawToken\)/);
-  assert.match(biometricRoutes, /allowCredentials/);
-  assert.match(biometricRoutes, /passkey_id/);
-  assert.match(biometricRoutes, /credential\.credential_id !== response\.id/);
-  assert.match(
-    biometricRoutes,
-    /This device is not linked to the requested account/
-  );
-  assert.match(biometricClient, /chalin03_biometric_binding_v2/);
-  assert.match(biometricClient, /binding_token/);
-});
-
-
-test("setup is offered only when a platform authenticator is reported", () => {
-  assert.match(
+test("frontend never advertises or invokes browser biometric availability", () => {
+  assert.match(biometricClient, /WEB_BIOMETRIC_ENABLED = false/);
+  assert.match(biometricClient, /isBiometricAccessAvailable\(\)[\s\S]*return false/);
+  assert.match(biometricClient, /WEB_BIOMETRIC_DISABLED/);
+  assert.match(biometricClient, /localStorage\.removeItem\(BINDING_KEY\)/);
+  assert.doesNotMatch(
     biometricClient,
-    /isUserVerifyingPlatformAuthenticatorAvailable/
+    /isUserVerifyingPlatformAuthenticatorAvailable|startAuthentication|startRegistration/
   );
-  assert.match(biometricClient, /platformAvailabilityResolved/);
-  assert.match(biometricClient, /PLATFORM_BIOMETRIC_UNAVAILABLE/);
-  assert.match(loginPage, /const \[biometricAvailable, setBiometricAvailable\]/);
-  assert.match(loginPage, /if \(biometricAvailable && !sameBoundAccount\)/);
-  assert.match(loginPage, /consentOpen && biometricAvailable/);
+});
+
+
+test("account security is password-only and explains why browser passkeys are rejected", () => {
+  assert.match(passwordPage, /Password Security/);
+  assert.match(passwordPage, /Browser fingerprint, face, passkey and device screen-lock login are/);
+  assert.match(passwordPage, /password login is the approved method/);
+  assert.doesNotMatch(passwordPage, /auth\/biometrics\/devices/);
+  assert.doesNotMatch(passwordPage, /registerBiometricDevice|isBiometricAccessAvailable/);
 });
 
 
@@ -109,13 +74,6 @@ test("password starts blank, group story is shown and every login opens a dashbo
   assert.match(loginPage, /Three connected businesses/);
   assert.match(loginPage, /DASHBOARD_PATHS/);
   assert.match(loginPage, /Opening your dashboard/);
-  assert.match(loginPage, /Use fingerprint or face on this device\?/);
-  assert.match(loginPage, /Set up fingerprint or face/);
-  assert.match(loginPage, /Not now/);
-  assert.match(loginPage, /sameBoundAccount/);
-  assert.doesNotMatch(loginPage, /Password first\. Fingerprint/i);
-  assert.doesNotMatch(loginPage, /device PIN/i);
-  assert.doesNotMatch(loginPage, /Windows Hello/i);
   assert.match(groupStyles, /group-operations-map/);
 });
 
@@ -135,9 +93,9 @@ test("mobile administration layouts override route-level desktop widths", () => 
 });
 
 
-test("service worker ignores third-party requests and refreshes the mobile release", () => {
+test("service worker ignores third-party requests and keeps the current release cache", () => {
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v4/);
+  assert.match(serviceWorker, /chalin03-equipment-navigation-hotfix-v2/);
   assert.match(
     headers,
     /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/
