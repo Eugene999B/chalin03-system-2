@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-desktop-auth-context-hotfix-v3";
+const CACHE_NAME = "chalin03-export-fallback-hotfix-v4";
 
 const CORE_ASSETS = [
   "/",
@@ -7,6 +7,38 @@ const CORE_ASSETS = [
   "/favicon-512x512.png",
   "/chalin03-logo.png"
 ];
+
+function buildOfflineResponse() {
+  return new Response(
+    "Chalin 03 is temporarily offline. Please reconnect and try again.",
+    {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}
+
+async function cachedResponseOrOffline(request, fallbackRequest = null) {
+  const cachedResponse = await caches.match(request);
+
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  if (fallbackRequest) {
+    const fallbackResponse = await caches.match(fallbackRequest);
+
+    if (fallbackResponse) {
+      return fallbackResponse;
+    }
+  }
+
+  return buildOfflineResponse();
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -57,15 +89,17 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const responseClone = response.clone();
+          if (response?.ok) {
+            const responseClone = response.clone();
 
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put("/", responseClone);
-          });
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put("/", responseClone);
+            });
+          }
 
           return response;
         })
-        .catch(() => caches.match("/"))
+        .catch(() => cachedResponseOrOffline("/"))
     );
 
     return;
@@ -75,7 +109,7 @@ self.addEventListener("fetch", (event) => {
     fetch(request)
       .then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
+          return networkResponse || buildOfflineResponse();
         }
 
         const responseClone = networkResponse.clone();
@@ -84,6 +118,6 @@ self.addEventListener("fetch", (event) => {
         });
         return networkResponse;
       })
-      .catch(() => caches.match(request))
+      .catch(() => cachedResponseOrOffline(request))
   );
 });
