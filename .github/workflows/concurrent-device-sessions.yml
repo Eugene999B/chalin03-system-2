@@ -1,0 +1,40 @@
+name: Concurrent Device Sessions Hotfix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/services/accountSessionService.js"
+      - "backend/tests/concurrentDeviceSessions.test.js"
+      - "backend/tests/release2aSessionSecurity.test.js"
+      - ".github/workflows/concurrent-device-sessions.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: concurrent-device-sessions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate phone and desktop sessions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Check session service syntax
+        run: node --check services/accountSessionService.js
+      - name: Run session regression tests
+        run: node --test tests/concurrentDeviceSessions.test.js tests/release2aSessionSecurity.test.js
