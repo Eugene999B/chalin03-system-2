@@ -15,6 +15,14 @@ const PLACEHOLDER_FRAGMENTS = [
   ">",
 ];
 
+const PRODUCTION_SECRET_NAMES = [
+  "JWT_SECRET",
+  "ACCOUNT_RECOVERY_OTP_SECRET",
+  "CLOUDFLARE_ORIGIN_SECRET",
+  "OWNER_MFA_ENCRYPTION_KEY",
+  "BACKUP_SIGNING_SECRET",
+];
+
 class StartupSecurityError extends Error {
   constructor(problems) {
     super(`Startup security check failed: ${problems.join("; ")}`);
@@ -30,7 +38,6 @@ function cleanValue(value) {
 
 function booleanValue(value, fallback = false) {
   const normalized = cleanValue(value).toLowerCase();
-
   if (!normalized) return fallback;
   return ["1", "true", "yes", "on"].includes(normalized);
 }
@@ -72,23 +79,56 @@ function secretProblems(name, value) {
   return problems;
 }
 
+function normalizedHosts(value) {
+  return cleanValue(value)
+    .split(",")
+    .map((host) =>
+      host
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/:\d+$/, "")
+        .replace(/\/$/, "")
+    )
+    .filter(Boolean);
+}
+
+function distinctSecretProblems(env) {
+  const values = PRODUCTION_SECRET_NAMES.map((name) => [
+    name,
+    cleanValue(env[name]),
+  ]).filter(([, value]) => value);
+  const problems = [];
+
+  for (let left = 0; left < values.length; left += 1) {
+    for (let right = left + 1; right < values.length; right += 1) {
+      if (values[left][1] === values[right][1]) {
+        problems.push(
+          `${values[left][0]} and ${values[right][0]} must use different secrets`
+        );
+      }
+    }
+  }
+
+  return problems;
+}
+
 function auditStartupSecurity({
   env = process.env,
   allowedOrigins = [],
 } = {}) {
   const production = isProductionEnvironment(env);
-  const strictProductionSecurity = booleanValue(
-    env.ENFORCE_PRODUCTION_SECURITY_SECRETS,
-    false
-  );
+  // Production is always strict. The legacy flag remains visible only so an
+  // explicitly false value is reported as a configuration error.
+  const strictProductionSecurity = production
+    ? true
+    : booleanValue(env.ENFORCE_PRODUCTION_SECURITY_SECRETS, false);
   const errors = [];
   const warnings = [];
   const origins = Array.isArray(allowedOrigins)
     ? allowedOrigins.map(cleanValue).filter(Boolean)
     : [];
   const jwtSecret = cleanValue(env.JWT_SECRET);
-  const otpSecret = cleanValue(env.ACCOUNT_RECOVERY_OTP_SECRET);
-  const originSecret = cleanValue(env.CLOUDFLARE_ORIGIN_SECRET);
 
   if (!jwtSecret) {
     errors.push("JWT_SECRET is missing");
@@ -99,66 +139,69 @@ function auditStartupSecurity({
   }
 
   if (production) {
-    const productionProblems = [
-      ...secretProblems("JWT_SECRET", jwtSecret),
-      ...secretProblems(
-        "ACCOUNT_RECOVERY_OTP_SECRET",
-        otpSecret
-      ),
-      ...secretProblems(
-        "CLOUDFLARE_ORIGIN_SECRET",
-        originSecret
-      ),
-    ];
+    for (const secretName of PRODUCTION_SECRET_NAMES) {
+      errors.push(...secretProblems(secretName, env[secretName]));
+    }
+    errors.push(...distinctSecretProblems(env));
 
-    if (jwtSecret && otpSecret && jwtSecret === otpSecret) {
-      productionProblems.push(
-        "ACCOUNT_RECOVERY_OTP_SECRET must be different from JWT_SECRET"
+    if (
+      cleanValue(env.ENFORCE_PRODUCTION_SECURITY_SECRETS).toLowerCase() ===
+      "false"
+    ) {
+      errors.push(
+        "ENFORCE_PRODUCTION_SECURITY_SECRETS cannot be false in production"
       );
     }
 
     if (
-      cleanValue(
-        env.ENFORCE_TRUSTED_API_HOSTS || "true"
-      ).toLowerCase() === "false"
+      cleanValue(env.ENFORCE_TRUSTED_API_HOSTS || "true").toLowerCase() ===
+      "false"
     ) {
-      productionProblems.push(
-        "ENFORCE_TRUSTED_API_HOSTS cannot be false in production"
-      );
+      errors.push("ENFORCE_TRUSTED_API_HOSTS cannot be false in production");
     }
 
-    if (!origins.some((origin) => origin.startsWith("https://"))) {
-      productionProblems.push(
-        "At least one HTTPS frontend origin is required in production"
-      );
+    const trustedHosts = normalizedHosts(env.TRUSTED_API_HOSTS);
+    if (!trustedHosts.includes("api.chalin03.com")) {
+      errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");
+    }
+    if (trustedHosts.some((host) => host.endsWith(".railway.app"))) {
+      errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");
     }
 
-    if (strictProductionSecurity) {
-      errors.push(...productionProblems);
-    } else {
-      warnings.push(...productionProblems);
-      if (productionProblems.length > 0) {
-        warnings.push(
-          "Set ENFORCE_PRODUCTION_SECURITY_SECRETS=true only after Railway secrets and the Cloudflare origin-header rule are configured."
-        );
-      }
+    if (!booleanValue(env.DB_SSL, false)) {
+      errors.push("DB_SSL must be true in production");
+    }
+
+    const httpsOrigins = origins.filter((origin) =>
+      origin.startsWith("https://")
+    );
+    if (httpsOrigins.length === 0) {
+      errors.push("At least one HTTPS frontend origin is required in production");
+    }
+    if (
+      httpsOrigins.some(
+        (origin) =>
+          origin.includes("localhost") || origin.includes("127.0.0.1")
+      )
+    ) {
+      errors.push("Production HTTPS frontend origins cannot use localhost");
     }
   } else {
-    const developmentJwtProblems = secretProblems(
-      "JWT_SECRET",
-      jwtSecret
-    );
-
+    const developmentJwtProblems = secretProblems("JWT_SECRET", jwtSecret);
     if (jwtSecret && developmentJwtProblems.length > 0) {
       warnings.push(
         "Development JWT_SECRET is not production-strength. Do not reuse it in Railway."
       );
     }
 
-    if (!otpSecret) {
-      warnings.push(
-        "ACCOUNT_RECOVERY_OTP_SECRET is not set, so local OTP hashing falls back to JWT_SECRET."
-      );
+    for (const secretName of PRODUCTION_SECRET_NAMES.filter(
+      (name) => name !== "JWT_SECRET"
+    )) {
+      if (!cleanValue(env[secretName])) {
+        warnings.push(
+          `${secretName} is not configured. Production will refuse to start without it.`
+        );
+      }
     }
   }
 
@@ -172,22 +215,23 @@ function auditStartupSecurity({
 
 function validateStartupSecurity(options = {}) {
   const result = auditStartupSecurity(options);
-
   if (result.errors.length > 0) {
     throw new StartupSecurityError(result.errors);
   }
-
   return result;
 }
 
 module.exports = {
   MIN_PRODUCTION_SECRET_LENGTH,
   MIN_SECRET_VARIETY,
+  PRODUCTION_SECRET_NAMES,
   StartupSecurityError,
   auditStartupSecurity,
   booleanValue,
+  distinctSecretProblems,
   isProductionEnvironment,
   looksLikePlaceholder,
+  normalizedHosts,
   secretProblems,
   validateStartupSecurity,
 };
