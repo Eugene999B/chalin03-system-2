@@ -13,13 +13,15 @@ test("Release 2A.1 uses an auditable server-side session store", () => {
   const source = read("services/accountSessionService.js");
 
   assert.match(source, /CREATE|auth_sessions/i);
+  assert.match(source, /MAX_ACTIVE_SESSIONS_PER_USER/);
+  assert.match(source, /session_limit_exceeded/);
   assert.match(source, /replaced_by_new_login/);
   assert.match(source, /replaced_by_session_id/);
   assert.match(source, /revokeAllUserSessions/);
   assert.match(source, /SESSION_REPLACED/);
   assert.match(
     source,
-    /DATE_SUB\(NOW\(\), INTERVAL 5 MINUTE\)/
+    /DATE_SUB\((?:UTC_TIMESTAMP\(\)|NOW\(\)), INTERVAL 5 MINUTE\)/
   );
 });
 
@@ -31,7 +33,7 @@ test("authentication middleware validates the JWT session ID", () => {
   assert.match(source, /sessionState\.session\.session_id/);
 });
 
-test("login creates one server-side session and logout revokes it", () => {
+test("login creates a server-side session and logout revokes the current session", () => {
   const source = read("routes/authRoutes.js");
 
   assert.match(source, /createSession/);
