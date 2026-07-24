@@ -79,17 +79,30 @@ function secretProblems(name, value) {
   return problems;
 }
 
+function normalizeHostEntry(value) {
+  const raw = cleanValue(value);
+  if (!raw) return "";
+
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)
+    ? raw
+    : `https://${raw}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    if (parsed.username || parsed.password) return "";
+    if (parsed.pathname && parsed.pathname !== "/") return "";
+    if (parsed.search || parsed.hash) return "";
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 function normalizedHosts(value) {
   return cleanValue(value)
     .split(",")
-    .map((host) =>
-      host
-        .trim()
-        .toLowerCase()
-        .replace(/^https?:\/\//, "")
-        .replace(/:\d+$/, "")
-        .replace(/\/$/, "")
-    )
+    .map(normalizeHostEntry)
     .filter(Boolean);
 }
 
@@ -231,6 +244,7 @@ module.exports = {
   distinctSecretProblems,
   isProductionEnvironment,
   looksLikePlaceholder,
+  normalizeHostEntry,
   normalizedHosts,
   secretProblems,
   validateStartupSecurity,
