@@ -110,6 +110,38 @@ function restartWithCurrentSession() {
   }, 0);
 }
 
+function buildCachedProfileResponse(error, cachedUser) {
+  const workspaceCode =
+    cachedUser?.workspace_code || cachedUser?.active_workspace?.code || "spare_parts";
+  const workspaceName =
+    cachedUser?.business_unit_name ||
+    cachedUser?.active_workspace?.name ||
+    (workspaceCode === "mining"
+      ? "Mining Operations"
+      : workspaceCode === "equipment_hire"
+      ? "Equipment Hire"
+      : "Spare Parts");
+
+  return {
+    data: {
+      status: "degraded",
+      message:
+        "The secure session is active. Fresh profile details will be retried automatically.",
+      workspace: {
+        id: cachedUser?.business_unit_id || cachedUser?.active_workspace?.id || null,
+        code: workspaceCode,
+        name: workspaceName,
+      },
+      user: cachedUser,
+    },
+    status: 200,
+    statusText: "OK",
+    headers: error.response?.headers || {},
+    config: error.config,
+    request: error.request,
+  };
+}
+
 axiosClient.interceptors.request.use((config) => {
   assertSparePartsInstallmentRequestAllowed(config);
 
@@ -173,8 +205,10 @@ axiosClient.interceptors.response.use(
     const errorCode = String(error.response?.data?.code || "");
     const errorMessage = String(error.response?.data?.message || "");
     const requestUrl = String(error.config?.url || "");
+    const requestPath = cleanRequestPath(requestUrl);
     const requestToken = String(error.config?.[REQUEST_TOKEN_KEY] || "");
     const activeToken = String(localStorage.getItem(TOKEN_KEY) || "");
+    const cachedUser = getStoredUser();
     const isOwnerRecoveryRequest = requestUrl.includes(
       "/release2-final/owner/"
     );
@@ -184,6 +218,12 @@ axiosClient.interceptors.response.use(
       Boolean(requestToken) &&
       Boolean(activeToken) &&
       requestToken !== activeToken;
+    const isTemporaryProfileFailure =
+      requestPath === "/auth/me" &&
+      Boolean(activeToken) &&
+      requestToken === activeToken &&
+      Boolean(cachedUser) &&
+      (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
 
     if (isStaleSessionResponse) {
       // The user has already received a newer token. Do not reject this old
@@ -191,6 +231,24 @@ axiosClient.interceptors.response.use(
       // desktop session. Reload once so every component adopts the new token.
       restartWithCurrentSession();
       return new Promise(() => {});
+    }
+
+    if (isTemporaryProfileFailure) {
+      // Login has already been cryptographically accepted and the server-issued
+      // user/branch response is stored. A temporary profile refresh failure must
+      // not throw a fresh desktop login back to the login page. Real 401/403/404
+      // security rejections never enter this fallback.
+      try {
+        sessionStorage.setItem(
+          "chalin03_session_warning",
+          errorMessage ||
+            "Fresh profile details could not be loaded. Your verified session remains active."
+        );
+      } catch {
+        // Session continuity does not depend on warning storage.
+      }
+
+      return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
 
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage) {
