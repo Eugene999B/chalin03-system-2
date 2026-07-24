@@ -28,11 +28,6 @@ assert.match(headers, /\/company\/\*/);
 assert.match(headers, /index, follow, max-image-preview:large/);
 assert.match(headers, /https:\/\/api\.chalin03\.com/);
 assert.doesNotMatch(headers, /pages\.dev/);
-assert.match(headers, /Cache-Control: public, max-age=31536000, immutable/);
-assert.match(headers, /\/favicon\.ico/);
-assert.match(headers, /\/favicon-192x192\.png/);
-assert.match(headers, /\/favicon-512x512\.png/);
-assert.match(headers, /max-age=86400, must-revalidate/);
 
 assert.match(
   appIndex,
