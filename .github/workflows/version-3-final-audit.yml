@@ -5,6 +5,7 @@ on:
   pull_request:
     branches:
       - main
+      - production
   push:
     branches:
       - main
@@ -17,6 +18,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  production-source-policy:
+    name: Production releases originate from main
+    if: github.event_name == 'pull_request' && github.base_ref == 'production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the integrated main branch
+        shell: bash
+        env:
+          RELEASE_SOURCE_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_SOURCE_BRANCH" = "main" || {
+            echo "Production releases must be opened from main, not ${RELEASE_SOURCE_BRANCH}." >&2
+            exit 1
+          }
+
   backend-quality:
     name: Backend syntax, migrations and tests
     runs-on: ubuntu-latest
