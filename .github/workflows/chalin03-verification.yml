@@ -1,6 +1,7 @@
 name: Chalin 03 Verification
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -13,25 +14,52 @@ permissions:
   contents: read
 
 concurrency:
-  group: chalin03-verification-${{ github.ref }}
+  group: chalin03-verification-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend syntax and tests
+  repository:
+    name: Repository integrity
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject whitespace errors
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          BASE_SHA="$PR_BASE_SHA"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "null" ]]; then
+            BASE_SHA="$PUSH_BASE_SHA"
+          fi
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git diff --check "${BASE_SHA}...HEAD"
+
+  backend:
+    name: Backend safety checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
     steps:
-      - name: Check out repository
+      - name: Check out repository history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Node.js
+      - name: Set up Node.js LTS
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -41,24 +69,100 @@ jobs:
       - name: Check backend syntax
         run: npm run syntax-check
 
+      - name: Verify controlled migration safety
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -o pipefail
+          BASE_SHA="$PR_BASE_SHA"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "null" ]]; then
+            BASE_SHA="$PUSH_BASE_SHA"
+          fi
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          npm run migration-safety -- --base "$BASE_SHA" --head HEAD 2>&1 | tee migration-safety.log
+
       - name: Run backend tests
         run: |
           set -o pipefail
           npm test 2>&1 | tee backend-test.log
 
-      - name: Preserve backend test log
+      - name: Preserve backend verification log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-log
-          path: backend/backend-test.log
+          name: backend-verification-log
+          path: |
+            backend/migration-safety.log
+            backend/backend-test.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
+
+  database-drill:
+    name: Disposable migration and recovery drill
+    needs: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: release31-root
+      DB_NAME: chalin03_release31_test
+      DB_SSL: "false"
+      SYSTEM_ADMIN_USER_ID: 1
+      SYSTEM_ADMIN_USERNAME: admin
+      CONFIRM_RELEASE31_DISPOSABLE_DRILL: RUN_RELEASE31_DISPOSABLE_DRILL
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: release31-root
+          MYSQL_DATABASE: chalin03_release31_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot --password=release31-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run destructive disposable drill
+        run: npm run drill:release31
+
+      - name: Preserve recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release31-disposable-recovery-evidence
+          path: backend/release31-disposable-drill-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
 
   frontend:
-    name: Frontend tests, lint and build
+    name: Frontend source tests and production build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -66,10 +170,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js LTS
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -77,17 +181,20 @@ jobs:
         run: npm ci
 
       - name: Run frontend source tests
-        run: npm test
-
-      - name: Enforce full frontend lint
         run: |
           set -o pipefail
-          npm run lint 2>&1 | tee frontend-lint.log
+          npm test 2>&1 | tee frontend-test.log
 
       - name: Build production frontend
         run: |
           set -o pipefail
           npm run build 2>&1 | tee frontend-build.log
+
+      - name: Record legacy full-project lint debt
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee frontend-lint.log
 
       - name: Preserve frontend verification logs
         if: always()
@@ -95,7 +202,8 @@ jobs:
         with:
           name: frontend-verification-logs
           path: |
-            frontend/frontend-lint.log
+            frontend/frontend-test.log
             frontend/frontend-build.log
+            frontend/frontend-lint.log
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14

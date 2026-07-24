@@ -21,8 +21,11 @@ const reviewedRules = new Set([
 const reviewedBypassFiles = new Set([
   "backend/middleware/authMiddleware.js",
   "backend/routes/authRoutes.js",
+  "backend/routes/biometricRoutes.js",
+  "backend/routes/passkeyRoutes.js",
   "backend/routes/returnRoutes.js",
   "backend/routes/saleRoutes.js",
+  "backend/routes/userRoutes.js",
 ]);
 
 const counts = new Map();
@@ -85,6 +88,10 @@ const authRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/authRoutes.js"),
   "utf8"
 );
+const biometricRoutesSource = fs.readFileSync(
+  path.join(root, "backend/routes/biometricRoutes.js"),
+  "utf8"
+);
 const returnRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/returnRoutes.js"),
   "utf8"
@@ -93,11 +100,17 @@ const saleRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/saleRoutes.js"),
   "utf8"
 );
+const userRoutesSource = fs.readFileSync(
+  path.join(root, "backend/routes/userRoutes.js"),
+  "utf8"
+);
 
 assert.match(serverSource, /const generalApiLimiter = rateLimit\(/);
 assert.match(serverSource, /app\.use\("\/api", generalApiLimiter\)/);
 assert.match(serverSource, /API_RATE_LIMIT_WINDOW_MINUTES/);
 assert.match(serverSource, /API_RATE_LIMIT_MAX/);
+assert.doesNotMatch(serverSource, /passkeyRoutes/);
+assert.match(serverSource, /LEGACY_PASSKEYS_RETIRED/);
 
 assert.match(authMiddlewareSource, /const decoded = jwt\.verify/);
 assert.match(authMiddlewareSource, /id: state\.id/);
@@ -116,6 +129,25 @@ assert.match(authRoutesSource, /resolveLoginWorkspace\(user, workspaceCode\)/);
 assert.match(authRoutesSource, /bcrypt\.compare\(password, user\.password_hash\)/);
 assert.match(authRoutesSource, /createSession\(/);
 
+assert.match(biometricRoutesSource, /loadCredentialByBinding\(rawToken\)/);
+assert.match(
+  biometricRoutesSource,
+  /consumeChallenge\(\{ id: challengeId, purpose: "biometric_authentication" \}\)/
+);
+assert.match(biometricRoutesSource, /expectedChallenge: challenge\.challenge/);
+assert.match(biometricRoutesSource, /expectedOrigin: origins/);
+assert.match(biometricRoutesSource, /expectedRPID: rpID/);
+assert.match(biometricRoutesSource, /requireUserVerification: true/);
+assert.match(
+  biometricRoutesSource,
+  /resolveLoginWorkspace\(user, challenge\.context\.workspace_code\)/
+);
+assert.match(
+  biometricRoutesSource,
+  /resolveLoginBranch\(user, challenge\.context\.branch_id\)/
+);
+assert.match(biometricRoutesSource, /createSession\(/);
+
 assert.match(returnRoutesSource, /allowedReturnTypes/);
 assert.match(returnRoutesSource, /verifyIndependentReturnApprover\(/);
 assert.match(returnRoutesSource, /Refund amount cannot exceed the returned item value/);
@@ -126,6 +158,23 @@ assert.match(saleRoutesSource, /verifyIndependentApprover\(/);
 assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
+
+assert.match(
+  userRoutesSource,
+  /router\.post\("\/", requireAuth, requireRole\("admin"\)/
+);
+assert.match(
+  userRoutesSource,
+  /router\.put\("\/:id", requireAuth, requireRole\("admin"\)/
+);
+assert.match(userRoutesSource, /isOriginalSystemAdministrator\(existingUser\)/);
+assert.match(userRoutesSource, /isOriginalSystemAdministrator\(requester\)/);
+assert.match(userRoutesSource, /resolveBranchIds\(/);
+assert.match(userRoutesSource, /strongPasswordError\(password\)/);
+assert.match(
+  userRoutesSource,
+  /token_version = COALESCE\(token_version, 0\) \+ 1/
+);
 
 if (violations.length > 0) {
   throw new Error(`CodeQL review policy failed:\n- ${violations.join("\n- ")}`);

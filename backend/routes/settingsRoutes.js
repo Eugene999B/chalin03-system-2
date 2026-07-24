@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   ensureWorkerIdentitySchema,
   normalizeEmployeePrefix,
@@ -12,156 +13,114 @@ const {
 const router = express.Router();
 
 function getBranchId(req) {
-  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
-
-  if (!Number.isInteger(branchId) || branchId <= 0) {
-    return 1;
-  }
-
-  return branchId;
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 0);
+  return Number.isInteger(branchId) && branchId > 0 ? branchId : null;
 }
 
-function cleanText(value) {
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  return String(value).trim();
+function cleanText(value, maxLength = 255) {
+  return String(value ?? "").trim().slice(0, maxLength);
 }
 
-function nullableText(value) {
-  const text = cleanText(value);
+function nullableText(value, maxLength = 255) {
+  const text = cleanText(value, maxLength);
   return text || null;
 }
 
 function toNonNegativeNumber(value) {
   const number = Number(value);
-
-  if (Number.isNaN(number) || number < 0) {
-    return null;
-  }
-
+  if (!Number.isFinite(number) || number < 0) return null;
   return Number(number.toFixed(2));
 }
 
 function toPositiveInt(value) {
   const number = Number(value);
-
-  if (!Number.isInteger(number) || number <= 0) {
-    return null;
-  }
-
-  return number;
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
-async function logActivity(userId, branchId, action, details) {
-  await pool.query(
-    `INSERT INTO activity_log (branch_id, user_id, action, details)
-     VALUES (?, ?, ?, ?)`,
-    [branchId || null, userId || null, action, details]
-  );
+function normalizeTime(value, fallback = "18:00:00") {
+  const text = cleanText(value, 8);
+  if (!text) return fallback;
+  if (!/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(text)) return null;
+  return text.length === 5 ? `${text}:00` : text;
 }
 
-async function getBranch(branchId) {
-  const [branches] = await pool.query(
-    `SELECT id, code, name, location
+async function loadBranch(connection, branchId, lock = false) {
+  const [rows] = await connection.query(
+    `SELECT id, code, branch_code, name, location, phone, is_active
      FROM branches
      WHERE id = ?
-     LIMIT 1`,
+     LIMIT 1${lock ? " FOR UPDATE" : ""}`,
     [branchId]
   );
-
-  return branches[0] || null;
+  return rows[0] || null;
 }
 
-async function createDefaultSettingsForBranch(branchId) {
-  await ensureWorkerIdentitySchema();
-  const branch = await getBranch(branchId);
-
-  const branchName = branch?.name || "Chalin 03 Store";
-  const branchLocation = branch?.location || "Dunkwa Police Barrier";
-  const branchCode = branch?.code || "CHL";
-
-  const [result] = await pool.query(
-    `INSERT INTO settings (
-      branch_id,
-      branch_name,
-      business_name,
-      business_address,
-      business_phone,
-      owner_phone,
-      tax_rate,
-      debt_reminder_days,
-      daily_summary_time,
-      receipt_footer,
-      receipt_prefix
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      branchId,
-      branchName,
-      "Chalin 03 Company Limited",
-      branchLocation,
-      "0249469080 / 0249995510",
-      "0543421127",
-      0,
-      7,
-      "18:00:00",
-      "Thank You For Coming",
-      branchCode,
-    ]
-  );
-
-  return result.insertId;
-}
-
-async function getSettingsForBranch(branchId) {
-  await ensureWorkerIdentitySchema();
-  let [settingsRows] = await pool.query(
+async function loadSettings(connection, branchId, lock = false) {
+  const [rows] = await connection.query(
     `SELECT
-      s.*,
-      b.code AS branch_code,
-      b.name AS store_name,
-      b.location AS store_location
+       s.*,
+       b.code AS branch_code,
+       b.name AS store_name,
+       b.location AS store_location
      FROM settings s
-     LEFT JOIN branches b ON s.branch_id = b.id
+     LEFT JOIN branches b ON b.id = s.branch_id
      WHERE s.branch_id = ?
      ORDER BY s.id DESC
-     LIMIT 1`,
+     LIMIT 1${lock ? " FOR UPDATE" : ""}`,
     [branchId]
   );
+  return rows[0] || null;
+}
 
-  if (settingsRows.length === 0) {
-    await createDefaultSettingsForBranch(branchId);
-
-    [settingsRows] = await pool.query(
-      `SELECT
-        s.*,
-        b.code AS branch_code,
-        b.name AS store_name,
-        b.location AS store_location
-       FROM settings s
-       LEFT JOIN branches b ON s.branch_id = b.id
-       WHERE s.branch_id = ?
-       ORDER BY s.id DESC
-       LIMIT 1`,
-      [branchId]
-    );
+function sendSettingsError(res, error, fallbackMessage) {
+  if (
+    [
+      "WORKER_IDENTITY_SCHEMA_NOT_READY",
+      "BRANCH_SCHEMA_NOT_READY",
+    ].includes(error?.code)
+  ) {
+    return res.status(503).json({
+      status: "error",
+      code: error.code,
+      message:
+        "Store settings are unavailable because the approved database migration is incomplete.",
+      missing_tables: error.missingTables || [],
+      missing_columns: error.missingColumns || [],
+    });
   }
 
-  return settingsRows[0] || null;
+  return res.status(Number(error?.statusCode || 500)).json({
+    status: "error",
+    code: error?.code || "SETTINGS_OPERATION_FAILED",
+    message:
+      Number(error?.statusCode || 500) < 500
+        ? error.message
+        : fallbackMessage,
+  });
 }
 
 // GET /api/settings
+// Deliberately read-only. Missing settings are reported instead of being seeded
+// by opening this page.
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     const branchId = getBranchId(req);
-    const settings = await getSettingsForBranch(branchId);
+    if (!branchId) {
+      return res.status(400).json({
+        status: "error",
+        code: "VALID_BRANCH_REQUIRED",
+        message: "Choose a valid Spare Parts store before loading settings.",
+      });
+    }
 
+    await ensureWorkerIdentitySchema(pool);
+    const settings = await loadSettings(pool, branchId);
     if (!settings) {
       return res.status(404).json({
         status: "error",
-        message: "Settings record not found for the selected store.",
+        code: "STORE_SETTINGS_NOT_CONFIGURED",
+        message:
+          "Settings have not been configured for this store. Save the settings form once as an Administrator to create them explicitly.",
       });
     }
 
@@ -171,161 +130,196 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
       settings,
     });
   } catch (error) {
-    console.error("Get settings error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while fetching settings.",
+    console.error("Get settings error:", {
+      code: error?.code,
+      message: error?.message,
+      missing_tables: error?.missingTables,
+      missing_columns: error?.missingColumns,
     });
+    return sendSettingsError(
+      res,
+      error,
+      "Something went wrong while fetching settings."
+    );
   }
 });
 
 // PUT /api/settings
+// Creating a missing row is allowed only as this explicit Administrator write.
 router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
+  const connection = await pool.getConnection();
+  let transactionStarted = false;
+
   try {
     const branchId = getBranchId(req);
+    if (!branchId) {
+      return res.status(400).json({
+        status: "error",
+        code: "VALID_BRANCH_REQUIRED",
+        message: "Choose a valid Spare Parts store before saving settings.",
+      });
+    }
 
-    const {
-      branch_name,
-      business_name,
-      business_address,
-      business_phone,
-      owner_phone,
-      tax_rate,
-      debt_reminder_days,
-      daily_summary_time,
-      receipt_footer,
-      receipt_prefix,
-      worker_id_card_validity_months,
-      worker_employee_number_prefix,
-    } = req.body;
-
-    const cleanBusinessName = cleanText(business_name);
-    const cleanBranchName = cleanText(branch_name);
+    const cleanBusinessName = cleanText(req.body.business_name, 150);
+    const cleanBranchName = cleanText(req.body.branch_name, 150);
+    const businessAddress = nullableText(req.body.business_address, 255);
+    const businessPhone = nullableText(req.body.business_phone, 80);
+    const ownerPhone = nullableText(req.body.owner_phone, 80);
+    const receiptFooter = nullableText(req.body.receipt_footer, 500);
+    const receiptPrefix = nullableText(req.body.receipt_prefix, 30);
+    const taxRate = toNonNegativeNumber(req.body.tax_rate ?? 0);
+    const reminderDays = toPositiveInt(req.body.debt_reminder_days ?? 7);
+    const dailySummaryTime = normalizeTime(req.body.daily_summary_time);
+    const cardValidityMonths = normalizeValidityMonths(
+      Number(req.body.worker_id_card_validity_months ?? 24)
+    );
+    const employeeNumberPrefix = normalizeEmployeePrefix(
+      req.body.worker_employee_number_prefix
+    );
 
     if (!cleanBusinessName) {
       return res.status(400).json({
         status: "error",
+        code: "BUSINESS_NAME_REQUIRED",
         message: "Business name is required.",
       });
     }
-
-    const taxRate = toNonNegativeNumber(tax_rate ?? 0);
-    const reminderDays = toPositiveInt(Number(debt_reminder_days ?? 7));
-    const cardValidityMonths = normalizeValidityMonths(
-      Number(worker_id_card_validity_months ?? 24)
-    );
-    const employeeNumberPrefix = normalizeEmployeePrefix(
-      worker_employee_number_prefix
-    );
-
     if (taxRate === null) {
       return res.status(400).json({
         status: "error",
-        message: "Tax rate must be a valid number.",
+        code: "INVALID_TAX_RATE",
+        message: "Tax rate must be a non-negative number.",
       });
     }
-
     if (reminderDays === null) {
       return res.status(400).json({
         status: "error",
+        code: "INVALID_DEBT_REMINDER_DAYS",
         message: "Debt reminder days must be a positive whole number.",
       });
     }
+    if (!dailySummaryTime) {
+      return res.status(400).json({
+        status: "error",
+        code: "INVALID_DAILY_SUMMARY_TIME",
+        message: "Daily summary time must use a valid 24-hour time.",
+      });
+    }
 
-    let [settingsRows] = await pool.query(
-      `SELECT id
-       FROM settings
-       WHERE branch_id = ?
-       ORDER BY id DESC
-       LIMIT 1`,
-      [branchId]
-    );
+    await ensureWorkerIdentitySchema(connection);
+    await connection.beginTransaction();
+    transactionStarted = true;
 
-    if (settingsRows.length === 0) {
-      await createDefaultSettingsForBranch(branchId);
+    const branch = await loadBranch(connection, branchId, true);
+    if (!branch || !Number(branch.is_active)) {
+      const error = new Error("The selected active store was not found.");
+      error.code = "ACTIVE_BRANCH_NOT_FOUND";
+      error.statusCode = 404;
+      throw error;
+    }
 
-      [settingsRows] = await pool.query(
-        `SELECT id
-         FROM settings
-         WHERE branch_id = ?
-         ORDER BY id DESC
-         LIMIT 1`,
-        [branchId]
+    let settings = await loadSettings(connection, branchId, true);
+    if (!settings) {
+      const [result] = await connection.query(
+        `INSERT INTO settings (
+           branch_id, branch_name, business_name, business_address,
+           business_phone, owner_phone, tax_rate, debt_reminder_days,
+           daily_summary_time, receipt_footer, receipt_prefix,
+           worker_id_card_validity_months, worker_employee_number_prefix
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          branchId,
+          cleanBranchName || branch.name,
+          cleanBusinessName,
+          businessAddress || branch.location || null,
+          businessPhone || branch.phone || null,
+          ownerPhone,
+          taxRate,
+          reminderDays,
+          dailySummaryTime,
+          receiptFooter,
+          receiptPrefix || branch.code || branch.branch_code || "CHL",
+          cardValidityMonths,
+          employeeNumberPrefix,
+        ]
+      );
+      settings = { id: result.insertId };
+    } else {
+      await connection.query(
+        `UPDATE settings
+         SET branch_name = ?,
+             business_name = ?,
+             business_address = ?,
+             business_phone = ?,
+             owner_phone = ?,
+             tax_rate = ?,
+             debt_reminder_days = ?,
+             daily_summary_time = ?,
+             receipt_footer = ?,
+             receipt_prefix = ?,
+             worker_id_card_validity_months = ?,
+             worker_employee_number_prefix = ?
+         WHERE id = ? AND branch_id = ?`,
+        [
+          cleanBranchName || branch.name,
+          cleanBusinessName,
+          businessAddress,
+          businessPhone,
+          ownerPhone,
+          taxRate,
+          reminderDays,
+          dailySummaryTime,
+          receiptFooter,
+          receiptPrefix,
+          cardValidityMonths,
+          employeeNumberPrefix,
+          settings.id,
+          branchId,
+        ]
       );
     }
 
-    const settingsId = settingsRows[0].id;
-
-    await pool.query(
-      `UPDATE settings
-       SET branch_name = ?,
-           business_name = ?,
-           business_address = ?,
-           business_phone = ?,
-           owner_phone = ?,
-           tax_rate = ?,
-           debt_reminder_days = ?,
-           daily_summary_time = ?,
-           receipt_footer = ?,
-           receipt_prefix = ?,
-           worker_id_card_validity_months = ?,
-           worker_employee_number_prefix = ?
-       WHERE id = ?
-       AND branch_id = ?`,
-      [
-        cleanBranchName || null,
-        cleanBusinessName,
-        nullableText(business_address),
-        nullableText(business_phone),
-        nullableText(owner_phone),
-        taxRate,
-        reminderDays,
-        daily_summary_time || "18:00:00",
-        nullableText(receipt_footer),
-        nullableText(receipt_prefix),
-        cardValidityMonths,
-        employeeNumberPrefix,
-        settingsId,
-        branchId,
-      ]
-    );
-
-    // Worker identity rules are group-wide so every workspace generates consistent cards.
-    await pool.query(
+    // Worker identity rules are group-wide and are changed only by this explicit
+    // Administrator action, never by a settings read.
+    await connection.query(
       `UPDATE settings
        SET worker_id_card_validity_months = ?,
            worker_employee_number_prefix = ?`,
       [cardValidityMonths, employeeNumberPrefix]
     );
 
-    /*
-      Keep the store name/address in the branches table close to the settings.
-      This helps the login store selector and receipt header stay consistent.
-    */
-    if (cleanBranchName || cleanText(business_address)) {
-      await pool.query(
+    if (cleanBranchName || businessAddress) {
+      await connection.query(
         `UPDATE branches
          SET name = COALESCE(?, name),
              location = COALESCE(?, location)
          WHERE id = ?`,
-        [
-          cleanBranchName || null,
-          nullableText(business_address),
-          branchId,
-        ]
+        [cleanBranchName || null, businessAddress, branchId]
       );
     }
 
-    await logActivity(
-      req.user.id,
+    await writeAuditEvent({
+      connection,
+      req,
+      action: "UPDATE_SETTINGS",
+      actionType: "settings.store.updated",
+      entityType: "settings",
+      entityId: settings.id,
+      workspaceCode: "spare_parts",
       branchId,
-      "UPDATE_SETTINGS",
-      "Updated selected store settings"
-    );
+      severity: "notice",
+      outcome: "success",
+      details: "Updated selected store settings through an explicit Administrator action.",
+      metadata: {
+        worker_id_card_validity_months: cardValidityMonths,
+        worker_employee_number_prefix: employeeNumberPrefix,
+      },
+    });
 
-    const updatedSettings = await getSettingsForBranch(branchId);
+    await connection.commit();
+    transactionStarted = false;
 
+    const updatedSettings = await loadSettings(pool, branchId);
     return res.json({
       status: "success",
       branch_id: branchId,
@@ -333,12 +327,26 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
       settings: updatedSettings,
     });
   } catch (error) {
-    console.error("Update settings error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Something went wrong while updating settings.",
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Preserve the original settings failure.
+      }
+    }
+    console.error("Update settings error:", {
+      code: error?.code,
+      message: error?.message,
+      missing_tables: error?.missingTables,
+      missing_columns: error?.missingColumns,
     });
+    return sendSettingsError(
+      res,
+      error,
+      "Something went wrong while updating settings."
+    );
+  } finally {
+    connection.release();
   }
 });
 

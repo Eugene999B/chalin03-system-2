@@ -26,12 +26,11 @@ assert.match(headers, /X-Frame-Options: DENY/);
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/);
 assert.match(headers, /\/company\/\*/);
 assert.match(headers, /index, follow, max-image-preview:large/);
-assert.match(headers, /chalin03-system-2\.pages\.dev/);
-assert.match(headers, /Cache-Control: public, max-age=31536000, immutable/);
-assert.match(headers, /\/favicon\.ico/);
-assert.match(headers, /\/favicon-192x192\.png/);
-assert.match(headers, /\/favicon-512x512\.png/);
-assert.match(headers, /max-age=86400, must-revalidate/);
+assert.doesNotMatch(headers, /pages\.dev/);
+assert.match(headers, /Cross-Origin-Opener-Policy: same-origin/);
+assert.match(headers, /Cross-Origin-Resource-Policy: same-origin/);
+assert.match(headers, /X-Permitted-Cross-Domain-Policies: none/);
+assert.match(headers, /Permissions-Policy: camera=\(\), microphone=\(\), geolocation=\(self\)/);
 
 assert.match(
   appIndex,

@@ -2,10 +2,25 @@ const { pool } = require("../config/db");
 
 const DEFAULT_VALIDITY_MONTHS = 24;
 const DEFAULT_PREFIX = "CH03";
+const MIGRATION_NAME = "20260718_release3fd2_worker_identity_cards";
 const WORKSPACE_SEGMENTS = Object.freeze({
   spare_parts: "SP",
   mining: "MN",
   equipment_hire: "EH",
+});
+const REQUIRED_TABLE_COLUMNS = Object.freeze({
+  settings: [
+    "id",
+    "branch_id",
+    "business_name",
+    "business_address",
+    "business_phone",
+    "owner_phone",
+    "worker_id_card_validity_months",
+    "worker_employee_number_prefix",
+  ],
+  worker_identity_sequences: ["workspace_code", "last_number", "updated_at"],
+  worker_profiles: ["id", "workspace_code", "employee_number"],
 });
 
 let schemaPromise = null;
@@ -49,66 +64,81 @@ function calculateCardDates(issueValue = new Date(), validityMonths = DEFAULT_VA
   };
 }
 
-async function columnExists(tableName, columnName) {
-  const [rows] = await pool.query(
-    `SELECT COLUMN_NAME
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = ?
-       AND COLUMN_NAME = ?
-     LIMIT 1`,
-    [tableName, columnName]
+function schemaError(missingTables, missingColumns) {
+  const error = new Error(
+    `Worker identity migration ${MIGRATION_NAME} is required before startup.`
   );
-  return rows.length > 0;
+  error.code = "WORKER_IDENTITY_SCHEMA_NOT_READY";
+  error.statusCode = 503;
+  error.missingTables = missingTables;
+  error.missingColumns = missingColumns;
+  return error;
 }
 
-async function ensureWorkerIdentitySchema() {
-  if (schemaPromise) return schemaPromise;
+async function ensureWorkerIdentitySchema(connection = pool) {
+  if (connection === pool && schemaPromise) return schemaPromise;
 
-  schemaPromise = (async () => {
-    if (!(await columnExists("settings", "worker_id_card_validity_months"))) {
-      await pool.query(
-        `ALTER TABLE settings
-         ADD COLUMN worker_id_card_validity_months INT NOT NULL DEFAULT 24`
-      );
-    }
-
-    if (!(await columnExists("settings", "worker_employee_number_prefix"))) {
-      await pool.query(
-        `ALTER TABLE settings
-         ADD COLUMN worker_employee_number_prefix VARCHAR(20) NOT NULL DEFAULT 'CH03'`
-      );
-    }
-
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS worker_identity_sequences (
-         workspace_code VARCHAR(50) NOT NULL PRIMARY KEY,
-         last_number INT NOT NULL DEFAULT 0,
-         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-       )`
+  const verify = async () => {
+    const tableNames = Object.keys(REQUIRED_TABLE_COLUMNS);
+    const [tableRows] = await connection.query(
+      `SELECT TABLE_NAME
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_TYPE = 'BASE TABLE'
+         AND TABLE_NAME IN (${tableNames.map(() => "?").join(", ")})`,
+      tableNames
+    );
+    const existingTables = new Set(tableRows.map((row) => row.TABLE_NAME));
+    const missingTables = tableNames.filter(
+      (tableName) => !existingTables.has(tableName)
     );
 
-    try {
-      await pool.query(
-        `INSERT IGNORE INTO schema_migrations (migration_name, description)
-         VALUES (
-           '20260718_release3fd2_worker_identity_cards',
-           'Automatic employee numbers, settings-driven card validity and premium worker ID cards.'
-         )`
-      );
-    } catch (error) {
-      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    const [columnRows] = await connection.query(
+      `SELECT TABLE_NAME, COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME IN (${tableNames.map(() => "?").join(", ")})`,
+      tableNames
+    );
+    const columnsByTable = new Map(
+      tableNames.map((tableName) => [tableName, new Set()])
+    );
+    for (const row of columnRows) {
+      columnsByTable.get(row.TABLE_NAME)?.add(row.COLUMN_NAME);
     }
-  })().catch((error) => {
+
+    const missingColumns = [];
+    for (const [tableName, columns] of Object.entries(REQUIRED_TABLE_COLUMNS)) {
+      if (!existingTables.has(tableName)) continue;
+      for (const columnName of columns) {
+        if (!columnsByTable.get(tableName)?.has(columnName)) {
+          missingColumns.push(`${tableName}.${columnName}`);
+        }
+      }
+    }
+
+    if (missingTables.length || missingColumns.length) {
+      throw schemaError(missingTables, missingColumns);
+    }
+
+    return {
+      ready: true,
+      migration_name: MIGRATION_NAME,
+      missing_tables: [],
+      missing_columns: [],
+    };
+  };
+
+  if (connection !== pool) return verify();
+  schemaPromise = verify().catch((error) => {
     schemaPromise = null;
     throw error;
   });
-
   return schemaPromise;
 }
 
 async function loadWorkerIdentitySettings(connection = pool) {
-  await ensureWorkerIdentitySchema();
+  await ensureWorkerIdentitySchema(connection);
   const [rows] = await connection.query(
     `SELECT
        id,
@@ -123,9 +153,18 @@ async function loadWorkerIdentitySettings(connection = pool) {
      LIMIT 1`
   );
 
-  const settings = rows[0] || {};
+  if (!rows.length) {
+    const error = new Error(
+      "Worker identity settings are missing. Configure at least one store before issuing worker cards."
+    );
+    error.code = "WORKER_IDENTITY_SETTINGS_MISSING";
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const settings = rows[0];
   return {
-    settingsId: settings.id || null,
+    settingsId: settings.id,
     businessName: cleanText(settings.business_name, 150) || "Chalin 03 Company Limited",
     businessAddress: cleanText(settings.business_address, 255) || "Dunkwa Police Barrier, Ghana",
     businessPhone:
@@ -147,13 +186,6 @@ async function allocateWorkerIdentity(connection, workspaceCode, issueValue = ne
   const settings = await loadWorkerIdentitySettings(connection);
   const workspace = cleanText(workspaceCode, 50).toLowerCase() || "spare_parts";
 
-  await connection.query(
-    `INSERT INTO worker_identity_sequences (workspace_code, last_number)
-     VALUES (?, 0)
-     ON DUPLICATE KEY UPDATE workspace_code = VALUES(workspace_code)`,
-    [workspace]
-  );
-
   const [sequenceRows] = await connection.query(
     `SELECT last_number
      FROM worker_identity_sequences
@@ -162,6 +194,15 @@ async function allocateWorkerIdentity(connection, workspaceCode, issueValue = ne
      FOR UPDATE`,
     [workspace]
   );
+
+  if (!sequenceRows.length) {
+    const error = new Error(
+      `Worker identity sequence ${workspace} is missing. Apply the approved sequence seed before creating staff records.`
+    );
+    error.code = "WORKER_IDENTITY_SEQUENCE_MISSING";
+    error.statusCode = 503;
+    throw error;
+  }
 
   let nextNumber = Number(sequenceRows[0]?.last_number || 0) + 1;
   let employeeNumber = "";
@@ -227,6 +268,8 @@ async function cardDatesForReissue(issueValue = new Date()) {
 module.exports = {
   DEFAULT_PREFIX,
   DEFAULT_VALIDITY_MONTHS,
+  MIGRATION_NAME,
+  REQUIRED_TABLE_COLUMNS,
   allocateWorkerIdentity,
   calculateCardDates,
   cardDatesForReissue,

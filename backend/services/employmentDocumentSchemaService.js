@@ -1,162 +1,145 @@
 const { pool } = require("../config/db");
+const {
+  ensureWorkerIdentitySchema,
+} = require("./workerIdentityService");
+
+const MIGRATION_NAME = "20260719_standalone_employment_documents_signature";
+const REQUIRED_TABLE_COLUMNS = Object.freeze({
+  document_signature_settings: [
+    "id",
+    "signatory_name",
+    "signatory_title",
+    "signature_data_url",
+    "updated_by",
+    "created_at",
+    "updated_at",
+  ],
+  standalone_hr_documents: [
+    "id",
+    "workspace_code",
+    "linked_worker_id",
+    "linked_worker_letter_id",
+    "recipient_full_name",
+    "recipient_preferred_name",
+    "recipient_phone",
+    "recipient_email",
+    "recipient_address",
+    "letter_number",
+    "letter_type",
+    "title",
+    "subject",
+    "letter_date",
+    "effective_date",
+    "response_due_date",
+    "status",
+    "payload_json",
+    "signatory_name",
+    "signatory_title",
+    "approval_signature_data_url",
+    "approval_signatory_name",
+    "approval_signatory_title",
+    "signature_captured_at",
+    "worker_acknowledgement_status",
+    "worker_acknowledged_name",
+    "worker_acknowledged_at",
+    "worker_acknowledgement_note",
+    "issued_by",
+    "issued_at",
+    "cancelled_by",
+    "cancelled_at",
+    "cancellation_reason",
+    "created_by",
+    "updated_by",
+    "created_at",
+    "updated_at",
+  ],
+  worker_hr_letters: [
+    "approval_signature_data_url",
+    "approval_signatory_name",
+    "approval_signatory_title",
+    "signature_captured_at",
+  ],
+});
 
 let schemaPromise = null;
 
-const MIGRATION_NAME = "20260719_standalone_employment_documents_signature";
-const MIGRATION_DESCRIPTION =
-  "Adds standalone employment and HR documents, reusable authorised-signature settings and immutable signature snapshots for issued worker letters.";
-
-const SAFE_TABLES = new Set(["worker_hr_letters"]);
-const SAFE_COLUMNS = new Set([
-  "approval_signature_data_url",
-  "approval_signatory_name",
-  "approval_signatory_title",
-  "signature_captured_at",
-]);
-
-async function ensureColumn(tableName, columnName, definition) {
-  if (!SAFE_TABLES.has(tableName) || !SAFE_COLUMNS.has(columnName)) {
-    throw new Error("Unsafe employment-document schema identifier.");
-  }
-
-  const [rows] = await pool.query(
-    `SELECT 1
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = ?
-       AND COLUMN_NAME = ?
-     LIMIT 1`,
-    [tableName, columnName]
+function schemaError(missingTables, missingColumns) {
+  const error = new Error(
+    `Employment-document migration ${MIGRATION_NAME} is required before startup.`
   );
-
-  if (rows.length === 0) {
-    await pool.query(
-      `ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`
-    );
-  }
+  error.code = "EMPLOYMENT_DOCUMENT_SCHEMA_NOT_READY";
+  error.statusCode = 503;
+  error.missingTables = missingTables;
+  error.missingColumns = missingColumns;
+  return error;
 }
 
-async function ensureEmploymentDocumentSchema() {
-  if (schemaPromise) return schemaPromise;
+async function ensureEmploymentDocumentSchema(connection = pool) {
+  if (connection === pool && schemaPromise) return schemaPromise;
 
-  schemaPromise = (async () => {
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS document_signature_settings (
-         id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-         signatory_name VARCHAR(150) NOT NULL,
-         signatory_title VARCHAR(150) NOT NULL,
-         signature_data_url MEDIUMTEXT NOT NULL,
-         updated_by INT NULL,
-         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         CONSTRAINT fk_document_signature_updated_by
-           FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
-       )`
+  const verify = async () => {
+    const workerIdentity = await ensureWorkerIdentitySchema(connection);
+    const tableNames = Object.keys(REQUIRED_TABLE_COLUMNS);
+    const [tableRows] = await connection.query(
+      `SELECT TABLE_NAME
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_TYPE = 'BASE TABLE'
+         AND TABLE_NAME IN (${tableNames.map(() => "?").join(", ")})`,
+      tableNames
+    );
+    const existingTables = new Set(tableRows.map((row) => row.TABLE_NAME));
+    const missingTables = tableNames.filter(
+      (tableName) => !existingTables.has(tableName)
     );
 
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS standalone_hr_documents (
-         id BIGINT AUTO_INCREMENT PRIMARY KEY,
-         workspace_code VARCHAR(50) NOT NULL,
-         linked_worker_id BIGINT NULL,
-         linked_worker_letter_id BIGINT NULL,
-         recipient_full_name VARCHAR(180) NOT NULL,
-         recipient_preferred_name VARCHAR(120) NULL,
-         recipient_phone VARCHAR(40) NULL,
-         recipient_email VARCHAR(180) NULL,
-         recipient_address TEXT NULL,
-         letter_number VARCHAR(100) NULL,
-         letter_type VARCHAR(50) NOT NULL,
-         title VARCHAR(180) NOT NULL,
-         subject VARCHAR(255) NULL,
-         letter_date DATE NOT NULL,
-         effective_date DATE NULL,
-         response_due_date DATE NULL,
-         status ENUM('draft', 'issued', 'acknowledged', 'cancelled') NOT NULL DEFAULT 'draft',
-         payload_json JSON NOT NULL,
-         signatory_name VARCHAR(150) NOT NULL,
-         signatory_title VARCHAR(150) NOT NULL,
-         approval_signature_data_url MEDIUMTEXT NULL,
-         approval_signatory_name VARCHAR(150) NULL,
-         approval_signatory_title VARCHAR(150) NULL,
-         signature_captured_at DATETIME NULL,
-         worker_acknowledgement_status ENUM('pending', 'accepted', 'received', 'declined', 'not_required') NOT NULL DEFAULT 'pending',
-         worker_acknowledged_name VARCHAR(150) NULL,
-         worker_acknowledged_at DATETIME NULL,
-         worker_acknowledgement_note TEXT NULL,
-         issued_by INT NULL,
-         issued_at DATETIME NULL,
-         cancelled_by INT NULL,
-         cancelled_at DATETIME NULL,
-         cancellation_reason VARCHAR(1000) NULL,
-         created_by INT NULL,
-         updated_by INT NULL,
-         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-         UNIQUE KEY uq_standalone_hr_document_number (letter_number),
-         INDEX idx_standalone_hr_workspace (workspace_code, letter_date),
-         INDEX idx_standalone_hr_recipient (recipient_full_name, letter_date),
-         INDEX idx_standalone_hr_status (status, letter_date),
-         INDEX idx_standalone_hr_linked_worker (linked_worker_id, letter_date),
-
-         CONSTRAINT fk_standalone_hr_linked_worker
-           FOREIGN KEY (linked_worker_id) REFERENCES worker_profiles(id) ON DELETE SET NULL,
-         CONSTRAINT fk_standalone_hr_linked_letter
-           FOREIGN KEY (linked_worker_letter_id) REFERENCES worker_hr_letters(id) ON DELETE SET NULL,
-         CONSTRAINT fk_standalone_hr_issued_by
-           FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE SET NULL,
-         CONSTRAINT fk_standalone_hr_cancelled_by
-           FOREIGN KEY (cancelled_by) REFERENCES users(id) ON DELETE SET NULL,
-         CONSTRAINT fk_standalone_hr_created_by
-           FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
-         CONSTRAINT fk_standalone_hr_updated_by
-           FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
-       )`
+    const [columnRows] = await connection.query(
+      `SELECT TABLE_NAME, COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME IN (${tableNames.map(() => "?").join(", ")})`,
+      tableNames
     );
-
-    await ensureColumn(
-      "worker_hr_letters",
-      "approval_signature_data_url",
-      "MEDIUMTEXT NULL AFTER signatory_title"
+    const columnsByTable = new Map(
+      tableNames.map((tableName) => [tableName, new Set()])
     );
-    await ensureColumn(
-      "worker_hr_letters",
-      "approval_signatory_name",
-      "VARCHAR(150) NULL AFTER approval_signature_data_url"
-    );
-    await ensureColumn(
-      "worker_hr_letters",
-      "approval_signatory_title",
-      "VARCHAR(150) NULL AFTER approval_signatory_name"
-    );
-    await ensureColumn(
-      "worker_hr_letters",
-      "signature_captured_at",
-      "DATETIME NULL AFTER approval_signatory_title"
-    );
-
-    try {
-      await pool.query(
-        `INSERT INTO schema_migrations (migration_name, description)
-         VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE description = VALUES(description)`,
-        [MIGRATION_NAME, MIGRATION_DESCRIPTION]
-      );
-    } catch (error) {
-      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    for (const row of columnRows) {
+      columnsByTable.get(row.TABLE_NAME)?.add(row.COLUMN_NAME);
     }
 
-    console.log("Standalone employment documents and signature schema is ready.");
-  })().catch((error) => {
+    const missingColumns = [];
+    for (const [tableName, columns] of Object.entries(REQUIRED_TABLE_COLUMNS)) {
+      if (!existingTables.has(tableName)) continue;
+      for (const columnName of columns) {
+        if (!columnsByTable.get(tableName)?.has(columnName)) {
+          missingColumns.push(`${tableName}.${columnName}`);
+        }
+      }
+    }
+
+    if (missingTables.length || missingColumns.length) {
+      throw schemaError(missingTables, missingColumns);
+    }
+
+    return {
+      ready: true,
+      migration_name: MIGRATION_NAME,
+      worker_identity: workerIdentity,
+      missing_tables: [],
+      missing_columns: [],
+    };
+  };
+
+  if (connection !== pool) return verify();
+  schemaPromise = verify().catch((error) => {
     schemaPromise = null;
     throw error;
   });
-
   return schemaPromise;
 }
 
 module.exports = {
   ensureEmploymentDocumentSchema,
   MIGRATION_NAME,
+  REQUIRED_TABLE_COLUMNS,
 };

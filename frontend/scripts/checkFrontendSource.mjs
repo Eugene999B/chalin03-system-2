@@ -14,6 +14,7 @@ const app = read("src/App.jsx");
 const authContext = read("src/context/AuthContext.jsx");
 const axiosClient = read("src/api/axiosClient.js");
 const loginPage = read("src/pages/LoginPage.jsx");
+const groupOperationsLogin = read("src/pages/LoginPageGroupOperations.jsx");
 const usersSettingsPage = read("src/pages/UsersSettingsPage.jsx");
 const workspaceAdministrationPage = read(
   "src/pages/WorkspaceAdministrationPage.jsx"
@@ -54,12 +55,13 @@ assert.match(authContext, /\/auth\/logout/);
 assert.match(axiosClient, /SESSION_REPLACED/);
 assert.match(axiosClient, /isOwnerRecoveryRequest/);
 assert.match(axiosClient, /\/owner-recovery/);
-assert.match(loginPage, /chalin03_login_notice/);
-assert.match(loginPage, /\/auth\/recovery\/request-otp/);
-assert.match(loginPage, /\/auth\/recovery\/reset-password/);
-assert.match(loginPage, /Forgot Password \/ Unlock Account/);
-assert.match(loginPage, /6-Digit Recovery Code/);
-assert.match(loginPage, /Owner Break-Glass/);
+assert.match(loginPage, /LoginPageGroupOperations/);
+assert.match(groupOperationsLogin, /\/auth\/recovery\/request-otp/);
+assert.match(groupOperationsLogin, /\/auth\/recovery\/reset-password/);
+assert.match(groupOperationsLogin, /Recover password/);
+assert.match(groupOperationsLogin, /6-digit code/);
+assert.match(groupOperationsLogin, /Dashboard-first entry/);
+assert.match(groupOperationsLogin, /One company\./);
 assert.match(usersSettingsPage, /Only the original System Administrator can unlock or reset user accounts/);
 assert.match(usersSettingsPage, /Account Locked/);
 assert.match(usersSettingsPage, /Unlock & Reset/);

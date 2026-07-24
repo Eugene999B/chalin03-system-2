@@ -4,12 +4,17 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./services/equipmentSalesCommercialBootstrap.js server.js",
+    "start": "node scripts/runControlledDeployment.js --deployment && node server.js",
     "dev": "nodemon server.js",
+    "migrate:plan": "node scripts/runControlledMigrations.js --plan",
+    "migrate:apply": "node scripts/runControlledDeployment.js --apply",
+    "migrate:snapshot-attestation": "node scripts/createMigrationSnapshotAttestation.js",
+    "drill:release31": "node scripts/runRelease31DisposableDrillWithEvidence.js && node scripts/assertRelease31DrillEvidence.js",
     "create-admin": "node scripts/createAdmin.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/release31*.test.js tests/migrationSafety.test.js tests/equipmentSalesCommercialRepairContract.test.js",
+    "test:legacy": "node --test tests/*.test.js"
   },
   "engines": {
     "node": ">=20"

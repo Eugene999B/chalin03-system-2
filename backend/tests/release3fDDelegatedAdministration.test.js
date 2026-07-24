@@ -32,7 +32,7 @@ test("Release 3F-D reuses audited permission overrides for delegated authority",
   const service = read(
     "backend/services/delegatedAdministrationService.js"
   );
-  assert.match(service, /DELEGATED_PERMISSION_PREFIX = "delegated_admin\."/);
+  assert.match(service, /DELEGATED_PERMISSION_PREFIX = "delegated_admin\./);
   assert.match(service, /user_permission_overrides/);
   assert.match(service, /reason/);
   assert.match(service, /expires_at/);
@@ -49,14 +49,21 @@ test("Release 3F-D delegation changes require password confirmation and revoke s
   assert.match(routes, /appendLedger/);
 });
 
-test("Release 3F-D delegated restore validates owner identity and clears old sessions", () => {
+test("Release 3F-D delegated restore validates identity and invalidates old security state", () => {
   const routes = read("backend/routes/delegatedBackupRoutes.js");
-  assert.match(routes, /configuredOwnerPresent/);
-  assert.match(routes, /requesterPresent/);
+  const recovery = read("backend/services/fullSystemBackupService.js");
+  assert.match(routes, /requireBackupAuthority/);
+  assert.match(routes, /requireProtectedAction/);
   assert.match(routes, /ALLOW_WEB_RESTORE/);
   assert.match(routes, /RESTORE_FULL_SYSTEM_BACKUP/);
-  assert.match(routes, /EPHEMERAL_SECURITY_TABLES/);
-  assert.match(routes, /DELEGATED_FULL_BACKUP_RESTORED/);
+  assert.match(routes, /validateFullSystemBackup/);
+  assert.match(routes, /restoreFullSystemBackup/);
+  assert.match(recovery, /configuredOwnerPresent/);
+  assert.match(recovery, /requesterPresent/);
+  assert.match(recovery, /The backup is incomplete and cannot replace the current database/);
+  assert.match(recovery, /UPDATE auth_sessions/);
+  assert.match(recovery, /UPDATE protected_action_sessions/);
+  assert.match(recovery, /UPDATE user_passkeys/);
 });
 
 test("Release 3F-D System Operations exposes Railway and delegated authority evidence", () => {
