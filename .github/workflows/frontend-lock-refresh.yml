@@ -2,11 +2,19 @@ name: Frontend Lock Refresh
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - frontend/package.json
+      - frontend/package-lock.json
+      - .github/workflows/frontend-lock-refresh.yml
   push:
     branches:
       - agent/phase-0-production-safety
     paths:
       - frontend/package.json
+      - frontend/package-lock.json
       - .github/workflows/frontend-lock-refresh.yml
 
 permissions:
