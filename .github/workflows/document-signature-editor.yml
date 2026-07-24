@@ -1,0 +1,52 @@
+name: Document Signature Editor Verification
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/src/pages/DocumentSignatureSettingsPage.jsx"
+      - "frontend/src/styles/documentSignatureSettings.css"
+      - "frontend/scripts/employmentDocumentsTests.mjs"
+      - ".github/workflows/document-signature-editor.yml"
+  push:
+    branches:
+      - "agent/document-signature-editor-controls"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: document-signature-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-signature:
+    name: Signature tests, lint and frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run focused desktop and mobile source checks
+        run: node scripts/employmentDocumentsTests.mjs
+
+      - name: Lint changed frontend sources
+        run: npx eslint src/pages/DocumentSignatureSettingsPage.jsx scripts/employmentDocumentsTests.mjs
+
+      - name: Build complete production frontend
+        run: npm run build
