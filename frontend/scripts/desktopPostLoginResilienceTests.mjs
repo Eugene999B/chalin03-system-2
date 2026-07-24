@@ -11,7 +11,7 @@ const read = (relativePath) =>
 const expiryGuard = read("src/security/sessionExpiryGuard.js");
 const axiosClient = read("src/api/axiosClient.js");
 
-assert.match(expiryGuard, /function checkStoredSession\(\)/);
+assert.match(expiryGuard, /const checkStoredSession = \(\) =>/);
 assert.match(expiryGuard, /backend validates the real eight-hour/);
 assert.match(expiryGuard, /browser clock is deliberately/);
 assert.doesNotMatch(
