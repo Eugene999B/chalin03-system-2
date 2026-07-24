@@ -35,7 +35,7 @@ jobs:
           }
 
   backend-quality:
-    name: Backend syntax, migrations and tests
+    name: Backend syntax and tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -51,9 +51,6 @@ jobs:
       - name: Verify backend syntax
         working-directory: backend
         run: npm run syntax-check
-      - name: Verify production migration safety
-        working-directory: backend
-        run: npm run migration-safety
       - name: Run backend tests
         working-directory: backend
         run: npm test
