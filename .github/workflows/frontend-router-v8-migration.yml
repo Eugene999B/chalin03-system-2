@@ -69,18 +69,31 @@ jobs:
       - name: Verify the resolved router and production audit
         working-directory: frontend
         run: |
-          npm ls react-router
-          npm audit --omit=dev --audit-level=high
-      - name: Run frontend source and permission tests
+          npm ls react-router | tee router-v8-tree.log
+          npm audit --omit=dev --audit-level=high | tee router-v8-audit.log
+      - id: source_tests
+        name: Run frontend source and permission tests
+        continue-on-error: true
         working-directory: frontend
-        run: npm test
-      - name: Enforce frontend lint
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee router-v8-test.log
+      - id: lint
+        name: Enforce frontend lint
+        continue-on-error: true
         working-directory: frontend
-        run: npm run lint
-      - name: Build the production frontend
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee router-v8-lint.log
+      - id: build
+        name: Build the production frontend
+        continue-on-error: true
         working-directory: frontend
-        run: npm run build
-      - name: Preserve the verified migration
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee router-v8-build.log
+      - name: Preserve the migration and verification evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase0-verified-router-v8-migration
@@ -88,5 +101,18 @@ jobs:
             frontend/package.json
             frontend/package-lock.json
             frontend/src
+            frontend/router-v8-*.log
           if-no-files-found: error
           retention-days: 3
+      - name: Enforce all migration checks
+        if: always()
+        shell: bash
+        env:
+          TEST_OUTCOME: ${{ steps.source_tests.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          test "$TEST_OUTCOME" = "success"
+          test "$LINT_OUTCOME" = "success"
+          test "$BUILD_OUTCOME" = "success"
