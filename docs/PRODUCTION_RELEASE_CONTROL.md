@@ -38,6 +38,21 @@ Railway deploys pushes to the connected GitHub branch. Changing the trigger bran
 6. Set preview deployments according to policy; feature branches may use preview URLs but must not become the production deployment.
 7. Save the settings.
 
+## Phase 0 recovery drill
+
+Complete this drill before Phase 0 is approved for merge:
+
+1. Create a fresh signed full-system backup using the Phase 0 backup format.
+2. Record the backup identifier, manifest version, creation time and source migration state.
+3. Create a disposable recovery database that cannot reach production traffic.
+4. Restore the signed backup into that isolated database.
+5. Confirm the restore rejects a deliberately altered backup and a backup with an omitted durable table.
+6. Compare the manifest table inventory, schema fingerprints and restored row counts.
+7. Verify representative records for users, permissions, branches, products, sales, debts, purchases, expenses, mining, equipment hire, documents and audit history.
+8. Confirm all sessions, recovery OTPs and temporary protected-action credentials that existed before restore are invalid.
+9. Record the drill result and destroy or securely retain the isolated recovery database according to policy.
+10. Do not run the restore against the live production database during this rehearsal.
+
 ## Release process
 
 1. Build a change on an `agent/*` branch.
