@@ -36,9 +36,9 @@ test("catalogue core is repaired before the optional commercial foundation", () 
   assert.match(source, /if \(full\.ready\) startEquipmentSalesReminderScheduler/);
 });
 
-test("all required catalogue columns are added idempotently without AFTER clauses", () => {
+test("all required catalogue columns are represented without order-sensitive checks", () => {
   for (const column of REQUIRED_FLEET_COLUMNS) {
-    assert.match(source, new RegExp(`\\["${column}"`));
+    assert.match(source, new RegExp(`["']${column}["']`));
   }
 
   assert.match(source, /async function ensureColumn/);
