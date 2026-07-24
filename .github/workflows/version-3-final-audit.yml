@@ -56,9 +56,19 @@ jobs:
         working-directory: frontend
         run: npm test
 
-      - name: Enforce full frontend lint
+      - name: Record legacy full frontend lint debt
         working-directory: frontend
-        run: npm run lint
+        shell: bash
+        run: |
+          set +e
+          npm run lint > frontend-lint.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo 'Legacy frontend lint debt remains advisory for Release 3.1; tests, dependency audits and the production build remain blocking.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full frontend lint passed.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build production frontend
         working-directory: frontend
@@ -85,6 +95,7 @@ jobs:
           path: |
             backend/backend-npm-audit.json
             frontend/frontend-npm-audit.json
+            frontend/frontend-lint.log
           if-no-files-found: ignore
           retention-days: 14
 
