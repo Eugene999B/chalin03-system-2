@@ -136,8 +136,8 @@ assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
 assert.match(retirementBridge, /window\.location\.pathname !== "\/installments"/);
 assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
 assert.match(retirementBridge, /option\[value="installment"\]/);
-assert.match(retirementBridge, /installment agreement/);
-assert.match(retirementBridge, /Heavy-equipment installment sales/);
+assert.match(retirementBridge, /Equipment installments are handled in Equipment Sales & Hire/);
+assert.match(retirementBridge, /Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales/);
 
 assert.match(hireLayout, /workspaceName="Equipment Sales & Hire"/);
 assert.match(hireLayout, /title: "Equipment Catalogue"/);
