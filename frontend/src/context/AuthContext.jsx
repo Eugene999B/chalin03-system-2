@@ -204,6 +204,19 @@ export function AuthProvider({ children }) {
     Boolean(localStorage.getItem(TOKEN_KEY))
   );
 
+  function adoptLatestStoredSession() {
+    const latestToken = localStorage.getItem(TOKEN_KEY);
+    const latestUser = normalizeUser(
+      safeParseUser(localStorage.getItem(USER_KEY))
+    );
+
+    setToken(latestToken || null);
+    setUser(latestToken ? latestUser : null);
+    setLoading(false);
+
+    return Boolean(latestToken && latestUser);
+  }
+
   function saveSession(newToken, newUser) {
     const normalizedUser = normalizeUser(newUser);
 
@@ -214,16 +227,37 @@ export function AuthProvider({ children }) {
     setUser(normalizedUser);
   }
 
-  async function logout() {
-    const hadToken = Boolean(localStorage.getItem(TOKEN_KEY));
+  async function logout({ expectedToken = null } = {}) {
+    const tokenBeforeLogout = localStorage.getItem(TOKEN_KEY);
+
+    // A newer login won the race. Never revoke or clear that newer session.
+    if (
+      expectedToken &&
+      tokenBeforeLogout &&
+      tokenBeforeLogout !== expectedToken
+    ) {
+      adoptLatestStoredSession();
+      return false;
+    }
 
     try {
-      if (hadToken) {
+      if (tokenBeforeLogout) {
         await axiosClient.post("/auth/logout");
       }
     } catch {
       // Local logout must still complete when the server session already ended.
     } finally {
+      const tokenAfterRequest = localStorage.getItem(TOKEN_KEY);
+
+      if (
+        expectedToken &&
+        tokenAfterRequest &&
+        tokenAfterRequest !== expectedToken
+      ) {
+        adoptLatestStoredSession();
+        return false;
+      }
+
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       localStorage.removeItem("chalin03_active_context_mining");
@@ -233,6 +267,8 @@ export function AuthProvider({ children }) {
       setUser(null);
       setLoading(false);
     }
+
+    return true;
   }
 
   async function login(credentialsOrUsername, password, branchId) {
@@ -286,10 +322,12 @@ export function AuthProvider({ children }) {
   }
 
   async function refreshUser() {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
+    const refreshToken = localStorage.getItem(TOKEN_KEY);
 
-    if (!savedToken) {
-      logout();
+    if (!refreshToken) {
+      setToken(null);
+      setUser(null);
+      setLoading(false);
       return;
     }
 
@@ -297,6 +335,15 @@ export function AuthProvider({ children }) {
 
     try {
       const response = await axiosClient.get("/auth/me");
+      const activeToken = localStorage.getItem(TOKEN_KEY);
+
+      // A successful login happened while this older profile request was in
+      // flight. Ignore the old response and adopt the newer stored session.
+      if (activeToken && activeToken !== refreshToken) {
+        adoptLatestStoredSession();
+        return;
+      }
+
       const freshUser = normalizeUser({
         ...response.data.user,
         workspace_code:
@@ -306,17 +353,30 @@ export function AuthProvider({ children }) {
       });
 
       if (!freshUser) {
-        logout();
+        await logout({ expectedToken: refreshToken });
         return;
       }
 
       localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
-      setToken(savedToken);
+      setToken(refreshToken);
       setUser(freshUser);
     } catch {
-      logout();
+      const activeToken = localStorage.getItem(TOKEN_KEY);
+
+      // This failure belongs to an older desktop session. It may be a 401,
+      // 403, 400 or network failure; none may erase a newer successful login.
+      if (activeToken && activeToken !== refreshToken) {
+        adoptLatestStoredSession();
+        return;
+      }
+
+      await logout({ expectedToken: refreshToken });
     } finally {
-      setLoading(false);
+      const activeToken = localStorage.getItem(TOKEN_KEY);
+
+      if (!activeToken || activeToken === refreshToken) {
+        setLoading(false);
+      }
     }
   }
 
