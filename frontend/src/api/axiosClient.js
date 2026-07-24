@@ -4,14 +4,35 @@ import {
   assertSparePartsInstallmentRequestAllowed,
 } from "../utils/sparePartsInstallmentRetirementBridge";
 
+const TOKEN_KEY = "chalin03_token";
+const USER_KEY = "chalin03_user";
+const REQUEST_TOKEN_KEY = "__chalin03RequestToken";
+const PUBLIC_SESSION_PATHS = new Set([
+  "/auth/login",
+  "/auth/recovery/request-otp",
+  "/auth/recovery/reset-password",
+  "/branches/public",
+]);
+
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   timeout: 30000,
 });
 
+function cleanRequestPath(value) {
+  return String(value || "")
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/api(?=\/)/, "")
+    .replace(/\?.*$/, "");
+}
+
+function isPublicSessionRequest(config) {
+  return PUBLIC_SESSION_PATHS.has(cleanRequestPath(config?.url));
+}
+
 function getStoredUser() {
   try {
-    const storedUser = localStorage.getItem("chalin03_user");
+    const storedUser = localStorage.getItem(USER_KEY);
 
     if (!storedUser) {
       return null;
@@ -76,16 +97,37 @@ function getStoredSessionInfo() {
   };
 }
 
+function clearStoredSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem("chalin03_active_context_mining");
+  localStorage.removeItem("chalin03_active_context_equipment_hire");
+}
+
+function restartWithCurrentSession() {
+  window.setTimeout(() => {
+    window.location.reload();
+  }, 0);
+}
+
 axiosClient.interceptors.request.use((config) => {
   assertSparePartsInstallmentRequestAllowed(config);
 
-  const token = localStorage.getItem("chalin03_token");
+  const token = localStorage.getItem(TOKEN_KEY) || "";
+  const publicSessionRequest = isPublicSessionRequest(config);
+  const requestToken = publicSessionRequest ? "" : token;
   const { workspaceCode, branchId, branchCode, branchName } =
     getStoredSessionInfo();
   const workspaceContextId = getStoredWorkspaceContextId(workspaceCode);
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  // Keep the exact token used by this request. A late 401 from an older desktop
+  // session must never be allowed to erase a newer successful login.
+  config[REQUEST_TOKEN_KEY] = requestToken;
+
+  if (requestToken) {
+    config.headers.Authorization = `Bearer ${requestToken}`;
+  } else if (config.headers?.Authorization) {
+    delete config.headers.Authorization;
   }
 
   if (workspaceCode) {
@@ -131,10 +173,25 @@ axiosClient.interceptors.response.use(
     const errorCode = String(error.response?.data?.code || "");
     const errorMessage = String(error.response?.data?.message || "");
     const requestUrl = String(error.config?.url || "");
+    const requestToken = String(error.config?.[REQUEST_TOKEN_KEY] || "");
+    const activeToken = String(localStorage.getItem(TOKEN_KEY) || "");
     const isOwnerRecoveryRequest = requestUrl.includes(
       "/release2-final/owner/"
     );
     const isOwnerRecoveryPage = window.location.pathname === "/owner-recovery";
+    const isStaleSessionResponse =
+      statusCode === 401 &&
+      Boolean(requestToken) &&
+      Boolean(activeToken) &&
+      requestToken !== activeToken;
+
+    if (isStaleSessionResponse) {
+      // The user has already received a newer token. Do not reject this old
+      // request into AuthContext.logout(), because that would delete the new
+      // desktop session. Reload once so every component adopts the new token.
+      restartWithCurrentSession();
+      return new Promise(() => {});
+    }
 
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage) {
       if (errorCode === "SESSION_REPLACED") {
@@ -150,13 +207,14 @@ axiosClient.interceptors.response.use(
         );
       }
 
-      localStorage.removeItem("chalin03_token");
-      localStorage.removeItem("chalin03_user");
-      localStorage.removeItem("chalin03_active_context_mining");
-      localStorage.removeItem("chalin03_active_context_equipment_hire");
+      // A request without an authenticated token, or one using the current
+      // token, may clear the current session. A stale request is handled above.
+      if (!requestToken || requestToken === activeToken) {
+        clearStoredSession();
 
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     }
 
