@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-equipment-navigation-hotfix-v2";
+const CACHE_NAME = "chalin03-desktop-auth-context-hotfix-v3";
 
 const CORE_ASSETS = [
   "/",
@@ -72,23 +72,18 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      return (
-        cachedResponse ||
-        fetch(request).then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200) {
-            return networkResponse;
-          }
-
-          const responseClone = networkResponse.clone();
-
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
-
+    fetch(request)
+      .then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
-        })
-      );
-    })
+        }
+
+        const responseClone = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, responseClone);
+        });
+        return networkResponse;
+      })
+      .catch(() => caches.match(request))
   );
 });
