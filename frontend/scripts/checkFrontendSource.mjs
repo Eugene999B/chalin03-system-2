@@ -13,7 +13,8 @@ const indexHtml = read("index.html");
 const app = read("src/App.jsx");
 const authContext = read("src/context/AuthContext.jsx");
 const axiosClient = read("src/api/axiosClient.js");
-const loginPage = read("src/pages/LoginPage.jsx");
+const loginEntry = read("src/pages/LoginPage.jsx");
+const loginPage = read("src/pages/LoginPageGroupOperations.jsx");
 const usersSettingsPage = read("src/pages/UsersSettingsPage.jsx");
 const workspaceAdministrationPage = read(
   "src/pages/WorkspaceAdministrationPage.jsx"
@@ -54,6 +55,7 @@ assert.match(authContext, /\/auth\/logout/);
 assert.match(axiosClient, /SESSION_REPLACED/);
 assert.match(axiosClient, /isOwnerRecoveryRequest/);
 assert.match(axiosClient, /\/owner-recovery/);
+assert.match(loginEntry, /LoginPageGroupOperations/);
 assert.match(loginPage, /chalin03_login_notice/);
 assert.match(loginPage, /\/auth\/recovery\/request-otp/);
 assert.match(loginPage, /\/auth\/recovery\/reset-password/);
