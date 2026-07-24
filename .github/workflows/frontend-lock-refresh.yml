@@ -1,0 +1,40 @@
+name: Frontend Lock Refresh
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/phase-0-production-safety
+    paths:
+      - frontend/package.json
+      - .github/workflows/frontend-lock-refresh.yml
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Generate the exact lockfile
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Verify unaffected router and audit result
+        working-directory: frontend
+        run: |
+          npm ls react-router react-router-dom
+          npm audit --omit=dev --audit-level=high
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-frontend-package-lock
+          path: frontend/package-lock.json
+          if-no-files-found: error
+          retention-days: 3
