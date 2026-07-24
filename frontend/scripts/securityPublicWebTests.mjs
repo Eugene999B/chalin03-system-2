@@ -26,7 +26,8 @@ assert.match(headers, /X-Frame-Options: DENY/);
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/);
 assert.match(headers, /\/company\/\*/);
 assert.match(headers, /index, follow, max-image-preview:large/);
-assert.match(headers, /chalin03-system-2\.pages\.dev/);
+assert.match(headers, /https:\/\/api\.chalin03\.com/);
+assert.doesNotMatch(headers, /pages\.dev/);
 assert.match(headers, /Cache-Control: public, max-age=31536000, immutable/);
 assert.match(headers, /\/favicon\.ico/);
 assert.match(headers, /\/favicon-192x192\.png/);
@@ -73,10 +74,13 @@ assert.equal(
   false
 );
 
-assert.match(serviceWorker, /CACHE_NAME = "chalin03-version-3-v1"/);
-assert.match(serviceWorker, /"\/site\.webmanifest"/);
-assert.match(serviceWorker, /"\/favicon-192x192\.png"/);
-assert.match(serviceWorker, /"\/favicon-512x512\.png"/);
+assert.match(serviceWorker, /const CACHE_NAME = "chalin03-[^"]+"/);
+assert.match(serviceWorker, /\/site\.webmanifest/);
+assert.match(serviceWorker, /\/favicon-192x192\.png/);
+assert.match(serviceWorker, /\/favicon-512x512\.png/);
+assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
+assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
+assert.match(serviceWorker, /cacheName !== CACHE_NAME/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
