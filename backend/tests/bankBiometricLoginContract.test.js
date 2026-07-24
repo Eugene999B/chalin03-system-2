@@ -93,9 +93,9 @@ test("mobile administration layouts override route-level desktop widths", () => 
 });
 
 
-test("service worker ignores third-party requests and keeps the mobile release cache", () => {
+test("service worker ignores third-party requests and keeps the current release cache", () => {
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /chalin03-group-login-mobile-admin-v4/);
+  assert.match(serviceWorker, /chalin03-equipment-navigation-hotfix-v2/);
   assert.match(
     headers,
     /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/
