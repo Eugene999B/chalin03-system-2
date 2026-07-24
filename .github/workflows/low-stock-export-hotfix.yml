@@ -1,0 +1,61 @@
+name: Low Stock Export Hotfix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/package.json"
+      - "backend/services/exportWorkbookSafetyBootstrap.js"
+      - "backend/tests/exportWorkbookAndServiceWorkerSafety.test.js"
+      - "frontend/public/sw.js"
+      - ".github/workflows/low-stock-export-hotfix.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: low-stock-export-hotfix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-export-safety:
+    name: Validate all export worksheet names
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Check bootstrap syntax
+        run: node --check services/exportWorkbookSafetyBootstrap.js
+      - name: Run export and service-worker regression tests
+        run: node --test tests/exportWorkbookAndServiceWorkerSafety.test.js
+
+  frontend-build:
+    name: Build production frontend and service worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Check service-worker syntax
+        run: node --check public/sw.js
+      - name: Build production frontend
+        run: npm run build
