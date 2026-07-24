@@ -4,10 +4,10 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/runControlledDeployment.js --deployment && node server.js",
+    "start": "node -r ./scripts/controlledMigrationPathShim.js scripts/runControlledDeployment.js --deployment && node server.js",
     "dev": "nodemon server.js",
-    "migrate:plan": "node scripts/runControlledMigrations.js --plan",
-    "migrate:apply": "node scripts/runControlledDeployment.js --apply",
+    "migrate:plan": "node -r ./scripts/controlledMigrationPathShim.js scripts/runControlledMigrations.js --plan",
+    "migrate:apply": "node -r ./scripts/controlledMigrationPathShim.js scripts/runControlledDeployment.js --apply",
     "migrate:snapshot-attestation": "node scripts/createMigrationSnapshotAttestation.js",
     "drill:release31": "node scripts/runRelease31DisposableDrillWithEvidence.js && node scripts/assertRelease31DrillEvidence.js",
     "create-admin": "node scripts/createAdmin.js",
