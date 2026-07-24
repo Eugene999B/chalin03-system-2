@@ -5,6 +5,8 @@ const test = require("node:test");
 const {
   StartupSecurityError,
   auditStartupSecurity,
+  normalizeHostEntry,
+  normalizedHosts,
   validateStartupSecurity,
 } = require("../config/startupSecurity");
 
@@ -112,6 +114,45 @@ test("production rejects reused and placeholder secrets", () => {
       return true;
     }
   );
+});
+
+test("trusted host parsing accepts only structural host values", () => {
+  assert.equal(
+    normalizeHostEntry("https://API.chalin03.com:443/"),
+    "api.chalin03.com"
+  );
+  assert.deepEqual(
+    normalizedHosts("api.chalin03.com, https://API.chalin03.com:443/"),
+    ["api.chalin03.com", "api.chalin03.com"]
+  );
+
+  const result = validateStartupSecurity({
+    env: productionEnv({
+      TRUSTED_API_HOSTS: "https://API.chalin03.com:443/",
+    }),
+    allowedOrigins: officialOrigins,
+  });
+  assert.equal(result.production, true);
+});
+
+test("production rejects deceptive trusted API host values", () => {
+  const deceptiveHosts = [
+    "https://api.chalin03.com.attacker.invalid",
+    "https://api.chalin03.com@attacker.invalid",
+    "https://attacker.invalid/api.chalin03.com",
+    "javascript://api.chalin03.com",
+  ];
+
+  for (const trustedHost of deceptiveHosts) {
+    assert.throws(
+      () =>
+        validateStartupSecurity({
+          env: productionEnv({ TRUSTED_API_HOSTS: trustedHost }),
+          allowedOrigins: officialOrigins,
+        }),
+      /must include api\.chalin03\.com/
+    );
+  }
 });
 
 test("production requires the official API host and rejects Railway hosts", () => {
