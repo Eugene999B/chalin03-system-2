@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -139,9 +139,7 @@ export default function LoginPageGroupOperations() {
   } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const passwordRef = useRef(null);
-  const [passwordFieldName] = useState(
-    () => `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  const passwordFieldName = `chalin03-entry-${useId().replace(/:/g, "")}`;
 
   const requestedWorkspace = getBusinessWorkspace(searchParams.get("workspace"));
   const [workspaceCode, setWorkspaceCode] = useState(

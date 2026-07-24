@@ -173,11 +173,11 @@ function auditStartupSecurity({
       errors.push("ENFORCE_TRUSTED_API_HOSTS cannot be false in production");
     }
 
-    const trustedHosts = normalizedHosts(env.TRUSTED_API_HOSTS);
-    if (!trustedHosts.includes("api.chalin03.com")) {
+    const trustedHostSet = new Set(normalizedHosts(env.TRUSTED_API_HOSTS));
+    if (!trustedHostSet.has("api.chalin03.com")) {
       errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");
     }
-    if (trustedHosts.some((host) => host.endsWith(".railway.app"))) {
+    if ([...trustedHostSet].some((host) => host.endsWith(".railway.app"))) {
       errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");
     }
 
