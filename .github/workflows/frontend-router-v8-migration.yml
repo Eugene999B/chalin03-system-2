@@ -97,18 +97,43 @@ jobs:
       - name: Verify the resolved router and production audit
         working-directory: frontend
         run: |
-          npm ls react-router
-          npm audit --omit=dev --audit-level=high
-      - name: Run frontend source and permission tests
+          npm ls react-router | tee router-v8-tree.log
+          npm audit --omit=dev --audit-level=high | tee router-v8-audit.log
+      - id: source_tests
+        name: Run frontend source and permission tests
+        continue-on-error: true
         working-directory: frontend
-        run: npm test
-      - name: Enforce frontend lint
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee router-v8-test.log
+      - id: lint_check
+        name: Enforce frontend lint
+        continue-on-error: true
         working-directory: frontend
-        run: npm run lint
-      - name: Build the production frontend
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee router-v8-lint.log
+      - id: build_check
+        name: Build the production frontend
+        continue-on-error: true
         working-directory: frontend
-        run: npm run build
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee router-v8-build.log
+      - name: Preserve migration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-router-v8-visible-evidence
+          path: |
+            frontend/package.json
+            frontend/package-lock.json
+            frontend/src
+            frontend/router-v8-*.log
+          if-no-files-found: error
+          retention-days: 3
       - name: Commit the verified migration
+        if: steps.source_tests.outcome == 'success' && steps.lint_check.outcome == 'success' && steps.build_check.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -121,3 +146,16 @@ jobs:
           fi
           git commit -m 'Migrate frontend to patched React Router 8.3.0'
           git push origin HEAD:agent/phase-0-production-safety
+      - name: Enforce all migration checks
+        if: always()
+        shell: bash
+        env:
+          TEST_RESULT: ${{ steps.source_tests.outcome }}
+          LINT_RESULT: ${{ steps.lint_check.outcome }}
+          BUILD_RESULT: ${{ steps.build_check.outcome }}
+        run: |
+          set -euo pipefail
+          printf 'test=%s lint=%s build=%s\n' "$TEST_RESULT" "$LINT_RESULT" "$BUILD_RESULT"
+          [ "$TEST_RESULT" = "success" ]
+          [ "$LINT_RESULT" = "success" ]
+          [ "$BUILD_RESULT" = "success" ]
