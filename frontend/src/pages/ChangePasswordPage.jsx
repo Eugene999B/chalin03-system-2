@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { clearStoredBiometricBinding } from "../utils/biometricAccess";

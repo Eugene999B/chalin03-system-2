@@ -128,7 +128,7 @@ async function parseApiResponse(response) {
   try {
     body = await response.json();
   } catch {
-    body = {};
+    // Keep the default empty response body.
   }
 
   if (!response.ok) {
