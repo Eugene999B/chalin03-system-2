@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs && node scripts/versionThreeReleaseTests.mjs && node scripts/commandGateReleaseTests.mjs && node scripts/equipmentSalesHireReleaseTests.mjs && node scripts/creditMixedSaleHotfixTests.mjs && node scripts/equipmentNavigationActiveStateTests.mjs && node scripts/sessionExpiryReleaseTests.mjs",
+    "test": "node scripts/checkFrontendSource.mjs && node scripts/frontendPermissionTests.mjs && node scripts/securityPublicWebTests.mjs && node scripts/employmentDocumentsTests.mjs && node scripts/versionThreeReleaseTests.mjs && node scripts/commandGateReleaseTests.mjs && node scripts/expenseFundingEvidenceTests.mjs && node scripts/equipmentSalesHireReleaseTests.mjs && node scripts/creditMixedSaleHotfixTests.mjs && node scripts/equipmentNavigationActiveStateTests.mjs && node scripts/sessionExpiryReleaseTests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
