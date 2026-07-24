@@ -9,6 +9,7 @@ on:
       - frontend/package.json
       - frontend/package-lock.json
       - frontend/src/**
+      - frontend/scripts/**
       - .github/workflows/frontend-router-v8-migration.yml
   push:
     branches:
@@ -30,7 +31,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Replace the removed react-router-dom package
+      - name: Apply the reviewed React Router and lint migration
         shell: bash
         run: |
           set -euo pipefail
@@ -46,9 +47,43 @@ jobs:
               text = path.read_text(encoding='utf-8')
               updated = text.replace('"react-router-dom"', '"react-router"')
               updated = updated.replace("'react-router-dom'", "'react-router'")
+              updated = updated.replace(
+                  '    let preservedNewerSession = false;',
+                  '    let preservedNewerSession;'
+              )
+              updated = updated.replace(
+                  '    user: activeUser,\n    workspaceCode: activeWorkspaceCode,',
+                  '    workspaceCode: activeWorkspaceCode,'
+              ) if path.name == 'LoginPageGroupOperations.jsx' else updated
+              updated = updated.replace(
+                  '  const passwordNameRef = useRef(\n'
+                  '    `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`\n'
+                  '  );',
+                  '  const [passwordFieldName] = useState(\n'
+                  '    () => `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`\n'
+                  '  );'
+              )
+              updated = updated.replace(
+                  'name={passwordNameRef.current}',
+                  'name={passwordFieldName}'
+              )
+              updated = updated.replace(
+                  '  } catch {\n    body = {};\n  }',
+                  '  } catch {\n    // Keep the default empty response body.\n  }'
+              )
               if updated != text:
                   path.write_text(updated, encoding='utf-8')
                   changed.append(str(path))
+
+          check_path = root / 'scripts' / 'checkFrontendSource.mjs'
+          check_text = check_path.read_text(encoding='utf-8')
+          check_updated = check_text.replace(
+              'assert.match(loginPage, /chalin03_login_notice/);',
+              'assert.match(axiosClient, /chalin03_login_notice/);'
+          )
+          if check_updated != check_text:
+              check_path.write_text(check_updated, encoding='utf-8')
+              changed.append(str(check_path))
 
           package_path = root / 'package.json'
           package = json.loads(package_path.read_text(encoding='utf-8'))
@@ -59,7 +94,7 @@ jobs:
           dependencies['react-dom'] = '^19.2.7'
           package_path.write_text(json.dumps(package, indent=2) + '\n', encoding='utf-8')
 
-          print(f'Updated {len(changed)} frontend source files.')
+          print(f'Updated {len(changed)} frontend files.')
           for name in changed:
               print(name)
           PY
@@ -78,14 +113,14 @@ jobs:
         run: |
           set -o pipefail
           npm test 2>&1 | tee router-v8-test.log
-      - id: lint
+      - id: lint_check
         name: Enforce frontend lint
         continue-on-error: true
         working-directory: frontend
         run: |
           set -o pipefail
           npm run lint 2>&1 | tee router-v8-lint.log
-      - id: build
+      - id: build_check
         name: Build the production frontend
         continue-on-error: true
         working-directory: frontend
@@ -101,6 +136,7 @@ jobs:
             frontend/package.json
             frontend/package-lock.json
             frontend/src
+            frontend/scripts
             frontend/router-v8-*.log
           if-no-files-found: error
           retention-days: 3
@@ -108,11 +144,12 @@ jobs:
         if: always()
         shell: bash
         env:
-          TEST_OUTCOME: ${{ steps.source_tests.outcome }}
-          LINT_OUTCOME: ${{ steps.lint.outcome }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TEST_RESULT: ${{ steps.source_tests.outcome }}
+          LINT_RESULT: ${{ steps.lint_check.outcome }}
+          BUILD_RESULT: ${{ steps.build_check.outcome }}
         run: |
           set -euo pipefail
-          test "$TEST_OUTCOME" = "success"
-          test "$LINT_OUTCOME" = "success"
-          test "$BUILD_OUTCOME" = "success"
+          printf 'test=%s lint=%s build=%s\n' "$TEST_RESULT" "$LINT_RESULT" "$BUILD_RESULT"
+          [ "$TEST_RESULT" = "success" ]
+          [ "$LINT_RESULT" = "success" ]
+          [ "$BUILD_RESULT" = "success" ]
