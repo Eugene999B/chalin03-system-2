@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./services/equipmentSalesCommercialBootstrap.js server.js",
+    "start": "node -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentSalesCommercialBootstrap.js server.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
