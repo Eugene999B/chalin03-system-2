@@ -81,6 +81,18 @@ jobs:
               'assert.match(loginPage, /chalin03_login_notice/);',
               'assert.match(axiosClient, /chalin03_login_notice/);'
           )
+          check_updated = check_updated.replace(
+              'assert.match(loginPage, /Forgot Password \\/ Unlock Account/);',
+              'assert.match(loginPage, /Recover password/);'
+          )
+          check_updated = check_updated.replace(
+              'assert.match(loginPage, /6-Digit Recovery Code/);',
+              'assert.match(loginPage, /6-digit code/);'
+          )
+          check_updated = check_updated.replace(
+              'assert.match(loginPage, /Owner Break-Glass/);',
+              'assert.match(loginEntry, /openEmergencyCommand/);'
+          )
           if check_updated != check_text:
               check_path.write_text(check_updated, encoding='utf-8')
               changed.append(str(check_path))
