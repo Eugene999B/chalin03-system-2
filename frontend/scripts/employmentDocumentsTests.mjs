@@ -12,6 +12,7 @@ function read(relativePath) {
 
 const employmentPage = read("src/pages/EmploymentDocumentsPage.jsx");
 const signaturePage = read("src/pages/DocumentSignatureSettingsPage.jsx");
+const signatureStyles = read("src/styles/documentSignatureSettings.css");
 const app = read("src/App.jsx");
 const spareLayout = read("src/components/Layout.jsx");
 const miningLayout = read("src/layouts/MiningLayout.jsx");
@@ -26,6 +27,18 @@ assert.match(employmentPage, /No worker profile is created by this form/);
 assert.match(signaturePage, /onPointerDown/);
 assert.match(signaturePage, /toDataURL\("image\/png"\)/);
 assert.match(signaturePage, /one finger/);
+assert.match(signaturePage, /trimmedSignatureDataUrl/);
+assert.match(signaturePage, /ResizeObserver/);
+assert.match(signaturePage, /getCoalescedEvents/);
+assert.match(signaturePage, /Undo/);
+assert.match(signaturePage, /Redo/);
+assert.match(signaturePage, /Open Large Pad/);
+assert.match(signaturePage, /Exact New Output/);
+assert.match(signaturePage, /signature-safe-area/);
+assert.match(signatureStyles, /@media \(max-width: 560px\)/);
+assert.match(signatureStyles, /\.signature-editor\.expanded/);
+assert.match(signatureStyles, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+assert.match(signatureStyles, /touch-action: none/);
 assert.match(app, /EmploymentDocumentsPage/);
 assert.match(app, /DocumentSignatureSettingsPage/);
 assert.match(spareLayout, /Employment & HR Documents/);
