@@ -133,7 +133,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Commit the verified migration
-        if: steps.source_tests.outcome == 'success' && steps.lint_check.outcome == 'success' && steps.build_check.outcome == 'success'
+        if: steps.source_tests.conclusion == 'success' && steps.lint_check.conclusion == 'success' && steps.build_check.conclusion == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -150,9 +150,9 @@ jobs:
         if: always()
         shell: bash
         env:
-          TEST_RESULT: ${{ steps.source_tests.outcome }}
-          LINT_RESULT: ${{ steps.lint_check.outcome }}
-          BUILD_RESULT: ${{ steps.build_check.outcome }}
+          TEST_RESULT: ${{ steps.source_tests.conclusion }}
+          LINT_RESULT: ${{ steps.lint_check.conclusion }}
+          BUILD_RESULT: ${{ steps.build_check.conclusion }}
         run: |
           set -euo pipefail
           printf 'test=%s lint=%s build=%s\n' "$TEST_RESULT" "$LINT_RESULT" "$BUILD_RESULT"
