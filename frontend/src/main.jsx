@@ -60,8 +60,11 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     if (import.meta.env.PROD) {
       navigator.serviceWorker
-        .register("/sw.js")
-        .then(() => {
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => {
+          registration.update().catch(() => {
+            // The active worker remains available if an update check is offline.
+          });
           console.log("✅ Chalin 03 service worker registered");
         })
         .catch((error) => {
