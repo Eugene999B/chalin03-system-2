@@ -35,10 +35,12 @@ jobs:
 
           old_import = 'import { useEffect, useMemo, useRef, useState } from "react";'
           new_import = 'import { useEffect, useId, useMemo, useRef, useState } from "react";'
-          old_name = '''  const [passwordFieldName] = useState(
-              () => `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`
-            );'''
-          new_name = '''  const passwordFieldName = `chalin03-entry-${useId().replace(/:/g, "")}`;'''
+          old_name = (
+              '  const [passwordFieldName] = useState(\n'
+              '    () => `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`\n'
+              '  );'
+          )
+          new_name = '  const passwordFieldName = `chalin03-entry-${useId().replace(/:/g, "")}`;'
 
           for path in login_paths:
               text = path.read_text(encoding='utf-8')
@@ -52,20 +54,24 @@ jobs:
 
           startup = Path('backend/config/startupSecurity.js')
           text = startup.read_text(encoding='utf-8')
-          old_hosts = '''    const trustedHosts = normalizedHosts(env.TRUSTED_API_HOSTS);
-            if (!trustedHosts.includes("api.chalin03.com")) {
-              errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");
-            }
-            if (trustedHosts.some((host) => host.endsWith(".railway.app"))) {
-              errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");
-            }'''
-          new_hosts = '''    const trustedHostSet = new Set(normalizedHosts(env.TRUSTED_API_HOSTS));
-            if (!trustedHostSet.has("api.chalin03.com")) {
-              errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");
-            }
-            if ([...trustedHostSet].some((host) => host.endsWith(".railway.app"))) {
-              errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");
-            }'''
+          old_hosts = (
+              '    const trustedHosts = normalizedHosts(env.TRUSTED_API_HOSTS);\n'
+              '    if (!trustedHosts.includes("api.chalin03.com")) {\n'
+              '      errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");\n'
+              '    }\n'
+              '    if (trustedHosts.some((host) => host.endsWith(".railway.app"))) {\n'
+              '      errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");\n'
+              '    }'
+          )
+          new_hosts = (
+              '    const trustedHostSet = new Set(normalizedHosts(env.TRUSTED_API_HOSTS));\n'
+              '    if (!trustedHostSet.has("api.chalin03.com")) {\n'
+              '      errors.push("TRUSTED_API_HOSTS must include api.chalin03.com in production");\n'
+              '    }\n'
+              '    if ([...trustedHostSet].some((host) => host.endsWith(".railway.app"))) {\n'
+              '      errors.push("TRUSTED_API_HOSTS must not include Railway public hostnames");\n'
+              '    }'
+          )
           if old_hosts not in text:
               raise SystemExit('Missing expected trusted-host validation block')
           startup.write_text(text.replace(old_hosts, new_hosts, 1), encoding='utf-8')
