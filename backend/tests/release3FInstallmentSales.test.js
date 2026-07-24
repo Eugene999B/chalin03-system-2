@@ -217,8 +217,9 @@ test("Release 3F-B is registered in navigation, permissions and UI", () => {
   assert.match(page, /Agreement PDF/);
 });
 
-test("Release 3F-B integrates backups and Daily Closing collections", () => {
+test("Release 3F-B integrates dynamic backups and Daily Closing collections", () => {
   const backup = read("backend/routes/backupRoutes.js");
+  const backupSafety = read("backend/services/backupSafetyService.js");
   const professional = read("backend/routes/release2FinalRoutes.js");
   const closing = read("backend/routes/dailyClosingRoutes.js");
 
@@ -229,10 +230,14 @@ test("Release 3F-B integrates backups and Daily Closing collections", () => {
     "installment_payments",
     "installment_reminder_log",
   ]) {
-    assert.match(backup, new RegExp(`"${table}"`));
     assert.match(professional, new RegExp(`"${table}"`));
   }
 
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
   assert.match(closing, /Installment Sales/);
   assert.match(closing, /FROM installment_payments ip/);
   assert.match(closing, /'installment' AS collection_type/);
