@@ -2,6 +2,15 @@ name: Frontend Router v8 Migration
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - frontend/package.json
+      - frontend/package-lock.json
+      - frontend/src/**
+      - frontend/scripts/**
+      - .github/workflows/frontend-router-v8-migration.yml
   push:
     branches:
       - agent/phase-0-production-safety
