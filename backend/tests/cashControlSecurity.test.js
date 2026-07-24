@@ -10,6 +10,7 @@ const dailyClosingSource = read("routes/dailyClosingRoutes.js");
 const salesSource = read("routes/saleRoutes.js");
 const activitySource = read("routes/activityRoutes.js");
 const backupSource = read("routes/backupRoutes.js");
+const backupSafetySource = read("services/backupSafetyService.js");
 const smsSource = read("routes/smsRoutes.js");
 const migrationSource = fs.readFileSync(
   path.resolve(root, "..", "database", "20260714_cash_control_security_migration.sql"),
@@ -50,15 +51,19 @@ test("Activity Log has grouped Excel PDF Word and CSV exports", () => {
   assert.match(activitySource, /daily_closing/);
 });
 
-test("Backup and migration include new accounting evidence tables", () => {
+test("Backup dynamically includes new accounting evidence tables", () => {
   for (const table of [
     "sale_payment_allocations",
     "sale_change_history",
     "daily_closing_revisions",
   ]) {
-    assert.match(backupSource, new RegExp(table));
     assert.match(migrationSource, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   }
+  assert.match(backupSource, /information_schema\.TABLES/);
+  assert.match(backupSource, /classifyDatabaseTables/);
+  assert.match(backupSafetySource, /currentIncludedTables/);
+  assert.match(backupSafetySource, /Backup is missing current required tables/);
+  assert.doesNotMatch(backupSource, /const PREFERRED_TABLE_ORDER/);
 });
 
 test("Clean-hands Daily Closing reports include security flags and immutable revisions", () => {
