@@ -55,8 +55,14 @@ test("existing expense entry and Daily Closing remain strict and channel-specifi
   const expenseRoutes = read("backend/routes/expenseRoutes.js");
   const closingRoutes = read("backend/routes/dailyClosingRoutes.js");
 
-  assert.match(expenseRoutes, /expectedAffectsClosing = fundingSource === "today_sales_receipts"/);
-  assert.match(expenseRoutes, /EXPENSE_CLOSING_DECISION_MISMATCH/);
+  assert.match(
+    expenseRoutes,
+    /affectsDailyClosing && fundingSource !== "today_sales_receipts"/
+  );
+  assert.match(
+    expenseRoutes,
+    /!affectsDailyClosing && fundingSource === "today_sales_receipts"/
+  );
   assert.match(closingRoutes, /const closingExpenses = expenses\.filter/);
   assert.match(closingRoutes, /saleCashReceived[\s\S]*- expenseCash/);
   assert.match(closingRoutes, /saleMomoReceived \+ debtMomo - expenseMomo/);
