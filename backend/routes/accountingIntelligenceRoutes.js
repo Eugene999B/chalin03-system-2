@@ -4,6 +4,9 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const {
   buildAccountingIntelligence,
 } = require("../services/accountingIntelligenceService");
+const {
+  loadExpenseFundingEvidence,
+} = require("../services/expenseFundingEvidenceService");
 
 const router = express.Router();
 
@@ -16,7 +19,8 @@ const router = express.Router();
 
   This route exposes the intelligence in smaller sections so the frontend can
   load overview, ledger, audit flags, stock intelligence, SMS intelligence,
-  system controls, and period review information without duplicating logic.
+  system controls, period review, and expense-funding evidence without
+  duplicating business calculations.
 */
 
 function asyncHandler(handler) {
@@ -42,10 +46,6 @@ function safeObject(value) {
   }
 
   return value;
-}
-
-function safeArray(value) {
-  return Array.isArray(value) ? value : [];
 }
 
 function pickFirstObject(...values) {
@@ -84,6 +84,21 @@ function buildBaseResponse(message, intelligence, extra = {}) {
     scope: intelligence?.scope || null,
     generated_at: getGeneratedAt(intelligence),
     ...extra,
+  };
+}
+
+async function attachExpenseFundingEvidence(intelligence) {
+  const evidence = await loadExpenseFundingEvidence(intelligence?.scope || {});
+  return {
+    ...intelligence,
+    expense_funding_evidence: evidence,
+    expenses: {
+      ...safeObject(intelligence?.expenses),
+      receipts_funded_expenses: evidence.receipts_funded_expenses,
+      externally_funded_expenses: evidence.externally_funded_expenses,
+      closing_deductions: evidence.closing_deductions,
+      funding_sources: evidence.by_funding_source,
+    },
   };
 }
 
@@ -215,11 +230,30 @@ router.get(
   requireAuth,
   requireAccountingAccess,
   asyncHandler(async (req, res) => {
-    const intelligence = await buildAccountingIntelligence(req);
+    const intelligence = await attachExpenseFundingEvidence(
+      await buildAccountingIntelligence(req)
+    );
 
     return res.json(
       buildBaseResponse("Advanced accounting and audit intelligence loaded.", intelligence, {
         intelligence,
+      })
+    );
+  })
+);
+
+// GET /api/accounting-intelligence/expense-funding
+router.get(
+  "/expense-funding",
+  requireAuth,
+  requireAccountingAccess,
+  asyncHandler(async (req, res) => {
+    const intelligence = await buildAccountingIntelligence(req);
+    const evidence = await loadExpenseFundingEvidence(intelligence?.scope || {});
+
+    return res.json(
+      buildBaseResponse("Expense funding and Daily Closing evidence loaded.", intelligence, {
+        expense_funding_evidence: evidence,
       })
     );
   })
@@ -333,11 +367,14 @@ router.get(
   requireAuth,
   requireAccountingAccess,
   asyncHandler(async (req, res) => {
-    const intelligence = await buildAccountingIntelligence(req);
+    const intelligence = await attachExpenseFundingEvidence(
+      await buildAccountingIntelligence(req)
+    );
 
     return res.json(
       buildBaseResponse("All advanced accounting intelligence loaded.", intelligence, {
         intelligence,
+        expense_funding_evidence: intelligence.expense_funding_evidence,
         ledger: extractLedger(intelligence),
         audit: extractAudit(intelligence),
         stock: extractStockIntelligence(intelligence),
