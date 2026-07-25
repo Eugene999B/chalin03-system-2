@@ -1,7 +1,7 @@
 -- CHALIN 03 PHASE 1 FINANCIAL CONTROL HARDENING
 -- ADDITIVE MIGRATION ONLY.
 -- BACKUP REQUIRED: create and validate a signed Version 2 full-system backup before production execution.
--- Purpose: preserve every expense row while allowing an authorised void/reversal workflow.
+-- Purpose: preserve every expense row while allowing an authorised, independently approved void workflow.
 -- Never run database/schema.sql against production.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -100,6 +100,18 @@ CALL chalin03_phase1_add_column(
     '`voided_at` DATETIME NULL AFTER `voided_by`'
 );
 
+CALL chalin03_phase1_add_column(
+    'expenses',
+    'void_approved_by',
+    '`void_approved_by` INT NULL AFTER `voided_at`'
+);
+
+CALL chalin03_phase1_add_column(
+    'expenses',
+    'void_approved_at',
+    '`void_approved_at` DATETIME NULL AFTER `void_approved_by`'
+);
+
 CALL chalin03_phase1_add_index(
     'expenses',
     'idx_expense_void_status',
@@ -112,10 +124,16 @@ CALL chalin03_phase1_add_index(
     'UNIQUE INDEX `uq_expense_void_reference` (`void_reference`)'
 );
 
+CALL chalin03_phase1_add_index(
+    'expenses',
+    'idx_expense_void_approval',
+    'INDEX `idx_expense_void_approval` (`void_approved_by`, `void_approved_at`)'
+);
+
 INSERT INTO schema_migrations (migration_name, description)
 SELECT
     '20260725_phase1_financial_control_hardening',
-    'Adds immutable expense void/reversal evidence so financial rows are preserved rather than physically deleted.'
+    'Adds immutable expense void evidence and independent approver evidence so financial rows are preserved rather than physically deleted.'
 WHERE @phase1_financial_already_applied = 0;
 
 DROP PROCEDURE IF EXISTS chalin03_phase1_add_index;
