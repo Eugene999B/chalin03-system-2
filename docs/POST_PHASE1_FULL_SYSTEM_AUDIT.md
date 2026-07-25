@@ -16,17 +16,17 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 | Area | Weight | Evidence status | Score | Findings |
 |---|---:|---|---:|---|
-| Production safety, migrations and disaster recovery | 15 | In review | — | M-002 open |
+| Production safety, migrations and disaster recovery | 15 | In review | — | M-002 resolved |
 | Authentication, sessions and shared security | 12 | In review | — | H-002 resolved |
 | Permissions, category and location isolation | 12 | In review | — | H-002 resolved |
 | Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
 | Spare Parts correctness | 10 | In review | — | M-001 resolved |
 | Mining correctness | 10 | In review | — | H-002 access revocation verified |
 | Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved |
+| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved |
 | Mobile, usability and accessibility | 4 | In review | — | — |
 | Testing, deployment and documentation | 4 | In review | — | — |
-| **Total** | **100** | **In review** | **—** | Three resolved; one open |
+| **Total** | **100** | **In review** | **—** | Four findings resolved; full audit continues |
 
 ## Findings
 
@@ -63,12 +63,12 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 ### M-002 — Legacy request-time schema probes remain in audit routes
 
 - **Severity:** Medium
-- **Affected area:** Production runtime safety; audit sign-off route readiness helpers
-- **Evidence:** The route still contains request-time `CREATE TABLE IF NOT EXISTS`, column and index readiness logic. The production database guard suppresses idempotent create-table probes and blocks actual runtime schema mutation.
-- **Business risk:** Unnecessary request-time schema work, confusing readiness failures when an approved migration is incomplete, and ongoing dependence on compatibility behaviour.
-- **Correction:** Replace request-time mutation helpers with read-only readiness checks after the immutable-evidence corrections are verified.
-- **Regression evidence:** Production-mode DDL guard contract and disposable migrated-database route acceptance required.
-- **Status:** Open; next corrective item.
+- **Affected area:** Production runtime safety; Audit Sign-Off and re-approval schema readiness
+- **Evidence:** The route previously contained request-time `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` and index-creation logic. The clean schema also lacked seven evidence columns used by the Audit Sign-Off interface.
+- **Business risk:** Production requests depended on compatibility suppression of runtime DDL and could fail when the approved schema was incomplete.
+- **Correction:** Request-time mutation helpers were replaced with cached, read-only `information_schema` readiness checks that fail closed with `AUDIT_SCHEMA_NOT_READY`. The clean schema now contains the seven extended evidence columns. Additive migration `20260725_post_phase1_audit_signoff_readiness.sql` and its read-only verifier were added.
+- **Regression evidence:** `auditSchemaReadiness.test.js`; all 397 backend tests passed; the migration applied successfully twice to a disposable legacy MySQL 8.4 schema; the verifier returned zero missing columns and zero missing indexes; production-mode readiness executed 12 read-only queries and zero runtime DDL statements. Artifact digest: `sha256:258f7014e16e34ac264573ea483592c3b7feec5ce5596de2bc645a9d5281be7e`.
+- **Status:** Resolved in product commit `4dc7f03887cdcb44f9ec656cdd7dcbbf58672425`; permanent current-head gates pending.
 
 ## Required evidence checklist
 
