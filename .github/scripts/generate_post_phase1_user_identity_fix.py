@@ -303,12 +303,6 @@ module.exports = router;'''
         "User status and deletion route block",
     )
 
-    frontend_source = replace_exact(
-        frontend_source,
-        'const [deletingUserId, setDeletingUserId] = useState("");',
-        'const [offboardingUserId, setOffboardingUserId] = useState("");',
-        "Offboarding state",
-    )
     frontend_source = replace_pattern(
     frontend_source,
     re.compile(
