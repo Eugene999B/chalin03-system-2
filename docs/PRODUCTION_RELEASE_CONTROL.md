@@ -4,80 +4,100 @@
 
 Production must not deploy merely because a feature pull request is merged into `main`.
 
-The repository now uses these branch responsibilities:
+Branch responsibilities:
 
-- `agent/*`: isolated implementation branches.
-- `main`: reviewed, integrated and release-candidate code.
-- `production`: the only branch approved to trigger the live Railway and Cloudflare production deployments.
+- `agent/*`: isolated implementation or documentation branches;
+- `main`: reviewed, integrated release-candidate code;
+- `production`: the only branch approved to trigger live Railway and Cloudflare production deployments.
 
-The `production` branch was created from the current `main` baseline before Phase 0 changes. Do not copy Phase 0 into it until the complete Phase 0 gate and recovery drill pass.
+Railway and Cloudflare must watch **only `production`**.
 
-## Required external configuration
+## Normal release process
 
-Repository code cannot change the branch watched by an existing Railway or Cloudflare service. An authorised project administrator must complete both dashboard changes before claiming that merge and deployment are separated.
+1. Start from current `main` and create an isolated `agent/*` branch.
+2. Implement the smallest controlled change.
+3. Update focused tests and documentation.
+4. Open a pull request into `main`.
+5. Pass backend syntax/tests, frontend tests/lint/build, migration safety when applicable, dependency audit, repository and full-history secret checks, and CodeQL.
+6. Complete required desktop/mobile and role/workspace checks.
+7. Merge into `main`; this creates a release candidate only.
+8. Confirm neither Railway nor Cloudflare deployed from `main`.
+9. Open a separate `main → production` pull request.
+10. Re-run the applicable production-origin and security gates.
+11. Confirm a current signed backup and a known rollback target.
+12. Apply approved production migrations through the controlled method before the new backend starts.
+13. Merge the promotion PR.
+14. Observe Railway and Cloudflare deployments.
+15. Verify `/api/health`, authentication, security headers and affected business journeys.
+16. Record the released commit, migration evidence and recovery point.
 
-### Railway backend
+## Controlled Railway production migrations
 
-1. Open the Chalin 03 Railway project.
-2. Select the backend service.
-3. Open **Settings**.
-4. Under the GitHub service source or deployment trigger, change the connected branch from `main` to `production`.
-5. Prefer disabling automatic deployments until the first controlled release is completed.
-6. Save the service settings.
-7. Confirm the Root Directory and start command still point to the backend application.
+For the 25 July 2026 release, Railway used:
 
-Railway deploys pushes to the connected GitHub branch. Changing the trigger branch is therefore mandatory; adding a GitHub branch alone is not sufficient.
+```text
+npm run migrate:production
+```
 
-### Cloudflare Pages frontend
+as the backend service **Pre-deploy Command**.
 
-1. Open **Workers & Pages** and select the Chalin 03 Pages project.
-2. Open **Settings** > **Builds & deployments**.
-3. Open the production branch controls.
-4. Change the production branch from `main` to `production`.
-5. Disable automatic production deployments until the first controlled release is approved, or keep it enabled only after the release process below has been verified.
-6. Set preview deployments according to policy; feature branches may use preview URLs but must not become the production deployment.
-7. Save the settings.
+Canonical implementation: `backend/scripts/runProductionMigrations.js`.
 
-## Phase 0 recovery drill
+The runner is deliberately fail-closed. It requires:
 
-Complete this drill before Phase 0 is approved for merge:
+```text
+NODE_ENV=production
+CHALIN03_PRODUCTION_MIGRATIONS_ENABLED=true
+CHALIN03_SIGNED_BACKUP_CONFIRMED=true
+CHALIN03_MIGRATION_RELEASE=20260725_PHASE1_POST_PHASE1
+```
 
-1. Create a fresh signed full-system backup using the Phase 0 backup format.
-2. Record the backup identifier, manifest version, creation time and source migration state.
-3. Create a disposable recovery database that cannot reach production traffic.
-4. Restore the signed backup into that isolated database.
-5. Confirm the restore rejects a deliberately altered backup and a backup with an omitted durable table.
-6. Compare the manifest table inventory, schema fingerprints and restored row counts.
-7. Verify representative records for users, permissions, branches, products, sales, debts, purchases, expenses, mining, equipment hire, documents and audit history.
-8. Confirm all sessions, recovery OTPs and temporary protected-action credentials that existed before restore are invalid.
-9. Record the drill result and destroy or securely retain the isolated recovery database according to policy.
-10. Do not run the restore against the live production database during this rehearsal.
+It connects using the existing Railway DB/MYSQL variables, optionally checks `CHALIN03_EXPECTED_DATABASE`, acquires a MySQL advisory lock, applies only the approved plan, runs read-only verifiers and exits non-zero on any failure. Railway must not start the new backend when the Pre-deploy Command fails.
 
-## Release process
+### Post-release cleanup
 
-1. Build a change on an `agent/*` branch.
-2. Open a draft pull request into `main`.
-3. Pass backend syntax, migration safety, backend tests, frontend tests, lint, build, dependency audit, repository secret checks and CodeQL.
-4. Complete the required desktop, mobile and role/workspace checks.
-5. Merge into `main`. This creates a release candidate only.
-6. Verify that neither Railway nor Cloudflare deployed from the `main` merge.
-7. Open a separate pull request from `main` into `production`.
-8. Re-run the complete required checks and attach the production release checklist.
-9. Approve and merge the release pull request.
-10. Observe Railway and Cloudflare deployments.
-11. Run the post-deployment production-smoke workflow.
-12. Confirm health, readiness, authentication gates, security headers, service worker, manifest and key business journeys.
-13. Record the released commit and recovery point.
+The confirmation values and migration plan are specific to the 25 July 2026 release. After retaining the successful logs:
+
+1. remove the release-specific Pre-deploy Command, or set `CHALIN03_PRODUCTION_MIGRATIONS_ENABLED=false` before an unrelated deployment;
+2. remove or retire `CHALIN03_SIGNED_BACKUP_CONFIRMED` and `CHALIN03_MIGRATION_RELEASE` when they no longer describe a current release gate;
+3. add a new reviewed migration plan and new exact confirmation value for future schema work;
+4. never broaden the existing runner silently to execute unreviewed SQL.
+
+## Backup and recovery gate
+
+Before any production migration:
+
+1. download a fresh signed `chalin03-full-system-v2` backup;
+2. retain it privately and unchanged;
+3. verify its signature/manifest through the supported application controls;
+4. record the current production commit and deployment rollback target;
+5. never run `database/schema.sql` against production.
+
+Production browser restore remains disabled. Database recovery must use a verified signed backup through an isolated, approved recovery procedure.
+
+## Completed 25 July 2026 release
+
+- Audit/corrective PR: #75 → `main`
+- Migration-runner PR: #77 → `main`
+- Production-promotion PR: #76 → `production`
+- Release candidate: `d71c3f1245d53fc6c636dbb6ef52ee3eaca69d2a`
+- Production merge: `84c554e157c9439de12b12a65438ea440c79acc0`
+- Fresh signed backup: confirmed before migration
+- Financial-control migration: applied and verified
+- Audit Sign-Off readiness migration: applied and verified
+- Railway deployment: successful
+- Live owner acceptance: successful
 
 ## Emergency stop
 
-If merging to `main` still triggers either live platform:
+When a migration, build, health check or deployment fails:
 
-1. Disable automatic deployments in that platform immediately.
-2. Do not merge another feature pull request.
-3. Record the unexpected deployment and exact commit.
-4. Verify the live API and frontend before resuming work.
-5. Correct the watched branch to `production`.
+1. do not force the failed release live;
+2. keep the last successful production deployment serving traffic;
+3. preserve the signed backup and failure logs;
+4. identify whether the failure is application, configuration or schema-related;
+5. correct the issue on an isolated branch and repeat the normal release path;
+6. never repair a normal release failure by dropping, truncating or rewriting production records.
 
 ## Rollback rule
 
