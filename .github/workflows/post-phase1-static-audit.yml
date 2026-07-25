@@ -1,0 +1,178 @@
+name: Post-Phase-1 Static Route Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/server.js"
+      - "backend/routes/**"
+      - ".github/workflows/post-phase1-static-audit.yml"
+  push:
+    branches:
+      - agent/post-phase1-full-system-audit
+    paths:
+      - "backend/server.js"
+      - "backend/routes/**"
+      - ".github/workflows/post-phase1-static-audit.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-phase1-static-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  route-audit:
+    name: Authentication and destructive-operation inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build route and SQL mutation inventory
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          root = pathlib.Path('.')
+          routes_dir = root / 'backend' / 'routes'
+          server_path = root / 'backend' / 'server.js'
+          high_risk_tables = {
+              'expenses', 'sales', 'sale_items', 'debts', 'debt_payments',
+              'returns', 'purchases', 'purchase_items', 'purchase_payments',
+              'hire_invoices', 'hire_invoice_lines', 'hire_payments',
+              'hire_contracts', 'mining_expenses', 'mining_fuel_logs',
+              'mining_production_records', 'mining_equipment_logs',
+              'daily_closings', 'stock_adjustments', 'products'
+          }
+
+          def line_number(text, offset):
+              return text.count('\n', 0, offset) + 1
+
+          def nearest_route(lines, line_no):
+              for index in range(line_no - 1, max(-1, line_no - 80), -1):
+                  line = lines[index].strip()
+                  if line.startswith('// ') and '/api/' in line:
+                      return line.removeprefix('// ').strip()
+                  if re.search(r'router\.(?:get|post|put|patch|delete)\s*\(', line):
+                      return line[:240]
+              return None
+
+          route_files = []
+          physical_deletes = []
+          for path in sorted(routes_dir.glob('*.js')):
+              text = path.read_text(encoding='utf-8')
+              lines = text.splitlines()
+              methods = []
+              for match in re.finditer(r'router\.(get|post|put|patch|delete)\s*\(', text):
+                  methods.append({
+                      'method': match.group(1).upper(),
+                      'line': line_number(text, match.start()),
+                  })
+
+              delete_rows = []
+              for match in re.finditer(r'\bDELETE\s+FROM\s+`?([A-Za-z0-9_]+)`?', text, re.I):
+                  table = match.group(1)
+                  line = line_number(text, match.start())
+                  row = {
+                      'file': str(path),
+                      'line': line,
+                      'table': table,
+                      'high_risk': table.lower() in high_risk_tables,
+                      'nearest_route': nearest_route(lines, line),
+                  }
+                  delete_rows.append(row)
+                  physical_deletes.append(row)
+
+              route_files.append({
+                  'file': str(path),
+                  'imports_require_auth': bool(re.search(r'require\(["\']\.\./middleware/authMiddleware["\']\)', text)),
+                  'router_use_require_auth': bool(re.search(r'router\.use\(\s*requireAuth\s*\)', text)),
+                  'route_method_count': len(methods),
+                  'delete_route_count': sum(1 for method in methods if method['method'] == 'DELETE'),
+                  'physical_delete_count': len(delete_rows),
+                  'methods': methods,
+              })
+
+          server_text = server_path.read_text(encoding='utf-8')
+          server_lines = server_text.splitlines()
+          mounts = []
+          for index, line in enumerate(server_lines, start=1):
+              if 'app.use(' not in line:
+                  continue
+              block = line
+              cursor = index
+              while cursor < len(server_lines) and ');' not in block and len(block) < 2500:
+                  block += '\n' + server_lines[cursor]
+                  cursor += 1
+              path_match = re.search(r'app\.use\(\s*["\']([^"\']+)["\']', block)
+              if not path_match:
+                  continue
+              mounts.append({
+                  'line': index,
+                  'path': path_match.group(1),
+                  'has_require_auth_in_mount': 'requireAuth' in block,
+                  'block': block[:1000],
+              })
+
+          report = {
+              'head_sha': '${{ github.sha }}',
+              'route_file_count': len(route_files),
+              'route_method_count': sum(item['route_method_count'] for item in route_files),
+              'router_delete_method_count': sum(item['delete_route_count'] for item in route_files),
+              'physical_delete_count': len(physical_deletes),
+              'high_risk_physical_delete_count': sum(1 for item in physical_deletes if item['high_risk']),
+              'server_mounts': mounts,
+              'route_files': route_files,
+              'physical_deletes': physical_deletes,
+          }
+
+          pathlib.Path('post-phase1-static-route-audit.json').write_text(
+              json.dumps(report, indent=2) + '\n', encoding='utf-8'
+          )
+
+          with pathlib.Path('post-phase1-static-route-audit.md').open('w', encoding='utf-8') as output:
+              output.write('# Post-Phase-1 Static Route Audit\n\n')
+              output.write(f"- Route files: {report['route_file_count']}\n")
+              output.write(f"- Route methods: {report['route_method_count']}\n")
+              output.write(f"- Router DELETE methods: {report['router_delete_method_count']}\n")
+              output.write(f"- SQL physical DELETE statements: {report['physical_delete_count']}\n")
+              output.write(f"- High-risk table DELETE statements: {report['high_risk_physical_delete_count']}\n\n")
+              output.write('## Physical SQL deletions\n\n')
+              if not physical_deletes:
+                  output.write('None detected.\n')
+              else:
+                  for item in physical_deletes:
+                      risk = 'HIGH-RISK REVIEW' if item['high_risk'] else 'review'
+                      output.write(
+                          f"- `{item['file']}:{item['line']}` — `{item['table']}` — {risk}"
+                          f" — {item['nearest_route'] or 'route not resolved'}\n"
+                      )
+
+          print(json.dumps({
+              'route_file_count': report['route_file_count'],
+              'route_method_count': report['route_method_count'],
+              'router_delete_method_count': report['router_delete_method_count'],
+              'physical_delete_count': report['physical_delete_count'],
+              'high_risk_physical_delete_count': report['high_risk_physical_delete_count'],
+          }, indent=2))
+          PY
+
+      - name: Show audit summary
+        run: cat post-phase1-static-route-audit.md
+
+      - name: Preserve audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-phase1-static-route-audit
+          path: |
+            post-phase1-static-route-audit.json
+            post-phase1-static-route-audit.md
+          retention-days: 14
