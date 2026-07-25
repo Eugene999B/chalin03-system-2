@@ -80,6 +80,16 @@ test("Spare Parts store context fails closed without a selected store", () => {
   assert.match(categoryBoundary, /SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS/);
 });
 
+test("exports use the trusted matched route for store-context enforcement", () => {
+  const authMiddleware = readBackend("middleware/authMiddleware.js");
+
+  assert.match(authMiddleware, /req\.baseUrl/);
+  assert.match(authMiddleware, /\/api\/exports/);
+  assert.doesNotMatch(authMiddleware, /req\.originalUrl/);
+  assert.doesNotMatch(authMiddleware, /req\.url/);
+  assert.match(authMiddleware, /requireSparePartsBranchContext/);
+});
+
 test("Daily Closing labels voided originals and linked reversals clearly", () => {
   const source = readBackend("middleware/sparePartsBranchContextMiddleware.js");
 
