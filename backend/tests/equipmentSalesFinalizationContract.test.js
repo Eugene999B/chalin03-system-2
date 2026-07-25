@@ -59,24 +59,20 @@ test("Spare Parts installment retirement is additive and preserves recovery", ()
   assert.match(resetScript, /SET FOREIGN_KEY_CHECKS = 0/);
 });
 
-test("catalogue foundation is required while optional legacy retirement cannot cause 503", () => {
+test("catalogue and commercial foundations are verified read-only", () => {
   assert.match(schemaService, /FOUNDATION_MIGRATION/);
   assert.match(schemaService, /RETIREMENT_MIGRATION/);
   assert.match(schemaService, /required: true/);
   assert.match(schemaService, /required: false/);
-  assert.match(schemaService, /chalin03_equipment_sales_finalization_v3/);
-  assert.match(schemaService, /GET_LOCK\(\?, 60\)/);
-  assert.match(schemaService, /ensureMigrationRegistryShape/);
-  assert.match(schemaService, /normalizeFoundationSqlForProduction/);
-  assert.match(schemaService, /Removing AFTER clauses/);
-  assert.match(schemaService, /fk_equipment_legacy_migration_legacy/);
-  assert.match(schemaService, /ensureOptionalMigration/);
-  assert.match(schemaService, /will not block Equipment Catalogue/);
-  assert.match(schemaService, /verifyFoundationCore/);
+  assert.match(schemaService, /information_schema\.TABLES/);
+  assert.match(schemaService, /information_schema\.COLUMNS/);
+  assert.match(schemaService, /information_schema\.TRIGGERS/);
+  assert.match(schemaService, /verifyCatalogueCore/);
+  assert.match(schemaService, /verifyFullFoundation/);
   assert.match(schemaService, /verifyFoundationSafety/);
-  assert.match(schemaService, /database trigger reinforcement remains pending/);
-  assert.match(schemaService, /marked applied but verification failed/);
-  assert.match(schemaService, /executeMigration/);
+  assert.match(schemaService, /verifyRetirement/);
+  assert.match(schemaService, /assertEquipmentSalesSchemaReady/);
+  assert.match(schemaService, /runtime_mutation_disabled/);
   assert.match(schemaService, /startEquipmentSalesReminderScheduler/);
   assert.match(
     schemaService,
@@ -90,8 +86,10 @@ test("catalogue foundation is required while optional legacy retirement cannot c
     schemaService,
     /trg_spare_parts_installment_retired_sales_insert/
   );
-  assert.match(schemaService, /EQUIPMENT_SALES_MIGRATION_LOCK_TIMEOUT/);
-  assert.match(schemaService, /statementIndex/);
+  assert.doesNotMatch(schemaService, /GET_LOCK|RELEASE_LOCK/);
+  assert.doesNotMatch(schemaService, /executeMigration|splitSqlStatements/);
+  assert.doesNotMatch(schemaService, /\bCREATE\s+(?:TABLE|TRIGGER|INDEX)\b/i);
+  assert.doesNotMatch(schemaService, /\bALTER\s+TABLE\b/i);
 });
 
 test("Cloudflare Insights is explicitly permitted without widening the whole CSP", () => {
