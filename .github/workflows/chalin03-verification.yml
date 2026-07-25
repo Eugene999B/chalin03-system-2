@@ -102,3 +102,71 @@ jobs:
             frontend/frontend-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  post-phase1-immutability-artifact:
+    name: Generate and verify audit/expense immutability fix
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Generate exact source changes in runner only
+        run: python3 .github/scripts/generate_post_phase1_immutability_fix.py
+
+      - name: Verify focused contracts and syntax
+        run: |
+          node --check backend/routes/auditSignoffRoutes.js
+          node --check backend/routes/expenseRoutes.js
+          node --test backend/tests/auditSignoffExpenseImmutability.test.js
+
+      - name: Run complete backend suite against generated fix
+        working-directory: backend
+        run: |
+          npm ci
+          npm test
+
+      - name: Test, lint and build frontend against generated fix
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npx eslint src/pages/AuditSignoffHistoryPage.jsx
+          npm run build
+
+      - name: Package exact verified source files
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --binary -- \
+            backend/routes/auditSignoffRoutes.js \
+            backend/routes/expenseRoutes.js \
+            backend/tests/auditSignoffExpenseImmutability.test.js \
+            frontend/src/pages/AuditSignoffHistoryPage.jsx \
+            > post-phase1-immutability-fix.patch
+          sha256sum \
+            backend/routes/auditSignoffRoutes.js \
+            backend/routes/expenseRoutes.js \
+            backend/tests/auditSignoffExpenseImmutability.test.js \
+            frontend/src/pages/AuditSignoffHistoryPage.jsx \
+            post-phase1-immutability-fix.patch \
+            > post-phase1-immutability-fix.sha256
+
+      - name: Upload reviewed fix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-phase1-immutability-fix-files
+          path: |
+            backend/routes/auditSignoffRoutes.js
+            backend/routes/expenseRoutes.js
+            backend/tests/auditSignoffExpenseImmutability.test.js
+            frontend/src/pages/AuditSignoffHistoryPage.jsx
+            post-phase1-immutability-fix.patch
+            post-phase1-immutability-fix.sha256
+          if-no-files-found: error
+          retention-days: 14
