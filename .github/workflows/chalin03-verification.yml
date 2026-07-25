@@ -117,29 +117,40 @@ jobs:
           node-version: 24
 
       - name: Generate exact source changes in runner only
+        id: generate
         run: python3 .github/scripts/generate_post_phase1_immutability_fix.py
 
       - name: Verify focused contracts and syntax
+        id: focused
+        continue-on-error: true
         run: |
           node --check backend/routes/auditSignoffRoutes.js
           node --check backend/routes/expenseRoutes.js
           node --test backend/tests/auditSignoffExpenseImmutability.test.js
 
       - name: Run complete backend suite against generated fix
+        id: generated_backend
+        continue-on-error: true
         working-directory: backend
         run: |
+          set -o pipefail
           npm ci
-          npm test
+          npm test 2>&1 | tee ../post-phase1-generated-backend-tests.log
 
       - name: Test, lint and build frontend against generated fix
+        id: generated_frontend
+        if: always() && steps.generate.outcome == 'success'
+        continue-on-error: true
         working-directory: frontend
         run: |
+          set -o pipefail
           npm ci
-          npm test
-          npx eslint src/pages/AuditSignoffHistoryPage.jsx
-          npm run build
+          npm test 2>&1 | tee ../post-phase1-generated-frontend-tests.log
+          npx eslint src/pages/AuditSignoffHistoryPage.jsx 2>&1 | tee ../post-phase1-generated-frontend-lint.log
+          npm run build 2>&1 | tee ../post-phase1-generated-frontend-build.log
 
-      - name: Package exact verified source files
+      - name: Package exact generated source files
+        if: always() && steps.generate.outcome == 'success'
         run: |
           set -euo pipefail
           git diff --check
@@ -157,7 +168,8 @@ jobs:
             post-phase1-immutability-fix.patch \
             > post-phase1-immutability-fix.sha256
 
-      - name: Upload reviewed fix artifact
+      - name: Upload generated fix and diagnostics
+        if: always() && steps.generate.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: post-phase1-immutability-fix-files
@@ -168,5 +180,22 @@ jobs:
             frontend/src/pages/AuditSignoffHistoryPage.jsx
             post-phase1-immutability-fix.patch
             post-phase1-immutability-fix.sha256
-          if-no-files-found: error
+            post-phase1-generated-backend-tests.log
+            post-phase1-generated-frontend-tests.log
+            post-phase1-generated-frontend-lint.log
+            post-phase1-generated-frontend-build.log
+          if-no-files-found: warn
           retention-days: 14
+
+      - name: Enforce generated-fix verification outcomes
+        if: always()
+        env:
+          GENERATE_OUTCOME: ${{ steps.generate.outcome }}
+          FOCUSED_OUTCOME: ${{ steps.focused.outcome }}
+          BACKEND_OUTCOME: ${{ steps.generated_backend.outcome }}
+          FRONTEND_OUTCOME: ${{ steps.generated_frontend.outcome }}
+        run: |
+          test "$GENERATE_OUTCOME" = "success"
+          test "$FOCUSED_OUTCOME" = "success"
+          test "$BACKEND_OUTCOME" = "success"
+          test "$FRONTEND_OUTCOME" = "success"
