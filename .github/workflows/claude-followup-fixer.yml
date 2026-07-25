@@ -1,0 +1,39 @@
+name: Claude Follow-Up Hardening Fixer
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fixes:
+    if: github.head_ref == 'agent/claude-followup-hardening'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out hardening branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/claude-followup-hardening
+          fetch-depth: 0
+
+      - name: Apply exact reviewed hardening changes
+        run: |
+          python3 .github/scripts/apply_claude_followup_hardening.py
+          node --check backend/routes/release2FinalRoutes.js
+          node --check backend/routes/dailyClosingRoutes.js
+          node --check backend/tests/claudeFollowupHardening.test.js
+          git diff --check
+
+      - name: Commit fixes and remove one-time helper files
+        run: |
+          git config user.name "chalin03-hardening-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/claude-followup-fixer.yml
+          git rm .github/scripts/apply_claude_followup_hardening.py
+          git add backend/routes/release2FinalRoutes.js backend/routes/dailyClosingRoutes.js backend/tests/claudeFollowupHardening.test.js docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md
+          git commit -m "Harden Owner login and Daily Closing correction evidence"
+          git push origin HEAD:agent/claude-followup-hardening
