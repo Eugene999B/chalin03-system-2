@@ -14,6 +14,9 @@ function readProject(path) {
   return readFileSync(join(projectRoot, path), "utf8");
 }
 
+const DDL_PATTERN =
+  /\b(?:CREATE\s+(?:TABLE|TRIGGER|PROCEDURE)|ALTER\s+TABLE|DROP\s+(?:TABLE|TRIGGER|PROCEDURE)|TRUNCATE)\b/i;
+
 test("worker HR letter migration is additive and linked to worker profiles", () => {
   const migration = readProject(
     "database/migrations/20260719_worker_hr_letters.sql"
@@ -58,7 +61,7 @@ test("worker HR letter API supports drafts, issue, acknowledgement, cancellation
   assert.doesNotMatch(source, /UPDATE worker_profiles\s+SET\s+employment_status/i);
 });
 
-test("worker HR letters are registered, dynamically backed up and visible", () => {
+test("worker HR letters are registered, backed up and verified read-only", () => {
   const server = readBackend("server.js");
   const schemaService = readBackend("services/workerHrLetterSchemaService.js");
   const systemRoutes = readBackend("routes/systemRoutes.js");
@@ -70,10 +73,12 @@ test("worker HR letters are registered, dynamically backed up and visible", () =
   const css = readProject("frontend/src/styles/workerHrLetters.css");
 
   assert.match(server, /workerHrLetterRoutes/);
-  assert.match(server, /await ensureWorkerHrLetterSchema\(\)/);
-  assert.match(schemaService, /CREATE TABLE IF NOT EXISTS worker_hr_letters/);
-  assert.match(schemaService, /worker_id BIGINT NOT NULL/);
-  assert.match(schemaService, /Worker HR schema verification failed/);
+  assert.match(server, /validateProductionSchemaReadiness/);
+  assert.doesNotMatch(server, /await ensureWorkerHrLetterSchema\(\)/);
+  assert.match(schemaService, /verifyWorkerHrLetterSchema/);
+  assert.match(schemaService, /information_schema\.COLUMNS/);
+  assert.match(schemaService, /WORKER_HR_SCHEMA_NOT_READY/);
+  assert.doesNotMatch(schemaService, DDL_PATTERN);
   assert.match(systemRoutes, /"worker_hr_letters"/);
   assert.match(releaseBackup, /worker_hr_letters/);
   assert.match(backup, /getAllBaseTables/);

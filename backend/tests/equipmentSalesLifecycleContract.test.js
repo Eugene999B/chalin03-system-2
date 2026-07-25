@@ -32,18 +32,21 @@ const lifecycleTables = [
   "equipment_sales_reminder_log",
 ];
 
-test("startup migration is locked, idempotent and verified", () => {
-  assert.match(schemaService, /GET_LOCK\(\?, 60\)/);
-  assert.match(schemaService, /RELEASE_LOCK\(\?\)/);
-  assert.match(schemaService, /migrationApplied/);
-  assert.match(schemaService, /schema_migrations/);
-  assert.match(schemaService, /removeAnsiQuotesForMigration/);
-  assert.match(schemaService, /mode\.toUpperCase\(\) !== "ANSI_QUOTES"/);
-  assert.match(schemaService, /splitSqlStatements/);
+test("Equipment Sales migration is controlled while runtime readiness is read-only", () => {
+  assert.match(migration, /INSERT INTO schema_migrations/i);
+  assert.match(schemaService, /information_schema\.TABLES/);
+  assert.match(schemaService, /information_schema\.COLUMNS/);
+  assert.match(schemaService, /information_schema\.TRIGGERS/);
   assert.match(schemaService, /verifyFoundation/);
+  assert.match(schemaService, /assertEquipmentSalesSchemaReady/);
+  assert.match(schemaService, /runtime_mutation_disabled/);
+  assert.doesNotMatch(schemaService, /GET_LOCK|RELEASE_LOCK/);
+  assert.doesNotMatch(schemaService, /executeMigration|splitSqlStatements/);
+  assert.doesNotMatch(schemaService, /\bCREATE\s+(?:TABLE|TRIGGER|INDEX)\b/i);
+  assert.doesNotMatch(schemaService, /\bALTER\s+TABLE\b/i);
 
   for (const tableName of lifecycleTables) {
-    assert.match(schemaService, new RegExp(`"${tableName}"`));
+    assert.match(schemaService, new RegExp(`\\b${tableName}\\b`));
     assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${tableName}\\b`));
   }
 });

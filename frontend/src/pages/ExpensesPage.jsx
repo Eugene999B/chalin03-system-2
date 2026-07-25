@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
-import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import ExpenseVoidApprovalPanel from "../components/ExpenseVoidApprovalPanel";
+import { useAuth } from "../context/AuthContext";
 import "../styles/expensesFunding.css";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -48,12 +49,14 @@ export default function ExpensesPage() {
     expense_count: 0,
     closing_expenses: 0,
     externally_funded_expenses: 0,
+    voided_expense_count: 0,
   });
 
   const [form, setForm] = useState(emptyExpenseForm);
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [voidTarget, setVoidTarget] = useState(null);
 
   const [lockedPeriod, setLockedPeriod] = useState(null);
   const [unlockRequestAction, setUnlockRequestAction] = useState(
@@ -67,8 +70,8 @@ export default function ExpensesPage() {
     return `GHS ${Number(value || 0).toFixed(2)}`;
   }
 
-  function getLockedPeriodFromError(error) {
-    const responseData = error?.response?.data;
+  function getLockedPeriodFromError(apiError) {
+    const responseData = apiError?.response?.data;
 
     if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
       return responseData.locked_period || null;
@@ -77,8 +80,8 @@ export default function ExpensesPage() {
     return null;
   }
 
-  function getFriendlyApiError(error, fallbackMessage) {
-    const responseData = error?.response?.data;
+  function getFriendlyApiError(apiError, fallbackMessage) {
+    const responseData = apiError?.response?.data;
 
     if (responseData?.code === "AUDIT_PERIOD_LOCKED") {
       const lockedPeriodData = responseData.locked_period || {};
@@ -116,10 +119,10 @@ export default function ExpensesPage() {
 
       setExpenses(response.data.expenses || []);
       setSummary(response.data.summary || {});
-    } catch (error) {
+    } catch (apiError) {
       setError(
         getFriendlyApiError(
-          error,
+          apiError,
           "Failed to load expenses. Make sure you are admin or manager."
         )
       );
@@ -171,44 +174,36 @@ export default function ExpensesPage() {
       setMessage(response.data.message || "Expense recorded successfully.");
       setForm(emptyExpenseForm);
       loadExpenses();
-    } catch (error) {
-      const period = getLockedPeriodFromError(error);
+    } catch (apiError) {
+      const period = getLockedPeriodFromError(apiError);
 
       if (period) {
         setLockedPeriod(period);
         setUnlockRequestAction("Record expense inside locked period");
       }
 
-      setError(getFriendlyApiError(error, "Failed to record expense."));
+      setError(getFriendlyApiError(apiError, "Failed to record expense."));
     }
   }
 
-  async function deleteExpense(expenseId) {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this expense?"
-    );
-
-    if (!confirmDelete) return;
-
+  function openVoidExpense(expense) {
     setMessage("");
     setError("");
     setLockedPeriod(null);
-    setUnlockRequestAction("Delete expense inside locked period");
+    setUnlockRequestAction("Void expense inside locked period");
+    setVoidTarget(expense);
+  }
 
-    try {
-      const response = await axiosClient.delete(`/expenses/${expenseId}`);
-      setMessage(response.data.message || "Expense deleted successfully.");
-      loadExpenses();
-    } catch (error) {
-      const period = getLockedPeriodFromError(error);
+  function handleVoidError(apiError) {
+    const period = getLockedPeriodFromError(apiError);
 
-      if (period) {
-        setLockedPeriod(period);
-        setUnlockRequestAction("Delete expense inside locked period");
-      }
-
-      setError(getFriendlyApiError(error, "Failed to delete expense."));
+    if (period) {
+      setLockedPeriod(period);
+      setUnlockRequestAction("Void expense inside locked period");
+      setVoidTarget(null);
     }
+
+    setError(getFriendlyApiError(apiError, "Failed to void expense."));
   }
 
   if (role !== "admin" && role !== "manager") {
@@ -263,8 +258,9 @@ export default function ExpensesPage() {
         {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}
         <br />
         <small>
-          Expenses, expense summary, filters and delete actions are filtered to
-          this selected store only.
+          Expenses, summaries, filters and void actions are restricted to this
+          selected store. Voiding preserves the original row and requires a
+          different authorised approver.
         </small>
       </div>
 
@@ -280,6 +276,19 @@ export default function ExpensesPage() {
             "Unlock request sent successfully. Admin or manager must review it."
           );
         }}
+      />
+
+      <ExpenseVoidApprovalPanel
+        expense={voidTarget}
+        storeCode={currentStoreCode}
+        onClose={() => setVoidTarget(null)}
+        onSuccess={(successMessage) => {
+          setVoidTarget(null);
+          setMessage(successMessage);
+          setError("");
+          loadExpenses();
+        }}
+        onError={handleVoidError}
       />
 
       <div className="cards-grid expense-summary-grid expense-funding-summary">
@@ -477,11 +486,7 @@ export default function ExpensesPage() {
                 setSearch("");
                 setFrom("");
                 setTo("");
-                loadExpenses({
-                  search: "",
-                  from: "",
-                  to: "",
-                });
+                loadExpenses({ search: "", from: "", to: "" });
               }}
             >
               Clear
@@ -497,72 +502,82 @@ export default function ExpensesPage() {
           <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
           <div className="expense-table-wrap">
-          <table className="expense-funding-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Store</th>
-                <th>Category</th>
-                <th>Description</th>
-                <th>Payment</th>
-                <th>Funding Source</th>
-                <th>Daily Closing</th>
-                <th>Amount</th>
-                <th>Recorded By</th>
-                <th></th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {expenses.map((expense) => (
-                <tr key={expense.id}>
-                  <td data-label="Date">{new Date(expense.expense_date).toLocaleDateString()}</td>
-                  <td data-label="Store">{expense.branch_code || expense.store_code || currentStoreCode}</td>
-                  <td data-label="Category">
-                    <strong>{expense.category}</strong>
-                  </td>
-                  <td data-label="Description">
-                    {expense.description || "-"}
-                    {expense.closing_treatment_note ? (
-                      <small className="expense-treatment-note">
-                        {expense.closing_treatment_note}
-                      </small>
-                    ) : null}
-                  </td>
-                  <td data-label="Payment">{String(expense.payment_method || "cash").toUpperCase()}</td>
-                  <td data-label="Funding Source">
-                    {String(expense.funding_source || "other")
-                      .replaceAll("_", " ")
-                      .replace(/\b\w/g, (letter) => letter.toUpperCase())}
-                  </td>
-                  <td data-label="Daily Closing">
-                    <span
-                      className={`expense-closing-badge ${
-                        Number(expense.affects_daily_closing) === 1
-                          ? "is-deducted"
-                          : "is-accounting-only"
-                      }`}
-                    >
-                      {Number(expense.affects_daily_closing) === 1
-                        ? "Deduct"
-                        : "Accounting only"}
-                    </span>
-                  </td>
-                  <td data-label="Amount">{formatMoney(expense.amount)}</td>
-                  <td data-label="Recorded By">{expense.recorded_by_name || "-"}</td>
-                  <td data-label="Action">
-                    <button
-                      type="button"
-                      className="small-danger"
-                      onClick={() => deleteExpense(expense.id)}
-                    >
-                      Delete
-                    </button>
-                  </td>
+            <table className="expense-funding-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Store</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Payment</th>
+                  <th>Funding Source</th>
+                  <th>Daily Closing</th>
+                  <th>Amount</th>
+                  <th>Recorded By</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {expenses.map((expense) => (
+                  <tr key={expense.id}>
+                    <td data-label="Date">
+                      {new Date(expense.expense_date).toLocaleDateString()}
+                    </td>
+                    <td data-label="Store">
+                      {expense.branch_code ||
+                        expense.store_code ||
+                        currentStoreCode}
+                    </td>
+                    <td data-label="Category">
+                      <strong>{expense.category}</strong>
+                    </td>
+                    <td data-label="Description">
+                      {expense.description || "-"}
+                      {expense.closing_treatment_note ? (
+                        <small className="expense-treatment-note">
+                          {expense.closing_treatment_note}
+                        </small>
+                      ) : null}
+                    </td>
+                    <td data-label="Payment">
+                      {String(expense.payment_method || "cash").toUpperCase()}
+                    </td>
+                    <td data-label="Funding Source">
+                      {String(expense.funding_source || "other")
+                        .replaceAll("_", " ")
+                        .replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                    </td>
+                    <td data-label="Daily Closing">
+                      <span
+                        className={`expense-closing-badge ${
+                          Number(expense.affects_daily_closing) === 1
+                            ? "is-deducted"
+                            : "is-accounting-only"
+                        }`}
+                      >
+                        {Number(expense.affects_daily_closing) === 1
+                          ? "Deduct"
+                          : "Accounting only"}
+                      </span>
+                    </td>
+                    <td data-label="Amount">{formatMoney(expense.amount)}</td>
+                    <td data-label="Recorded By">
+                      {expense.recorded_by_name || "-"}
+                    </td>
+                    <td data-label="Action">
+                      <button
+                        type="button"
+                        className="small-danger"
+                        onClick={() => openVoidExpense(expense)}
+                      >
+                        Void
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

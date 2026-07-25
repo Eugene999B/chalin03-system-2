@@ -6,6 +6,9 @@ const { resolveEffectivePermissions } = require("../services/permissionOverrideS
 const {
   validateUserCategoryAccess,
 } = require("../services/categoryIsolationService");
+const {
+  requireSparePartsBranchContext,
+} = require("./sparePartsBranchContextMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 const tableColumnCache = new Map();
@@ -60,6 +63,13 @@ async function loadUserSecurityState(userId) {
   );
 
   return rows[0] || null;
+}
+
+function requiresExportStoreContext(req, user) {
+  return (
+    String(user?.workspace_code || "").trim().toLowerCase() === "spare_parts" &&
+    String(req.baseUrl || "") === "/api/exports"
+  );
 }
 
 async function requireAuth(req, res, next) {
@@ -167,7 +177,11 @@ async function requireAuth(req, res, next) {
     };
     req.user.effective_permissions = await resolveEffectivePermissions(req.user);
 
-    next();
+    if (requiresExportStoreContext(req, req.user)) {
+      return requireSparePartsBranchContext(req, res, next);
+    }
+
+    return next();
   } catch {
     return res.status(401).json({
       status: "error",
@@ -179,5 +193,7 @@ async function requireAuth(req, res, next) {
 }
 
 module.exports = {
+  loadUserSecurityState,
   requireAuth,
+  requiresExportStoreContext,
 };

@@ -42,12 +42,16 @@ test("server retains the retired route boundary while password login remains act
 });
 
 
-test("historical credential tables remain available for revocation and audit only", () => {
+test("historical credentials remain revocable without runtime schema mutation", () => {
   const schema = read("services/passkeySchemaService.js");
 
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS user_passkeys/);
-  assert.match(schema, /CREATE TABLE IF NOT EXISTS passkey_challenges/);
-  assert.match(schema, /revoked_at/);
+  assert.match(schema, /information_schema\.TABLES/);
+  assert.match(schema, /UPDATE user_passkeys[\s\S]*revoked_at/);
+  assert.match(schema, /historical_credentials_revoked/);
+  assert.match(schema, /runtime_mutation_disabled/);
+  assert.doesNotMatch(schema, /\bCREATE\s+(?:TABLE|TRIGGER|INDEX)\b/i);
+  assert.doesNotMatch(schema, /\bALTER\s+TABLE\b/i);
+  assert.doesNotMatch(schema, /\bDROP\s+(?:TABLE|TRIGGER|INDEX)\b/i);
   assert.doesNotMatch(schema, /\b(video|image|photo|audio)_/i);
 });
 

@@ -1,4 +1,7 @@
 const { pool } = require("../config/db");
+const {
+  requireSparePartsBranchContext,
+} = require("../middleware/sparePartsBranchContextMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 const CATEGORY_CODES = Object.freeze([
@@ -10,8 +13,12 @@ const CATEGORY_CODES = Object.freeze([
 const CATEGORY_LABELS = Object.freeze({
   spare_parts: "Spare Parts",
   mining: "Mining Operations",
-  equipment_hire: "Equipment Hire",
+  equipment_hire: "Equipment Sales & Hire",
 });
+
+const SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS = Object.freeze(
+  new Set(["/api/maintenance"])
+);
 
 function normalizeCategory(value) {
   const cleaned = String(value || "")
@@ -205,14 +212,26 @@ async function getBusinessUnitId(workspaceCode, connection = pool) {
   return rows[0]?.id || null;
 }
 
+function needsSparePartsStoreContext(req, allowedWorkspaceCodes) {
+  return (
+    allowedWorkspaceCodes.size === 1 &&
+    allowedWorkspaceCodes.has("spare_parts") &&
+    !SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS.has(String(req.baseUrl || ""))
+  );
+}
+
 function requireWorkspaceCategory(...allowedWorkspaceCodes) {
   const allowed = new Set(
     allowedWorkspaceCodes.map(normalizeCategory).filter(Boolean)
   );
 
-  return function categoryBoundary(req, res, next) {
+  return async function categoryBoundary(req, res, next) {
+    const requiresStoreContext = needsSparePartsStoreContext(req, allowed);
+
     if (isOriginalSystemAdministrator(req.user)) {
-      return next();
+      return requiresStoreContext
+        ? requireSparePartsBranchContext(req, res, next)
+        : next();
     }
 
     const activeWorkspace = normalizeCategory(req.user?.workspace_code);
@@ -226,7 +245,9 @@ function requireWorkspaceCategory(...allowedWorkspaceCodes) {
       });
     }
 
-    return next();
+    return requiresStoreContext
+      ? requireSparePartsBranchContext(req, res, next)
+      : next();
   };
 }
 
@@ -253,9 +274,11 @@ async function revokeUserSessions(connection, userId, reason) {
 module.exports = {
   CATEGORY_CODES,
   CATEGORY_LABELS,
+  SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS,
   categoryLabel,
   getBusinessUnitId,
   loadUserCategoryState,
+  needsSparePartsStoreContext,
   normalizeCategory,
   requireWorkspaceCategory,
   revokeUserSessions,
