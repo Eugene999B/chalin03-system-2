@@ -20,7 +20,9 @@ WHERE TABLE_SCHEMA = DATABASE()
       'void_reason',
       'void_reference',
       'voided_by',
-      'voided_at'
+      'voided_at',
+      'void_approved_by',
+      'void_approved_at'
   )
 ORDER BY ORDINAL_POSITION;
 
@@ -33,7 +35,8 @@ WHERE TABLE_SCHEMA = DATABASE()
   AND TABLE_NAME = 'expenses'
   AND INDEX_NAME IN (
       'idx_expense_void_status',
-      'uq_expense_void_reference'
+      'uq_expense_void_reference',
+      'idx_expense_void_approval'
   )
 GROUP BY INDEX_NAME, NON_UNIQUE
 ORDER BY INDEX_NAME;
@@ -44,9 +47,12 @@ FROM expenses
 WHERE is_voided = 1
   AND (
       void_reason IS NULL
-      OR void_reason = ''
+      OR CHAR_LENGTH(TRIM(void_reason)) < 8
       OR void_reference IS NULL
       OR void_reference = ''
       OR voided_by IS NULL
       OR voided_at IS NULL
+      OR void_approved_by IS NULL
+      OR void_approved_at IS NULL
+      OR voided_by = void_approved_by
   );
