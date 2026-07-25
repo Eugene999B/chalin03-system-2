@@ -28,8 +28,7 @@ test("operations write routes consume only centralized sanitized request values"
   );
   const expense = routeSection(
     readRoute("expenseRoutes.js"),
-    "// POST /api/expenses\nrouter.post(",
-    "// DELETE /api/expenses/:id"
+    "// POST /api/expenses\nrouter.post("
   );
   const stockAdjustment = routeSection(
     readRoute("productRoutes.js"),
