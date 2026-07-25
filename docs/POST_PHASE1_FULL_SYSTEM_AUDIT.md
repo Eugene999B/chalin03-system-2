@@ -16,17 +16,17 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 | Area | Weight | Evidence status | Score | Findings |
 |---|---:|---|---:|---|
-| Production safety, migrations and disaster recovery | 15 | Critical correction required | — | M-002 resolved; C-001 open |
+| Production safety, migrations and disaster recovery | 15 | Critical verification running | — | M-002 resolved; C-001 verification in progress |
 | Authentication, sessions and shared security | 12 | In review | — | H-002 resolved |
 | Permissions, category and location isolation | 12 | In review | — | H-002 resolved |
 | Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
-| Spare Parts correctness | 10 | In review | — | M-001 resolved; C-001 system-wide reset risk |
-| Mining correctness | 10 | In review | — | H-002 access revocation verified; C-001 system-wide reset risk |
-| Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified; C-001 system-wide reset risk |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved; C-001 audit records at risk |
-| Mobile, usability and accessibility | 4 | In review | — | C-001 maintenance guidance review required |
-| Testing, deployment and documentation | 4 | In review | — | C-001 missing transactional rollback evidence |
-| **Total** | **100** | **In review** | **—** | Four resolved; one Critical open |
+| Spare Parts correctness | 10 | In review | — | M-001 resolved; C-001 correction generated |
+| Mining correctness | 10 | In review | — | H-002 access revocation verified; C-001 correction generated |
+| Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified; C-001 correction generated |
+| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved; C-001 correction generated |
+| Mobile, usability and accessibility | 4 | In review | — | C-001 interface correction generated |
+| Testing, deployment and documentation | 4 | In review | — | C-001 rollback acceptance running |
+| **Total** | **100** | **In review** | **—** | Four resolved; one Critical verification in progress |
 
 ## Findings
 
@@ -38,7 +38,7 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 - **Business risk:** A failure midway through the system-wide operation can leave Spare Parts, Mining and Equipment Sales & Hire partially and irreversibly cleared while the API reports failure. Audit and activity evidence are among the first records removed.
 - **Correction:** Permanently block the browser clear operation in production; require explicit opt-in in every non-production environment; replace `TRUNCATE` and `ALTER TABLE` with transaction-compatible `DELETE` operations only; preserve foreign-key reset in `finally`; fail closed on partial verification; update the interface to describe a non-production test reset rather than a live business reset.
 - **Regression evidence:** Source contract, complete backend/frontend suites and disposable-MySQL failure-injection acceptance must prove rollback restores every table when a later delete fails and prove production always returns a blocked response regardless of the environment flag.
-- **Status:** Open; immediate corrective priority.
+- **Status:** Correction generated; complete rollback and production-block acceptance running.
 
 ### H-001 — Audit sign-offs can be physically deleted
 
@@ -89,7 +89,7 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 - [ ] CodeQL security-extended analysis and reviewed SARIF policy
 - [x] Full-history secret scan baseline
 - [x] Migration-safety baseline
-- [ ] Backup and restore control review — signed backup/restore reviewed; C-001 maintenance reset remains open
+- [ ] Backup and restore control review — signed backup/restore reviewed; C-001 maintenance reset verification running
 - [x] Production startup configuration review
 - [ ] Role, permission and category-isolation review
 - [ ] Financial formula and approval review
