@@ -7,74 +7,80 @@ const SPARE_PARTS_GUIDE = [
   {
     title: "1. Sign in to the correct Spare Parts store",
     detail:
-      "Choose Spare Parts on the login page, select the correct store and use your own username or registered phone number. Mining and Equipment Hire accounts cannot enter this workspace. Store selection controls stock, sales, receipts, debts, closing and reports.",
-    actions: ["Confirm store code and name", "Never share a login", "Logout before changing store"],
+      "Choose Spare Parts on the login page, select the correct authorized store and use your own username or registered phone number. Store context controls stock, sales, receipts, debts, expenses, closing and reports. Mining sites and Equipment Sales & Hire locations are separate business records.",
+    actions: ["Confirm store code and name", "Never share a login", "Sign out before changing store"],
   },
   {
-    title: "2. Products, stock and suppliers",
+    title: "2. Products, suppliers and stock control",
     detail:
-      "Create each part once, record cost and selling price, set its low-stock level and keep supplier information current. Use Stock Adjustment only for a real counted correction and record a clear reason. Use Stock Transfer for movement between the two Spare Parts stores.",
-    actions: ["Search before creating", "Count before adjusting", "Review the stock ledger"],
+      "Search before creating a product, maintain accurate cost and selling prices, set a realistic low-stock level and keep supplier details current. Use purchases, returns, transfers and stock adjustments for their intended purposes; never edit quantity merely to hide an unexplained difference.",
+    actions: ["Search before creating", "Count before adjusting", "Review stock history and reasons"],
   },
   {
-    title: "3. Ordinary sales and receipts",
+    title: "3. New Sale, customers and payment channels",
     detail:
-      "On New Sale, select products, confirm quantity, customer and payment channel, then review totals before completing the sale. Cash, MoMo, bank and mixed allocations must match what was actually received. The selected store’s Business Phone is printed as its receipt MoMo number.",
-    actions: ["Check customer details", "Record exact payment channels", "Print or send the final receipt"],
+      "Select the correct products and quantities, identify the customer when required, and record exactly how money was received. Cash, MoMo, Bank, Other, Credit and Mixed transactions must reflect the real transaction and their channel allocations must reconcile to the total.",
+    actions: ["Check customer details", "Review quantity and price", "Record exact payment allocations"],
   },
   {
-    title: "4. Professional installment sales",
+    title: "4. Receipts and store identity",
     detail:
-      "Choose Installment Sale, identify the customer, enter the deposit, cadence, due dates, grace terms, guarantor/reference and delivery policy. Review the generated schedule before activation. Record every payment against the agreement and issue its installment receipt.",
-    actions: ["Verify Ghana phone", "Review schedule and delivery", "Use controlled rescheduling"],
+      "Review the completed transaction before printing or sharing its receipt. The selected store's configured business identity and Business Phone / Receipt MoMo Number appear on its documents. Do not use another store's receipt, phone number or prefix.",
+    actions: ["Confirm receipt number", "Check store identity", "Preserve the final receipt evidence"],
   },
   {
-    title: "5. Credit, debts and customer statements",
+    title: "5. Credit sales, debts and customer statements",
     detail:
-      "Credit balances must be attached to the correct customer. Record debt payments through the Debt module and preserve each payment channel. Use Customer Statement for a complete customer history rather than changing an old sale to hide a balance.",
-    actions: ["Select the correct customer", "Issue payment evidence", "Review overdue balances"],
+      "Attach every credit balance to the correct customer and record later collections through the Debt module using the real payment channel. Use Customer Statement for the full history. Do not rewrite an old sale or delete payment evidence to make a balance appear correct.",
+    actions: ["Select the correct customer", "Issue debt-payment evidence", "Review overdue balances"],
   },
   {
-    title: "6. Purchases and supplier payments",
+    title: "6. Spare Parts installment retirement",
     detail:
-      "Record supplier purchases with invoice/reference details, item quantities and cost prices. Record deposit and later supplier payments separately. Confirm received stock before approving the purchase so inventory and accounting remain aligned.",
+      "New Spare Parts installment sales are retired. Historical Spare Parts installment records remain preserved for authorized review, but staff must not create new agreements through old links or workarounds. Current equipment installment sales belong only to Equipment Sales & Hire.",
+    actions: ["Do not create new Spare Parts installments", "Preserve historical records", "Use Equipment Sales & Hire for equipment finance"],
+  },
+  {
+    title: "7. Purchases and supplier payments",
+    detail:
+      "Record supplier purchases with invoice or reference details, item quantities and cost prices. Confirm goods received before approval. Record deposits and later supplier payments separately so stock, supplier balance and accounting evidence remain aligned.",
     actions: ["Use supplier invoice reference", "Confirm quantities received", "Record each supplier payment"],
   },
   {
-    title: "7. Expenses, returns and protected corrections",
+    title: "8. Expenses, returns, refunds and corrections",
     detail:
-      "Record genuine store expenses with the correct date, category, amount and evidence. Process customer returns through Returns. Voids, refunds, corrections and post-closing changes require the appropriate permission, password confirmation and a truthful reason.",
-    actions: ["Do not overwrite history", "Attach a clear reason", "Review Activity Log evidence"],
+      "Record genuine store expenses with the correct funding source, date, category, amount and evidence. Process customer returns through Returns. Voids, refunds and post-closing corrections require the correct permission, password confirmation, truthful reason and independent approval where configured.",
+    actions: ["Do not overwrite history", "Record funding source and reason", "Review approval and Activity Log evidence"],
   },
   {
-    title: "8. Daily Closing and cash control",
+    title: "9. Stock transfers and low-stock control",
     detail:
-      "At the end of the day, enter the actual counted Cash, MoMo, Bank and Other amounts. Optional denomination counting can support the cash figure. Investigate shortages or excesses; never force a variance to zero. Management verification must be independent.",
-    actions: ["Count independently", "Explain every variance", "Complete manager verification"],
+      "Use the controlled Request → Approve → Dispatch → Receive process for movement between the two Spare Parts stores. Approval alone does not move stock. Use Low Stock and restock exports to plan purchasing, and verify the destination receipt before considering a transfer complete.",
+    actions: ["Confirm source and destination", "Dispatch and receive separately", "Investigate transfer differences"],
   },
   {
-    title: "9. Reports, exports and accounting intelligence",
+    title: "10. Daily Closing and cash control",
     detail:
-      "Use Sales History, reports and accounting intelligence to review revenue, profit, stock, debts, purchases, expenses and closing variances for the selected store and date range. Export only the period and store requested by management.",
-    actions: ["Confirm filters", "Review before exporting", "Protect customer information"],
+      "At the end of the day, enter the actual counted Cash, MoMo, Bank and Other amounts. Investigate shortages or excesses; never force a variance to zero. Expenses funded from today's receipts and approved refunds reduce the matching channel, while externally funded expenses remain accounting expenses without reducing the drawer.",
+    actions: ["Count independently", "Explain every variance", "Use independent manager verification"],
   },
   {
-    title: "10. Store settings and receipt identity",
+    title: "11. Reports, exports and accounting intelligence",
     detail:
-      "Administrators maintain each store’s business name, address, Business Phone / Receipt MoMo Number, receipt prefix and footer. Owner Security Alert Phone is separate and is not printed as the receipt MoMo number.",
-    actions: ["Edit the selected store only", "Test one receipt", "Keep alert phone private"],
+      "Use Sales History, reports, customer statements, audit accounting and accounting intelligence to review revenue, profit, stock, debts, purchases, expenses, refunds and closing variances for the selected store and period. Confirm filters before exporting and protect customer information.",
+    actions: ["Confirm store and dates", "Review figures before exporting", "Keep exported files private"],
   },
   {
-    title: "11. Users, category permissions and worker profiles",
+    title: "12. Users, permissions, workers and documents",
     detail:
-      "Spare Parts users, permissions and worker profiles are independent from Mining and Equipment Hire. User Permission Manager displays only Spare Parts permissions when this category is selected. Worker profiles and documents opened here belong only to Spare Parts.",
-    actions: ["Assign one category", "Use least privilege", "Resolve conflicts as System Administrator"],
+      "Spare Parts users, permissions, worker profiles and employment documents are category-isolated. Administrators should grant the least permission needed. Approved employment and business documents may use the protected boss signature configured in Document Signature Settings; changing the saved signature does not rewrite historical approved snapshots.",
+    actions: ["Assign the correct category", "Use least privilege", "Review documents before approval"],
   },
   {
-    title: "12. Security, backups and support",
+    title: "13. Security, notifications, backups and support",
     detail:
-      "Review Security Centre and Activity Log, keep account recovery details current and download regular Full System Backups. Security messages may be dismissed from the Security Centre, but the protected audit evidence remains. Report unexpected errors before repeating a sensitive action.",
-    actions: ["Keep one admin recovery path", "Download and verify backups", "Never share passwords"],
+      "Use password-only sign-in, keep account recovery details secure, review notifications and the Activity Log, and download regular signed Full System Backups. Browser restore is blocked in production. Report unexpected errors before repeating a sensitive action, and never share passwords, OTPs, secrets or backup files.",
+    actions: ["Keep recovery details current", "Download and protect signed backups", "Escalate unusual errors promptly"],
   },
 ];
 
@@ -102,7 +108,7 @@ export default function HelpPage() {
       <header>
         <div className="workspace-help-icon" aria-hidden="true">🔩</div>
         <div>
-          <p>Independent Business User Guide</p>
+          <p>Independent Business User Guide · Version Three</p>
           <h1>Spare Parts User Guide</h1>
           <span>
             {storeCode} — {storeName}{storeLocation ? ` · ${storeLocation}` : ""}
@@ -113,7 +119,7 @@ export default function HelpPage() {
       <article className="workspace-help-boundary">
         <strong>Spare Parts boundary</strong>
         <p>
-          This guide, its users, permissions, workers, stores, receipts and records belong only to Spare Parts. Mining Operations and Equipment Hire use their own independent guides and logins.
+          This guide, its users, permissions, workers, stores, receipts and records belong only to Spare Parts. Mining Operations and Equipment Sales & Hire use independent sites, locations, guides and records.
         </p>
       </article>
 
@@ -124,7 +130,7 @@ export default function HelpPage() {
             id="spare-parts-help-search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Example: installment, closing, receipt, stock, backup"
+            placeholder="Example: credit, closing, receipt, transfer, worker, backup"
           />
           <button type="button" onClick={() => setSearch("")}>Clear</button>
         </div>
@@ -147,7 +153,7 @@ export default function HelpPage() {
       ) : null}
 
       <footer>
-        <Link to="/dashboard">← Return to Spare Parts dashboard</Link>
+        <Link to="/">← Return to Spare Parts dashboard</Link>
         <span>Use controlled corrections and contact the System Administrator before changing approved records.</span>
       </footer>
     </section>
