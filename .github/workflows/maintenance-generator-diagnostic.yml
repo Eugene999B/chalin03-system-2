@@ -1,0 +1,33 @@
+name: Maintenance Reset Generator Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/maintenance-generator-diagnostic.yml"
+      - ".github/scripts/generate_post_phase1_maintenance_reset_fix.py"
+      - "backend/routes/maintenanceRoutes.js"
+      - "frontend/src/pages/MaintenancePage.jsx"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Clone audit branch quietly and run generator
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --quiet --depth 1 --branch agent/post-phase1-full-system-audit \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repository
+          cd repository
+          set +e
+          python3 .github/scripts/generate_post_phase1_maintenance_reset_fix.py > /tmp/generator.log 2>&1
+          code=$?
+          cat /tmp/generator.log
+          exit "$code"
