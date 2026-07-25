@@ -10,7 +10,7 @@ on:
       - "agent/**"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: chalin03-verification-${{ github.ref }}
@@ -104,12 +104,14 @@ jobs:
           retention-days: 7
 
   post-phase1-immutability-artifact:
-    name: Generate and verify audit/expense immutability fix
+    name: Generate, verify and commit audit/expense immutability fix
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -122,7 +124,6 @@ jobs:
 
       - name: Verify focused contracts and syntax
         id: focused
-        continue-on-error: true
         run: |
           node --check backend/routes/auditSignoffRoutes.js
           node --check backend/routes/expenseRoutes.js
@@ -131,7 +132,6 @@ jobs:
 
       - name: Run complete backend suite against generated fix
         id: generated_backend
-        continue-on-error: true
         working-directory: backend
         run: |
           set -o pipefail
@@ -140,8 +140,6 @@ jobs:
 
       - name: Test, lint and build frontend against generated fix
         id: generated_frontend
-        if: always() && steps.generate.outcome == 'success'
-        continue-on-error: true
         working-directory: frontend
         run: |
           set -o pipefail
@@ -151,7 +149,6 @@ jobs:
           npm run build 2>&1 | tee ../post-phase1-generated-frontend-build.log
 
       - name: Package exact generated source files
-        if: always() && steps.generate.outcome == 'success'
         run: |
           set -euo pipefail
           git diff --check
@@ -172,7 +169,6 @@ jobs:
             > post-phase1-immutability-fix.sha256
 
       - name: Upload generated fix and diagnostics
-        if: always() && steps.generate.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: post-phase1-immutability-fix-files
@@ -188,18 +184,25 @@ jobs:
             post-phase1-generated-frontend-tests.log
             post-phase1-generated-frontend-lint.log
             post-phase1-generated-frontend-build.log
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
-      - name: Enforce generated-fix verification outcomes
-        if: always()
-        env:
-          GENERATE_OUTCOME: ${{ steps.generate.outcome }}
-          FOCUSED_OUTCOME: ${{ steps.focused.outcome }}
-          BACKEND_OUTCOME: ${{ steps.generated_backend.outcome }}
-          FRONTEND_OUTCOME: ${{ steps.generated_frontend.outcome }}
+      - name: Commit verified product files and restore permanent CI
+        if: github.event_name == 'push' && github.ref == 'refs/heads/agent/post-phase1-full-system-audit'
         run: |
-          test "$GENERATE_OUTCOME" = "success"
-          test "$FOCUSED_OUTCOME" = "success"
-          test "$BACKEND_OUTCOME" = "success"
-          test "$FRONTEND_OUTCOME" = "success"
+          set -euo pipefail
+          git fetch origin main --depth=1
+          git checkout origin/main -- .github/workflows/chalin03-verification.yml
+          git rm .github/scripts/generate_post_phase1_immutability_fix.py
+
+          git config user.name "chalin03-audit-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            .github/workflows/chalin03-verification.yml \
+            backend/routes/auditSignoffRoutes.js \
+            backend/routes/expenseRoutes.js \
+            backend/tests/auditSignoffExpenseImmutability.test.js \
+            backend/tests/operationsRouteReleaseContract.test.js \
+            frontend/src/pages/AuditSignoffHistoryPage.jsx
+          git commit -m "Preserve audit and expense evidence"
+          git push origin HEAD:agent/post-phase1-full-system-audit
