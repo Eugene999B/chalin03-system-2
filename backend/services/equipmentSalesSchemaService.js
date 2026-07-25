@@ -132,13 +132,14 @@ const REQUIRED_COMMERCIAL_COLUMNS = Object.freeze({
   ],
   equipment_sales_quotation_items: [
     "quotation_id",
-    "quotation_item_id",
     "hire_location_id",
+    "asset_id",
     "line_total",
   ],
   equipment_sale_agreements: [
     "agreement_number",
     "hire_location_id",
+    "quotation_item_id",
     "customer_id",
     "asset_id",
     "agreement_status",
@@ -160,20 +161,20 @@ const REQUIRED_COMMERCIAL_COLUMNS = Object.freeze({
   ],
   equipment_sale_payment_allocations: [
     "payment_id",
-    "payment_method",
-    "amount",
+    "schedule_id",
+    "allocated_amount",
   ],
   equipment_deliveries: [
     "agreement_id",
     "delivery_number",
     "hire_location_id",
-    "delivery_status",
+    "status",
   ],
   equipment_ownership_transfers: [
     "agreement_id",
     "transfer_number",
     "hire_location_id",
-    "transfer_status",
+    "status",
   ],
   equipment_sales_reminder_log: [
     "agreement_id",
