@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-export-fallback-hotfix-v4";
+const CACHE_NAME = "chalin03-documentation-refresh-v5";
 
 const CORE_ASSETS = [
   "/",
