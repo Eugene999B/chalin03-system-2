@@ -19,5 +19,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Run maintenance reset generator
-        run: python3 .github/scripts/generate_post_phase1_maintenance_reset_fix.py
+        shell: bash
+        run: |
+          set +e
+          python3 .github/scripts/generate_post_phase1_maintenance_reset_fix.py > /tmp/generator.log 2>&1
+          code=$?
+          tail -n 8 /tmp/generator.log
+          exit "$code"
