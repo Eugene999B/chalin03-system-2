@@ -241,7 +241,7 @@ router.delete(
         after_counts: resetResult.before_commit_result.after_counts,
         production_permanently_blocked: true,
         note:
-          "Only transactional DELETE statements were used. No TRUNCATE, ALTER TABLE or AUTO_INCREMENT reset was executed.",
+          "Only transaction-compatible DELETE statements were used. No implicit-commit schema operation or sequence reset was executed.",
       });
     } catch (error) {
       console.error("Transactional non-production test reset error:", error);
