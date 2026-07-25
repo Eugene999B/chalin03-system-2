@@ -2,6 +2,11 @@ name: Correct User Identity Generator Matcher
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/patch-user-identity-generator.yml"
   push:
     branches:
       - agent/post-phase1-full-system-audit
