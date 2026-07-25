@@ -21,11 +21,13 @@ def main() -> None:
     backend_path = Path("backend/routes/auditSignoffRoutes.js")
     frontend_path = Path("frontend/src/pages/AuditSignoffHistoryPage.jsx")
     expense_path = Path("backend/routes/expenseRoutes.js")
+    operations_test_path = Path("backend/tests/operationsRouteReleaseContract.test.js")
     test_path = Path("backend/tests/auditSignoffExpenseImmutability.test.js")
 
     backend = backend_path.read_text(encoding="utf-8")
     frontend = frontend_path.read_text(encoding="utf-8")
     expense = expense_path.read_text(encoding="utf-8")
+    operations_test = operations_test_path.read_text(encoding="utf-8")
 
     backend = replace_exact(
         backend,
@@ -137,6 +139,20 @@ module.exports = router;'''
         "Legacy physical expense DELETE route",
     )
 
+    operations_test = replace_exact(
+        operations_test,
+        '''  const expense = routeSection(
+    readRoute("expenseRoutes.js"),
+    "// POST /api/expenses\\nrouter.post(",
+    "// DELETE /api/expenses/:id"
+  );''',
+        '''  const expense = routeSection(
+    readRoute("expenseRoutes.js"),
+    "// POST /api/expenses\\nrouter.post("
+  );''',
+        "Legacy expense route-boundary contract",
+    )
+
     test_source = r'''const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -174,9 +190,16 @@ test("audit sign-offs remain immutable compliance evidence", () => {
 test("legacy expense deletion cannot bypass the Phase 1 void ledger", () => {
   const expenseRouteSource = read("backend/routes/expenseRoutes.js");
   const reversalRouteSource = read("backend/routes/expenseReversalRoutes.js");
+  const operationsContractSource = read(
+    "backend/tests/operationsRouteReleaseContract.test.js"
+  );
 
   assert.doesNotMatch(expenseRouteSource, /DELETE\s+FROM\s+expenses/i);
   assert.doesNotMatch(expenseRouteSource, /DELETE_EXPENSE/);
+  assert.doesNotMatch(
+    operationsContractSource,
+    /\/\/ DELETE \/api\/expenses\/:id/
+  );
   assert.match(reversalRouteSource, /EXPENSE_VOIDED/);
   assert.match(reversalRouteSource, /is_reversal/);
   assert.match(reversalRouteSource, /reversal_of_expense_id/);
@@ -187,6 +210,7 @@ test("legacy expense deletion cannot bypass the Phase 1 void ledger", () => {
     backend_path.write_text(backend, encoding="utf-8")
     frontend_path.write_text(frontend, encoding="utf-8")
     expense_path.write_text(expense, encoding="utf-8")
+    operations_test_path.write_text(operations_test, encoding="utf-8")
     test_path.write_text(test_source, encoding="utf-8")
 
 
