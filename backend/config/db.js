@@ -5,12 +5,30 @@ function getEnvValue(primaryName, fallbackName, defaultValue = undefined) {
   return process.env[primaryName] || process.env[fallbackName] || defaultValue;
 }
 
-function getSslConfig() {
-  const dbSsl = String(process.env.DB_SSL || "").toLowerCase();
+function booleanValue(value, fallback = false) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+function getSslConfig(env = process.env) {
+  const dbSsl = String(env.DB_SSL || "").trim().toLowerCase();
 
   if (dbSsl === "true") {
+    const encodedCa = String(env.DB_SSL_CA_BASE64 || "").trim();
+
+    if (encodedCa) {
+      return {
+        ca: Buffer.from(encodedCa, "base64").toString("utf8"),
+        rejectUnauthorized: true,
+      };
+    }
+
     return {
-      rejectUnauthorized: true,
+      rejectUnauthorized: booleanValue(
+        env.DB_SSL_REJECT_UNAUTHORIZED,
+        true
+      ),
     };
   }
 
@@ -72,6 +90,7 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  getSslConfig,
   pool,
   testDatabaseConnection,
 };
