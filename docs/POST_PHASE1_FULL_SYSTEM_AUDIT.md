@@ -16,19 +16,29 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 | Area | Weight | Evidence status | Score | Findings |
 |---|---:|---|---:|---|
-| Production safety, migrations and disaster recovery | 15 | In review | — | M-002 resolved |
+| Production safety, migrations and disaster recovery | 15 | Critical correction required | — | M-002 resolved; C-001 open |
 | Authentication, sessions and shared security | 12 | In review | — | H-002 resolved |
 | Permissions, category and location isolation | 12 | In review | — | H-002 resolved |
 | Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
-| Spare Parts correctness | 10 | In review | — | M-001 resolved |
-| Mining correctness | 10 | In review | — | H-002 access revocation verified |
-| Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved |
-| Mobile, usability and accessibility | 4 | In review | — | — |
-| Testing, deployment and documentation | 4 | In review | — | — |
-| **Total** | **100** | **In review** | **—** | Four findings resolved; full audit continues |
+| Spare Parts correctness | 10 | In review | — | M-001 resolved; C-001 system-wide reset risk |
+| Mining correctness | 10 | In review | — | H-002 access revocation verified; C-001 system-wide reset risk |
+| Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified; C-001 system-wide reset risk |
+| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved; C-001 audit records at risk |
+| Mobile, usability and accessibility | 4 | In review | — | C-001 maintenance guidance review required |
+| Testing, deployment and documentation | 4 | In review | — | C-001 missing transactional rollback evidence |
+| **Total** | **100** | **In review** | **—** | Four resolved; one Critical open |
 
 ## Findings
+
+### C-001 — System-wide clear operation can partially erase data despite rollback
+
+- **Severity:** Critical
+- **Affected area:** `DELETE /api/maintenance/clear-business-data`; `maintenanceRoutes.js`; `MaintenancePage.jsx`; all three business workspaces.
+- **Evidence:** The clear route begins a transaction, then runs `TRUNCATE TABLE` for each business table and may run `ALTER TABLE ... AUTO_INCREMENT = 1` after a fallback `DELETE`. MySQL treats those schema operations as implicit-commit boundaries, so the catch block's rollback cannot guarantee restoration after a later failure. Production can also enable the operation by setting `ALLOW_CLEAR_BUSINESS_DATA=true`.
+- **Business risk:** A failure midway through the system-wide operation can leave Spare Parts, Mining and Equipment Sales & Hire partially and irreversibly cleared while the API reports failure. Audit and activity evidence are among the first records removed.
+- **Correction:** Permanently block the browser clear operation in production; require explicit opt-in in every non-production environment; replace `TRUNCATE` and `ALTER TABLE` with transaction-compatible `DELETE` operations only; preserve foreign-key reset in `finally`; fail closed on partial verification; update the interface to describe a non-production test reset rather than a live business reset.
+- **Regression evidence:** Source contract, complete backend/frontend suites and disposable-MySQL failure-injection acceptance must prove rollback restores every table when a later delete fails and prove production always returns a blocked response regardless of the environment flag.
+- **Status:** Open; immediate corrective priority.
 
 ### H-001 — Audit sign-offs can be physically deleted
 
@@ -79,7 +89,7 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 - [ ] CodeQL security-extended analysis and reviewed SARIF policy
 - [x] Full-history secret scan baseline
 - [x] Migration-safety baseline
-- [ ] Backup and restore control review
+- [ ] Backup and restore control review — signed backup/restore reviewed; C-001 maintenance reset remains open
 - [x] Production startup configuration review
 - [ ] Role, permission and category-isolation review
 - [ ] Financial formula and approval review
