@@ -2,6 +2,20 @@ name: Phase 1 Runtime Acceptance
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/routes/expenseReversalRoutes.js"
+      - "backend/middleware/sparePartsBranchContextMiddleware.js"
+      - "backend/services/dailyClosingSecurityService.js"
+      - "backend/services/independentApproverService.js"
+      - "backend/tests/phase1RuntimeAcceptance.js"
+      - "database/schema.sql"
+      - "database/migrations/20260718_release3fc3_mobile_id_expense_funding.sql"
+      - "database/migrations/20260725_phase1_financial_control_hardening.sql"
+      - "database/migrations/20260725_phase1_financial_control_hardening_verify.sql"
+      - ".github/workflows/phase1-runtime-acceptance.yml"
   push:
     branches:
       - agent/phase1-runtime-finance-hardening
