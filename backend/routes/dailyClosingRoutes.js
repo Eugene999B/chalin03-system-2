@@ -439,6 +439,58 @@ function normalizeSaleForClosing(sale) {
   };
 }
 
+function buildExpenseCorrectionPresentation(expense = {}) {
+  const isVoided = Number(expense.is_voided || 0) === 1;
+  const isReversal = Number(expense.is_reversal || 0) === 1;
+  const category = cleanText(expense.category || "Other", 180) || "Other";
+  const description = cleanText(expense.description, 5000);
+
+  if (!isVoided && !isReversal) {
+    return {
+      correction_status: "active",
+      correction_reference: null,
+      display_category: category,
+      display_description: description || null,
+    };
+  }
+
+  const statusLabel = isReversal ? "REVERSAL" : "VOIDED";
+  const reference = cleanText(
+    expense.reversal_reference || expense.void_reference,
+    180
+  );
+  const reason = cleanText(expense.void_reason, 1000);
+  const actorEvidence = [
+    expense.voided_by_name
+      ? `Voided by ${cleanText(expense.voided_by_name, 160)}`
+      : null,
+    expense.void_approved_by_name
+      ? `Approved by ${cleanText(expense.void_approved_by_name, 160)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("; ");
+
+  const evidence = [
+    description || null,
+    reference ? `Correction reference ${reference}` : null,
+    reason ? `Reason: ${reason}` : null,
+    isReversal && expense.reversal_of_expense_id
+      ? `Reverses expense ${Number(expense.reversal_of_expense_id)}`
+      : null,
+    actorEvidence || null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  return {
+    correction_status: isReversal ? "reversal" : "voided",
+    correction_reference: reference || null,
+    display_category: `${statusLabel} — ${category}`,
+    display_description: evidence || `${statusLabel} expense evidence`,
+  };
+}
+
 function buildClosingSmsMessage({
   summary,
   closingDate,
@@ -616,14 +668,30 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
       e.description,
       e.expense_date,
       e.created_at,
-      COALESCE(u.full_name, 'System') AS recorded_by_name
+      e.is_voided,
+      e.void_reason,
+      e.void_reference,
+      e.voided_at,
+      e.void_approved_at,
+      e.is_reversal,
+      e.reversal_of_expense_id,
+      e.reversal_reference,
+      COALESCE(u.full_name, 'System') AS recorded_by_name,
+      voider.full_name AS voided_by_name,
+      void_approver.full_name AS void_approved_by_name
      FROM expenses e
      LEFT JOIN users u ON e.recorded_by = u.id
+     LEFT JOIN users voider ON e.voided_by = voider.id
+     LEFT JOIN users void_approver ON e.void_approved_by = void_approver.id
      WHERE e.branch_id = ?
      AND e.expense_date = ?
      ORDER BY e.created_at ASC, e.id ASC`,
     [branchId, closingDate]
   );
+
+  for (const expense of expenses) {
+    Object.assign(expense, buildExpenseCorrectionPresentation(expense));
+  }
 
   const [returns] = await connection.query(
     `SELECT
@@ -1646,7 +1714,7 @@ function createDailyClosingWorkbook(reportData) {
     const row = expensesSheet.getRow(expenseRow);
     row.values = [
       formatDate(expense.expense_date),
-      expense.category,
+      expense.display_category || expense.category,
       Number(expense.amount || 0),
       String(expense.payment_method || "cash").toUpperCase(),
       String(expense.funding_source || "other").replaceAll("_", " ").toUpperCase(),
@@ -1654,7 +1722,7 @@ function createDailyClosingWorkbook(reportData) {
         ? "DEDUCT FROM CLOSING"
         : "ACCOUNTING ONLY",
       [
-        expense.description || null,
+        expense.display_description || expense.description || null,
         expense.closing_treatment_note || null,
       ]
         .filter(Boolean)
@@ -2205,8 +2273,20 @@ function createDailyClosingPdf(reportData, res) {
   drawPdfTable(
     doc,
     [
-      { key: "category", label: "Category", width: 120, maxLength: 22 },
-      { key: "description", label: "Description", width: 245, maxLength: 48 },
+      {
+        key: "category",
+        label: "Category",
+        width: 120,
+        maxLength: 22,
+        value: (item) => item.display_category || item.category,
+      },
+      {
+        key: "description",
+        label: "Description",
+        width: 245,
+        maxLength: 48,
+        value: (item) => item.display_description || item.description,
+      },
       { key: "payment_method", label: "Method", width: 62, format: (value) => String(value || "other").toUpperCase(), maxLength: 10 },
       { key: "funding_source", label: "Funding", width: 105, format: (value) => String(value || "other").replaceAll("_", " ").toUpperCase(), maxLength: 20 },
       { key: "affects_daily_closing", label: "Closing", width: 78, format: (value) => Number(value) === 1 ? "DEDUCT" : "REPORT ONLY", maxLength: 12 },
@@ -2505,8 +2585,8 @@ function createDailyClosingWordHtml(reportData) {
           .map(
             (expense) => `
               <tr>
-                ${wordCell(expense.category || "Other")}
-                ${wordCell(expense.description || null)}
+                ${wordCell(expense.display_category || expense.category || "Other")}
+                ${wordCell(expense.display_description || expense.description || null)}
                 ${wordCell(String(expense.payment_method || "other").toUpperCase())}
                 ${wordCell(String(expense.funding_source || "other").replaceAll("_", " ").toUpperCase())}
                 ${wordCell(Number(expense.affects_daily_closing) === 1 ? "DEDUCT" : "REPORT ONLY")}

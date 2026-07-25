@@ -54,3 +54,15 @@ The runner used an advisory lock, exact release confirmation and read-only verif
 ## Documentation status
 
 Repository README, audit report, production release-control guide and this release record are synchronized with the deployed release. The external Google Docs handbook still requires a separate consistency update and evidence check.
+
+
+## Independent post-release review follow-up
+
+A later independent Slack review identified one genuine dormant security risk and one reporting-consistency gap. The follow-up hardening:
+
+- removed the shadowed password-only `/owner/login` implementation from the legacy Release 2 router, leaving the MFA/recovery-code implementation as the only Owner Break-Glass login path;
+- retained the existing fail-closed Spare Parts branch middleware after confirming the claimed active branch-1 fallback was not reachable through protected routes;
+- added explicit `VOIDED` and `REVERSAL` correction evidence to Daily Closing PDF, Excel and Word output data, matching the browser control evidence while preserving both immutable ledger rows;
+- added permanent regression tests for the unique MFA login route and cross-format expense-correction presentation.
+
+This is post-release defence-in-depth and evidence consistency work. It does not rewrite the original 95/100 audit result or imply that the deployed release had an active Critical or High incident.
