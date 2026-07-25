@@ -345,13 +345,13 @@ module.exports = router;'''
         "Maintenance frontend clear enablement",
     )
 
-    frontend = replace_exact(
+    frontend = replace_pattern(
         frontend,
-        '''            <h1>System Maintenance</h1>
-            <p>
-              Clear test data safely before the business starts real operation.
-            </p>''',
-        '''            <h1>Non-Production Test Reset</h1>
+        re.compile(
+            r'<h1>System Maintenance</h1>\s*<p>\s*Clear test data safely before the business starts real operation\.\s*</p>',
+            re.M,
+        ),
+        '''<h1>Non-Production Test Reset</h1>
             <p>
               Transactionally clear disposable test data outside production only.
             </p>''',
