@@ -62,6 +62,7 @@ const REQUIRED_TABLE_COLUMNS = Object.freeze({
   ],
   equipment_sale_agreements: [
     "hire_location_id",
+    "quotation_item_id",
     "customer_id",
     "asset_id",
     "agreement_status",
@@ -76,14 +77,14 @@ const REQUIRED_TABLE_COLUMNS = Object.freeze({
   equipment_sale_payments: ["agreement_id", "amount", "payment_category"],
   equipment_sale_payment_allocations: [
     "payment_id",
-    "payment_method",
-    "amount",
+    "schedule_id",
+    "allocated_amount",
   ],
-  equipment_deliveries: ["agreement_id", "hire_location_id", "delivery_status"],
+  equipment_deliveries: ["agreement_id", "hire_location_id", "status"],
   equipment_ownership_transfers: [
     "agreement_id",
     "hire_location_id",
-    "transfer_status",
+    "status",
   ],
   equipment_sales_reminder_log: [
     "agreement_id",
