@@ -30,13 +30,13 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Select patched ExcelJS prerelease
+      - name: Select maintained ExcelJS-compatible package
         working-directory: backend
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          packageJson.dependencies.exceljs = '4.4.1-prerelease.0';
+          packageJson.dependencies.exceljs = 'npm:@excel.js/exceljs@0.9.0';
           delete packageJson.overrides;
           fs.writeFileSync('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
@@ -51,6 +51,32 @@ jobs:
           npm ci
           npm audit --omit=dev --audit-level=high
 
+      - name: Verify XLSX compatibility round trip
+        working-directory: backend
+        run: |
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const ExcelJS = require('exceljs');
+          (async () => {
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Recovery Audit');
+            sheet.columns = [
+              { header: 'Reference', key: 'reference', width: 24 },
+              { header: 'Amount', key: 'amount', width: 14 }
+            ];
+            sheet.addRow({ reference: 'PHASE0-DRILL', amount: 245.5 });
+            const buffer = await workbook.xlsx.writeBuffer();
+            assert.ok(buffer.length > 100);
+            const restored = new ExcelJS.Workbook();
+            await restored.xlsx.load(buffer);
+            assert.equal(restored.getWorksheet('Recovery Audit').getCell('A2').value, 'PHASE0-DRILL');
+            assert.equal(restored.getWorksheet('Recovery Audit').getCell('B2').value, 245.5);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
       - name: Verify backend syntax and tests
         working-directory: backend
         run: |
@@ -64,5 +90,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add backend/package.json backend/package-lock.json
           git diff --cached --check
-          git commit -m 'Upgrade ExcelJS to patched prerelease'
+          git commit -m 'Replace vulnerable ExcelJS dependency chain'
           git push origin HEAD:agent/phase-0-production-safety
