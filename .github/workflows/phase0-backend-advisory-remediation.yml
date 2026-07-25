@@ -30,17 +30,14 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Add narrow patched transitive overrides
+      - name: Select patched ExcelJS prerelease
         working-directory: backend
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          packageJson.overrides = {
-            ...(packageJson.overrides || {}),
-            'brace-expansion@^1.0.0': '1.1.16',
-            'brace-expansion@^2.0.0': '2.1.2'
-          };
+          packageJson.dependencies.exceljs = '4.4.1-prerelease.0';
+          delete packageJson.overrides;
           fs.writeFileSync('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
 
@@ -67,5 +64,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add backend/package.json backend/package-lock.json
           git diff --cached --check
-          git commit -m 'Patch backend archive dependency advisory'
+          git commit -m 'Upgrade ExcelJS to patched prerelease'
           git push origin HEAD:agent/phase-0-production-safety
