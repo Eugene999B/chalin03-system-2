@@ -3,17 +3,16 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const service = fs.readFileSync(
-  path.resolve(__dirname, "../services/equipmentSalesCommercialRepairService.js"),
-  "utf8"
-);
-const bootstrap = fs.readFileSync(
-  path.resolve(__dirname, "../services/equipmentSalesCommercialBootstrap.js"),
-  "utf8"
-);
-const packageJson = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf8")
-);
+const backendRoot = path.resolve(__dirname, "..");
+const read = (relativePath) =>
+  fs.readFileSync(path.join(backendRoot, relativePath), "utf8");
+
+const schemaService = read("services/equipmentSalesSchemaService.js");
+const serverSource = read("server.js");
+const packageJson = JSON.parse(read("package.json"));
+
+const DDL_PATTERN =
+  /\b(?:CREATE\s+(?:TABLE|TRIGGER|PROCEDURE)|ALTER\s+TABLE|DROP\s+(?:TABLE|TRIGGER|PROCEDURE)|TRUNCATE)\b/i;
 
 const COMMERCIAL_TABLES = [
   "equipment_sales_enquiries",
@@ -29,9 +28,9 @@ const COMMERCIAL_TABLES = [
   "equipment_legacy_installment_migrations",
 ];
 
-test("commercial repair covers every Equipment Sales table and verifies columns", () => {
+test("Equipment Sales commercial schema is verified without runtime repair", () => {
   for (const tableName of COMMERCIAL_TABLES) {
-    assert.match(service, new RegExp(`${tableName}: \\{`));
+    assert.match(schemaService, new RegExp(`"${tableName}"`));
   }
 
   for (const requiredColumn of [
@@ -49,49 +48,38 @@ test("commercial repair covers every Equipment Sales table and verifies columns"
     "reminder_key",
     "source_snapshot_json",
   ]) {
-    assert.match(service, new RegExp(`"${requiredColumn}"`));
+    assert.match(schemaService, new RegExp(`"${requiredColumn}"`));
   }
 
-  assert.match(service, /async function addMissingColumns/);
-  assert.match(service, /ALTER TABLE/);
-  assert.match(service, /verifyCommercialSalesSchema/);
-  assert.match(service, /missing_columns/);
-  assert.match(service, /EQUIPMENT_SALES_COMMERCIAL_SCHEMA_INCOMPLETE/);
+  assert.match(schemaService, /assertEquipmentSalesSchemaReady/);
+  assert.match(schemaService, /verifyFullFoundation/);
+  assert.match(schemaService, /missing_columns/);
+  assert.match(schemaService, /EQUIPMENT_SALES_SCHEMA_NOT_READY/);
+  assert.doesNotMatch(schemaService, DDL_PATTERN);
 });
 
-test("commercial repair is additive, advisory-locked and production safe", () => {
-  assert.match(service, /chalin03_equipment_sales_finalization_v3/);
-  assert.match(service, /SELECT GET_LOCK/);
-  assert.match(service, /SELECT RELEASE_LOCK/);
-  assert.match(service, /CREATE TABLE IF NOT EXISTS/);
-  assert.match(service, /ADD COLUMN/);
-  assert.doesNotMatch(service, /\bDROP\s+TABLE\b/i);
-  assert.doesNotMatch(service, /\bTRUNCATE\b/i);
-  assert.doesNotMatch(service, /\bDELETE\s+FROM\b/i);
-});
-
-test("Railway start loads the required commercial bootstrap without assuming preload order", () => {
-  assert.match(packageJson.scripts.start, /^node\s+/);
-  assert.match(
+test("Railway start no longer preloads commercial schema repair", () => {
+  assert.equal(
     packageJson.scripts.start,
-    /-r \.\/services\/equipmentSalesCommercialBootstrap\.js/
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
   );
-  assert.match(packageJson.scripts.start, /server\.js$/);
-  assert.match(bootstrap, /BOOT_DELAY_MS = 2 \* 1000/);
-  assert.match(bootstrap, /RETRY_DELAY_MS = 60 \* 1000/);
-  assert.match(bootstrap, /ensureCommercialSalesSchema/);
-  assert.match(bootstrap, /if \(!ready\) schedule\(RETRY_DELAY_MS\)/);
-  assert.match(bootstrap, /timer\.unref/);
-  assert.match(bootstrap, /Catalogue and Hire remain available/);
+  assert.equal(
+    fs.existsSync(
+      path.join(backendRoot, "services/equipmentSalesCommercialBootstrap.js")
+    ),
+    false
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(backendRoot, "services/equipmentSalesCommercialRepairService.js")
+    ),
+    false
+  );
 });
 
-test("production preload gates every Sales request on verified commercial columns", () => {
-  assert.match(bootstrap, /require\("\.\/equipmentSalesSchemaService"\)/);
-  assert.match(bootstrap, /const ensureCatalogueFoundation/);
-  assert.match(bootstrap, /ensureEquipmentSalesSchemaWithCommercialColumns/);
-  assert.match(bootstrap, /await ensureCatalogueFoundation/);
-  assert.match(bootstrap, /await commercialRepairOnce\(\)/);
-  assert.match(bootstrap, /full_ready: ready/);
-  assert.match(bootstrap, /__chalin03CommercialColumnGateInstalled/);
-  assert.match(bootstrap, /requestRepairPromise = null/);
+test("production startup uses one read-only schema readiness gate", () => {
+  assert.match(serverSource, /validateProductionSchemaReadiness/);
+  assert.match(serverSource, /runtime schema mutation is disabled/);
+  assert.doesNotMatch(serverSource, /equipmentSalesCommercialBootstrap/);
+  assert.doesNotMatch(serverSource, /ensureCommercialSalesSchema/);
 });

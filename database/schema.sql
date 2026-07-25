@@ -872,6 +872,13 @@ CREATE TABLE audit_signoffs (
     stock_checked BOOLEAN NOT NULL DEFAULT FALSE,
     warnings_checked BOOLEAN NOT NULL DEFAULT FALSE,
     reports_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    purchases_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    returns_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    transfers_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    sms_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    stock_ledger_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    backup_checked BOOLEAN NOT NULL DEFAULT FALSE,
+    maintenance_checked BOOLEAN NOT NULL DEFAULT FALSE,
 
     accountant_notes TEXT,
     management_notes TEXT,

@@ -146,28 +146,22 @@ export default function MaintenancePage() {
     event.preventDefault();
 
     const confirmBrowser = window.confirm(
-      "This will permanently clear test/business data across ALL stores. Users, store records and settings will be kept. Do you want to continue?"
+      "This tool is only for disposable non-production test environments. It is permanently blocked in production. Continue with the full test-data reset?"
     );
 
-    if (!confirmBrowser) {
-      return;
-    }
+    if (!confirmBrowser) return;
 
     const secondConfirm = window.confirm(
-      "Final warning: this action is system-wide, not only the selected store. It will clear business/test records for MAIN, AJAKAA and any other store. Continue?"
+      "Final warning: the non-production reset is system-wide across Spare Parts, Mining and Equipment Sales & Hire. Continue?"
     );
 
-    if (!secondConfirm) {
-      return;
-    }
+    if (!secondConfirm) return;
 
     const backupConfirm = window.confirm(
-      "Backup reminder: make sure you have downloaded or created a fresh backup before clearing. Continue only if backup is done or the data is only test data."
+      "Confirm that this environment contains only disposable test data or that a verified backup exists. Continue?"
     );
 
-    if (!backupConfirm) {
-      return;
-    }
+    if (!backupConfirm) return;
 
     setClearing(true);
     setMessage("");
@@ -184,7 +178,10 @@ export default function MaintenancePage() {
         }
       );
 
-      setMessage(response.data.message || "Business data cleared successfully.");
+      setMessage(
+        response.data.message ||
+          "Non-production test data reset completed successfully."
+      );
       setSystemAdminPassword("");
       setConfirmation("");
 
@@ -192,7 +189,7 @@ export default function MaintenancePage() {
     } catch (error) {
       setError(
         error.response?.data?.message ||
-          "Something went wrong while clearing business data."
+          "Something went wrong while resetting non-production test data."
       );
     } finally {
       setClearing(false);
@@ -224,12 +221,17 @@ export default function MaintenancePage() {
 
   const protectedTables = summary?.protected_tables || [];
   const tablesToClear = summary?.tables_to_clear || tableNames;
-  const clearEnabled = summary?.clear_enabled !== false;
+  const clearEnabled = summary?.clear_enabled === true;
+  const productionPermanentlyBlocked = Boolean(
+    summary?.production_permanently_blocked
+  );
+  const clearEnvironment = summary?.clear_environment || "unknown";
   const systemAdminOnly = summary?.system_admin_only !== false;
   const clearScope = summary?.clear_scope || "full_system_all_stores";
 
   const canClear =
     clearEnabled &&
+    !productionPermanentlyBlocked &&
     systemAdminPassword.trim().length > 0 &&
     confirmation === requiredConfirmation &&
     !clearing;
@@ -271,10 +273,10 @@ export default function MaintenancePage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>System Maintenance</h1>
-          <p>
-            Clear test data safely before the business starts real operation.
-          </p>
+          <h1>Non-Production Test Reset</h1>
+            <p>
+              Transactionally clear disposable test data outside production only.
+            </p>
         </div>
 
         <button type="button" onClick={loadSummary} disabled={loading}>
@@ -304,9 +306,9 @@ export default function MaintenancePage() {
       </div>
 
       <div className="warning-box">
-        <strong>Important:</strong> This page is for the main System
-        Administrator only. It clears business/test records across all stores,
-        but keeps users, branches, user store access and business settings.
+                <strong>Important:</strong> Production is permanently blocked. This
+         page is for the original System Administrator in an explicitly enabled,
+         disposable non-production environment only.
       </div>
 
       <div className="error-box">
@@ -332,7 +334,14 @@ export default function MaintenancePage() {
               {systemAdminOnly ? "Yes" : "No"}
             </p>
             <p>
-              <strong>Clear Enabled:</strong> {clearEnabled ? "Yes" : "No"}
+              <strong>Reset Enabled:</strong> {clearEnabled ? "Yes" : "No"}
+            </p>
+            <p>
+              <strong>Environment:</strong> {clearEnvironment}
+            </p>
+            <p>
+              <strong>Production Permanently Blocked:</strong>{" "}
+              {productionPermanentlyBlocked ? "Yes" : "No"}
             </p>
             <p>
               <strong>Total Clearable Records:</strong>{" "}
@@ -342,9 +351,9 @@ export default function MaintenancePage() {
 
           {!clearEnabled && (
             <div className="warning-box">
-              Clearing is disabled on the backend. In production, the Railway
-              backend variable ALLOW_CLEAR_BUSINESS_DATA must be set to true
-              only when you intentionally want to clear test data.
+              {productionPermanentlyBlocked
+                ? "This operation is permanently blocked in production and cannot be enabled with an environment variable."
+                : "This non-production reset is disabled. Set ALLOW_CLEAR_BUSINESS_DATA=true only inside a disposable test environment."}
             </div>
           )}
 
@@ -371,8 +380,8 @@ export default function MaintenancePage() {
           </ul>
 
           <div className="warning-box">
-            Do not use this after real business operation has started unless you
-            are intentionally resetting the whole system across all stores.
+                        Never use this against live business data. Production is permanently
+             blocked; only disposable local or staging test data may be reset.
           </div>
         </div>
 
@@ -448,9 +457,8 @@ export default function MaintenancePage() {
         </div>
 
         <div className="warning-box">
-          If the business has already started real operation, do not clear these
-          records unless the owner has approved a full reset and a backup has
-          been made.
+                    Live business records cannot be cleared through this page. The backend
+           permits only an explicitly enabled non-production test environment.
         </div>
       </div>
 
@@ -492,44 +500,52 @@ export default function MaintenancePage() {
       </div>
 
       <div className="section-card" style={{ marginTop: "18px" }}>
-        <h2>Clear Test / Business Data</h2>
+        <h2>Reset Disposable Non-Production Test Data</h2>
 
         <p>
-          To continue, type the System Administrator password and the exact
+          The backend permanently blocks production. In a disposable test
+          environment, enter the System Administrator password and exact
           confirmation text.
         </p>
 
         <div className="error-box">
-          This action is not for only {currentStoreCode}. It clears business
-          records across all stores and removes stock movement ledger source
-          history.
+          This reset is system-wide across all three workspaces and uses only
+          transaction-compatible DELETE operations. A failure must roll back every
+          cleared table.
         </div>
 
         <div className="warning-box">
           Type exactly: <strong>{requiredConfirmation}</strong>
         </div>
 
-        <form onSubmit={clearBusinessData}>
-          <label>System Administrator Password</label>
-          <input
-            type="password"
-            value={systemAdminPassword}
-            onChange={(event) => setSystemAdminPassword(event.target.value)}
-            placeholder="Enter System Administrator password"
-          />
+        {productionPermanentlyBlocked ? (
+          <div className="error-box">
+            Production reset is permanently blocked. No destructive form is
+            available in this environment.
+          </div>
+        ) : (
+          <form onSubmit={clearBusinessData}>
+            <label>System Administrator Password</label>
+            <input
+              type="password"
+              value={systemAdminPassword}
+              onChange={(event) => setSystemAdminPassword(event.target.value)}
+              placeholder="Enter System Administrator password"
+            />
 
-          <label>Confirmation Text</label>
-          <input
-            type="text"
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            placeholder={requiredConfirmation}
-          />
+            <label>Confirmation Text</label>
+            <input
+              type="text"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              placeholder={requiredConfirmation}
+            />
 
-          <button type="submit" className="danger-button" disabled={!canClear}>
-            {clearing ? "Clearing..." : "Clear Test Data Across All Stores"}
-          </button>
-        </form>
+            <button type="submit" className="danger-button" disabled={!canClear}>
+              {clearing ? "Resetting..." : "Reset Non-Production Test Data"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

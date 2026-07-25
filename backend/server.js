@@ -30,8 +30,18 @@ const {
   requireDelegatedCapabilityForAdministrator,
 } = require("./middleware/delegatedAdministrationMiddleware");
 const {
+  preventMiningSelfApproval,
+  preventStockTransferSelfApproval,
+} = require("./middleware/independentApprovalMiddleware");
+const {
+  requireSparePartsBranchContext,
+} = require("./middleware/sparePartsBranchContextMiddleware");
+const {
   requireWorkspaceCategory,
 } = require("./services/categoryIsolationService");
+const {
+  validateProductionSchemaReadiness,
+} = require("./services/productionSchemaReadinessService");
 
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
@@ -43,6 +53,7 @@ const userRoutes = require("./routes/userRoutes");
 const userPermissionRoutes = require("./routes/userPermissionRoutes");
 const delegatedAdministrationRoutes = require("./routes/delegatedAdministrationRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
+const expenseReversalRoutes = require("./routes/expenseReversalRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 const returnRoutes = require("./routes/returnRoutes");
@@ -81,19 +92,12 @@ const workerHrLetterRoutes = require("./routes/workerHrLetterRoutes");
 const workerHrPdfV2Routes = require("./routes/workerHrPdfV2Routes");
 const standaloneHrDocumentRoutes = require("./routes/standaloneHrDocumentRoutes");
 const documentSignatureRoutes = require("./routes/documentSignatureRoutes");
-const {
-  ensureWorkerHrLetterSchema,
-} = require("./services/workerHrLetterSchemaService");
-const {
-  ensureEmploymentDocumentSchema,
-} = require("./services/employmentDocumentSchemaService");
 const workerCardVerificationRoutes = require("./routes/workerCardVerificationRoutes");
 const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
-const { ensurePasskeySchema } = require("./services/passkeySchemaService");
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
@@ -293,7 +297,14 @@ app.use(
 );
 app.use("/api/delegated-administration", delegatedAdministrationRoutes);
 app.use("/api/settings", requireAuth, sparePartsBoundary, settingsRoutes);
-app.use("/api/expenses", requireAuth, sparePartsBoundary, expenseRoutes);
+app.use(
+  "/api/expenses",
+  requireAuth,
+  sparePartsBoundary,
+  requireSparePartsBranchContext,
+  expenseReversalRoutes,
+  expenseRoutes
+);
 app.use("/api/purchases", requireAuth, sparePartsBoundary, purchaseRoutes);
 app.use("/api/returns", requireAuth, sparePartsBoundary, returnRoutes);
 app.use("/api/exports", exportRoutes);
@@ -306,7 +317,13 @@ app.use(
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
 app.use("/api/backups", delegatedBackupRoutes);
 app.use("/api/backups", backupRoutes);
-app.use("/api/daily-closing", requireAuth, sparePartsBoundary, dailyClosingRoutes);
+app.use(
+  "/api/daily-closing",
+  requireAuth,
+  sparePartsBoundary,
+  requireSparePartsBranchContext,
+  dailyClosingRoutes
+);
 app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
 app.use(
   "/api/customer-debt-reports",
@@ -325,9 +342,22 @@ app.use("/api/audit-signoffs", requireAuth, sparePartsBoundary, auditSignoffRout
 app.use("/api/audit-unlock-requests", requireAuth, sparePartsBoundary, auditUnlockRequestRoutes);
 app.use("/api/sms", requireAuth, sparePartsBoundary, smsRoutes);
 app.use("/api/accounting-intelligence", requireAuth, sparePartsBoundary, accountingIntelligenceRoutes);
-app.use("/api/stock-transfers", requireAuth, sparePartsBoundary, stockTransferRoutes);
+app.use(
+  "/api/stock-transfers",
+  requireAuth,
+  sparePartsBoundary,
+  requireSparePartsBranchContext,
+  preventStockTransferSelfApproval,
+  stockTransferRoutes
+);
 app.use("/api/fleet", requireAuth, fleetBoundary, fleetRoutes);
-app.use("/api/mining", requireAuth, miningBoundary, miningRoutes);
+app.use(
+  "/api/mining",
+  requireAuth,
+  miningBoundary,
+  preventMiningSelfApproval,
+  miningRoutes
+);
 app.use("/api/mining-control", requireAuth, miningBoundary, miningControlRoutes);
 app.use("/api/equipment-hire", requireAuth, hireBoundary, equipmentHireRoutes);
 app.use("/api/hire-commercial", requireAuth, hireBoundary, hireCommercialRoutes);
@@ -371,9 +401,17 @@ async function startServer() {
   try {
     await testDatabaseConnection();
     await runStartupSelfCheck();
-    await ensureWorkerHrLetterSchema();
-    await ensureEmploymentDocumentSchema();
-    await ensurePasskeySchema();
+
+    const schemaReadiness = await validateProductionSchemaReadiness();
+    for (const warning of schemaReadiness.warnings) {
+      console.warn(`Schema readiness warning: ${warning}`);
+    }
+    for (const warning of schemaReadiness.errors) {
+      console.warn(`Development schema readiness warning: ${warning}`);
+    }
+    console.log(
+      `Read-only schema readiness checked ${schemaReadiness.checked_tables.length} required table(s); runtime schema mutation is disabled.`
+    );
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
