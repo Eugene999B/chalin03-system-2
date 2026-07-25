@@ -6,6 +6,18 @@ const { requireRole } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
+const REQUIRED_BRANCH_COLUMNS = Object.freeze([
+  "id",
+  "code",
+  "branch_code",
+  "name",
+  "location",
+  "phone",
+  "is_active",
+  "created_at",
+  "updated_at",
+]);
+
 function cleanText(value) {
   if (value === undefined || value === null) {
     return "";
@@ -22,101 +34,41 @@ function cleanBoolean(value, fallback = true) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
-async function columnExists(connection, tableName, columnName) {
-  const [columns] = await connection.query(
-    `SHOW COLUMNS FROM \`${tableName}\` LIKE ?`,
-    [columnName]
+async function verifyBranchesTable(connection = pool) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'branches'`
   );
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  const missing = REQUIRED_BRANCH_COLUMNS.filter((column) => !columns.has(column));
 
-  return columns.length > 0;
+  if (missing.length > 0) {
+    const error = new Error(
+      `Store schema is not ready. Missing branches columns: ${missing.join(
+        ", "
+      )}. Apply the approved migration before continuing.`
+    );
+    error.code = "BRANCH_SCHEMA_NOT_READY";
+    error.missingColumns = missing;
+    throw error;
+  }
+
+  return { ready: true, missing_columns: [] };
 }
 
-async function ensureBranchesTable(connection = pool) {
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS branches (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      code VARCHAR(30) NOT NULL,
-      name VARCHAR(150) NOT NULL,
-      location VARCHAR(255) NULL,
-      phone VARCHAR(50) NULL,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_branches_code (code),
-      INDEX idx_branches_active (is_active)
-    )
-  `);
+function sendBranchSchemaError(res, error) {
+  if (error?.code !== "BRANCH_SCHEMA_NOT_READY") return false;
 
-  const hasCode = await columnExists(connection, "branches", "code");
-  const hasBranchCode = await columnExists(connection, "branches", "branch_code");
-
-  if (!hasCode && hasBranchCode) {
-    await connection.query(
-      `ALTER TABLE branches ADD COLUMN code VARCHAR(30) NULL AFTER id`
-    );
-
-    await connection.query(
-      `UPDATE branches
-       SET code = branch_code
-       WHERE code IS NULL OR code = ''`
-    );
-  }
-
-  if (hasCode && !hasBranchCode) {
-    await connection.query(
-      `ALTER TABLE branches ADD COLUMN branch_code VARCHAR(30) NULL AFTER code`
-    );
-
-    await connection.query(
-      `UPDATE branches
-       SET branch_code = code
-       WHERE branch_code IS NULL OR branch_code = ''`
-    );
-  }
-
-  if (!(await columnExists(connection, "branches", "phone"))) {
-    await connection.query(
-      `ALTER TABLE branches ADD COLUMN phone VARCHAR(50) NULL AFTER location`
-    );
-  }
-
-  if (!(await columnExists(connection, "branches", "is_active"))) {
-    await connection.query(
-      `ALTER TABLE branches ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE AFTER phone`
-    );
-  }
-
-  await connection.query(`
-    INSERT INTO branches (code, branch_code, name, location, phone, is_active)
-    SELECT 'MAIN', 'MAIN', 'Chalin 03 Main Store', 'Dunkwa Police Barrier', '0249469080 / 0249995510', TRUE
-    WHERE NOT EXISTS (
-      SELECT 1 FROM branches WHERE code = 'MAIN' OR branch_code = 'MAIN'
-    )
-  `);
-
-  await connection.query(`
-    INSERT INTO branches (code, branch_code, name, location, phone, is_active)
-    SELECT 'AJAKAA', 'AJAKAA', 'Chalin 03 Store', 'Ajakaa Manso', '0249469080 / 0249995510', TRUE
-    WHERE NOT EXISTS (
-      SELECT 1 FROM branches WHERE code = 'AJAKAA' OR branch_code = 'AJAKAA'
-    )
-  `);
-
-  await connection.query(
-    `UPDATE branches
-     SET branch_code = code
-     WHERE (branch_code IS NULL OR branch_code = '')
-     AND code IS NOT NULL
-     AND code != ''`
-  );
-
-  await connection.query(
-    `UPDATE branches
-     SET code = branch_code
-     WHERE (code IS NULL OR code = '')
-     AND branch_code IS NOT NULL
-     AND branch_code != ''`
-  );
+  res.status(503).json({
+    status: "error",
+    code: error.code,
+    message:
+      "The Spare Parts store list is not ready. Apply and verify the approved database migration before using this page.",
+    missing_columns: error.missingColumns || [],
+  });
+  return true;
 }
 
 function normalizeBranch(row) {
@@ -138,7 +90,7 @@ function normalizeBranch(row) {
 }
 
 async function getBranches({ includeInactive = false } = {}) {
-  await ensureBranchesTable(pool);
+  await verifyBranchesTable(pool);
 
   const whereClause = includeInactive ? "" : "WHERE is_active = TRUE";
 
@@ -175,11 +127,11 @@ router.get("/public", async (req, res) => {
     });
   } catch (error) {
     console.error("Get public branches error:", error);
+    if (sendBranchSchemaError(res, error)) return undefined;
 
     return res.status(500).json({
       status: "error",
-      message:
-        error.message || "Something went wrong while loading stores.",
+      message: "Something went wrong while loading stores.",
     });
   }
 });
@@ -201,10 +153,11 @@ router.get("/", requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("Get branches error:", error);
+    if (sendBranchSchemaError(res, error)) return undefined;
 
     return res.status(500).json({
       status: "error",
-      message: error.message || "Something went wrong while loading stores.",
+      message: "Something went wrong while loading stores.",
     });
   }
 });
@@ -212,7 +165,7 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/branches
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    await ensureBranchesTable(pool);
+    await verifyBranchesTable(pool);
 
     const code = cleanText(req.body.code || req.body.branch_code)
       .toUpperCase()
@@ -261,6 +214,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     });
   } catch (error) {
     console.error("Create branch error:", error);
+    if (sendBranchSchemaError(res, error)) return undefined;
 
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
@@ -271,7 +225,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
     return res.status(500).json({
       status: "error",
-      message: error.message || "Something went wrong while creating store.",
+      message: "Something went wrong while creating store.",
     });
   }
 });
@@ -279,7 +233,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 // PUT /api/branches/:id
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    await ensureBranchesTable(pool);
+    await verifyBranchesTable(pool);
 
     const id = Number(req.params.id);
 
@@ -351,6 +305,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     });
   } catch (error) {
     console.error("Update branch error:", error);
+    if (sendBranchSchemaError(res, error)) return undefined;
 
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
@@ -361,9 +316,14 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
     return res.status(500).json({
       status: "error",
-      message: error.message || "Something went wrong while updating store.",
+      message: "Something went wrong while updating store.",
     });
   }
 });
 
-module.exports = router;
+module.exports = {
+  REQUIRED_BRANCH_COLUMNS,
+  getBranches,
+  router,
+  verifyBranchesTable,
+};
