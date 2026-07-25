@@ -1,0 +1,72 @@
+name: Correct User Identity Generator Matcher
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/patch-user-identity-generator.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/post-phase1-full-system-audit
+          fetch-depth: 0
+      - name: Make only the confirmed matcher correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/generate_post_phase1_user_identity_fix.py')
+          lines = path.read_text().splitlines(keepends=True)
+          label_indexes = [
+              index
+              for index, line in enumerate(lines)
+              if '"Staff-user section description",' in line
+          ]
+          if len(label_indexes) != 1:
+              raise SystemExit(
+                  f'Expected one Staff-user section description label, found {len(label_indexes)}.'
+              )
+
+          label_index = label_indexes[0]
+          start = label_index
+          while start >= 0 and lines[start].strip() != 'frontend_source = replace_exact(':
+              start -= 1
+          if start < 0:
+              raise SystemExit('Could not find the replace_exact call before the unique label.')
+
+          end = label_index + 1
+          while end < len(lines) and lines[end].strip() != ')':
+              end += 1
+          if end >= len(lines):
+              raise SystemExit('Could not find the closing line after the unique label.')
+          end += 1
+
+          replacement = '''    frontend_source = replace_pattern(
+              frontend_source,
+              re.compile(
+                  r'Review account status, store access, reset passwords, disable staff\\s+accounts and protect the original system administrator\\.'
+              ),
+              "Review account status, store access, reset passwords, temporarily\\n               disable staff or securely offboard them while preserving historical identity.",
+              "Staff-user section description",
+          )
+          '''.splitlines(keepends=True)
+
+          path.write_text(''.join(lines[:start] + replacement + lines[end:]))
+          PY
+
+          git config user.name "chalin03-audit-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/scripts/generate_post_phase1_user_identity_fix.py
+          git rm .github/workflows/patch-user-identity-generator.yml
+          git commit -m "Make secure-offboarding matcher whitespace-safe"
+          git push origin HEAD:agent/post-phase1-full-system-audit
