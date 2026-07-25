@@ -681,7 +681,7 @@ test("maintenance reset contains no implicit-commit clearing operations", () => 
   assert.match(service, /beginTransaction/);
   assert.match(service, /rollback/);
   assert.match(service, /SET FOREIGN_KEY_CHECKS = 1/);
-  assert.match(route, /PRODUCTION_BUSINESS_DATA_CLEAR_PERMANENTLY_BLOCKED/);
+  assert.match(service, /PRODUCTION_BUSINESS_DATA_CLEAR_PERMANENTLY_BLOCKED/);
   assert.match(route, /clearTablesTransactionally/);
   assert.match(frontend, /Production reset is permanently blocked/);
   assert.match(frontend, /Reset Non-Production Test Data/);
