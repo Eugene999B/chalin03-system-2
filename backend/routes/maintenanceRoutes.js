@@ -3,6 +3,10 @@ const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const {
+  clearTablesTransactionally,
+  resolveMaintenanceClearAvailability,
+} = require("../services/maintenanceResetService");
 
 const router = express.Router();
 
@@ -147,12 +151,12 @@ function getBranchId(req) {
   return branchId;
 }
 
-function isClearEnabled() {
-  if (process.env.NODE_ENV !== "production") {
-    return true;
-  }
+function clearAvailability() {
+  return resolveMaintenanceClearAvailability(process.env);
+}
 
-  return process.env.ALLOW_CLEAR_BUSINESS_DATA === "true";
+function isClearEnabled() {
+  return clearAvailability().enabled;
 }
 
 async function getExistingTables(connection = pool) {
@@ -242,78 +246,39 @@ async function requireSystemAdministrator(req, res, next) {
 }
 
 async function insertClearActivityLog(connection, req) {
-  try {
-    const existingTables = await getExistingTables(connection);
+  const existingTables = await getExistingTables(connection);
 
-    if (!existingTables.includes("activity_log")) {
-      return;
-    }
+  if (!existingTables.includes("activity_log")) {
+    return { inserted: false, reason: "activity_log_missing" };
+  }
 
-    const columns = await getTableColumns(connection, "activity_log");
-    const columnSet = new Set(columns);
+  const columns = await getTableColumns(connection, "activity_log");
+  const columnSet = new Set(columns);
 
-    if (columnSet.has("branch_id")) {
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [
-          getBranchId(req),
-          req.systemAdmin.id,
-          "CLEAR_BUSINESS_DATA",
-          `${req.systemAdmin.username} cleared test/business data for the whole multi-store system before real operation`,
-        ]
-      );
-
-      return;
-    }
-
+  if (columnSet.has("branch_id")) {
+    await connection.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, ?, ?)`,
+      [
+        getBranchId(req),
+        req.systemAdmin.id,
+        "CLEAR_NON_PRODUCTION_TEST_DATA",
+        `${req.systemAdmin.username} transactionally cleared disposable non-production test data for the whole multi-store system`,
+      ]
+    );
+  } else {
     await connection.query(
       `INSERT INTO activity_log (user_id, action, details)
        VALUES (?, ?, ?)`,
       [
         req.systemAdmin.id,
-        "CLEAR_BUSINESS_DATA",
-        `${req.systemAdmin.username} cleared test/business data for the whole system before real operation`,
+        "CLEAR_NON_PRODUCTION_TEST_DATA",
+        `${req.systemAdmin.username} transactionally cleared disposable non-production test data for the whole system`,
       ]
     );
-  } catch (error) {
-    console.warn("Could not write clear business data activity log:", error.message);
   }
-}
 
-async function truncateTableSafely(connection, tableName) {
-  try {
-    await connection.query(`TRUNCATE TABLE \`${tableName}\``);
-
-    return {
-      table: tableName,
-      method: "TRUNCATE",
-      status: "cleared",
-    };
-  } catch (truncateError) {
-    console.warn(
-      `TRUNCATE failed for ${tableName}; falling back to DELETE:`,
-      truncateError.message
-    );
-
-    await connection.query(`DELETE FROM \`${tableName}\``);
-
-    try {
-      await connection.query(`ALTER TABLE \`${tableName}\` AUTO_INCREMENT = 1`);
-    } catch (alterError) {
-      console.warn(
-        `Could not reset AUTO_INCREMENT for ${tableName}:`,
-        alterError.message
-      );
-    }
-
-    return {
-      table: tableName,
-      method: "DELETE",
-      status: "cleared",
-      note: "TRUNCATE failed, DELETE fallback used.",
-    };
-  }
+  return { inserted: true };
 }
 
 // GET /api/maintenance/business-data-summary
@@ -350,6 +315,10 @@ router.get(
         counts,
         confirmation_required: CONFIRMATION_TEXT,
         clear_enabled: isClearEnabled(),
+        production_permanently_blocked:
+          clearAvailability().production_permanently_blocked,
+        clear_environment: clearAvailability().environment,
+        clear_enablement_code: clearAvailability().code,
         system_admin_only: true,
         note:
           "Stock movement ledger has no separate table in the current system. It is rebuilt from sales, purchases, returns, stock transfers and stock adjustments.",
@@ -375,12 +344,15 @@ router.delete(
 
     try {
       const { confirmation, system_admin_password } = req.body;
+      const availability = clearAvailability();
 
-      if (!isClearEnabled()) {
+      if (!availability.enabled) {
         return res.status(403).json({
           status: "error",
-          message:
-            "Clear business data is disabled in production. Set ALLOW_CLEAR_BUSINESS_DATA=true in Railway only when you are ready to clear test data.",
+          code: availability.code,
+          message: availability.message,
+          production_permanently_blocked:
+            availability.production_permanently_blocked,
         });
       }
 
@@ -411,69 +383,80 @@ router.delete(
       }
 
       const existingTables = await getExistingTables(connection);
-
       const availableTables = TABLES_TO_CLEAR.filter((tableName) =>
         existingTables.includes(tableName)
       );
-
       const protectedTables = PROTECTED_TABLES.filter((tableName) =>
         existingTables.includes(tableName)
       );
-
       const missingOptionalTables = TABLES_TO_CLEAR.filter(
         (tableName) => !existingTables.includes(tableName)
       );
-
       const beforeCounts = await getTableCounts(availableTables, connection);
 
-      await connection.beginTransaction();
+      const resetResult = await clearTablesTransactionally(
+        connection,
+        availableTables,
+        {
+          beforeCommit: async ({ connection: transactionConnection }) => {
+            const zeroCounts = await getTableCounts(
+              availableTables,
+              transactionConnection
+            );
+            const unclearedTables = Object.entries(zeroCounts)
+              .filter(([, count]) => Number(count || 0) !== 0)
+              .map(([tableName]) => tableName);
 
-      await connection.query("SET FOREIGN_KEY_CHECKS = 0");
+            if (unclearedTables.length > 0) {
+              const error = new Error(
+                `Transactional reset verification failed for: ${unclearedTables.join(", ")}.`
+              );
+              error.code = "MAINTENANCE_RESET_VERIFICATION_FAILED";
+              throw error;
+            }
 
-      const clear_results = [];
+            const auditResult = await insertClearActivityLog(
+              transactionConnection,
+              req
+            );
+            const afterCounts = await getTableCounts(
+              availableTables,
+              transactionConnection
+            );
 
-      for (const tableName of availableTables) {
-        const clearResult = await truncateTableSafely(connection, tableName);
-        clear_results.push(clearResult);
-      }
-
-      await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-
-      await insertClearActivityLog(connection, req);
-
-      const afterCounts = await getTableCounts(availableTables, connection);
-
-      await connection.commit();
+            return {
+              zero_counts_before_audit: zeroCounts,
+              after_counts: afterCounts,
+              audit_log: auditResult,
+            };
+          },
+        }
+      );
 
       return res.json({
         status: "success",
+        code: "NON_PRODUCTION_TEST_DATA_RESET_COMPLETED",
         message:
-          "Business/test data cleared successfully for the whole multi-store system. Users, branches, store access, settings, SMS templates, backup history and restore history were kept where those tables exist.",
-        clear_scope: "full_system_all_stores",
+          "Disposable non-production test data was cleared transactionally across all workspaces. Production remains permanently blocked.",
+        clear_scope: "full_system_all_stores_non_production_only",
         protected_tables: protectedTables,
         cleared_tables: availableTables,
         missing_optional_tables: missingOptionalTables,
-        clear_results,
+        clear_results: resetResult.clear_results,
         before_counts: beforeCounts,
-        after_counts: afterCounts,
+        after_counts: resetResult.before_commit_result.after_counts,
+        production_permanently_blocked: true,
         note:
-          "Stock movement ledger records are cleared through their source records. Shared fleet and Mining Operations records are also included when those tables exist.",
+          "Only transaction-compatible DELETE statements were used. No implicit-commit schema operation or sequence reset was executed.",
       });
     } catch (error) {
-      await connection.rollback();
-
-      try {
-        await connection.query("SET FOREIGN_KEY_CHECKS = 1");
-      } catch (resetError) {
-        console.error("Failed to reset foreign key checks:", resetError);
-      }
-
-      console.error("Clear business data error:", error);
+      console.error("Transactional non-production test reset error:", error);
 
       return res.status(500).json({
         status: "error",
+        code: error.code || "NON_PRODUCTION_TEST_RESET_FAILED",
         message:
-          error.message || "Something went wrong while clearing business/test data.",
+          "The non-production test reset failed and the transaction was rolled back. Review the backend log before retrying.",
       });
     } finally {
       connection.release();
