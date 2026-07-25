@@ -159,10 +159,10 @@ new_expense_query = """    `SELECT
 closing = replace_once(closing, old_expense_query, new_expense_query, "Daily Closing expense evidence query")
 closing = replace_once(
     closing,
-    """          expense.category,
-          Number(expense.amount || 0),""",
-    """          expense.display_category || expense.category,
-          Number(expense.amount || 0),""",
+    """      expense.category,
+      Number(expense.amount || 0),""",
+    """      expense.display_category || expense.category,
+      Number(expense.amount || 0),""",
     "Excel expense category presentation",
 )
 closing = replace_once(
