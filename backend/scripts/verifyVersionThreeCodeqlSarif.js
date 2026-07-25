@@ -21,6 +21,7 @@ const reviewedRules = new Set([
 const reviewedBypassFiles = new Set([
   "backend/middleware/authMiddleware.js",
   "backend/routes/authRoutes.js",
+  "backend/routes/expenseReversalRoutes.js",
   "backend/routes/returnRoutes.js",
   "backend/routes/saleRoutes.js",
 ]);
@@ -85,6 +86,10 @@ const authRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/authRoutes.js"),
   "utf8"
 );
+const expenseReversalSource = fs.readFileSync(
+  path.join(root, "backend/routes/expenseReversalRoutes.js"),
+  "utf8"
+);
 const returnRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/returnRoutes.js"),
   "utf8"
@@ -115,6 +120,22 @@ assert.match(authRoutesSource, /normalizeWorkspaceCode\(req\.body\.workspace_cod
 assert.match(authRoutesSource, /resolveLoginWorkspace\(user, workspaceCode\)/);
 assert.match(authRoutesSource, /bcrypt\.compare\(password, user\.password_hash\)/);
 assert.match(authRoutesSource, /createSession\(/);
+
+assert.match(
+  expenseReversalSource,
+  /router\.delete\("\/:id", requireRole\("admin", "manager"\)/
+);
+assert.match(expenseReversalSource, /const branchId = Number\(req\.user\.branch_id\)/);
+assert.match(
+  expenseReversalSource,
+  /WHERE id = \? AND branch_id = \? AND is_reversal = 0[\s\S]*FOR UPDATE/
+);
+assert.match(expenseReversalSource, /approvedAuditLock\(/);
+assert.match(expenseReversalSource, /verifyIndependentBranchApprover\(/);
+assert.match(expenseReversalSource, /reason\.length < 8/);
+assert.match(expenseReversalSource, /void_approved_by = \?/);
+assert.match(expenseReversalSource, /reversal_of_expense_id/);
+assert.match(expenseReversalSource, /writeAuditEvent\(/);
 
 assert.match(returnRoutesSource, /allowedReturnTypes/);
 assert.match(returnRoutesSource, /verifyIndependentReturnApprover\(/);
