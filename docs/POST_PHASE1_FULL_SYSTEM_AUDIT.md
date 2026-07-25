@@ -17,16 +17,16 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 | Area | Weight | Evidence status | Score | Findings |
 |---|---:|---|---:|---|
 | Production safety, migrations and disaster recovery | 15 | In review | — | M-002 open |
-| Authentication, sessions and shared security | 12 | In review | — | H-002 open |
+| Authentication, sessions and shared security | 12 | In review | — | H-002 verification in progress |
 | Permissions, category and location isolation | 12 | In review | — | — |
 | Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
 | Spare Parts correctness | 10 | In review | — | M-001 resolved |
 | Mining correctness | 10 | In review | — | — |
 | Equipment Sales & Hire correctness | 12 | In review | — | — |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 open |
+| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 verification in progress |
 | Mobile, usability and accessibility | 4 | In review | — | — |
 | Testing, deployment and documentation | 4 | In review | — | — |
-| **Total** | **100** | **In review** | **—** | Two resolved; two open |
+| **Total** | **100** | **In review** | **—** | Two resolved; two under review |
 
 ## Findings
 
@@ -46,9 +46,9 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 - **Affected area:** Shared user administration; `DELETE /api/users/:id`
 - **Evidence:** `clearUserReferencesBeforeDelete` explicitly sets user references to `NULL` in sales, expenses, debt and purchase payments, Daily Closings, stock approvals, SMS, audit sign-offs, unlock requests, re-approval logs and `activity_log`, then deletes the user row.
 - **Business risk:** Financial and security records lose reliable attribution of who recorded, approved, closed, reviewed or performed an action.
-- **Correction:** Replace permanent identity deletion with account deactivation, workspace/store access revocation, active-session revocation and retained historical identity evidence.
-- **Regression evidence:** Controlled API contract and database-transaction acceptance required.
-- **Status:** Open; next corrective item.
+- **Correction:** The generated correction replaces permanent deletion with temporary Disable and controlled Secure Offboard actions. Temporary Disable revokes sessions while retaining assigned access for reactivation. Secure Offboard preserves the user identity and historical references while revoking sessions, store/workspace/site/location access and active permission overrides.
+- **Regression evidence:** Focused source contracts, complete backend/frontend gates and a disposable-MySQL transaction are required to prove the user row and historical sale/activity attribution remain while all live access is revoked.
+- **Status:** Correction generated; transaction-level verification rerunning after generator repair.
 
 ### M-001 — Shadowed legacy expense route still contains physical deletion
 
