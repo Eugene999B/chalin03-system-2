@@ -2,11 +2,18 @@ name: User Identity Generator Diagnostics
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/user-identity-generator-diagnostics.yml"
+      - ".github/scripts/generate_post_phase1_user_identity_fix.py"
   push:
     branches:
       - agent/post-phase1-full-system-audit
     paths:
       - ".github/workflows/user-identity-generator-diagnostics.yml"
+      - ".github/scripts/generate_post_phase1_user_identity_fix.py"
 
 permissions:
   contents: read
