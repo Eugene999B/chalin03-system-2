@@ -1,0 +1,58 @@
+name: Correct User Identity Generator Matcher
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/post-phase1-full-system-audit
+    paths:
+      - ".github/workflows/patch-user-identity-generator.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/post-phase1-full-system-audit
+          fetch-depth: 0
+      - name: Make only the confirmed matcher correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/generate_post_phase1_user_identity_fix.py')
+          source = path.read_text()
+          old = '''    frontend_source = replace_exact(
+              frontend_source,
+              ''' + "'''" + '''              Review account status, store access, reset passwords, disable staff
+               accounts and protect the original system administrator.''' + "'''" + ''',
+              ''' + "'''" + '''              Review account status, store access, reset passwords, temporarily
+               disable staff or securely offboard them while preserving historical identity.''' + "'''" + ''',
+              "Staff-user section description",
+          )
+          '''
+          new = '''    frontend_source = replace_pattern(
+              frontend_source,
+              re.compile(
+                  r'Review account status, store access, reset passwords, disable staff\\s+accounts and protect the original system administrator\\.'
+              ),
+              "Review account status, store access, reset passwords, temporarily\\n               disable staff or securely offboard them while preserving historical identity.",
+              "Staff-user section description",
+          )
+          '''
+          if source.count(old) != 1:
+              raise SystemExit('Confirmed staff-description matcher block was not found exactly once.')
+          path.write_text(source.replace(old, new, 1))
+          PY
+
+          git config user.name "chalin03-audit-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/scripts/generate_post_phase1_user_identity_fix.py
+          git rm .github/workflows/patch-user-identity-generator.yml
+          git commit -m "Make secure-offboarding matcher whitespace-safe"
+          git push origin HEAD:agent/post-phase1-full-system-audit
