@@ -125,7 +125,7 @@ function requireAdmin(req, res, next) {
   if (role !== "admin" && role !== "auditor") {
     return res.status(403).json({
       status: "error",
-      message: "Only admin or auditor can delete audit sign-offs.",
+      message: "Only admin or auditor can request protected audit sign-off actions.",
     });
   }
 
@@ -2032,73 +2032,30 @@ router.post("/", requireAuth, requireAdminOrManager, async (req, res) => {
 });
 
 router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
-  const connection = await pool.getConnection();
+  const branchId = getBranchId(req);
+  const id = Number(req.params.id);
 
-  try {
-    await ensureAuditSignoffsTable();
-
-    const branchId = getBranchId(req);
-    const id = Number(req.params.id);
-
-    if (!Number.isInteger(id) || id <= 0) {
-      return res
-        .status(400)
-        .json({ status: "error", message: "Invalid sign-off ID." });
-    }
-
-    await connection.beginTransaction();
-
-    const [rows] = await connection.query(
-      `SELECT id, period_label
-       FROM audit_signoffs
-       WHERE id = ?
-       AND branch_id = ?
-       LIMIT 1`,
-      [id, branchId]
-    );
-
-    if (rows.length === 0) {
-      await connection.rollback();
-
-      return res.status(404).json({
-        status: "error",
-        message: "Audit sign-off not found in the selected store.",
-      });
-    }
-
-    await connection.query(
-      `DELETE FROM audit_signoffs
-       WHERE id = ?
-       AND branch_id = ?`,
-      [id, branchId]
-    );
-
-    await safeLogActivity(
-      connection,
-      getUserId(req),
-      branchId,
-      "DELETE_AUDIT_SIGNOFF",
-      `Deleted audit sign-off for ${rows[0].period_label}.`,
-      getClientIp(req)
-    );
-
-    await connection.commit();
-
-    return res.json({
-      status: "success",
-      branch_id: branchId,
-      message: "Audit sign-off deleted successfully.",
-    });
-  } catch (error) {
-    await connection.rollback();
-    console.error("Delete audit signoff error:", error);
-    return res.status(500).json({
-      status: "error",
-      message: error.message || "Something went wrong while deleting audit sign-off.",
-    });
-  } finally {
-    connection.release();
+  if (!Number.isInteger(id) || id <= 0) {
+    return res
+      .status(400)
+      .json({ status: "error", message: "Invalid sign-off ID." });
   }
+
+  await safeLogActivity(
+    pool,
+    getUserId(req),
+    branchId,
+    "BLOCK_DELETE_AUDIT_SIGNOFF",
+    `Blocked physical deletion request for audit sign-off ID ${id}. Audit sign-offs are permanent compliance evidence and must be corrected through review, unlock and re-approval.`,
+    getClientIp(req)
+  );
+
+  return res.status(409).json({
+    status: "error",
+    code: "AUDIT_SIGNOFF_IMMUTABLE",
+    message:
+      "Audit sign-offs are permanent compliance evidence and cannot be deleted. Create or update the corrected sign-off through the controlled review, unlock and re-approval process.",
+  });
 });
 
 module.exports = router;

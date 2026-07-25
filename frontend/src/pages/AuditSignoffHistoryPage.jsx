@@ -987,27 +987,6 @@ export default function AuditSignoffHistoryPage() {
     setMessage("Sign-off certificate Word document downloaded.");
   }
 
-  async function deleteSignoff(signoff) {
-    const confirmed = window.confirm(
-      `Delete audit sign-off for "${signoff.period_label}" in ${getSignoffStoreCode(signoff)}?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      await axiosClient.delete(`/audit-signoffs/${signoff.id}`);
-
-      setMessage("Audit sign-off deleted successfully.");
-
-      await loadSignoffs();
-    } catch (requestError) {
-      setError(
-        requestError.response?.data?.message ||
-          "Failed to delete audit sign-off."
-      );
-    }
-  }
-
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
@@ -1061,8 +1040,9 @@ export default function AuditSignoffHistoryPage() {
           {currentStoreLocation ? <p>{currentStoreLocation}</p> : null}
 
           <p>
-            Audit sign-off history, approval certificates, CSV exports and
-            delete actions are filtered to this selected store only.
+            Audit sign-off history, approval certificates and CSV exports are
+             filtered to this selected store. Sign-off records are permanent
+             compliance evidence and cannot be deleted.
           </p>
         </div>
       </div>
@@ -1253,8 +1233,9 @@ export default function AuditSignoffHistoryPage() {
             </h2>
 
             <p style={styles.mutedText}>
-              Each record below can be printed as a certificate, downloaded as a
-              Word file, or deleted by authorized management.
+              Each record below can be printed or downloaded and remains permanent
+               compliance evidence. Corrections must use the controlled review, unlock
+               and re-approval process.
             </p>
           </div>
 
@@ -1368,13 +1349,21 @@ export default function AuditSignoffHistoryPage() {
                       Word Certificate
                     </button>
 
-                    <button
-                      type="button"
-                      style={styles.deleteButton}
-                      onClick={() => deleteSignoff(item)}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        borderRadius: "999px",
+                        padding: "10px 13px",
+                        background: "#ecfdf5",
+                        border: "1px solid #86efac",
+                        color: "#166534",
+                        fontWeight: "900",
+                        fontSize: "12px",
+                      }}
                     >
-                      Delete
-                    </button>
+                      Permanent evidence
+                    </span>
                   </div>
                 </div>
               </article>
