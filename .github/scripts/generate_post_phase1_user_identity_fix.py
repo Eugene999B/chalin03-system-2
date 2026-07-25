@@ -309,104 +309,104 @@ module.exports = router;'''
     'const [offboardingUserId, setOffboardingUserId] = useState("");',
     "Offboarding state",
 )
-frontend_source = replace_pattern(
-    frontend_source,
-    re.compile(
-        r'function canCurrentUserDeleteAccounts\(\)\s*\{\s*return isOriginalSystemAdministrator\(currentUser\);\s*\}'
-    ),
-    '''function canCurrentUserSecurelyOffboardAccounts() {
-    return isOriginalSystemAdministrator(currentUser);
-  }''',
-    "Current-user offboarding capability",
-)
-frontend_source = replace_pattern(
-    frontend_source,
-    re.compile(
-        r'function canDeleteThisUser\(user\)\s*\{[\s\S]*?\n  \}',
-        re.M,
-    ),
-    '''function canSecurelyOffboardUser(user) {
-    if (!canCurrentUserSecurelyOffboardAccounts()) return false;
-    if (Number(user.id) === Number(currentUser?.id)) return false;
-    if (isOriginalSystemAdministrator(user)) return false;
-    return Boolean(user.is_active);
-  }''',
-    "Per-user secure offboarding capability",
-)
-frontend_source = replace_pattern(
-    frontend_source,
-    re.compile(
-        r'  async function deleteUserAccount\(user\) \{[\s\S]*?\n  \}\n\n  async function resetUserPassword',
-        re.M,
-    ),
-    '''  async function secureOffboardUser(user) {
-    setMessage("");
-    setError("");
+    frontend_source = replace_pattern(
+        frontend_source,
+        re.compile(
+            r'function canCurrentUserDeleteAccounts\(\)\s*\{\s*return isOriginalSystemAdministrator\(currentUser\);\s*\}'
+        ),
+        '''function canCurrentUserSecurelyOffboardAccounts() {
+        return isOriginalSystemAdministrator(currentUser);
+      }''',
+        "Current-user offboarding capability",
+    )
+    frontend_source = replace_pattern(
+        frontend_source,
+        re.compile(
+            r'function canDeleteThisUser\(user\)\s*\{[\s\S]*?\n  \}',
+            re.M,
+        ),
+        '''function canSecurelyOffboardUser(user) {
+        if (!canCurrentUserSecurelyOffboardAccounts()) return false;
+        if (Number(user.id) === Number(currentUser?.id)) return false;
+        if (isOriginalSystemAdministrator(user)) return false;
+        return Boolean(user.is_active);
+      }''',
+        "Per-user secure offboarding capability",
+    )
+    frontend_source = replace_pattern(
+        frontend_source,
+        re.compile(
+            r'  async function deleteUserAccount\(user\) \{[\s\S]*?\n  \}\n\n  async function resetUserPassword',
+            re.M,
+        ),
+        '''  async function secureOffboardUser(user) {
+        setMessage("");
+        setError("");
 
-    if (!canSecurelyOffboardUser(user)) {
-      setError(
-        "Only the original System Administrator can securely offboard another active user account."
-      );
-      return;
-    }
+        if (!canSecurelyOffboardUser(user)) {
+          setError(
+            "Only the original System Administrator can securely offboard another active user account."
+          );
+          return;
+        }
 
-    const firstConfirm = window.confirm(
-      `Securely offboard this account?\n\nName: ${user.full_name}\nUsername: ${user.username}\nRole: ${user.role}\n\nThis disables login, revokes all active sessions and assigned access, and preserves the user identity on historical sales, payments, approvals and audit records.`
-    );
+        const firstConfirm = window.confirm(
+          `Securely offboard this account?\n\nName: ${user.full_name}\nUsername: ${user.username}\nRole: ${user.role}\n\nThis disables login, revokes all active sessions and assigned access, and preserves the user identity on historical sales, payments, approvals and audit records.`
+        );
 
-    if (!firstConfirm) return;
+        if (!firstConfirm) return;
 
-    const typedConfirm = window.prompt(
-      `Type OFFBOARD ${user.username} to confirm secure offboarding.`
-    );
+        const typedConfirm = window.prompt(
+          `Type OFFBOARD ${user.username} to confirm secure offboarding.`
+        );
 
-    if (typedConfirm !== `OFFBOARD ${user.username}`) {
-      setError("Secure offboarding cancelled. Confirmation text did not match.");
-      return;
-    }
+        if (typedConfirm !== `OFFBOARD ${user.username}`) {
+          setError("Secure offboarding cancelled. Confirmation text did not match.");
+          return;
+        }
 
-    setOffboardingUserId(user.id);
+        setOffboardingUserId(user.id);
 
-    try {
-      const response = await axiosClient.delete(`/users/${user.id}`);
+        try {
+          const response = await axiosClient.delete(`/users/${user.id}`);
 
-      setMessage(
-        response.data.message ||
-          "User account securely offboarded and historical identity preserved."
-      );
-      await loadUsers();
-    } catch (error) {
-      setError(
-        error.response?.data?.message || "Failed to securely offboard user."
-      );
-    } finally {
-      setOffboardingUserId("");
-    }
-  }
+          setMessage(
+            response.data.message ||
+              "User account securely offboarded and historical identity preserved."
+          );
+          await loadUsers();
+        } catch (error) {
+          setError(
+            error.response?.data?.message || "Failed to securely offboard user."
+          );
+        } finally {
+          setOffboardingUserId("");
+        }
+      }
 
-  async function resetUserPassword''',
-    "Permanent-delete frontend function",
-)
-frontend_source = replace_pattern(
-    frontend_source,
-    re.compile(
-        r'\{canCurrentUserDeleteAccounts\(\) && \([\s\S]*?\n      \)\}',
-        re.M,
-    ),
-    '''{canCurrentUserSecurelyOffboardAccounts() && (
-    <div className="users-warning-banner">
-      <div>🛡️</div>
-      <div>
-        <strong>Original System Administrator secure-offboarding mode is active.</strong>
-        <br />
-        Temporary Disable retains assigned access for reactivation. Secure Offboard
-        revokes login, sessions and assigned access while permanently preserving the
-        staff identity on historical financial and audit records.
-      </div>
-    </div>
-  )}''',
-    "Administrator warning banner",
-)
+      async function resetUserPassword''',
+        "Permanent-delete frontend function",
+    )
+    frontend_source = replace_pattern(
+        frontend_source,
+        re.compile(
+            r'\{canCurrentUserDeleteAccounts\(\) && \([\s\S]*?\n      \)\}',
+            re.M,
+        ),
+        '''{canCurrentUserSecurelyOffboardAccounts() && (
+        <div className="users-warning-banner">
+          <div>🛡️</div>
+          <div>
+            <strong>Original System Administrator secure-offboarding mode is active.</strong>
+            <br />
+            Temporary Disable retains assigned access for reactivation. Secure Offboard
+            revokes login, sessions and assigned access while permanently preserving the
+            staff identity on historical financial and audit records.
+          </div>
+        </div>
+      )}''',
+        "Administrator warning banner",
+    )
 
     frontend_source = replace_pattern(
     frontend_source,
