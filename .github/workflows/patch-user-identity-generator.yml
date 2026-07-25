@@ -29,19 +29,19 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('.github/scripts/generate_post_phase1_user_identity_fix.py')
           source = path.read_text()
-          old = '''    frontend_source = replace_exact(
-              frontend_source,
-              ''' + "'''" + '''              Review account status, store access, reset passwords, disable staff
-               accounts and protect the original system administrator.''' + "'''" + ''',
-              ''' + "'''" + '''              Review account status, store access, reset passwords, temporarily
-               disable staff or securely offboard them while preserving historical identity.''' + "'''" + ''',
-              "Staff-user section description",
+          pattern = re.compile(
+              r'    frontend_source = replace_exact\(\n'
+              r'        frontend_source,\n'
+              r"        '''[\s\S]*?disable staff[\s\S]*?"
+              r'        "Staff-user section description",\n'
+              r'    \)\n',
+              re.M,
           )
-          '''
-          new = '''    frontend_source = replace_pattern(
+          replacement = '''    frontend_source = replace_pattern(
               frontend_source,
               re.compile(
                   r'Review account status, store access, reset passwords, disable staff\\s+accounts and protect the original system administrator\\.'
@@ -50,9 +50,12 @@ jobs:
               "Staff-user section description",
           )
           '''
-          if source.count(old) != 1:
-              raise SystemExit('Confirmed staff-description matcher block was not found exactly once.')
-          path.write_text(source.replace(old, new, 1))
+          updated, count = pattern.subn(replacement, source, count=1)
+          if count != 1:
+              raise SystemExit(
+                  f'Confirmed staff-description matcher block matched {count} times instead of once.'
+              )
+          path.write_text(updated)
           PY
 
           git config user.name "chalin03-audit-bot"
