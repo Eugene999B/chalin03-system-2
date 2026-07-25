@@ -321,9 +321,8 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
-module.exports = {
-  REQUIRED_BRANCH_COLUMNS,
-  getBranches,
-  router,
-  verifyBranchesTable,
-};
+router.REQUIRED_BRANCH_COLUMNS = REQUIRED_BRANCH_COLUMNS;
+router.getBranches = getBranches;
+router.verifyBranchesTable = verifyBranchesTable;
+
+module.exports = router;
