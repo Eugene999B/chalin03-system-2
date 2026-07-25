@@ -38,7 +38,7 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 - **Business risk:** A failure midway through the system-wide operation can leave Spare Parts, Mining and Equipment Sales & Hire partially and irreversibly cleared while the API reports failure. Audit and activity evidence are among the first records removed.
 - **Correction:** Permanently block the browser clear operation in production; require explicit opt-in in every non-production environment; replace `TRUNCATE` and `ALTER TABLE` with transaction-compatible `DELETE` operations only; preserve foreign-key reset in `finally`; fail closed on partial verification; update the interface to describe a non-production test reset rather than a live business reset.
 - **Regression evidence:** Source contract, complete backend/frontend suites and disposable-MySQL failure-injection acceptance must prove rollback restores every table when a later delete fails and prove production always returns a blocked response regardless of the environment flag.
-- **Status:** Generator and focused contract corrected; final rollback and production-block acceptance running.
+- **Status:** All generator and focused-contract corrections are complete; final rollback and production-block acceptance running.
 
 ### H-001 — Audit sign-offs can be physically deleted
 
