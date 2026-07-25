@@ -1,0 +1,71 @@
+name: Phase 0 Backend Advisory Remediation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/phase0-backend-advisory-remediation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-audit-test-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out Phase 0 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/phase-0-production-safety
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Add narrow patched transitive overrides
+        working-directory: backend
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          packageJson.overrides = {
+            ...(packageJson.overrides || {}),
+            'brace-expansion@^1.0.0': '1.1.16',
+            'brace-expansion@^2.0.0': '2.1.2'
+          };
+          fs.writeFileSync('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
+          NODE
+
+      - name: Regenerate exact backend lockfile
+        working-directory: backend
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Verify clean install and zero high production audit
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+
+      - name: Verify backend syntax and tests
+        working-directory: backend
+        run: |
+          npm run syntax-check
+          npm test
+
+      - name: Commit verified dependency remediation
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/package.json backend/package-lock.json
+          git diff --cached --check
+          git commit -m 'Patch backend archive dependency advisory'
+          git push origin HEAD:agent/phase-0-production-safety
