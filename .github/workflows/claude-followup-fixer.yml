@@ -53,9 +53,24 @@ jobs:
           if [ -f .fixer-already-applied ]; then
             exit 0
           fi
-          git config user.name "chalin03-hardening-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git rm .github/scripts/apply_claude_followup_hardening.py
-          git add backend/routes/release2FinalRoutes.js backend/routes/dailyClosingRoutes.js backend/tests/claudeFollowupHardening.test.js docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md
-          git commit -m "Harden Owner login and Daily Closing correction evidence"
-          git push origin HEAD:agent/claude-followup-hardening
+          set +e
+          {
+            git config user.name "chalin03-hardening-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git rm .github/scripts/apply_claude_followup_hardening.py
+            git add backend/routes/release2FinalRoutes.js backend/routes/dailyClosingRoutes.js backend/tests/claudeFollowupHardening.test.js docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md
+            git commit -m "Harden Owner login and Daily Closing correction evidence"
+            git push origin HEAD:agent/claude-followup-hardening
+          } > commit-diagnostic.txt 2>&1
+          status=$?
+          cat commit-diagnostic.txt
+          exit $status
+
+      - name: Upload commit diagnostic on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-followup-commit-diagnostic
+          path: commit-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 3
