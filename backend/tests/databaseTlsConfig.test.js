@@ -5,7 +5,7 @@ const { getSslConfig } = require("../config/db");
 const { auditStartupSecurity } = require("../config/startupSecurity");
 
 function strongSecret(prefix) {
-  return `${prefix}-Aa1!Bb2@Cc3#Dd4$Ee5%Ff6^Gg7&Hh8*Ii9(Jj0)Kk1_Ll2+Mm3=Nn4?`;
+  return `${prefix}-Aa1!Bb2@Cc3#Dd4$Ee5%Ff6^Gg7&Hh8*Ii9(Jj0)Kk1_Ll2+Mm3=Nn4?Oo5[Pp6]Qq7{Rr8}`;
 }
 
 function productionEnv(overrides = {}) {
