@@ -106,6 +106,14 @@ function normalizedHosts(value) {
     .filter(Boolean);
 }
 
+function normalizeDatabaseHost(value) {
+  return cleanValue(value).toLowerCase().replace(/\.$/, "");
+}
+
+function isRailwayPrivateDatabaseHost(value) {
+  return normalizeDatabaseHost(value).endsWith(".railway.internal");
+}
+
 function distinctSecretProblems(env) {
   const values = PRODUCTION_SECRET_NAMES.map((name) => [
     name,
@@ -185,6 +193,25 @@ function auditStartupSecurity({
       errors.push("DB_SSL must be true in production");
     }
 
+    const verifyDatabaseCertificate = booleanValue(
+      env.DB_SSL_REJECT_UNAUTHORIZED,
+      true
+    );
+    const databaseHost = env.DB_HOST || env.MYSQLHOST;
+    if (
+      !verifyDatabaseCertificate &&
+      !isRailwayPrivateDatabaseHost(databaseHost)
+    ) {
+      errors.push(
+        "DB_SSL_REJECT_UNAUTHORIZED may be false only for a Railway private *.railway.internal MySQL host"
+      );
+    }
+    if (!verifyDatabaseCertificate && isRailwayPrivateDatabaseHost(databaseHost)) {
+      warnings.push(
+        "MySQL uses encrypted TLS with Railway private-network identity protection; certificate-chain verification is disabled for the self-signed Railway database certificate."
+      );
+    }
+
     const httpsOrigins = origins.filter((origin) =>
       origin.startsWith("https://")
     );
@@ -243,7 +270,9 @@ module.exports = {
   booleanValue,
   distinctSecretProblems,
   isProductionEnvironment,
+  isRailwayPrivateDatabaseHost,
   looksLikePlaceholder,
+  normalizeDatabaseHost,
   normalizeHostEntry,
   normalizedHosts,
   secretProblems,
