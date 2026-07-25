@@ -24,12 +24,15 @@ Production business-control system for **Chalin 03 Company Limited**, prepared b
 | Integration branch | `main` |
 | Work branches | `agent/*` or approved `hotfix/*` |
 | Release | Version Three · v3.0.0 |
-| Production baseline recorded 25 July 2026 | `0cf526cdb50690fa70d712c958edceeb19f55e54` |
+| Production release deployed 25 July 2026 | `84c554e157c9439de12b12a65438ea440c79acc0` |
+| Integrated release candidate | `d71c3f1245d53fc6c636dbb6ef52ee3eaca69d2a` |
+| Automated audit | `95 / 100`; 0 Critical and 0 High findings open |
+| Production migrations | Financial-control hardening and Audit Sign-Off readiness applied and verified |
 | Authentication | Password-only browser sign-in |
 | SMS | Arkesel when deliberately enabled |
 | WhatsApp receipts | Disabled until approved Meta configuration exists |
 
-The baseline commit is historical evidence, not a permanent pointer. Before every release, verify the current `main` head, the `main → production` pull request, GitHub checks, Railway deployment and Cloudflare deployment.
+The current production release was promoted through PR #76 after PR #75 completed the post-Phase-1 audit and PR #77 added the fail-closed Railway migration runner. Commit hashes above are release evidence, not permanent pointers.
 
 ### Approved release path
 
@@ -39,7 +42,7 @@ agent/* or hotfix/*
 main
         ↓ controlled production-promotion PR
 production
-        ↓ automatic deployment
+        ↓ deployment
 Railway backend + Cloudflare frontend
 ```
 
@@ -55,7 +58,7 @@ Railway and Cloudflare must watch **only `production`**. Never point either serv
 4. Never rewrite completed sales, payments, closings, approvals, signatures or audit history to make a report look correct.
 5. Never change a monetary formula merely to force an expected result.
 6. Never mix Spare Parts stores, Mining sites and Equipment Sales & Hire locations.
-7. A hidden frontend button is not security; the backend must independently reject unauthorized requests.
+7. A hidden frontend button is not security; the backend must independently reject unauthorised requests.
 8. Every production migration must be additive, reviewed, backed up, locked and verified.
 9. Every production release must pass the applicable backend, frontend, dependency, secret-scan and CodeQL gates.
 10. When uncertain, stop a risky write rather than guess.
@@ -64,32 +67,13 @@ Railway and Cloudflare must watch **only `production`**. Never point either serv
 
 ## 3. Business categories and boundaries
 
-The platform contains three independent operating categories plus a separate Group Executive management shell.
+### Spare Parts — `spare_parts`
 
-### 3.1 Spare Parts — `spare_parts`
+Spare Parts uses the original two-store branch model. The selected store controls products, stock, suppliers, purchases, sales, receipts, customers, debts, returns, transfers, expenses, Daily Closing, reports, exports, SMS, users, workers, documents, signatures, backups and audit evidence.
 
-Spare Parts uses the original two-store branch model. The selected store controls:
+New Spare Parts installment sales are retired. Historical records remain preserved for authorised review. Current installment sales belong only to Equipment Sales & Hire.
 
-- dashboard and store performance;
-- products, suppliers and stock quantities;
-- low-stock planning;
-- purchases and supplier payments;
-- New Sale and receipts;
-- Cash, MoMo, Bank, Other, Credit and Mixed allocations;
-- customers, debts and customer statements;
-- returns, refunds and protected corrections;
-- Request → Approve → Dispatch → Receive stock transfers;
-- expenses and funding-source evidence;
-- Daily Closing and independent verification;
-- reports, exports and accounting intelligence;
-- SMS, notifications and Activity Log evidence;
-- category-scoped users, permissions and workers;
-- employment documents and protected signature settings;
-- security, backups and diagnostics.
-
-**New Spare Parts installment sales are retired.** Historical records remain preserved for authorized review. Current installment sales belong only to Equipment Sales & Hire.
-
-Spare Parts context headers:
+Context headers:
 
 ```text
 X-Chalin03-Branch-Id
@@ -97,284 +81,116 @@ X-Chalin03-Branch-Code
 X-Chalin03-Branch-Name
 ```
 
-### 3.2 Mining Operations — `mining`
+### Mining Operations — `mining`
 
-Mining sites are created and managed by authorized Mining administrators. They are not Spare Parts stores.
+Mining sites are created and managed by authorised Mining administrators. They are not Spare Parts stores. Mining includes site administration, daily logs, production, stockpiles, dispatch, equipment, fuel, contractors, expenses, incidents, corrective actions, site closing, reports, documents, workers, signatures, notifications and audit evidence.
 
-Mining covers:
-
-- site administration and staff/site access;
-- daily and shift logs;
-- production records;
-- stockpiles and dispatch;
-- equipment assignments, meters and operating hours;
-- fuel receipts, issues, transfers and reconciliation;
-- contractors and site expenses;
-- safety, environmental, security and equipment incidents;
-- corrective actions;
-- site closing and management review;
-- Mining reports, documents and shared controls;
-- Mining workers, licences and private files;
-- employment documents and protected signatures;
-- notifications and audit evidence.
-
-Mining context headers:
+Context headers:
 
 ```text
 X-Chalin03-Workspace: mining
 X-Chalin03-Context-Id: <mining_site_id>
 ```
 
-### 3.3 Equipment Sales & Hire — `equipment_hire`
+### Equipment Sales & Hire — `equipment_hire`
 
-Equipment locations, bases, yards and offices are created by authorized Equipment Sales & Hire administrators. They are not Spare Parts stores or Mining sites.
+Equipment locations, bases, yards and offices are created by authorised Equipment Sales & Hire administrators. They are not Spare Parts stores or Mining sites.
 
-The workspace contains two connected commercial families that share one fleet catalogue.
+The workspace covers one shared equipment catalogue, equipment sales, enquiries, quotations, sale agreements, installment schedules, deposits, payments, delivery, Hire availability, quotations, contracts, mobilization, work logs, invoices, returns, damage, maintenance, meters, fuel, reports, documents, workers and audit evidence.
 
-#### Equipment Catalogue and Sales
-
-- one registered asset identity per machine;
-- secure equipment photographs and condition evidence;
-- serial, chassis, engine, make, model, year and location;
-- selling price and Hire rate;
-- availability and sale locks;
-- sales enquiries and quotations;
-- approval-controlled sale agreements;
-- equipment installment schedules and collections;
-- deposits, payments, receipts and aging;
-- delivery evidence and ownership conditions;
-- sales documents, profit and management reports.
-
-#### Equipment Hire
-
-- customers and enquiries;
-- availability and rate cards;
-- quotations and approvals;
-- contracts and amendments;
-- mobilization, dispatch and job cards;
-- work logs and billable time;
-- Hire invoices, deposits and payments;
-- returns, damage assessment and settlement;
-- equipment release controls;
-- maintenance, meters, fuel and service history;
-- Hire reports and operational documents.
-
-Equipment context headers:
+Context headers:
 
 ```text
 X-Chalin03-Workspace: equipment_hire
 X-Chalin03-Context-Id: <hire_location_id>
 ```
 
-### 3.4 Shared Fleet
+Mining and Equipment Sales & Hire share the fleet catalogue. Register a physical machine once.
 
-Mining and Equipment Sales & Hire share the fleet catalogue. Register a machine once; do not create duplicate assets for the same physical equipment.
+### Group Executive Control
 
-### 3.5 Group Executive Control
-
-Group Executive is a separate management shell for authorized consolidated review. It provides:
-
-- group performance and risk intelligence;
-- notifications and escalation evidence;
-- shared reports and controlled documents;
-- read-only security, backup and workforce oversight;
-- controlled group configuration.
-
-It does not merge operational records or replace editing inside the correct business workspace.
+Group Executive is a separate authorised management shell for consolidated performance, risk, notifications, reports, documents, security, backup and workforce oversight. It does not merge operational records or replace editing inside the correct workspace.
 
 ---
 
-## 4. Main frontend routes
+## 4. Current control model
 
-### Public and authentication
+### Authentication and sessions
 
-| Route | Purpose |
-|---|---|
-| `/login` | Category, location and password sign-in |
-| `/owner-recovery` | Protected original-owner recovery |
-| `/mining-operations` | Mining workspace entry |
-| `/equipment-hire` | Equipment Sales & Hire workspace entry |
+Every authenticated request checks JWT signature, active user state, token version, server session, assigned workspace, assigned store/site/location, effective permissions and protected-action evidence where required.
 
-### Spare Parts
-
-Key routes include `/`, `/products`, `/new-sale`, `/sales-history`, `/debts`, `/purchases`, `/expenses`, `/returns`, `/daily-closing`, `/stock-transfers`, `/low-stock`, `/reports`, `/exports`, `/audit-accounting`, `/advanced-accounting-intelligence`, `/workers`, `/employment-documents`, `/document-signature-settings`, `/backup`, `/security-centre` and `/help`.
-
-The legacy `/installments` route remains only for controlled retirement/compatibility behavior; it must not create new Spare Parts agreements.
-
-### Mining
-
-Key routes include `/mining`, `/mining/sites`, `/mining/daily-logs`, `/mining/production`, `/mining/equipment`, `/mining/fuel`, `/mining/expenses`, `/mining/incidents`, `/mining/control-centre`, `/mining/fleet`, `/mining/documents`, `/mining/workers`, `/mining/employment-documents`, `/mining/document-signature-settings`, `/mining/administration`, `/mining/notifications` and `/mining/help`.
-
-### Equipment Sales & Hire
-
-Key routes include `/equipment-hire-operations`, customer/enquiry/availability/quotation/contract/commercial/operations/finance/return/report routes, plus:
-
-```text
-/equipment-hire-operations/fleet
-/equipment-hire-operations/fleet?view=sales
-/equipment-hire-operations/fleet?view=reports
-/equipment-hire-operations/fleet?view=maintenance
-```
-
-The workspace also contains documents, shared controls, workforce, employment documents, signature settings, administration, notifications and help.
-
----
-
-## 5. Authentication, sessions and permissions
-
-The backend validates every authenticated request using:
-
-1. JWT signature;
-2. active user record;
-3. token version;
-4. server-side session;
-5. assigned category/workspace;
-6. assigned store/site/location;
-7. effective permissions;
-8. protected-action evidence where required.
-
-### Current sign-in policy
-
-- Browser passkeys and biometric login are retired.
-- Users sign in with their account password.
+- Browser passkeys and biometric sign-in are retired.
+- Users sign in with account passwords.
 - Sessions expire at the earlier of eight hours after login or the next Ghana midnight boundary.
-- Up to five controlled active sessions per account may coexist; older sessions are retired when the limit is exceeded.
-- Password changes, administrator revocation, restoration or security actions may revoke sessions immediately.
+- Password changes, administrator revocation, restoration and security actions can revoke sessions immediately.
 
-### Permission principles
+### User administration
 
-- Roles provide defaults.
-- User-specific overrides may allow or deny.
-- Explicit deny takes precedence.
-- Overrides may expire.
-- Sensitive changes require a reason and protected-action confirmation.
-- Independent approval is required where self-approval would create a control weakness.
-- Frontend guards improve usability; backend middleware is authoritative.
-- The protected original System Administrator is the only account designed for cross-category administration and owner recovery.
+Permanent account deletion is not part of the normal system.
 
-When adding a permission-controlled feature, update all of these:
+- **Temporary Disable** stops access while preserving assignments for controlled reactivation.
+- **Secure Offboard** revokes sessions, token state, branch/workspace/site/location access and active permission overrides while preserving the user identity on historical financial and audit records.
 
-1. backend permission catalog;
-2. role defaults;
-3. backend middleware;
-4. frontend permission rules;
-5. navigation visibility;
-6. route guard;
-7. permission-manager label/grouping;
-8. Activity Log or privileged ledger;
-9. tests;
-10. in-app Help and handbook documentation.
+### Audit Sign-Off evidence
+
+Audit Sign-Off records are permanent compliance evidence. The backend blocks physical deletion and the archive does not expose a normal Delete action.
+
+### Expenses and corrections
+
+The legacy physical expense-deletion route was removed. Corrections use the approved immutable void-and-reversal process with reason, requester, independent approver and linked negative reversal evidence.
+
+### Maintenance reset
+
+The system-wide test-data reset is permanently blocked in production. Explicitly enabled non-production reset uses transaction-compatible deletion, verifies zero counts before commit, restores foreign-key checks and rolls back safely on failure.
 
 ---
 
-## 6. Monetary and operational invariants
-
-### Sales and stock
+## 5. Monetary and operational invariants
 
 - A valid sale changes stock exactly once.
-- SMS or receipt-delivery failure must not roll back a valid sale.
-- Completed sales are not silently rewritten.
+- Completed sales, payments, closings, approvals and signatures are not silently rewritten.
 - Corrections preserve original values, before/after evidence, reason, requester and approver.
-- Direct quantity edits do not replace purchases, returns, transfers or adjustments.
-
-### Stock transfers
-
-```text
-Request → Approve → Dispatch → Receive
-```
-
-Approval does not move stock. Dispatch reduces the source store; receipt increases the destination store. Repeated requests must not duplicate movement.
-
-### Returns and refunds
-
-A stock return and a financial refund are separate effects. Financial refunds require the exact amount, channel, reference where applicable, reason and approval. Approved refunds reduce the matching Daily Closing channel.
-
-### Daily Closing
-
-Expected physical cash includes real cash receipts and excludes cash expenses funded from the day's receipts and approved cash refunds. MoMo, Bank and Other channels reconcile separately.
-
-Rules:
-
-- counted values come from real counting, not copied expectations;
-- variances are never forced to zero;
-- explanations are preserved;
-- denomination totals must agree with submitted cash when used;
-- a submitter cannot independently verify the same closing;
-- later changes preserve prior versions;
-- externally funded expenses remain expenses but do not reduce the day's drawer/channel balance.
-
-### Debts and payments
-
-- customer balances and payment ledgers must reconcile;
-- a payment is recorded once;
-- payment allocations cannot exceed money received;
-- customer statements show history rather than rewriting old transactions.
-
-### Equipment sales and installments
-
-- an equipment sale agreement comes from approved terms;
-- deposits and payments are allocated exactly once;
-- outstanding balance equals agreement value less valid allocations;
-- delivery and ownership controls follow the agreement;
-- sale locks prevent incompatible Hire assignment;
-- rescheduling and amendments preserve the original schedule and approval evidence.
-
-### Mining reconciliation
-
-- production, stockpile movement, dispatch and closing quantities reconcile by site, date, material and unit;
-- fuel receipts, issues and balance reconcile by site and tank;
-- machine meters and hours remain physically plausible;
-- incidents and corrective actions preserve the original report.
+- Stock transfer flow is `Request → Approve → Dispatch → Receive`.
+- Approval does not move stock; dispatch and receipt perform the physical movements.
+- Stock returns and financial refunds are separate effects.
+- Daily Closing reconciles Cash, MoMo, Bank and Other independently.
+- A submitter cannot independently verify the same closing.
+- Debt payments and allocations cannot exceed money received.
+- Equipment sale locks prevent incompatible Hire assignment.
+- Mining production, stockpile, dispatch, fuel and machine-meter records must remain physically reconcilable.
 
 ---
 
-## 7. Workforce, documents and signatures
+## 6. Workforce, documents and signatures
 
-Worker profiles are category-isolated and may include:
+Worker records are category-isolated and may include personal details, workspace assignments, licences, private files, issued property, photographs, ID cards, correspondence and employment documents.
 
-- personal and employment details;
-- workspace/location assignments;
-- licences and expiry dates;
-- private documents;
-- issued property;
-- worker photographs;
-- staff ID cards and QR verification;
-- correspondence and employment documents.
+Employment documents may be prepared before a worker profile exists and linked after onboarding.
 
-Employment documents may be prepared for a candidate before a worker profile exists, then linked later after onboarding.
-
-The boss signature settings page supports mouse, stylus and one-finger drawing, pen-weight control, undo/redo, clear, alignment guides, larger signing mode, transparent whitespace trimming and exact cleaned preview. Approved documents preserve an immutable signature snapshot; later signature changes do not rewrite historical PDFs.
+Approved documents preserve an immutable signature snapshot. Later signature-setting changes do not rewrite historical PDFs.
 
 ---
 
-## 8. Backup, restore and disaster recovery
+## 7. Backup, restore and disaster recovery
 
 Production uses signed `chalin03-full-system-v2` backups.
 
-A valid backup includes:
-
-- durable-table inventory;
-- table/column and migration manifest;
-- row counts and checksums;
-- HMAC signature using `BACKUP_SIGNING_SECRET`;
-- compatibility validation before destructive restore work.
+A valid backup includes durable-table inventory, schema/migration manifest, row counts, checksums, HMAC signature and compatibility validation.
 
 Production protections:
 
 - browser restore is disabled;
-- incomplete, altered or wrong-server backups are rejected;
+- altered, incomplete or wrong-server backups are rejected;
 - restore verifies row counts before completion;
-- sessions, OTPs, recovery sessions and protected-action credentials are invalidated after restore;
-- user token versions are advanced so old tokens cannot continue;
+- sessions and temporary security credentials are invalidated after restore;
+- token versions advance so old tokens cannot continue;
 - recovery evidence is recorded.
 
-A disposable MySQL 8.4 recovery drill passed before Phase 0 was promoted. The current operating rule is still: download and privately store regular signed backups, and verify one before any production migration.
-
-Legacy Version 1 backups remain private emergency evidence but do not meet the signed Version 2 restore contract.
+Download and privately retain a fresh signed backup before every production migration. Legacy Version 1 backups are emergency evidence only and do not meet the signed Version 2 restore contract.
 
 ---
 
-## 9. Production hosting and security configuration
+## 8. Production hosting and security
 
 ### Railway
 
@@ -390,29 +206,34 @@ ENFORCE_PRODUCTION_SECURITY_SECRETS=true
 ALLOW_WEB_RESTORE=false
 ```
 
-`DB_SSL_REJECT_UNAUTHORIZED=false` is accepted only for the effective Railway private MySQL host ending in `.railway.internal`. External/public MySQL hosts must retain certificate verification or use an explicit trusted CA through `DB_SSL_CA_BASE64`.
+`DB_SSL_REJECT_UNAUTHORIZED=false` is accepted only for the effective Railway private MySQL host ending in `.railway.internal`.
 
-Production secrets must be strong, unique and different:
+Production secrets must be strong, unique and different. Never place them in GitHub, frontend code, Google Docs, screenshots or chat.
 
-- `JWT_SECRET`;
-- `ACCOUNT_RECOVERY_OTP_SECRET`;
-- `CLOUDFLARE_ORIGIN_SECRET`;
-- `OWNER_MFA_ENCRYPTION_KEY`;
-- `BACKUP_SIGNING_SECRET`.
+### Controlled Railway migration runner
 
-Never place those values in GitHub, frontend code, Google Docs, screenshots or chat.
+The approved 25 July 2026 release used this backend Pre-deploy Command:
+
+```text
+npm run migrate:production
+```
+
+Canonical runner: `backend/scripts/runProductionMigrations.js`.
+
+The runner requires production mode, explicit migration enablement, signed-backup confirmation and an exact release confirmation. It connects using Railway DB/MYSQL variables, acquires a MySQL advisory lock, applies only the approved financial-control and Audit Sign-Off migrations, runs both read-only verifiers and exits non-zero when any check fails.
+
+The runner is release-specific. After retaining successful deployment evidence, remove its one-release Pre-deploy Command or disable the confirmation variable before an unrelated deployment. A later migration set requires a new reviewed plan and exact release confirmation.
 
 ### Cloudflare
 
 - Pages production branch: `production`.
-- `api.chalin03.com` must remain proxied through Cloudflare.
-- Cloudflare injects `x-chalin-origin-key` using the same private value as Railway's `CLOUDFLARE_ORIGIN_SECRET`.
+- `api.chalin03.com` remains proxied through Cloudflare.
+- Cloudflare injects the origin header using the same private value as Railway's `CLOUDFLARE_ORIGIN_SECRET`.
 - The origin secret must never be exposed as a frontend variable.
-- Direct public Railway hostnames must not be added to `TRUSTED_API_HOSTS`.
 
 ---
 
-## 10. Repository structure and sources of truth
+## 9. Sources of truth
 
 | Purpose | Canonical location |
 |---|---|
@@ -424,26 +245,23 @@ Never place those values in GitHub, frontend code, Google Docs, screenshots or c
 | Authentication middleware | `backend/middleware/authMiddleware.js` |
 | Category isolation | `backend/services/categoryIsolationService.js` |
 | Permission catalog | `backend/security/permissionCatalog.js` |
-| Permission overrides | `backend/services/permissionOverrideService.js` |
 | Session policy | `backend/services/accountSessionService.js` |
-| System Administrator identity | `backend/security/systemAdminIdentity.js` |
-| Frontend API client | `frontend/src/api/axiosClient.js` |
-| Frontend auth state | `frontend/src/context/AuthContext.jsx` |
-| Mining/Hire context | `frontend/src/context/WorkspaceContext.jsx` |
 | Fresh local schema | `database/schema.sql` |
-| Production migrations | `database/migrations/` and controlled migration services |
+| Production migrations | `database/migrations/` |
+| Railway migration runner | `backend/scripts/runProductionMigrations.js` |
 | Backup and restore | `backend/routes/backupRoutes.js` |
 | Standard verification | `.github/workflows/chalin03-verification.yml` |
 | Final security audit | `.github/workflows/version-3-final-audit.yml` |
-| Production smoke | `.github/workflows/version-3-production-smoke.yml` |
 | Release control | `docs/PRODUCTION_RELEASE_CONTROL.md` |
-| Documentation/audit standard | `docs/SYSTEM_GUIDE_AND_AUDIT_STANDARD.md` |
+| Post-Phase-1 audit | `docs/POST_PHASE1_FULL_SYSTEM_AUDIT.md` |
+| 25 July 2026 release record | `docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md` |
+| Documentation standard | `docs/SYSTEM_GUIDE_AND_AUDIT_STANDARD.md` |
 
-When code and documentation disagree, investigate the live behavior and update both. Do not silently choose whichever text is more convenient.
+When code and documentation disagree, investigate the live behaviour and update both.
 
 ---
 
-## 11. Local development
+## 10. Local development
 
 ### Backend
 
@@ -466,136 +284,59 @@ npm run build
 npm run dev
 ```
 
-Typical local services:
-
-```text
-Frontend: http://localhost:5173
-Backend:  http://localhost:5000
-Database: local MySQL development schema
-```
-
 Use development-only values locally. Never copy production secrets into source files.
 
 ---
 
-## 12. Required release checks
+## 11. Required release checks
 
-Before merging a normal change to `main`:
+Before merging to `main`:
 
-- backend syntax check;
-- complete backend tests;
-- frontend source tests;
-- frontend lint;
-- production frontend build;
-- production dependency audit;
-- repository secret/environment checks;
-- full-history secret scan when triggered;
+- backend syntax and complete tests;
+- frontend tests, lint and production build;
+- dependency audit;
+- repository and full-history secret checks;
 - CodeQL security-extended analysis;
-- migration/recovery drill when database or backup contracts change;
-- desktop and mobile checks for affected pages.
+- migration/recovery evidence when database or backup contracts change;
+- desktop/mobile and role/workspace checks for affected pages;
+- relevant README, help and handbook updates.
 
 Before promoting `main` to `production`:
 
-1. all feature PR checks are green;
-2. the promotion PR is exactly `main → production`;
-3. production-origin gate passes;
-4. backend/frontend/dependency/secret/CodeQL gates pass again;
-5. required Railway and Cloudflare configuration is already present;
-6. a recent signed backup exists;
-7. rollback target is known;
-8. post-deployment smoke checks cover affected categories.
+1. use an exact `main → production` pull request;
+2. pass production-origin and security gates;
+3. confirm Railway and Cloudflare configuration;
+4. retain a fresh signed backup;
+5. know the rollback target;
+6. apply and verify approved additive migrations before the new backend starts;
+7. verify deployment logs, `/api/health`, authentication and affected business journeys;
+8. record the release commit and recovery point.
 
 ---
 
-## 13. Help and handbook maintenance
+## 12. Current release status
 
-Every feature or control change must update:
+As of the completed 25 July 2026 release:
 
-- the relevant in-app help page;
-- this README when architecture, deployment or operating rules change;
-- the Chalin 03 Google Docs handbook master index;
-- the affected workspace/page guide;
-- the affected daily procedure;
-- security, backup, deployment, testing, training, roadmap or handover documents when relevant.
+- post-Phase-1 automated audit: **95 / 100**;
+- open Critical findings: **0**;
+- open High findings: **0**;
+- PR #75 merged the audit corrections into `main`;
+- PR #77 added the Railway production migration runner;
+- a fresh signed Version 2 backup was downloaded before migration;
+- both approved migrations were applied and verified before deployment;
+- PR #76 promoted the release to `production`;
+- Railway reported successful backend deployment;
+- the authorised owner reported the live system and new features successful;
+- existing production business data remained available;
+- production release commit: `84c554e157c9439de12b12a65438ea440c79acc0`.
 
-Documentation must distinguish current rules from historical release evidence. Old commit hashes may remain in release history, but they must not be presented as the current production source.
-
----
-
-## 14. Full-system scoring standard
-
-After documentation is synchronized, score the system using evidence rather than impressions.
-
-| Area | Weight |
-|---|---:|
-| Production safety, migrations and disaster recovery | 15 |
-| Authentication, sessions and shared security | 12 |
-| Permissions, category and location isolation | 12 |
-| Monetary correctness and approvals | 14 |
-| Spare Parts correctness | 10 |
-| Mining correctness | 10 |
-| Equipment Sales & Hire correctness | 12 |
-| Reports, documents, workforce and audit evidence | 7 |
-| Mobile, usability and accessibility | 4 |
-| Testing, deployment and documentation | 4 |
-| **Total** | **100** |
-
-A score requires:
-
-- repository inspection;
-- current automated checks;
-- read-only architecture and permission review;
-- financial invariant review;
-- desktop/mobile acceptance evidence;
-- production configuration and recovery evidence;
-- documented findings with severity and remediation.
-
-A working screen alone is not proof of correctness. A failing or missing evidence area cannot receive full marks merely because no worker has reported a problem.
+The next step is normal monitored operation. Preserve the backup and deployment logs, record any defect before changing code, and use `agent/* → main → production` for every future update.
 
 ---
 
-## 15. Current release status and planned next step
+## 13. Documentation maintenance
 
-As of the recorded 25 July 2026 baseline:
+Every feature or control change must update the relevant in-app Help page, this README, the repository release/audit documents and the external Chalin 03 handbook where applicable.
 
-- Phase 0 production-safety hardening is complete;
-- signed Version 2 backup/recovery controls are active;
-- production deploys only from `production`;
-- Railway MySQL connects through encrypted private-network TLS;
-- the live system is operating without reported worker defects;
-- a fresh signed production backup has been downloaded and stored privately;
-- in-app help and the handbook are being synchronized before the next audit.
-
-The next controlled programme is a full-system evidence review and rescoring. New feature families should wait until that review identifies and prioritizes any remaining correctness, permission, usability or documentation gaps.
-
----
-
-## 16. Change checklist
-
-Before coding:
-
-- [ ] Start from current `main`.
-- [ ] Use an isolated branch.
-- [ ] Identify the affected category and location boundary.
-- [ ] Trace frontend → API → middleware → transaction → audit effects.
-- [ ] Check migrations, backups, permissions, financial formulas, documents, mobile layout and PWA caching.
-
-Before merge:
-
-- [ ] Update tests.
-- [ ] Update in-app Help.
-- [ ] Update README/handbook where applicable.
-- [ ] Run backend checks.
-- [ ] Run frontend tests, lint and build.
-- [ ] Review the diff for unrelated changes and secrets.
-- [ ] Keep the PR unmerged until required gates are green.
-
-Before production:
-
-- [ ] Promote only `main → production`.
-- [ ] Confirm current signed backup.
-- [ ] Confirm Railway and Cloudflare production configuration.
-- [ ] Record rollback target.
-- [ ] Verify deployment logs and `/api/health`.
-- [ ] Smoke-test affected workspaces on desktop and mobile.
-- [ ] Record release and update affected documentation.
+Repository documentation is synchronized with the 25 July 2026 deployed release. The external Google Docs handbook still requires a separate consistency update and evidence check.
