@@ -83,7 +83,7 @@ router.get("/", requireRole("admin", "manager"), async (req, res) => {
       String(req.query.include_voided || "").toLowerCase() === "true" &&
       String(req.user.role || "").toLowerCase() === "admin";
 
-    const where = ["e.branch_id = ?"];
+    const where = ["e.branch_id = ?", "e.is_reversal = 0"];
     const params = [branchId];
 
     if (!includeVoided) where.push("e.is_voided = 0");
@@ -195,7 +195,7 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
     const [rows] = await connection.query(
       `SELECT *
        FROM expenses
-       WHERE id = ? AND branch_id = ?
+       WHERE id = ? AND branch_id = ? AND is_reversal = 0
        LIMIT 1
        FOR UPDATE`,
       [expenseId, branchId]
@@ -254,7 +254,10 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
            voided_at = NOW(),
            void_approved_by = ?,
            void_approved_at = NOW()
-       WHERE id = ? AND branch_id = ? AND is_voided = 0`,
+       WHERE id = ?
+         AND branch_id = ?
+         AND is_voided = 0
+         AND is_reversal = 0`,
       [
         reason,
         reference,
@@ -274,12 +277,49 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       });
     }
 
+    const reversalCategory = cleanText(`Reversal - ${expense.category}`, 100);
+    const reversalDescription = cleanText(
+      `Financial reversal for expense ${expenseId} under ${reference}. Reason: ${reason}`,
+      5000
+    );
+    const reversalNote = cleanText(
+      `Linked reversal of expense ${expenseId}; independently approved by ${approval.approver.full_name}.`,
+      500
+    );
+    const [reversalResult] = await connection.query(
+      `INSERT INTO expenses (
+         branch_id, category, amount, payment_method, description,
+         funding_source, affects_daily_closing, closing_treatment_note,
+         expense_date, recorded_by, is_reversal,
+         reversal_of_expense_id, reversal_reference
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [
+        branchId,
+        reversalCategory,
+        -Math.abs(Number(expense.amount || 0)),
+        expense.payment_method,
+        reversalDescription,
+        expense.funding_source,
+        Number(expense.affects_daily_closing || 0),
+        reversalNote,
+        expense.expense_date,
+        req.user.id,
+        expenseId,
+        reference,
+      ]
+    );
+
+    const reversalExpenseId = Number(reversalResult.insertId || 0);
+    if (!reversalExpenseId) {
+      throw new Error("The linked expense reversal row was not created.");
+    }
+
     const affectedClosing = await markClosingStale(connection, {
       branchId,
       transactionDate: expense.expense_date,
       reason: `Expense ${expenseId} (${expense.category}) worth GHS ${Number(
         expense.amount || 0
-      ).toFixed(2)} was voided under ${reference}. The original row remains preserved.`,
+      ).toFixed(2)} was voided under ${reference}. Reversal row ${reversalExpenseId} restores the financial effect while the original row remains preserved.`,
       sourceEntityType: "expense_void",
       sourceEntityId: expenseId,
       changedBy: req.user.id,
@@ -298,10 +338,12 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       workspaceCode: "spare_parts",
       outcome: "success",
       severity: "critical",
-      details: `Voided expense ${expenseId} under ${reference}; the original financial record was preserved and independently approved by ${approval.approver.full_name}.`,
+      details: `Voided expense ${expenseId} under ${reference}; original evidence was preserved and reversal row ${reversalExpenseId} was independently approved by ${approval.approver.full_name}.`,
       metadata: {
         void_reference: reference,
         void_reason: reason,
+        reversal_expense_id: reversalExpenseId,
+        reversal_amount: -Math.abs(Number(expense.amount || 0)),
         independent_approver: approval.approver,
         original_expense: {
           category: expense.category,
@@ -322,8 +364,9 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       status: "success",
       code: "EXPENSE_VOIDED",
       message:
-        "Expense voided successfully. The original financial row and independent approval evidence were preserved.",
+        "Expense voided successfully. The original row, independent approval and linked financial reversal were preserved.",
       expense_id: expenseId,
+      reversal_expense_id: reversalExpenseId,
       void_reference: reference,
       approved_by: approval.approver.full_name,
       affected_closing: affectedClosing,
