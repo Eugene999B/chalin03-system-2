@@ -102,3 +102,38 @@ jobs:
             frontend/frontend-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  documentation-sync:
+    name: Apply final production documentation sync
+    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/final-production-documentation-sync'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Check out documentation branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/final-production-documentation-sync
+          fetch-depth: 0
+
+      - name: Generate and validate synchronized documents
+        run: |
+          python3 .github/scripts/final_production_documentation_sync.py
+          git diff --check
+          grep -q '84c554e157c9439de12b12a65438ea440c79acc0' README.md
+          grep -q 'Live owner acceptance: successful' docs/POST_PHASE1_FULL_SYSTEM_AUDIT.md
+          grep -q 'npm run migrate:production' docs/PRODUCTION_RELEASE_CONTROL.md
+          grep -q 'Production Release — 25 July 2026' docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md
+
+      - name: Commit exact documentation files and restore permanent CI
+        run: |
+          git config user.name "chalin03-docs-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin main --depth=1
+          git checkout origin/main -- .github/workflows/chalin03-verification.yml
+          git rm -f .github/workflows/final-production-documentation-sync.yml
+          git rm -f .github/scripts/final_production_documentation_sync.py
+          git add README.md docs/POST_PHASE1_FULL_SYSTEM_AUDIT.md docs/PRODUCTION_RELEASE_CONTROL.md docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md .github/workflows/chalin03-verification.yml
+          git commit -m "Synchronize final production release documentation"
+          git push origin HEAD:agent/final-production-documentation-sync
