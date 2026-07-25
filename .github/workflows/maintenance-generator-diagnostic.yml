@@ -1,0 +1,23 @@
+name: Maintenance Reset Generator Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/maintenance-generator-diagnostic.yml"
+      - ".github/scripts/generate_post_phase1_maintenance_reset_fix.py"
+      - "backend/routes/maintenanceRoutes.js"
+      - "frontend/src/pages/MaintenancePage.jsx"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run maintenance reset generator
+        run: python3 .github/scripts/generate_post_phase1_maintenance_reset_fix.py
