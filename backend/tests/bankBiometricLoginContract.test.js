@@ -19,13 +19,11 @@ const mobileAdminStyles = read("frontend/src/styles/adminMobileHotfix.css");
 const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
-
 test("historical biometric credentials remain revocable after web login retirement", () => {
   assert.match(schemaService, /20260722_bank_biometric_device_reset_v1/);
   assert.match(schemaService, /UPDATE user_passkeys[\s\S]*revoked_at/);
   assert.match(schemaService, /trg_user_password_change_revoke_biometrics/);
 });
-
 
 test("browser passkey and biometric APIs are retired fail-closed", () => {
   for (const source of [passkeyRoutes, biometricRoutes]) {
@@ -34,7 +32,6 @@ test("browser passkey and biometric APIs are retired fail-closed", () => {
     assert.doesNotMatch(source, /simplewebauthn|generateAuthenticationOptions|verifyAuthenticationResponse/i);
   }
 });
-
 
 test("frontend never advertises or invokes browser biometric availability", () => {
   assert.match(biometricClient, /WEB_BIOMETRIC_ENABLED = false/);
@@ -47,7 +44,6 @@ test("frontend never advertises or invokes browser biometric availability", () =
   );
 });
 
-
 test("account security is password-only and explains why browser passkeys are rejected", () => {
   assert.match(passwordPage, /Password Security/);
   assert.match(passwordPage, /Browser fingerprint, face, passkey and device screen-lock login are/);
@@ -56,17 +52,13 @@ test("account security is password-only and explains why browser passkeys are re
   assert.doesNotMatch(passwordPage, /registerBiometricDevice|isBiometricAccessAvailable/);
 });
 
-
 test("password starts blank, group story is shown and every login opens a dashboard", () => {
   assert.match(loginEntry, /LoginPageGroupOperations/);
   assert.match(loginPage, /const \[password, setPassword\] = useState\(""\)/);
   assert.match(loginPage, /autoComplete="off"/);
   assert.match(loginPage, /autoComplete="new-password"/);
   assert.match(loginPage, /readOnly=\{!passwordUnlocked\}/);
-  assert.match(
-    loginPage,
-    /window\.addEventListener\("pageshow", clearPasswordField\)/
-  );
+  assert.match(loginPage, /window\.addEventListener\("pageshow", clearPasswordField\)/);
   assert.match(loginEntry, /unlockPasswordOnFirstTap/);
   assert.match(loginEntry, /input\.readOnly = false/);
   assert.match(loginEntry, /openEmergencyCommand/);
@@ -77,31 +69,20 @@ test("password starts blank, group story is shown and every login opens a dashbo
   assert.match(groupStyles, /group-operations-map/);
 });
 
-
 test("mobile administration layouts override route-level desktop widths", () => {
-  assert.match(
-    mobileAdminStyles,
-    /\.upm-table-wrap \.upm-permission-table/
-  );
+  assert.match(mobileAdminStyles, /\.upm-table-wrap \.upm-permission-table/);
   assert.match(mobileAdminStyles, /min-width:\s*0 !important/);
-  assert.match(
-    mobileAdminStyles,
-    /delegate-capability-grid input\[type="checkbox"\]/
-  );
+  assert.match(mobileAdminStyles, /delegate-capability-grid input\[type="checkbox"\]/);
   assert.match(mobileAdminStyles, /users-store-strip/);
   assert.match(mobileAdminStyles, /grid-template-columns:\s*repeat\(2/);
 });
 
-
-test("service worker ignores third-party requests and keeps the current release cache", () => {
+test("service worker ignores external and API traffic and rotates release caches", () => {
+  assert.match(serviceWorker, /const CACHE_NAME = "chalin03-[^"]+"/);
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /chalin03-equipment-navigation-hotfix-v2/);
-  assert.match(
-    headers,
-    /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/
-  );
-  assert.match(
-    headers,
-    /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/
-  );
+  assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
+  assert.match(serviceWorker, /cacheName !== CACHE_NAME/);
+  assert.match(serviceWorker, /caches\.delete\(cacheName\)/);
+  assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
+  assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 });

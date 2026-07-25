@@ -1,0 +1,70 @@
+name: Phase 0 Recovery Drill
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - backend/scripts/phase0RecoveryDrill.js
+      - backend/services/backupSafetyService.js
+      - .github/workflows/phase0-recovery-drill.yml
+
+permissions:
+  contents: read
+
+jobs:
+  signed-backup-restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: phase0-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pphase0-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: phase0-root-password
+
+    steps:
+      - name: Check out Phase 0 branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Check recovery drill syntax
+        working-directory: backend
+        run: node --check scripts/phase0RecoveryDrill.js
+
+      - name: Run signed V2 backup and isolated restore drill
+        working-directory: backend
+        run: node scripts/phase0RecoveryDrill.js
+
+      - name: Upload sanitized recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-recovery-drill-evidence
+          path: backend/phase0-recovery-drill-report.json
+          if-no-files-found: error
+          retention-days: 30

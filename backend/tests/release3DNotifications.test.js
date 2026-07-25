@@ -79,8 +79,9 @@ test("Release 3D is registered across API, layouts and route trees", () => {
   assert.match(page, /SMS escalation:/);
 });
 
-test("Professional backups and Group Command Centre include Release 3D evidence", () => {
+test("Professional backups dynamically include Release 3D evidence", () => {
   const backup = read("backend/routes/backupRoutes.js");
+  const safety = read("backend/services/backupSafetyService.js");
   const professional = read("backend/routes/release2FinalRoutes.js");
   const command = read("backend/services/groupCommandCentreService.js");
 
@@ -91,10 +92,14 @@ test("Professional backups and Group Command Centre include Release 3D evidence"
     "notification_escalations",
     "notification_sync_runs",
   ]) {
-    assert.match(backup, new RegExp(`"${table}"`));
     assert.match(professional, new RegExp(`"${table}"`));
   }
 
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(safety, /currentIncludedTables/);
+  assert.match(safety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
   assert.match(command, /notification_centre/);
   assert.match(command, /critical_notifications/);
   assert.match(command, /\/group-executive-control\/notifications/);

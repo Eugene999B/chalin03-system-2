@@ -70,11 +70,13 @@ test("commercial repair is additive, advisory-locked and production safe", () =>
   assert.doesNotMatch(service, /\bDELETE\s+FROM\b/i);
 });
 
-test("Railway start preloads non-blocking repair and retries until ready", () => {
-  assert.equal(
+test("Railway start loads the required commercial bootstrap without assuming preload order", () => {
+  assert.match(packageJson.scripts.start, /^node\s+/);
+  assert.match(
     packageJson.scripts.start,
-    "node -r ./services/equipmentSalesCommercialBootstrap.js server.js"
+    /-r \.\/services\/equipmentSalesCommercialBootstrap\.js/
   );
+  assert.match(packageJson.scripts.start, /server\.js$/);
   assert.match(bootstrap, /BOOT_DELAY_MS = 2 \* 1000/);
   assert.match(bootstrap, /RETRY_DELAY_MS = 60 \* 1000/);
   assert.match(bootstrap, /ensureCommercialSalesSchema/);
@@ -86,10 +88,7 @@ test("Railway start preloads non-blocking repair and retries until ready", () =>
 test("production preload gates every Sales request on verified commercial columns", () => {
   assert.match(bootstrap, /require\("\.\/equipmentSalesSchemaService"\)/);
   assert.match(bootstrap, /const ensureCatalogueFoundation/);
-  assert.match(
-    bootstrap,
-    /ensureEquipmentSalesSchemaWithCommercialColumns/
-  );
+  assert.match(bootstrap, /ensureEquipmentSalesSchemaWithCommercialColumns/);
   assert.match(bootstrap, /await ensureCatalogueFoundation/);
   assert.match(bootstrap, /await commercialRepairOnce\(\)/);
   assert.match(bootstrap, /full_ready: ready/);

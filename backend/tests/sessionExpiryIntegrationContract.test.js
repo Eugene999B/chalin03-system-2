@@ -7,6 +7,10 @@ const accountSessions = fs.readFileSync(
   path.resolve(__dirname, "../services/accountSessionService.js"),
   "utf8"
 );
+const expiryPolicy = fs.readFileSync(
+  path.resolve(__dirname, "../services/sessionExpiryPolicy.js"),
+  "utf8"
+);
 const authContext = fs.readFileSync(
   path.resolve(__dirname, "../../frontend/src/context/AuthContext.jsx"),
   "utf8"
@@ -24,8 +28,10 @@ test("new and legacy server sessions share the eight-hour or Ghana-midnight poli
   assert.match(accountSessions, /DATE_ADD\(UTC_TIMESTAMP\(\), INTERVAL 8 HOUR\)/);
   assert.match(accountSessions, /DATE_ADD\(UTC_DATE\(\), INTERVAL 1 DAY\)/);
   assert.match(accountSessions, /getEffectiveSessionExpiry/);
+  assert.match(accountSessions, /expiryResponse/);
   assert.match(accountSessions, /created_at,/);
-  assert.match(accountSessions, /SESSION_EXPIRED/);
+  assert.match(expiryPolicy, /SESSION_EXPIRED_GHANA_MIDNIGHT/);
+  assert.match(expiryPolicy, /SESSION_EXPIRED_EIGHT_HOURS/);
   assert.doesNotMatch(accountSessions, /AUTH_SESSION_TTL_DAYS/);
 });
 

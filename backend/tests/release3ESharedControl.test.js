@@ -121,9 +121,14 @@ test("Existing document and report downloads write Release 3E evidence", () => {
   }
 });
 
-test("Professional backups include Release 3E audit evidence", () => {
+test("Professional backups dynamically include Release 3E audit evidence", () => {
   const backup = read("backend/routes/backupRoutes.js");
+  const safety = read("backend/services/backupSafetyService.js");
   const professional = read("backend/routes/release2FinalRoutes.js");
-  assert.match(backup, /"shared_control_evidence"/);
   assert.match(professional, /"shared_control_evidence"/);
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(safety, /currentIncludedTables/);
+  assert.match(safety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
 });

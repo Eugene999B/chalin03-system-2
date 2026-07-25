@@ -1,4 +1,4 @@
-const ExcelJS = require("exceljs");
+const ExcelJS = require("./excelJsCompat");
 
 const INVALID_WORKSHEET_CHARACTERS = /[*?:\\/\[\]]/g;
 const MAX_WORKSHEET_NAME_LENGTH = 31;

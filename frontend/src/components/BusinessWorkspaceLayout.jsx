@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import WorkspaceContextSelector from "./WorkspaceContextSelector";

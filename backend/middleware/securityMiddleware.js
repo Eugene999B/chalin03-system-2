@@ -4,6 +4,10 @@ const helmet = require("helmet");
 
 const HEALTH_PATHS = new Set(["/", "/api/health"]);
 const ORIGIN_SECRET_HEADER = "x-chalin-origin-key";
+const OFFICIAL_FRONTEND_ORIGINS = new Set([
+  "https://chalin03.com",
+  "https://www.chalin03.com",
+]);
 
 function isProductionEnvironment() {
   return String(process.env.NODE_ENV || "").toLowerCase() === "production";
@@ -27,23 +31,51 @@ function normalizeHost(value) {
   return firstValue.replace(/:\d+$/, "");
 }
 
+function normalizeOrigin(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    return `${url.protocol}//${url.host}`.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 function getTrustedApiHosts() {
   const configuredHosts = String(process.env.TRUSTED_API_HOSTS || "")
     .split(",")
     .map(normalizeHost)
     .filter(Boolean);
+  const defaults = ["api.chalin03.com"];
+  if (!isProductionEnvironment()) {
+    defaults.push("localhost", "127.0.0.1", "::1");
+  }
+  return new Set([...defaults, ...configuredHosts]);
+}
 
-  return new Set([
-    "api.chalin03.com",
-    "localhost",
-    "127.0.0.1",
-    "::1",
-    ...configuredHosts,
-  ]);
+function getTrustedFrontendOrigins() {
+  const configured = [process.env.FRONTEND_URL, process.env.FRONTEND_URL_ALT]
+    .map(normalizeOrigin)
+    .filter(Boolean);
+  const origins = new Set([...OFFICIAL_FRONTEND_ORIGINS, ...configured]);
+  if (!isProductionEnvironment()) {
+    origins.add("http://localhost:5173");
+    origins.add("http://localhost:3000");
+  }
+  return origins;
 }
 
 function isTrustedApiHost(host, trustedHosts = getTrustedApiHosts()) {
   return trustedHosts.has(normalizeHost(host));
+}
+
+function isTrustedFrontendOrigin(
+  origin,
+  trustedOrigins = getTrustedFrontendOrigins()
+) {
+  const normalized = normalizeOrigin(origin);
+  return Boolean(normalized && trustedOrigins.has(normalized));
 }
 
 function shouldSkipOriginProtection(req) {
@@ -53,33 +85,35 @@ function shouldSkipOriginProtection(req) {
 function safeSecretEquals(expectedValue, suppliedValue) {
   const expected = Buffer.from(String(expectedValue || ""));
   const supplied = Buffer.from(String(suppliedValue || ""));
-
   if (expected.length === 0 || expected.length !== supplied.length) {
     return false;
   }
-
   return crypto.timingSafeEqual(expected, supplied);
 }
 
-function trustedHostMiddleware(req, res, next) {
-  const enforcementDisabled =
-    String(process.env.ENFORCE_TRUSTED_API_HOSTS || "true").toLowerCase() ===
-    "false";
-
-  if (
-    !isProductionEnvironment() ||
-    enforcementDisabled ||
-    shouldSkipOriginProtection(req)
-  ) {
+function trustedFrontendOriginMiddleware(req, res, next) {
+  if (!isProductionEnvironment() || shouldSkipOriginProtection(req)) {
     return next();
   }
+  const suppliedOrigin = req.get("origin");
+  if (!suppliedOrigin || isTrustedFrontendOrigin(suppliedOrigin)) {
+    return next();
+  }
+  return res.status(403).json({
+    status: "error",
+    code: "UNTRUSTED_FRONTEND_ORIGIN",
+    message: "This browser request must come from an approved Chalin 03 website.",
+  });
+}
 
+function trustedHostMiddleware(req, res, next) {
+  if (!isProductionEnvironment() || shouldSkipOriginProtection(req)) {
+    return next();
+  }
   const requestHost = req.headers.host;
-
   if (isTrustedApiHost(requestHost)) {
     return next();
   }
-
   return res.status(421).json({
     status: "error",
     code: "UNTRUSTED_API_HOST",
@@ -88,20 +122,22 @@ function trustedHostMiddleware(req, res, next) {
 }
 
 function cloudflareOriginSecretMiddleware(req, res, next) {
-  const configuredSecret = String(
-    process.env.CLOUDFLARE_ORIGIN_SECRET || ""
-  ).trim();
-
-  if (
-    !isProductionEnvironment() ||
-    !configuredSecret ||
-    shouldSkipOriginProtection(req)
-  ) {
+  if (!isProductionEnvironment() || shouldSkipOriginProtection(req)) {
     return next();
   }
 
-  const suppliedSecret = req.get(ORIGIN_SECRET_HEADER);
+  const configuredSecret = String(
+    process.env.CLOUDFLARE_ORIGIN_SECRET || ""
+  ).trim();
+  if (configuredSecret.length < 64) {
+    return res.status(503).json({
+      status: "error",
+      code: "ORIGIN_PROTECTION_NOT_CONFIGURED",
+      message: "Production origin protection is not configured.",
+    });
+  }
 
+  const suppliedSecret = req.get(ORIGIN_SECRET_HEADER);
   if (safeSecretEquals(configuredSecret, suppliedSecret)) {
     return next();
   }
@@ -162,6 +198,7 @@ function buildSecurityMiddleware() {
         : false,
     }),
     additionalSecurityHeaders,
+    trustedFrontendOriginMiddleware,
     trustedHostMiddleware,
     cloudflareOriginSecretMiddleware,
   ];
@@ -194,16 +231,21 @@ const sensitiveAdminLimiter = buildRateLimiter({
 });
 
 module.exports = {
+  OFFICIAL_FRONTEND_ORIGINS,
   ORIGIN_SECRET_HEADER,
   additionalSecurityHeaders,
   buildSecurityMiddleware,
   buildRateLimiter,
   cloudflareOriginSecretMiddleware,
   getTrustedApiHosts,
+  getTrustedFrontendOrigins,
   isTrustedApiHost,
+  isTrustedFrontendOrigin,
   loginLimiter,
   normalizeHost,
+  normalizeOrigin,
   safeSecretEquals,
   sensitiveAdminLimiter,
+  trustedFrontendOriginMiddleware,
   trustedHostMiddleware,
 };

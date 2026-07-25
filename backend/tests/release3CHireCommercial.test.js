@@ -83,8 +83,9 @@ test("Release 3C UI is routed only inside Equipment Hire", () => {
   assert.doesNotMatch(page, /selectedBranch|store_id|branch_id/);
 });
 
-test("Professional backups include all Release 3C tables", () => {
+test("Professional backups dynamically include every Release 3C table", () => {
   const backup = read("backend/routes/backupRoutes.js");
+  const safety = read("backend/services/backupSafetyService.js");
   const professional = read("backend/routes/release2FinalRoutes.js");
   for (const table of [
     "hire_rate_cards",
@@ -96,7 +97,11 @@ test("Professional backups include all Release 3C tables", () => {
     "hire_evidence_files",
     "hire_damage_assessments",
   ]) {
-    assert.match(backup, new RegExp(`"${table}"`));
     assert.match(professional, new RegExp(`"${table}"`));
   }
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(safety, /currentIncludedTables/);
+  assert.match(safety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
 });
