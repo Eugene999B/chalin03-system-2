@@ -5,6 +5,7 @@ on:
   pull_request:
     branches:
       - main
+      - production
   push:
     branches:
       - main
@@ -17,13 +18,73 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dependency-and-quality:
-    name: Dependencies, tests, lint and build
+  production-source-policy:
+    name: Production releases originate from main
+    if: github.event_name == 'pull_request' && github.base_ref == 'production'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the integrated main branch
+        shell: bash
+        env:
+          RELEASE_SOURCE_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_SOURCE_BRANCH" = "main" || {
+            echo "Production releases must be opened from main, not ${RELEASE_SOURCE_BRANCH}." >&2
+            exit 1
+          }
+
+  backend-quality:
+    name: Backend syntax and tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Verify backend syntax
+        working-directory: backend
+        run: npm run syntax-check
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
 
+  frontend-quality:
+    name: Frontend tests, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Enforce frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Build production frontend
+        working-directory: frontend
+        run: npm run build
+
+  dependency-audit:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -31,39 +92,37 @@ jobs:
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
-
       - name: Audit backend production dependencies
         working-directory: backend
         run: npm audit --omit=dev --audit-level=high --json > backend-npm-audit.json
-
-      - name: Verify backend syntax and tests
-        working-directory: backend
-        run: npm run syntax-check && npm test
-
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-
       - name: Audit frontend production dependencies
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high --json > frontend-npm-audit.json
+      - name: Upload dependency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-dependency-audit
+          path: |
+            backend/backend-npm-audit.json
+            frontend/frontend-npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
 
-      - name: Run all frontend tests
-        working-directory: frontend
-        run: npm test
-
-      - name: Enforce full frontend lint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Build production frontend
-        working-directory: frontend
-        run: npm run build
-
+  repository-security:
+    name: Repository secret and environment checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check tracked files for secret-shaped values
         shell: bash
         run: |
@@ -77,39 +136,24 @@ jobs:
             exit 1
           fi
 
-      - name: Upload audit reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-3-dependency-audit
-          path: |
-            backend/backend-npm-audit.json
-            frontend/frontend-npm-audit.json
-          if-no-files-found: ignore
-          retention-days: 14
-
   codeql:
     name: CodeQL JavaScript security-extended analysis
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-
       - uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
           queries: security-extended
-
       - id: analyze
         continue-on-error: true
         uses: github/codeql-action/analyze@v3
         with:
           upload: never
           output: codeql-results
-
       - name: Enforce reviewed CodeQL SARIF policy
         run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif
-
       - name: Upload CodeQL SARIF evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -120,12 +164,12 @@ jobs:
           retention-days: 14
 
   production-passive-checks:
-    name: Production passive security checks
+    name: Manual production passive security checks
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - name: Check API headers, authentication gates and exposed files
         shell: bash
         run: |
@@ -187,8 +231,6 @@ jobs:
 
       - name: Check public site headers and private route indexing protection
         shell: bash
-        env:
-          AUDIT_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           mkdir -p audit-output
@@ -197,14 +239,7 @@ jobs:
           grep -qi '^x-content-type-options: nosniff' audit-output/site.headers
           grep -qi '^x-frame-options: DENY' audit-output/site.headers
           grep -qi '^referrer-policy:' audit-output/site.headers
-
-          if ! grep -qi '^strict-transport-security:' audit-output/site.headers; then
-            if [ "$AUDIT_EVENT_NAME" = "push" ]; then
-              echo 'Live public site is missing HSTS after deployment.' >&2
-              exit 1
-            fi
-            grep -q 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload' frontend/public/_headers
-          fi
+          grep -qi '^strict-transport-security:' audit-output/site.headers
 
           curl --fail --silent --show-error --location --dump-header audit-output/login.headers \
             --output audit-output/login.html https://chalin03.com/login

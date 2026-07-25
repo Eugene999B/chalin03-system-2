@@ -58,11 +58,12 @@ test("worker HR letter API supports drafts, issue, acknowledgement, cancellation
   assert.doesNotMatch(source, /UPDATE worker_profiles\s+SET\s+employment_status/i);
 });
 
-test("worker HR letters are registered, backed up and visible in the worker page", () => {
+test("worker HR letters are registered, dynamically backed up and visible", () => {
   const server = readBackend("server.js");
   const schemaService = readBackend("services/workerHrLetterSchemaService.js");
   const systemRoutes = readBackend("routes/systemRoutes.js");
   const backup = readBackend("routes/backupRoutes.js");
+  const backupSafety = readBackend("services/backupSafetyService.js");
   const releaseBackup = readBackend("routes/release2FinalRoutes.js");
   const workerPage = readProject("frontend/src/pages/ExpandedWorkerProfilePage.jsx");
   const panel = readProject("frontend/src/components/WorkerHrLettersPanel.jsx");
@@ -74,8 +75,12 @@ test("worker HR letters are registered, backed up and visible in the worker page
   assert.match(schemaService, /worker_id BIGINT NOT NULL/);
   assert.match(schemaService, /Worker HR schema verification failed/);
   assert.match(systemRoutes, /"worker_hr_letters"/);
-  assert.match(backup, /worker_hr_letters/);
   assert.match(releaseBackup, /worker_hr_letters/);
+  assert.match(backup, /getAllBaseTables/);
+  assert.match(backup, /classifyDatabaseTables/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backup, /const PREFERRED_TABLE_ORDER/);
   assert.match(workerPage, /Letters & HR Correspondence/);
   assert.match(workerPage, /WorkerHrLettersPanel/);
   assert.match(panel, /Save Draft Letter/);

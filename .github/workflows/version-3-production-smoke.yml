@@ -2,45 +2,53 @@ name: Version 3 Production Smoke
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
   push:
     branches:
-      - main
+      - production
 
 permissions:
   contents: read
 
 concurrency:
-  group: version-3-production-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  group: version-3-production-smoke
+  cancel-in-progress: false
 
 jobs:
   live-production:
-    name: Live API and Cloudflare release checks
+    name: Post-deployment API and Cloudflare checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify live API version, readiness and rate limiting
+      - name: Wait for the approved production release
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p smoke-output
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error --location \
+              --dump-header smoke-output/api-health.headers \
+              --output smoke-output/api-health.json \
+              https://api.chalin03.com/api/health; then
+              if jq -e '
+                .status == "success" and
+                .service == "Chalin 03 Group Operations Platform" and
+                .version == "3.0.0"
+              ' smoke-output/api-health.json >/dev/null; then
+                echo "Production API is ready after attempt ${attempt}."
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo 'Production API did not become ready with the expected release.' >&2
+          exit 1
 
-          curl --fail --silent --show-error --location \
-            --dump-header smoke-output/api-health.headers \
-            --output smoke-output/api-health.json \
-            https://api.chalin03.com/api/health
-
-          jq -e '
-            .status == "success" and
-            .service == "Chalin 03 Group Operations Platform" and
-            .version == "3.0.0"
-          ' smoke-output/api-health.json
-
+      - name: Verify live API readiness, security and authentication gates
+        shell: bash
+        run: |
+          set -euo pipefail
           grep -qi '^strict-transport-security:' smoke-output/api-health.headers
           grep -qi '^content-security-policy:' smoke-output/api-health.headers
           grep -qi '^cache-control: no-store' smoke-output/api-health.headers
@@ -68,14 +76,10 @@ jobs:
           test "$protected_status" = "401"
           grep -qiE '^ratelimit-(policy|limit):' smoke-output/protected.headers
 
-      - name: Verify live login release bundle and Cloudflare security
+      - name: Verify live login bundle, service worker and manifest
         shell: bash
-        env:
-          SMOKE_EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          mkdir -p smoke-output
-
           curl --fail --silent --show-error --location \
             --dump-header smoke-output/login.headers \
             --output smoke-output/login.html \
@@ -97,30 +101,19 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/service-worker.js \
             https://chalin03.com/sw.js
-          grep -q 'chalin03-version-3-v1' smoke-output/service-worker.js
+          grep -qE 'const CACHE_NAME = "chalin03-[^"]+"' smoke-output/service-worker.js
+          grep -q 'url.origin !== self.location.origin' smoke-output/service-worker.js
+          grep -q 'url.pathname.startsWith("/api")' smoke-output/service-worker.js
           grep -q '/site.webmanifest' smoke-output/service-worker.js
 
           curl --fail --silent --show-error --location \
             --output smoke-output/site.webmanifest \
             https://chalin03.com/site.webmanifest
-
-          if jq -e '
+          jq -e '
             .name == "Chalin 03 Group Operations Platform" and
             .short_name == "Chalin 03" and
             (.icons | length) >= 2
-          ' smoke-output/site.webmanifest; then
-            echo 'Live Version Three manifest is deployed.'
-          elif [ "$SMOKE_EVENT_NAME" = "pull_request" ]; then
-            jq -e '
-              .name == "Chalin 03 Group Operations Platform" and
-              .short_name == "Chalin 03" and
-              (.icons | length) >= 2
-            ' frontend/public/site.webmanifest
-            echo 'Pre-deploy source manifest is ready; the push-to-main smoke will require the live value.'
-          else
-            echo 'Live production manifest is not the Version Three group manifest.' >&2
-            exit 1
-          fi
+          ' smoke-output/site.webmanifest
 
       - name: Preserve live smoke evidence
         if: always()

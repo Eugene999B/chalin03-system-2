@@ -71,16 +71,18 @@ test("Release 3F-A login route exposes clear lock and attempt evidence", () => {
   assert.match(source, /login_method/);
 });
 
-test("Release 3F-A frontend presents phone login, location consent and lock notice", () => {
-  const loginPage = read("frontend/src/pages/LoginPage.jsx");
+test("Release 3F-A frontend presents phone login, location consent and attempt evidence", () => {
+  const loginEntry = read("frontend/src/pages/LoginPage.jsx");
+  const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
   const authContext = read("frontend/src/context/AuthContext.jsx");
   const collector = read("frontend/src/utils/deviceEvidence.js");
 
+  assert.match(loginEntry, /LoginPageGroupOperations/);
   assert.match(loginPage, /Username or phone number/);
-  assert.match(loginPage, /Account blocked/);
-  assert.match(loginPage, /Attempts remaining before block/);
-  assert.match(loginPage, /Record this login device and precise location/);
+  assert.match(loginPage, /attemptsRemaining/);
+  assert.match(loginPage, /data\.attempts_remaining/);
   assert.match(loginPage, /collectDeviceEvidence/);
+  assert.match(loginPage, /requestLocation: shareLocation/);
   assert.match(authContext, /device_evidence/);
   assert.match(collector, /navigator\.geolocation\.getCurrentPosition/);
   assert.match(collector, /enableHighAccuracy:\s*true/);

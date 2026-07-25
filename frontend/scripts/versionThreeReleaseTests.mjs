@@ -10,8 +10,15 @@ import {
 } from "../src/config/appVersion.js";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const loginSource = readFileSync(join(root, "src/pages/LoginPage.jsx"), "utf8");
-const versionStyles = readFileSync(join(root, "src/styles/appVersion.css"), "utf8");
+const loginEntry = readFileSync(join(root, "src/pages/LoginPage.jsx"), "utf8");
+const loginSource = readFileSync(
+  join(root, "src/pages/LoginPageGroupOperations.jsx"),
+  "utf8"
+);
+const loginStyles = readFileSync(
+  join(root, "src/styles/commandGateV4.css"),
+  "utf8"
+);
 const manifest = JSON.parse(
   readFileSync(join(root, "public/site.webmanifest"), "utf8")
 );
@@ -32,15 +39,15 @@ assert.equal(manifest.short_name, "Chalin 03");
 assert.match(manifest.description, /Spare Parts/);
 assert.match(manifest.description, /Mining Operations/);
 assert.match(manifest.description, /Equipment Hire/);
-assert.match(loginSource, /premium-version-badge/);
+assert.match(loginEntry, /LoginPageGroupOperations/);
 assert.match(loginSource, /APP_RELEASE_LABEL/);
-assert.match(versionStyles, /\.premium-login-page\s*\{[^}]*padding-top:/s);
-assert.match(versionStyles, /\.premium-version-badge\s*\{[^}]*position:\s*absolute/s);
-assert.match(versionStyles, /transform:\s*translateX\(-50%\)/);
-assert.match(versionStyles, /@media \(max-width: 680px\)/);
+assert.match(loginSource, /className="gate4__version"/);
+assert.match(loginSource, /commandGateV4\.css/);
+assert.match(loginStyles, /\.gate4__version/);
+assert.match(loginStyles, /@media \(max-width:/);
 assert.match(backendVersionSource, /APP_VERSION = "3\.0\.0"/);
 assert.match(systemRouteSource, /process\.env\.APP_VERSION \|\| APP_VERSION/);
 
 console.log(
-  "PASS - Version Three identity is consistent across login, PWA manifest and API health."
+  "PASS - Version Three identity is consistent across the active login, PWA manifest and API health."
 );

@@ -240,7 +240,7 @@ export function AuthProvider({ children }) {
       return false;
     }
 
-    let preservedNewerSession = false;
+    let preservedNewerSession;
 
     try {
       if (tokenBeforeLogout) {

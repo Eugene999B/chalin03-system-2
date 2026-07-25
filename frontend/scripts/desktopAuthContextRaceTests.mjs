@@ -25,7 +25,11 @@ assert.ok(logoutCall > responseGuard, "newer-session guard must run before logou
 
 assert.match(main, /register\("\/sw\.js", \{ updateViaCache: "none" \}\)/);
 assert.match(main, /registration\.update\(\)/);
-assert.match(worker, /chalin03-desktop-auth-context-hotfix-v3/);
-assert.match(worker, /fetch\(request\)[\s\S]*catch\(\(\) => caches\.match\(request\)\)/);
+assert.match(worker, /const CACHE_NAME = "chalin03-[^"]+"/);
+assert.match(worker, /async function cachedResponseOrOffline\(/);
+assert.match(worker, /cacheName !== CACHE_NAME/);
+assert.match(worker, /fetch\(request\)[\s\S]*catch\(\(\) => cachedResponseOrOffline\("\/"\)\)/);
+assert.match(worker, /fetch\(request\)[\s\S]*catch\(\(\) => cachedResponseOrOffline\(request\)\)/);
+assert.match(worker, /return buildOfflineResponse\(\)/);
 
 console.log("Desktop AuthContext race and cache refresh contract passed.");

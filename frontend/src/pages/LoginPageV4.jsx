@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { openEmergencyCommand } from "../components/EmergencyCommandOverlay";
 import { useAuth } from "../context/AuthContext";

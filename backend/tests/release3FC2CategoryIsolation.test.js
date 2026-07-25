@@ -181,12 +181,12 @@ test("Release 3F-C2 has distinct category guides and corrected Equipment Hire ic
   assert.doesNotMatch(hireLayout, /\\u\{/);
 });
 
-test("Release 3F-C2 full-system backup covers permissions, conflicts and independent workers", () => {
+test("Release 3F-C2 full-system backup dynamically covers permissions, conflicts and workers", () => {
   const backupSource = read("backend/routes/backupRoutes.js");
+  const backupSafety = read("backend/services/backupSafetyService.js");
   const resetSource = read("backend/scripts/resetDatabaseFromBackup.js");
   const verifySource = read("backend/scripts/verifyRestoredDatabase.js");
 
-  const backupTables = extractArray(backupSource, "PREFERRED_TABLE_ORDER");
   const resetTables = extractArray(resetSource, "CANONICAL_TABLES");
   const verifyTables = extractArray(verifySource, "APPLICATION_TABLES");
   const required = [
@@ -200,12 +200,15 @@ test("Release 3F-C2 full-system backup covers permissions, conflicts and indepen
   ];
 
   for (const table of required) {
-    assert.equal(backupTables.includes(table), true, `${table} missing from backup`);
     assert.equal(resetTables.includes(table), true, `${table} missing from reset`);
     assert.equal(verifyTables.includes(table), true, `${table} missing from verification`);
   }
 
-  assert.ok(backupTables.indexOf("worker_profiles") < backupTables.indexOf("worker_category_assignment_conflicts"));
+  assert.match(backupSource, /getAllBaseTables/);
+  assert.match(backupSource, /classifyDatabaseTables/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backupSource, /const PREFERRED_TABLE_ORDER/);
 });
 
 test("Release 3F-C2 group-wide views are original-System-Administrator only", () => {

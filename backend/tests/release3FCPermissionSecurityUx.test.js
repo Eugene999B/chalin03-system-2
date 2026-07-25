@@ -107,15 +107,18 @@ test("Release 3F-C Security Centre deletes only the message view, not audit evid
   assert.match(page, /underlying audit evidence will remain protected/i);
 });
 
-test("Release 3F-C login page clears and resists remembered password autofill", () => {
-  const page = read("frontend/src/pages/LoginPage.jsx");
+test("Release 3F-C active login component clears and resists password autofill", () => {
+  const loginEntry = read("frontend/src/pages/LoginPage.jsx");
+  const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
 
-  assert.match(page, /clearRememberedPassword/);
-  assert.match(page, /autoComplete="off"/);
-  assert.match(page, /autoComplete="new-password"/);
-  assert.match(page, /readOnly=!\{?passwordFieldActivated\}?|readOnly=\{!passwordFieldActivated\}/);
-  assert.match(page, /data-lpignore="true"/);
-  assert.doesNotMatch(page, /name="chalin03_login_password"/);
+  assert.match(loginEntry, /LoginPageGroupOperations/);
+  assert.match(loginPage, /function clearPasswordField/);
+  assert.match(loginPage, /window\.addEventListener\("pageshow", clearPasswordField\)/);
+  assert.match(loginPage, /autoComplete="off"/);
+  assert.match(loginPage, /autoComplete="new-password"/);
+  assert.match(loginPage, /readOnly=\{!passwordUnlocked\}/);
+  assert.match(loginPage, /data-lpignore="true"/);
+  assert.doesNotMatch(loginPage, /name="chalin03_login_password"/);
 });
 
 test("Release 3F-C frontend registers the permission manager route and sidebar", () => {
@@ -131,13 +134,17 @@ test("Release 3F-C frontend registers the permission manager route and sidebar",
   assert.match(page, /X-Protected-Action-Token/);
 });
 
-test("Release 3F-C backup and System Operations cover new control evidence", () => {
-  const backup = read("backend/routes/backupRoutes.js");
+test("Release 3F-C controls are included by the exact dynamic backup contract", () => {
+  const backupRoutes = read("backend/routes/backupRoutes.js");
+  const backupSafety = read("backend/services/backupSafetyService.js");
   const system = read("backend/routes/systemRoutes.js");
   const systemPage = read("frontend/src/pages/SystemOperationsPage.jsx");
 
-  assert.match(backup, /user_permission_overrides/);
-  assert.match(backup, /security_event_dismissals/);
+  assert.match(backupRoutes, /getAllBaseTables/);
+  assert.match(backupRoutes, /information_schema\.TABLES/);
+  assert.match(backupSafety, /currentIncludedTables/);
+  assert.match(backupSafety, /Backup is missing current required tables/);
+  assert.doesNotMatch(backupRoutes, /const PREFERRED_TABLE_ORDER/);
   assert.match(system, /permissionControlStatus/);
   assert.match(systemPage, /Open User Permission Manager/);
   assert.match(systemPage, /Delegated System Administrator/);

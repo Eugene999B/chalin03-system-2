@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router";
 import CompactSidebarNavigation from "./CompactSidebarNavigation";
 import SidebarAccountMenu from "./SidebarAccountMenu";
 import "../styles/sidebarPolish.css";

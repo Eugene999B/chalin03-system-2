@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Navigate, useSearchParams } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { businessWorkspaces, getBusinessWorkspace } from "../data/businessWorkspaces";
@@ -135,14 +135,11 @@ export default function LoginPageGroupOperations() {
   const {
     isLoggedIn,
     login,
-    user: activeUser,
     workspaceCode: activeWorkspaceCode,
   } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const passwordRef = useRef(null);
-  const passwordNameRef = useRef(
-    `chalin03-entry-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  const passwordFieldName = `chalin03-entry-${useId().replace(/:/g, "")}`;
 
   const requestedWorkspace = getBusinessWorkspace(searchParams.get("workspace"));
   const [workspaceCode, setWorkspaceCode] = useState(
@@ -682,7 +679,7 @@ export default function LoginPageGroupOperations() {
                 <div className="gate4__password">
                   <input
                     ref={passwordRef}
-                    name={passwordNameRef.current}
+                    name={passwordFieldName}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     onFocus={() => {
