@@ -20,15 +20,15 @@ Production business-control platform for **Chalin 03 Company Limited**, prepared
 | Frontend hosting | Cloudflare Pages |
 | Backend hosting | Railway |
 | Database | Railway MySQL |
-| Production branch | `main` |
+| Production deployment branch | `production` |
 | Current release | `Version Three · v3.0.0` |
 | Supported backend runtime | Node.js 20+; CI uses Node.js 24 |
 | SMS | Arkesel when deliberately enabled; `mock` for development |
 | WhatsApp receipts | Keep disabled until approved Meta setup exists |
 
-`main` deploys automatically. Never merge an unverified change into `main`.
+`main` is the reviewed release-candidate branch. Only `production` may trigger the live Railway and Cloudflare deployments. Never promote an unverified change to `production`.
 
-The exact production commit changes over time. Before a release task, verify current `main`, open pull requests, workflow status, Railway deployment and Cloudflare deployment instead of trusting an old hash in documentation.
+The exact production commit changes over time. Before a release task, verify current `main`, the `production` promotion pull request, workflow status, Railway deployment and Cloudflare deployment instead of trusting an old hash in documentation.
 
 ---
 
@@ -174,7 +174,7 @@ Browser / installed PWA
 
 - React 19
 - Vite 8
-- React Router 7
+- React Router 8
 - Axios
 - CSS
 - PWA/service worker
@@ -191,7 +191,7 @@ Browser / installed PWA
 - Helmet security headers
 - Express rate limiting
 - PDFKit
-- ExcelJS
+- ExcelJS-compatible maintained workbook package through `backend/services/excelJsCompat.js`
 - Sharp
 - QR code generation
 - Arkesel integration
