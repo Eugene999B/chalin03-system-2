@@ -1,4 +1,4 @@
-name: Apply Post-Phase-1 Immutability Fix
+name: Generate Post-Phase-1 Immutability Fix
 
 on:
   workflow_dispatch:
@@ -14,26 +14,26 @@ on:
       - ".github/workflows/apply-post-phase1-immutability-fix.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-post-phase1-immutability-fix
+  group: generate-post-phase1-immutability-fix-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-fix:
-    name: Preserve audit and expense evidence
+  generate-fix:
+    name: Generate and verify audit/expense evidence fix
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
     steps:
-      - name: Check out isolated audit branch
+      - name: Check out exact audit branch head
         uses: actions/checkout@v4
         with:
           ref: agent/post-phase1-full-system-audit
           fetch-depth: 0
 
-      - name: Apply exact fail-closed source changes
+      - name: Apply exact fail-closed source changes in runner only
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -223,21 +223,34 @@ test("legacy expense deletion cannot bypass the Phase 1 void ledger", () => {
           npx eslint src/pages/AuditSignoffHistoryPage.jsx
           npm run build
 
-      - name: Commit verified corrections to isolated branch
+      - name: Package exact verified source files
         run: |
-          if git diff --quiet; then
-            echo "No source changes were produced." >&2
-            exit 1
-          fi
-
-          git config user.name "chalin03-audit-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add \
+          set -euo pipefail
+          git diff --check
+          git diff --binary -- \
             backend/routes/auditSignoffRoutes.js \
             backend/routes/expenseRoutes.js \
             backend/tests/auditSignoffExpenseImmutability.test.js \
+            frontend/src/pages/AuditSignoffHistoryPage.jsx \
+            > post-phase1-immutability-fix.patch
+          sha256sum \
+            backend/routes/auditSignoffRoutes.js \
+            backend/routes/expenseRoutes.js \
+            backend/tests/auditSignoffExpenseImmutability.test.js \
+            frontend/src/pages/AuditSignoffHistoryPage.jsx \
+            post-phase1-immutability-fix.patch \
+            > post-phase1-immutability-fix.sha256
+
+      - name: Upload reviewed fix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-phase1-immutability-fix-files
+          path: |
+            backend/routes/auditSignoffRoutes.js
+            backend/routes/expenseRoutes.js
+            backend/tests/auditSignoffExpenseImmutability.test.js
             frontend/src/pages/AuditSignoffHistoryPage.jsx
-          git commit -m "Preserve audit and expense evidence"
-          git fetch origin agent/post-phase1-full-system-audit
-          git rebase origin/agent/post-phase1-full-system-audit
-          git push origin HEAD:agent/post-phase1-full-system-audit
+            post-phase1-immutability-fix.patch
+            post-phase1-immutability-fix.sha256
+          if-no-files-found: error
+          retention-days: 14
