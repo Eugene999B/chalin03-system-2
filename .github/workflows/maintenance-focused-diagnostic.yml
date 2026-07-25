@@ -1,0 +1,31 @@
+name: Maintenance Reset Focused Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/maintenance-focused-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Clone quietly and run focused checks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --quiet --depth 1 --branch agent/post-phase1-full-system-audit \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repository
+          cd repository
+          python3 .github/scripts/generate_post_phase1_maintenance_reset_fix.py
+          python3 -m py_compile .github/scripts/generate_post_phase1_maintenance_reset_fix.py
+          node --check backend/routes/maintenanceRoutes.js
+          node --check backend/services/maintenanceResetService.js
+          node --test backend/tests/maintenanceResetSafety.test.js
+          ! grep -RniE 'TRUNCATE[[:space:]]+TABLE|ALTER[[:space:]]+TABLE' backend/routes/maintenanceRoutes.js backend/services/maintenanceResetService.js
