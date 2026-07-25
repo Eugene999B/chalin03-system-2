@@ -20,7 +20,7 @@ jobs:
         with:
           ref: agent/post-phase1-full-system-audit
           fetch-depth: 0
-      - name: Restore the frontend generator block inside main
+      - name: Shift the restored frontend statements into main
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -28,139 +28,45 @@ jobs:
           path = Path('.github/scripts/generate_post_phase1_user_identity_fix.py')
           lines = path.read_text().splitlines(keepends=True)
 
-          state_indexes = [
-              index for index, line in enumerate(lines)
-              if 'const [deletingUserId, setDeletingUserId]' in line
-          ]
-          staff_indexes = [
-              index for index, line in enumerate(lines)
-              if '"Staff-user section description",' in line
-          ]
-          if len(state_indexes) != 1 or len(staff_indexes) != 1:
-              raise SystemExit(
-                  f'Expected one state and one staff label; found {len(state_indexes)} and {len(staff_indexes)}.'
-              )
-
-          start = state_indexes[0]
-          while start >= 0 and lines[start].strip() != 'frontend_source = replace_exact(':
-              start -= 1
-          if start < 0:
-              raise SystemExit('Could not find the offboarding-state replacement start.')
-
-          staff_start = staff_indexes[0]
-          while staff_start >= 0 and lines[staff_start].strip() != 'frontend_source = replace_pattern(':
-              staff_start -= 1
-          if staff_start <= start:
-              raise SystemExit('Could not resolve the staff-description replacement boundary.')
-
-          block = '''    frontend_source = replace_exact(
-              frontend_source,
-              'const [deletingUserId, setDeletingUserId] = useState("");',
-              'const [offboardingUserId, setOffboardingUserId] = useState("");',
-              "Offboarding state",
+          state_index = next(
+              (index for index, line in enumerate(lines)
+               if 'const [deletingUserId, setDeletingUserId]' in line),
+              None,
           )
-          frontend_source = replace_pattern(
-              frontend_source,
-              re.compile(
-                  r'function canCurrentUserDeleteAccounts\\(\\)\\s*\\{\\s*return isOriginalSystemAdministrator\\(currentUser\\);\\s*\\}'
+          staff_label_index = next(
+              (index for index, line in enumerate(lines)
+               if '"Staff-user section description",' in line),
+              None,
+          )
+          if state_index is None or staff_label_index is None:
+              raise SystemExit('Could not find the unique state/staff markers.')
+
+          second_call_start = next(
+              (
+                  index
+                  for index in range(state_index + 1, staff_label_index)
+                  if lines[index].startswith('frontend_source = replace_pattern(')
               ),
-              ''' + "'''" + '''function canCurrentUserSecurelyOffboardAccounts() {
-              return isOriginalSystemAdministrator(currentUser);
-            }''' + "'''" + ''',
-              "Current-user offboarding capability",
+              None,
           )
-          frontend_source = replace_pattern(
-              frontend_source,
-              re.compile(
-                  r'function canDeleteThisUser\\(user\\)\\s*\\{[\\s\\S]*?\\n  \\}',
-                  re.M,
-              ),
-              ''' + "'''" + '''function canSecurelyOffboardUser(user) {
-              if (!canCurrentUserSecurelyOffboardAccounts()) return false;
-              if (Number(user.id) === Number(currentUser?.id)) return false;
-              if (isOriginalSystemAdministrator(user)) return false;
-              return Boolean(user.is_active);
-            }''' + "'''" + ''',
-              "Per-user secure offboarding capability",
-          )
-          frontend_source = replace_pattern(
-              frontend_source,
-              re.compile(
-                  r'  async function deleteUserAccount\\(user\\) \\{[\\s\\S]*?\\n  \\}\\n\\n  async function resetUserPassword',
-                  re.M,
-              ),
-              ''' + "'''" + '''  async function secureOffboardUser(user) {
-              setMessage("");
-              setError("");
+          if second_call_start is None:
+              raise SystemExit('Could not find the first outdented frontend statement.')
 
-              if (!canSecurelyOffboardUser(user)) {
-                setError(
-                  "Only the original System Administrator can securely offboard another active user account."
-                );
-                return;
-              }
+          staff_call_start = staff_label_index
+          while (
+              staff_call_start >= 0
+              and lines[staff_call_start].strip()
+              != 'frontend_source = replace_pattern('
+          ):
+              staff_call_start -= 1
+          if staff_call_start <= second_call_start:
+              raise SystemExit('Could not resolve the staff-description boundary.')
 
-              const firstConfirm = window.confirm(
-                `Securely offboard this account?\\n\\nName: ${user.full_name}\\nUsername: ${user.username}\\nRole: ${user.role}\\n\\nThis disables login, revokes all active sessions and assigned access, and preserves the user identity on historical sales, payments, approvals and audit records.`
-              );
+          for index in range(second_call_start, staff_call_start):
+              if lines[index].strip():
+                  lines[index] = '    ' + lines[index]
 
-              if (!firstConfirm) return;
-
-              const typedConfirm = window.prompt(
-                `Type OFFBOARD ${user.username} to confirm secure offboarding.`
-              );
-
-              if (typedConfirm !== `OFFBOARD ${user.username}`) {
-                setError("Secure offboarding cancelled. Confirmation text did not match.");
-                return;
-              }
-
-              setOffboardingUserId(user.id);
-
-              try {
-                const response = await axiosClient.delete(`/users/${user.id}`);
-
-                setMessage(
-                  response.data.message ||
-                    "User account securely offboarded and historical identity preserved."
-                );
-                await loadUsers();
-              } catch (error) {
-                setError(
-                  error.response?.data?.message || "Failed to securely offboard user."
-                );
-              } finally {
-                setOffboardingUserId("");
-              }
-            }
-
-            async function resetUserPassword''' + "'''" + ''',
-              "Permanent-delete frontend function",
-          )
-          frontend_source = replace_pattern(
-              frontend_source,
-              re.compile(
-                  r'\\{canCurrentUserDeleteAccounts\\(\\) && \\([\\s\\S]*?\\n      \\)\\}',
-                  re.M,
-              ),
-              ''' + "'''" + '''{canCurrentUserSecurelyOffboardAccounts() && (
-              <div className="users-warning-banner">
-                <div>🛡️</div>
-                <div>
-                  <strong>Original System Administrator secure-offboarding mode is active.</strong>
-                  <br />
-                  Temporary Disable retains assigned access for reactivation. Secure Offboard
-                  revokes login, sessions and assigned access while permanently preserving the
-                  staff identity on historical financial and audit records.
-                </div>
-              </div>
-            )}''' + "'''" + ''',
-              "Administrator warning banner",
-          )
-
-          '''.splitlines(keepends=True)
-
-          path.write_text(''.join(lines[:start] + block + lines[staff_start:]))
+          path.write_text(''.join(lines))
           PY
 
           python3 -m py_compile .github/scripts/generate_post_phase1_user_identity_fix.py
