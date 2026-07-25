@@ -23,16 +23,31 @@ jobs:
       - name: Apply exact reviewed hardening changes
         run: |
           if [ ! -f .github/scripts/apply_claude_followup_hardening.py ]; then
-            echo "Hardening changes were already applied."
+            echo "Hardening changes were already applied." > fixer-diagnostic.txt
             touch .fixer-already-applied
             exit 0
           fi
-          python3 .github/scripts/apply_claude_followup_hardening.py
-          node --check backend/routes/release2FinalRoutes.js
-          node --check backend/routes/dailyClosingRoutes.js
-          node --check backend/tests/claudeFollowupHardening.test.js
-          git diff --check
-          git status --short
+          set +e
+          {
+            python3 .github/scripts/apply_claude_followup_hardening.py
+            node --check backend/routes/release2FinalRoutes.js
+            node --check backend/routes/dailyClosingRoutes.js
+            node --check backend/tests/claudeFollowupHardening.test.js
+            git diff --check
+            git status --short
+          } > fixer-diagnostic.txt 2>&1
+          status=$?
+          cat fixer-diagnostic.txt
+          exit $status
+
+      - name: Upload fixer diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-followup-fixer-diagnostic
+          path: fixer-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Commit exact hardening changes
         run: |
