@@ -22,6 +22,11 @@ jobs:
 
       - name: Apply exact reviewed hardening changes
         run: |
+          if [ ! -f .github/scripts/apply_claude_followup_hardening.py ]; then
+            echo "Hardening changes were already applied." > fixer-diagnostic.txt
+            touch .fixer-already-applied
+            exit 0
+          fi
           set +e
           {
             python3 .github/scripts/apply_claude_followup_hardening.py
@@ -43,11 +48,13 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      - name: Commit fixes and remove one-time helper files
+      - name: Commit exact hardening changes
         run: |
+          if [ -f .fixer-already-applied ]; then
+            exit 0
+          fi
           git config user.name "chalin03-hardening-bot"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/claude-followup-fixer.yml
           git rm .github/scripts/apply_claude_followup_hardening.py
           git add backend/routes/release2FinalRoutes.js backend/routes/dailyClosingRoutes.js backend/tests/claudeFollowupHardening.test.js docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md
           git commit -m "Harden Owner login and Daily Closing correction evidence"
