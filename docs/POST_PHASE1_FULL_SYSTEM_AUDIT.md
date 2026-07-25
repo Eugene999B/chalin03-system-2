@@ -16,17 +16,17 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 | Area | Weight | Evidence status | Score | Findings |
 |---|---:|---|---:|---|
-| Production safety, migrations and disaster recovery | 15 | In review | — | M-002 |
-| Authentication, sessions and shared security | 12 | In review | — | H-002 |
+| Production safety, migrations and disaster recovery | 15 | In review | — | M-002 open |
+| Authentication, sessions and shared security | 12 | In review | — | H-002 open |
 | Permissions, category and location isolation | 12 | In review | — | — |
-| Monetary correctness and approvals | 14 | In review | — | H-001, M-001 |
-| Spare Parts correctness | 10 | In review | — | M-001 |
+| Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
+| Spare Parts correctness | 10 | In review | — | M-001 resolved |
 | Mining correctness | 10 | In review | — | — |
 | Equipment Sales & Hire correctness | 12 | In review | — | — |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001, H-002 |
+| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 open |
 | Mobile, usability and accessibility | 4 | In review | — | — |
 | Testing, deployment and documentation | 4 | In review | — | — |
-| **Total** | **100** | **In review** | **—** | Four findings recorded |
+| **Total** | **100** | **In review** | **—** | Two resolved; two open |
 
 ## Findings
 
@@ -34,11 +34,11 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 - **Severity:** High
 - **Affected area:** Spare Parts audit archive; `DELETE /api/audit-signoffs/:id`; `AuditSignoffHistoryPage.jsx`
-- **Evidence:** The backend physically deletes the `audit_signoffs` row and the compliance archive exposes a normal Delete button.
-- **Business risk:** An approved accounting-period sign-off can lose its primary approval record. An activity-log sentence is not an adequate replacement for the deleted sign-off, certificate and linked audit evidence.
-- **Correction:** Preserve sign-offs permanently; keep the legacy DELETE endpoint only as a fail-closed compatibility guard; log blocked attempts; direct corrections through review, unlock and re-approval; remove the frontend Delete control.
-- **Regression evidence:** Focused source contract, complete backend suite, frontend tests/lint/build and permanent security gates required.
-- **Status:** Correction in progress.
+- **Evidence:** The prior backend physically deleted the `audit_signoffs` row and the compliance archive exposed a normal Delete button.
+- **Business risk:** An approved accounting-period sign-off could lose its primary approval record. An activity-log sentence is not an adequate replacement for the deleted sign-off, certificate and linked audit evidence.
+- **Correction:** Audit sign-offs are now permanent. The legacy DELETE endpoint logs `BLOCK_DELETE_AUDIT_SIGNOFF` and returns `AUDIT_SIGNOFF_IMMUTABLE`; the archive Delete action was removed and replaced with a `Permanent evidence` marker and controlled correction guidance.
+- **Regression evidence:** `auditSignoffExpenseImmutability.test.js`; complete 393-test backend suite; frontend source tests, targeted lint and production build all passed against the exact generated files before commit `58db5c0d298d6ffddc51d2fafe5c0d09c85c1a79`.
+- **Status:** Resolved; permanent current-head gates pending.
 
 ### H-002 — Permanent user deletion destroys historical attribution
 
@@ -54,11 +54,11 @@ This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STAN
 
 - **Severity:** Medium
 - **Affected area:** Spare Parts expenses; legacy handler in `expenseRoutes.js`
-- **Evidence:** The Phase 1 immutable void router currently shadows a later `DELETE FROM expenses` handler, but the physical-delete implementation remains in the repository and could become reachable after a future route-order change.
+- **Evidence:** The Phase 1 immutable void router shadowed a later `DELETE FROM expenses` handler, but the physical-delete implementation remained in the repository and could become reachable after a future route-order change.
 - **Business risk:** Latent bypass of the approved two-person void and linked-reversal ledger.
-- **Correction:** Remove the legacy physical-delete handler and retain the Phase 1 void route as the only DELETE behaviour.
-- **Regression evidence:** Source contract must prove `expenseRoutes.js` has no physical expense deletion and the reversal route retains the immutable controls.
-- **Status:** Correction in progress with H-001.
+- **Correction:** The legacy physical-delete handler was removed. `expenseReversalRoutes.js` remains the only DELETE behaviour, and the older operations-route contract was updated so it no longer requires the deleted legacy boundary.
+- **Regression evidence:** `auditSignoffExpenseImmutability.test.js`; updated `operationsRouteReleaseContract.test.js`; complete 393-test backend suite passed against the exact generated files before commit `58db5c0d298d6ffddc51d2fafe5c0d09c85c1a79`.
+- **Status:** Resolved; permanent current-head gates pending.
 
 ### M-002 — Legacy request-time schema probes remain in audit routes
 
