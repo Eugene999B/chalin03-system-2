@@ -126,8 +126,8 @@ jobs:
         run: |
           set -o pipefail
           mysql --table --protocol=tcp -h 127.0.0.1 -P 3306 -u root chalin03_phase1_acceptance < database/migrations/20260725_phase1_financial_control_hardening_verify.sql | tee backend/phase1-migration-verify.log
-          grep -Eq "invalid_void_rows[[:space:]]*\|[[:space:]]*0" backend/phase1-migration-verify.log
-          grep -Eq "invalid_reversal_rows[[:space:]]*\|[[:space:]]*0" backend/phase1-migration-verify.log
+          grep -A2 '^| invalid_void_rows |$' backend/phase1-migration-verify.log | tail -n1 | grep -Eq '^|[[:space:]]*0[[:space:]]*|$'
+          grep -A2 '^| invalid_reversal_rows |$' backend/phase1-migration-verify.log | tail -n1 | grep -Eq '^|[[:space:]]*0[[:space:]]*|$'
 
       - name: Preserve acceptance evidence
         if: always()
