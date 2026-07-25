@@ -1,5 +1,5 @@
 const express = require("express");
-const ExcelJS = require("exceljs");
+const ExcelJS = require("../services/excelJsCompat");
 const PDFDocument = require("pdfkit");
 const bcrypt = require("bcryptjs");
 

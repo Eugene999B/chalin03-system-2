@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const ExcelJS = require("exceljs");
+const ExcelJS = require("../services/excelJsCompat");
 
 const {
   MAX_WORKSHEET_NAME_LENGTH,

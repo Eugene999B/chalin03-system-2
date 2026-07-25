@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
-const ExcelJS = require("exceljs");
+const ExcelJS = require("../services/excelJsCompat");
 const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
