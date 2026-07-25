@@ -1,0 +1,89 @@
+name: Production Source Snapshot 2026-07-25
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-sanitised-source-snapshot:
+    name: Build exact production source snapshot
+    if: github.head_ref == 'ops/production-source-snapshot-20260725'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build tracked-source archive from exact live production commit
+        shell: bash
+        env:
+          PRODUCTION_COMMIT: 84c554e157c9439de12b12a65438ea440c79acc0
+          SNAPSHOT_DATE: 2026-07-25
+        run: |
+          set -euo pipefail
+
+          short_sha="${PRODUCTION_COMMIT:0:12}"
+          archive_name="Chalin03_Production_Source_Backup_${SNAPSHOT_DATE}_${short_sha}.zip"
+          root_name="chalin03-system-2-${short_sha}"
+
+          git cat-file -e "${PRODUCTION_COMMIT}^{commit}"
+          mkdir -p snapshot-output "snapshot-stage/${root_name}"
+          git archive "${PRODUCTION_COMMIT}" | tar -x -C "snapshot-stage/${root_name}"
+
+          # Generated dependencies, builds, coverage, logs and runtime data do not
+          # belong in a sanitised source snapshot even if they appear unexpectedly.
+          find "snapshot-stage/${root_name}" -type d \
+            \( -name node_modules -o -name dist -o -name build -o -name coverage -o -name .vite -o -name logs \) \
+            -prune -exec rm -rf {} +
+          find "snapshot-stage/${root_name}" -type f \
+            \( -name '*.log' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name '*.db' \) \
+            -delete
+
+          # Fail closed if a non-example environment file is present.
+          forbidden_env_files="$(find "snapshot-stage/${root_name}" -type f -name '.env*' ! -name '.env.example' ! -name '*.env.example' -print)"
+          if [ -n "${forbidden_env_files}" ]; then
+            printf 'Forbidden environment file(s) found:\n%s\n' "${forbidden_env_files}" >&2
+            exit 1
+          fi
+
+          tracked_count="$(git ls-tree -r --name-only "${PRODUCTION_COMMIT}" | wc -l | tr -d ' ')"
+          commit_time="$(git show -s --format=%cI "${PRODUCTION_COMMIT}")"
+          cat > "snapshot-stage/${root_name}/SOURCE_SNAPSHOT_MANIFEST.txt" <<EOF
+          Chalin 03 Company Limited — Sanitised Production Source Snapshot
+          Snapshot date: ${SNAPSHOT_DATE}
+          Repository: Eugene999B/chalin03-system-2
+          Exact live production commit: ${PRODUCTION_COMMIT}
+          Commit timestamp: ${commit_time}
+          Original tracked-file count: ${tracked_count}
+          Archive policy: tracked source plus this manifest; no live database records, service secrets, generated dependencies, builds, coverage or logs.
+          Verification: calculate SHA-256 and compare with the accompanying .sha256 file.
+          EOF
+
+          (
+            cd snapshot-stage
+            zip -X -q -r "../snapshot-output/${archive_name}" "${root_name}"
+          )
+          (
+            cd snapshot-output
+            sha256sum "${archive_name}" > "${archive_name}.sha256"
+          )
+
+          unzip -t "snapshot-output/${archive_name}"
+          test -s "snapshot-output/${archive_name}"
+          test -s "snapshot-output/${archive_name}.sha256"
+          cat "snapshot-output/${archive_name}.sha256"
+
+      - name: Upload snapshot and checksum evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-source-snapshot-84c554e157c9
+          path: snapshot-output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
