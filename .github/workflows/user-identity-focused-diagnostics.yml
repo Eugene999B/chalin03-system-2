@@ -1,0 +1,51 @@
+name: User Identity Focused Diagnostics
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/user-identity-focused-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate files and capture focused checks
+        id: checks
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 .github/scripts/generate_post_phase1_user_identity_fix.py 2>&1 | tee user-identity-generate.log
+          node --check backend/routes/userRoutes.js 2>&1 | tee user-identity-route-syntax.log
+          node --check backend/services/userIdentityPreservationService.js 2>&1 | tee user-identity-service-syntax.log
+          node --test backend/tests/userIdentityPreservation.test.js 2>&1 | tee user-identity-focused-test.log
+      - name: Upload exact generated files and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-identity-focused-diagnostics
+          path: |
+            backend/routes/userRoutes.js
+            backend/services/userIdentityPreservationService.js
+            backend/tests/userIdentityPreservation.test.js
+            frontend/src/pages/UsersSettingsPage.jsx
+            user-identity-generate.log
+            user-identity-route-syntax.log
+            user-identity-service-syntax.log
+            user-identity-focused-test.log
+          retention-days: 7
+      - name: Enforce focused checks
+        if: always()
+        env:
+          CHECKS_OUTCOME: ${{ steps.checks.outcome }}
+        run: test "$CHECKS_OUTCOME" = "success"
