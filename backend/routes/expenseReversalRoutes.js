@@ -4,6 +4,9 @@ const { pool } = require("../config/db");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { markClosingStale } = require("../services/dailyClosingSecurityService");
+const {
+  verifyIndependentBranchApprover,
+} = require("../services/independentApproverService");
 
 const router = express.Router();
 
@@ -108,9 +111,10 @@ router.get("/", requireRole("admin", "manager"), async (req, res) => {
          e.payment_method, e.funding_source, e.affects_daily_closing,
          e.closing_treatment_note, e.expense_date, e.recorded_by,
          e.is_voided, e.void_reason, e.void_reference, e.voided_by,
-         e.voided_at, e.created_at,
+         e.voided_at, e.void_approved_by, e.void_approved_at, e.created_at,
          recorder.full_name AS recorded_by_name,
          voider.full_name AS voided_by_name,
+         approver.full_name AS void_approved_by_name,
          b.code AS store_code,
          b.branch_code,
          b.name AS branch_name,
@@ -118,14 +122,13 @@ router.get("/", requireRole("admin", "manager"), async (req, res) => {
        FROM expenses e
        LEFT JOIN users recorder ON recorder.id = e.recorded_by
        LEFT JOIN users voider ON voider.id = e.voided_by
+       LEFT JOIN users approver ON approver.id = e.void_approved_by
        LEFT JOIN branches b ON b.id = e.branch_id
        ${whereSql}
        ORDER BY e.expense_date DESC, e.created_at DESC`,
       params
     );
 
-    const summaryWhere = [...where];
-    const summaryParams = [...params];
     const [summaryRows] = await pool.query(
       `SELECT
          COALESCE(SUM(CASE WHEN e.is_voided = 0 THEN e.amount ELSE 0 END), 0) AS total_expenses,
@@ -135,8 +138,8 @@ router.get("/", requireRole("admin", "manager"), async (req, res) => {
          SUM(e.is_voided = 1) AS voided_expense_count
        FROM expenses e
        LEFT JOIN users recorder ON recorder.id = e.recorded_by
-       WHERE ${summaryWhere.join(" AND ")}`,
-      summaryParams
+       ${whereSql}`,
+      params
     );
 
     const summary = summaryRows[0] || {};
@@ -170,6 +173,8 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
   try {
     const expenseId = positiveId(req.params.id);
     const branchId = Number(req.user.branch_id);
+    const reason = cleanText(req.body?.reason || req.body?.void_reason, 1000);
+
     if (!expenseId) {
       return res.status(400).json({
         status: "error",
@@ -178,13 +183,13 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       });
     }
 
-    const suppliedReason = cleanText(
-      req.body?.reason || req.body?.void_reason,
-      1000
-    );
-    const reason =
-      suppliedReason ||
-      "Expense voided after an authorised user confirmed the correction in the Expenses page.";
+    if (reason.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        code: "EXPENSE_VOID_REASON_REQUIRED",
+        message: "Enter a clear void reason using at least 8 characters.",
+      });
+    }
 
     await connection.beginTransaction();
     const [rows] = await connection.query(
@@ -224,17 +229,50 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       return lockedResponse(res, lock);
     }
 
+    const approval = await verifyIndependentBranchApprover(connection, {
+      currentUserId: req.user.id,
+      branchId,
+      approverUsername: req.body?.approver_username,
+      approverPassword: req.body?.approver_password,
+    });
+    if (approval.error) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        code: "INDEPENDENT_APPROVER_REQUIRED",
+        message: approval.error,
+      });
+    }
+
     const reference = voidReference(expenseId);
-    await connection.query(
+    const [updateResult] = await connection.query(
       `UPDATE expenses
        SET is_voided = 1,
            void_reason = ?,
            void_reference = ?,
            voided_by = ?,
-           voided_at = NOW()
+           voided_at = NOW(),
+           void_approved_by = ?,
+           void_approved_at = NOW()
        WHERE id = ? AND branch_id = ? AND is_voided = 0`,
-      [reason, reference, req.user.id, expenseId, branchId]
+      [
+        reason,
+        reference,
+        req.user.id,
+        approval.approver.id,
+        expenseId,
+        branchId,
+      ]
     );
+
+    if (Number(updateResult.affectedRows || 0) !== 1) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        code: "EXPENSE_VOID_CONFLICT",
+        message: "The expense changed before the void could be completed. Refresh and try again.",
+      });
+    }
 
     const affectedClosing = await markClosingStale(connection, {
       branchId,
@@ -245,6 +283,7 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       sourceEntityType: "expense_void",
       sourceEntityId: expenseId,
       changedBy: req.user.id,
+      approvedBy: approval.approver.id,
     });
 
     await writeAuditEvent({
@@ -259,10 +298,11 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       workspaceCode: "spare_parts",
       outcome: "success",
       severity: "critical",
-      details: `Voided expense ${expenseId} under ${reference}; the original financial record was preserved.`,
+      details: `Voided expense ${expenseId} under ${reference}; the original financial record was preserved and independently approved by ${approval.approver.full_name}.`,
       metadata: {
         void_reference: reference,
         void_reason: reason,
+        independent_approver: approval.approver,
         original_expense: {
           category: expense.category,
           description: expense.description,
@@ -282,9 +322,10 @@ router.delete("/:id", requireRole("admin", "manager"), async (req, res) => {
       status: "success",
       code: "EXPENSE_VOIDED",
       message:
-        "Expense voided successfully. The original financial row and audit evidence were preserved.",
+        "Expense voided successfully. The original financial row and independent approval evidence were preserved.",
       expense_id: expenseId,
       void_reference: reference,
+      approved_by: approval.approver.full_name,
       affected_closing: affectedClosing,
     });
   } catch (error) {
