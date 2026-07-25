@@ -10,6 +10,8 @@ const REQUIRED_TABLE_COLUMNS = Object.freeze({
     "void_reference",
     "voided_by",
     "voided_at",
+    "void_approved_by",
+    "void_approved_at",
   ],
   worker_hr_letters: [
     "worker_id",
