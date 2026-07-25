@@ -50,7 +50,7 @@ jobs:
               "Staff-user section description",
           )
           '''
-          updated, count = pattern.subn(replacement, source, count=1)
+          updated, count = pattern.subn(lambda _match: replacement, source, count=1)
           if count != 1:
               raise SystemExit(
                   f'Confirmed staff-description matcher block matched {count} times instead of once.'
