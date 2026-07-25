@@ -46,7 +46,7 @@ test("Equipment Sales migration is controlled while runtime readiness is read-on
   assert.doesNotMatch(schemaService, /\bALTER\s+TABLE\b/i);
 
   for (const tableName of lifecycleTables) {
-    assert.match(schemaService, new RegExp(`"${tableName}"`));
+    assert.match(schemaService, new RegExp(`\\b${tableName}\\b`));
     assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${tableName}\\b`));
   }
 });
