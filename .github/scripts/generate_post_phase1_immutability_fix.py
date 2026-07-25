@@ -8,6 +8,15 @@ def replace_exact(source: str, old: str, new: str, label: str) -> str:
     return source.replace(old, new, 1)
 
 
+def replace_pattern(
+    source: str, pattern: re.Pattern[str], replacement: str, label: str
+) -> str:
+    updated, count = pattern.subn(replacement, source, count=1)
+    if count != 1:
+        raise SystemExit(f"{label} was not found exactly once.")
+    return updated
+
+
 def main() -> None:
     backend_path = Path("backend/routes/auditSignoffRoutes.js")
     frontend_path = Path("frontend/src/pages/AuditSignoffHistoryPage.jsx")
@@ -57,35 +66,40 @@ def main() -> None:
 });
 
 module.exports = router;'''
-    backend, backend_count = delete_route_pattern.subn(immutable_route, backend, count=1)
-    if backend_count != 1:
-        raise SystemExit("Audit-signoff physical DELETE route was not replaced exactly once.")
-
-    delete_function_pattern = re.compile(
-        r'\n  async function deleteSignoff\(signoff\) \{[\s\S]*?\n  \}\n\n  return \(',
-        re.M,
+    backend = replace_pattern(
+        backend,
+        delete_route_pattern,
+        immutable_route,
+        "Audit-signoff physical DELETE route",
     )
-    frontend, function_count = delete_function_pattern.subn("\n  return (", frontend, count=1)
-    if function_count != 1:
-        raise SystemExit("Audit archive delete function was not removed exactly once.")
 
-    frontend = replace_exact(
+    frontend = replace_pattern(
         frontend,
-        "Audit sign-off history, approval certificates, CSV exports and\n             delete actions are filtered to this selected store only.",
+        re.compile(
+            r'\n  async function deleteSignoff\(signoff\) \{[\s\S]*?\n  \}\n\n  return \(',
+            re.M,
+        ),
+        "\n  return (",
+        "Audit archive delete function",
+    )
+
+    frontend = replace_pattern(
+        frontend,
+        re.compile(
+            r'Audit sign-off history, approval certificates, CSV exports and\s+delete actions are filtered to this selected store only\.'
+        ),
         "Audit sign-off history, approval certificates and CSV exports are\n             filtered to this selected store. Sign-off records are permanent\n             compliance evidence and cannot be deleted.",
         "Audit archive store notice",
     )
-    frontend = replace_exact(
+    frontend = replace_pattern(
         frontend,
-        "Each record below can be printed as a certificate, downloaded as a\n               Word file, or deleted by authorized management.",
+        re.compile(
+            r'Each record below can be printed as a certificate, downloaded as a\s+Word file, or deleted by authorized management\.'
+        ),
         "Each record below can be printed or downloaded and remains permanent\n               compliance evidence. Corrections must use the controlled review, unlock\n               and re-approval process.",
         "Audit archive record description",
     )
 
-    delete_button_pattern = re.compile(
-        r'\n\s*<button\n\s*type="button"\n\s*style=\{styles\.deleteButton\}\n\s*onClick=\{\(\) => deleteSignoff\(item\)\}\n\s*>\n\s*Delete\n\s*</button>',
-        re.M,
-    )
     immutable_badge = '''
 
                     <span
@@ -103,19 +117,25 @@ module.exports = router;'''
                     >
                       Permanent evidence
                     </span>'''
-    frontend, button_count = delete_button_pattern.subn(immutable_badge, frontend, count=1)
-    if button_count != 1:
-        raise SystemExit("Audit archive Delete button was not replaced exactly once.")
+    frontend = replace_pattern(
+        frontend,
+        re.compile(
+            r'\n\s*<button\n\s*type="button"\n\s*style=\{styles\.deleteButton\}\n\s*onClick=\{\(\) => deleteSignoff\(item\)\}\n\s*>\n\s*Delete\n\s*</button>',
+            re.M,
+        ),
+        immutable_badge,
+        "Audit archive Delete button",
+    )
 
-    expense_delete_pattern = re.compile(
-        r'\n// DELETE /api/expenses/:id[\s\S]*?\n\);\n\nmodule\.exports = router;',
-        re.M,
+    expense = replace_pattern(
+        expense,
+        re.compile(
+            r'\n// DELETE /api/expenses/:id[\s\S]*?\n\);\n\nmodule\.exports = router;',
+            re.M,
+        ),
+        "\n\nmodule.exports = router;",
+        "Legacy physical expense DELETE route",
     )
-    expense, expense_count = expense_delete_pattern.subn(
-        "\n\nmodule.exports = router;", expense, count=1
-    )
-    if expense_count != 1:
-        raise SystemExit("Legacy physical expense DELETE route was not removed exactly once.")
 
     test_source = r'''const assert = require("node:assert/strict");
 const fs = require("node:fs");
