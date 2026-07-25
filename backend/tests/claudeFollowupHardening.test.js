@@ -4,20 +4,26 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const backendRoot = path.resolve(__dirname, "..");
-const read = (relativePath) => fs.readFileSync(path.join(backendRoot, relativePath), "utf8");
+const read = (relativePath) =>
+  fs.readFileSync(path.join(backendRoot, relativePath), "utf8");
 
 test("Owner Break-Glass login has one MFA-enforcing implementation", () => {
   const secureRoutes = read("routes/ownerSecurityRoutes.js");
   const legacyRoutes = read("routes/release2FinalRoutes.js");
   const server = read("server.js");
-  assert.match(secureRoutes, /router\.post\(\s*["']\\/owner\\/login["']/);
+
+  assert.match(secureRoutes, /router\.post\(\s*["']\/owner\/login["']/);
   assert.match(secureRoutes, /mfa_code|recovery_code/);
-  assert.doesNotMatch(legacyRoutes, /router\.post\(\s*["']\\/owner\\/login["']/);
-  assert.match(server, /app\.use\(["']\\/api\\/release2-final["'],\s*ownerSecurityRoutes\)/);
+  assert.doesNotMatch(legacyRoutes, /router\.post\(\s*["']\/owner\/login["']/);
+  assert.match(
+    server,
+    /app\.use\(["']\/api\/release2-final["'],\s*ownerSecurityRoutes\)/
+  );
 });
 
 test("Daily Closing exposes correction evidence consistently in all outputs", () => {
   const source = read("routes/dailyClosingRoutes.js");
+
   assert.match(source, /function buildExpenseCorrectionPresentation/);
   assert.match(source, /e\.is_voided/);
   assert.match(source, /e\.is_reversal/);
