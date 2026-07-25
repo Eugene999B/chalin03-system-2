@@ -233,4 +233,6 @@ test("legacy expense deletion cannot bypass the Phase 1 void ledger", () => {
             backend/tests/auditSignoffExpenseImmutability.test.js \
             frontend/src/pages/AuditSignoffHistoryPage.jsx
           git commit -m "Preserve audit and expense evidence"
+          git fetch origin agent/post-phase1-full-system-audit
+          git rebase origin/agent/post-phase1-full-system-audit
           git push origin HEAD:agent/post-phase1-full-system-audit
