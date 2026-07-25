@@ -56,7 +56,9 @@ async function createOrUpdateAdmin() {
         [existingUsers[0].id]
       );
 
-      console.log(`✅ Administrator "${username}" updated and existing sessions revoked.`);
+      console.log(
+        "✅ Administrator credentials updated and existing sessions revoked."
+      );
     } else {
       await pool.query(
         `INSERT INTO users (full_name, username, password_hash, role, phone, is_active)
@@ -64,10 +66,10 @@ async function createOrUpdateAdmin() {
         [fullName, username, passwordHash, phone]
       );
 
-      console.log(`✅ Administrator "${username}" created successfully.`);
+      console.log("✅ Administrator account created successfully.");
     }
 
-    console.log("✅ The password was read from ADMIN_PASSWORD and was not printed.");
+    console.log("✅ Environment-supplied credentials were not printed.");
     process.exit(0);
   } catch (error) {
     console.error("❌ Failed to create/update administrator.");
