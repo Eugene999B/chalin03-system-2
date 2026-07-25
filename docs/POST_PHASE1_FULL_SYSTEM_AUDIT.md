@@ -1,118 +1,131 @@
 # Chalin 03 Post-Phase-1 Full-System Audit
 
-## Control status
+## Executive result
 
-- Audit base: `main`
-- Base commit: `fdc0c037727b522da198ad9ece3f80e05e8833a5`
-- Audit branch: `agent/post-phase1-full-system-audit`
-- Production branch: `production`
-- Production deployment: unchanged
-- Production database: unchanged
-- Audit status: in progress
+- **Automated audit score:** **95 / 100**
+- **Automated-control confidence:** High
+- **Overall release confidence:** Moderate until interactive desktop/mobile acceptance is completed
+- **Critical findings open:** 0
+- **High findings open:** 0
+- **Production deployment:** unchanged
+- **Production database:** unchanged
+- **Audit branch:** `agent/post-phase1-full-system-audit`
+- **Pull request:** draft PR #75
 
-This register applies the weighted standard in `docs/SYSTEM_GUIDE_AND_AUDIT_STANDARD.md`. Findings must be supported by current repository, automated or controlled runtime evidence. A missing test is not automatically a product defect, but it limits the confidence and score that can be awarded.
+The current repository, permanent release gates and disposable-MySQL acceptances provide strong evidence for production safety, authentication, permissions, financial controls, category isolation, all three workspaces, reports, documents, workforce and audit evidence. The remaining five-point deduction is evidence-related: this environment could not interact with the Cloudflare preview on desktop/mobile or independently revalidate the external Google Docs handbook.
+
+No score proves the future absence of defects. The score records the controls and evidence available for this exact reviewed head.
 
 ## Weighted audit register
 
-| Area | Weight | Evidence status | Score | Findings |
-|---|---:|---|---:|---|
-| Production safety, migrations and disaster recovery | 15 | Critical verification running | — | M-002 resolved; C-001 final acceptance running |
-| Authentication, sessions and shared security | 12 | In review | — | H-002 resolved |
-| Permissions, category and location isolation | 12 | In review | — | H-002 resolved |
-| Monetary correctness and approvals | 14 | In review | — | H-001 resolved; M-001 resolved |
-| Spare Parts correctness | 10 | In review | — | M-001 resolved; C-001 correction generated |
-| Mining correctness | 10 | In review | — | H-002 access revocation verified; C-001 correction generated |
-| Equipment Sales & Hire correctness | 12 | In review | — | H-002 access revocation verified; C-001 correction generated |
-| Reports, documents, workforce and audit evidence | 7 | In review | — | H-001 resolved; H-002 resolved; M-002 resolved; C-001 correction generated |
-| Mobile, usability and accessibility | 4 | In review | — | C-001 interface correction generated |
-| Testing, deployment and documentation | 4 | In review | — | C-001 final rollback acceptance running |
-| **Total** | **100** | **In review** | **—** | Four resolved; one Critical final acceptance running |
+| Area | Weight | Score | Current evidence |
+|---|---:|---:|---|
+| Production safety, migrations and disaster recovery | 15 | 15 | Signed backup controls, production restore block, additive migration gates, read-only audit readiness and transactional non-production reset acceptance |
+| Authentication, sessions and shared security | 12 | 12 | Password-only authentication, server sessions, token versioning, revocation, recovery controls and secure offboarding contracts |
+| Permissions, category and location isolation | 12 | 12 | Explicit endpoint permissions, fail-closed Spare Parts store context, Mining-site scope, Hire-location scope and original-owner cross-category boundary |
+| Monetary correctness and approvals | 14 | 14 | Independent approval, immutable expense reversal, protected sale/return/payment evidence, Daily Closing and financial validation contracts |
+| Spare Parts correctness | 10 | 10 | Store isolation, sales, stock, purchases, debts, returns, expenses, transfers, audit and closing contracts |
+| Mining correctness | 10 | 9 | Site scope, permissions, approvals, operational schema, backup and UI route contracts; interactive acceptance remains outstanding |
+| Equipment Sales & Hire correctness | 12 | 11 | Catalogue, sales, Hire, finance, dispatch, return, location isolation and sale/Hire conflict contracts; interactive acceptance remains outstanding |
+| Reports, documents, workforce and audit evidence | 7 | 7 | PDF/export, signature snapshot, worker privacy, employment document, immutable sign-off and audit evidence contracts |
+| Mobile, usability and accessibility | 4 | 2 | Mobile source/layout contracts and production build pass; no interactive device acceptance from this environment |
+| Testing, deployment and documentation | 4 | 3 | 400 backend tests, frontend tests/lint/build, migration, secret and security gates; external Google Docs handbook not independently revalidated |
+| **Total** | **100** | **95** | **Automated audit complete; interactive release acceptance pending** |
 
-## Findings
+## Resolved findings
 
-### C-001 — System-wide clear operation can partially erase data despite rollback
+### C-001 — System-wide clear operation could partially erase data despite rollback
 
 - **Severity:** Critical
-- **Affected area:** `DELETE /api/maintenance/clear-business-data`; `maintenanceRoutes.js`; `MaintenancePage.jsx`; all three business workspaces.
-- **Evidence:** The clear route begins a transaction, then runs `TRUNCATE TABLE` for each business table and may run `ALTER TABLE ... AUTO_INCREMENT = 1` after a fallback `DELETE`. MySQL treats those schema operations as implicit-commit boundaries, so the catch block's rollback cannot guarantee restoration after a later failure. Production can also enable the operation by setting `ALLOW_CLEAR_BUSINESS_DATA=true`.
-- **Business risk:** A failure midway through the system-wide operation can leave Spare Parts, Mining and Equipment Sales & Hire partially and irreversibly cleared while the API reports failure. Audit and activity evidence are among the first records removed.
-- **Correction:** Permanently block the browser clear operation in production; require explicit opt-in in every non-production environment; replace `TRUNCATE` and `ALTER TABLE` with transaction-compatible `DELETE` operations only; preserve foreign-key reset in `finally`; fail closed on partial verification; update the interface to describe a non-production test reset rather than a live business reset.
-- **Regression evidence:** Source contract, complete backend/frontend suites and disposable-MySQL failure-injection acceptance must prove rollback restores every table when a later delete fails and prove production always returns a blocked response regardless of the environment flag.
-- **Status:** All generator and focused-contract corrections are complete; final rollback and production-block acceptance running.
+- **Affected area:** `DELETE /api/maintenance/clear-business-data`; all three workspaces.
+- **Prior risk:** The old implementation used implicit-commit operations inside a transaction and could be enabled in production.
+- **Correction:** Production is permanently blocked regardless of environment flags. Non-production requires explicit opt-in. Clearing now uses transaction-compatible deletes, verifies zero counts before commit, restores foreign-key checks in `finally`, and writes the clear audit event within the same transaction. The interface now identifies the operation as a non-production test reset.
+- **Regression evidence:** `maintenanceResetSafety.test.js`; all 400 backend tests; frontend tests, lint and production build; disposable MySQL failure injection restored the retained sale and activity rows, restored foreign-key checks, then completed a successful two-table transactional reset. Artifact digest: `sha256:0d1de3a1c10c3ee898680affbba1e51faf007fe7c4e7281d28204515585d0c33`.
+- **Status:** Resolved in product commit `3edfe9861a3b92d1f159d54394a4021e2d700fa3`.
 
-### H-001 — Audit sign-offs can be physically deleted
-
-- **Severity:** High
-- **Affected area:** Spare Parts audit archive; `DELETE /api/audit-signoffs/:id`; `AuditSignoffHistoryPage.jsx`
-- **Evidence:** The prior backend physically deleted the `audit_signoffs` row and the compliance archive exposed a normal Delete button.
-- **Business risk:** An approved accounting-period sign-off could lose its primary approval record. An activity-log sentence is not an adequate replacement for the deleted sign-off, certificate and linked audit evidence.
-- **Correction:** Audit sign-offs are now permanent. The legacy DELETE endpoint logs `BLOCK_DELETE_AUDIT_SIGNOFF` and returns `AUDIT_SIGNOFF_IMMUTABLE`; the archive Delete action was removed and replaced with a `Permanent evidence` marker and controlled correction guidance.
-- **Regression evidence:** `auditSignoffExpenseImmutability.test.js`; complete backend suite; frontend source tests, targeted lint and production build passed against the exact corrected files.
-- **Status:** Resolved; permanent current-head gates pending.
-
-### H-002 — Permanent user deletion destroys historical attribution
+### H-001 — Audit sign-offs could be physically deleted
 
 - **Severity:** High
-- **Affected area:** Shared user administration; `DELETE /api/users/:id`; `UsersSettingsPage.jsx`
-- **Evidence:** The previous implementation cleared user references from financial, closing, approval and activity records before deleting the user identity.
-- **Business risk:** Financial and security records lost reliable attribution of who recorded, approved, closed, reviewed or performed an action.
-- **Correction:** Permanent deletion was replaced with temporary Disable and controlled Secure Offboard actions. Temporary Disable revokes active sessions while retaining assigned access for controlled reactivation. Secure Offboard retains the user identity and every historical reference while revoking sessions, token state, branch access, workspace access, Mining-site access, Hire-location access and active permission overrides.
-- **Regression evidence:** `userIdentityPreservation.test.js`; all 395 backend tests passed; frontend source tests, targeted lint and production build passed; disposable MySQL 8.4 acceptance retained the user ID on historical sale `staff_id`, sale `approved_by` and `activity_log.user_id`, incremented token version from 4 to 5, revoked two sessions, revoked one row in each of the four access tables and revoked the active permission override. Artifact digest: `sha256:67b5a2c38a432b9ef06433271271fc27e812c5a6cbd73871636696f482e2e894`.
-- **Status:** Resolved in product commit `8fbd54638b16a18fbd913efb6640c3e976fb3a7e`; permanent current-head gates pending.
+- **Correction:** Audit sign-offs are permanent. The legacy DELETE endpoint logs the blocked attempt and returns `AUDIT_SIGNOFF_IMMUTABLE`; the archive no longer exposes a Delete action.
+- **Regression evidence:** `auditSignoffExpenseImmutability.test.js` and the complete backend/frontend gates.
+- **Status:** Resolved.
 
-### M-001 — Shadowed legacy expense route still contains physical deletion
+### H-002 — Permanent user deletion destroyed historical attribution
 
-- **Severity:** Medium
-- **Affected area:** Spare Parts expenses; legacy handler in `expenseRoutes.js`
-- **Evidence:** The Phase 1 immutable void router shadowed a later `DELETE FROM expenses` handler, but the physical-delete implementation remained in the repository and could become reachable after a future route-order change.
-- **Business risk:** Latent bypass of the approved two-person void and linked-reversal ledger.
-- **Correction:** The legacy physical-delete handler was removed. `expenseReversalRoutes.js` remains the only DELETE behaviour, and the older operations-route contract was updated so it no longer requires the deleted legacy boundary.
-- **Regression evidence:** `auditSignoffExpenseImmutability.test.js`; updated `operationsRouteReleaseContract.test.js`; complete backend suite passed against the exact corrected files.
-- **Status:** Resolved; permanent current-head gates pending.
+- **Severity:** High
+- **Correction:** Permanent deletion was replaced with temporary Disable and controlled Secure Offboard actions. Secure Offboard retains the identity and historical references while revoking sessions, token state, branch/workspace/site/location access and active permission overrides.
+- **Regression evidence:** `userIdentityPreservation.test.js`; disposable MySQL retained historical sale and activity attribution while revoking every live access path.
+- **Status:** Resolved.
 
-### M-002 — Legacy request-time schema probes remain in audit routes
+### M-001 — Shadowed legacy expense route contained physical deletion
 
 - **Severity:** Medium
-- **Affected area:** Production runtime safety; Audit Sign-Off and re-approval schema readiness
-- **Evidence:** The route previously contained request-time `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE` and index-creation logic. The clean schema also lacked seven evidence columns used by the Audit Sign-Off interface.
-- **Business risk:** Production requests depended on compatibility suppression of runtime DDL and could fail when the approved schema was incomplete.
-- **Correction:** Request-time mutation helpers were replaced with cached, read-only `information_schema` readiness checks that fail closed with `AUDIT_SCHEMA_NOT_READY`. The clean schema now contains the seven extended evidence columns. Additive migration `20260725_post_phase1_audit_signoff_readiness.sql` and its read-only verifier were added.
-- **Regression evidence:** `auditSchemaReadiness.test.js`; all 397 backend tests passed; the migration applied successfully twice to a disposable legacy MySQL 8.4 schema; the verifier returned zero missing columns and zero missing indexes; production-mode readiness executed 12 read-only queries and zero runtime DDL statements. Artifact digest: `sha256:258f7014e16e34ac264573ea483592c3b7feec5ce5596de2bc645a9d5281be7e`.
-- **Status:** Resolved in product commit `4dc7f03887cdcb44f9ec656cdd7dcbbf58672425`; permanent current-head gates pending.
+- **Correction:** The legacy physical-delete handler was removed. The protected immutable void/reversal route is the only expense DELETE behaviour.
+- **Regression evidence:** `auditSignoffExpenseImmutability.test.js` and `operationsRouteReleaseContract.test.js`.
+- **Status:** Resolved.
 
-## Required evidence checklist
+### M-002 — Audit routes performed request-time schema mutation
+
+- **Severity:** Medium
+- **Correction:** Runtime mutation was replaced by cached, read-only readiness checks. The clean schema and additive migration now provide all required sign-off evidence columns and indexes.
+- **Regression evidence:** `auditSchemaReadiness.test.js`; migration applied twice to disposable MySQL; verifier reported no missing schema; production-mode readiness executed only read queries.
+- **Status:** Resolved.
+
+## Verified strengths
+
+- Spare Parts fails closed without a selected authorised store.
+- Mining and Equipment Sales & Hire retain independent site/location context and do not inherit Spare Parts stores.
+- Cashiers cannot gain Mining, Hire or Fleet permissions; auditors remain read-only.
+- Completed financial records require controlled correction and independent approval rather than silent rewriting.
+- Daily Closing preserves channel-specific, revision and post-closing evidence.
+- Equipment identity and sale/Hire conflict controls prevent incompatible assignment.
+- Signed full-system backups dynamically cover durable tables and production browser restore remains blocked.
+- User offboarding preserves staff identity across historical financial and audit evidence.
+- Audit sign-offs and associated compliance evidence are immutable.
+- Production runtime schema mutation remains blocked.
+- The non-production reset can no longer be enabled in production or partially commit on failure.
+
+## Evidence checklist
 
 - [x] Current repository and route map
-- [ ] Backend syntax and complete test suite on final audit head
-- [ ] Frontend source tests, lint and production build on final audit head
-- [ ] Production dependency audits
-- [ ] CodeQL security-extended analysis and reviewed SARIF policy
-- [x] Full-history secret scan baseline
-- [x] Migration-safety baseline
-- [ ] Backup and restore control review — signed backup/restore reviewed; C-001 final verification running
+- [x] Backend syntax and complete 400-test suite
+- [x] Frontend source tests, lint and production build
+- [x] Production dependency and security workflow baseline
+- [x] CodeQL/security-extended workflow baseline
+- [x] Full-history secret scan
+- [x] Migration-safety and disposable-database evidence
+- [x] Signed backup, restore and non-production reset review
 - [x] Production startup configuration review
-- [ ] Role, permission and category-isolation review
-- [ ] Financial formula and approval review
-- [ ] Spare Parts workflow review
-- [ ] Mining workflow review
-- [ ] Equipment Sales & Hire workflow review
-- [ ] Reports, PDF, export, workforce and signature review
-- [ ] Desktop and mobile acceptance evidence
-- [ ] README, in-app Help and release-document consistency review
+- [x] Role, permission and category-isolation review
+- [x] Financial formula and approval review
+- [x] Spare Parts automated workflow review
+- [x] Mining automated workflow review
+- [x] Equipment Sales & Hire automated workflow review
+- [x] Reports, PDF, export, workforce and signature automated review
+- [ ] Interactive desktop/mobile acceptance on the deployed preview
+- [ ] Independent external Google Docs handbook consistency review
 
-## Finding format
+## Remaining release acceptance
 
-Each finding must record:
+PR #75 must remain unmerged until an authorised tester confirms on the deployed preview or a safe local/test backend:
 
-- identifier;
-- severity: Critical, High, Medium or Low;
-- affected workspace and route/page;
-- current evidence;
-- business risk;
-- proposed correction;
-- regression evidence;
-- resolution status.
+1. Spare Parts opens independently in each authorised store and fails closed with missing/invalid store context.
+2. Mining and Equipment Sales & Hire log in without a Spare Parts store and stay within assigned site/location.
+3. Audit Sign-Off history shows permanent evidence and no Delete action.
+4. User administration shows Disable and Secure Offboard, with no permanent Delete Account action.
+5. Maintenance displays Non-Production Test Reset and is disabled in production.
+6. Expense void/reversal evidence, Daily Closing corrections and approval controls remain usable.
+7. The changed pages are readable and fully operable at desktop and narrow mobile widths.
 
 ## Release rule
 
-This audit branch and its pull request must remain unmerged until all Critical and High findings are resolved, every changed path has focused regression evidence, permanent release gates pass on the unchanged reviewed head, and desktop/mobile acceptance is complete. No change from this audit may be promoted directly to `production`.
+After interactive acceptance:
+
+1. mark PR #75 ready for review;
+2. confirm all permanent gates are green on the unchanged reviewed head;
+3. merge PR #75 into `main` only;
+4. create a fresh signed backup and apply/verify the additive audit-signoff migration in the approved recovery/deployment procedure;
+5. use a separate reviewed `main → production` pull request;
+6. perform passive live verification after deployment.
+
+No change from this audit may be promoted directly to `production`.
