@@ -3,9 +3,23 @@ import re
 
 
 def replace_exact(source: str, old: str, new: str, label: str) -> str:
-    if source.count(old) != 1:
-        raise SystemExit(f"{label} was not found exactly once.")
-    return source.replace(old, new, 1)
+    exact_count = source.count(old)
+    if exact_count == 1:
+        return source.replace(old, new, 1)
+    if exact_count > 1:
+        raise SystemExit(f"{label} was found {exact_count} times instead of once.")
+
+    tokens = old.split()
+    if not tokens:
+        raise SystemExit(f"{label} has an empty source pattern.")
+    pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens), re.M)
+    matches = list(pattern.finditer(source))
+    if len(matches) != 1:
+        raise SystemExit(
+            f"{label} matched {len(matches)} whitespace-normalized blocks instead of once."
+        )
+    match = matches[0]
+    return source[: match.start()] + new + source[match.end() :]
 
 
 def replace_pattern(source: str, pattern: re.Pattern[str], replacement: str, label: str) -> str:
