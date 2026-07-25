@@ -126,6 +126,7 @@ jobs:
         run: |
           node --check backend/routes/auditSignoffRoutes.js
           node --check backend/routes/expenseRoutes.js
+          node --check backend/tests/operationsRouteReleaseContract.test.js
           node --test backend/tests/auditSignoffExpenseImmutability.test.js
 
       - name: Run complete backend suite against generated fix
@@ -158,12 +159,14 @@ jobs:
             backend/routes/auditSignoffRoutes.js \
             backend/routes/expenseRoutes.js \
             backend/tests/auditSignoffExpenseImmutability.test.js \
+            backend/tests/operationsRouteReleaseContract.test.js \
             frontend/src/pages/AuditSignoffHistoryPage.jsx \
             > post-phase1-immutability-fix.patch
           sha256sum \
             backend/routes/auditSignoffRoutes.js \
             backend/routes/expenseRoutes.js \
             backend/tests/auditSignoffExpenseImmutability.test.js \
+            backend/tests/operationsRouteReleaseContract.test.js \
             frontend/src/pages/AuditSignoffHistoryPage.jsx \
             post-phase1-immutability-fix.patch \
             > post-phase1-immutability-fix.sha256
@@ -177,6 +180,7 @@ jobs:
             backend/routes/auditSignoffRoutes.js
             backend/routes/expenseRoutes.js
             backend/tests/auditSignoffExpenseImmutability.test.js
+            backend/tests/operationsRouteReleaseContract.test.js
             frontend/src/pages/AuditSignoffHistoryPage.jsx
             post-phase1-immutability-fix.patch
             post-phase1-immutability-fix.sha256
