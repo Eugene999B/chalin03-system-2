@@ -59,9 +59,14 @@ function stripSqlComments(statement) {
 }
 
 const RUNTIME_DDL_PATTERN =
-  /\b(?:ALTER\s+TABLE|TRUNCATE(?:\s+TABLE)?|CREATE\s+(?:TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|DROP\s+(?:TABLE|TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|RENAME\s+TABLE)\b/i;
+  /\b(?:ALTER\s+(?:TABLE|DATABASE|SCHEMA|EVENT)|TRUNCATE(?:\s+TABLE)?|CREATE\s+(?:TABLE|INDEX|TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|DROP\s+(?:TABLE|INDEX|TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|RENAME\s+TABLE)\b/i;
 const IDEMPOTENT_CREATE_TABLE_PATTERN =
   /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\b/i;
+
+function isSingleStatement(sql) {
+  const withoutTrailingSemicolon = String(sql || "").replace(/;\s*$/, "");
+  return !withoutTrailingSemicolon.includes(";");
+}
 
 function runtimeDdlDecision(statement, env = process.env) {
   const sql = stripSqlComments(queryText(statement));
@@ -69,7 +74,10 @@ function runtimeDdlDecision(statement, env = process.env) {
     return { action: "allow", sql };
   }
 
-  if (IDEMPOTENT_CREATE_TABLE_PATTERN.test(sql)) {
+  if (
+    IDEMPOTENT_CREATE_TABLE_PATTERN.test(sql) &&
+    isSingleStatement(sql)
+  ) {
     return {
       action: "noop",
       sql,
