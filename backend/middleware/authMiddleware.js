@@ -68,7 +68,7 @@ async function loadUserSecurityState(userId) {
 function requiresExportStoreContext(req, user) {
   return (
     String(user?.workspace_code || "").trim().toLowerCase() === "spare_parts" &&
-    /^\/api\/exports(?:\/|$)/.test(String(req.originalUrl || req.url || ""))
+    String(req.baseUrl || "") === "/api/exports"
   );
 }
 
