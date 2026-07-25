@@ -65,14 +65,32 @@ test("the additive migration records void, approval and reversal evidence", () =
 });
 
 test("Spare Parts store context fails closed without a selected store", () => {
+  const middleware = readBackend("middleware/sparePartsBranchContextMiddleware.js");
+  const categoryBoundary = readBackend("services/categoryIsolationService.js");
+
+  assert.match(middleware, /STORE_CONTEXT_REQUIRED/);
+  assert.match(middleware, /STORE_CONTEXT_INVALID/);
+  assert.match(middleware, /STORE_ACCESS_DENIED/);
+  assert.doesNotMatch(middleware, /default_branch_id\s*\|\|\s*1/);
+  assert.doesNotMatch(middleware, /return\s+1/);
+  assert.match(middleware, /user_branch_access/);
+  assert.match(categoryBoundary, /requireSparePartsBranchContext/);
+  assert.match(categoryBoundary, /needsSparePartsStoreContext/);
+  assert.match(categoryBoundary, /allowedWorkspaceCodes\.has\("spare_parts"\)/);
+  assert.match(categoryBoundary, /SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS/);
+});
+
+test("Daily Closing labels voided originals and linked reversals clearly", () => {
   const source = readBackend("middleware/sparePartsBranchContextMiddleware.js");
 
-  assert.match(source, /STORE_CONTEXT_REQUIRED/);
-  assert.match(source, /STORE_CONTEXT_INVALID/);
-  assert.match(source, /STORE_ACCESS_DENIED/);
-  assert.doesNotMatch(source, /default_branch_id\s*\|\|\s*1/);
-  assert.doesNotMatch(source, /return\s+1/);
-  assert.match(source, /user_branch_access/);
+  assert.match(source, /loadDailyClosingExpenseEvidence/);
+  assert.match(source, /VOIDED —/);
+  assert.match(source, /REVERSAL —/);
+  assert.match(source, /expense_corrections/);
+  assert.match(source, /expense_correction_count/);
+  assert.match(source, /net_effect/);
+  assert.match(source, /void_approved_by_name/);
+  assert.match(source, /reversal_of_expense_id/);
 });
 
 test("Mining and stock-transfer approvals block the record preparer", () => {
