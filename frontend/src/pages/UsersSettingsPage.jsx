@@ -185,7 +185,7 @@ export default function UsersSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
-  const [deletingUserId, setDeletingUserId] = useState("");
+  const [offboardingUserId, setOffboardingUserId] = useState("");
   const [activePanel, setActivePanel] = useState("create");
 
   const selectedBranchId = Number(
@@ -229,20 +229,20 @@ export default function UsersSettingsPage() {
     );
   }
 
-  function canCurrentUserDeleteAccounts() {
-    return isOriginalSystemAdministrator(currentUser);
-  }
+  function canCurrentUserSecurelyOffboardAccounts() {
+        return isOriginalSystemAdministrator(currentUser);
+      }
 
   function canCurrentUserResetAccounts() {
     return isOriginalSystemAdministrator(currentUser);
   }
 
-  function canDeleteThisUser(user) {
-    if (!canCurrentUserDeleteAccounts()) return false;
-    if (Number(user.id) === Number(currentUser?.id)) return false;
-    if (isOriginalSystemAdministrator(user)) return false;
-    return true;
-  }
+  function canSecurelyOffboardUser(user) {
+        if (!canCurrentUserSecurelyOffboardAccounts()) return false;
+        if (Number(user.id) === Number(currentUser?.id)) return false;
+        if (isOriginalSystemAdministrator(user)) return false;
+        return Boolean(user.is_active);
+      }
 
   function getCurrentStoreName() {
     return (
@@ -545,47 +545,58 @@ export default function UsersSettingsPage() {
     }
   }
 
-  async function deleteUserAccount(user) {
-    setMessage("");
-    setError("");
+  async function secureOffboardUser(user) {
+        setMessage("");
+        setError("");
 
-    if (!canDeleteThisUser(user)) {
-      setError(
-        "Only the original System Administrator can delete other user accounts."
-      );
-      return;
-    }
+        if (!canSecurelyOffboardUser(user)) {
+          setError(
+            "Only the original System Administrator can securely offboard another active user account."
+          );
+          return;
+        }
 
-    const firstConfirm = window.confirm(
-      `Are you sure you want to permanently delete this account?\n\nName: ${user.full_name}\nUsername: ${user.username}\nRole: ${user.role}`
-    );
+        const firstConfirm = window.confirm(
+          `Securely offboard this account?
 
-    if (!firstConfirm) return;
+Name: ${user.full_name}
+Username: ${user.username}
+Role: ${user.role}
 
-    const typedConfirm = window.prompt(
-      `Type DELETE ${user.username} to confirm permanent deletion.`
-    );
+This disables login, revokes all active sessions and assigned access, and preserves the user identity on historical sales, payments, approvals and audit records.`
+        );
 
-    if (typedConfirm !== `DELETE ${user.username}`) {
-      setError("Delete cancelled. Confirmation text did not match.");
-      return;
-    }
+        if (!firstConfirm) return;
 
-    setDeletingUserId(user.id);
+        const typedConfirm = window.prompt(
+          `Type OFFBOARD ${user.username} to confirm secure offboarding.`
+        );
 
-    try {
-      const response = await axiosClient.delete(`/users/${user.id}`);
+        if (typedConfirm !== `OFFBOARD ${user.username}`) {
+          setError("Secure offboarding cancelled. Confirmation text did not match.");
+          return;
+        }
 
-      setMessage(response.data.message || "User account deleted permanently.");
-      await loadUsers();
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to delete user.");
-    } finally {
-      setDeletingUserId("");
-    }
-  }
+        setOffboardingUserId(user.id);
 
-  async function resetUserPassword(event) {
+        try {
+          const response = await axiosClient.delete(`/users/${user.id}`);
+
+          setMessage(
+            response.data.message ||
+              "User account securely offboarded and historical identity preserved."
+          );
+          await loadUsers();
+        } catch (error) {
+          setError(
+            error.response?.data?.message || "Failed to securely offboard user."
+          );
+        } finally {
+          setOffboardingUserId("");
+        }
+      }
+
+      async function resetUserPassword(event) {
     event.preventDefault();
 
     setMessage("");
@@ -1527,14 +1538,15 @@ export default function UsersSettingsPage() {
       {message && <div className="users-message success">{message}</div>}
       {error && <div className="users-message error">{error}</div>}
 
-      {canCurrentUserDeleteAccounts() && (
+      {canCurrentUserSecurelyOffboardAccounts() && (
         <div className="users-warning-banner">
           <div>🛡️</div>
           <div>
-            <strong>Original System Administrator mode is active.</strong>
+            <strong>Original System Administrator secure-offboarding mode is active.</strong>
             <br />
-            You can permanently delete other staff accounts, but you cannot delete
-            your own original admin account.
+            Temporary Disable retains assigned access for reactivation. Secure Offboard
+            revokes login, sessions and assigned access while permanently preserving the
+            staff identity on historical financial and audit records.
           </div>
         </div>
       )}
@@ -1972,8 +1984,8 @@ export default function UsersSettingsPage() {
           <div className="users-card-header">
             <h2>Staff Users</h2>
             <p>
-              Review account status, store access, reset passwords, disable staff
-              accounts and protect the original system administrator.
+              Review account status, store access, reset passwords, temporarily
+               disable staff or securely offboard them while preserving historical identity.
             </p>
           </div>
 
@@ -2092,18 +2104,19 @@ export default function UsersSettingsPage() {
                                 {user.is_active ? "Disable" : "Activate"}
                               </button>
 
-                              {canDeleteThisUser(user) && (
+                              {canSecurelyOffboardUser(user) && (
                                 <button
                                   type="button"
                                   className="users-small-button danger"
-                                  onClick={() => deleteUserAccount(user)}
+                                  onClick={() => secureOffboardUser(user)}
                                   disabled={
-                                    Number(deletingUserId) === Number(user.id)
+                                    Number(offboardingUserId) === Number(user.id)
                                   }
+                                  title="Deactivate the account, revoke every assigned access path and session, and preserve historical attribution."
                                 >
-                                  {Number(deletingUserId) === Number(user.id)
-                                    ? "Deleting..."
-                                    : "Delete Account"}
+                                  {Number(offboardingUserId) === Number(user.id)
+                                    ? "Offboarding..."
+                                    : "Secure Offboard"}
                                 </button>
                               )}
                             </div>

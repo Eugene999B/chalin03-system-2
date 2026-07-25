@@ -14,6 +14,12 @@ const { normalizedPhoneForStorage } = require("../services/loginIdentityService"
 const {
   resetAccountBySystemAdministrator,
 } = require("../services/accountRecoveryService");
+const {
+  revokeAllUserSessions,
+} = require("../services/accountSessionService");
+const {
+  secureDeactivateUser,
+} = require("../services/userIdentityPreservationService");
 
 const router = express.Router();
 
@@ -493,58 +499,6 @@ async function sendNewUserCreatedSecuritySmsAlert({
     });
   } catch (error) {
     console.warn("New user SMS alert skipped:", error.message);
-  }
-}
-
-async function setUserReferenceToNull(connection, tableName, columnName, userId) {
-  const exists = await columnExists(connection, tableName, columnName);
-
-  if (!exists) {
-    return;
-  }
-
-  await connection.query(
-    `UPDATE \`${tableName}\`
-     SET \`${columnName}\` = NULL
-     WHERE \`${columnName}\` = ?`,
-    [userId]
-  );
-}
-
-async function clearUserReferencesBeforeDelete(connection, userId) {
-  const references = [
-    { table: "sales", columns: ["staff_id", "voided_by"] },
-    { table: "returns", columns: ["returned_by"] },
-    { table: "expenses", columns: ["recorded_by"] },
-    { table: "debt_payments", columns: ["received_by"] },
-    { table: "purchase_payments", columns: ["paid_by", "received_by"] },
-    { table: "purchases", columns: ["created_by"] },
-    { table: "daily_closings", columns: ["closed_by"] },
-    { table: "stock_adjustments", columns: ["adjusted_by", "approved_by"] },
-    { table: "sms_log", columns: ["sent_by"] },
-    { table: "audit_signoffs", columns: ["created_by", "approved_by"] },
-    { table: "audit_unlock_requests", columns: ["requested_by", "reviewed_by"] },
-    { table: "audit_reapproval_log", columns: ["reapproved_by"] },
-    { table: "activity_log", columns: ["user_id"] },
-  ];
-
-  for (const reference of references) {
-    for (const column of reference.columns) {
-      await setUserReferenceToNull(
-        connection,
-        reference.table,
-        column,
-        userId
-      );
-    }
-  }
-
-  if (await tableExists(connection, "user_branch_access")) {
-    await connection.query(
-      `DELETE FROM user_branch_access
-       WHERE user_id = ?`,
-      [userId]
-    );
   }
 }
 
@@ -1132,16 +1086,23 @@ router.patch(
   async (req, res) => {
     try {
       const branchId = getBranchId(req);
-      const { id } = req.params;
+      const targetUserId = Number(req.params.id);
 
-      if (Number(id) === Number(req.user.id)) {
+      if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+        return res.status(400).json({
+          status: "error",
+          message: "Invalid user ID.",
+        });
+      }
+
+      if (targetUserId === Number(req.user.id)) {
         return res.status(400).json({
           status: "error",
           message: "You cannot disable your own account while logged in.",
         });
       }
 
-      const user = await getUserById(id);
+      const user = await getUserById(targetUserId);
 
       if (!user) {
         return res.status(404).json({
@@ -1179,22 +1140,30 @@ router.patch(
 
       await pool.query(
         `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
-        [...updateParams, id]
+        [...updateParams, targetUserId]
       );
+
+      const revokedSessionCount = newStatus
+        ? 0
+        : await revokeAllUserSessions(targetUserId, "account_disabled");
 
       await logActivity(
         req.user.id,
         branchId,
-        "TOGGLE_USER_STATUS",
-        `${newStatus ? "Activated" : "Disabled"} user "${user.username}"`
+        newStatus ? "ACTIVATE_USER" : "DEACTIVATE_USER",
+        newStatus
+          ? `Activated user "${user.username}" while retaining assigned access.`
+          : `Disabled user "${user.username}" and revoked ${revokedSessionCount} active session(s); assigned access was retained for controlled reactivation.`
       );
 
       return res.json({
         status: "success",
+        code: newStatus ? "USER_ACTIVATED" : "USER_DISABLED",
         message: newStatus
-          ? "User account activated successfully."
-          : "User account disabled successfully.",
+          ? "User account activated successfully. Assigned access remains available."
+          : "User account disabled successfully. Active sessions were revoked and historical records remain linked.",
         is_active: newStatus,
+        revoked_session_count: revokedSessionCount,
       });
     } catch (error) {
       console.error("Toggle user status error:", error);
@@ -1207,14 +1176,14 @@ router.patch(
   }
 );
 
-// DELETE /api/users/:id
+// DELETE /api/users/:id — compatibility endpoint for secure offboarding
 router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
+  let transactionStarted = false;
 
   try {
     const branchId = getBranchId(req);
-    const { id } = req.params;
-    const targetUserId = Number(id);
+    const targetUserId = Number(req.params.id);
 
     if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
       return res.status(400).json({
@@ -1229,20 +1198,33 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       return res.status(403).json({
         status: "error",
         message:
-          "Only the original System Administrator can permanently delete user accounts.",
+          "Only the original System Administrator can securely offboard user accounts.",
       });
     }
 
     if (targetUserId === Number(req.user.id)) {
       return res.status(400).json({
         status: "error",
-        message: "You cannot delete your own account while logged in.",
+        message: "You cannot securely offboard your own account while logged in.",
       });
     }
 
-    const targetUser = await getUserById(targetUserId);
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const [targetRows] = await connection.query(
+      `SELECT id, full_name, username, role, is_active, token_version
+       FROM users
+       WHERE id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [targetUserId]
+    );
+    const targetUser = targetRows[0];
 
     if (!targetUser) {
+      await connection.rollback();
+      transactionStarted = false;
       return res.status(404).json({
         status: "error",
         message: "User not found.",
@@ -1250,74 +1232,84 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     if (isOriginalSystemAdministrator(targetUser)) {
+      await connection.rollback();
+      transactionStarted = false;
       return res.status(403).json({
         status: "error",
-        message: "The original System Administrator account cannot be deleted.",
+        message:
+          "The original System Administrator account cannot be securely offboarded.",
       });
     }
-
-    const [managedWorkspaceRows] = await connection.query(
-      `SELECT
-         uba.id,
-         bu.code
-       FROM user_business_access uba
-       INNER JOIN business_units bu ON bu.id = uba.business_unit_id
-       WHERE uba.user_id = ?
-         AND bu.code IN ('mining', 'equipment_hire')
-       LIMIT 1`,
-      [targetUserId]
-    );
 
     if (
-      String(targetUser.role || "").toLowerCase() === "staff" ||
-      managedWorkspaceRows.length > 0
+      String(targetUser.role || "").toLowerCase() === "admin" &&
+      Number(targetUser.is_active || 0) === 1 &&
+      (await activeAdminCountExcluding(connection, targetUserId)) < 1
     ) {
-      return res.status(409).json({
+      await connection.rollback();
+      transactionStarted = false;
+      return res.status(400).json({
         status: "error",
-        message:
-          "Mining and Equipment Hire staff accounts must be deactivated or have workspace access revoked. They cannot be permanently deleted because historical records must remain linked.",
+        message: "At least one active administrator must remain.",
       });
     }
 
-    await connection.beginTransaction();
+    const result = await secureDeactivateUser(connection, {
+      targetUserId,
+      actorUserId: req.user.id,
+      reason:
+        "Secure offboarding requested by the original System Administrator; historical identity retained.",
+    });
 
-    await clearUserReferencesBeforeDelete(connection, targetUserId);
-
-    await connection.query(`DELETE FROM users WHERE id = ?`, [targetUserId]);
-
-    await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [
-        branchId,
-        req.user.id,
-        "DELETE_USER",
-        `Permanently deleted user "${targetUser.username}" with role "${targetUser.role}" and ID ${targetUser.id}`,
-      ]
-    );
+    await writeAuditEvent({
+      connection,
+      req,
+      userId: req.user.id,
+      branchId,
+      workspaceCode: "spare_parts",
+      action: "SECURE_OFFBOARD_USER",
+      actionType: "user.secure_offboard",
+      outcome: "success",
+      severity: "critical",
+      entityType: "user",
+      entityId: targetUserId,
+      details: `Securely offboarded user "${targetUser.username}" (ID ${targetUserId}) without deleting the identity or clearing historical attribution.`,
+      metadata: result.revocation_summary,
+    });
 
     await connection.commit();
+    transactionStarted = false;
 
     return res.json({
       status: "success",
-      message: `User account "${targetUser.username}" deleted permanently.`,
+      code: "USER_DEACTIVATED_PRESERVED",
+      message: `User account "${targetUser.username}" was securely offboarded. Login, sessions and assigned access were revoked while historical business and audit records remain linked to the retained identity.`,
+      user: {
+        id: targetUserId,
+        username: targetUser.username,
+        is_active: false,
+        identity_preserved: true,
+      },
+      revocation_summary: result.revocation_summary,
     });
   } catch (error) {
-    await connection.rollback();
-
-    console.error("Delete user error:", error);
-
-    if (error.code === "ER_ROW_IS_REFERENCED_2") {
-      return res.status(409).json({
-        status: "error",
-        message:
-          "This user account is connected to business records and could not be deleted. Disable the account instead, or contact the developer to update the linked records safely.",
-      });
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Preserve the original secure-offboarding error.
+      }
     }
 
-    return res.status(500).json({
+    console.error("Secure offboard user error:", error);
+
+    return res.status(error.statusCode || 500).json({
       status: "error",
-      message: error.message || "Something went wrong while deleting user.",
+      code: error.code || "USER_SECURE_OFFBOARD_FAILED",
+      message:
+        error.statusCode && error.statusCode < 500
+          ? error.message
+          : "Something went wrong while securely offboarding the user account.",
     });
   } finally {
     connection.release();
