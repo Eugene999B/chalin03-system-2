@@ -53,8 +53,7 @@ The runner used an advisory lock, exact release confirmation and read-only verif
 
 ## Documentation status
 
-Repository README, audit report, production release-control guide and this release record are synchronized with the deployed release. The external Google Docs handbook still requires a separate consistency update and evidence check.
-
+Repository README, audit report, production release-control guide, external Google Docs handbook, frozen handbook PDF and this release record are synchronized. A sanitised production source snapshot and SHA-256 checksum for `84c554e157c9439de12b12a65438ea440c79acc0` are retained in the controlled Drive archive.
 
 ## Independent post-release review follow-up
 
