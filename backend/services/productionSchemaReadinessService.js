@@ -1,10 +1,49 @@
 const { pool } = require("../config/db");
 
+const REQUIRED_MIGRATIONS = Object.freeze([
+  "20260725_phase1_financial_control_hardening",
+]);
+
 const REQUIRED_TABLE_COLUMNS = Object.freeze({
+  schema_migrations: ["migration_name", "applied_at", "description"],
+  branches: [
+    "id",
+    "code",
+    "branch_code",
+    "name",
+    "location",
+    "phone",
+    "is_active",
+    "created_at",
+    "updated_at",
+  ],
+  users: [
+    "id",
+    "full_name",
+    "username",
+    "password_hash",
+    "role",
+    "phone",
+    "default_branch_id",
+    "can_access_all_branches",
+    "is_active",
+    "token_version",
+    "created_at",
+    "updated_at",
+  ],
+  user_branch_access: [
+    "user_id",
+    "branch_id",
+    "can_access",
+    "created_at",
+    "updated_at",
+  ],
   expenses: [
     "branch_id",
     "amount",
     "expense_date",
+    "funding_source",
+    "affects_daily_closing",
     "is_voided",
     "void_reason",
     "void_reference",
@@ -12,6 +51,9 @@ const REQUIRED_TABLE_COLUMNS = Object.freeze({
     "voided_at",
     "void_approved_by",
     "void_approved_at",
+    "is_reversal",
+    "reversal_of_expense_id",
+    "reversal_reference",
   ],
   worker_hr_letters: [
     "worker_id",
@@ -139,6 +181,16 @@ async function loadTableColumns(connection = pool) {
   return found;
 }
 
+async function loadAppliedMigrations(connection = pool) {
+  const [rows] = await connection.query(
+    `SELECT migration_name
+     FROM schema_migrations
+     WHERE migration_name IN (${REQUIRED_MIGRATIONS.map(() => "?").join(",")})`,
+    REQUIRED_MIGRATIONS
+  );
+  return new Set(rows.map((row) => row.migration_name));
+}
+
 async function loadInstalledTriggers(connection = pool) {
   const placeholders = OPTIONAL_TRIGGER_NAMES.map(() => "?").join(",");
   const [rows] = await connection.query(
@@ -176,6 +228,15 @@ async function auditProductionSchemaReadiness({
     }
   }
 
+  if (errors.every((message) => !message.includes("schema_migrations"))) {
+    const appliedMigrations = await loadAppliedMigrations(connection);
+    for (const migrationName of REQUIRED_MIGRATIONS) {
+      if (!appliedMigrations.has(migrationName)) {
+        errors.push(`Required migration ${migrationName} is not recorded as applied`);
+      }
+    }
+  }
+
   const installedTriggers = await loadInstalledTriggers(connection);
   const missingTriggers = OPTIONAL_TRIGGER_NAMES.filter(
     (triggerName) => !installedTriggers.has(triggerName)
@@ -193,6 +254,7 @@ async function auditProductionSchemaReadiness({
     errors: [...new Set(errors)],
     warnings: [...new Set(warnings)],
     checked_tables: Object.keys(REQUIRED_TABLE_COLUMNS),
+    required_migrations: REQUIRED_MIGRATIONS,
     missing_optional_triggers: missingTriggers,
   };
 }
@@ -209,6 +271,7 @@ async function validateProductionSchemaReadiness(options = {}) {
 
 module.exports = {
   OPTIONAL_TRIGGER_NAMES,
+  REQUIRED_MIGRATIONS,
   REQUIRED_TABLE_COLUMNS,
   SchemaReadinessError,
   auditProductionSchemaReadiness,
