@@ -39,6 +39,108 @@ function getSslConfig(env = process.env) {
   return undefined;
 }
 
+function isProduction(env = process.env) {
+  return String(env.NODE_ENV || "").trim().toLowerCase() === "production";
+}
+
+function queryText(statement) {
+  if (typeof statement === "string") return statement;
+  return String(statement?.sql || "");
+}
+
+function stripSqlComments(statement) {
+  return String(statement || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/--.*$/, ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const RUNTIME_DDL_PATTERN =
+  /\b(?:ALTER\s+TABLE|TRUNCATE(?:\s+TABLE)?|CREATE\s+(?:TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|DROP\s+(?:TABLE|TRIGGER|PROCEDURE|FUNCTION|EVENT|DATABASE|SCHEMA)|RENAME\s+TABLE)\b/i;
+const IDEMPOTENT_CREATE_TABLE_PATTERN =
+  /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\b/i;
+
+function runtimeDdlDecision(statement, env = process.env) {
+  const sql = stripSqlComments(queryText(statement));
+  if (!isProduction(env) || !sql) {
+    return { action: "allow", sql };
+  }
+
+  if (IDEMPOTENT_CREATE_TABLE_PATTERN.test(sql)) {
+    return {
+      action: "noop",
+      sql,
+      reason:
+        "Legacy compatibility CREATE TABLE probe suppressed; production schema changes require an approved migration.",
+    };
+  }
+
+  if (RUNTIME_DDL_PATTERN.test(sql)) {
+    return {
+      action: "block",
+      sql,
+      reason:
+        "Runtime schema mutation is disabled in production. Apply and verify an approved additive migration before deploying code that requires this schema.",
+    };
+  }
+
+  return { action: "allow", sql };
+}
+
+function runtimeDdlBlockedError(decision) {
+  const error = new Error(decision.reason);
+  error.name = "RuntimeDdlBlockedError";
+  error.code = "RUNTIME_DDL_BLOCKED";
+  error.sql_operation = decision.sql.slice(0, 180);
+  return error;
+}
+
+function guardedExecutor(original, receiver) {
+  return async function executeWithRuntimeDdlGuard(statement, values) {
+    const decision = runtimeDdlDecision(statement);
+
+    if (decision.action === "block") {
+      throw runtimeDdlBlockedError(decision);
+    }
+
+    if (decision.action === "noop") {
+      return [
+        {
+          affectedRows: 0,
+          changedRows: 0,
+          warningStatus: 0,
+          runtimeDdlSuppressed: true,
+        },
+        [],
+      ];
+    }
+
+    return original.call(receiver, statement, values);
+  };
+}
+
+function protectConnection(connection) {
+  if (!connection || connection.__chalin03RuntimeDdlGuardInstalled) {
+    return connection;
+  }
+
+  if (typeof connection.query === "function") {
+    connection.query = guardedExecutor(connection.query, connection);
+  }
+  if (typeof connection.execute === "function") {
+    connection.execute = guardedExecutor(connection.execute, connection);
+  }
+
+  Object.defineProperty(connection, "__chalin03RuntimeDdlGuardInstalled", {
+    value: true,
+    enumerable: false,
+  });
+  return connection;
+}
+
 const pool = mysql.createPool({
   host: getEnvValue("DB_HOST", "MYSQLHOST"),
   port: Number(getEnvValue("DB_PORT", "MYSQLPORT", 3306)),
@@ -53,6 +155,16 @@ const pool = mysql.createPool({
   timezone: "Z",
   ssl: getSslConfig(),
 });
+
+const originalPoolQuery = pool.query.bind(pool);
+const originalPoolExecute = pool.execute.bind(pool);
+const originalGetConnection = pool.getConnection.bind(pool);
+
+pool.query = guardedExecutor(originalPoolQuery, pool);
+pool.execute = guardedExecutor(originalPoolExecute, pool);
+pool.getConnection = async function getProtectedConnection() {
+  return protectConnection(await originalGetConnection());
+};
 
 async function testDatabaseConnection() {
   try {
@@ -90,7 +202,12 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  RUNTIME_DDL_PATTERN,
   getSslConfig,
+  isProduction,
   pool,
+  protectConnection,
+  runtimeDdlDecision,
+  stripSqlComments,
   testDatabaseConnection,
 };
