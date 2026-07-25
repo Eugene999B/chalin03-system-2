@@ -14,7 +14,7 @@ permissions:
 jobs:
   patch-audit-test-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Check out Phase 0 branch
@@ -30,15 +30,52 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Select maintained ExcelJS-compatible package
+      - name: Select maintained ExcelJS package and compatibility adapter
         working-directory: backend
         run: |
           node - <<'NODE'
           const fs = require('fs');
+          const path = require('path');
+
           const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           packageJson.dependencies.exceljs = 'npm:@excel.js/exceljs@0.9.0';
           delete packageJson.overrides;
           fs.writeFileSync('package.json', `${JSON.stringify(packageJson, null, 2)}\n`);
+
+          const adapterPath = path.join('services', 'excelJsCompat.js');
+          const adapter = `const excelModule = require("exceljs");\n\nconst ExcelJS = excelModule?.default || excelModule;\n\nif (!ExcelJS || typeof ExcelJS.Workbook !== "function") {\n  const exportedKeys = Object.keys(excelModule || {}).join(", ");\n  throw new Error(\`ExcelJS compatibility adapter could not resolve Workbook. Exports: \${exportedKeys || "none"}\`);\n}\n\nmodule.exports = ExcelJS;\n`;
+          fs.writeFileSync(adapterPath, adapter);
+
+          const servicePath = 'services/exportWorkbookSafetyBootstrap.js';
+          let serviceSource = fs.readFileSync(servicePath, 'utf8');
+          serviceSource = serviceSource.replace(
+            /require\(["']exceljs["']\)/g,
+            'require("./excelJsCompat")'
+          );
+          fs.writeFileSync(servicePath, serviceSource);
+
+          const parentImportPaths = [
+            'routes/activityRoutes.js',
+            'routes/exportRoutes.js',
+            'routes/installmentRoutes.js',
+            'routes/dailyClosingRoutes.js',
+            'routes/customerStatementWorkspaceRoutes.js',
+            'routes/groupExecutiveRoutes.js',
+            'routes/operationsDocumentRoutes.js',
+            'tests/exportWorkbookAndServiceWorkerSafety.test.js'
+          ];
+
+          for (const filePath of parentImportPaths) {
+            let source = fs.readFileSync(filePath, 'utf8');
+            const replaced = source.replace(
+              /require\(["']exceljs["']\)/g,
+              'require("../services/excelJsCompat")'
+            );
+            if (replaced === source) {
+              throw new Error(`Expected ExcelJS import was not found in ${filePath}`);
+            }
+            fs.writeFileSync(filePath, replaced);
+          }
           NODE
 
       - name: Regenerate exact backend lockfile
@@ -56,7 +93,7 @@ jobs:
         run: |
           node - <<'NODE'
           const assert = require('node:assert/strict');
-          const ExcelJS = require('exceljs');
+          const ExcelJS = require('./services/excelJsCompat');
           (async () => {
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Recovery Audit');
@@ -88,7 +125,17 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add backend/package.json backend/package-lock.json
+          git add backend/package.json backend/package-lock.json \
+            backend/services/excelJsCompat.js \
+            backend/services/exportWorkbookSafetyBootstrap.js \
+            backend/routes/activityRoutes.js \
+            backend/routes/exportRoutes.js \
+            backend/routes/installmentRoutes.js \
+            backend/routes/dailyClosingRoutes.js \
+            backend/routes/customerStatementWorkspaceRoutes.js \
+            backend/routes/groupExecutiveRoutes.js \
+            backend/routes/operationsDocumentRoutes.js \
+            backend/tests/exportWorkbookAndServiceWorkerSafety.test.js
           git diff --cached --check
           git commit -m 'Replace vulnerable ExcelJS dependency chain'
           git push origin HEAD:agent/phase-0-production-safety
