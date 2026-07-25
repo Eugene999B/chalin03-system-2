@@ -7,41 +7,70 @@ const router = express.Router();
 const allowedPeriodTypes = ["all", "today", "week", "month", "year", "custom"];
 const allowedPeriodStatuses = ["draft", "reviewed", "approved", "rejected"];
 
-let tableReadyPromise = null;
-let reapprovalTableReadyPromise = null;
+let auditSchemaReadyPromise = null;
 
-const EXTENDED_SIGNOFF_CHECK_COLUMNS = [
-  {
-    name: "purchases_checked",
-    definition: "purchases_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER reports_checked",
+const AUDIT_SCHEMA_REQUIREMENTS = Object.freeze({
+  audit_signoffs: {
+    columns: [
+      "id",
+      "branch_id",
+      "period_type",
+      "period_label",
+      "period_start",
+      "period_end",
+      "audit_score",
+      "audit_status",
+      "prepared_by_name",
+      "reviewed_by_name",
+      "approved_by_name",
+      "review_date",
+      "period_status",
+      "sales_checked",
+      "expenses_checked",
+      "debts_checked",
+      "stock_checked",
+      "warnings_checked",
+      "reports_checked",
+      "purchases_checked",
+      "returns_checked",
+      "transfers_checked",
+      "sms_checked",
+      "stock_ledger_checked",
+      "backup_checked",
+      "maintenance_checked",
+      "accountant_notes",
+      "management_notes",
+      "created_by",
+      "approved_by",
+      "created_at",
+      "updated_at",
+    ],
+    indexes: ["idx_audit_signoff_branch"],
   },
-  {
-    name: "returns_checked",
-    definition: "returns_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER purchases_checked",
+  audit_reapproval_log: {
+    columns: [
+      "id",
+      "branch_id",
+      "audit_signoff_id",
+      "unlock_request_id",
+      "period_label",
+      "period_start",
+      "period_end",
+      "previous_status",
+      "new_status",
+      "audit_score",
+      "audit_status",
+      "reapproved_by",
+      "reapproved_by_name",
+      "reapproved_at",
+      "reapproval_notes",
+      "accountant_notes",
+      "management_notes",
+      "created_at",
+    ],
+    indexes: ["idx_reapproval_branch"],
   },
-  {
-    name: "transfers_checked",
-    definition: "transfers_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER returns_checked",
-  },
-  {
-    name: "sms_checked",
-    definition: "sms_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER transfers_checked",
-  },
-  {
-    name: "stock_ledger_checked",
-    definition:
-      "stock_ledger_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER sms_checked",
-  },
-  {
-    name: "backup_checked",
-    definition: "backup_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER stock_ledger_checked",
-  },
-  {
-    name: "maintenance_checked",
-    definition:
-      "maintenance_checked BOOLEAN NOT NULL DEFAULT FALSE AFTER backup_checked",
-  },
-];
+});
 
 function getBranchId(req) {
   const branchId = Number(req.user?.branch_id || req.user?.default_branch_id || 1);
@@ -227,27 +256,6 @@ function addDateFilter(sqlParts, params, columnName, from, to) {
   }
 }
 
-async function ensureColumn(tableName, columnName, columnDefinition) {
-  const [columns] = await pool.query(`SHOW COLUMNS FROM ${tableName} LIKE ?`, [
-    columnName,
-  ]);
-
-  if (columns.length === 0) {
-    await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
-  }
-}
-
-async function ensureIndex(tableName, indexName, indexDefinition) {
-  const [indexes] = await pool.query(
-    `SHOW INDEX FROM ${tableName} WHERE Key_name = ?`,
-    [indexName]
-  );
-
-  if (indexes.length === 0) {
-    await pool.query(`ALTER TABLE ${tableName} ADD INDEX ${indexDefinition}`);
-  }
-}
-
 async function tableExists(connection, tableName) {
   try {
     const [rows] = await connection.query(
@@ -298,135 +306,119 @@ async function safeQueryRows(connection, label, sql, params, warnings) {
   }
 }
 
-async function ensureAuditSignoffsTable() {
-  if (!tableReadyPromise) {
-    tableReadyPromise = (async () => {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS audit_signoffs (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          branch_id INT NOT NULL DEFAULT 1,
-          period_type ENUM('all', 'today', 'week', 'month', 'year', 'custom') NOT NULL DEFAULT 'month',
-          period_label VARCHAR(255) NOT NULL,
-          period_start DATE NULL,
-          period_end DATE NULL,
-          audit_score INT NOT NULL DEFAULT 0,
-          audit_status VARCHAR(50) NOT NULL DEFAULT 'Needs Review',
-          prepared_by_name VARCHAR(150),
-          reviewed_by_name VARCHAR(150),
-          approved_by_name VARCHAR(150),
-          review_date DATE NULL,
-          period_status ENUM('draft', 'reviewed', 'approved', 'rejected') NOT NULL DEFAULT 'draft',
-          sales_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          expenses_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          debts_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          stock_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          warnings_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          reports_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          purchases_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          returns_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          transfers_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          sms_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          stock_ledger_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          backup_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          maintenance_checked BOOLEAN NOT NULL DEFAULT FALSE,
-          accountant_notes TEXT,
-          management_notes TEXT,
-          created_by INT,
-          approved_by INT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_audit_signoff_branch (branch_id),
-          INDEX idx_audit_signoff_period_type (period_type),
-          INDEX idx_audit_signoff_period_dates (period_start, period_end),
-          INDEX idx_audit_signoff_status (period_status),
-          INDEX idx_audit_signoff_created_by (created_by),
-          INDEX idx_audit_signoff_approved_by (approved_by),
-          INDEX idx_audit_signoff_created_at (created_at)
-        )
-      `);
+function auditSchemaReadinessError(state) {
+  const details = [
+    ...state.missing_tables.map((tableName) => `missing table ${tableName}`),
+    ...state.missing_columns.map(
+      ({ table_name, column_name }) => `missing column ${table_name}.${column_name}`
+    ),
+    ...state.missing_indexes.map(
+      ({ table_name, index_name }) => `missing index ${table_name}.${index_name}`
+    ),
+  ];
+  const error = new Error(
+    `Audit schema is not ready. Apply and verify database/migrations/20260725_post_phase1_audit_signoff_readiness.sql before using Audit Sign-Offs.${
+      details.length > 0 ? ` ${details.join("; ")}.` : ""
+    }`
+  );
+  error.code = "AUDIT_SCHEMA_NOT_READY";
+  error.statusCode = 503;
+  error.schema_state = state;
+  return error;
+}
 
-      await ensureColumn(
-        "audit_signoffs",
-        "branch_id",
-        "branch_id INT NOT NULL DEFAULT 1 AFTER id"
-      );
+async function readAuditSchemaState(connection = pool) {
+  const state = {
+    ready: true,
+    missing_tables: [],
+    missing_columns: [],
+    missing_indexes: [],
+  };
 
-      await ensureIndex(
-        "audit_signoffs",
-        "idx_audit_signoff_branch",
-        "idx_audit_signoff_branch (branch_id)"
-      );
+  for (const [tableName, requirement] of Object.entries(
+    AUDIT_SCHEMA_REQUIREMENTS
+  )) {
+    if (!(await tableExists(connection, tableName))) {
+      state.missing_tables.push(tableName);
+      continue;
+    }
 
-      for (const column of EXTENDED_SIGNOFF_CHECK_COLUMNS) {
-        await ensureColumn("audit_signoffs", column.name, column.definition);
+    const [columnRows] = await connection.query(
+      `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = ?`,
+      [tableName]
+    );
+    const columns = new Set(columnRows.map((row) => row.COLUMN_NAME));
+
+    for (const columnName of requirement.columns) {
+      if (!columns.has(columnName)) {
+        state.missing_columns.push({
+          table_name: tableName,
+          column_name: columnName,
+        });
       }
-    })().catch((error) => {
-      tableReadyPromise = null;
-      throw error;
-    });
+    }
+
+    const [indexRows] = await connection.query(
+      `SELECT DISTINCT INDEX_NAME
+       FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = ?`,
+      [tableName]
+    );
+    const indexes = new Set(indexRows.map((row) => row.INDEX_NAME));
+
+    for (const indexName of requirement.indexes) {
+      if (!indexes.has(indexName)) {
+        state.missing_indexes.push({
+          table_name: tableName,
+          index_name: indexName,
+        });
+      }
+    }
   }
 
-  await tableReadyPromise;
+  state.ready =
+    state.missing_tables.length === 0 &&
+    state.missing_columns.length === 0 &&
+    state.missing_indexes.length === 0;
+  return state;
+}
+
+async function assertAuditSchemaReady(connection = pool) {
+  if (connection !== pool) {
+    const state = await readAuditSchemaState(connection);
+    if (!state.ready) throw auditSchemaReadinessError(state);
+    return state;
+  }
+
+  if (!auditSchemaReadyPromise) {
+    auditSchemaReadyPromise = readAuditSchemaState(pool)
+      .then((state) => {
+        if (!state.ready) throw auditSchemaReadinessError(state);
+        return state;
+      })
+      .catch((error) => {
+        auditSchemaReadyPromise = null;
+        throw error;
+      });
+  }
+
+  return auditSchemaReadyPromise;
+}
+
+function resetAuditSchemaReadinessCache() {
+  auditSchemaReadyPromise = null;
+}
+
+async function ensureAuditSignoffsTable() {
+  return assertAuditSchemaReady(pool);
 }
 
 async function ensureAuditReapprovalLogTable() {
-  if (!reapprovalTableReadyPromise) {
-    reapprovalTableReadyPromise = (async () => {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS audit_reapproval_log (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          branch_id INT NOT NULL DEFAULT 1,
-
-          audit_signoff_id INT NULL,
-          unlock_request_id INT NULL,
-
-          period_label VARCHAR(255) NOT NULL,
-          period_start DATE NULL,
-          period_end DATE NULL,
-
-          previous_status VARCHAR(50) NULL,
-          new_status VARCHAR(50) NOT NULL DEFAULT 'approved',
-
-          audit_score INT NOT NULL DEFAULT 0,
-          audit_status VARCHAR(50) NULL,
-
-          reapproved_by INT NULL,
-          reapproved_by_name VARCHAR(150) NULL,
-          reapproved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-          reapproval_notes TEXT,
-          accountant_notes TEXT,
-          management_notes TEXT,
-
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-          INDEX idx_reapproval_branch (branch_id),
-          INDEX idx_reapproval_signoff (audit_signoff_id),
-          INDEX idx_reapproval_unlock_request (unlock_request_id),
-          INDEX idx_reapproval_period_dates (period_start, period_end),
-          INDEX idx_reapproval_user (reapproved_by),
-          INDEX idx_reapproval_date (reapproved_at)
-        )
-      `);
-
-      await ensureColumn(
-        "audit_reapproval_log",
-        "branch_id",
-        "branch_id INT NOT NULL DEFAULT 1 AFTER id"
-      );
-
-      await ensureIndex(
-        "audit_reapproval_log",
-        "idx_reapproval_branch",
-        "idx_reapproval_branch (branch_id)"
-      );
-    })().catch((error) => {
-      reapprovalTableReadyPromise = null;
-      throw error;
-    });
-  }
-
-  await reapprovalTableReadyPromise;
+  return assertAuditSchemaReady(pool);
 }
 
 async function safeLogActivity(
@@ -2059,3 +2051,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.AUDIT_SCHEMA_REQUIREMENTS = AUDIT_SCHEMA_REQUIREMENTS;
+module.exports.assertAuditSchemaReady = assertAuditSchemaReady;
+module.exports.readAuditSchemaState = readAuditSchemaState;
+module.exports.resetAuditSchemaReadinessCache = resetAuditSchemaReadinessCache;
