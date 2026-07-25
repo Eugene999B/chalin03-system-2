@@ -11,7 +11,7 @@ on:
       - "backend/services/dailyClosingSecurityService.js"
       - "backend/services/independentApproverService.js"
       - "backend/tests/phase1RuntimeAcceptance.js"
-      - "database/schema.sql"
+      - "backend/tests/fixtures/phase1_runtime_acceptance_schema.sql"
       - "database/migrations/20260718_release3fc3_mobile_id_expense_funding.sql"
       - "database/migrations/20260725_phase1_financial_control_hardening.sql"
       - "database/migrations/20260725_phase1_financial_control_hardening_verify.sql"
@@ -25,7 +25,7 @@ on:
       - "backend/services/dailyClosingSecurityService.js"
       - "backend/services/independentApproverService.js"
       - "backend/tests/phase1RuntimeAcceptance.js"
-      - "database/schema.sql"
+      - "backend/tests/fixtures/phase1_runtime_acceptance_schema.sql"
       - "database/migrations/20260718_release3fc3_mobile_id_expense_funding.sql"
       - "database/migrations/20260725_phase1_financial_control_hardening.sql"
       - "database/migrations/20260725_phase1_financial_control_hardening_verify.sql"
@@ -92,7 +92,7 @@ jobs:
           MYSQL_PWD: chalin03_ci_root
         run: |
           set -o pipefail
-          mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root chalin03_phase1_acceptance < database/schema.sql
+          mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root chalin03_phase1_acceptance < backend/tests/fixtures/phase1_runtime_acceptance_schema.sql
           mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root chalin03_phase1_acceptance < database/migrations/20260718_release3fc3_mobile_id_expense_funding.sql
           mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root chalin03_phase1_acceptance < database/migrations/20260725_phase1_financial_control_hardening.sql
 
