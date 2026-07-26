@@ -54,12 +54,13 @@ async function loadForeignKeyDependencies(
 function findBlockingDependencies(dependencies, removableTables = []) {
   const removable = new Set(removableTables.map((value) => String(value)));
 
+  // Every linked business or audit record protects the parent context, even
+  // when the database foreign key technically uses CASCADE or SET NULL.
+  // Only explicit staff-assignment tables may be removed for an otherwise
+  // empty site or location.
   return (dependencies || []).filter((dependency) => {
     if (Number(dependency.count || 0) < 1) return false;
-    if (removable.has(String(dependency.table_name))) return false;
-    return ["RESTRICT", "NO ACTION"].includes(
-      String(dependency.delete_rule || "RESTRICT").toUpperCase()
-    );
+    return !removable.has(String(dependency.table_name));
   });
 }
 
