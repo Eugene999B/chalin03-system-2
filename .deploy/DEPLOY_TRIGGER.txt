@@ -1,0 +1,8 @@
+CHALIN 03 DEPLOYMENT TRIGGER
+
+Mode: SCHEDULED MAINTENANCE
+Branch: maintenance
+Trigger sequence: 1
+Triggered at: 2026-07-26
+
+This file exists only to create a harmless Git commit after changing Railway and Cloudflare to the maintenance branch. Editing the trigger sequence causes both platforms to deploy the selected branch without changing business data.
