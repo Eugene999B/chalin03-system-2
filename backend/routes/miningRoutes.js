@@ -14,6 +14,12 @@ const {
   sendMiningSiteScopeError,
 } = require("../services/miningSiteScope");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const {
+  loadForeignKeyDependencies,
+  findBlockingDependencies,
+  summarizeDependencies,
+} = require("../services/workspaceContextDeletionService");
 
 const router = express.Router();
 
@@ -662,6 +668,152 @@ router.put("/sites/:id", requirePermission("mining.sites.manage"), async (req, r
     if (sendMiningSiteScopeError(res, error)) return;
     if (sendMiningSetupError(res, error)) return;
     return res.status(500).json({ status: "error", message: "Could not update mining site." });
+  }
+});
+
+
+// DELETE /api/mining/sites/:id
+// Empty sites are permanently removed. Sites with operational history are
+// closed and hidden so immutable business evidence is never destroyed.
+router.delete("/sites/:id", requirePermission("mining.sites.manage"), async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    if (!isOriginalSystemAdministrator(req.user)) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only the main System Administrator can remove a Mining site.",
+      });
+    }
+
+    const siteId = toPositiveInt(req.params.id);
+    const reason = cleanText(req.body?.reason, 1000);
+    const confirmation = cleanText(req.body?.confirmation, 80).toUpperCase();
+
+    if (!siteId) {
+      return res.status(400).json({ status: "error", message: "Invalid site ID." });
+    }
+
+    if (!reason) {
+      return res.status(400).json({
+        status: "error",
+        message: "A reason is required before removing a Mining site.",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const [sites] = await connection.query(
+      `SELECT id, site_code, site_name, status, is_active
+       FROM mining_sites
+       WHERE id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [siteId]
+    );
+
+    const site = sites[0];
+
+    if (!site) {
+      await connection.rollback();
+      return res.status(404).json({ status: "error", message: "Mining site not found." });
+    }
+
+    if (confirmation !== String(site.site_code || "").toUpperCase()) {
+      await connection.rollback();
+      return res.status(400).json({
+        status: "error",
+        message: `Type the site code ${site.site_code} exactly to confirm.`,
+      });
+    }
+
+    const dependencies = await loadForeignKeyDependencies(
+      connection,
+      "mining_sites",
+      siteId
+    );
+    const blocking = findBlockingDependencies(dependencies, [
+      "user_mining_site_access",
+    ]);
+
+    if (blocking.length > 0) {
+      await connection.query(
+        `UPDATE user_mining_site_access
+         SET can_access = FALSE,
+             is_default = FALSE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE site_id = ?`,
+        [siteId]
+      );
+      await connection.query(
+        `UPDATE mining_sites
+         SET status = 'closed',
+             is_active = FALSE,
+             notes = CONCAT_WS('\n', NULLIF(notes, ''), ?),
+             updated_by = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [`Archived by System Administrator. Reason: ${reason}`, req.user.id, siteId]
+      );
+      await connection.commit();
+
+      await logActivity(
+        pool,
+        req,
+        "ARCHIVE_MINING_SITE_WITH_HISTORY",
+        `Archived mining site ${site.site_code} — ${site.site_name}. Reason: ${reason}. Linked records preserved: ${blocking
+          .map((item) => `${item.table_name}=${item.count}`)
+          .join(", ")}`
+      );
+
+      return res.json({
+        status: "success",
+        code: "MINING_SITE_ARCHIVED_WITH_HISTORY",
+        message:
+          "This Mining site contains operational history, so it was closed and hidden instead of deleting business evidence.",
+        deleted: false,
+        archived: true,
+        dependencies: summarizeDependencies(dependencies),
+      });
+    }
+
+    await connection.query(
+      "DELETE FROM user_mining_site_access WHERE site_id = ?",
+      [siteId]
+    );
+    await connection.query("DELETE FROM mining_sites WHERE id = ?", [siteId]);
+    await connection.commit();
+
+    await logActivity(
+      pool,
+      req,
+      "DELETE_EMPTY_MINING_SITE",
+      `Permanently deleted empty mining site ${site.site_code} — ${site.site_name}. Reason: ${reason}`
+    );
+
+    return res.json({
+      status: "success",
+      code: "EMPTY_MINING_SITE_DELETED",
+      message: "The empty Mining site and its staff assignments were deleted successfully.",
+      deleted: true,
+      archived: false,
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failures after a connection error.
+    }
+
+    console.error("Remove mining site error:", error);
+    if (sendMiningSiteScopeError(res, error)) return;
+    if (sendMiningSetupError(res, error)) return;
+    return res.status(500).json({
+      status: "error",
+      message: "Could not safely remove the Mining site.",
+    });
+  } finally {
+    connection.release();
   }
 });
 

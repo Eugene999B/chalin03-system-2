@@ -77,6 +77,14 @@ function apiMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
+function isOriginalSystemAdministrator(user) {
+  return (
+    Number(user?.id) === 1 &&
+    String(user?.username || "").toLowerCase() === "admin" &&
+    String(user?.role || "").toLowerCase() === "admin"
+  );
+}
+
 function downloadCsv(filename, rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     window.alert("There are no visible records to export.");
@@ -249,7 +257,7 @@ const createIncidentForm = () => ({
 });
 
 export default function MiningOperationsPage({ section = "overview" }) {
-  const { effectivePermissions, hasAnyPermission } = useAuth();
+  const { user: currentUser, effectivePermissions, hasAnyPermission } = useAuth();
   const {
     options: assignedSiteOptions,
     selectedContextId,
@@ -262,6 +270,7 @@ export default function MiningOperationsPage({ section = "overview" }) {
     .filter(Boolean);
   const canEdit = hasAnyPermission(miningMutationPermissions);
   const canManageSites = canUseMiningAction(effectivePermissions, "sites", "edit");
+  const canDeleteSites = isOriginalSystemAdministrator(currentUser);
   const requestedSection = TABS.some(([code]) => code === section)
     ? section
     : "overview";
@@ -277,6 +286,7 @@ export default function MiningOperationsPage({ section = "overview" }) {
   const [loading, setLoading] = useState(true);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingSiteId, setDeletingSiteId] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -510,6 +520,50 @@ export default function MiningOperationsPage({ section = "overview" }) {
     setFormOpen(true);
   }
 
+
+  async function deleteSite(site) {
+    const confirmation = window.prompt(
+      `Type ${site.site_code} to remove this Mining site. Empty sites are deleted; sites with operational history are closed and hidden.`
+    );
+
+    if (confirmation === null) return;
+
+    const reason = window.prompt(
+      "Enter the reason for removing this Mining site. This reason is written to the audit trail."
+    );
+
+    if (!String(reason || "").trim()) {
+      setError("A reason is required before removing a Mining site.");
+      return;
+    }
+
+    setDeletingSiteId(site.id);
+    setError("");
+
+    try {
+      const response = await axiosClient.delete(`/mining/sites/${site.id}`, {
+        data: {
+          confirmation: String(confirmation || "").trim(),
+          reason: String(reason).trim(),
+        },
+      });
+
+      if (Number(selectedSiteId) === Number(site.id)) {
+        selectContext("");
+        setSelectedSiteId("");
+      }
+
+      setFormOpen(false);
+      setSiteForm(initialSiteForm);
+      setNotice(response.data?.message || "Mining site removed safely.");
+      await Promise.all([loadSitesAndAssets(), loadDashboard()]);
+    } catch (requestError) {
+      setError(apiMessage(requestError, "Could not safely remove the Mining site."));
+    } finally {
+      setDeletingSiteId(null);
+    }
+  }
+
   async function approveDailyLog(log) {
     if (!window.confirm(`Approve the ${log.shift_code} log for ${log.site_code} on ${formatDate(log.log_date)}?`)) return;
     setSaving(true);
@@ -736,7 +790,14 @@ export default function MiningOperationsPage({ section = "overview" }) {
             ) : null}
 
             {activeTab === "sites" ? (
-              <SitesTable sites={sites} canEdit={canManageSites} onEdit={editSite} />
+              <SitesTable
+                sites={sites}
+                canEdit={canManageSites}
+                canDelete={canDeleteSites}
+                deletingSiteId={deletingSiteId}
+                onEdit={editSite}
+                onDelete={deleteSite}
+              />
             ) : recordsLoading ? (
               <div className="mining-loading mining-loading--small">Loading records…</div>
             ) : (
@@ -955,14 +1016,28 @@ function IncidentForm({ sites, form, setForm, onSubmit, saving }) {
   </form>;
 }
 
-function SitesTable({ sites, canEdit, onEdit }) {
+function SitesTable({ sites, canEdit, canDelete, deletingSiteId, onEdit, onDelete }) {
   if (!sites.length) return <EmptyState icon="📍" title="No mining sites registered" description="Create the first site before recording daily operations." />;
   return <div className="mining-record-grid">{sites.map((site) => (
     <article className={`mining-site-card ${site.is_active ? "" : "mining-site-card--inactive"}`} key={site.id}>
       <div className="mining-card-head"><div><span>📍</span><div><small>{site.site_code}</small><h3>{site.site_name}</h3></div></div><StatusPill value={site.status} /></div>
       <dl><div><dt>Location</dt><dd>{site.location || "Not recorded"}</dd></div><div><dt>Material</dt><dd>{site.material_type || "Not set"}</dd></div><div><dt>Daily target</dt><dd>{site.daily_target ? `${formatNumber(site.daily_target, 3)} ${site.production_unit}` : "Not set"}</dd></div><div><dt>Manager</dt><dd>{site.manager_name || "Not assigned"}</dd></div></dl>
       {site.notes ? <p className="mining-card-note">{site.notes}</p> : null}
-      {canEdit ? <button type="button" className="mining-button mining-button--ghost" onClick={() => onEdit(site)}>Edit Site</button> : null}
+      {canEdit || canDelete ? (
+        <div className="mining-inline-actions">
+          {canEdit ? <button type="button" className="mining-button mining-button--ghost" onClick={() => onEdit(site)}>Edit Site</button> : null}
+          {canDelete ? (
+            <button
+              type="button"
+              className="mining-button mining-button--danger"
+              disabled={Number(deletingSiteId) === Number(site.id)}
+              onClick={() => onDelete(site)}
+            >
+              {Number(deletingSiteId) === Number(site.id) ? "Removing…" : "Delete Site"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   ))}</div>;
 }
