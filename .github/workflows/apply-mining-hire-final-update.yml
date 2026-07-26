@@ -20,6 +20,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check backend server syntax
         run: node --check backend/server.js
       - name: Check notification scheduler syntax
