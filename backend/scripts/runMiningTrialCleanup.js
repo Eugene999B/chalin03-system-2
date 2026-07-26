@@ -1,12 +1,8 @@
-const fs = require("node:fs");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const CLEANUP_MARKER = "20260726_mining_trial_data_cleanup";
 const CLEANUP_LOCK = "chalin03:mining-trial-cleanup:20260726";
-const STATUS_PATH =
-  process.env.CHALIN03_MINING_CLEANUP_STATUS_PATH ||
-  "/tmp/chalin03-mining-trial-cleanup-status.json";
 
 // This flag is deliberately true only in the one-time cleanup release. The
 // follow-up release removes this startup hook after production verification.
@@ -122,19 +118,13 @@ function connectionOptions() {
   };
 }
 
-function writeStatus(status, details = {}) {
-  const payload = {
+function cleanupEvidence(status, details = {}) {
+  return {
     marker: CLEANUP_MARKER,
     status,
     recorded_at: new Date().toISOString(),
     ...details,
   };
-  try {
-    fs.writeFileSync(STATUS_PATH, `${JSON.stringify(payload)}\n`, "utf8");
-  } catch (error) {
-    console.warn("Mining cleanup status file warning:", error.message);
-  }
-  return payload;
 }
 
 async function tableExists(connection, tableName) {
@@ -365,12 +355,12 @@ async function externalBlockingReferences(connection, tableNames, foreignKeys) {
 
 async function runMiningTrialCleanup() {
   if (!CLEANUP_EXECUTION_ENABLED) {
-    writeStatus("disabled");
+    console.log(JSON.stringify(cleanupEvidence("disabled")));
     return;
   }
 
   if (!isProduction()) {
-    writeStatus("skipped_non_production");
+    console.log(JSON.stringify(cleanupEvidence("skipped_non_production")));
     return;
   }
 
@@ -415,7 +405,11 @@ async function runMiningTrialCleanup() {
       [CLEANUP_MARKER]
     );
     if (markerRows.length) {
-      writeStatus("already_complete", { database_name: databaseName });
+      console.log(
+        JSON.stringify(
+          cleanupEvidence("already_complete", { database_name: databaseName })
+        )
+      );
       console.log("Mining trial cleanup already completed.");
       return;
     }
@@ -496,7 +490,7 @@ async function runMiningTrialCleanup() {
       (sum, value) => sum + Number(value || 0),
       0
     );
-    const status = writeStatus("complete", {
+    const evidence = cleanupEvidence("complete", {
       database_name: databaseName,
       mining_table_count: tables.length,
       deleted_row_count: totalDeleted,
@@ -506,7 +500,7 @@ async function runMiningTrialCleanup() {
     console.log(
       `Mining trial cleanup completed. Tables: ${tables.length}. Rows removed: ${totalDeleted}.`
     );
-    console.log(JSON.stringify(status));
+    console.log(JSON.stringify(evidence));
   } catch (error) {
     if (transactionStarted) {
       try {
@@ -515,9 +509,13 @@ async function runMiningTrialCleanup() {
         // Preserve the original failure.
       }
     }
-    writeStatus("failed", {
-      error: String(error.message || error).slice(0, 800),
-    });
+    console.error(
+      JSON.stringify(
+        cleanupEvidence("failed", {
+          error: String(error.message || error).slice(0, 800),
+        })
+      )
+    );
     throw error;
   } finally {
     if (lockAcquired) {
