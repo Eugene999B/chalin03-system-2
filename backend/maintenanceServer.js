@@ -15,8 +15,8 @@ const maintenancePayload = {
   status: "maintenance",
   code: "SYSTEM_MAINTENANCE",
   message:
-    "Chalin 03 is temporarily unavailable while a scheduled system update is being completed. Please contact the system developer for additional information.",
-  developer: "Eugene Amankwah Appiah",
+    "Chalin 03 is temporarily unavailable while a scheduled system update is being completed. Please contact the developers for additional information.",
+  contact: "Developers",
 };
 
 const maintenanceHtml = `<!doctype html>
@@ -34,8 +34,7 @@ const maintenanceHtml = `<!doctype html>
       .badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(245, 158, 11, .14); border: 1px solid rgba(245, 158, 11, .45); color: #fcd34d; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
       h1 { margin: 24px 0 16px; font-size: clamp(32px, 7vw, 52px); line-height: 1.05; }
       p { margin: 0 auto; max-width: 560px; color: #cbd5e1; font-size: clamp(16px, 2.4vw, 19px); line-height: 1.7; }
-      .contact { margin-top: 28px; padding: 18px; border-radius: 16px; background: rgba(15, 23, 42, .72); border: 1px solid rgba(148, 163, 184, .18); }
-      .contact strong { display: block; margin-top: 6px; color: #fff; font-size: 18px; }
+      .contact { margin-top: 28px; padding: 18px; border-radius: 16px; background: rgba(15, 23, 42, .72); border: 1px solid rgba(148, 163, 184, .18); color: #fff; font-size: 18px; font-weight: 700; }
       footer { margin-top: 28px; color: #94a3b8; font-size: 13px; }
     </style>
   </head>
@@ -44,10 +43,7 @@ const maintenanceHtml = `<!doctype html>
       <span class="badge">● Scheduled maintenance</span>
       <h1>System temporarily unavailable</h1>
       <p>Chalin 03 is currently undergoing a scheduled system update. Access has been temporarily suspended while the update is completed. No business records have been deleted.</p>
-      <div class="contact">
-        <span>For additional information, please contact the system developer.</span>
-        <strong>Eugene Amankwah Appiah</strong>
-      </div>
+      <div class="contact">For additional information, please contact the developers.</div>
       <footer>Chalin 03 Company Limited · Please check back later</footer>
     </main>
   </body>
