@@ -1,0 +1,31 @@
+name: Workspace Final Audit
+
+on:
+  push:
+    branches:
+      - agent/mining-hire-final-completion
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mining-hire-final-completion
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate workspace audit
+        run: python .github/scripts/workspace_final_audit.py
+      - name: Commit audit report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/WORKSPACE_FINAL_AUDIT.json
+          git diff --cached --quiet || git commit -m "Generate Mining and Hire final audit"
+          git push origin HEAD:agent/mining-hire-final-completion
