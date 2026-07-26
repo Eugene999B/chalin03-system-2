@@ -100,7 +100,7 @@ test("automatic workspace notifications cover Mining and Hire risks", () => {
     "mining.dispatch_pending",
     "mining.fuel_variance",
     "hire.invoice_overdue",
-    "hire.contract_ending",
+    "hire.contract_overdue",
     "hire.deposit_pending",
     "hire.damage_open",
     "hire.work_log_pending",
