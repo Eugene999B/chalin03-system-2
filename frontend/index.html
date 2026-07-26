@@ -2,109 +2,177 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <meta name="theme-color" content="#07182c" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
     <meta
       name="description"
-      content="Chalin 03 Group Operations Platform - local staff portal for Spare Parts, Mining Operations and Equipment Hire."
+      content="Chalin 03 is temporarily unavailable while a scheduled system update is completed."
     />
-
-    <!--
-      Public React routes must be indexable in the initial HTML response because
-      Google may stop processing when it sees an early noindex directive. Private
-      staff routes remain protected by Cloudflare X-Robots-Tag headers and the
-      route metadata controller.
-    -->
-    <meta
-      name="robots"
-      content="index, follow, max-image-preview:large"
-    />
-    <meta name="application-name" content="Chalin 03 Group Operations Platform" />
-    <meta name="msapplication-TileColor" content="#07182c" />
-    <meta name="msapplication-TileImage" content="/favicon-192x192.png" />
-
-    <meta property="og:site_name" content="Chalin 03 Company Limited" />
-    <meta property="og:title" content="Chalin 03 Group Operations Platform" />
-    <meta
-      property="og:description"
-      content="Local staff portal for Spare Parts, Mining Operations and Equipment Hire."
-    />
-    <meta property="og:type" content="website" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Chalin 03 Group Operations Platform" />
-    <meta
-      name="twitter:description"
-      content="Local staff portal for Spare Parts, Mining Operations and Equipment Hire."
-    />
-
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Chalin 03" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-
-    <!-- Stable square favicon assets for browsers, devices and Google Search. -->
     <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="192x192"
-      href="/favicon-192x192.png"
-    />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="512x512"
-      href="/favicon-512x512.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="192x192"
-      href="/favicon-192x192.png"
-    />
-    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png" />
+    <title>Chalin 03 — Scheduled Maintenance</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+          BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #07182c;
+      }
 
-    <!-- PWA manifest -->
-    <link rel="manifest" href="/site.webmanifest" />
+      * {
+        box-sizing: border-box;
+      }
 
-    <!-- Organization logo information for search engines -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": "Chalin 03 Company Limited",
-        "description": "Chalin 03 Group Operations Platform",
-        "telephone": "+233249469080",
-        "logo": "/favicon-512x512.png",
-        "address": {
-          "@type": "PostalAddress",
-          "addressLocality": "Dunkwa Police Barrier",
-          "addressCountry": "GH"
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 50% -10%, rgba(37, 99, 235, 0.32), transparent 46%),
+          linear-gradient(160deg, #0b2442 0%, #07182c 48%, #020812 100%);
+        color: #f8fafc;
+      }
+
+      main {
+        width: min(720px, 100%);
+        padding: clamp(30px, 7vw, 58px);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 26px;
+        background: rgba(7, 24, 44, 0.94);
+        box-shadow: 0 32px 90px rgba(0, 0, 0, 0.42);
+        text-align: center;
+      }
+
+      .logo {
+        width: 76px;
+        height: 76px;
+        object-fit: contain;
+        margin-bottom: 20px;
+        filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.28));
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 15px;
+        border-radius: 999px;
+        border: 1px solid rgba(245, 158, 11, 0.48);
+        background: rgba(245, 158, 11, 0.14);
+        color: #fcd34d;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #f59e0b;
+        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13);
+      }
+
+      h1 {
+        margin: 26px 0 16px;
+        font-size: clamp(34px, 7vw, 56px);
+        line-height: 1.04;
+        letter-spacing: -0.035em;
+      }
+
+      .message {
+        max-width: 590px;
+        margin: 0 auto;
+        color: #cbd5e1;
+        font-size: clamp(16px, 2.5vw, 19px);
+        line-height: 1.75;
+      }
+
+      .contact {
+        margin-top: 30px;
+        padding: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 17px;
+        background: rgba(15, 23, 42, 0.74);
+        color: #cbd5e1;
+      }
+
+      .contact strong {
+        display: block;
+        margin-top: 7px;
+        color: #ffffff;
+        font-size: 19px;
+      }
+
+      footer {
+        margin-top: 30px;
+        color: #94a3b8;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 480px) {
+        body {
+          padding: 14px;
+        }
+
+        main {
+          padding: 30px 22px;
+          border-radius: 20px;
+        }
+
+        .logo {
+          width: 64px;
+          height: 64px;
         }
       }
-    </script>
-
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Chalin 03 Group Operations Platform"
-      }
-    </script>
-
-    <title>Chalin 03 Group Operations Platform</title>
+    </style>
   </head>
-
   <body>
-    <noscript>You need JavaScript enabled to run Chalin 03 Group Operations Platform.</noscript>
+    <main role="main" aria-labelledby="maintenance-title">
+      <img class="logo" src="/chalin03-logo.png" alt="Chalin 03 Company Limited" />
+      <div class="badge">Scheduled maintenance</div>
+      <h1 id="maintenance-title">System temporarily unavailable</h1>
+      <p class="message">
+        Chalin 03 is currently undergoing a scheduled system update. Access has
+        been temporarily suspended while the update is completed. No business
+        records have been deleted. Please check back later.
+      </p>
+      <section class="contact" aria-label="Developer contact information">
+        For additional information, please contact the system developer.
+        <strong>Eugene Amankwah Appiah</strong>
+      </section>
+      <footer>
+        Chalin 03 Company Limited<br />
+        Spare Parts · Mining Operations · Equipment Sales &amp; Hire
+      </footer>
+    </main>
 
-    <div id="root"></div>
+    <script>
+      (async function clearPreviousApplicationCaches() {
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
 
-    <script type="module" src="/src/main.jsx"></script>
+          if ("caches" in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+          }
+
+          localStorage.removeItem("chalin03_auth_token");
+          sessionStorage.clear();
+        } catch (error) {
+          console.warn("Maintenance page cache cleanup was not fully completed.", error);
+        }
+      })();
+    </script>
   </body>
 </html>
