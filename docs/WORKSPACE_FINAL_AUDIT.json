@@ -1,0 +1,708 @@
+{
+  "database": {
+    "mining_tables": [
+      "mining_daily_logs",
+      "mining_equipment_logs",
+      "mining_expenses",
+      "mining_fuel_logs",
+      "mining_incidents",
+      "mining_production_records",
+      "mining_sites"
+    ],
+    "shared_workspace_tables": [
+      "activity_log",
+      "user_permission_overrides",
+      "worker_identity_sequences"
+    ]
+  },
+  "files": {
+    "equipment_sales_finalization_routes": {
+      "line_count": 1202,
+      "path": "backend/routes/equipmentSalesFinalizationRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/quotations/:id/quotation.pdf"
+        },
+        {
+          "method": "GET",
+          "path": "/agreements/:id/documents/:type.pdf"
+        },
+        {
+          "method": "GET",
+          "path": "/payments/:id/receipt.pdf"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/management"
+        },
+        {
+          "method": "GET",
+          "path": "/reports/export.csv"
+        },
+        {
+          "method": "GET",
+          "path": "/retirement-status"
+        },
+        {
+          "method": "POST",
+          "path": "/reminders/run"
+        }
+      ],
+      "term_counts": {
+        "adjust": 0,
+        "amend": 0,
+        "approve": 14,
+        "archive": 0,
+        "cancel": 3,
+        "correct": 0,
+        "delete": 0,
+        "notification": 0,
+        "overdue": 17,
+        "reject": 0,
+        "reminder": 8,
+        "reverse": 0,
+        "sms": 1,
+        "void": 1,
+        "whatsapp": 0
+      },
+      "todo_count": 0
+    },
+    "equipment_sales_routes": {
+      "line_count": 1200,
+      "path": "backend/routes/equipmentSalesRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/summary"
+        },
+        {
+          "method": "GET",
+          "path": "/reference"
+        },
+        {
+          "method": "GET",
+          "path": "/enquiries"
+        },
+        {
+          "method": "POST",
+          "path": "/enquiries"
+        },
+        {
+          "method": "PATCH",
+          "path": "/enquiries/:id/status"
+        },
+        {
+          "method": "GET",
+          "path": "/quotations"
+        },
+        {
+          "method": "POST",
+          "path": "/quotations"
+        },
+        {
+          "method": "PATCH",
+          "path": "/quotations/:id/status"
+        },
+        {
+          "method": "GET",
+          "path": "/agreements"
+        },
+        {
+          "method": "GET",
+          "path": "/agreements/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/agreements"
+        },
+        {
+          "method": "POST",
+          "path": "/agreements/:id/payments"
+        },
+        {
+          "method": "POST",
+          "path": "/agreements/:id/delivery"
+        },
+        {
+          "method": "POST",
+          "path": "/agreements/:id/ownership-transfer"
+        },
+        {
+          "method": "POST",
+          "path": "/agreements/:id/sms"
+        }
+      ],
+      "term_counts": {
+        "adjust": 1,
+        "amend": 0,
+        "approve": 24,
+        "archive": 0,
+        "cancel": 10,
+        "correct": 0,
+        "delete": 0,
+        "notification": 0,
+        "overdue": 20,
+        "reject": 3,
+        "reminder": 16,
+        "reverse": 0,
+        "sms": 35,
+        "void": 1,
+        "whatsapp": 0
+      },
+      "todo_count": 0
+    },
+    "hire_commercial_routes": {
+      "line_count": 1014,
+      "path": "backend/routes/hireCommercialRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/rate-cards"
+        },
+        {
+          "method": "POST",
+          "path": "/rate-cards"
+        },
+        {
+          "method": "PATCH",
+          "path": "/rate-cards/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/quotations"
+        },
+        {
+          "method": "POST",
+          "path": "/quotations"
+        },
+        {
+          "method": "PATCH",
+          "path": "/quotations/:id/approve"
+        },
+        {
+          "method": "POST",
+          "path": "/quotations/:id/convert-to-contract"
+        },
+        {
+          "method": "GET",
+          "path": "/contracts"
+        },
+        {
+          "method": "POST",
+          "path": "/contracts/:id/amendments"
+        },
+        {
+          "method": "PATCH",
+          "path": "/amendments/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/deposits"
+        },
+        {
+          "method": "POST",
+          "path": "/deposits"
+        },
+        {
+          "method": "PATCH",
+          "path": "/deposits/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/evidence"
+        },
+        {
+          "method": "POST",
+          "path": "/evidence"
+        },
+        {
+          "method": "GET",
+          "path": "/damage-assessments"
+        },
+        {
+          "method": "POST",
+          "path": "/damage-assessments"
+        },
+        {
+          "method": "PATCH",
+          "path": "/damage-assessments/:id/settle"
+        },
+        {
+          "method": "GET",
+          "path": "/documents/:type/:id.pdf"
+        }
+      ],
+      "term_counts": {
+        "adjust": 7,
+        "amend": 46,
+        "approve": 79,
+        "archive": 0,
+        "cancel": 1,
+        "correct": 0,
+        "delete": 0,
+        "notification": 0,
+        "overdue": 0,
+        "reject": 0,
+        "reminder": 0,
+        "reverse": 0,
+        "sms": 0,
+        "void": 2,
+        "whatsapp": 0
+      },
+      "todo_count": 0
+    },
+    "hire_routes": {
+      "line_count": 4468,
+      "path": "backend/routes/equipmentHireRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/reports"
+        },
+        {
+          "method": "GET",
+          "path": "/customers"
+        },
+        {
+          "method": "POST",
+          "path": "/customers"
+        },
+        {
+          "method": "PUT",
+          "path": "/customers/:id"
+        },
+        {
+          "method": "GET",
+          "path": "/enquiries"
+        },
+        {
+          "method": "POST",
+          "path": "/enquiries"
+        },
+        {
+          "method": "PUT",
+          "path": "/enquiries/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/enquiries/:id/convert-to-quotation"
+        },
+        {
+          "method": "PATCH",
+          "path": "/enquiries/:id/status"
+        },
+        {
+          "method": "GET",
+          "path": "/availability"
+        },
+        {
+          "method": "GET",
+          "path": "/quotations"
+        },
+        {
+          "method": "POST",
+          "path": "/quotations"
+        },
+        {
+          "method": "PUT",
+          "path": "/quotations/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/quotations/:id/convert-to-contract"
+        },
+        {
+          "method": "PATCH",
+          "path": "/quotations/:id/status"
+        },
+        {
+          "method": "GET",
+          "path": "/contracts"
+        },
+        {
+          "method": "POST",
+          "path": "/contracts"
+        },
+        {
+          "method": "PATCH",
+          "path": "/contracts/:id/status"
+        },
+        {
+          "method": "PATCH",
+          "path": "/contracts/:id/close"
+        },
+        {
+          "method": "PATCH",
+          "path": "/contracts/:id/financial-close"
+        },
+        {
+          "method": "GET",
+          "path": "/contract-assets"
+        },
+        {
+          "method": "POST",
+          "path": "/contracts/:id/assets"
+        },
+        {
+          "method": "DELETE",
+          "path": "/contract-assets/:id"
+        },
+        {
+          "method": "GET",
+          "path": "/dispatches"
+        },
+        {
+          "method": "POST",
+          "path": "/dispatches"
+        },
+        {
+          "method": "GET",
+          "path": "/work-logs"
+        },
+        {
+          "method": "POST",
+          "path": "/work-logs"
+        },
+        {
+          "method": "PATCH",
+          "path": "/work-logs/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/finance-summary"
+        },
+        {
+          "method": "GET",
+          "path": "/billable-work-logs"
+        },
+        {
+          "method": "GET",
+          "path": "/invoices"
+        },
+        {
+          "method": "POST",
+          "path": "/invoices"
+        },
+        {
+          "method": "PATCH",
+          "path": "/invoices/:id/void"
+        },
+        {
+          "method": "GET",
+          "path": "/payments"
+        },
+        {
+          "method": "POST",
+          "path": "/payments"
+        },
+        {
+          "method": "GET",
+          "path": "/returns"
+        },
+        {
+          "method": "POST",
+          "path": "/returns"
+        }
+      ],
+      "term_counts": {
+        "adjust": 1,
+        "amend": 0,
+        "approve": 79,
+        "archive": 0,
+        "cancel": 13,
+        "correct": 1,
+        "delete": 2,
+        "notification": 0,
+        "overdue": 16,
+        "reject": 5,
+        "reminder": 0,
+        "reverse": 1,
+        "sms": 0,
+        "void": 42,
+        "whatsapp": 4
+      },
+      "todo_count": 0
+    },
+    "mining_control_routes": {
+      "line_count": 1615,
+      "path": "backend/routes/miningControlRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/reference-data"
+        },
+        {
+          "method": "GET",
+          "path": "/stockpiles"
+        },
+        {
+          "method": "POST",
+          "path": "/stockpiles"
+        },
+        {
+          "method": "GET",
+          "path": "/stockpile-movements"
+        },
+        {
+          "method": "POST",
+          "path": "/stockpile-movements"
+        },
+        {
+          "method": "GET",
+          "path": "/dispatches"
+        },
+        {
+          "method": "POST",
+          "path": "/dispatches"
+        },
+        {
+          "method": "PATCH",
+          "path": "/dispatches/:id/approve"
+        },
+        {
+          "method": "PATCH",
+          "path": "/dispatches/:id/cancel"
+        },
+        {
+          "method": "GET",
+          "path": "/dispatches/:id/pdf"
+        },
+        {
+          "method": "GET",
+          "path": "/fuel-tanks"
+        },
+        {
+          "method": "POST",
+          "path": "/fuel-tanks"
+        },
+        {
+          "method": "GET",
+          "path": "/fuel-transactions"
+        },
+        {
+          "method": "POST",
+          "path": "/fuel-transactions"
+        },
+        {
+          "method": "GET",
+          "path": "/fuel-reconciliations"
+        },
+        {
+          "method": "POST",
+          "path": "/fuel-reconciliations"
+        },
+        {
+          "method": "PATCH",
+          "path": "/fuel-reconciliations/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/fuel-consumption"
+        },
+        {
+          "method": "GET",
+          "path": "/contractors"
+        },
+        {
+          "method": "POST",
+          "path": "/contractors"
+        },
+        {
+          "method": "GET",
+          "path": "/crews"
+        },
+        {
+          "method": "POST",
+          "path": "/crews"
+        },
+        {
+          "method": "PATCH",
+          "path": "/crews/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/workforce-warnings"
+        },
+        {
+          "method": "GET",
+          "path": "/closings"
+        },
+        {
+          "method": "POST",
+          "path": "/closings"
+        },
+        {
+          "method": "PATCH",
+          "path": "/closings/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/intelligence"
+        }
+      ],
+      "term_counts": {
+        "adjust": 17,
+        "amend": 0,
+        "approve": 80,
+        "archive": 0,
+        "cancel": 12,
+        "correct": 9,
+        "delete": 0,
+        "notification": 0,
+        "overdue": 0,
+        "reject": 0,
+        "reminder": 0,
+        "reverse": 0,
+        "sms": 0,
+        "void": 0,
+        "whatsapp": 0
+      },
+      "todo_count": 0
+    },
+    "mining_routes": {
+      "line_count": 1663,
+      "path": "backend/routes/miningRoutes.js",
+      "routes": [
+        {
+          "method": "GET",
+          "path": "/dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/sites"
+        },
+        {
+          "method": "POST",
+          "path": "/sites"
+        },
+        {
+          "method": "PUT",
+          "path": "/sites/:id"
+        },
+        {
+          "method": "DELETE",
+          "path": "/sites/:id"
+        },
+        {
+          "method": "GET",
+          "path": "/daily-logs"
+        },
+        {
+          "method": "POST",
+          "path": "/daily-logs"
+        },
+        {
+          "method": "PATCH",
+          "path": "/daily-logs/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/production"
+        },
+        {
+          "method": "POST",
+          "path": "/production"
+        },
+        {
+          "method": "GET",
+          "path": "/equipment-logs"
+        },
+        {
+          "method": "POST",
+          "path": "/equipment-logs"
+        },
+        {
+          "method": "GET",
+          "path": "/fuel-logs"
+        },
+        {
+          "method": "POST",
+          "path": "/fuel-logs"
+        },
+        {
+          "method": "GET",
+          "path": "/expenses"
+        },
+        {
+          "method": "POST",
+          "path": "/expenses"
+        },
+        {
+          "method": "PATCH",
+          "path": "/production/:id/approve"
+        },
+        {
+          "method": "PATCH",
+          "path": "/equipment-logs/:id/approve"
+        },
+        {
+          "method": "PATCH",
+          "path": "/expenses/:id/approve"
+        },
+        {
+          "method": "GET",
+          "path": "/incidents"
+        },
+        {
+          "method": "POST",
+          "path": "/incidents"
+        },
+        {
+          "method": "PATCH",
+          "path": "/incidents/:id/status"
+        }
+      ],
+      "term_counts": {
+        "adjust": 5,
+        "amend": 0,
+        "approve": 67,
+        "archive": 6,
+        "cancel": 0,
+        "correct": 5,
+        "delete": 10,
+        "notification": 0,
+        "overdue": 0,
+        "reject": 0,
+        "reminder": 0,
+        "reverse": 0,
+        "sms": 0,
+        "void": 0,
+        "whatsapp": 0
+      },
+      "todo_count": 0
+    }
+  },
+  "findings": [
+    "No route-level lazy loading is present in App.jsx."
+  ],
+  "frontend": {
+    "hire_commercial_static": true,
+    "hire_page_static": true,
+    "lazy_count": 0,
+    "mining_control_static": true,
+    "mining_page_static": true,
+    "static_import_count": 59,
+    "suspense_count": 0
+  },
+  "notifications": {
+    "fuel_mentions": 14,
+    "hire_mentions": 81,
+    "mining_mentions": 66,
+    "overdue_mentions": 9,
+    "return_mentions": 23,
+    "stockpile_mentions": 11
+  }
+}
