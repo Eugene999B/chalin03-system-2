@@ -15,6 +15,8 @@ const CLEANUP_EXECUTION_ENABLED = true;
 const SENTINEL_TABLES = Object.freeze([
   "branches",
   "users",
+  "user_branch_access",
+  "settings",
   "products",
   "stock_adjustments",
   "suppliers",
@@ -31,6 +33,9 @@ const SENTINEL_TABLES = Object.freeze([
   "expenses",
   "daily_closings",
   "audit_signoffs",
+  "audit_unlock_requests",
+  "stock_transfers",
+  "sms_log",
   "business_locations",
   "user_hire_location_access",
   "hire_customers",
@@ -211,7 +216,7 @@ async function miningTables(connection) {
      FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_TYPE = 'BASE TABLE'
-       AND TABLE_NAME LIKE 'mining\\_%' ESCAPE '\\'
+       AND TABLE_NAME LIKE 'mining=_%' ESCAPE '='
      ORDER BY TABLE_NAME`
   );
   return rows.map((row) => String(row.TABLE_NAME));
@@ -248,7 +253,9 @@ async function foreignKeysForTables(connection, tableNames) {
 
 function buildDeleteOrder(tableNames, foreignKeys) {
   const target = new Set(tableNames);
-  const childrenByParent = new Map(tableNames.map((table) => [table, new Set()]));
+  const childrenByParent = new Map(
+    tableNames.map((table) => [table, new Set()])
+  );
 
   for (const key of foreignKeys) {
     if (!target.has(key.child_table) || !target.has(key.parent_table)) continue;
@@ -267,7 +274,9 @@ function buildDeleteOrder(tableNames, foreignKeys) {
   function visit(tableName) {
     if (permanent.has(tableName)) return;
     if (temporary.has(tableName)) {
-      throw new Error(`Mining cleanup found a foreign-key cycle at ${tableName}.`);
+      throw new Error(
+        `Mining cleanup found a foreign-key cycle at ${tableName}.`
+      );
     }
     temporary.add(tableName);
     for (const child of childrenByParent.get(tableName) || []) visit(child);
@@ -282,8 +291,16 @@ function buildDeleteOrder(tableNames, foreignKeys) {
 
 async function deleteWorkspaceRows(connection, tableName, report) {
   if (!(await tableExists(connection, tableName))) return;
-  const hasWorkspace = await columnExists(connection, tableName, "workspace_code");
-  const hasMiningSite = await columnExists(connection, tableName, "mining_site_id");
+  const hasWorkspace = await columnExists(
+    connection,
+    tableName,
+    "workspace_code"
+  );
+  const hasMiningSite = await columnExists(
+    connection,
+    tableName,
+    "mining_site_id"
+  );
   if (!hasWorkspace && !hasMiningSite) return;
 
   const clauses = [];
@@ -292,12 +309,15 @@ async function deleteWorkspaceRows(connection, tableName, report) {
   const [result] = await connection.query(
     `DELETE FROM ${safeIdentifier(tableName)} WHERE ${clauses.join(" OR ")}`
   );
-  report[tableName] = (report[tableName] || 0) + Number(result.affectedRows || 0);
+  report[tableName] =
+    (report[tableName] || 0) + Number(result.affectedRows || 0);
 }
 
 async function deleteSharedMiningRows(connection, report) {
   if (await tableExists(connection, "user_mining_site_access")) {
-    const [result] = await connection.query("DELETE FROM user_mining_site_access");
+    const [result] = await connection.query(
+      "DELETE FROM user_mining_site_access"
+    );
     report.user_mining_site_access = Number(result.affectedRows || 0);
   }
 
@@ -306,7 +326,7 @@ async function deleteSharedMiningRows(connection, report) {
      FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND COLUMN_NAME = 'mining_site_id'
-       AND TABLE_NAME NOT LIKE 'mining\\_%' ESCAPE '\\'`
+       AND TABLE_NAME NOT LIKE 'mining=_%' ESCAPE '='`
   );
   for (const row of siteScopedTables) {
     await deleteWorkspaceRows(connection, String(row.TABLE_NAME), report);
@@ -318,15 +338,13 @@ async function deleteSharedMiningRows(connection, report) {
 
   if (
     (await tableExists(connection, "worker_profiles")) &&
-    (await columnExists(connection, "worker_profiles", "workspace_code")) &&
-    (await columnExists(connection, "worker_profiles", "user_id"))
+    (await columnExists(connection, "worker_profiles", "workspace_code"))
   ) {
     const [result] = await connection.query(
       `DELETE FROM worker_profiles
-       WHERE workspace_code = 'mining'
-         AND user_id IS NULL`
+       WHERE workspace_code = 'mining'`
     );
-    report.worker_profiles_unlinked_mining = Number(result.affectedRows || 0);
+    report.worker_profiles_mining = Number(result.affectedRows || 0);
   }
 }
 
@@ -340,9 +358,7 @@ async function externalBlockingReferences(connection, tableNames, foreignKeys) {
       key.child_table,
       `${safeIdentifier(key.child_column)} IS NOT NULL`
     );
-    if (count > 0 && ["RESTRICT", "NO ACTION"].includes(key.delete_rule)) {
-      blockers.push({ ...key, count });
-    }
+    if (count > 0) blockers.push({ ...key, count });
   }
   return blockers;
 }
@@ -392,7 +408,10 @@ async function runMiningTrialCleanup() {
     }
 
     const [markerRows] = await connection.query(
-      "SELECT migration_name FROM schema_migrations WHERE migration_name = ? LIMIT 1",
+      `SELECT migration_name
+       FROM schema_migrations
+       WHERE migration_name = ?
+       LIMIT 1`,
       [CLEANUP_MARKER]
     );
     if (markerRows.length) {
@@ -496,7 +515,9 @@ async function runMiningTrialCleanup() {
         // Preserve the original failure.
       }
     }
-    writeStatus("failed", { error: String(error.message || error).slice(0, 800) });
+    writeStatus("failed", {
+      error: String(error.message || error).slice(0, 800),
+    });
     throw error;
   } finally {
     if (lockAcquired) {
