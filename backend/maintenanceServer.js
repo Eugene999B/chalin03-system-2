@@ -81,12 +81,14 @@ app.use((req, res, next) => {
 
   res.setHeader("Cache-Control", "no-store, max-age=0");
   res.setHeader("Pragma", "no-cache");
-  res.setHeader("Retry-After", "3600");
   res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
 
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Chalin03-Workspace, X-Chalin03-Context-Id, X-Chalin03-Branch-Id");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type, X-Chalin03-Workspace, X-Chalin03-Context-Id, X-Chalin03-Branch-Id"
+    );
     return res.status(204).end();
   }
 
@@ -112,6 +114,7 @@ app.get("/api/readiness", (req, res) => {
 });
 
 app.all(/^\/api(?:\/|$)/, (req, res) => {
+  res.setHeader("Retry-After", "3600");
   return res.status(503).json({
     ...maintenancePayload,
     path: req.originalUrl,
@@ -123,7 +126,7 @@ app.get("*", (req, res) => {
   return res.status(200).type("html").send(maintenanceHtml);
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Chalin 03 maintenance server listening on port ${port}`);
+app.listen(port, "::", () => {
+  console.log(`Chalin 03 maintenance server listening on IPv6/dual-stack port ${port}`);
   console.log("Business routes, database connections and background schedulers are disabled on this branch.");
 });
