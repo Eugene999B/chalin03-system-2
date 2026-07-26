@@ -101,6 +101,9 @@ const { startInstallmentReminderScheduler } = require("./services/installmentRem
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
+const {
+  startNotificationSyncScheduler,
+} = require("./services/notificationSchedulerService");
 
 const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
 const miningBoundary = requireWorkspaceCategory("mining");
@@ -419,6 +422,7 @@ async function startServer() {
       console.log(`Allowed frontend origins: ${allowedOrigins.join(", ")}`);
       startSmsDeliveryStatusSync();
       startInstallmentReminderScheduler();
+      startNotificationSyncScheduler();
     });
   } catch (error) {
     console.error("Failed to start server:", error);

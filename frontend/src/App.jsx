@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WorkspaceContextProvider } from "./context/WorkspaceContext";
@@ -41,27 +42,42 @@ import SmsPage from "./pages/SmsPage";
 import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage";
 import StockTransfersPage from "./pages/StockTransfersPage";
 import MiningPortalPage from "./pages/MiningPortalPage";
-import MiningOperationsPage from "./pages/MiningOperationsPage";
-import MiningControlCentrePage from "./pages/MiningControlCentrePage";
 import EquipmentHirePortalPage from "./pages/EquipmentHirePortalPage";
-import EquipmentHireOperationsPage from "./pages/EquipmentHireOperationsPage";
-import HireCommercialControlPage from "./pages/HireCommercialControlPage";
-import NotificationCentrePage from "./pages/NotificationCentrePage";
-import SharedReportsDocumentsPage from "./pages/SharedReportsDocumentsPage";
-import FleetAssetsPage from "./pages/FleetAssetsPage";
-import OperationsDocumentsAccountingPage from "./pages/OperationsDocumentsAccountingPage";
-import GroupExecutiveControlPage from "./pages/GroupExecutiveControlPage";
-import GroupConfigurationPage from "./pages/GroupConfigurationPage";
 import OwnerRecoveryPage from "./pages/OwnerRecoveryPage";
-import Release2FinalControlPage from "./pages/Release2FinalControlPage";
 import WorkspaceHelpPage from "./pages/WorkspaceHelpPage";
-import WorkspaceAdministrationPage from "./pages/WorkspaceAdministrationPage";
-import EmploymentDocumentsPage from "./pages/EmploymentDocumentsPage";
-import DocumentSignatureSettingsPage from "./pages/DocumentSignatureSettingsPage";
 import {
   HIRE_SECTION_PERMISSIONS,
   MINING_SECTION_PERMISSIONS,
 } from "./security/permissionRules";
+
+const MiningOperationsPage = lazy(() => import("./pages/MiningOperationsPage"));
+const MiningControlCentrePage = lazy(() => import("./pages/MiningControlCentrePage"));
+const EquipmentHireOperationsPage = lazy(() =>
+  import("./pages/EquipmentHireOperationsPage")
+);
+const HireCommercialControlPage = lazy(() =>
+  import("./pages/HireCommercialControlPage")
+);
+const NotificationCentrePage = lazy(() => import("./pages/NotificationCentrePage"));
+const SharedReportsDocumentsPage = lazy(() =>
+  import("./pages/SharedReportsDocumentsPage")
+);
+const FleetAssetsPage = lazy(() => import("./pages/FleetAssetsPage"));
+const OperationsDocumentsAccountingPage = lazy(() =>
+  import("./pages/OperationsDocumentsAccountingPage")
+);
+const GroupExecutiveControlPage = lazy(() =>
+  import("./pages/GroupExecutiveControlPage")
+);
+const GroupConfigurationPage = lazy(() => import("./pages/GroupConfigurationPage"));
+const Release2FinalControlPage = lazy(() => import("./pages/Release2FinalControlPage"));
+const WorkspaceAdministrationPage = lazy(() =>
+  import("./pages/WorkspaceAdministrationPage")
+);
+const EmploymentDocumentsPage = lazy(() => import("./pages/EmploymentDocumentsPage"));
+const DocumentSignatureSettingsPage = lazy(() =>
+  import("./pages/DocumentSignatureSettingsPage")
+);
 
 const businessWorkRoles = ["admin", "manager", "cashier"];
 const adminManagerRoles = ["admin", "manager"];
@@ -73,8 +89,30 @@ const MINING_WORKSPACE = ["mining"];
 const EQUIPMENT_HIRE_WORKSPACE = ["equipment_hire"];
 const ALL_WORKSPACES = ["spare_parts", "mining", "equipment_hire"];
 
+function RouteLoadingFallback() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        minHeight: "12rem",
+        display: "grid",
+        placeItems: "center",
+        padding: "2rem",
+        fontWeight: 700,
+      }}
+    >
+      Loading workspace…
+    </div>
+  );
+}
+
 function SafePage({ children }) {
-  return <PageErrorBoundary>{children}</PageErrorBoundary>;
+  return (
+    <PageErrorBoundary>
+      <Suspense fallback={<RouteLoadingFallback />}>{children}</Suspense>
+    </PageErrorBoundary>
+  );
 }
 
 function safe(page) {
