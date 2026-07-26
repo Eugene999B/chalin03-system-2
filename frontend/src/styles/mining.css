@@ -219,3 +219,15 @@
   .mining-heading-actions { width: 100%; display: grid; grid-template-columns: 1fr; }
   .mining-heading-actions .mining-button { width: 100%; }
 }
+
+
+.mining-button--danger {
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+}
+
+.mining-button--danger:hover:not(:disabled) {
+  background: #912018;
+  border-color: #912018;
+}

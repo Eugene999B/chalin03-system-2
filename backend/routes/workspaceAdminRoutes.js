@@ -15,6 +15,11 @@ const {
 const {
   isOriginalSystemAdministrator,
 } = require("../security/systemAdminIdentity");
+const {
+  loadForeignKeyDependencies,
+  findBlockingDependencies,
+  summarizeDependencies,
+} = require("../services/workspaceContextDeletionService");
 
 const router = express.Router();
 
@@ -1728,6 +1733,153 @@ router.put("/locations/:locationId", async (req, res) => {
       status: "error",
       message: "Could not update Equipment Hire location.",
     });
+  }
+});
+
+
+// DELETE /api/workspace-admin/locations/:locationId
+// Empty Hire locations are removed. Locations with commercial or operational
+// records are archived so invoices, contracts, deliveries and audit evidence remain intact.
+router.delete("/locations/:locationId", async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const workspace = await getActiveWorkspace(req, res);
+    if (!workspace) return;
+
+    if (workspace.code !== "equipment_hire") {
+      throw clientError(400, "This action is available only in Equipment Hire.");
+    }
+
+    if (!isOriginalSystemAdministrator(req.user)) {
+      throw clientError(
+        403,
+        "Only the main System Administrator can remove an Equipment Hire location."
+      );
+    }
+
+    const locationId = positiveId(req.params.locationId);
+    const reason = cleanText(req.body?.reason, 1000);
+    const confirmation = cleanText(req.body?.confirmation, 80).toUpperCase();
+
+    if (!locationId) throw clientError(400, "Invalid location ID.");
+    if (!reason) {
+      throw clientError(
+        400,
+        "A reason is required before removing an Equipment Hire location."
+      );
+    }
+
+    await connection.beginTransaction();
+
+    const [locations] = await connection.query(
+      `SELECT id, code, name, location_type, is_active
+       FROM business_locations
+       WHERE id = ? AND business_unit_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [locationId, workspace.id]
+    );
+    const location = locations[0];
+
+    if (!location) {
+      await connection.rollback();
+      throw clientError(404, "Equipment Hire location not found.");
+    }
+
+    if (confirmation !== String(location.code || "").toUpperCase()) {
+      await connection.rollback();
+      throw clientError(
+        400,
+        `Type the location code ${location.code} exactly to confirm.`
+      );
+    }
+
+    const dependencies = await loadForeignKeyDependencies(
+      connection,
+      "business_locations",
+      locationId
+    );
+    const blocking = findBlockingDependencies(dependencies, [
+      "user_hire_location_access",
+    ]);
+
+    if (blocking.length > 0) {
+      await connection.query(
+        `UPDATE user_hire_location_access
+         SET can_access = FALSE,
+             is_default = FALSE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE location_id = ?`,
+        [locationId]
+      );
+      await connection.query(
+        `UPDATE business_locations
+         SET is_active = FALSE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND business_unit_id = ?`,
+        [locationId, workspace.id]
+      );
+      await connection.commit();
+
+      await logActivity(
+        req,
+        "ARCHIVE_HIRE_LOCATION_WITH_HISTORY",
+        `Archived Equipment Hire location ${location.code} - ${location.name}. Reason: ${reason}. Linked records preserved: ${blocking
+          .map((item) => `${item.table_name}=${item.count}`)
+          .join(", ")}`
+      );
+
+      return res.json({
+        status: "success",
+        code: "HIRE_LOCATION_ARCHIVED_WITH_HISTORY",
+        message:
+          "This Hire location contains business history, so it was deactivated instead of deleting contracts, invoices or operational evidence.",
+        deleted: false,
+        archived: true,
+        dependencies: summarizeDependencies(dependencies),
+      });
+    }
+
+    await connection.query(
+      "DELETE FROM user_hire_location_access WHERE location_id = ?",
+      [locationId]
+    );
+    await connection.query(
+      "DELETE FROM business_locations WHERE id = ? AND business_unit_id = ?",
+      [locationId, workspace.id]
+    );
+    await connection.commit();
+
+    await logActivity(
+      req,
+      "DELETE_EMPTY_HIRE_LOCATION",
+      `Permanently deleted empty Equipment Hire location ${location.code} - ${location.name}. Reason: ${reason}`
+    );
+
+    return res.json({
+      status: "success",
+      code: "EMPTY_HIRE_LOCATION_DELETED",
+      message:
+        "The empty Equipment Hire location and its staff assignments were deleted successfully.",
+      deleted: true,
+      archived: false,
+    });
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Ignore rollback failures after a connection error.
+    }
+
+    console.error("Remove Equipment Hire location error:", error);
+    return sendRouteError(
+      res,
+      error,
+      "Could not safely remove the Equipment Hire location."
+    );
+  } finally {
+    connection.release();
   }
 });
 

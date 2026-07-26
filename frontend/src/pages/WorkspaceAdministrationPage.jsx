@@ -329,7 +329,7 @@ function HireLocationForm({ form, setForm, saving, onSubmit, onCancel }) {
   );
 }
 
-function HireLocations({ locations, onEdit }) {
+function HireLocations({ locations, onEdit, onDelete, deletingLocationId }) {
   if (locations.length === 0) {
     return (
       <div className="workspace-admin-empty">
@@ -370,13 +370,27 @@ function HireLocations({ locations, onEdit }) {
               <dd>{formatDateTime(location.updated_at)}</dd>
             </div>
           </dl>
-          <button
-            type="button"
-            className="workspace-admin-btn workspace-admin-btn--ghost"
-            onClick={() => onEdit(location)}
-          >
-            Edit location
-          </button>
+          <div className="workspace-staff-actions">
+            <button
+              type="button"
+              className="workspace-admin-btn workspace-admin-btn--ghost"
+              onClick={() => onEdit(location)}
+            >
+              Edit location
+            </button>
+            {onDelete ? (
+              <button
+                type="button"
+                className="workspace-admin-btn workspace-admin-btn--danger"
+                disabled={Number(deletingLocationId) === Number(location.id)}
+                onClick={() => onDelete(location)}
+              >
+                {Number(deletingLocationId) === Number(location.id)
+                  ? "Removing..."
+                  : "Delete location"}
+              </button>
+            ) : null}
+          </div>
         </article>
       ))}
     </div>
@@ -1318,6 +1332,7 @@ export default function WorkspaceAdministrationPage({ workspace }) {
   const [success, setSuccess] = useState("");
   const [savingUserId, setSavingUserId] = useState(null);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [deletingLocationId, setDeletingLocationId] = useState(null);
   const [savingStaff, setSavingStaff] = useState(false);
   const [savingExistingUser, setSavingExistingUser] = useState(false);
   const [locationForm, setLocationForm] = useState(emptyLocationForm);
@@ -1731,6 +1746,55 @@ export default function WorkspaceAdministrationPage({ workspace }) {
     }
   }
 
+
+  async function deleteLocation(location) {
+    const confirmation = window.prompt(
+      `Type ${location.code} to remove this Equipment Hire location. Empty locations are deleted; locations with business history are deactivated.`
+    );
+
+    if (confirmation === null) return;
+
+    const reason = window.prompt(
+      "Enter the reason for removing this Equipment Hire location. This reason is written to the audit trail."
+    );
+
+    if (!String(reason || "").trim()) {
+      setError("A reason is required before removing an Equipment Hire location.");
+      return;
+    }
+
+    setDeletingLocationId(location.id);
+    setError("");
+
+    try {
+      const response = await axiosClient.delete(
+        `/workspace-admin/locations/${location.id}`,
+        {
+          data: {
+            confirmation: String(confirmation || "").trim(),
+            reason: String(reason).trim(),
+          },
+        }
+      );
+
+      if (Number(locationForm.id) === Number(location.id)) {
+        setLocationForm(emptyLocationForm);
+      }
+
+      showSuccess(response.data?.message || "Hire location removed safely.");
+      await loadOverview();
+    } catch (requestError) {
+      setError(
+        apiMessage(
+          requestError,
+          "Could not safely remove the Equipment Hire location."
+        )
+      );
+    } finally {
+      setDeletingLocationId(null);
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="workspace-admin-loading">
@@ -1890,7 +1954,12 @@ export default function WorkspaceAdministrationPage({ workspace }) {
                 </span>
               </div>
             </div>
-            <HireLocations locations={locations} onEdit={editLocation} />
+            <HireLocations
+              locations={locations}
+              onEdit={editLocation}
+              onDelete={canResetAccounts ? deleteLocation : null}
+              deletingLocationId={deletingLocationId}
+            />
           </section>
         </>
       )}
