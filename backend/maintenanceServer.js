@@ -120,7 +120,7 @@ app.all(/^\/api(?:\/|$)/, (req, res) => {
 });
 
 app.get("*", (req, res) => {
-  return res.status(503).type("html").send(maintenanceHtml);
+  return res.status(200).type("html").send(maintenanceHtml);
 });
 
 app.listen(port, "0.0.0.0", () => {
