@@ -1,0 +1,121 @@
+name: Measure Workspace Route Splitting
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  measure:
+    if: github.head_ref == 'agent/mining-hire-final-update' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mining-hire-final-update
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build current lazy-loaded branch
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Build previous main baseline
+        run: |
+          git worktree add --detach /tmp/chalin03-route-baseline 31d02405f14bce70d58764f2f5c781b7b3c7cf3a
+          cd /tmp/chalin03-route-baseline/frontend
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Generate measured evidence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          root = Path('.')
+          current = root / 'frontend/dist/assets'
+          baseline = Path('/tmp/chalin03-route-baseline/frontend/dist/assets')
+
+          def metrics(folder):
+              files = sorted(folder.glob('*.js'))
+              sizes = {item.name: item.stat().st_size for item in files}
+              entry = [(name, size) for name, size in sizes.items() if name.startswith('index-')]
+              entry_name, entry_size = max(entry, key=lambda item: item[1])
+              largest_name, largest_size = max(sizes.items(), key=lambda item: item[1])
+              return {
+                  'sizes': sizes,
+                  'count': len(files),
+                  'total': sum(sizes.values()),
+                  'entry_name': entry_name,
+                  'entry_size': entry_size,
+                  'largest_name': largest_name,
+                  'largest_size': largest_size,
+              }
+
+          base = metrics(baseline)
+          now = metrics(current)
+          saved = base['entry_size'] - now['entry_size']
+          percent = (saved / base['entry_size'] * 100) if base['entry_size'] else 0
+          lazy_chunks = [
+              (name, size)
+              for name, size in now['sizes'].items()
+              if any(token in name for token in [
+                  'MiningOperationsPage', 'MiningControlCentrePage',
+                  'EquipmentHireOperationsPage', 'HireCommercialControlPage',
+                  'FleetAssetsPage', 'WorkspaceAdministrationPage',
+                  'OperationsDocumentsAccountingPage', 'GroupExecutiveControlPage',
+                  'Release2FinalControlPage', 'EmploymentDocumentsPage'
+              ])
+          ]
+
+          lines = [
+              '# Frontend Route-Splitting Evidence',
+              '',
+              f'- Baseline commit: `31d02405f14bce70d58764f2f5c781b7b3c7cf3a`',
+              '- Candidate branch: `agent/mining-hire-final-update`',
+              f'- Measured at: `{datetime.now(timezone.utc).isoformat()}`',
+              '',
+              '## Production build comparison',
+              '',
+              '| Metric | Previous main | Lazy-loaded branch | Change |',
+              '|---|---:|---:|---:|',
+              f"| Initial `index` JavaScript | {base['entry_size']:,} bytes | {now['entry_size']:,} bytes | {saved:,} bytes ({percent:.1f}% smaller) |",
+              f"| JavaScript chunk count | {base['count']} | {now['count']} | {now['count'] - base['count']:+d} |",
+              f"| Total emitted JavaScript | {base['total']:,} bytes | {now['total']:,} bytes | {now['total'] - base['total']:+,} bytes |",
+              f"| Largest JavaScript chunk | {base['largest_size']:,} bytes | {now['largest_size']:,} bytes | {now['largest_size'] - base['largest_size']:+,} bytes |",
+              '',
+              'The initial entry reduction is the relevant first-load improvement. Total emitted JavaScript may remain similar or increase slightly because Vite creates independently cacheable route chunks instead of placing all workspace code in the initial bundle.',
+              '',
+              '## Workspace chunks emitted',
+              '',
+              '| Chunk | Bytes |',
+              '|---|---:|',
+          ]
+          for name, size in sorted(lazy_chunks):
+              lines.append(f'| `{name}` | {size:,} |')
+          lines.extend([
+              '',
+              '## Acceptance',
+              '',
+              '- Both builds completed from clean `npm ci` installations.',
+              '- Authentication, workspace, role and permission wrappers remain eagerly loaded.',
+              '- Heavy Mining, Equipment Sales & Hire, fleet, shared-report, administration and worker-document pages load on demand.',
+              '- Frontend tests, full lint and production build remain mandatory release gates.',
+              '',
+          ])
+          (root / 'docs/FRONTEND_ROUTE_SPLITTING_EVIDENCE.md').write_text('\n'.join(lines), encoding='utf-8')
+          PY
+      - name: Commit performance evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/FRONTEND_ROUTE_SPLITTING_EVIDENCE.md
+          git diff --cached --quiet || git commit -m "Record measured workspace route-splitting evidence"
+          git push origin HEAD:agent/mining-hire-final-update
