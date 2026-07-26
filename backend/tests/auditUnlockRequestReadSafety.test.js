@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+// This contract prevents read endpoints from silently reintroducing production DDL.
 const routePath = path.join(__dirname, "..", "routes", "auditUnlockRequestRoutes.js");
 const source = fs.readFileSync(routePath, "utf8");
 
