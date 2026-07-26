@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "start": "node scripts/runMiningTrialCleanup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
@@ -19,15 +19,14 @@
     "chalin03",
     "sales",
     "inventory",
-    "mysql",
-    "express"
+    "mysql"
   ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
+    "cors": "^2.8.0",
     "dotenv": "^16.0.0",
     "exceljs": "npm:@excel.js/exceljs@0.9.0",
     "express": "^4.18.0",
