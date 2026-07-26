@@ -8,9 +8,10 @@
 - High findings open at release: **0**
 - Audit PR: #75
 - Railway migration-runner PR: #77
-- Production promotion PR: #76
+- Initial production-promotion PR: #76
 - `main` release candidate: `d71c3f1245d53fc6c636dbb6ef52ee3eaca69d2a`
-- `production` release commit: `84c554e157c9439de12b12a65438ea440c79acc0`
+- Initial `production` release commit: `84c554e157c9439de12b12a65438ea440c79acc0`
+- Current post-review production commit: `96ab439931e2331a5a537207881c4467a64856af`
 
 ## Main corrections released
 
@@ -64,4 +65,19 @@ A later independent Slack review identified one genuine dormant security risk an
 - added explicit `VOIDED` and `REVERSAL` correction evidence to Daily Closing PDF, Excel and Word output data, matching the browser control evidence while preserving both immutable ledger rows;
 - added permanent regression tests for the unique MFA login route and cross-format expense-correction presentation.
 
-This is post-release defence-in-depth and evidence consistency work. It does not rewrite the original 95/100 audit result or imply that the deployed release had an active Critical or High incident.
+Hardening PR #82 merged into `main` at `043bdccb7464c01bb2e3505403dba6cf9eace13c`. Production PR #83 merged at `96ab439931e2331a5a537207881c4467a64856af`, and Railway reported a successful deployment for that exact commit. No schema migration, reset or destructive production data operation was introduced.
+
+## Equipment Sales routing clarification
+
+A subsequent fresh scan initially described `equipmentSalesRoutes.js` and `equipmentSalesFinalizationRoutes.js` as unreachable because they are not directly imported by `server.js`. A deeper route-chain review proved they are active:
+
+1. the frontend calls `/api/equipment-catalogue/sales/...`;
+2. `server.js` mounts `/api/equipment-catalogue` with `enforceEquipmentCatalogueWriteIntegrity`;
+3. that middleware detects `/sales`, removes the prefix and dispatches into `equipmentSalesRoutes.js`;
+4. `equipmentSalesSchemaService.js` attaches `equipmentSalesFinalizationRoutes.js` to the same router.
+
+The files must not be deleted or mounted a second time. Their indirect reachability is documented in `docs/EQUIPMENT_SALES_ROUTING_ARCHITECTURE.md` and protected by `backend/tests/equipmentSalesReachabilityContract.test.js`.
+
+## Performance backlog
+
+The production frontend build remains healthy. Route-level lazy loading for heavier reporting, accounting, Mining, Equipment Sales & Hire and Group Executive pages is a separate measured performance improvement so it cannot be mixed with security or financial-control changes.
