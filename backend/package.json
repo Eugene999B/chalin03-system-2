@@ -1,6 +1,6 @@
 {
   "name": "chalin03-backend",
-  "version": "3.0.0-maintenance",
+  "version": "3.0.0",
   "description": "Maintenance-only server for the Chalin 03 Group Operations Platform",
   "main": "maintenanceServer.js",
   "scripts": {
