@@ -56,7 +56,7 @@ async function runScheduledNotificationSync({
 
   syncRunning = true;
   try {
-    const result = await sync({ workspace: "group", userId: null });
+    const result = await sync({ workspaceCode: "group", userId: null });
     logger.log(
       `Notification sync completed: generated ${Number(
         result?.generated_count || 0
