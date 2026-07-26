@@ -1,0 +1,104 @@
+name: Maintenance Branch Verification
+
+on:
+  push:
+    branches:
+      - maintenance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance-branch-verification
+  cancel-in-progress: true
+
+jobs:
+  railway-maintenance-server:
+    name: Railway maintenance server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out maintenance branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Verify maintenance source syntax
+        run: npm run syntax-check
+
+      - name: Verify migration command is a no-op
+        run: npm run migrate:production
+
+      - name: Start maintenance server and verify responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=5050 npm start > maintenance-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:5050/api/health > health.json; then
+              break
+            fi
+            sleep 1
+          done
+
+          grep -q '"status":"maintenance"' health.json
+          grep -q '"healthy":true' health.json
+
+          business_status="$(curl --silent --output business.json --write-out '%{http_code}' http://127.0.0.1:5050/api/products)"
+          test "$business_status" = "503"
+          grep -q 'SYSTEM_MAINTENANCE' business.json
+
+          root_status="$(curl --silent --output root.html --write-out '%{http_code}' http://127.0.0.1:5050/)"
+          test "$root_status" = "200"
+          grep -q 'System temporarily unavailable' root.html
+
+  cloudflare-maintenance-page:
+    name: Cloudflare maintenance page
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out maintenance branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build static maintenance page
+        run: npm run build
+
+      - name: Verify maintenance-only output
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'System temporarily unavailable' dist/index.html
+          grep -q 'Scheduled maintenance' dist/index.html
+          grep -q 'Eugene Amankwah Appiah' dist/index.html
+          test -f dist/_headers
+          test -f dist/_redirects
+          test -f dist/sw.js
+          ! grep -q '/src/main.jsx' dist/index.html
