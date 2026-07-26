@@ -24,15 +24,17 @@ Production business-control system for **Chalin 03 Company Limited**, prepared b
 | Integration branch | `main` |
 | Work branches | `agent/*` or approved `hotfix/*` |
 | Release | Version Three · v3.0.0 |
-| Production release deployed 25 July 2026 | `84c554e157c9439de12b12a65438ea440c79acc0` |
-| Integrated release candidate | `d71c3f1245d53fc6c636dbb6ef52ee3eaca69d2a` |
+| Initial 25 July production release | `84c554e157c9439de12b12a65438ea440c79acc0` |
+| Current production hardening commit | `96ab439931e2331a5a537207881c4467a64856af` |
 | Automated audit | `95 / 100`; 0 Critical and 0 High findings open |
 | Production migrations | Financial-control hardening and Audit Sign-Off readiness applied and verified |
-| Authentication | Password-only browser sign-in |
+| Authentication | Password-only browser sign-in; Owner Break-Glass requires MFA or a recovery code |
 | SMS | Arkesel when deliberately enabled |
 | WhatsApp receipts | Disabled until approved Meta configuration exists |
 
-The current production release was promoted through PR #76 after PR #75 completed the post-Phase-1 audit and PR #77 added the fail-closed Railway migration runner. Commit hashes above are release evidence, not permanent pointers.
+The audited release was promoted through PR #76 after PR #75 completed the post-Phase-1 audit and PR #77 added the fail-closed Railway migration runner. PR #83 later promoted the independently reviewed Owner-login and Daily Closing evidence hardening to production at `96ab439931e2331a5a537207881c4467a64856af`.
+
+Commit hashes are release evidence, not permanent pointers. Reconfirm the current `main`, `production`, Railway and Cloudflare state before every later release.
 
 ### Approved release path
 
@@ -96,7 +98,7 @@ X-Chalin03-Context-Id: <mining_site_id>
 
 Equipment locations, bases, yards and offices are created by authorised Equipment Sales & Hire administrators. They are not Spare Parts stores or Mining sites.
 
-The workspace covers one shared equipment catalogue, equipment sales, enquiries, quotations, sale agreements, installment schedules, deposits, payments, delivery, Hire availability, quotations, contracts, mobilization, work logs, invoices, returns, damage, maintenance, meters, fuel, reports, documents, workers and audit evidence.
+The workspace covers one shared equipment catalogue, equipment sales, enquiries, quotations, sale agreements, installment schedules, deposits, payments, delivery, Hire availability, Hire quotations, contracts, mobilization, work logs, invoices, returns, damage, maintenance, meters, fuel, reports, documents, workers and audit evidence.
 
 Context headers:
 
@@ -113,14 +115,13 @@ Group Executive is a separate authorised management shell for consolidated perfo
 
 ---
 
-## 4. Current control model
-
-### Authentication and sessions
+## 4. Authentication, access and evidence controls
 
 Every authenticated request checks JWT signature, active user state, token version, server session, assigned workspace, assigned store/site/location, effective permissions and protected-action evidence where required.
 
 - Browser passkeys and biometric sign-in are retired.
 - Users sign in with account passwords.
+- Owner Break-Glass login requires password plus authenticator or one-time recovery-code evidence.
 - Sessions expire at the earlier of eight hours after login or the next Ghana midnight boundary.
 - Password changes, administrator revocation, restoration and security actions can revoke sessions immediately.
 
@@ -139,13 +140,41 @@ Audit Sign-Off records are permanent compliance evidence. The backend blocks phy
 
 The legacy physical expense-deletion route was removed. Corrections use the approved immutable void-and-reversal process with reason, requester, independent approver and linked negative reversal evidence.
 
+Daily Closing browser, PDF, Excel and Word outputs present explicit `VOIDED` and `REVERSAL` labels and correction evidence while preserving both immutable ledger rows.
+
 ### Maintenance reset
 
 The system-wide test-data reset is permanently blocked in production. Explicitly enabled non-production reset uses transaction-compatible deletion, verifies zero counts before commit, restores foreign-key checks and rolls back safely on failure.
 
 ---
 
-## 5. Monetary and operational invariants
+## 5. Equipment Sales routing architecture
+
+Equipment Sales is live through an intentional protected sub-router chain. It is **not** dead code merely because its two route files are not imported directly by `server.js`.
+
+```text
+frontend /equipment-catalogue/sales/...
+        ↓
+server.js mounts /api/equipment-catalogue
+        ↓
+requireAuth + hireBoundary
+        ↓
+enforceEquipmentCatalogueWriteIntegrity
+        ↓
+/sales is dispatched to equipmentSalesRoutes.js
+        ↓
+equipmentSalesSchemaService.js attaches equipmentSalesFinalizationRoutes.js once
+```
+
+Do not delete these route files or add a second direct mount without a complete route-conflict, permission, location-scope and financial-integrity review.
+
+Canonical explanation: `docs/EQUIPMENT_SALES_ROUTING_ARCHITECTURE.md`.
+
+Permanent proof: `backend/tests/equipmentSalesReachabilityContract.test.js`.
+
+---
+
+## 6. Monetary and operational invariants
 
 - A valid sale changes stock exactly once.
 - Completed sales, payments, closings, approvals and signatures are not silently rewritten.
@@ -161,7 +190,7 @@ The system-wide test-data reset is permanently blocked in production. Explicitly
 
 ---
 
-## 6. Workforce, documents and signatures
+## 7. Workforce, documents and signatures
 
 Worker records are category-isolated and may include personal details, workspace assignments, licences, private files, issued property, photographs, ID cards, correspondence and employment documents.
 
@@ -171,7 +200,7 @@ Approved documents preserve an immutable signature snapshot. Later signature-set
 
 ---
 
-## 7. Backup, restore and disaster recovery
+## 8. Backup, restore and disaster recovery
 
 Production uses signed `chalin03-full-system-v2` backups.
 
@@ -188,9 +217,11 @@ Production protections:
 
 Download and privately retain a fresh signed backup before every production migration. Legacy Version 1 backups are emergency evidence only and do not meet the signed Version 2 restore contract.
 
+A sanitised source snapshot and SHA-256 checksum for the initial 25 July release commit are retained in the controlled Drive archive.
+
 ---
 
-## 8. Production hosting and security
+## 9. Production hosting and migration control
 
 ### Railway
 
@@ -212,7 +243,7 @@ Production secrets must be strong, unique and different. Never place them in Git
 
 ### Controlled Railway migration runner
 
-The approved 25 July 2026 release used this backend Pre-deploy Command:
+The approved 25 July 2026 migration release used this backend Pre-deploy Command:
 
 ```text
 npm run migrate:production
@@ -220,9 +251,9 @@ npm run migrate:production
 
 Canonical runner: `backend/scripts/runProductionMigrations.js`.
 
-The runner requires production mode, explicit migration enablement, signed-backup confirmation and an exact release confirmation. It connects using Railway DB/MYSQL variables, acquires a MySQL advisory lock, applies only the approved financial-control and Audit Sign-Off migrations, runs both read-only verifiers and exits non-zero when any check fails.
+The runner requires production mode, explicit migration enablement, signed-backup confirmation and an exact release confirmation. It connects using Railway DB/MYSQL variables, acquires a MySQL advisory lock, applies only the approved migrations, runs read-only verifiers and exits non-zero when any check fails.
 
-The runner is release-specific. After retaining successful deployment evidence, remove its one-release Pre-deploy Command or disable the confirmation variable before an unrelated deployment. A later migration set requires a new reviewed plan and exact release confirmation.
+The runner is release-specific. After retaining successful deployment evidence, remove the one-release Pre-deploy Command or disable the confirmation variable before an unrelated deployment. A later migration set requires a new reviewed plan and exact release confirmation.
 
 ### Cloudflare
 
@@ -233,7 +264,7 @@ The runner is release-specific. After retaining successful deployment evidence, 
 
 ---
 
-## 9. Sources of truth
+## 10. Sources of truth
 
 | Purpose | Canonical location |
 |---|---|
@@ -241,6 +272,7 @@ The runner is release-specific. After retaining successful deployment evidence, 
 | Frontend route tree | `frontend/src/App.jsx` |
 | Spare Parts help | `frontend/src/pages/HelpPage.jsx` |
 | Mining and Equipment help | `frontend/src/pages/WorkspaceHelpPage.jsx` |
+| Equipment Sales routing | `docs/EQUIPMENT_SALES_ROUTING_ARCHITECTURE.md` |
 | Workspace navigation | `frontend/src/layouts/` |
 | Authentication middleware | `backend/middleware/authMiddleware.js` |
 | Category isolation | `backend/services/categoryIsolationService.js` |
@@ -254,14 +286,14 @@ The runner is release-specific. After retaining successful deployment evidence, 
 | Final security audit | `.github/workflows/version-3-final-audit.yml` |
 | Release control | `docs/PRODUCTION_RELEASE_CONTROL.md` |
 | Post-Phase-1 audit | `docs/POST_PHASE1_FULL_SYSTEM_AUDIT.md` |
-| 25 July 2026 release record | `docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md` |
+| 25 July release record | `docs/RELEASE_2026-07-25_PHASE1_POST_PHASE1.md` |
 | Documentation standard | `docs/SYSTEM_GUIDE_AND_AUDIT_STANDARD.md` |
 
-When code and documentation disagree, investigate the live behaviour and update both.
+When code and documentation disagree, investigate the mounted route chain and live behaviour before changing or deleting code.
 
 ---
 
-## 10. Local development
+## 11. Local development
 
 ### Backend
 
@@ -284,11 +316,13 @@ npm run build
 npm run dev
 ```
 
+Run `npm ci` before any syntax check, test, lint or build on a fresh checkout. Missing-module failures before dependency installation are environment-setup errors, not application regressions.
+
 Use development-only values locally. Never copy production secrets into source files.
 
 ---
 
-## 11. Required release checks
+## 12. Required release checks
 
 Before merging to `main`:
 
@@ -306,7 +340,7 @@ Before promoting `main` to `production`:
 1. use an exact `main → production` pull request;
 2. pass production-origin and security gates;
 3. confirm Railway and Cloudflare configuration;
-4. retain a fresh signed backup;
+4. retain a fresh signed backup when database compatibility may change;
 5. know the rollback target;
 6. apply and verify approved additive migrations before the new backend starts;
 7. verify deployment logs, `/api/health`, authentication and affected business journeys;
@@ -314,29 +348,30 @@ Before promoting `main` to `production`:
 
 ---
 
-## 12. Current release status
+## 13. Current release status and backlog
 
-As of the completed 25 July 2026 release:
+As of the completed 25 July 2026 release and subsequent independent-review hardening:
 
 - post-Phase-1 automated audit: **95 / 100**;
 - open Critical findings: **0**;
 - open High findings: **0**;
 - PR #75 merged the audit corrections into `main`;
 - PR #77 added the Railway production migration runner;
-- a fresh signed Version 2 backup was downloaded before migration;
-- both approved migrations were applied and verified before deployment;
-- PR #76 promoted the release to `production`;
-- Railway reported successful backend deployment;
-- the authorised owner reported the live system and new features successful;
-- existing production business data remained available;
-- production release commit: `84c554e157c9439de12b12a65438ea440c79acc0`.
+- PR #76 promoted the audited release to `production`;
+- PR #82 removed the dormant password-only Owner route and aligned Daily Closing correction evidence across browser, PDF, Excel and Word;
+- PR #83 promoted that hardening to production;
+- Railway reported successful deployment of current production commit `96ab439931e2331a5a537207881c4467a64856af`;
+- the external Google Docs handbook and frozen handbook PDF are synchronized;
+- existing production business data remained available.
 
-The next step is normal monitored operation. Preserve the backup and deployment logs, record any defect before changing code, and use `agent/* → main → production` for every future update.
+A fresh independent scan confirmed the Equipment Sales routers are live through the equipment-catalogue middleware rather than direct `server.js` mounts. Preserve that chain and its regression test.
+
+Route-level frontend code-splitting remains a separate measured performance backlog item for heavier reports, accounting, Mining, Equipment Sales & Hire and Group Executive pages. It is not an active incident and must not be mixed into security or financial-control changes.
 
 ---
 
-## 13. Documentation maintenance
+## 14. Documentation maintenance
 
 Every feature or control change must update the relevant in-app Help page, this README, the repository release/audit documents and the external Chalin 03 handbook where applicable.
 
-Repository documentation is synchronized with the 25 July 2026 deployed release. The external Google Docs handbook still requires a separate consistency update and evidence check.
+Repository documentation, the external Google Docs handbook, the frozen handbook PDF and the controlled source-snapshot record are synchronized with the completed release and follow-up hardening.
