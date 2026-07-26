@@ -1,26 +1,22 @@
 {
   "name": "chalin03-backend",
-  "version": "3.0.0",
-  "description": "Backend API for Chalin 03 Sales and Inventory Management System",
-  "main": "server.js",
+  "version": "3.0.0-maintenance",
+  "description": "Maintenance-only server for the Chalin 03 Group Operations Platform",
+  "main": "maintenanceServer.js",
   "scripts": {
-    "start": "node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
-    "dev": "nodemon server.js",
-    "create-admin": "node scripts/createAdmin.js",
-    "migrate:production": "node scripts/runProductionMigrations.js",
-    "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
-    "migration-safety": "node scripts/verifyMigrationSafety.js",
-    "test": "node --test tests/*.test.js"
+    "start": "node maintenanceServer.js",
+    "dev": "nodemon maintenanceServer.js",
+    "migrate:production": "node scripts/maintenancePredeploy.js",
+    "syntax-check": "node --check maintenanceServer.js && node --check scripts/maintenancePredeploy.js",
+    "migration-safety": "node scripts/maintenancePredeploy.js",
+    "test": "npm run syntax-check"
   },
   "engines": {
     "node": ">=20"
   },
   "keywords": [
     "chalin03",
-    "sales",
-    "inventory",
-    "mysql",
-    "express"
+    "maintenance"
   ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
