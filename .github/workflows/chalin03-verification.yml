@@ -102,37 +102,3 @@ jobs:
             frontend/frontend-build.log
           if-no-files-found: ignore
           retention-days: 7
-
-  equipment-sales-reachability-update:
-    name: Apply equipment sales reachability update
-    if: github.event_name == 'push' && github.ref == 'refs/heads/agent/equipment-sales-reachability-docs'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    permissions:
-      contents: write
-    steps:
-      - name: Check out update branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/equipment-sales-reachability-docs
-          fetch-depth: 0
-
-      - name: Generate documentation and regression evidence
-        run: |
-          python3 .github/scripts/apply_equipment_sales_reachability_update.py
-          git diff --check
-          grep -q '96ab439931e2331a5a537207881c4467a64856af' README.md
-          grep -q 'Equipment Sales Routing Architecture' docs/EQUIPMENT_SALES_ROUTING_ARCHITECTURE.md
-          grep -q 'Equipment Sales remains reachable' backend/tests/equipmentSalesReachabilityContract.test.js
-
-      - name: Restore permanent workflow and commit generated files
-        run: |
-          git config user.name "chalin03-maintenance-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git fetch origin main --depth=1
-          git checkout origin/main -- .github/workflows/chalin03-verification.yml
-          git rm .github/scripts/apply_equipment_sales_reachability_update.py
-          git add -A
-          git diff --cached --check
-          git commit -m "Document and protect Equipment Sales router reachability"
-          git push origin HEAD:agent/equipment-sales-reachability-docs
