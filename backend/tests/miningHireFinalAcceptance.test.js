@@ -107,7 +107,7 @@ test("automatic workspace notifications cover Mining and Hire risks", () => {
   ]) assert.match(notifications, new RegExp(rule.replaceAll(".", "\\.")));
 
   assert.match(scheduler, /runNotificationSync/);
-  assert.match(scheduler, /workspace: "group"/);
+  assert.match(scheduler, /workspaceCode: "group"/);
   assert.match(scheduler, /MIN_INTERVAL_MINUTES = 5/);
   assert.match(server, /startNotificationSyncScheduler\(\)/);
 });
