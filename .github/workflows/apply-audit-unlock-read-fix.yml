@@ -1,0 +1,59 @@
+name: Apply Audit Unlock Read Fix
+
+on:
+  push:
+    branches:
+      - agent/fix-audit-unlock-list-500
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-audit-unlock-read-fix
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/fix-audit-unlock-list-500
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply read-only route fix
+        run: python3 .github/scripts/apply_audit_unlock_read_fix.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend syntax checks
+        working-directory: backend
+        run: npm run syntax-check
+
+      - name: Run backend test suite
+        working-directory: backend
+        run: npm test
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/auditUnlockRequestRoutes.js backend/tests/auditUnlockRequestReadSafety.test.js
+          git diff --cached --quiet && { echo "Expected fix files were not staged"; exit 1; }
+          git commit -m "Fix audit unlock request list schema mutation [skip ci]"
+          git push origin HEAD:agent/fix-audit-unlock-list-500
