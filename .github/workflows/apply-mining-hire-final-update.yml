@@ -1,17 +1,16 @@
 name: Apply Mining and Hire Final Update
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/mining-hire-final-update
-    paths:
-      - .deploy/MINING_HIRE_FINAL_UPDATE_TRIGGER.txt
+      - main
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.head_ref == 'agent/mining-hire-final-update' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
