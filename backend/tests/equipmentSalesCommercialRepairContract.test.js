@@ -58,10 +58,14 @@ test("Equipment Sales commercial schema is verified without runtime repair", () 
   assert.doesNotMatch(schemaService, DDL_PATTERN);
 });
 
-test("Railway start no longer preloads commercial schema repair", () => {
-  assert.equal(
+test("Railway start never preloads commercial schema repair", () => {
+  assert.match(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    /node -r \.\/services\/exportWorkbookSafetyBootstrap\.js server\.js$/
+  );
+  assert.doesNotMatch(
+    packageJson.scripts.start,
+    /equipmentSalesCommercial(?:Bootstrap|RepairService)/
   );
   assert.equal(
     fs.existsSync(
