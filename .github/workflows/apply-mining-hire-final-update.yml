@@ -1,4 +1,4 @@
-name: Apply Mining and Hire Final Update
+name: Verify Mining and Hire Final Update
 
 on:
   pull_request:
@@ -6,35 +6,27 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
-    if: github.head_ref == 'agent/mining-hire-final-update' && github.actor != 'github-actions[bot]'
+  verify:
+    if: github.head_ref == 'agent/mining-hire-final-update'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/mining-hire-final-update
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Apply reviewed final update
-        run: python .github/scripts/apply_mining_hire_final_update.py
-      - name: Commit generated changes for exact review
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/server.js backend/services/notificationSchedulerService.js backend/tests/notificationSchedulerService.test.js backend/tests/miningHireFinalAcceptance.test.js frontend/src/App.jsx frontend/src/pages/WorkspaceHelpPage.jsx frontend/scripts/workspaceFinalCompletionTests.mjs frontend/package.json docs/MINING_HIRE_FINAL_ACCEPTANCE.md
-          git diff --cached --quiet || git commit -m "Complete Mining and Equipment Hire final updates"
-          git push origin HEAD:agent/mining-hire-final-update
-      - name: Verify committed generated source
-        run: |
-          node --check backend/server.js
-          node --check backend/services/notificationSchedulerService.js
-          node --test backend/tests/notificationSchedulerService.test.js backend/tests/miningHireFinalAcceptance.test.js
-          node frontend/scripts/workspaceFinalCompletionTests.mjs
+      - name: Check backend server syntax
+        run: node --check backend/server.js
+      - name: Check notification scheduler syntax
+        run: node --check backend/services/notificationSchedulerService.js
+      - name: Test notification scheduler
+        run: node --test backend/tests/notificationSchedulerService.test.js
+      - name: Test Mining and Hire acceptance contract
+        run: node --test backend/tests/miningHireFinalAcceptance.test.js
+      - name: Test route-level frontend completion
+        run: node frontend/scripts/workspaceFinalCompletionTests.mjs
