@@ -1,2 +1,0 @@
-Trigger the isolated Mining trial cleanup release generator.
-No production deployment occurs from this branch.
