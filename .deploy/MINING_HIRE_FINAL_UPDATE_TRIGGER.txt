@@ -1,2 +1,0 @@
-Apply the reviewed Mining and Equipment Hire final update on the isolated branch.
-No production deployment occurs from this branch.
