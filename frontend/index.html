@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#07182c" />
+    <meta name="theme-color" content="#061426" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
-    <meta name="maintenance-build" content="2026-07-26-developers" />
+    <meta name="maintenance-build" content="2026-07-26-premium-responsive" />
     <meta
       name="description"
-      content="Chalin 03 is temporarily unavailable while a scheduled system update is completed."
+      content="Chalin 03 is temporarily unavailable while a scheduled system update and verification are completed."
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
@@ -19,154 +19,813 @@
         color-scheme: dark;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system,
           BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #07182c;
+        --navy-950: #020812;
+        --navy-900: #061426;
+        --navy-800: #0a213d;
+        --surface: rgba(7, 24, 44, 0.78);
+        --surface-strong: rgba(8, 28, 51, 0.94);
+        --line: rgba(148, 163, 184, 0.18);
+        --line-strong: rgba(148, 163, 184, 0.3);
+        --text: #f8fafc;
+        --muted: #a9bad0;
+        --soft: #d8e3f0;
+        --amber: #fbbf24;
+        --amber-strong: #f59e0b;
+        --blue: #60a5fa;
+        --cyan: #67e8f9;
+        --green: #34d399;
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html {
+        min-width: 320px;
+        background: var(--navy-950);
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
-        display: grid;
-        place-items: center;
-        padding: 24px;
+        overflow-x: hidden;
+        color: var(--text);
         background:
-          radial-gradient(circle at 50% -10%, rgba(37, 99, 235, 0.32), transparent 46%),
-          linear-gradient(160deg, #0b2442 0%, #07182c 48%, #020812 100%);
-        color: #f8fafc;
+          radial-gradient(circle at 8% 8%, rgba(37, 99, 235, 0.28), transparent 31rem),
+          radial-gradient(circle at 92% 16%, rgba(14, 165, 233, 0.18), transparent 28rem),
+          radial-gradient(circle at 48% 110%, rgba(245, 158, 11, 0.12), transparent 34rem),
+          linear-gradient(145deg, var(--navy-800) 0%, var(--navy-900) 45%, var(--navy-950) 100%);
       }
 
-      main {
-        width: min(720px, 100%);
-        padding: clamp(30px, 7vw, 58px);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 26px;
-        background: rgba(7, 24, 44, 0.94);
-        box-shadow: 0 32px 90px rgba(0, 0, 0, 0.42);
-        text-align: center;
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.25;
+        background-image:
+          linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+        background-size: 42px 42px;
+        mask-image: linear-gradient(to bottom, black, transparent 86%);
       }
 
-      .logo {
-        width: 76px;
-        height: 76px;
+      .orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(1px);
+        pointer-events: none;
+        opacity: 0.34;
+        animation: drift 12s ease-in-out infinite alternate;
+      }
+
+      .orb-one {
+        width: 260px;
+        height: 260px;
+        top: -120px;
+        right: 12%;
+        border: 1px solid rgba(96, 165, 250, 0.24);
+        box-shadow: inset 0 0 70px rgba(59, 130, 246, 0.09);
+      }
+
+      .orb-two {
+        width: 150px;
+        height: 150px;
+        left: -70px;
+        bottom: 12%;
+        border: 1px solid rgba(251, 191, 36, 0.18);
+        box-shadow: inset 0 0 50px rgba(245, 158, 11, 0.08);
+        animation-delay: -5s;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        width: min(1180px, calc(100% - 40px));
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 30px 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .shell {
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 30px;
+        background: linear-gradient(145deg, rgba(9, 31, 57, 0.94), rgba(3, 13, 26, 0.9));
+        box-shadow:
+          0 40px 110px rgba(0, 0, 0, 0.46),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(24px);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 22px 26px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(4, 17, 33, 0.44);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .brand-logo {
+        width: 52px;
+        height: 52px;
+        flex: 0 0 52px;
         object-fit: contain;
-        margin-bottom: 20px;
-        filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.28));
+        border-radius: 15px;
+        padding: 4px;
+        background: rgba(255, 255, 255, 0.04);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
       }
 
-      .badge {
+      .brand-copy strong,
+      .brand-copy span {
+        display: block;
+      }
+
+      .brand-copy strong {
+        font-size: 16px;
+        letter-spacing: 0.01em;
+      }
+
+      .brand-copy span {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .live-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex: 0 0 auto;
+        padding: 10px 14px;
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        border-radius: 999px;
+        background: rgba(245, 158, 11, 0.1);
+        color: #fde68a;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--amber);
+        box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
+        animation: pulse 2.2s ease-out infinite;
+      }
+
+      .content {
+        display: grid;
+        grid-template-columns: minmax(0, 1.12fr) minmax(330px, 0.88fr);
+        gap: 0;
+      }
+
+      .hero {
+        padding: clamp(36px, 6vw, 72px);
+        border-right: 1px solid var(--line);
+      }
+
+      .eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 9px;
-        padding: 9px 15px;
-        border-radius: 999px;
-        border: 1px solid rgba(245, 158, 11, 0.48);
-        background: rgba(245, 158, 11, 0.14);
-        color: #fcd34d;
+        margin: 0 0 22px;
+        color: var(--cyan);
         font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 28px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--cyan));
+      }
+
+      h1 {
+        max-width: 700px;
+        margin: 0;
+        font-size: clamp(44px, 6.5vw, 78px);
+        line-height: 0.98;
+        letter-spacing: -0.055em;
+      }
+
+      h1 .accent {
+        display: block;
+        margin-top: 9px;
+        color: transparent;
+        background: linear-gradient(100deg, #ffffff 0%, #bfdbfe 40%, #67e8f9 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+
+      .lead {
+        max-width: 680px;
+        margin: 26px 0 0;
+        color: var(--soft);
+        font-size: clamp(17px, 2vw, 20px);
+        line-height: 1.75;
+      }
+
+      .lead strong {
+        color: #ffffff;
+      }
+
+      .progress-wrap {
+        margin-top: 34px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(2, 8, 18, 0.34);
+      }
+
+      .progress-copy {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .progress-copy strong {
+        color: #ffffff;
+        font-size: 14px;
+      }
+
+      .progress-track {
+        position: relative;
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.12);
+      }
+
+      .progress-track::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 44%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--blue), var(--cyan), var(--amber));
+        box-shadow: 0 0 24px rgba(96, 165, 250, 0.36);
+        animation: progress 2.8s ease-in-out infinite alternate;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-top: 28px;
+      }
+
+      .check-button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 14px 18px;
+        color: #061426;
+        background: linear-gradient(135deg, #ffffff, #dbeafe);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 850;
+        cursor: pointer;
+        box-shadow: 0 14px 34px rgba(96, 165, 250, 0.18);
+        transition: transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      .check-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 40px rgba(96, 165, 250, 0.28);
+      }
+
+      .check-button:focus-visible {
+        outline: 3px solid rgba(103, 232, 249, 0.55);
+        outline-offset: 3px;
+      }
+
+      .checked-time {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .checked-time strong {
+        display: block;
+        color: #dbeafe;
+      }
+
+      .panel {
+        padding: clamp(30px, 4vw, 48px);
+        background: linear-gradient(180deg, rgba(6, 20, 38, 0.36), rgba(2, 8, 18, 0.5));
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.02em;
+      }
+
+      .panel-intro {
+        margin: 8px 0 25px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 12px;
+      }
+
+      .step {
+        position: relative;
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 13px;
+        align-items: start;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(7, 24, 44, 0.48);
+      }
+
+      .step-icon {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        font-size: 17px;
+        font-weight: 900;
+      }
+
+      .step.done .step-icon {
+        color: #a7f3d0;
+        background: rgba(16, 185, 129, 0.14);
+        border: 1px solid rgba(52, 211, 153, 0.28);
+      }
+
+      .step.active {
+        border-color: rgba(96, 165, 250, 0.34);
+        box-shadow: inset 3px 0 0 var(--blue);
+      }
+
+      .step.active .step-icon {
+        color: #bfdbfe;
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(96, 165, 250, 0.3);
+      }
+
+      .step.pending .step-icon {
+        color: #cbd5e1;
+        background: rgba(148, 163, 184, 0.08);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+      }
+
+      .step strong,
+      .step span {
+        display: block;
+      }
+
+      .step strong {
+        margin-top: 1px;
+        font-size: 14px;
+      }
+
+      .step span {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .info-card {
+        min-width: 0;
+        padding: 15px 12px;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: rgba(2, 8, 18, 0.26);
+        text-align: center;
+      }
+
+      .info-icon {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        margin: 0 auto 10px;
+        border-radius: 11px;
+        color: #dbeafe;
+        background: rgba(59, 130, 246, 0.12);
+      }
+
+      .info-icon svg {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+      }
+
+      .info-card strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .contact {
+        margin-top: 20px;
+        padding: 18px;
+        border: 1px solid rgba(251, 191, 36, 0.24);
+        border-radius: 17px;
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.11), rgba(59, 130, 246, 0.08));
+      }
+
+      .contact small,
+      .contact strong {
+        display: block;
+      }
+
+      .contact small {
+        color: #fcd34d;
+        font-size: 11px;
         font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
-      .badge::before {
-        content: "";
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: #f59e0b;
-        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.13);
+      .contact strong {
+        margin-top: 7px;
+        font-size: 15px;
+        line-height: 1.55;
       }
 
-      h1 {
-        margin: 26px 0 16px;
-        font-size: clamp(34px, 7vw, 56px);
-        line-height: 1.04;
-        letter-spacing: -0.035em;
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 18px 26px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
       }
 
-      .message {
-        max-width: 590px;
-        margin: 0 auto;
-        color: #cbd5e1;
-        font-size: clamp(16px, 2.5vw, 19px);
-        line-height: 1.75;
-      }
-
-      .contact {
-        margin-top: 30px;
-        padding: 20px;
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        border-radius: 17px;
-        background: rgba(15, 23, 42, 0.74);
-        color: #ffffff;
-        font-size: 18px;
+      .footer strong {
+        color: #dbeafe;
         font-weight: 700;
       }
 
-      footer {
-        margin-top: 30px;
-        color: #94a3b8;
-        font-size: 13px;
-        line-height: 1.6;
+      @keyframes pulse {
+        70% {
+          box-shadow: 0 0 0 9px rgba(251, 191, 36, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+        }
       }
 
-      @media (max-width: 480px) {
-        body {
-          padding: 14px;
+      @keyframes drift {
+        from {
+          transform: translate3d(0, 0, 0) rotate(0deg);
+        }
+        to {
+          transform: translate3d(24px, 18px, 0) rotate(8deg);
+        }
+      }
+
+      @keyframes progress {
+        from {
+          transform: translateX(-10%);
+        }
+        to {
+          transform: translateX(138%);
+        }
+      }
+
+      @media (max-width: 900px) {
+        .page {
+          width: min(760px, calc(100% - 28px));
+          padding: 18px 0;
         }
 
-        main {
-          padding: 30px 22px;
-          border-radius: 20px;
+        .content {
+          grid-template-columns: 1fr;
         }
 
-        .logo {
-          width: 64px;
-          height: 64px;
+        .hero {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .panel {
+          padding-top: 34px;
+        }
+      }
+
+      @media (max-width: 600px) {
+        body::before {
+          background-size: 30px 30px;
+        }
+
+        .page {
+          width: min(100% - 20px, 560px);
+          padding: 10px 0;
+        }
+
+        .shell {
+          border-radius: 22px;
+        }
+
+        .topbar {
+          align-items: flex-start;
+          padding: 17px;
+        }
+
+        .brand {
+          gap: 10px;
+        }
+
+        .brand-logo {
+          width: 44px;
+          height: 44px;
+          flex-basis: 44px;
+          border-radius: 12px;
+        }
+
+        .brand-copy strong {
+          font-size: 14px;
+        }
+
+        .brand-copy span {
+          font-size: 10px;
+        }
+
+        .live-status {
+          gap: 7px;
+          padding: 8px 10px;
+          font-size: 9px;
+          letter-spacing: 0.05em;
+        }
+
+        .status-dot {
+          width: 7px;
+          height: 7px;
+        }
+
+        .hero,
+        .panel {
+          padding: 30px 20px;
+        }
+
+        h1 {
+          font-size: clamp(40px, 13vw, 58px);
+        }
+
+        .lead {
+          font-size: 16px;
+          line-height: 1.68;
+        }
+
+        .progress-copy {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .check-button {
+          width: 100%;
+          min-height: 50px;
+        }
+
+        .checked-time {
+          text-align: center;
+        }
+
+        .info-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .info-card {
+          display: grid;
+          grid-template-columns: 36px minmax(0, 1fr);
+          align-items: center;
+          gap: 10px;
+          padding: 12px;
+          text-align: left;
+        }
+
+        .info-icon {
+          margin: 0;
+        }
+
+        .footer {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 6px;
+          padding: 16px 20px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
         }
       }
     </style>
   </head>
   <body>
-    <main role="main" aria-labelledby="maintenance-title">
-      <img class="logo" src="/chalin03-logo.png" alt="Chalin 03 Company Limited" />
-      <div class="badge">Scheduled maintenance</div>
-      <h1 id="maintenance-title">System temporarily unavailable</h1>
-      <p class="message">
-        Chalin 03 is currently undergoing a scheduled system update. Access has
-        been temporarily suspended while the update is completed. No business
-        records have been deleted. Please check back later.
-      </p>
-      <section class="contact" aria-label="Developer contact information">
-        For additional information, please contact the developers.
+    <div class="orb orb-one" aria-hidden="true"></div>
+    <div class="orb orb-two" aria-hidden="true"></div>
+
+    <main class="page" aria-labelledby="maintenance-title">
+      <section class="shell">
+        <header class="topbar">
+          <div class="brand">
+            <img class="brand-logo" src="/chalin03-logo.png" alt="Chalin 03 Company Limited" />
+            <div class="brand-copy">
+              <strong>Chalin 03 Company Limited</strong>
+              <span>Group Operations Platform</span>
+            </div>
+          </div>
+          <div class="live-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            Maintenance active
+          </div>
+        </header>
+
+        <div class="content">
+          <section class="hero">
+            <p class="eyebrow">Scheduled system update</p>
+            <h1 id="maintenance-title">
+              System temporarily unavailable
+              <span class="accent">We’re improving your experience.</span>
+            </h1>
+            <p class="lead">
+              Chalin 03 is undergoing a controlled update and verification. Normal access is temporarily paused so the work can be completed safely. <strong>Your business records remain protected.</strong>
+            </p>
+
+            <div class="progress-wrap" aria-label="Maintenance progress">
+              <div class="progress-copy">
+                <strong>Updates and system checks are in progress</strong>
+                <span>No action is required from staff</span>
+              </div>
+              <div class="progress-track" aria-hidden="true"></div>
+            </div>
+
+            <div class="actions">
+              <button class="check-button" id="check-again" type="button">Check again</button>
+              <div class="checked-time" aria-live="polite">
+                <strong>Last checked</strong>
+                <span id="checked-at">Just now</span> · automatic check every 2 minutes
+              </div>
+            </div>
+          </section>
+
+          <aside class="panel" aria-label="Maintenance status details">
+            <h2>What is happening</h2>
+            <p class="panel-intro">Access will return after the update passes final operational checks.</p>
+
+            <div class="timeline">
+              <div class="step done">
+                <div class="step-icon" aria-hidden="true">✓</div>
+                <div>
+                  <strong>Maintenance mode enabled</strong>
+                  <span>Business access and transactions have been safely paused.</span>
+                </div>
+              </div>
+              <div class="step active">
+                <div class="step-icon" aria-hidden="true">↻</div>
+                <div>
+                  <strong>Update and verification</strong>
+                  <span>The developers are completing the scheduled work and checks.</span>
+                </div>
+              </div>
+              <div class="step pending">
+                <div class="step-icon" aria-hidden="true">3</div>
+                <div>
+                  <strong>Normal access restored</strong>
+                  <span>The platform will reopen after successful verification.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-card">
+                <div class="info-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <strong>Records protected</strong>
+              </div>
+              <div class="info-card">
+                <div class="info-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>
+                </div>
+                <strong>Transactions paused</strong>
+              </div>
+              <div class="info-card">
+                <div class="info-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                </div>
+                <strong>All workspaces covered</strong>
+              </div>
+            </div>
+
+            <section class="contact" aria-label="Developer contact information">
+              <small>Need more information?</small>
+              <strong>Please contact the developers for additional information.</strong>
+            </section>
+          </aside>
+        </div>
+
+        <footer class="footer">
+          <span><strong>Chalin 03 Company Limited</strong> · Scheduled maintenance</span>
+          <span>Spare Parts · Mining Operations · Equipment Sales &amp; Hire</span>
+        </footer>
       </section>
-      <footer>
-        Chalin 03 Company Limited<br />
-        Spare Parts · Mining Operations · Equipment Sales &amp; Hire
-      </footer>
     </main>
 
     <script>
-      (async function clearPreviousApplicationCaches() {
-        try {
-          if ("serviceWorker" in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(registrations.map((registration) => registration.unregister()));
-          }
+      (function maintenanceExperience() {
+        const checkedAt = document.getElementById("checked-at");
+        const checkAgain = document.getElementById("check-again");
 
-          if ("caches" in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
-          }
-
-          localStorage.removeItem("chalin03_auth_token");
-          sessionStorage.clear();
-        } catch (error) {
-          console.warn("Maintenance page cache cleanup was not fully completed.", error);
+        function updateCheckedTime() {
+          const now = new Date();
+          checkedAt.textContent = now.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
         }
+
+        updateCheckedTime();
+        checkAgain.addEventListener("click", function () {
+          checkAgain.textContent = "Checking…";
+          checkAgain.disabled = true;
+          window.location.reload();
+        });
+
+        window.setTimeout(function () {
+          window.location.reload();
+        }, 120000);
+
+        (async function clearPreviousApplicationCaches() {
+          try {
+            if ("serviceWorker" in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.map((registration) => registration.unregister()));
+            }
+
+            if ("caches" in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+            }
+
+            localStorage.removeItem("chalin03_auth_token");
+            sessionStorage.clear();
+          } catch (error) {
+            console.warn("Maintenance page cache cleanup was not fully completed.", error);
+          }
+        })();
       })();
     </script>
   </body>
