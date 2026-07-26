@@ -2,6 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  findBlockingDependencies,
+} = require("../services/workspaceContextDeletionService");
 
 function read(...parts) {
   return fs.readFileSync(path.join(__dirname, "..", "..", ...parts), "utf8");
@@ -22,11 +25,27 @@ const workspacePage = read(
   "WorkspaceAdministrationPage.jsx"
 );
 
-test("workspace context deletion discovers foreign-key blockers without disabling constraints", () => {
+test("workspace context deletion discovers dependencies without disabling constraints", () => {
   assert.match(deletionService, /information_schema\.KEY_COLUMN_USAGE/);
   assert.match(deletionService, /REFERENTIAL_CONSTRAINTS/);
   assert.match(deletionService, /findBlockingDependencies/);
   assert.doesNotMatch(deletionService, /FOREIGN_KEY_CHECKS/i);
+});
+
+test("every linked business record protects its site or location regardless of delete rule", () => {
+  const dependencies = [
+    { table_name: "staff_access", count: 2, delete_rule: "CASCADE" },
+    { table_name: "commercial_records", count: 1, delete_rule: "SET NULL" },
+    { table_name: "operational_records", count: 3, delete_rule: "RESTRICT" },
+    { table_name: "empty_records", count: 0, delete_rule: "NO ACTION" },
+  ];
+
+  assert.deepEqual(
+    findBlockingDependencies(dependencies, ["staff_access"]).map(
+      (dependency) => dependency.table_name
+    ),
+    ["commercial_records", "operational_records"]
+  );
 });
 
 test("only the original System Administrator can remove sites and Hire locations", () => {
