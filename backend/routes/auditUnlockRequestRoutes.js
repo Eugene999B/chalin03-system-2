@@ -127,161 +127,22 @@ function requireAdminOrManager(req, res, next) {
   });
 }
 
-async function columnExists(connection, tableName, columnName) {
+async function ensureAuditUnlockRequestTable(connection = pool) {
   try {
-    const [columns] = await connection.query(
-      `SHOW COLUMNS FROM \`${tableName}\` LIKE ?`,
-      [columnName]
+    await connection.query(
+      "SELECT 1 FROM audit_unlock_requests LIMIT 1"
     );
-
-    return columns.length > 0;
   } catch (error) {
     if (error.code === "ER_NO_SUCH_TABLE") {
-      return false;
+      const schemaError = new Error(
+        "Audit unlock request storage is not ready. Apply the approved database migration before using this feature."
+      );
+      schemaError.code = "AUDIT_UNLOCK_SCHEMA_NOT_READY";
+      throw schemaError;
     }
 
     throw error;
   }
-}
-
-async function ensureColumn(connection, tableName, columnName, columnDefinition) {
-  const [columns] = await connection.query(
-    `SHOW COLUMNS FROM \`${tableName}\` LIKE ?`,
-    [columnName]
-  );
-
-  if (columns.length === 0) {
-    await connection.query(
-      `ALTER TABLE \`${tableName}\` ADD COLUMN ${columnDefinition}`
-    );
-  }
-}
-
-async function ensureIndex(connection, tableName, indexName, indexDefinition) {
-  const [indexes] = await connection.query(
-    `SHOW INDEX FROM \`${tableName}\` WHERE Key_name = ?`,
-    [indexName]
-  );
-
-  if (indexes.length === 0) {
-    await connection.query(
-      `ALTER TABLE \`${tableName}\` ADD INDEX ${indexDefinition}`
-    );
-  }
-}
-
-async function ensureRequestAreaEnum(connection) {
-  if (!(await columnExists(connection, "audit_unlock_requests", "request_area"))) {
-    await ensureColumn(
-      connection,
-      "audit_unlock_requests",
-      "request_area",
-      `request_area ENUM(${ALLOWED_REQUEST_AREAS.map((area) => `'${area}'`).join(
-        ", "
-      )}) NOT NULL DEFAULT 'other' AFTER period_end`
-    );
-
-    return;
-  }
-
-  const enumValues = ALLOWED_REQUEST_AREAS.map((area) => `'${area}'`).join(", ");
-
-  await connection.query(
-    `ALTER TABLE audit_unlock_requests
-     MODIFY COLUMN request_area ENUM(${enumValues}) NOT NULL DEFAULT 'other'`
-  );
-}
-
-async function safeLogActivity(connection, userId, branchId, action, details) {
-  try {
-    await connection.query(
-      `INSERT INTO activity_log (branch_id, user_id, action, details)
-       VALUES (?, ?, ?, ?)`,
-      [branchId || null, userId || null, action, details]
-    );
-  } catch (error) {
-    console.error("Activity log error:", error.message);
-  }
-}
-
-async function ensureAuditUnlockRequestTable(connection = pool) {
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS audit_unlock_requests (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-
-      branch_id INT NOT NULL DEFAULT 1,
-      audit_signoff_id INT NULL,
-
-      period_label VARCHAR(255) NOT NULL,
-      period_start DATE NULL,
-      period_end DATE NULL,
-
-      request_area ENUM(
-        'sale',
-        'expense',
-        'debt_payment',
-        'stock',
-        'stock_adjustment',
-        'stock_transfer',
-        'stock_ledger',
-        'purchase',
-        'return',
-        'sms',
-        'backup_restore',
-        'maintenance',
-        'audit_signoff',
-        'audit_reapproval',
-        'report',
-        'export',
-        'other'
-      ) NOT NULL DEFAULT 'other',
-
-      requested_action VARCHAR(150) NOT NULL DEFAULT 'Correction needed',
-      reason TEXT NOT NULL,
-
-      status ENUM('pending', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending',
-
-      requested_by INT NULL,
-      reviewed_by INT NULL,
-      reviewed_at TIMESTAMP NULL,
-
-      review_notes TEXT,
-
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-      INDEX idx_unlock_request_branch (branch_id),
-      INDEX idx_unlock_request_signoff (audit_signoff_id),
-      INDEX idx_unlock_request_status (status),
-      INDEX idx_unlock_request_area (request_area),
-      INDEX idx_unlock_request_requested_by (requested_by),
-      INDEX idx_unlock_request_reviewed_by (reviewed_by),
-      INDEX idx_unlock_request_created_at (created_at)
-    )
-  `);
-
-  await ensureColumn(
-    connection,
-    "audit_unlock_requests",
-    "branch_id",
-    "branch_id INT NOT NULL DEFAULT 1 AFTER id"
-  );
-
-  await ensureRequestAreaEnum(connection);
-
-  await ensureIndex(
-    connection,
-    "audit_unlock_requests",
-    "idx_unlock_request_branch",
-    "idx_unlock_request_branch (branch_id)"
-  );
-
-  await ensureIndex(
-    connection,
-    "audit_unlock_requests",
-    "idx_unlock_request_area",
-    "idx_unlock_request_area (request_area)"
-  );
 }
 
 function normalizeRequestArea(value) {
