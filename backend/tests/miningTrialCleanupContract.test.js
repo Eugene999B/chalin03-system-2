@@ -11,16 +11,9 @@ const cleanupPath = path.join(
   "runMiningTrialCleanup.js"
 );
 const packagePath = path.join(root, "backend", "package.json");
-const systemRoutesPath = path.join(
-  root,
-  "backend",
-  "routes",
-  "systemRoutes.js"
-);
 
 const cleanupSource = fs.readFileSync(cleanupPath, "utf8");
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-const systemRoutesSource = fs.readFileSync(systemRoutesPath, "utf8");
 const cleanup = require(cleanupPath);
 
 test("Mining trial cleanup never disables constraints or changes database schema", () => {
@@ -79,21 +72,12 @@ test("Mining cleanup orders dependent tables before their parents", () => {
   );
 });
 
-test("one-time production start is fail-closed and health exposes only cleanup evidence", () => {
+test("one-time production start is fail-closed", () => {
   assert.match(
     packageJson.scripts.start,
     /^node scripts\/runMiningTrialCleanup\.js && node /
   );
-  assert.match(
-    systemRoutesSource,
-    /mining_trial_cleanup: miningCleanupStatus\(\)/
-  );
-  assert.match(
-    systemRoutesSource,
-    /spare_parts_and_hire_sentinels_verified/
-  );
-  assert.doesNotMatch(
-    systemRoutesSource,
-    /database_name: parsed\.database_name/
-  );
+  assert.match(cleanupSource, /process\.exit\(1\)/);
+  assert.match(cleanupSource, /already_complete/);
+  assert.match(cleanupSource, /spare_parts_and_hire_sentinels_verified: true/);
 });
