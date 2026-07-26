@@ -2,10 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#061426" />
     <meta name="robots" content="noindex, nofollow, noarchive" />
-    <meta name="maintenance-build" content="2026-07-26-premium-responsive" />
+    <meta name="maintenance-build" content="2026-07-26-mobile-screen-fit" />
     <meta
       name="description"
       content="Chalin 03 is temporarily unavailable while a scheduled system update and verification are completed."
@@ -22,39 +25,42 @@
         --navy-950: #020812;
         --navy-900: #061426;
         --navy-800: #0a213d;
-        --surface: rgba(7, 24, 44, 0.78);
-        --surface-strong: rgba(8, 28, 51, 0.94);
-        --line: rgba(148, 163, 184, 0.18);
-        --line-strong: rgba(148, 163, 184, 0.3);
+        --surface: rgba(7, 24, 44, 0.92);
+        --line: rgba(148, 163, 184, 0.2);
+        --line-strong: rgba(148, 163, 184, 0.32);
         --text: #f8fafc;
         --muted: #a9bad0;
         --soft: #d8e3f0;
         --amber: #fbbf24;
-        --amber-strong: #f59e0b;
         --blue: #60a5fa;
         --cyan: #67e8f9;
         --green: #34d399;
       }
 
-      * {
+      *,
+      *::before,
+      *::after {
         box-sizing: border-box;
       }
 
-      html {
-        min-width: 320px;
+      html,
+      body {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        margin: 0;
+        overflow-x: hidden;
         background: var(--navy-950);
       }
 
       body {
-        margin: 0;
         min-height: 100vh;
-        overflow-x: hidden;
+        min-height: 100svh;
         color: var(--text);
         background:
-          radial-gradient(circle at 8% 8%, rgba(37, 99, 235, 0.28), transparent 31rem),
-          radial-gradient(circle at 92% 16%, rgba(14, 165, 233, 0.18), transparent 28rem),
-          radial-gradient(circle at 48% 110%, rgba(245, 158, 11, 0.12), transparent 34rem),
-          linear-gradient(145deg, var(--navy-800) 0%, var(--navy-900) 45%, var(--navy-950) 100%);
+          radial-gradient(circle at 8% 8%, rgba(37, 99, 235, 0.26), transparent 28rem),
+          radial-gradient(circle at 92% 12%, rgba(14, 165, 233, 0.16), transparent 25rem),
+          linear-gradient(145deg, var(--navy-800), var(--navy-900) 48%, var(--navy-950));
       }
 
       body::before {
@@ -62,447 +68,365 @@
         position: fixed;
         inset: 0;
         pointer-events: none;
-        opacity: 0.25;
+        opacity: 0.22;
         background-image:
-          linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
-        background-size: 42px 42px;
-        mask-image: linear-gradient(to bottom, black, transparent 86%);
+          linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+        background-size: 40px 40px;
       }
 
-      .orb {
-        position: fixed;
-        border-radius: 50%;
-        filter: blur(1px);
-        pointer-events: none;
-        opacity: 0.34;
-        animation: drift 12s ease-in-out infinite alternate;
-      }
-
-      .orb-one {
-        width: 260px;
-        height: 260px;
-        top: -120px;
-        right: 12%;
-        border: 1px solid rgba(96, 165, 250, 0.24);
-        box-shadow: inset 0 0 70px rgba(59, 130, 246, 0.09);
-      }
-
-      .orb-two {
-        width: 150px;
-        height: 150px;
-        left: -70px;
-        bottom: 12%;
-        border: 1px solid rgba(251, 191, 36, 0.18);
-        box-shadow: inset 0 0 50px rgba(245, 158, 11, 0.08);
-        animation-delay: -5s;
+      button,
+      img,
+      svg {
+        max-width: 100%;
       }
 
       .page {
         position: relative;
         z-index: 1;
-        width: min(1180px, calc(100% - 40px));
+        display: grid;
+        align-items: center;
+        width: 100%;
         min-height: 100vh;
-        margin: 0 auto;
-        padding: 30px 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+        min-height: 100svh;
+        padding:
+          max(16px, env(safe-area-inset-top))
+          max(16px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom))
+          max(16px, env(safe-area-inset-left));
       }
 
       .shell {
+        width: min(1120px, 100%);
+        min-width: 0;
+        margin: auto;
         overflow: hidden;
         border: 1px solid var(--line-strong);
-        border-radius: 30px;
-        background: linear-gradient(145deg, rgba(9, 31, 57, 0.94), rgba(3, 13, 26, 0.9));
-        box-shadow:
-          0 40px 110px rgba(0, 0, 0, 0.46),
-          inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(24px);
+        border-radius: 28px;
+        background: linear-gradient(145deg, rgba(9, 31, 57, 0.97), rgba(3, 13, 26, 0.96));
+        box-shadow: 0 34px 90px rgba(0, 0, 0, 0.42);
       }
 
       .topbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        padding: 22px 26px;
+        gap: 16px;
+        min-width: 0;
+        padding: 20px 24px;
         border-bottom: 1px solid var(--line);
-        background: rgba(4, 17, 33, 0.44);
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
         min-width: 0;
       }
 
       .brand-logo {
-        width: 52px;
-        height: 52px;
-        flex: 0 0 52px;
+        flex: 0 0 48px;
+        width: 48px;
+        height: 48px;
         object-fit: contain;
-        border-radius: 15px;
-        padding: 4px;
-        background: rgba(255, 255, 255, 0.04);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.96);
+        padding: 5px;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+      }
+
+      .brand-copy {
+        min-width: 0;
       }
 
       .brand-copy strong,
       .brand-copy span {
         display: block;
+        overflow-wrap: anywhere;
       }
 
       .brand-copy strong {
-        font-size: 16px;
-        letter-spacing: 0.01em;
+        font-size: 15px;
+        line-height: 1.3;
       }
 
       .brand-copy span {
         margin-top: 3px;
         color: var(--muted);
-        font-size: 12px;
-        letter-spacing: 0.06em;
+        font-size: 10px;
+        letter-spacing: 0.075em;
         text-transform: uppercase;
       }
 
-      .live-status {
+      .status {
         display: inline-flex;
-        align-items: center;
-        gap: 10px;
         flex: 0 0 auto;
-        padding: 10px 14px;
-        border: 1px solid rgba(251, 191, 36, 0.35);
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border: 1px solid rgba(251, 191, 36, 0.36);
         border-radius: 999px;
-        background: rgba(245, 158, 11, 0.1);
         color: #fde68a;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.07em;
+        background: rgba(245, 158, 11, 0.11);
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: 0.065em;
         text-transform: uppercase;
+        white-space: nowrap;
       }
 
       .status-dot {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
         background: var(--amber);
-        box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
-        animation: pulse 2.2s ease-out infinite;
+        box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.1);
+        animation: pulse 2s ease-out infinite;
       }
 
       .content {
         display: grid;
-        grid-template-columns: minmax(0, 1.12fr) minmax(330px, 0.88fr);
-        gap: 0;
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        min-width: 0;
+      }
+
+      .hero,
+      .panel,
+      .step,
+      .step > div {
+        min-width: 0;
       }
 
       .hero {
-        padding: clamp(36px, 6vw, 72px);
+        padding: clamp(34px, 5vw, 62px);
         border-right: 1px solid var(--line);
       }
 
       .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 9px;
-        margin: 0 0 22px;
+        margin: 0 0 17px;
         color: var(--cyan);
-        font-size: 12px;
-        font-weight: 800;
+        font-size: 11px;
+        font-weight: 850;
         letter-spacing: 0.13em;
         text-transform: uppercase;
       }
 
-      .eyebrow::before {
-        content: "";
-        width: 28px;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, var(--cyan));
-      }
-
       h1 {
-        max-width: 700px;
+        max-width: 760px;
         margin: 0;
-        font-size: clamp(44px, 6.5vw, 78px);
-        line-height: 0.98;
-        letter-spacing: -0.055em;
+        font-size: clamp(40px, 5.6vw, 68px);
+        line-height: 1.02;
+        letter-spacing: -0.052em;
+        overflow-wrap: anywhere;
       }
 
-      h1 .accent {
+      h1 span {
         display: block;
         margin-top: 9px;
-        color: transparent;
-        background: linear-gradient(100deg, #ffffff 0%, #bfdbfe 40%, #67e8f9 100%);
-        -webkit-background-clip: text;
-        background-clip: text;
+        color: #bfdbfe;
       }
 
       .lead {
         max-width: 680px;
-        margin: 26px 0 0;
+        margin: 23px 0 0;
         color: var(--soft);
-        font-size: clamp(17px, 2vw, 20px);
-        line-height: 1.75;
+        font-size: clamp(16px, 1.8vw, 19px);
+        line-height: 1.68;
       }
 
       .lead strong {
-        color: #ffffff;
+        color: #fff;
       }
 
-      .progress-wrap {
-        margin-top: 34px;
-        padding: 18px;
+      .progress {
+        margin-top: 28px;
+        padding: 17px;
         border: 1px solid var(--line);
-        border-radius: 18px;
+        border-radius: 17px;
         background: rgba(2, 8, 18, 0.34);
       }
 
-      .progress-copy {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 12px;
-        color: var(--muted);
+      .progress strong,
+      .progress span {
+        display: block;
+      }
+
+      .progress strong {
         font-size: 13px;
       }
 
-      .progress-copy strong {
-        color: #ffffff;
-        font-size: 14px;
+      .progress span {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
       }
 
-      .progress-track {
+      .track {
         position: relative;
-        height: 8px;
+        height: 7px;
+        margin-top: 13px;
         overflow: hidden;
         border-radius: 999px;
-        background: rgba(148, 163, 184, 0.12);
+        background: rgba(148, 163, 184, 0.13);
       }
 
-      .progress-track::before {
+      .track::before {
         content: "";
         position: absolute;
         inset: 0;
-        width: 44%;
+        width: 62%;
         border-radius: inherit;
         background: linear-gradient(90deg, var(--blue), var(--cyan), var(--amber));
-        box-shadow: 0 0 24px rgba(96, 165, 250, 0.36);
-        animation: progress 2.8s ease-in-out infinite alternate;
       }
 
       .actions {
         display: flex;
         align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-top: 28px;
+        gap: 14px;
+        margin-top: 20px;
       }
 
       .check-button {
-        appearance: none;
-        border: 0;
-        border-radius: 14px;
-        padding: 14px 18px;
-        color: #061426;
-        background: linear-gradient(135deg, #ffffff, #dbeafe);
+        min-height: 46px;
+        padding: 0 19px;
+        border: 1px solid rgba(96, 165, 250, 0.42);
+        border-radius: 13px;
+        color: #eff6ff;
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.82), rgba(14, 116, 144, 0.76));
         font: inherit;
-        font-size: 14px;
-        font-weight: 850;
+        font-size: 13px;
+        font-weight: 800;
         cursor: pointer;
-        box-shadow: 0 14px 34px rgba(96, 165, 250, 0.18);
-        transition: transform 160ms ease, box-shadow 160ms ease;
-      }
-
-      .check-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 18px 40px rgba(96, 165, 250, 0.28);
-      }
-
-      .check-button:focus-visible {
-        outline: 3px solid rgba(103, 232, 249, 0.55);
-        outline-offset: 3px;
       }
 
       .checked-time {
+        min-width: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .checked-time strong {
+        color: #dbeafe;
+      }
+
+      .panel {
+        padding: clamp(28px, 4vw, 44px);
+        background: rgba(2, 8, 18, 0.22);
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: 19px;
+      }
+
+      .panel-intro {
+        margin: 8px 0 20px;
         color: var(--muted);
         font-size: 13px;
         line-height: 1.55;
       }
 
-      .checked-time strong {
-        display: block;
-        color: #dbeafe;
-      }
-
-      .panel {
-        padding: clamp(30px, 4vw, 48px);
-        background: linear-gradient(180deg, rgba(6, 20, 38, 0.36), rgba(2, 8, 18, 0.5));
-      }
-
-      .panel h2 {
-        margin: 0;
-        font-size: 20px;
-        letter-spacing: -0.02em;
-      }
-
-      .panel-intro {
-        margin: 8px 0 25px;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.65;
-      }
-
-      .timeline {
+      .steps {
         display: grid;
-        gap: 12px;
+        gap: 10px;
       }
 
       .step {
-        position: relative;
         display: grid;
-        grid-template-columns: 38px minmax(0, 1fr);
-        gap: 13px;
-        align-items: start;
-        padding: 16px;
+        grid-template-columns: 36px minmax(0, 1fr);
+        gap: 12px;
+        padding: 14px;
         border: 1px solid var(--line);
-        border-radius: 16px;
-        background: rgba(7, 24, 44, 0.48);
+        border-radius: 15px;
+        background: rgba(7, 24, 44, 0.5);
+      }
+
+      .step.active {
+        border-color: rgba(96, 165, 250, 0.36);
+        box-shadow: inset 3px 0 0 var(--blue);
       }
 
       .step-icon {
         display: grid;
         place-items: center;
-        width: 38px;
-        height: 38px;
-        border-radius: 12px;
-        font-size: 17px;
+        width: 36px;
+        height: 36px;
+        border-radius: 11px;
+        color: #bfdbfe;
+        background: rgba(59, 130, 246, 0.14);
         font-weight: 900;
       }
 
       .step.done .step-icon {
         color: #a7f3d0;
         background: rgba(16, 185, 129, 0.14);
-        border: 1px solid rgba(52, 211, 153, 0.28);
-      }
-
-      .step.active {
-        border-color: rgba(96, 165, 250, 0.34);
-        box-shadow: inset 3px 0 0 var(--blue);
-      }
-
-      .step.active .step-icon {
-        color: #bfdbfe;
-        background: rgba(59, 130, 246, 0.15);
-        border: 1px solid rgba(96, 165, 250, 0.3);
-      }
-
-      .step.pending .step-icon {
-        color: #cbd5e1;
-        background: rgba(148, 163, 184, 0.08);
-        border: 1px solid rgba(148, 163, 184, 0.18);
       }
 
       .step strong,
       .step span {
         display: block;
+        overflow-wrap: anywhere;
       }
 
       .step strong {
-        margin-top: 1px;
-        font-size: 14px;
+        font-size: 13px;
       }
 
       .step span {
-        margin-top: 5px;
+        margin-top: 4px;
         color: var(--muted);
-        font-size: 12.5px;
-        line-height: 1.5;
-      }
-
-      .info-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 20px;
-      }
-
-      .info-card {
-        min-width: 0;
-        padding: 15px 12px;
-        border: 1px solid var(--line);
-        border-radius: 15px;
-        background: rgba(2, 8, 18, 0.26);
-        text-align: center;
-      }
-
-      .info-icon {
-        display: grid;
-        place-items: center;
-        width: 34px;
-        height: 34px;
-        margin: 0 auto 10px;
-        border-radius: 11px;
-        color: #dbeafe;
-        background: rgba(59, 130, 246, 0.12);
-      }
-
-      .info-icon svg {
-        width: 18px;
-        height: 18px;
-        stroke: currentColor;
-      }
-
-      .info-card strong {
-        display: block;
-        font-size: 12px;
-        line-height: 1.35;
+        font-size: 11.5px;
+        line-height: 1.45;
       }
 
       .contact {
-        margin-top: 20px;
-        padding: 18px;
+        margin-top: 17px;
+        padding: 16px;
         border: 1px solid rgba(251, 191, 36, 0.24);
-        border-radius: 17px;
+        border-radius: 16px;
         background: linear-gradient(135deg, rgba(245, 158, 11, 0.11), rgba(59, 130, 246, 0.08));
       }
 
       .contact small,
       .contact strong {
         display: block;
+        overflow-wrap: anywhere;
       }
 
       .contact small {
         color: #fcd34d;
-        font-size: 11px;
-        font-weight: 800;
+        font-size: 10px;
+        font-weight: 850;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
       .contact strong {
-        margin-top: 7px;
-        font-size: 15px;
-        line-height: 1.55;
+        margin-top: 6px;
+        font-size: 14px;
+        line-height: 1.48;
       }
 
       .footer {
         display: flex;
-        align-items: center;
         justify-content: space-between;
-        gap: 20px;
-        padding: 18px 26px;
+        gap: 18px;
+        min-width: 0;
+        padding: 16px 24px;
         border-top: 1px solid var(--line);
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.5;
+      }
+
+      .footer span {
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .footer strong {
         color: #dbeafe;
-        font-weight: 700;
       }
 
       @keyframes pulse {
@@ -514,150 +438,212 @@
         }
       }
 
-      @keyframes drift {
-        from {
-          transform: translate3d(0, 0, 0) rotate(0deg);
-        }
-        to {
-          transform: translate3d(24px, 18px, 0) rotate(8deg);
-        }
-      }
-
-      @keyframes progress {
-        from {
-          transform: translateX(-10%);
-        }
-        to {
-          transform: translateX(138%);
-        }
-      }
-
-      @media (max-width: 900px) {
-        .page {
-          width: min(760px, calc(100% - 28px));
-          padding: 18px 0;
-        }
-
+      @media (max-width: 840px) {
         .content {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .hero {
           border-right: 0;
           border-bottom: 1px solid var(--line);
         }
-
-        .panel {
-          padding-top: 34px;
-        }
       }
 
       @media (max-width: 600px) {
         body::before {
-          background-size: 30px 30px;
+          background-size: 28px 28px;
         }
 
         .page {
-          width: min(100% - 20px, 560px);
-          padding: 10px 0;
+          display: block;
+          width: 100%;
+          min-height: 100svh;
+          padding:
+            max(6px, env(safe-area-inset-top))
+            max(6px, env(safe-area-inset-right))
+            max(6px, env(safe-area-inset-bottom))
+            max(6px, env(safe-area-inset-left));
         }
 
         .shell {
-          border-radius: 22px;
+          width: 100%;
+          max-width: 100%;
+          border-radius: 18px;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.34);
         }
 
         .topbar {
-          align-items: flex-start;
-          padding: 17px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          align-items: start;
+          gap: 11px;
+          padding: 14px;
         }
 
         .brand {
-          gap: 10px;
+          width: 100%;
         }
 
         .brand-logo {
-          width: 44px;
-          height: 44px;
-          flex-basis: 44px;
+          flex-basis: 42px;
+          width: 42px;
+          height: 42px;
           border-radius: 12px;
         }
 
         .brand-copy strong {
-          font-size: 14px;
+          font-size: 13px;
         }
 
         .brand-copy span {
-          font-size: 10px;
-        }
-
-        .live-status {
-          gap: 7px;
-          padding: 8px 10px;
           font-size: 9px;
-          letter-spacing: 0.05em;
+          letter-spacing: 0.055em;
         }
 
-        .status-dot {
-          width: 7px;
-          height: 7px;
+        .status {
+          justify-self: start;
+          padding: 7px 10px;
+          font-size: 8.5px;
         }
 
-        .hero,
-        .panel {
-          padding: 30px 20px;
+        .hero {
+          padding: 23px 16px 20px;
+        }
+
+        .eyebrow {
+          margin-bottom: 12px;
+          font-size: 9.5px;
         }
 
         h1 {
-          font-size: clamp(40px, 13vw, 58px);
+          font-size: clamp(30px, 9.6vw, 42px);
+          line-height: 1.04;
+          letter-spacing: -0.042em;
+        }
+
+        h1 span {
+          margin-top: 7px;
         }
 
         .lead {
-          font-size: 16px;
-          line-height: 1.68;
+          margin-top: 17px;
+          font-size: 14.5px;
+          line-height: 1.58;
         }
 
-        .progress-copy {
-          align-items: flex-start;
-          flex-direction: column;
-          gap: 4px;
+        .progress {
+          margin-top: 18px;
+          padding: 14px;
+          border-radius: 14px;
+        }
+
+        .progress strong {
+          font-size: 12px;
+        }
+
+        .progress span {
+          font-size: 11px;
         }
 
         .actions {
           align-items: stretch;
           flex-direction: column;
+          gap: 9px;
+          margin-top: 15px;
         }
 
         .check-button {
           width: 100%;
-          min-height: 50px;
+          min-height: 46px;
         }
 
         .checked-time {
+          width: 100%;
           text-align: center;
         }
 
-        .info-grid {
-          grid-template-columns: 1fr;
+        .panel {
+          padding: 20px 16px;
         }
 
-        .info-card {
-          display: grid;
-          grid-template-columns: 36px minmax(0, 1fr);
-          align-items: center;
+        .panel h2 {
+          font-size: 17px;
+        }
+
+        .panel-intro {
+          margin-bottom: 15px;
+          font-size: 12px;
+        }
+
+        .steps {
+          gap: 8px;
+        }
+
+        .step {
+          grid-template-columns: 32px minmax(0, 1fr);
           gap: 10px;
           padding: 12px;
-          text-align: left;
+          border-radius: 13px;
         }
 
-        .info-icon {
-          margin: 0;
+        .step-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+          font-size: 13px;
+        }
+
+        .step strong {
+          font-size: 12px;
+        }
+
+        .step span {
+          font-size: 10.5px;
+          line-height: 1.4;
+        }
+
+        .contact {
+          margin-top: 13px;
+          padding: 13px;
+          border-radius: 13px;
+        }
+
+        .contact strong {
+          font-size: 12.5px;
         }
 
         .footer {
           align-items: flex-start;
           flex-direction: column;
-          gap: 6px;
-          padding: 16px 20px;
+          gap: 5px;
+          padding: 13px 16px;
+          font-size: 10px;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .page {
+          padding: 4px;
+        }
+
+        .shell {
+          border-radius: 15px;
+        }
+
+        .topbar,
+        .hero,
+        .panel,
+        .footer {
+          padding-left: 13px;
+          padding-right: 13px;
+        }
+
+        h1 {
+          font-size: 29px;
+        }
+
+        .lead {
+          font-size: 13.5px;
         }
       }
 
@@ -665,7 +651,6 @@
         *,
         *::before,
         *::after {
-          scroll-behavior: auto !important;
           animation-duration: 0.001ms !important;
           animation-iteration-count: 1 !important;
           transition-duration: 0.001ms !important;
@@ -674,9 +659,6 @@
     </style>
   </head>
   <body>
-    <div class="orb orb-one" aria-hidden="true"></div>
-    <div class="orb orb-two" aria-hidden="true"></div>
-
     <main class="page" aria-labelledby="maintenance-title">
       <section class="shell">
         <header class="topbar">
@@ -687,7 +669,7 @@
               <span>Group Operations Platform</span>
             </div>
           </div>
-          <div class="live-status">
+          <div class="status">
             <span class="status-dot" aria-hidden="true"></span>
             Maintenance active
           </div>
@@ -698,25 +680,22 @@
             <p class="eyebrow">Scheduled system update</p>
             <h1 id="maintenance-title">
               System temporarily unavailable
-              <span class="accent">We’re improving your experience.</span>
+              <span>We’re improving your experience.</span>
             </h1>
             <p class="lead">
               Chalin 03 is undergoing a controlled update and verification. Normal access is temporarily paused so the work can be completed safely. <strong>Your business records remain protected.</strong>
             </p>
 
-            <div class="progress-wrap" aria-label="Maintenance progress">
-              <div class="progress-copy">
-                <strong>Updates and system checks are in progress</strong>
-                <span>No action is required from staff</span>
-              </div>
-              <div class="progress-track" aria-hidden="true"></div>
+            <div class="progress" aria-label="Maintenance progress">
+              <strong>Updates and system checks are in progress</strong>
+              <span>No action is required from staff.</span>
+              <div class="track" aria-hidden="true"></div>
             </div>
 
             <div class="actions">
               <button class="check-button" id="check-again" type="button">Check again</button>
               <div class="checked-time" aria-live="polite">
-                <strong>Last checked</strong>
-                <span id="checked-at">Just now</span> · automatic check every 2 minutes
+                <strong>Last checked:</strong> <span id="checked-at">Just now</span>
               </div>
             </div>
           </section>
@@ -725,7 +704,7 @@
             <h2>What is happening</h2>
             <p class="panel-intro">Access will return after the update passes final operational checks.</p>
 
-            <div class="timeline">
+            <div class="steps">
               <div class="step done">
                 <div class="step-icon" aria-hidden="true">✓</div>
                 <div>
@@ -740,33 +719,12 @@
                   <span>The developers are completing the scheduled work and checks.</span>
                 </div>
               </div>
-              <div class="step pending">
+              <div class="step">
                 <div class="step-icon" aria-hidden="true">3</div>
                 <div>
                   <strong>Normal access restored</strong>
                   <span>The platform will reopen after successful verification.</span>
                 </div>
-              </div>
-            </div>
-
-            <div class="info-grid">
-              <div class="info-card">
-                <div class="info-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
-                </div>
-                <strong>Records protected</strong>
-              </div>
-              <div class="info-card">
-                <div class="info-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>
-                </div>
-                <strong>Transactions paused</strong>
-              </div>
-              <div class="info-card">
-                <div class="info-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                </div>
-                <strong>All workspaces covered</strong>
               </div>
             </div>
 
@@ -789,15 +747,11 @@
         const checkedAt = document.getElementById("checked-at");
         const checkAgain = document.getElementById("check-again");
 
-        function updateCheckedTime() {
-          const now = new Date();
-          checkedAt.textContent = now.toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        }
+        checkedAt.textContent = new Date().toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-        updateCheckedTime();
         checkAgain.addEventListener("click", function () {
           checkAgain.textContent = "Checking…";
           checkAgain.disabled = true;
