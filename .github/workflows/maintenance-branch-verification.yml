@@ -58,14 +58,20 @@ jobs:
 
           grep -q '"status":"maintenance"' health.json
           grep -q '"healthy":true' health.json
+          grep -q '"contact":"Developers"' health.json
+          ! grep -qi 'Eugene Amankwah Appiah' health.json
 
           business_status="$(curl --silent --output business.json --write-out '%{http_code}' http://127.0.0.1:5050/api/products)"
           test "$business_status" = "503"
           grep -q 'SYSTEM_MAINTENANCE' business.json
+          grep -qi 'contact the developers' business.json
 
           root_status="$(curl --silent --output root.html --write-out '%{http_code}' http://127.0.0.1:5050/)"
           test "$root_status" = "200"
           grep -q 'System temporarily unavailable' root.html
+          grep -q 'We’re improving your experience' root.html
+          grep -qi 'contact the developers' root.html
+          ! grep -qi 'Eugene Amankwah Appiah' root.html
 
   cloudflare-maintenance-page:
     name: Cloudflare maintenance page
@@ -91,13 +97,16 @@ jobs:
       - name: Build static maintenance page
         run: npm run build
 
-      - name: Verify maintenance-only output
+      - name: Verify premium maintenance-only output
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'System temporarily unavailable' dist/index.html
-          grep -q 'Scheduled maintenance' dist/index.html
-          grep -q 'Eugene Amankwah Appiah' dist/index.html
+          grep -q 'We’re improving your experience' dist/index.html
+          grep -q 'Maintenance active' dist/index.html
+          grep -q 'Records protected' dist/index.html
+          grep -qi 'contact the developers' dist/index.html
+          ! grep -qi 'Eugene Amankwah Appiah' dist/index.html
           test -f dist/_headers
           test -f dist/_redirects
           test -f dist/sw.js
