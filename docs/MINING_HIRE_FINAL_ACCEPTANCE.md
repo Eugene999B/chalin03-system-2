@@ -44,7 +44,9 @@ This acceptance record verifies the production source paths for Mining Operation
 
 The server refreshes notification rules automatically in production every 15 minutes by default, with a database advisory lock preventing concurrent sync. The interval can be configured but cannot be set below five minutes.
 
-The rules cover Mining low stockpiles, low fuel, pending dispatch, reconciliation variance, incidents and closing review, plus Hire overdue invoices, ending contracts, pending approvals, draft work logs and open damage cases. The existing manual sync remains available for authorised investigation.
+The configured rules cover Mining low stockpiles, low fuel, pending dispatch, reconciliation variance, incidents and closing review, plus Hire overdue invoices, overdue contracts, pending approvals, draft work logs and open damage cases. The existing manual sync remains available for authorised investigation.
+
+The Hire dashboard separately exposes contracts approaching or passing their expected end date and returns due or incomplete. Those dashboard controls are preserved; this release does not invent an unconfigured notification rule or silently seed production settings.
 
 ## Performance acceptance
 
