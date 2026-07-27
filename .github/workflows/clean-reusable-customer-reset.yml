@@ -6,6 +6,7 @@ on:
       - main
     types:
       - opened
+      - reopened
 
 permissions:
   contents: write
@@ -27,24 +28,28 @@ jobs:
           from pathlib import Path
           path = Path('frontend/src/pages/NewSalePage.jsx')
           source = path.read_text(encoding='utf-8')
-          old = '''    setCustomerName("");
-    setCustomerPhone("");
-    setCustomerLocation("");
-    setCustomerSearch("");
-    setCustomerMatches([]);
-    setSelectedCustomerId("");
-    setSelectedCustomer(null);
-    setCustomerSearch("");
-    setCustomerMatches([]);
-    setSelectedCustomerId("");
-    setSelectedCustomer(null);'''
-          new = '''    setCustomerName("");
-    setCustomerPhone("");
-    setCustomerLocation("");
-    setCustomerSearch("");
-    setCustomerMatches([]);
-    setSelectedCustomerId("");
-    setSelectedCustomer(null);'''
+          old = "\n".join([
+              '    setCustomerName("");',
+              '    setCustomerPhone("");',
+              '    setCustomerLocation("");',
+              '    setCustomerSearch("");',
+              '    setCustomerMatches([]);',
+              '    setSelectedCustomerId("");',
+              '    setSelectedCustomer(null);',
+              '    setCustomerSearch("");',
+              '    setCustomerMatches([]);',
+              '    setSelectedCustomerId("");',
+              '    setSelectedCustomer(null);',
+          ])
+          new = "\n".join([
+              '    setCustomerName("");',
+              '    setCustomerPhone("");',
+              '    setCustomerLocation("");',
+              '    setCustomerSearch("");',
+              '    setCustomerMatches([]);',
+              '    setSelectedCustomerId("");',
+              '    setSelectedCustomer(null);',
+          ])
           count = source.count(old)
           if count == 0:
               Path('/tmp/customer-clean-changed').write_text('false', encoding='utf-8')
