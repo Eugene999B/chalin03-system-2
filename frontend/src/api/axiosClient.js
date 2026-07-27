@@ -218,17 +218,17 @@ axiosClient.interceptors.response.use(
       Boolean(requestToken) &&
       Boolean(activeToken) &&
       requestToken !== activeToken;
+    const isChangePasswordCredentialFailure =
+      requestPath === "/auth/change-password" &&
+      statusCode === 401 &&
+      (errorCode === "CURRENT_PASSWORD_INCORRECT" ||
+        errorMessage === "Current password is incorrect.");
     const isTemporaryProfileFailure =
       requestPath === "/auth/me" &&
       Boolean(activeToken) &&
       requestToken === activeToken &&
       Boolean(cachedUser) &&
       (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
-    const isChangePasswordCredentialFailure =
-      requestPath === "/auth/change-password" &&
-      statusCode === 401 &&
-      (errorCode === "CURRENT_PASSWORD_INCORRECT" ||
-        errorMessage === "Current password is incorrect.");
 
     if (isStaleSessionResponse) {
       // The user has already received a newer token. Do not reject this old
@@ -256,8 +256,7 @@ axiosClient.interceptors.response.use(
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
 
-    if (
-      statusCode === 401 &&
+    if (statusCode === 401 &&
       !isOwnerRecoveryRequest &&
       !isOwnerRecoveryPage &&
       !isChangePasswordCredentialFailure
