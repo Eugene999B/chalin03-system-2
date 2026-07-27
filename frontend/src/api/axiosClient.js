@@ -224,6 +224,11 @@ axiosClient.interceptors.response.use(
       requestToken === activeToken &&
       Boolean(cachedUser) &&
       (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
+    const isChangePasswordCredentialFailure =
+      requestPath === "/auth/change-password" &&
+      statusCode === 401 &&
+      (errorCode === "CURRENT_PASSWORD_INCORRECT" ||
+        errorMessage === "Current password is incorrect.");
 
     if (isStaleSessionResponse) {
       // The user has already received a newer token. Do not reject this old
@@ -251,7 +256,12 @@ axiosClient.interceptors.response.use(
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
 
-    if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage) {
+    if (
+      statusCode === 401 &&
+      !isOwnerRecoveryRequest &&
+      !isOwnerRecoveryPage &&
+      !isChangePasswordCredentialFailure
+    ) {
       if (errorCode === "SESSION_REPLACED") {
         sessionStorage.setItem(
           "chalin03_login_notice",
