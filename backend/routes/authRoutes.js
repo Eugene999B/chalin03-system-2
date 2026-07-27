@@ -1173,20 +1173,6 @@ router.post("/change-password", requireAuth, async (req, res) => {
 
     const newPasswordHash = await bcrypt.hash(new_password, 10);
     const userColumns = await getTableColumns("users");
-    const updateFields = ["password_hash = ?"];
-    const updateParams = [newPasswordHash];
-
-    if (userColumns.has("must_change_password")) {
-      updateFields.push("must_change_password = FALSE");
-    }
-
-    if (userColumns.has("password_changed_at")) {
-      updateFields.push("password_changed_at = CURRENT_TIMESTAMP");
-    }
-
-    if (userColumns.has("token_version")) {
-      updateFields.push("token_version = token_version + 1");
-    }
 
     await changePasswordAtomically({
       userId: user.id,
