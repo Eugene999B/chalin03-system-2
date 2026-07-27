@@ -28,10 +28,10 @@ test("sale creation accepts and verifies an explicit existing customer", () => {
 test("New Sale can search, select and submit a saved customer", () => {
   const source = read("frontend", "src", "pages", "NewSalePage.jsx");
   assert.match(source, /\/sales\/customers/);
-  assert.match(source, /Find Existing Customer/);
+  assert.match(source, /Returning Customer Search/);
   assert.match(source, /selectSavedCustomer/);
   assert.match(source, /customer_id: selectedCustomerId/);
-  assert.match(source, /Use New Customer Instead/);
+  assert.match(source, /Clear & Enter New Customer/);
 });
 
 test("Equipment Hire and Equipment Sales continue using reusable customer IDs", () => {
@@ -43,4 +43,25 @@ test("Equipment Hire and Equipment Sales continue using reusable customer IDs", 
   assert.match(sales, /customer_id:/);
   assert.match(sales, /Choose customer/);
   assert.match(backend, /FROM hire_customers/);
+});
+
+
+test("returning customer search appears below reusable identity fields", () => {
+  const source = read("frontend", "src", "pages", "NewSalePage.jsx");
+  const css = read("frontend", "src", "index.css");
+  const nameIndex = source.indexOf("<label>Customer Name</label>");
+  const locationIndex = source.indexOf("<label>Customer Location</label>");
+  const searchIndex = source.indexOf("Returning Customer Search");
+  const paymentIndex = source.indexOf("<label>Payment Type</label>");
+
+  assert.ok(nameIndex >= 0, "Customer Name field must exist");
+  assert.ok(locationIndex > nameIndex, "Customer Location must follow Customer Name");
+  assert.ok(searchIndex > locationIndex, "Returning Customer Search must sit below customer identity fields");
+  assert.ok(paymentIndex > searchIndex, "Payment controls must follow the returning-customer lookup");
+  assert.equal(source.includes("<label>Find Existing Customer</label>"), false);
+  assert.match(source, /No saved customer found/);
+  assert.match(source, /role="listbox"/);
+  assert.match(source, /Clear & Enter New Customer/);
+  assert.match(css, /Returning customer search: desktop and mobile/);
+  assert.match(css, /@media \(max-width: 720px\)/);
 });
