@@ -59,6 +59,18 @@ async function removeDevelopmentServiceWorkerCaches() {
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     if (import.meta.env.PROD) {
+      const hadActiveController = Boolean(navigator.serviceWorker.controller);
+      let reloadingForUpdate = false;
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadActiveController || reloadingForUpdate) {
+          return;
+        }
+
+        reloadingForUpdate = true;
+        window.location.reload();
+      });
+
       navigator.serviceWorker
         .register("/sw.js", { updateViaCache: "none" })
         .then((registration) => {
