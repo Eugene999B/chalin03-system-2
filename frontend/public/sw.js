@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-documentation-refresh-v5";
+const CACHE_NAME = "chalin03-customer-lookup-refresh-v6";
 
 const CORE_ASSETS = [
   "/",
