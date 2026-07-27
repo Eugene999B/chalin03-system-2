@@ -380,21 +380,17 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
   }
 
   function useNewCustomer() {
-    setSelectedCustomerId("");
-    setSelectedCustomer(null);
-    setCustomerSearch("");
-    setCustomerMatches([]);
-    setCustomerName("");
-    setCustomerPhone("");
-    setCustomerLocation("");
-    setCustomerSearch("");
-    setCustomerMatches([]);
-    setSelectedCustomerId("");
-    setSelectedCustomer(null);
-    setMessage("Enter the new customer's details. The system will save them after the sale.");
-  }
+  setSelectedCustomerId("");
+  setSelectedCustomer(null);
+  setCustomerSearch("");
+  setCustomerMatches([]);
+  setCustomerName("");
+  setCustomerPhone("");
+  setCustomerLocation("");
+  setMessage("Enter the new customer's details. The system will save them after the sale.");
+}
 
-  function formatCustomerHistoryDate(value) {
+function formatCustomerHistoryDate(value) {
     if (!value) return "No previous purchase";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "Previous purchase recorded";
