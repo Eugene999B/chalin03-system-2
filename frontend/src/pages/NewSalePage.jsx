@@ -1571,72 +1571,6 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 </div>
               </div>
 
-              <label>Find Existing Customer</label>
-              <input
-                value={customerSearch}
-                onChange={(event) => {
-                  setCustomerSearch(event.target.value);
-                  setSelectedCustomer(null);
-                  setSelectedCustomerId("");
-                }}
-                placeholder="Search by name, phone or location"
-                autoComplete="off"
-              />
-
-              {loadingCustomers ? (
-                <small style={{ color: "#64748b", marginTop: "6px" }}>Searching saved customers…</small>
-              ) : null}
-
-              {customerMatches.length > 0 ? (
-                <div style={{ display: "grid", gap: "8px", margin: "8px 0 14px" }}>
-                  {customerMatches.map((customer) => (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      onClick={() => selectSavedCustomer(customer)}
-                      style={{
-                        textAlign: "left",
-                        padding: "10px 12px",
-                        borderRadius: "10px",
-                        border: "1px solid #d8dee8",
-                        background: "#f8fafc",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <strong style={{ display: "block", color: "#12372a" }}>{customer.name}</strong>
-                      <span style={{ display: "block", color: "#475569", fontSize: "12px", marginTop: "3px" }}>
-                        {customer.phone || "No phone"}{customer.location ? ` · ${customer.location}` : ""}
-                      </span>
-                      <span style={{ display: "block", color: "#64748b", fontSize: "11px", marginTop: "3px" }}>
-                        {Number(customer.purchase_count || 0)} previous purchase(s) · {formatCustomerHistoryDate(customer.last_purchase_at)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {selectedCustomer ? (
-                <div style={{
-                  margin: "8px 0 14px",
-                  padding: "12px",
-                  borderRadius: "12px",
-                  border: "1px solid #a7d7c5",
-                  background: "#effaf5",
-                }}>
-                  <strong style={{ color: "#0f5132" }}>Saved customer selected</strong>
-                  <p style={{ margin: "5px 0", color: "#334155", fontSize: "12px" }}>
-                    {Number(selectedCustomer.purchase_count || 0)} previous purchase(s) · Total recorded GHS {formatMoney(selectedCustomer.total_spent)} · Outstanding GHS {formatMoney(selectedCustomer.outstanding_balance)}
-                  </p>
-                  <button type="button" className="secondary-button" onClick={useNewCustomer}>
-                    Use New Customer Instead
-                  </button>
-                </div>
-              ) : (
-                <button type="button" className="secondary-button" onClick={useNewCustomer} style={{ marginBottom: "12px" }}>
-                  + New Customer
-                </button>
-              )}
-
               <label>Customer Name</label>
               <input
                 value={customerName}
@@ -1657,6 +1591,96 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 onChange={(event) => setCustomerLocation(event.target.value)}
                 placeholder="Enter customer location"
               />
+
+              <div className="returning-customer-card">
+                <div className="returning-customer-header">
+                  <div>
+                    <p className="returning-customer-eyebrow">Returning Customer Search</p>
+                    <strong>Search saved customers</strong>
+                    <small>
+                      Type at least 2 letters or digits. Select a result to fill the customer details above.
+                    </small>
+                  </div>
+
+                  {selectedCustomer ? (
+                    <button
+                      type="button"
+                      className="secondary-button returning-customer-clear"
+                      onClick={useNewCustomer}
+                    >
+                      Clear & Enter New Customer
+                    </button>
+                  ) : null}
+                </div>
+
+                <label htmlFor="existing-customer-search">Search Existing Customer</label>
+                <input
+                  id="existing-customer-search"
+                  value={customerSearch}
+                  onChange={(event) => {
+                    setCustomerSearch(event.target.value);
+                    setSelectedCustomer(null);
+                    setSelectedCustomerId("");
+                  }}
+                  placeholder="Search by name, phone or location"
+                  autoComplete="off"
+                />
+
+                <div className="returning-customer-status" role="status" aria-live="polite">
+                  {loadingCustomers ? "Searching saved customers…" : null}
+                  {!loadingCustomers &&
+                  customerSearch.trim().length > 0 &&
+                  customerSearch.trim().length < 2
+                    ? "Enter at least 2 letters or digits."
+                    : null}
+                  {!loadingCustomers &&
+                  !selectedCustomer &&
+                  customerSearch.trim().length >= 2 &&
+                  customerMatches.length === 0
+                    ? `No saved customer found for “${customerSearch.trim()}”. You can continue with the details above as a new customer.`
+                    : null}
+                </div>
+
+                {customerMatches.length > 0 ? (
+                  <div
+                    className="returning-customer-results"
+                    role="listbox"
+                    aria-label="Saved customer matches"
+                  >
+                    {customerMatches.map((customer) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className="returning-customer-result"
+                        onClick={() => selectSavedCustomer(customer)}
+                        role="option"
+                        aria-selected={String(selectedCustomerId) === String(customer.id)}
+                      >
+                        <strong>{customer.name}</strong>
+                        <span>
+                          {customer.phone || "No phone"}
+                          {customer.location ? ` · ${customer.location}` : ""}
+                        </span>
+                        <small>
+                          {Number(customer.purchase_count || 0)} previous purchase(s) · {formatCustomerHistoryDate(customer.last_purchase_at)}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {selectedCustomer ? (
+                  <div className="returning-customer-selected">
+                    <strong>Saved customer selected: {selectedCustomer.name}</strong>
+                    <span>
+                      Name, phone and location were copied into the customer fields above. Confirm or correct them before completing the sale.
+                    </span>
+                    <small>
+                      {Number(selectedCustomer.purchase_count || 0)} previous purchase(s) · Total recorded GHS {formatMoney(selectedCustomer.total_spent)} · Outstanding GHS {formatMoney(selectedCustomer.outstanding_balance)}
+                    </small>
+                  </div>
+                ) : null}
+              </div>
 
               <label>Payment Type</label>
               <div style={styles.paymentTypeGrid}>
