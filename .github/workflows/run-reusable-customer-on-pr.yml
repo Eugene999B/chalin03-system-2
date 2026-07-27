@@ -46,7 +46,13 @@ jobs:
           code_lines = []
           for line in lines[start:end]:
               code_lines.append(line[10:] if line.startswith('          ') else line)
-          Path('/tmp/apply-reusable-customer.py').write_text('\n'.join(code_lines) + '\n', encoding='utf-8')
+          code = '\n'.join(code_lines) + '\n'
+          old = '''if sale_source.count(old_destructure) != 1:\n    raise SystemExit("sale customer_id destructure anchor missing")\nsale_source = sale_source.replace(old_destructure, new_destructure, 1)'''
+          new = '''post_route_index = sale_source.index("// POST /api/sales")\npost_route_source = sale_source[post_route_index:]\nif post_route_source.count(old_destructure) < 1:\n    raise SystemExit("sale customer_id destructure anchor missing in POST /api/sales")\npost_route_source = post_route_source.replace(old_destructure, new_destructure, 1)\nsale_source = sale_source[:post_route_index] + post_route_source'''
+          if old not in code:
+              raise SystemExit('Prepared script correction anchor was not found.')
+          code = code.replace(old, new, 1)
+          Path('/tmp/apply-reusable-customer.py').write_text(code, encoding='utf-8')
           PY
 
           set +e
