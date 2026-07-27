@@ -32,14 +32,20 @@ jobs:
 
           path = Path("backend/tests/customerReuseContract.test.js")
           source = path.read_text(encoding="utf-8")
-          old = "assert.match(source, /Find Existing Customer/);"
-          new = "assert.match(source, /Returning Customer Search/);"
+          replacements = {
+              "assert.match(source, /Find Existing Customer/);":
+                  "assert.match(source, /Returning Customer Search/);",
+              "assert.match(source, /Use New Customer Instead/);":
+                  "assert.match(source, /Clear & Enter New Customer/);",
+          }
 
-          if old in source:
-              source = source.replace(old, new, 1)
-              path.write_text(source, encoding="utf-8")
-          elif new not in source:
-              raise SystemExit("Expected customer-search contract assertion was not found.")
+          for old, new in replacements.items():
+              if old in source:
+                  source = source.replace(old, new, 1)
+              elif new not in source:
+                  raise SystemExit(f"Expected customer-search contract assertion was not found: {old}")
+
+          path.write_text(source, encoding="utf-8")
           PY
           if grep -q '^changed=true$' /tmp/reusable-customer-ux-result; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
