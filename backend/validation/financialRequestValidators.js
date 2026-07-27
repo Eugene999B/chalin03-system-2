@@ -520,6 +520,7 @@ function validateSaleCreateRequest({ body }) {
   }
 
   const allowedKeys = new Set([
+    "customer_id",
     "customer_name",
     "customer_phone",
     "customer_location",
@@ -532,6 +533,19 @@ function validateSaleCreateRequest({ body }) {
     "items",
   ]);
   rejectUnknownKeys(body, allowedKeys, "body", errors);
+
+  const customerId =
+    body.customer_id === undefined || body.customer_id === null || body.customer_id === ""
+      ? null
+      : parsePositiveInteger(body.customer_id);
+  if (body.customer_id !== undefined && body.customer_id !== null && body.customer_id !== "" && customerId === null) {
+    addError(
+      errors,
+      "body.customer_id",
+      "Customer ID must be a positive whole number.",
+      "INVALID_CUSTOMER_ID"
+    );
+  }
 
   const customerName = optionalText(body.customer_name, {
     field: "body.customer_name",
@@ -710,6 +724,7 @@ function validateSaleCreateRequest({ body }) {
 
   return success({
     body: {
+      customer_id: customerId,
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_location: customerLocation,
