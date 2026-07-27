@@ -707,16 +707,142 @@ function sendAuditLockedResponse(res, lock, actionText) {
   });
 }
 
+// GET /api/sales/customers?search=name-or-phone
+// Returns reusable customer identity records for the selected Spare Parts store.
+// Financial amounts and purchased items remain transaction-specific and are never copied.
+router.get("/customers", requireAuth, async (req, res) => {
+  try {
+    const branchId = requireSelectedBranch(req, res);
+    if (!branchId) return;
+
+    const search = cleanText(req.query.search);
+    const params = [branchId];
+    let searchSql = "";
+
+    if (search) {
+      const term = `%${search}%`;
+      searchSql = " AND (c.name LIKE ? OR c.phone LIKE ? OR c.location LIKE ?)";
+      params.push(term, term, term);
+    }
+
+    const [customers] = await pool.query(
+      `SELECT
+         c.id,
+         c.branch_id,
+         c.name,
+         c.phone,
+         c.location,
+         c.created_at,
+         c.updated_at,
+         (
+           SELECT COUNT(*)
+           FROM sales s
+           WHERE s.customer_id = c.id
+             AND s.branch_id = c.branch_id
+             AND s.sale_status = 'completed'
+             AND COALESCE(s.is_voided, 0) = 0
+         ) AS purchase_count,
+         (
+           SELECT MAX(s.created_at)
+           FROM sales s
+           WHERE s.customer_id = c.id
+             AND s.branch_id = c.branch_id
+             AND s.sale_status = 'completed'
+             AND COALESCE(s.is_voided, 0) = 0
+         ) AS last_purchase_at,
+         COALESCE((
+           SELECT SUM(s.total)
+           FROM sales s
+           WHERE s.customer_id = c.id
+             AND s.branch_id = c.branch_id
+             AND s.sale_status = 'completed'
+             AND COALESCE(s.is_voided, 0) = 0
+         ), 0) AS total_spent,
+         COALESCE((
+           SELECT SUM(d.balance)
+           FROM debts d
+           WHERE d.customer_id = c.id
+             AND d.branch_id = c.branch_id
+             AND d.balance > 0
+         ), 0) AS outstanding_balance
+       FROM customers c
+       WHERE c.branch_id = ?${searchSql}
+       ORDER BY last_purchase_at IS NULL, last_purchase_at DESC, c.name ASC
+       LIMIT 25`,
+      params
+    );
+
+    return res.json({
+      status: "success",
+      count: customers.length,
+      customers,
+    });
+  } catch (error) {
+    console.error("Search Spare Parts customers error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Could not search saved customers.",
+    });
+  }
+});
+
 async function findOrCreateCustomer(
   connection,
   branchId,
+  customerId,
   customerName,
   customerPhone,
   customerLocation
 ) {
+  const cleanId = toPositiveInt(customerId);
   const cleanName = cleanText(customerName);
   const cleanPhone = cleanText(customerPhone);
   const cleanLocation = cleanText(customerLocation);
+
+  if (cleanId) {
+    const [selectedCustomers] = await connection.query(
+      `SELECT id, branch_id, name, phone, location
+       FROM customers
+       WHERE id = ? AND branch_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [cleanId, branchId]
+    );
+
+    if (selectedCustomers.length === 0) {
+      const error = new Error(
+        "The selected customer was not found in this store. Search again or use New Customer."
+      );
+      error.statusCode = 404;
+      error.code = "CUSTOMER_NOT_FOUND_IN_STORE";
+      throw error;
+    }
+
+    const selectedCustomer = selectedCustomers[0];
+    const finalName = cleanName || selectedCustomer.name;
+    const finalPhone = cleanPhone || selectedCustomer.phone;
+    const finalLocation = cleanLocation || selectedCustomer.location;
+
+    if (
+      finalName !== selectedCustomer.name ||
+      finalPhone !== selectedCustomer.phone ||
+      finalLocation !== selectedCustomer.location
+    ) {
+      await connection.query(
+        `UPDATE customers
+         SET name = ?, phone = ?, location = ?
+         WHERE id = ? AND branch_id = ?`,
+        [finalName, finalPhone, finalLocation, cleanId, branchId]
+      );
+    }
+
+    return {
+      ...selectedCustomer,
+      name: finalName,
+      phone: finalPhone,
+      location: finalLocation,
+    };
+  }
 
   if (!cleanName && !cleanPhone) {
     return null;
@@ -734,44 +860,30 @@ async function findOrCreateCustomer(
 
     if (existingCustomers.length > 0) {
       const existingCustomer = existingCustomers[0];
+      const finalName = cleanName || existingCustomer.name;
+      const finalLocation = cleanLocation || existingCustomer.location;
 
-      if (cleanName && existingCustomer.name !== cleanName) {
+      if (
+        finalName !== existingCustomer.name ||
+        finalLocation !== existingCustomer.location
+      ) {
         await connection.query(
           `UPDATE customers
-           SET name = ?, location = COALESCE(?, location)
-           WHERE id = ?
-           AND branch_id = ?`,
-          [cleanName, cleanLocation, existingCustomer.id, branchId]
+           SET name = ?, location = ?
+           WHERE id = ? AND branch_id = ?`,
+          [finalName, finalLocation, existingCustomer.id, branchId]
         );
-
-        return {
-          ...existingCustomer,
-          name: cleanName,
-          location: cleanLocation || existingCustomer.location,
-        };
       }
 
-      if (cleanLocation && existingCustomer.location !== cleanLocation) {
-        await connection.query(
-          `UPDATE customers
-           SET location = ?
-           WHERE id = ?
-           AND branch_id = ?`,
-          [cleanLocation, existingCustomer.id, branchId]
-        );
-
-        return {
-          ...existingCustomer,
-          location: cleanLocation,
-        };
-      }
-
-      return existingCustomer;
+      return {
+        ...existingCustomer,
+        name: finalName,
+        location: finalLocation,
+      };
     }
   }
 
   const finalName = cleanName || "Walk-in Customer";
-
   const [result] = await connection.query(
     `INSERT INTO customers (branch_id, name, phone, location)
      VALUES (?, ?, ?, ?)`,
@@ -799,6 +911,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
     }
 
     const {
+      customer_id,
       customer_name,
       customer_phone,
       customer_location,
@@ -1029,6 +1142,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
+      customer_id,
       cleanCustomerName,
       cleanCustomerPhone,
       cleanCustomerLocation
@@ -1273,8 +1387,9 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 
     console.error("Create sale error:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       status: "error",
+      code: error.code || undefined,
       message: error.message || "Something went wrong while recording the sale.",
     });
   } finally {

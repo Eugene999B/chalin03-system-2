@@ -37,6 +37,11 @@ export default function NewSalePage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerLocation, setCustomerLocation] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerMatches, setCustomerMatches] = useState([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [paymentType, setPaymentType] = useState("cash");
   const [discountAmount, setDiscountAmount] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
@@ -362,6 +367,83 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }
   }
 
+  function selectSavedCustomer(customer) {
+    setSelectedCustomerId(String(customer.id));
+    setSelectedCustomer(customer);
+    setCustomerName(customer.name || "");
+    setCustomerPhone(customer.phone || "");
+    setCustomerLocation(customer.location || "");
+    setCustomerSearch(customer.phone || customer.name || "");
+    setCustomerMatches([]);
+    setMessage(`Saved details loaded for ${customer.name}. Enter only this sale's items and payment.`);
+    setError("");
+  }
+
+  function useNewCustomer() {
+    setSelectedCustomerId("");
+    setSelectedCustomer(null);
+    setCustomerSearch("");
+    setCustomerMatches([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerLocation("");
+    setCustomerSearch("");
+    setCustomerMatches([]);
+    setSelectedCustomerId("");
+    setSelectedCustomer(null);
+    setMessage("Enter the new customer's details. The system will save them after the sale.");
+  }
+
+  function formatCustomerHistoryDate(value) {
+    if (!value) return "No previous purchase";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Previous purchase recorded";
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  useEffect(() => {
+    const query = customerSearch.trim();
+    if (query.length < 2 || selectedCustomer) {
+      setCustomerMatches([]);
+      setLoadingCustomers(false);
+      return undefined;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setLoadingCustomers(true);
+      try {
+        const response = await axiosClient.get("/sales/customers", {
+          params: { search: query },
+        });
+        if (active) setCustomerMatches(response.data.customers || []);
+      } catch (searchError) {
+        if (active) {
+          setCustomerMatches([]);
+          setError(getFriendlyApiError(searchError, "Could not search saved customers."));
+        }
+      } finally {
+        if (active) setLoadingCustomers(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [customerSearch, selectedCustomer, branchId]);
+
+  useEffect(() => {
+    setSelectedCustomerId("");
+    setSelectedCustomer(null);
+    setCustomerSearch("");
+    setCustomerMatches([]);
+  }, [branchId]);
+
   useEffect(() => {
     loadProducts();
     // Reload available products when the selected store changes.
@@ -628,6 +710,10 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setCustomerName("");
     setCustomerPhone("");
     setCustomerLocation("");
+    setCustomerSearch("");
+    setCustomerMatches([]);
+    setSelectedCustomerId("");
+    setSelectedCustomer(null);
     setPaymentType("cash");
     setDiscountAmount("");
     setAmountPaid("");
@@ -751,6 +837,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     try {
       const response = await axiosClient.post("/sales", {
+        customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
         customer_name: cleanCustomerName,
         customer_phone: cleanCustomerPhone,
         customer_location: cleanCustomerLocation,
@@ -1487,6 +1574,72 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                   </p>
                 </div>
               </div>
+
+              <label>Find Existing Customer</label>
+              <input
+                value={customerSearch}
+                onChange={(event) => {
+                  setCustomerSearch(event.target.value);
+                  setSelectedCustomer(null);
+                  setSelectedCustomerId("");
+                }}
+                placeholder="Search by name, phone or location"
+                autoComplete="off"
+              />
+
+              {loadingCustomers ? (
+                <small style={{ color: "#64748b", marginTop: "6px" }}>Searching saved customers…</small>
+              ) : null}
+
+              {customerMatches.length > 0 ? (
+                <div style={{ display: "grid", gap: "8px", margin: "8px 0 14px" }}>
+                  {customerMatches.map((customer) => (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      onClick={() => selectSavedCustomer(customer)}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #d8dee8",
+                        background: "#f8fafc",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <strong style={{ display: "block", color: "#12372a" }}>{customer.name}</strong>
+                      <span style={{ display: "block", color: "#475569", fontSize: "12px", marginTop: "3px" }}>
+                        {customer.phone || "No phone"}{customer.location ? ` · ${customer.location}` : ""}
+                      </span>
+                      <span style={{ display: "block", color: "#64748b", fontSize: "11px", marginTop: "3px" }}>
+                        {Number(customer.purchase_count || 0)} previous purchase(s) · {formatCustomerHistoryDate(customer.last_purchase_at)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {selectedCustomer ? (
+                <div style={{
+                  margin: "8px 0 14px",
+                  padding: "12px",
+                  borderRadius: "12px",
+                  border: "1px solid #a7d7c5",
+                  background: "#effaf5",
+                }}>
+                  <strong style={{ color: "#0f5132" }}>Saved customer selected</strong>
+                  <p style={{ margin: "5px 0", color: "#334155", fontSize: "12px" }}>
+                    {Number(selectedCustomer.purchase_count || 0)} previous purchase(s) · Total recorded GHS {formatMoney(selectedCustomer.total_spent)} · Outstanding GHS {formatMoney(selectedCustomer.outstanding_balance)}
+                  </p>
+                  <button type="button" className="secondary-button" onClick={useNewCustomer}>
+                    Use New Customer Instead
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="secondary-button" onClick={useNewCustomer} style={{ marginBottom: "12px" }}>
+                  + New Customer
+                </button>
+              )}
 
               <label>Customer Name</label>
               <input
