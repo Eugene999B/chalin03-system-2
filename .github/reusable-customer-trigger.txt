@@ -1,1 +1,0 @@
-One-time branch trigger for the verified reusable-customer implementation workflow.
