@@ -19,9 +19,11 @@ const {
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
   createSession,
-  revokeAllUserSessions,
   revokeSession,
 } = require("../services/accountSessionService");
+const {
+  changePasswordAtomically,
+} = require("../services/passwordChangeService");
 const {
   GENERIC_RECOVERY_REQUEST_MESSAGE,
   recordFailedLoginAttempt,
@@ -1150,8 +1152,9 @@ router.post("/change-password", requireAuth, async (req, res) => {
     );
 
     if (!currentPasswordMatches) {
-      return res.status(401).json({
+      return res.status(400).json({
         status: "error",
+        code: "CURRENT_PASSWORD_INCORRECT",
         message: "Current password is incorrect.",
       });
     }
@@ -1170,29 +1173,13 @@ router.post("/change-password", requireAuth, async (req, res) => {
 
     const newPasswordHash = await bcrypt.hash(new_password, 10);
     const userColumns = await getTableColumns("users");
-    const updateFields = ["password_hash = ?"];
-    const updateParams = [newPasswordHash];
 
-    if (userColumns.has("must_change_password")) {
-      updateFields.push("must_change_password = FALSE");
-    }
-
-    if (userColumns.has("password_changed_at")) {
-      updateFields.push("password_changed_at = CURRENT_TIMESTAMP");
-    }
-
-    if (userColumns.has("token_version")) {
-      updateFields.push("token_version = token_version + 1");
-    }
-
-    await pool.query(
-      `UPDATE users
-       SET ${updateFields.join(",\n           ")}
-       WHERE id = ?`,
-      [...updateParams, user.id]
-    );
-
-    await revokeAllUserSessions(user.id, "password_changed");
+    await changePasswordAtomically({
+      userId: user.id,
+      expectedPasswordHash: user.password_hash,
+      newPasswordHash,
+      userColumns,
+    });
 
     const workspaceCode =
       normalizeWorkspaceCode(req.user.workspace_code) ||
@@ -1207,14 +1194,21 @@ router.post("/change-password", requireAuth, async (req, res) => {
           (await getDefaultBranchForUser(user))
         : null;
 
-    await writeActivityLog(
-      selectedBranch?.id || null,
-      user.id,
-      "CHANGE_PASSWORD",
-      `${user.username} changed account password in ${
-        workspace?.name || "Chalin 03"
-      }`
-    );
+    try {
+      await writeActivityLog(
+        selectedBranch?.id || null,
+        user.id,
+        "CHANGE_PASSWORD",
+        `${user.username} changed account password in ${
+          workspace?.name || "Chalin 03"
+        }`
+      );
+    } catch (auditError) {
+      console.error(
+        "Password changed but the security audit entry could not be written:",
+        auditError.message
+      );
+    }
 
     await sendPasswordChangedSecuritySmsAlert({
       user,
@@ -1240,10 +1234,15 @@ router.post("/change-password", requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("Change password error:", error);
+    const statusCode = Number(error.statusCode || 500);
 
-    return res.status(500).json({
+    return res.status(statusCode).json({
       status: "error",
-      message: "Something went wrong while changing password.",
+      code: error.code || "PASSWORD_CHANGE_FAILED",
+      message:
+        statusCode < 500
+          ? error.message
+          : "Something went wrong while changing password.",
     });
   }
 });

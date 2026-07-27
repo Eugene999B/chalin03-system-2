@@ -218,6 +218,11 @@ axiosClient.interceptors.response.use(
       Boolean(requestToken) &&
       Boolean(activeToken) &&
       requestToken !== activeToken;
+    const isChangePasswordCredentialFailure =
+      requestPath === "/auth/change-password" &&
+      statusCode === 401 &&
+      (errorCode === "CURRENT_PASSWORD_INCORRECT" ||
+        errorMessage === "Current password is incorrect.");
     const isTemporaryProfileFailure =
       requestPath === "/auth/me" &&
       Boolean(activeToken) &&
@@ -251,7 +256,11 @@ axiosClient.interceptors.response.use(
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
 
-    if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage) {
+    if (statusCode === 401 &&
+      !isOwnerRecoveryRequest &&
+      !isOwnerRecoveryPage &&
+      !isChangePasswordCredentialFailure
+    ) {
       if (errorCode === "SESSION_REPLACED") {
         sessionStorage.setItem(
           "chalin03_login_notice",
