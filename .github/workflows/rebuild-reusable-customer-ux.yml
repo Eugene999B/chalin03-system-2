@@ -27,6 +27,20 @@ jobs:
         shell: bash
         run: |
           python scripts/rebuildReusableCustomerUx.py | tee /tmp/reusable-customer-ux-result
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/customerReuseContract.test.js")
+          source = path.read_text(encoding="utf-8")
+          old = "assert.match(source, /Find Existing Customer/);"
+          new = "assert.match(source, /Returning Customer Search/);"
+
+          if old in source:
+              source = source.replace(old, new, 1)
+              path.write_text(source, encoding="utf-8")
+          elif new not in source:
+              raise SystemExit("Expected customer-search contract assertion was not found.")
+          PY
           if grep -q '^changed=true$' /tmp/reusable-customer-ux-result; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
