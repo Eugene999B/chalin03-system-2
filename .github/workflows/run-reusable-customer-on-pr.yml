@@ -47,11 +47,19 @@ jobs:
           for line in lines[start:end]:
               code_lines.append(line[10:] if line.startswith('          ') else line)
           code = '\n'.join(code_lines) + '\n'
-          old = '''if sale_source.count(old_destructure) != 1:\n    raise SystemExit("sale customer_id destructure anchor missing")\nsale_source = sale_source.replace(old_destructure, new_destructure, 1)'''
-          new = '''post_route_index = sale_source.index("// POST /api/sales")\npost_route_source = sale_source[post_route_index:]\nif post_route_source.count(old_destructure) < 1:\n    raise SystemExit("sale customer_id destructure anchor missing in POST /api/sales")\npost_route_source = post_route_source.replace(old_destructure, new_destructure, 1)\nsale_source = sale_source[:post_route_index] + post_route_source'''
-          if old not in code:
-              raise SystemExit('Prepared script correction anchor was not found.')
-          code = code.replace(old, new, 1)
+
+          old_destructure_fix = '''if sale_source.count(old_destructure) != 1:\n    raise SystemExit("sale customer_id destructure anchor missing")\nsale_source = sale_source.replace(old_destructure, new_destructure, 1)'''
+          new_destructure_fix = '''post_route_index = sale_source.index("// POST /api/sales")\npost_route_source = sale_source[post_route_index:]\nif post_route_source.count(old_destructure) < 1:\n    raise SystemExit("sale customer_id destructure anchor missing in POST /api/sales")\npost_route_source = post_route_source.replace(old_destructure, new_destructure, 1)\nsale_source = sale_source[:post_route_index] + post_route_source'''
+          if old_destructure_fix not in code:
+              raise SystemExit('Prepared destructure correction anchor was not found.')
+          code = code.replace(old_destructure_fix, new_destructure_fix, 1)
+
+          old_call_fix = '''if sale_source.count(old_call) != 1:\n    raise SystemExit("sale customer resolver call anchor missing")\nsale_source = sale_source.replace(old_call, new_call, 1)'''
+          new_call_fix = '''post_route_index = sale_source.index("// POST /api/sales")\npost_route_source = sale_source[post_route_index:]\nif post_route_source.count(old_call) < 1:\n    raise SystemExit("sale customer resolver call anchor missing in POST /api/sales")\npost_route_source = post_route_source.replace(old_call, new_call, 1)\nsale_source = sale_source[:post_route_index] + post_route_source'''
+          if old_call_fix not in code:
+              raise SystemExit('Prepared resolver-call correction anchor was not found.')
+          code = code.replace(old_call_fix, new_call_fix, 1)
+
           Path('/tmp/apply-reusable-customer.py').write_text(code, encoding='utf-8')
           PY
 
