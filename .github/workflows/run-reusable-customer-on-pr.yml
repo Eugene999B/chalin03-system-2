@@ -6,6 +6,7 @@ on:
       - main
     types:
       - opened
+      - synchronize
 
 permissions:
   contents: write
@@ -21,8 +22,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Extract and apply the prepared implementation
+        id: apply
         shell: bash
         run: |
+          if [ -f backend/tests/customerReuseContract.test.js ]; then
+            echo "Implementation is already present; verification workflow will handle the new commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -f .github/reusable-customer-error.log ]; then
+            echo "A captured implementation error is awaiting correction."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           python - <<'PY'
           from pathlib import Path
 
@@ -35,34 +48,60 @@ jobs:
               code_lines.append(line[10:] if line.startswith('          ') else line)
           Path('/tmp/apply-reusable-customer.py').write_text('\n'.join(code_lines) + '\n', encoding='utf-8')
           PY
-          python /tmp/apply-reusable-customer.py
+
+          set +e
+          python /tmp/apply-reusable-customer.py > /tmp/reusable-customer-apply.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/reusable-customer-apply.log
+
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/reusable-customer-apply.log .github/reusable-customer-error.log
+            git config user.name "Chalin 03 Release Automation"
+            git config user.email "actions@users.noreply.github.com"
+            git add .github/reusable-customer-error.log
+            git commit -m "Capture reusable customer workflow error"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            exit "$status"
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Install backend dependencies
+        if: steps.apply.outputs.changed == 'true'
         working-directory: backend
         run: npm ci
 
       - name: Verify backend syntax and tests
+        if: steps.apply.outputs.changed == 'true'
         working-directory: backend
         run: |
           npm run syntax-check
           npm test
 
       - name: Install frontend dependencies
+        if: steps.apply.outputs.changed == 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Verify frontend tests and production build
+        if: steps.apply.outputs.changed == 'true'
         working-directory: frontend
         run: |
           npm test
           npm run build
 
       - name: Commit verified implementation
+        if: steps.apply.outputs.changed == 'true'
         shell: bash
         run: |
           git config user.name "Chalin 03 Release Automation"
           git config user.email "actions@users.noreply.github.com"
           git add backend/routes/saleRoutes.js backend/validation/financialRequestValidators.js backend/tests/customerReuseContract.test.js frontend/src/pages/NewSalePage.jsx
           git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No implementation changes remain to commit."
+            exit 0
+          fi
           git commit -m "Implement reusable customer lookup"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
