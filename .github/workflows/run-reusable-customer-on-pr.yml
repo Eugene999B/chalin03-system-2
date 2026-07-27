@@ -1,0 +1,68 @@
+name: Run reusable customer implementation
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Extract and apply the prepared implementation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/apply-reusable-customer-directory.yml').read_text(encoding='utf-8')
+          lines = workflow.splitlines()
+          start = next(index for index, line in enumerate(lines) if line.strip() == "python - <<'PY'") + 1
+          end = next(index for index in range(start, len(lines)) if lines[index].strip() == 'PY')
+          code_lines = []
+          for line in lines[start:end]:
+              code_lines.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/apply-reusable-customer.py').write_text('\n'.join(code_lines) + '\n', encoding='utf-8')
+          PY
+          python /tmp/apply-reusable-customer.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Verify backend syntax and tests
+        working-directory: backend
+        run: |
+          npm run syntax-check
+          npm test
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify frontend tests and production build
+        working-directory: frontend
+        run: |
+          npm test
+          npm run build
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          git config user.name "Chalin 03 Release Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/routes/saleRoutes.js backend/validation/financialRequestValidators.js backend/tests/customerReuseContract.test.js frontend/src/pages/NewSalePage.jsx
+          git diff --cached --check
+          git commit -m "Implement reusable customer lookup"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
