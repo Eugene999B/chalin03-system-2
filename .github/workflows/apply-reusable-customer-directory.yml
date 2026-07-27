@@ -1,0 +1,394 @@
+name: Apply reusable customer directory
+
+on:
+  push:
+    branches:
+      - agent/reusable-customer-directory
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reusable-customer-directory
+  cancel-in-progress: false
+
+jobs:
+  implement-and-verify:
+    if: github.event.head_commit.message != 'Implement reusable customer lookup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/reusable-customer-directory
+
+      - name: Apply reusable customer implementation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new, label):
+              source = path.read_text(encoding="utf-8")
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one anchor, found {count}")
+              path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+          validator = Path("backend/validation/financialRequestValidators.js")
+          replace_once(
+              validator,
+              '''  const allowedKeys = new Set([\n    "customer_name",\n    "customer_phone",\n    "customer_location",''',
+              '''  const allowedKeys = new Set([\n    "customer_id",\n    "customer_name",\n    "customer_phone",\n    "customer_location",''',
+              "sale validator customer_id allow-list",
+          )
+          replace_once(
+              validator,
+              '''  rejectUnknownKeys(body, allowedKeys, "body", errors);\n\n  const customerName = optionalText(body.customer_name, {''',
+              '''  rejectUnknownKeys(body, allowedKeys, "body", errors);\n\n  const customerId =\n    body.customer_id === undefined || body.customer_id === null || body.customer_id === ""\n      ? null\n      : parsePositiveInteger(body.customer_id);\n  if (body.customer_id !== undefined && body.customer_id !== null && body.customer_id !== "" && customerId === null) {\n    addError(\n      errors,\n      "body.customer_id",\n      "Customer ID must be a positive whole number.",\n      "INVALID_CUSTOMER_ID"\n    );\n  }\n\n  const customerName = optionalText(body.customer_name, {''',
+              "sale validator customer_id parsing",
+          )
+          replace_once(
+              validator,
+              '''    body: {\n      customer_name: customerName,''',
+              '''    body: {\n      customer_id: customerId,\n      customer_name: customerName,''',
+              "sale validator customer_id output",
+          )
+
+          sale_routes = Path("backend/routes/saleRoutes.js")
+          sale_source = sale_routes.read_text(encoding="utf-8")
+          customer_block = re.compile(
+              r'''async function findOrCreateCustomer\(\n.*?\n\}\n\n// POST /api/sales''',
+              re.S,
+          )
+          replacement = r'''// GET /api/sales/customers?search=name-or-phone
+          // Returns reusable customer identity records for the selected Spare Parts store.
+          // Financial amounts and purchased items remain transaction-specific and are never copied.
+          router.get("/customers", requireAuth, async (req, res) => {
+            try {
+              const branchId = requireSelectedBranch(req, res);
+              if (!branchId) return;
+
+              const search = cleanText(req.query.search);
+              const params = [branchId];
+              let searchSql = "";
+
+              if (search) {
+                const term = `%${search}%`;
+                searchSql = " AND (c.name LIKE ? OR c.phone LIKE ? OR c.location LIKE ?)";
+                params.push(term, term, term);
+              }
+
+              const [customers] = await pool.query(
+                `SELECT
+                   c.id,
+                   c.branch_id,
+                   c.name,
+                   c.phone,
+                   c.location,
+                   c.created_at,
+                   c.updated_at,
+                   (
+                     SELECT COUNT(*)
+                     FROM sales s
+                     WHERE s.customer_id = c.id
+                       AND s.branch_id = c.branch_id
+                       AND s.sale_status = 'completed'
+                       AND COALESCE(s.is_voided, 0) = 0
+                   ) AS purchase_count,
+                   (
+                     SELECT MAX(s.created_at)
+                     FROM sales s
+                     WHERE s.customer_id = c.id
+                       AND s.branch_id = c.branch_id
+                       AND s.sale_status = 'completed'
+                       AND COALESCE(s.is_voided, 0) = 0
+                   ) AS last_purchase_at,
+                   COALESCE((
+                     SELECT SUM(s.total)
+                     FROM sales s
+                     WHERE s.customer_id = c.id
+                       AND s.branch_id = c.branch_id
+                       AND s.sale_status = 'completed'
+                       AND COALESCE(s.is_voided, 0) = 0
+                   ), 0) AS total_spent,
+                   COALESCE((
+                     SELECT SUM(d.balance)
+                     FROM debts d
+                     WHERE d.customer_id = c.id
+                       AND d.branch_id = c.branch_id
+                       AND d.balance > 0
+                   ), 0) AS outstanding_balance
+                 FROM customers c
+                 WHERE c.branch_id = ?${searchSql}
+                 ORDER BY last_purchase_at IS NULL, last_purchase_at DESC, c.name ASC
+                 LIMIT 25`,
+                params
+              );
+
+              return res.json({
+                status: "success",
+                count: customers.length,
+                customers,
+              });
+            } catch (error) {
+              console.error("Search Spare Parts customers error:", error);
+              return res.status(500).json({
+                status: "error",
+                message: "Could not search saved customers.",
+              });
+            }
+          });
+
+          async function findOrCreateCustomer(
+            connection,
+            branchId,
+            customerId,
+            customerName,
+            customerPhone,
+            customerLocation
+          ) {
+            const cleanId = toPositiveInt(customerId);
+            const cleanName = cleanText(customerName);
+            const cleanPhone = cleanText(customerPhone);
+            const cleanLocation = cleanText(customerLocation);
+
+            if (cleanId) {
+              const [selectedCustomers] = await connection.query(
+                `SELECT id, branch_id, name, phone, location
+                 FROM customers
+                 WHERE id = ? AND branch_id = ?
+                 LIMIT 1
+                 FOR UPDATE`,
+                [cleanId, branchId]
+              );
+
+              if (selectedCustomers.length === 0) {
+                const error = new Error(
+                  "The selected customer was not found in this store. Search again or use New Customer."
+                );
+                error.statusCode = 404;
+                error.code = "CUSTOMER_NOT_FOUND_IN_STORE";
+                throw error;
+              }
+
+              const selectedCustomer = selectedCustomers[0];
+              const finalName = cleanName || selectedCustomer.name;
+              const finalPhone = cleanPhone || selectedCustomer.phone;
+              const finalLocation = cleanLocation || selectedCustomer.location;
+
+              if (
+                finalName !== selectedCustomer.name ||
+                finalPhone !== selectedCustomer.phone ||
+                finalLocation !== selectedCustomer.location
+              ) {
+                await connection.query(
+                  `UPDATE customers
+                   SET name = ?, phone = ?, location = ?
+                   WHERE id = ? AND branch_id = ?`,
+                  [finalName, finalPhone, finalLocation, cleanId, branchId]
+                );
+              }
+
+              return {
+                ...selectedCustomer,
+                name: finalName,
+                phone: finalPhone,
+                location: finalLocation,
+              };
+            }
+
+            if (!cleanName && !cleanPhone) {
+              return null;
+            }
+
+            if (cleanPhone) {
+              const [existingCustomers] = await connection.query(
+                `SELECT id, branch_id, name, phone, location
+                 FROM customers
+                 WHERE branch_id = ?
+                 AND phone = ?
+                 LIMIT 1`,
+                [branchId, cleanPhone]
+              );
+
+              if (existingCustomers.length > 0) {
+                const existingCustomer = existingCustomers[0];
+                const finalName = cleanName || existingCustomer.name;
+                const finalLocation = cleanLocation || existingCustomer.location;
+
+                if (
+                  finalName !== existingCustomer.name ||
+                  finalLocation !== existingCustomer.location
+                ) {
+                  await connection.query(
+                    `UPDATE customers
+                     SET name = ?, location = ?
+                     WHERE id = ? AND branch_id = ?`,
+                    [finalName, finalLocation, existingCustomer.id, branchId]
+                  );
+                }
+
+                return {
+                  ...existingCustomer,
+                  name: finalName,
+                  location: finalLocation,
+                };
+              }
+            }
+
+            const finalName = cleanName || "Walk-in Customer";
+            const [result] = await connection.query(
+              `INSERT INTO customers (branch_id, name, phone, location)
+               VALUES (?, ?, ?, ?)`,
+              [branchId, finalName, cleanPhone, cleanLocation]
+            );
+
+            return {
+              id: result.insertId,
+              branch_id: branchId,
+              name: finalName,
+              phone: cleanPhone,
+              location: cleanLocation,
+            };
+          }
+
+          // POST /api/sales'''
+          sale_source, count = customer_block.subn(replacement, sale_source, count=1)
+          if count != 1:
+              raise SystemExit(f"sale customer resolver block: expected one match, found {count}")
+
+          old_destructure = '''    const {\n      customer_name,\n      customer_phone,'''
+          new_destructure = '''    const {\n      customer_id,\n      customer_name,\n      customer_phone,'''
+          if sale_source.count(old_destructure) != 1:
+              raise SystemExit("sale customer_id destructure anchor missing")
+          sale_source = sale_source.replace(old_destructure, new_destructure, 1)
+
+          old_call = '''    const customer = await findOrCreateCustomer(\n      connection,\n      branchId,\n      cleanCustomerName,'''
+          new_call = '''    const customer = await findOrCreateCustomer(\n      connection,\n      branchId,\n      customer_id,\n      cleanCustomerName,'''
+          if sale_source.count(old_call) != 1:
+              raise SystemExit("sale customer resolver call anchor missing")
+          sale_source = sale_source.replace(old_call, new_call, 1)
+
+          old_catch = '''    return res.status(500).json({\n      status: "error",\n      message: error.message || "Something went wrong while recording the sale.",\n    });'''
+          new_catch = '''    return res.status(error.statusCode || 500).json({\n      status: "error",\n      code: error.code || undefined,\n      message: error.message || "Something went wrong while recording the sale.",\n    });'''
+          if sale_source.count(old_catch) < 1:
+              raise SystemExit("sale error response anchor missing")
+          sale_source = sale_source.replace(old_catch, new_catch, 1)
+          sale_routes.write_text(sale_source, encoding="utf-8")
+
+          page = Path("frontend/src/pages/NewSalePage.jsx")
+          page_source = page.read_text(encoding="utf-8")
+          state_anchor = '''  const [customerName, setCustomerName] = useState("");\n  const [customerPhone, setCustomerPhone] = useState("");\n  const [customerLocation, setCustomerLocation] = useState("");'''
+          state_replacement = '''  const [customerName, setCustomerName] = useState("");\n  const [customerPhone, setCustomerPhone] = useState("");\n  const [customerLocation, setCustomerLocation] = useState("");\n  const [customerSearch, setCustomerSearch] = useState("");\n  const [customerMatches, setCustomerMatches] = useState([]);\n  const [selectedCustomerId, setSelectedCustomerId] = useState("");\n  const [selectedCustomer, setSelectedCustomer] = useState(null);\n  const [loadingCustomers, setLoadingCustomers] = useState(false);'''
+          if page_source.count(state_anchor) != 1:
+              raise SystemExit("New Sale customer state anchor missing")
+          page_source = page_source.replace(state_anchor, state_replacement, 1)
+
+          load_anchor = '''  async function loadProducts() {\n    setError("");\n\n    try {\n      const response = await axiosClient.get("/products");\n      setProducts(response.data.products || []);\n    } catch (error) {\n      setError(getFriendlyApiError(error, "Failed to load products."));\n    }\n  }\n\n  useEffect(() => {\n    loadProducts();'''
+          load_replacement = '''  async function loadProducts() {\n    setError("");\n\n    try {\n      const response = await axiosClient.get("/products");\n      setProducts(response.data.products || []);\n    } catch (error) {\n      setError(getFriendlyApiError(error, "Failed to load products."));\n    }\n  }\n\n  function selectSavedCustomer(customer) {\n    setSelectedCustomerId(String(customer.id));\n    setSelectedCustomer(customer);\n    setCustomerName(customer.name || "");\n    setCustomerPhone(customer.phone || "");\n    setCustomerLocation(customer.location || "");\n    setCustomerSearch(customer.phone || customer.name || "");\n    setCustomerMatches([]);\n    setMessage(`Saved details loaded for ${customer.name}. Enter only this sale's items and payment.`);\n    setError("");\n  }\n\n  function useNewCustomer() {\n    setSelectedCustomerId("");\n    setSelectedCustomer(null);\n    setCustomerSearch("");\n    setCustomerMatches([]);\n    setCustomerName("");\n    setCustomerPhone("");\n    setCustomerLocation("");\n    setMessage("Enter the new customer's details. The system will save them after the sale.");\n  }\n\n  function formatCustomerHistoryDate(value) {\n    if (!value) return "No previous purchase";\n    const date = new Date(value);\n    if (Number.isNaN(date.getTime())) return "Previous purchase recorded";\n    return date.toLocaleDateString("en-GB", {\n      day: "2-digit",\n      month: "short",\n      year: "numeric",\n    });\n  }\n\n  useEffect(() => {\n    const query = customerSearch.trim();\n    if (query.length < 2 || selectedCustomer) {\n      setCustomerMatches([]);\n      setLoadingCustomers(false);\n      return undefined;\n    }\n\n    let active = true;\n    const timer = window.setTimeout(async () => {\n      setLoadingCustomers(true);\n      try {\n        const response = await axiosClient.get("/sales/customers", {\n          params: { search: query },\n        });\n        if (active) setCustomerMatches(response.data.customers || []);\n      } catch (searchError) {\n        if (active) {\n          setCustomerMatches([]);\n          setError(getFriendlyApiError(searchError, "Could not search saved customers."));\n        }\n      } finally {\n        if (active) setLoadingCustomers(false);\n      }\n    }, 250);\n\n    return () => {\n      active = false;\n      window.clearTimeout(timer);\n    };\n  }, [customerSearch, selectedCustomer, branchId]);\n\n  useEffect(() => {\n    setSelectedCustomerId("");\n    setSelectedCustomer(null);\n    setCustomerSearch("");\n    setCustomerMatches([]);\n  }, [branchId]);\n\n  useEffect(() => {\n    loadProducts();'''
+          if page_source.count(load_anchor) != 1:
+              raise SystemExit("New Sale loadProducts anchor missing")
+          page_source = page_source.replace(load_anchor, load_replacement, 1)
+
+          reset_anchor = '''    setCustomerName("");\n    setCustomerPhone("");\n    setCustomerLocation("");'''
+          reset_replacement = '''    setCustomerName("");\n    setCustomerPhone("");\n    setCustomerLocation("");\n    setCustomerSearch("");\n    setCustomerMatches([]);\n    setSelectedCustomerId("");\n    setSelectedCustomer(null);'''
+          reset_count = page_source.count(reset_anchor)
+          if reset_count < 2:
+              raise SystemExit(f"New Sale reset anchors: expected at least two, found {reset_count}")
+          page_source = page_source.replace(reset_anchor, reset_replacement)
+
+          payload_anchor = '''      const response = await axiosClient.post("/sales", {\n        customer_name: cleanCustomerName,'''
+          payload_replacement = '''      const response = await axiosClient.post("/sales", {\n        customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,\n        customer_name: cleanCustomerName,'''
+          if page_source.count(payload_anchor) != 1:
+              raise SystemExit("New Sale customer_id payload anchor missing")
+          page_source = page_source.replace(payload_anchor, payload_replacement, 1)
+
+          fields_anchor = '''              <label>Customer Name</label>\n              <input\n                value={customerName}\n                onChange={(event) => setCustomerName(event.target.value)}\n                placeholder="Enter customer name"\n              />\n\n              <label>Customer Phone</label>\n              <input\n                value={customerPhone}\n                onChange={(event) => setCustomerPhone(event.target.value)}\n                placeholder="Enter customer phone"\n              />\n\n              <label>Customer Location</label>\n              <input\n                value={customerLocation}\n                onChange={(event) => setCustomerLocation(event.target.value)}\n                placeholder="Enter customer location"\n              />'''
+          fields_replacement = '''              <label>Find Existing Customer</label>\n              <input\n                value={customerSearch}\n                onChange={(event) => {\n                  setCustomerSearch(event.target.value);\n                  setSelectedCustomer(null);\n                  setSelectedCustomerId("");\n                }}\n                placeholder="Search by name, phone or location"\n                autoComplete="off"\n              />\n\n              {loadingCustomers ? (\n                <small style={{ color: "#64748b", marginTop: "6px" }}>Searching saved customers…</small>\n              ) : null}\n\n              {customerMatches.length > 0 ? (\n                <div style={{ display: "grid", gap: "8px", margin: "8px 0 14px" }}>\n                  {customerMatches.map((customer) => (\n                    <button\n                      key={customer.id}\n                      type="button"\n                      onClick={() => selectSavedCustomer(customer)}\n                      style={{\n                        textAlign: "left",\n                        padding: "10px 12px",\n                        borderRadius: "10px",\n                        border: "1px solid #d8dee8",\n                        background: "#f8fafc",\n                        cursor: "pointer",\n                      }}\n                    >\n                      <strong style={{ display: "block", color: "#12372a" }}>{customer.name}</strong>\n                      <span style={{ display: "block", color: "#475569", fontSize: "12px", marginTop: "3px" }}>\n                        {customer.phone || "No phone"}{customer.location ? ` · ${customer.location}` : ""}\n                      </span>\n                      <span style={{ display: "block", color: "#64748b", fontSize: "11px", marginTop: "3px" }}>\n                        {Number(customer.purchase_count || 0)} previous purchase(s) · {formatCustomerHistoryDate(customer.last_purchase_at)}\n                      </span>\n                    </button>\n                  ))}\n                </div>\n              ) : null}\n\n              {selectedCustomer ? (\n                <div style={{\n                  margin: "8px 0 14px",\n                  padding: "12px",\n                  borderRadius: "12px",\n                  border: "1px solid #a7d7c5",\n                  background: "#effaf5",\n                }}>\n                  <strong style={{ color: "#0f5132" }}>Saved customer selected</strong>\n                  <p style={{ margin: "5px 0", color: "#334155", fontSize: "12px" }}>\n                    {Number(selectedCustomer.purchase_count || 0)} previous purchase(s) · Total recorded GHS {formatMoney(selectedCustomer.total_spent)} · Outstanding GHS {formatMoney(selectedCustomer.outstanding_balance)}\n                  </p>\n                  <button type="button" className="secondary-button" onClick={useNewCustomer}>\n                    Use New Customer Instead\n                  </button>\n                </div>\n              ) : (\n                <button type="button" className="secondary-button" onClick={useNewCustomer} style={{ marginBottom: "12px" }}>\n                  + New Customer\n                </button>\n              )}\n\n              <label>Customer Name</label>\n              <input\n                value={customerName}\n                onChange={(event) => setCustomerName(event.target.value)}\n                placeholder="Enter customer name"\n              />\n\n              <label>Customer Phone</label>\n              <input\n                value={customerPhone}\n                onChange={(event) => setCustomerPhone(event.target.value)}\n                placeholder="Enter customer phone"\n              />\n\n              <label>Customer Location</label>\n              <input\n                value={customerLocation}\n                onChange={(event) => setCustomerLocation(event.target.value)}\n                placeholder="Enter customer location"\n              />'''
+          if page_source.count(fields_anchor) != 1:
+              raise SystemExit("New Sale customer fields anchor missing")
+          page_source = page_source.replace(fields_anchor, fields_replacement, 1)
+          page.write_text(page_source, encoding="utf-8")
+
+          test_path = Path("backend/tests/customerReuseContract.test.js")
+          test_path.write_text(r'''const test = require("node:test");
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const root = path.join(__dirname, "..", "..");
+          const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
+
+          test("Spare Parts exposes branch-scoped reusable customer search", () => {
+            const source = read("backend", "routes", "saleRoutes.js");
+            assert.match(source, /router\.get\("\/customers"/);
+            assert.match(source, /WHERE c\.branch_id = \?\$\{searchSql\}/);
+            assert.match(source, /purchase_count/);
+            assert.match(source, /last_purchase_at/);
+            assert.match(source, /outstanding_balance/);
+          });
+
+          test("sale creation accepts and verifies an explicit existing customer", () => {
+            const route = read("backend", "routes", "saleRoutes.js");
+            const validator = read("backend", "validation", "financialRequestValidators.js");
+            assert.match(validator, /"customer_id"/);
+            assert.match(validator, /customer_id: customerId/);
+            assert.match(route, /WHERE id = \? AND branch_id = \?/);
+            assert.match(route, /CUSTOMER_NOT_FOUND_IN_STORE/);
+            assert.match(route, /customer_id,\n\s+cleanCustomerName/);
+          });
+
+          test("New Sale can search, select and submit a saved customer", () => {
+            const source = read("frontend", "src", "pages", "NewSalePage.jsx");
+            assert.match(source, /\/sales\/customers/);
+            assert.match(source, /Find Existing Customer/);
+            assert.match(source, /selectSavedCustomer/);
+            assert.match(source, /customer_id: selectedCustomerId/);
+            assert.match(source, /Use New Customer Instead/);
+          });
+
+          test("Equipment Hire and Equipment Sales continue using reusable customer IDs", () => {
+            const hire = read("frontend", "src", "pages", "EquipmentHireOperationsPage.jsx");
+            const sales = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+            const backend = read("backend", "routes", "equipmentSalesRoutes.js");
+            assert.match(hire, /customer_id:/);
+            assert.match(hire, /Choose hire customer/);
+            assert.match(sales, /customer_id:/);
+            assert.match(sales, /Choose customer/);
+            assert.match(backend, /FROM hire_customers/);
+          });
+          ''', encoding="utf-8")
+          PY
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Verify backend syntax and tests
+        working-directory: backend
+        run: |
+          npm run syntax-check
+          npm test
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify frontend tests and production build
+        working-directory: frontend
+        run: |
+          npm test
+          npm run build
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          git config user.name "Chalin 03 Release Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/routes/saleRoutes.js backend/validation/financialRequestValidators.js backend/tests/customerReuseContract.test.js frontend/src/pages/NewSalePage.jsx
+          git diff --cached --check
+          git commit -m "Implement reusable customer lookup"
+          git push origin HEAD:agent/reusable-customer-directory
