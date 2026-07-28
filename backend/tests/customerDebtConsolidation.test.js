@@ -79,8 +79,12 @@ test("Debts page defaults to customer consolidation with optional audit records"
   assert.match(css, /\.customer-debt-detail-modal/);
 });
 
-test("service worker cache is advanced for the premium debt dashboard release", () => {
+test("service worker cache is advanced for the mobile debt contrast release", () => {
   const serviceWorker = read("frontend/public/sw.js");
-  assert.match(serviceWorker, /chalin03-premium-debt-dashboard-v12/);
+  const indexHtml = read("frontend/index.html");
+
+  assert.match(serviceWorker, /chalin03-mobile-debt-contrast-v13/);
   assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
+  assert.match(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
+  assert.match(indexHtml, /debt-mobile-contrast-hotfix\.css/);
 });
