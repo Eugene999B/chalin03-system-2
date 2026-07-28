@@ -49,6 +49,7 @@ const productRoutes = require("./routes/productRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
 const customerDebtConsolidationRoutes = require("./routes/customerDebtConsolidationRoutes");
+const debtReminderRoutes = require("./routes/debtReminderRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const userRoutes = require("./routes/userRoutes");
 const userPermissionRoutes = require("./routes/userPermissionRoutes");
@@ -99,6 +100,7 @@ const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
+const { startDebtReminderScheduler } = require("./services/debtReminderService");
 const {
   startSmsDeliveryStatusSync,
 } = require("./services/smsDeliveryStatusService");
@@ -196,6 +198,7 @@ app.get("/api", (req, res) => {
       "/api/sales",
       "/api/debts",
       "/api/debt-customers",
+      "/api/debt-reminders",
       "/api/reports",
       "/api/users",
       "/api/user-permissions",
@@ -287,6 +290,7 @@ app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
 app.use("/api/debts", requireAuth, sparePartsBoundary, debtRoutes);
 app.use("/api/debt-customers", requireAuth, sparePartsBoundary, customerDebtConsolidationRoutes);
+app.use("/api/debt-reminders", requireAuth, sparePartsBoundary, debtReminderRoutes);
 app.use("/api/reports", requireAuth, sparePartsBoundary, reportRoutes);
 app.use(
   "/api/users",
@@ -425,6 +429,7 @@ async function startServer() {
       console.log(`Allowed frontend origins: ${allowedOrigins.join(", ")}`);
       startSmsDeliveryStatusSync();
       startInstallmentReminderScheduler();
+      startDebtReminderScheduler();
       startNotificationSyncScheduler();
     });
   } catch (error) {

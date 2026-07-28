@@ -49,7 +49,7 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_phone/);
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
-  assert.match(serviceWorker, /chalin03-debt-dashboard-source-v14/);
+  assert.match(serviceWorker, /chalin03-debt-reminder-automation-v15/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
   assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
 });
