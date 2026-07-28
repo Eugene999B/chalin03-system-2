@@ -3,6 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import CustomerDebtPrintPanel from "../components/CustomerDebtPrintPanel";
+import { formatBusinessDate, formatBusinessDateTime } from "../utils/businessDate";
 
 export default function DebtsPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
@@ -87,23 +88,11 @@ export default function DebtsPage() {
   }
 
   function formatDate(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return "-";
-
-    return date.toLocaleDateString();
+    return formatBusinessDate(value);
   }
 
   function formatDateTime(value) {
-    if (!value) return "-";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return "-";
-
-    return date.toLocaleString();
+    return formatBusinessDateTime(value);
   }
 
   function formatPaymentMethod(value) {
@@ -893,8 +882,8 @@ Thank you.`;
                         </p>
 
                         <small>
-                          Due: {formatDate(debt.due_date)} • Store:{" "}
-                          {getDebtStoreCode(debt)}
+                          Debt Date: {formatDate(debt.created_at || debt.sale_date)} • Due:{" "}
+                          {formatDate(debt.due_date)} • Store: {getDebtStoreCode(debt)}
                         </small>
                       </div>
 
@@ -912,6 +901,10 @@ Thank you.`;
                       <MiniStat label="Owed" value={formatMoney(debt.amount_owed)} />
                       <MiniStat label="Paid" value={formatMoney(debt.amount_paid)} />
                       <MiniStat label="Balance" value={formatMoney(debt.balance)} />
+                      <MiniStat
+                        label="Debt Date"
+                        value={formatDate(debt.created_at || debt.sale_date)}
+                      />
                       <MiniStat label="Due Date" value={formatDate(debt.due_date)} />
                     </div>
 
@@ -1134,8 +1127,8 @@ Thank you.`;
                 </p>
 
                 <p>
-                  <strong>Sale Date:</strong>{" "}
-                  {formatDateTime(selectedDebt.sale_date)}
+                  <strong>Debt Date:</strong>{" "}
+                  {formatDateTime(selectedDebt.created_at || selectedDebt.sale_date)}
                 </p>
               </div>
 
