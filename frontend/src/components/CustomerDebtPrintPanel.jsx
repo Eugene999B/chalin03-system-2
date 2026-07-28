@@ -49,9 +49,10 @@ export default function CustomerDebtPrintPanel({
     [preferredCustomer]
   );
 
+  const exactCustomerSelected = Boolean(preferredCustomerId);
   const [filters, setFilters] = useState({
-    from: defaultFromDate(),
-    to: dateInputValue(new Date()),
+    from: exactCustomerSelected ? "" : defaultFromDate(),
+    to: exactCustomerSelected ? "" : dateInputValue(new Date()),
     customer: preferredSearch,
     customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
     debt_status: "",
@@ -64,6 +65,8 @@ export default function CustomerDebtPrintPanel({
     if (!preferredSearch && !preferredCustomerId) return;
     setFilters((current) => ({
       ...current,
+      from: preferredCustomerId ? "" : current.from,
+      to: preferredCustomerId ? "" : current.to,
       customer: preferredSearch || current.customer,
       customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
     }));
@@ -134,7 +137,9 @@ export default function CustomerDebtPrintPanel({
           <p>Filtered Financial Export</p>
           <h2>{reportType === "debt" ? "Debt Report" : "Customer Statement"}</h2>
           <span>
-            Date only prints the whole date range. Adding a customer name or phone narrows that same result.
+            {exactCustomerSelected
+              ? "This customer opens with complete debt history. Choose dates only when you need a shorter period."
+              : "Date only prints the whole date range. Adding a customer name or phone narrows that same result."}
           </span>
         </div>
         <div className="customer-debt-print-badge">Screen Filters → Export</div>
@@ -175,6 +180,7 @@ export default function CustomerDebtPrintPanel({
               setFilters((current) => ({ ...current, customer: event.target.value }))
             }
             placeholder="Leave blank for all customers"
+            readOnly={exactCustomerSelected}
           />
         </label>
 
@@ -213,7 +219,9 @@ export default function CustomerDebtPrintPanel({
       </div>
 
       <small className="customer-debt-print-note">
-        The generated file contains the exact selected store, date range, customer search and debt status shown above.
+        {exactCustomerSelected
+          ? "The generated file contains this exact customer’s complete history unless you choose a date range or debt status."
+          : "The generated file contains the exact selected store, date range, customer search and debt status shown above."}
       </small>
     </section>
   );
