@@ -54,6 +54,10 @@ test("exact customer exports use customer id and retain print and downloads", ()
   assert.match(workspaceRoute, /appendCustomerIdFilter/);
   assert.match(printPanel, /preferredCustomerId = null/);
   assert.match(printPanel, /customer_id: filters\.customer_id/);
+  assert.match(printPanel, /exactCustomerSelected \? "" : defaultFromDate\(\)/);
+  assert.match(printPanel, /exactCustomerSelected \? "" : dateInputValue\(new Date\(\)\)/);
+  assert.match(printPanel, /complete debt history/);
+  assert.match(printPanel, /readOnly=\{exactCustomerSelected\}/);
   assert.match(printPanel, /createReport\("print"\)/);
   assert.match(printPanel, /createReport\("pdf"\)/);
   assert.match(printPanel, /createReport\("word"\)/);
