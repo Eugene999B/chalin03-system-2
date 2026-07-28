@@ -15,16 +15,21 @@ const router = express.Router();
 const SEND_CONFIRMATION = "SEND DEBT REMINDERS";
 
 function getBranchId(req) {
-  const candidate =
-    req.body?.branch_id ||
-    req.query?.branch_id ||
-    req.headers["x-branch-id"] ||
+  const branchId = Number(
     req.user?.branch_id ||
-    req.user?.default_branch_id ||
-    req.user?.selected_branch_id ||
-    1;
-  const branchId = Number(candidate);
-  return Number.isInteger(branchId) && branchId > 0 ? branchId : 1;
+      req.user?.default_branch_id ||
+      req.user?.selected_branch_id ||
+      0
+  );
+
+  if (!Number.isInteger(branchId) || branchId <= 0) {
+    const error = new Error("No store is selected for this authenticated session.");
+    error.statusCode = 400;
+    error.code = "BRANCH_CONTEXT_REQUIRED";
+    throw error;
+  }
+
+  return branchId;
 }
 
 function getUserId(req) {
