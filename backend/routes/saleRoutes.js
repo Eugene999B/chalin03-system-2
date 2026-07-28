@@ -614,7 +614,9 @@ async function getSettings(connection, branchId) {
 
 function calculateDueDate(daysToAdd) {
   const date = new Date();
-  date.setDate(date.getDate() + Number(daysToAdd || 7));
+  const parsedDays = Number(daysToAdd);
+  const days = Number.isFinite(parsedDays) ? parsedDays : 7;
+  date.setUTCDate(date.getUTCDate() + days);
 
   return date.toISOString().slice(0, 10);
 }
