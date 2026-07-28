@@ -179,6 +179,9 @@ test("protected reminder routes expose settings, run, history and customer actio
   assert.match(route, /requireRole\("admin", "manager"\)/);
   assert.match(route, /SEND DEBT REMINDERS/);
   assert.match(route, /automatic_whatsapp_available: false/);
+  assert.match(route, /req\.user\?\.branch_id/);
+  assert.doesNotMatch(route, /req\.headers\["x-branch-id"\]/);
+  assert.doesNotMatch(route, /req\.body\?\.branch_id/);
 });
 
 test("scheduler stores settings safely and deduplicates automatic SMS", () => {
