@@ -1,11 +1,12 @@
-const CACHE_NAME = "chalin03-customer-debt-consolidation-v9";
+const CACHE_NAME = "chalin03-debt-responsive-search-v10";
 
 const CORE_ASSETS = [
   "/",
   "/site.webmanifest",
   "/favicon-192x192.png",
   "/favicon-512x512.png",
-  "/chalin03-logo.png"
+  "/chalin03-logo.png",
+  "/debt-responsive-hotfix.css"
 ];
 
 function buildOfflineResponse() {

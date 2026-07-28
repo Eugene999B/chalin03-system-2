@@ -19,6 +19,60 @@ function statusLabel(value) {
   return "Unpaid";
 }
 
+function customerMatches(customer, query) {
+  const term = String(query || "").trim().toLowerCase();
+  if (!term) return true;
+
+  return [
+    customer?.customer_id,
+    customer?.customer_name,
+    customer?.customer_phone,
+    customer?.customer_location,
+  ]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .some((value) => String(value).toLowerCase().includes(term));
+}
+
+function debtMatches(debt, query) {
+  const term = String(query || "").trim().toLowerCase();
+  if (!term) return true;
+
+  const values = [
+    debt?.id,
+    debt?.receipt_number,
+    debt?.status,
+    debt?.payment_type,
+    debt?.staff_name,
+    debt?.amount_owed,
+    debt?.amount_paid,
+    debt?.balance,
+    ...(debt?.items || []).flatMap((item) => [
+      item?.product_name,
+      item?.quantity,
+      item?.unit_price,
+      item?.line_total,
+    ]),
+    ...(debt?.payments || []).flatMap((payment) => [
+      payment?.payment_method,
+      payment?.received_by_name,
+      payment?.notes,
+      payment?.amount,
+    ]),
+  ];
+
+  return values
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .some((value) => String(value).toLowerCase().includes(term));
+}
+
+function customerOptionLabel(customer) {
+  return `#${customer.customer_id} — ${customer.customer_name} — ${
+    customer.customer_phone || "No phone"
+  } — ${customer.customer_location || "No location"} — ${formatMoney(
+    customer.outstanding_balance
+  )}`;
+}
+
 export default function CustomerDebtConsolidationPanel({
   currentStoreCode = "STORE",
   currentStoreName = "Selected Store",
@@ -33,12 +87,17 @@ export default function CustomerDebtConsolidationPanel({
   const [loading, setLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [breakdownSearch, setBreakdownSearch] = useState("");
+
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [masterSearch, setMasterSearch] = useState("");
+  const [duplicateSearch, setDuplicateSearch] = useState("");
   const [masterCustomerId, setMasterCustomerId] = useState("");
   const [sourceCustomerIds, setSourceCustomerIds] = useState([]);
   const [mergeReason, setMergeReason] = useState("");
   const [mergeConfirmation, setMergeConfirmation] = useState("");
   const [merging, setMerging] = useState(false);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -69,24 +128,74 @@ export default function CustomerDebtConsolidationPanel({
     loadCustomers();
   }, []);
 
-  const filteredCustomers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return customers;
+  useEffect(() => {
+    if (!selectedCustomer) return undefined;
 
-    return customers.filter((customer) =>
-      [
-        customer.customer_name,
-        customer.customer_phone,
-        customer.customer_location,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term))
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") {
+        setSelectedCustomer(null);
+        setBreakdownSearch("");
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectedCustomer]);
+
+  const filteredCustomers = useMemo(
+    () => customers.filter((customer) => customerMatches(customer, search)),
+    [customers, search]
+  );
+
+  const masterCandidates = useMemo(() => {
+    const matches = customers.filter((customer) =>
+      customerMatches(customer, masterSearch)
     );
-  }, [customers, search]);
+    const selected = customers.find(
+      (customer) => String(customer.customer_id) === String(masterCustomerId)
+    );
+
+    if (
+      selected &&
+      !matches.some(
+        (customer) => String(customer.customer_id) === String(selected.customer_id)
+      )
+    ) {
+      return [selected, ...matches];
+    }
+
+    return matches;
+  }, [customers, masterCustomerId, masterSearch]);
+
+  const duplicateCandidates = useMemo(
+    () =>
+      customers.filter(
+        (customer) =>
+          String(customer.customer_id) !== String(masterCustomerId) &&
+          customerMatches(customer, duplicateSearch)
+      ),
+    [customers, duplicateSearch, masterCustomerId]
+  );
+
+  const visibleBreakdown = useMemo(
+    () =>
+      (selectedCustomer?.debts || []).filter((debt) =>
+        debtMatches(debt, breakdownSearch)
+      ),
+    [breakdownSearch, selectedCustomer]
+  );
 
   async function openCustomer(customerId) {
     setDetailLoading(true);
     setError("");
+    setBreakdownSearch("");
 
     try {
       const response = await axiosClient.get(`/debt-customers/${customerId}`);
@@ -101,6 +210,11 @@ export default function CustomerDebtConsolidationPanel({
     }
   }
 
+  function closeCustomerDetail() {
+    setSelectedCustomer(null);
+    setBreakdownSearch("");
+  }
+
   function toggleSource(customerId) {
     const cleanId = String(customerId);
     setSourceCustomerIds((current) =>
@@ -111,6 +225,8 @@ export default function CustomerDebtConsolidationPanel({
   }
 
   function resetMergeForm() {
+    setMasterSearch("");
+    setDuplicateSearch("");
     setMasterCustomerId("");
     setSourceCustomerIds([]);
     setMergeReason("");
@@ -149,8 +265,9 @@ export default function CustomerDebtConsolidationPanel({
       setMessage(response.data.message || "Customer records merged successfully.");
       resetMergeForm();
       setMergeOpen(false);
-      setSelectedCustomer(null);
+      closeCustomerDetail();
       await loadCustomers();
+
       if (typeof onRefresh === "function") {
         await onRefresh();
       }
@@ -168,7 +285,7 @@ export default function CustomerDebtConsolidationPanel({
     if (typeof onRecordPayment === "function") {
       onRecordPayment(debt);
     }
-    setSelectedCustomer(null);
+    closeCustomerDetail();
   }
 
   return (
@@ -235,7 +352,10 @@ export default function CustomerDebtConsolidationPanel({
 
       {Number(unlinked?.debt_count || 0) > 0 ? (
         <div className="customer-debt-consolidation-warning">
-          <strong>{unlinked.debt_count} older debt record(s) are not linked to a saved customer.</strong>
+          <strong>
+            {unlinked.debt_count} older debt record(s) are not linked to a saved
+            customer.
+          </strong>
           <span>
             Outstanding unlinked amount: {formatMoney(unlinked.outstanding_balance)}.
             These records remain visible in Individual Debt Records and are not
@@ -250,10 +370,31 @@ export default function CustomerDebtConsolidationPanel({
             <p>Controlled Customer Merge</p>
             <h3>Choose the correct master customer</h3>
             <span>
-              Duplicate customer identities will be removed after their sales,
-              debts and installment links are reassigned. Receipts, debt records,
-              items and payments are preserved.
+              Search by name, phone, location or customer ID. The ID and contact
+              details help distinguish customers with identical names.
             </span>
+          </div>
+
+          <div className="customer-debt-merge-search-grid">
+            <label>
+              <span>Search Master Customer</span>
+              <input
+                type="search"
+                value={masterSearch}
+                onChange={(event) => setMasterSearch(event.target.value)}
+                placeholder="Name, phone, location or customer ID"
+              />
+            </label>
+
+            <label>
+              <span>Search Duplicate Customer</span>
+              <input
+                type="search"
+                value={duplicateSearch}
+                onChange={(event) => setDuplicateSearch(event.target.value)}
+                placeholder="Name, phone, location or customer ID"
+              />
+            </label>
           </div>
 
           <label>
@@ -268,43 +409,52 @@ export default function CustomerDebtConsolidationPanel({
               }}
             >
               <option value="">Choose master customer</option>
-              {customers.map((customer) => (
+              {masterCandidates.map((customer) => (
                 <option key={customer.customer_id} value={customer.customer_id}>
-                  {customer.customer_name} — {customer.customer_phone || "No phone"} —{" "}
-                  {formatMoney(customer.outstanding_balance)}
+                  {customerOptionLabel(customer)}
                 </option>
               ))}
             </select>
+            <small className="customer-debt-field-note">
+              Showing {masterCandidates.length} matching customer record(s).
+            </small>
           </label>
 
           <div className="customer-debt-merge-list">
-            <strong>Duplicate Customer Record(s) to Merge</strong>
-            <span>Select only records that belong to the same real customer.</span>
+            <div className="customer-debt-merge-list-heading">
+              <div>
+                <strong>Duplicate Customer Record(s) to Merge</strong>
+                <span>Select only records belonging to the same real customer.</span>
+              </div>
+              <strong>{sourceCustomerIds.length} selected</strong>
+            </div>
 
-            {customers
-              .filter(
-                (customer) =>
-                  String(customer.customer_id) !== String(masterCustomerId)
-              )
-              .map((customer) => (
-                <label key={customer.customer_id}>
-                  <input
-                    type="checkbox"
-                    checked={sourceCustomerIds.includes(
-                      String(customer.customer_id)
-                    )}
-                    onChange={() => toggleSource(customer.customer_id)}
-                  />
-                  <span>
-                    <strong>{customer.customer_name}</strong>
-                    <small>
-                      {customer.customer_phone || "No phone"} ·{" "}
-                      {customer.debt_count} debt record(s) ·{" "}
-                      {formatMoney(customer.outstanding_balance)}
-                    </small>
-                  </span>
-                </label>
-              ))}
+            {duplicateCandidates.length === 0 ? (
+              <div className="customer-debt-consolidation-empty">
+                No duplicate customer matches this search.
+              </div>
+            ) : null}
+
+            {duplicateCandidates.map((customer) => (
+              <label key={customer.customer_id}>
+                <input
+                  type="checkbox"
+                  checked={sourceCustomerIds.includes(String(customer.customer_id))}
+                  onChange={() => toggleSource(customer.customer_id)}
+                />
+                <span>
+                  <strong>
+                    #{customer.customer_id} — {customer.customer_name}
+                  </strong>
+                  <small>
+                    {customer.customer_phone || "No phone"} · {customer.customer_location || "No location"}
+                  </small>
+                  <small>
+                    {customer.debt_count} debt record(s) · {formatMoney(customer.outstanding_balance)} outstanding
+                  </small>
+                </span>
+              </label>
+            ))}
           </div>
 
           <label>
@@ -333,14 +483,29 @@ export default function CustomerDebtConsolidationPanel({
       ) : null}
 
       <div className="customer-debt-consolidation-search">
-        <label htmlFor="customer-debt-search">Find Customer Debt</label>
-        <input
-          id="customer-debt-search"
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by customer name, phone or location"
-        />
+        <div>
+          <label htmlFor="customer-debt-search">Find Customer Debt</label>
+          <span>
+            Search by name, phone, location or the customer ID shown on each card.
+          </span>
+        </div>
+        <div className="customer-debt-search-row">
+          <input
+            id="customer-debt-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name, phone, location or customer ID"
+          />
+          {search ? (
+            <button type="button" className="secondary-button" onClick={() => setSearch("")}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+        <small className="customer-debt-field-note">
+          Showing {filteredCustomers.length} of {customers.length} customer account(s).
+        </small>
       </div>
 
       {detailLoading ? (
@@ -363,10 +528,12 @@ export default function CustomerDebtConsolidationPanel({
           >
             <div className="customer-debt-consolidation-card-main">
               <div>
-                <h3>{customer.customer_name}</h3>
+                <div className="customer-debt-identity-line">
+                  <span>Customer #{customer.customer_id}</span>
+                  <h3>{customer.customer_name}</h3>
+                </div>
                 <p>
-                  {customer.customer_phone || "No phone"} ·{" "}
-                  {customer.customer_location || "No location"}
+                  {customer.customer_phone || "No phone"} · {customer.customer_location || "No location"}
                 </p>
                 <small>
                   First debt: {formatBusinessDate(customer.first_debt_date)} · Last
@@ -414,181 +581,232 @@ export default function CustomerDebtConsolidationPanel({
       </div>
 
       {selectedCustomer ? (
-        <div className="modal-backdrop">
-          <div className="customer-debt-detail-modal">
+        <div
+          className="modal-backdrop customer-debt-detail-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeCustomerDetail();
+          }}
+        >
+          <div
+            className="customer-debt-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-debt-detail-title"
+          >
             <div className="customer-debt-detail-header">
               <div>
                 <p>Customer Debt Account</p>
-                <h2>{selectedCustomer.customer?.name}</h2>
+                <h2 id="customer-debt-detail-title">
+                  {selectedCustomer.customer?.name}
+                </h2>
                 <span>
-                  {selectedCustomer.customer?.phone || "No phone"} ·{" "}
-                  {selectedCustomer.customer?.location || "No location"} ·{" "}
-                  {currentStoreCode} — {currentStoreName}
+                  Customer #{selectedCustomer.customer?.id} · {selectedCustomer.customer?.phone || "No phone"} · {selectedCustomer.customer?.location || "No location"} · {currentStoreCode} — {currentStoreName}
                 </span>
               </div>
 
               <button
                 type="button"
-                className="secondary-button"
-                onClick={() => setSelectedCustomer(null)}
+                className="secondary-button customer-debt-close-button"
+                onClick={closeCustomerDetail}
               >
                 Close
               </button>
             </div>
 
-            <div className="customer-debt-detail-summary">
-              <div>
-                <span>Debt Records</span>
-                <strong>{selectedCustomer.summary?.debt_count || 0}</strong>
+            <div className="customer-debt-detail-content">
+              <div className="customer-debt-detail-summary">
+                <div>
+                  <span>Debt Records</span>
+                  <strong>{selectedCustomer.summary?.debt_count || 0}</strong>
+                </div>
+                <div>
+                  <span>Total Owed</span>
+                  <strong>{formatMoney(selectedCustomer.summary?.total_owed)}</strong>
+                </div>
+                <div>
+                  <span>Total Paid</span>
+                  <strong>{formatMoney(selectedCustomer.summary?.total_paid)}</strong>
+                </div>
+                <div>
+                  <span>Outstanding</span>
+                  <strong>
+                    {formatMoney(selectedCustomer.summary?.outstanding_balance)}
+                  </strong>
+                </div>
               </div>
-              <div>
-                <span>Total Owed</span>
-                <strong>{formatMoney(selectedCustomer.summary?.total_owed)}</strong>
-              </div>
-              <div>
-                <span>Total Paid</span>
-                <strong>{formatMoney(selectedCustomer.summary?.total_paid)}</strong>
-              </div>
-              <div>
-                <span>Outstanding</span>
-                <strong>
-                  {formatMoney(selectedCustomer.summary?.outstanding_balance)}
-                </strong>
-              </div>
-            </div>
 
-            <CustomerDebtPrintPanel
-              currentStoreCode={currentStoreCode}
-              preferredCustomer={{
-                customer_id: selectedCustomer.customer?.id,
-                customer_name: selectedCustomer.customer?.name,
-                customer_phone: selectedCustomer.customer?.phone,
-                name: selectedCustomer.customer?.name,
-                phone: selectedCustomer.customer?.phone,
-              }}
-              preferredCustomerId={selectedCustomer.customer?.id}
-              reportType="debt"
-            />
+              <CustomerDebtPrintPanel
+                currentStoreCode={currentStoreCode}
+                preferredCustomer={{
+                  customer_id: selectedCustomer.customer?.id,
+                  customer_name: selectedCustomer.customer?.name,
+                  customer_phone: selectedCustomer.customer?.phone,
+                  name: selectedCustomer.customer?.name,
+                  phone: selectedCustomer.customer?.phone,
+                }}
+                preferredCustomerId={selectedCustomer.customer?.id}
+                reportType="debt"
+              />
 
-            <div className="customer-debt-breakdown-list">
-              {(selectedCustomer.debts || []).map((debt) => (
-                <article key={debt.id} className="customer-debt-breakdown-card">
-                  <div className="customer-debt-breakdown-heading">
-                    <div>
-                      <p>Receipt {debt.receipt_number || "-"}</p>
-                      <h3>
-                        {formatMoney(debt.balance)} outstanding
-                      </h3>
-                      <span>
-                        Debt Date: {formatBusinessDate(debt.created_at)} · Due Date:{" "}
-                        {formatBusinessDate(debt.due_date)}
+              <div className="customer-debt-breakdown-search">
+                <div>
+                  <label htmlFor="customer-debt-breakdown-search">
+                    Search This Customer's Debt Records
+                  </label>
+                  <span>
+                    Find a receipt, item, payment method, staff member or amount.
+                  </span>
+                </div>
+                <div className="customer-debt-search-row">
+                  <input
+                    id="customer-debt-breakdown-search"
+                    type="search"
+                    value={breakdownSearch}
+                    onChange={(event) => setBreakdownSearch(event.target.value)}
+                    placeholder="Receipt, item, staff, payment method or amount"
+                  />
+                  {breakdownSearch ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setBreakdownSearch("")}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <small className="customer-debt-field-note">
+                  Showing {visibleBreakdown.length} of {selectedCustomer.debts?.length || 0} debt record(s).
+                </small>
+              </div>
+
+              <div className="customer-debt-breakdown-list">
+                {visibleBreakdown.length === 0 ? (
+                  <div className="customer-debt-consolidation-empty">
+                    No debt record matches this search.
+                  </div>
+                ) : null}
+
+                {visibleBreakdown.map((debt) => (
+                  <article key={debt.id} className="customer-debt-breakdown-card">
+                    <div className="customer-debt-breakdown-heading">
+                      <div>
+                        <p>Receipt {debt.receipt_number || "-"}</p>
+                        <h3>{formatMoney(debt.balance)} outstanding</h3>
+                        <span>
+                          Debt #{debt.id} · Debt Date: {formatBusinessDate(debt.created_at)} · Due Date: {formatBusinessDate(debt.due_date)}
+                        </span>
+                      </div>
+
+                      <span
+                        className={`customer-debt-status ${String(
+                          debt.status || ""
+                        ).toLowerCase()}`}
+                      >
+                        {statusLabel(debt.status)}
                       </span>
                     </div>
 
-                    <span className={`customer-debt-status ${String(debt.status || "").toLowerCase()}`}>
-                      {statusLabel(debt.status)}
-                    </span>
-                  </div>
+                    <div className="customer-debt-breakdown-metrics">
+                      <div>
+                        <span>Sale Total</span>
+                        <strong>{formatMoney(debt.sale_total || debt.amount_owed)}</strong>
+                      </div>
+                      <div>
+                        <span>Debt Owed</span>
+                        <strong>{formatMoney(debt.amount_owed)}</strong>
+                      </div>
+                      <div>
+                        <span>Paid</span>
+                        <strong>{formatMoney(debt.amount_paid)}</strong>
+                      </div>
+                      <div>
+                        <span>Payment Type</span>
+                        <strong>{String(debt.payment_type || "-").toUpperCase()}</strong>
+                      </div>
+                      <div>
+                        <span>Sold By</span>
+                        <strong>{debt.staff_name || "-"}</strong>
+                      </div>
+                      <div>
+                        <span>Sale Time</span>
+                        <strong>{formatBusinessDateTime(debt.sale_date)}</strong>
+                      </div>
+                    </div>
 
-                  <div className="customer-debt-breakdown-metrics">
-                    <div>
-                      <span>Sale Total</span>
-                      <strong>{formatMoney(debt.sale_total || debt.amount_owed)}</strong>
-                    </div>
-                    <div>
-                      <span>Debt Owed</span>
-                      <strong>{formatMoney(debt.amount_owed)}</strong>
-                    </div>
-                    <div>
-                      <span>Paid</span>
-                      <strong>{formatMoney(debt.amount_paid)}</strong>
-                    </div>
-                    <div>
-                      <span>Payment Type</span>
-                      <strong>{String(debt.payment_type || "-").toUpperCase()}</strong>
-                    </div>
-                    <div>
-                      <span>Sold By</span>
-                      <strong>{debt.staff_name || "-"}</strong>
-                    </div>
-                    <div>
-                      <span>Sale Time</span>
-                      <strong>{formatBusinessDateTime(debt.sale_date)}</strong>
-                    </div>
-                  </div>
-
-                  <h4>Items Bought</h4>
-                  {(debt.items || []).length === 0 ? (
-                    <p className="customer-debt-breakdown-empty">
-                      No item breakdown is available for this older sale.
-                    </p>
-                  ) : (
-                    <div className="customer-debt-table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Item</th>
-                            <th>Qty</th>
-                            <th>Unit Price</th>
-                            <th>Line Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {debt.items.map((item) => (
-                            <tr key={item.id}>
-                              <td>{item.product_name}</td>
-                              <td>{item.quantity}</td>
-                              <td>{formatMoney(item.unit_price)}</td>
-                              <td>{formatMoney(item.line_total)}</td>
+                    <h4>Items Bought</h4>
+                    {(debt.items || []).length === 0 ? (
+                      <p className="customer-debt-breakdown-empty">
+                        No item breakdown is available for this older sale.
+                      </p>
+                    ) : (
+                      <div className="customer-debt-table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Item</th>
+                              <th>Qty</th>
+                              <th>Unit Price</th>
+                              <th>Line Total</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          </thead>
+                          <tbody>
+                            {debt.items.map((item) => (
+                              <tr key={item.id}>
+                                <td>{item.product_name}</td>
+                                <td>{item.quantity}</td>
+                                <td>{formatMoney(item.unit_price)}</td>
+                                <td>{formatMoney(item.line_total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
-                  <h4>Payments on This Debt</h4>
-                  {(debt.payments || []).length === 0 ? (
-                    <p className="customer-debt-breakdown-empty">
-                      No separate debt payment has been recorded yet.
-                    </p>
-                  ) : (
-                    <div className="customer-debt-table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Date</th>
-                            <th>Amount</th>
-                            <th>Method</th>
-                            <th>Received By</th>
-                            <th>Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {debt.payments.map((payment) => (
-                            <tr key={payment.id}>
-                              <td>{formatBusinessDateTime(payment.paid_at)}</td>
-                              <td>{formatMoney(payment.amount)}</td>
-                              <td>{String(payment.payment_method || "-").toUpperCase()}</td>
-                              <td>{payment.received_by_name || "-"}</td>
-                              <td>{payment.notes || "-"}</td>
+                    <h4>Payments on This Debt</h4>
+                    {(debt.payments || []).length === 0 ? (
+                      <p className="customer-debt-breakdown-empty">
+                        No separate debt payment has been recorded yet.
+                      </p>
+                    ) : (
+                      <div className="customer-debt-table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Amount</th>
+                              <th>Method</th>
+                              <th>Received By</th>
+                              <th>Notes</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          </thead>
+                          <tbody>
+                            {debt.payments.map((payment) => (
+                              <tr key={payment.id}>
+                                <td>{formatBusinessDateTime(payment.paid_at)}</td>
+                                <td>{formatMoney(payment.amount)}</td>
+                                <td>
+                                  {String(payment.payment_method || "-").toUpperCase()}
+                                </td>
+                                <td>{payment.received_by_name || "-"}</td>
+                                <td>{payment.notes || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
-                  {Number(debt.balance || 0) > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => handleRecordPayment(debt)}
-                    >
-                      Record Payment for This Receipt
-                    </button>
-                  ) : null}
-                </article>
-              ))}
+                    {Number(debt.balance || 0) > 0 ? (
+                      <button type="button" onClick={() => handleRecordPayment(debt)}>
+                        Record Payment for This Receipt
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
             </div>
           </div>
         </div>

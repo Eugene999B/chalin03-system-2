@@ -1,0 +1,306 @@
+.customer-debt-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.customer-debt-search-row input,
+.customer-debt-merge-search-grid input,
+.customer-debt-breakdown-search input {
+  min-width: 0;
+  margin: 0;
+}
+
+.customer-debt-search-row button {
+  min-width: 82px;
+}
+
+.customer-debt-field-note {
+  display: block;
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.customer-debt-consolidation-search,
+.customer-debt-breakdown-search {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbe3ec;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.customer-debt-consolidation-search > div:first-child,
+.customer-debt-breakdown-search > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.customer-debt-consolidation-search > div:first-child > span,
+.customer-debt-breakdown-search > div:first-child > span {
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.customer-debt-merge-search-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.customer-debt-merge-list-heading {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -12px -12px 2px;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.customer-debt-merge-list-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.customer-debt-merge-list-heading span {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.customer-debt-merge-list label {
+  min-width: 0;
+}
+
+.customer-debt-merge-list label > span,
+.customer-debt-merge-list label > span strong,
+.customer-debt-merge-list label > span small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.customer-debt-identity-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-debt-identity-line > span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e8eef6;
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.modal-backdrop.customer-debt-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(12px, 2vw, 28px);
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.modal-backdrop.customer-debt-detail-backdrop > .customer-debt-detail-modal {
+  width: min(1180px, 100%);
+  max-width: 100%;
+  max-height: min(94dvh, calc(100vh - 24px));
+  margin: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 20px;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.38);
+}
+
+.customer-debt-detail-modal > .customer-debt-detail-header {
+  position: sticky;
+  top: -20px;
+  z-index: 20;
+  margin: -20px -20px 16px;
+  padding: 20px;
+  border-bottom: 1px solid #dbe3ec;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(8px);
+}
+
+.customer-debt-detail-header > div,
+.customer-debt-detail-content,
+.customer-debt-breakdown-card {
+  min-width: 0;
+}
+
+.customer-debt-close-button {
+  flex: 0 0 auto;
+  min-width: 86px;
+}
+
+.customer-debt-detail-modal .customer-debt-print-panel {
+  min-width: 0;
+  margin: 18px 0;
+}
+
+.customer-debt-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1100px) {
+  .customer-debt-detail-modal .customer-debt-print-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-debt-detail-modal
+    .customer-debt-print-grid-filtered
+    .customer-debt-print-customer {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .customer-debt-merge-search-grid,
+  .customer-debt-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-debt-search-row button {
+    width: 100%;
+  }
+
+  .customer-debt-merge-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modal-backdrop.customer-debt-detail-backdrop {
+    align-items: stretch;
+    padding: 0;
+    background: #ffffff;
+    backdrop-filter: none;
+  }
+
+  .modal-backdrop.customer-debt-detail-backdrop > .customer-debt-detail-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .customer-debt-detail-modal > .customer-debt-detail-header {
+    top: -12px;
+    margin: -12px -12px 12px;
+    padding: 12px;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .customer-debt-detail-header h2 {
+    font-size: 1.2rem;
+  }
+
+  .customer-debt-detail-header span {
+    font-size: 0.75rem;
+  }
+
+  .customer-debt-close-button {
+    width: auto;
+    min-width: 72px;
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .customer-debt-detail-modal .customer-debt-detail-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-debt-detail-modal .customer-debt-print-panel {
+    margin: 14px 0;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .customer-debt-detail-modal .customer-debt-print-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-debt-detail-modal .customer-debt-print-badge {
+    align-self: flex-start;
+  }
+
+  .customer-debt-detail-modal .customer-debt-print-grid,
+  .customer-debt-detail-modal
+    .customer-debt-print-grid-filtered
+    .customer-debt-print-customer {
+    grid-template-columns: 1fr;
+    grid-column: span 1;
+  }
+
+  .customer-debt-detail-modal .customer-debt-export-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-debt-detail-modal .customer-debt-export-actions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .customer-debt-detail-modal .customer-debt-breakdown-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-debt-breakdown-card {
+    padding: 12px;
+  }
+
+  .customer-debt-table-wrap table {
+    min-width: 560px;
+  }
+}
+
+@media (max-width: 460px) {
+  .customer-debt-detail-modal .customer-debt-detail-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-debt-detail-modal > .customer-debt-detail-header {
+    flex-direction: column;
+  }
+
+  .customer-debt-close-button {
+    width: 100%;
+  }
+
+  .customer-debt-detail-modal .customer-debt-export-actions {
+    grid-template-columns: 1fr;
+  }
+}
