@@ -3,6 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import CustomerDebtPrintPanel from "../components/CustomerDebtPrintPanel";
+import CustomerDebtConsolidationPanel from "../components/CustomerDebtConsolidationPanel";
 import { formatBusinessDate, formatBusinessDateTime } from "../utils/businessDate";
 
 export default function DebtsPage() {
@@ -53,6 +54,7 @@ export default function DebtsPage() {
   const [sendingDebtSmsId, setSendingDebtSmsId] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showIndividualDebts, setShowIndividualDebts] = useState(false);
 
   const businessName = "Chalin 03 Company Limited";
   const momoNumber = "0543421127";
@@ -749,6 +751,27 @@ Thank you.`;
         </div>
       </div>
 
+      <CustomerDebtConsolidationPanel
+        currentStoreCode={currentStoreCode}
+        currentStoreName={currentStoreName}
+        userRole={user?.role}
+        onRecordPayment={preparePayment}
+        onRefresh={loadDebts}
+      />
+
+      <div className="debt-record-view-toggle">
+        <span>
+          The consolidated view keeps one card per customer. Open the individual
+          receipt-level records only when you need audit detail or a direct payment action.
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowIndividualDebts((current) => !current)}
+        >
+          {showIndividualDebts ? "Hide Individual Debt Records" : "Show Individual Debt Records"}
+        </button>
+      </div>
+
       <CustomerDebtPrintPanel
         currentStoreCode={currentStoreCode}
         preferredCustomer={selectedDebt}
@@ -839,7 +862,7 @@ Thank you.`;
       )}
 
       <div style={{ ...styles.mainGrid, ...compactMainGrid }}>
-        <section style={styles.panelLarge}>
+        <section style={{ ...styles.panelLarge, display: showIndividualDebts ? "block" : "none" }}>
           <div style={styles.panelHeader}>
             <div>
               <p style={styles.eyebrowDark}>Customer Debt List</p>
