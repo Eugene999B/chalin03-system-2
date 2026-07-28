@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import axiosClient from "../api/axiosClient";
 import CustomerDebtPrintPanel from "./CustomerDebtPrintPanel";
+import DebtReminderSettingsPanel from "./DebtReminderSettingsPanel";
 import { formatBusinessDate, formatBusinessDateTime } from "../utils/businessDate";
 import "../styles/customerDebtConsolidation.css";
 
@@ -100,10 +101,13 @@ export default function CustomerDebtConsolidationPanel({
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [sendingReminderCustomerId, setSendingReminderCustomerId] = useState(null);
+  const [openingWhatsAppCustomerId, setOpeningWhatsAppCustomerId] = useState(null);
 
   const canMerge = ["admin", "manager"].includes(
     String(userRole || "").toLowerCase()
   );
+  const canManageReminders = canMerge;
 
   async function loadCustomers() {
     setLoading(true);
@@ -281,6 +285,87 @@ export default function CustomerDebtConsolidationPanel({
     }
   }
 
+  async function sendCustomerReminderSms(customerId) {
+    setMessage("");
+    setError("");
+
+    if (!canManageReminders) {
+      setError("Only an administrator or manager can send debt reminders.");
+      return;
+    }
+
+    setSendingReminderCustomerId(Number(customerId));
+    try {
+      const response = await axiosClient.post(
+        `/debt-reminders/customer/${customerId}/sms`
+      );
+      setMessage(
+        response.data.message || "Customer debt reminder SMS submitted successfully."
+      );
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          "Could not send the customer debt reminder SMS."
+      );
+    } finally {
+      setSendingReminderCustomerId(null);
+    }
+  }
+
+  async function openCustomerReminderWhatsApp(customerId) {
+    setMessage("");
+    setError("");
+
+    if (!canManageReminders) {
+      setError("Only an administrator or manager can prepare debt reminders.");
+      return;
+    }
+
+    const popup = window.open("", "_blank");
+    if (popup) popup.opener = null;
+    setOpeningWhatsAppCustomerId(Number(customerId));
+
+    try {
+      const response = await axiosClient.get(
+        `/debt-reminders/customer/${customerId}/message`
+      );
+      const data = response.data || {};
+
+      if (!data.channels?.whatsapp_enabled) {
+        throw new Error(
+          "WhatsApp reminders are disabled in Debt Reminder Settings."
+        );
+      }
+
+      const digits = String(data.recipient_phone || "").replace(/\D/g, "");
+      if (!digits) {
+        throw new Error("This customer does not have a valid Ghana phone number.");
+      }
+
+      const url = `https://wa.me/${digits}?text=${encodeURIComponent(
+        data.message || ""
+      )}`;
+
+      if (popup) {
+        popup.location.href = url;
+      } else {
+        const opened = window.open(url, "_blank", "noopener,noreferrer");
+        if (!opened) {
+          throw new Error("Popup blocked. Allow popups and try WhatsApp again.");
+        }
+      }
+    } catch (requestError) {
+      if (popup && !popup.closed) popup.close();
+      setError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Could not prepare the WhatsApp debt reminder."
+      );
+    } finally {
+      setOpeningWhatsAppCustomerId(null);
+    }
+  }
+
   function handleRecordPayment(debt) {
     if (typeof onRecordPayment === "function") {
       onRecordPayment(debt);
@@ -349,6 +434,12 @@ export default function CustomerDebtConsolidationPanel({
           <strong>{Number(summary?.overdue_debt_count || 0)}</strong>
         </div>
       </div>
+
+      <DebtReminderSettingsPanel
+        userRole={userRole}
+        currentStoreCode={currentStoreCode}
+        currentStoreName={currentStoreName}
+      />
 
       {Number(unlinked?.debt_count || 0) > 0 ? (
         <div className="customer-debt-consolidation-warning">
@@ -570,12 +661,47 @@ export default function CustomerDebtConsolidationPanel({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => openCustomer(customer.customer_id)}
-            >
-              Open Full Debt Breakdown
-            </button>
+            <div className="customer-debt-card-actions">
+              <button
+                type="button"
+                onClick={() => openCustomer(customer.customer_id)}
+              >
+                Open Full Debt Breakdown
+              </button>
+
+              {canManageReminders ? (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button customer-debt-reminder-button"
+                    onClick={() => sendCustomerReminderSms(customer.customer_id)}
+                    disabled={
+                      sendingReminderCustomerId === Number(customer.customer_id)
+                    }
+                    title="Send one consolidated SMS for this customer account"
+                  >
+                    {sendingReminderCustomerId === Number(customer.customer_id)
+                      ? "Sending SMS..."
+                      : "Send SMS Reminder"}
+                  </button>
+                  <button
+                    type="button"
+                    className="customer-debt-whatsapp-button"
+                    onClick={() =>
+                      openCustomerReminderWhatsApp(customer.customer_id)
+                    }
+                    disabled={
+                      openingWhatsAppCustomerId === Number(customer.customer_id)
+                    }
+                    title="Open a prepared consolidated WhatsApp reminder"
+                  >
+                    {openingWhatsAppCustomerId === Number(customer.customer_id)
+                      ? "Opening WhatsApp..."
+                      : "WhatsApp Reminder"}
+                  </button>
+                </>
+              ) : null}
+            </div>
           </article>
         ))}
       </div>
@@ -635,6 +761,52 @@ export default function CustomerDebtConsolidationPanel({
                   </strong>
                 </div>
               </div>
+
+              {canManageReminders ? (
+                <div className="customer-debt-detail-reminder-actions">
+                  <div>
+                    <strong>Customer Follow-Up</strong>
+                    <span>
+                      Send one consolidated reminder for this customer’s complete
+                      outstanding account.
+                    </span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      className="secondary-button customer-debt-reminder-button"
+                      onClick={() =>
+                        sendCustomerReminderSms(selectedCustomer.customer?.id)
+                      }
+                      disabled={
+                        sendingReminderCustomerId ===
+                          Number(selectedCustomer.customer?.id)
+                      }
+                    >
+                      {sendingReminderCustomerId ===
+                      Number(selectedCustomer.customer?.id)
+                        ? "Sending SMS..."
+                        : "Send SMS Reminder"}
+                    </button>
+                    <button
+                      type="button"
+                      className="customer-debt-whatsapp-button"
+                      onClick={() =>
+                        openCustomerReminderWhatsApp(selectedCustomer.customer?.id)
+                      }
+                      disabled={
+                        openingWhatsAppCustomerId ===
+                          Number(selectedCustomer.customer?.id)
+                      }
+                    >
+                      {openingWhatsAppCustomerId ===
+                      Number(selectedCustomer.customer?.id)
+                        ? "Opening WhatsApp..."
+                        : "WhatsApp Reminder"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <CustomerDebtPrintPanel
                 currentStoreCode={currentStoreCode}

@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-debt-dashboard-source-v14";
+const CACHE_NAME = "chalin03-debt-reminder-automation-v15";
 
 const CORE_ASSETS = [
   "/",

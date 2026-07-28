@@ -1,0 +1,477 @@
+.debt-reminder-settings {
+  margin: 18px 0;
+  border: 1px solid #d8e3ed;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+  box-shadow: 0 18px 42px rgba(15, 35, 58, 0.08);
+  overflow: hidden;
+}
+
+.debt-reminder-settings-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  background: linear-gradient(135deg, #06172b 0%, #103b64 100%);
+  color: #ffffff;
+}
+
+.debt-reminder-settings-summary p,
+.debt-reminder-operations p,
+.debt-reminder-history p {
+  margin: 0 0 5px;
+  color: #e0ba28;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debt-reminder-settings-summary h2,
+.debt-reminder-operations h3,
+.debt-reminder-history h3 {
+  margin: 0;
+}
+
+.debt-reminder-settings-summary h2 {
+  color: #ffffff;
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+}
+
+.debt-reminder-settings-summary > div > span {
+  display: block;
+  margin-top: 7px;
+  max-width: 760px;
+  color: #d7e6f2;
+  line-height: 1.5;
+}
+
+.debt-reminder-settings-summary-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.debt-reminder-settings button {
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 11px;
+  background: #0b3760;
+  color: #ffffff;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.debt-reminder-settings-summary button {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.debt-reminder-settings button.secondary-button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #102a43;
+}
+
+.debt-reminder-settings button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.debt-reminder-mode {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.debt-reminder-mode.live {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.debt-reminder-mode.mock {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.debt-reminder-mode.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.debt-reminder-mode.disabled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.debt-reminder-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  padding: 16px 22px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.debt-reminder-channel-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #dce6ef;
+  border-radius: 15px;
+  background: #ffffff;
+}
+
+.debt-reminder-channel-grid span,
+.debt-reminder-preview-grid span {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.debt-reminder-channel-grid strong {
+  color: #102a43;
+  overflow-wrap: anywhere;
+}
+
+.debt-reminder-channel-grid small {
+  color: #718096;
+  line-height: 1.45;
+}
+
+.debt-reminder-message {
+  margin: 14px 22px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  line-height: 1.45;
+}
+
+.debt-reminder-message.success {
+  border: 1px solid #a7d7c5;
+  background: #effaf5;
+  color: #0f5132;
+}
+
+.debt-reminder-message.error {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.debt-reminder-settings-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 22px 22px;
+}
+
+.debt-reminder-settings form {
+  display: grid;
+  gap: 14px;
+}
+
+.debt-reminder-settings fieldset {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #dce5ee;
+  border-radius: 17px;
+  background: #ffffff;
+}
+
+.debt-reminder-settings legend {
+  padding: 0 8px;
+  color: #102a43;
+  font-weight: 900;
+}
+
+.debt-reminder-toggle-grid,
+.debt-reminder-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.debt-reminder-toggle-grid.compact {
+  margin-top: 12px;
+}
+
+.debt-reminder-toggle-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f9fbfd;
+}
+
+.debt-reminder-toggle-field > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.debt-reminder-toggle-field strong,
+.debt-reminder-form-grid label > span,
+.debt-reminder-template-field > span,
+.debt-reminder-save-row label > span {
+  color: #20364d;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.debt-reminder-toggle-field small,
+.debt-reminder-form-grid small,
+.debt-reminder-template-field small {
+  color: #718096;
+  line-height: 1.4;
+}
+
+.debt-reminder-toggle-field input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: #0b3760;
+}
+
+.debt-reminder-form-grid label,
+.debt-reminder-template-field,
+.debt-reminder-save-row label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.debt-reminder-settings input,
+.debt-reminder-settings textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #102a43;
+  font: inherit;
+}
+
+.debt-reminder-settings textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.debt-reminder-settings input:focus,
+.debt-reminder-settings textarea:focus {
+  outline: none;
+  border-color: #1b5f91;
+  box-shadow: 0 0 0 4px rgba(27, 95, 145, 0.11);
+}
+
+.debt-reminder-save-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #f1d478;
+  border-radius: 16px;
+  background: #fffdf5;
+}
+
+.debt-reminder-read-only {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.debt-reminder-operations {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px;
+  border: 1px solid #d8e4ed;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbfd, #ffffff);
+}
+
+.debt-reminder-operations span {
+  display: block;
+  margin-top: 6px;
+  max-width: 760px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.debt-reminder-operation-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.debt-reminder-preview,
+.debt-reminder-history {
+  padding: 16px;
+  border: 1px solid #dce5ee;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.debt-reminder-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.debt-reminder-preview-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border-radius: 13px;
+  background: #f6f9fc;
+}
+
+.debt-reminder-preview-grid strong {
+  color: #102a43;
+  font-size: 1.05rem;
+}
+
+.debt-reminder-preview-list,
+.debt-reminder-history-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.debt-reminder-preview-list > div,
+.debt-reminder-history-list > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #fbfdff;
+}
+
+.debt-reminder-preview-list span,
+.debt-reminder-history-list span {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.debt-reminder-preview-list strong,
+.debt-reminder-history-list strong {
+  color: #102a43;
+  overflow-wrap: anywhere;
+}
+
+.debt-reminder-preview-list small,
+.debt-reminder-history-list small {
+  color: #718096;
+  line-height: 1.4;
+}
+
+.debt-reminder-history-empty {
+  margin-top: 11px;
+  padding: 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 13px;
+  color: #64748b;
+  text-align: center;
+}
+
+@media (max-width: 1000px) {
+  .debt-reminder-preview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .debt-reminder-preview-list,
+  .debt-reminder-history-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .debt-reminder-settings {
+    margin: 12px 0;
+    border-radius: 19px;
+  }
+
+  .debt-reminder-settings-summary,
+  .debt-reminder-operations {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .debt-reminder-settings-summary {
+    padding: 18px;
+  }
+
+  .debt-reminder-settings-summary-actions,
+  .debt-reminder-settings-summary-actions button,
+  .debt-reminder-operation-buttons,
+  .debt-reminder-operation-buttons button {
+    width: 100%;
+  }
+
+  .debt-reminder-settings-summary-actions,
+  .debt-reminder-operation-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .debt-reminder-mode {
+    justify-content: center;
+  }
+
+  .debt-reminder-channel-grid {
+    grid-template-columns: 1fr;
+    padding: 13px;
+  }
+
+  .debt-reminder-settings-body {
+    padding: 13px;
+  }
+
+  .debt-reminder-message {
+    margin: 12px 13px 0;
+  }
+
+  .debt-reminder-toggle-grid,
+  .debt-reminder-form-grid,
+  .debt-reminder-save-row,
+  .debt-reminder-preview-list,
+  .debt-reminder-history-list {
+    grid-template-columns: 1fr;
+  }
+
+  .debt-reminder-save-row button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 460px) {
+  .debt-reminder-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .debt-reminder-settings fieldset {
+    padding: 12px;
+  }
+}
