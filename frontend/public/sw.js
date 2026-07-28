@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-debt-reminder-automation-v15";
+const CACHE_NAME = "chalin03-installment-command-centre-v16";
 
 const CORE_ASSETS = [
   "/",
@@ -15,7 +15,7 @@ function buildOfflineResponse() {
       status: 503,
       statusText: "Service Unavailable",
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/plain; charset=UTF-8",
         "Cache-Control": "no-store",
       },
     }

@@ -22,6 +22,14 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Installment Command Centre",
+        description: "Portfolio risk, collections queue, customer follow-up and reminder controls",
+        path: "/equipment-hire-operations/fleet?view=installments",
+        icon: "🎯",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Sales & Installments",
         description: "Enquiries, quotations, agreements, payments, delivery and ownership",
         path: "/equipment-hire-operations/fleet?view=sales",

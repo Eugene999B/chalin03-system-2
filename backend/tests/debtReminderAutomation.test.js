@@ -233,5 +233,5 @@ test("server and consolidated customer UI expose the debt reminder feature", () 
   assert.match(settingsPanel, /Run Reminders Now/);
   assert.match(settingsPanel, /approved Meta WhatsApp Business API/);
   assert.match(css, /@media \(max-width: 760px\)/);
-  assert.match(sw, /chalin03-debt-reminder-automation-v15/);
+  assert.match(sw, /chalin03-installment-command-centre-v16/);
 });
