@@ -56,7 +56,7 @@ test("exact customer exports use customer id and retain print and downloads", ()
   assert.match(printPanel, /customer_id: filters\.customer_id/);
   assert.match(printPanel, /exactCustomerSelected \? "" : defaultFromDate\(\)/);
   assert.match(printPanel, /exactCustomerSelected \? "" : dateInputValue\(new Date\(\)\)/);
-  assert.match(printPanel, /complete debt history/);
+  assert.match(printPanel, /Complete Customer Debt Statement/);
   assert.match(printPanel, /readOnly=\{exactCustomerSelected\}/);
   assert.match(printPanel, /createReport\("print"\)/);
   assert.match(printPanel, /createReport\("pdf"\)/);
@@ -79,8 +79,8 @@ test("Debts page defaults to customer consolidation with optional audit records"
   assert.match(css, /\.customer-debt-detail-modal/);
 });
 
-test("service worker cache is advanced for the responsive debt release", () => {
+test("service worker cache is advanced for the complete debt statement release", () => {
   const serviceWorker = read("frontend/public/sw.js");
-  assert.match(serviceWorker, /chalin03-debt-responsive-search-v10/);
+  assert.match(serviceWorker, /chalin03-customer-debt-statement-v11/);
   assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
 });

@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-debt-responsive-search-v10";
+const CACHE_NAME = "chalin03-customer-debt-statement-v11";
 
 const CORE_ASSETS = [
   "/",
