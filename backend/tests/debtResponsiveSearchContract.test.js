@@ -51,5 +51,20 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
   assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
-  assert.match(serviceWorker, /chalin03-customer-debt-statement-v11/);
+  assert.match(serviceWorker, /chalin03-premium-debt-dashboard-v12/);
+});
+
+test("premium debt dashboard uses compact desktop cards and mobile stacking", () => {
+  const responsiveCss = read(
+    "frontend",
+    "public",
+    "debt-responsive-hotfix.css"
+  );
+
+  assert.match(responsiveCss, /\.customer-debt-consolidation-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,/);
+  assert.match(responsiveCss, /\.customer-debt-consolidation-card\s*\{[\s\S]*border-radius:\s*23px/);
+  assert.match(responsiveCss, /\.customer-debt-consolidation-heading\s*\{[\s\S]*linear-gradient/);
+  assert.match(responsiveCss, /@media \(max-width: 720px\)/);
+  assert.match(responsiveCss, /@media \(max-width: 460px\)/);
+  assert.match(responsiveCss, /prefers-reduced-motion/);
 });
