@@ -36,6 +36,7 @@ function downloadBlob(response, fallbackName) {
 export default function CustomerDebtPrintPanel({
   currentStoreCode = "STORE",
   preferredCustomer = null,
+  preferredCustomerId = null,
   reportType = "debt",
 }) {
   const preferredSearch = useMemo(
@@ -52,6 +53,7 @@ export default function CustomerDebtPrintPanel({
     from: defaultFromDate(),
     to: dateInputValue(new Date()),
     customer: preferredSearch,
+    customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
     debt_status: "",
   });
   const [exporting, setExporting] = useState("");
@@ -59,9 +61,13 @@ export default function CustomerDebtPrintPanel({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!preferredSearch) return;
-    setFilters((current) => ({ ...current, customer: preferredSearch }));
-  }, [preferredSearch]);
+    if (!preferredSearch && !preferredCustomerId) return;
+    setFilters((current) => ({
+      ...current,
+      customer: preferredSearch || current.customer,
+      customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
+    }));
+  }, [preferredSearch, preferredCustomerId]);
 
   async function createReport(format) {
     setError("");
@@ -82,6 +88,7 @@ export default function CustomerDebtPrintPanel({
             from: filters.from,
             to: filters.to,
             customer: filters.customer.trim(),
+            customer_id: filters.customer_id,
             debt_status: reportType === "debt" ? filters.debt_status : "",
           },
           responseType: "blob",

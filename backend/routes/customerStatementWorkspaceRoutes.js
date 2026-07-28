@@ -44,6 +44,7 @@ function parseFilters(req) {
   const from = parseDate(req.query.from);
   const to = parseDate(req.query.to);
   const customer = cleanText(req.query.customer || req.query.query, 160);
+  const customerId = positiveId(req.query.customer_id);
   const debtStatus = cleanText(req.query.debt_status, 30).toLowerCase();
   const reportType = cleanText(req.query.report_type || "statement", 20).toLowerCase();
 
@@ -66,7 +67,7 @@ function parseFilters(req) {
     throw error;
   }
 
-  return { from, to, customer, debtStatus, reportType };
+  return { from, to, customer, customerId, debtStatus, reportType };
 }
 
 function appendDateFilter(sql, params, alias, column, filters) {
@@ -82,8 +83,14 @@ function appendDateFilter(sql, params, alias, column, filters) {
   return nextSql;
 }
 
+function appendCustomerIdFilter(sql, params, alias, filters) {
+  if (!filters.customerId) return sql;
+  params.push(filters.customerId);
+  return `${sql} AND ${alias}.customer_id = ?`;
+}
+
 function appendCustomerFilter(sql, params, alias, filters) {
-  if (!filters.customer) return sql;
+  if (filters.customerId || !filters.customer) return sql;
   const pattern = `%${filters.customer.toLowerCase()}%`;
   params.push(pattern, pattern);
   return `${sql} AND (
@@ -193,6 +200,7 @@ async function loadFilteredData(req) {
     WHERE s.branch_id = ?
   `;
   saleSql = appendDateFilter(saleSql, saleParams, "s", "created_at", filters);
+  saleSql = appendCustomerIdFilter(saleSql, saleParams, "s", filters);
   saleSql = appendCustomerFilter(saleSql, saleParams, "s", filters);
   saleSql += ` ORDER BY s.created_at DESC, s.id DESC LIMIT ${MAX_ROWS}`;
 
@@ -216,6 +224,7 @@ async function loadFilteredData(req) {
     WHERE d.branch_id = ?
   `;
   debtSql = appendDateFilter(debtSql, debtParams, "d", "created_at", filters);
+  debtSql = appendCustomerIdFilter(debtSql, debtParams, "d", filters);
   debtSql = appendCustomerFilter(debtSql, debtParams, "d", filters);
   if (filters.debtStatus) {
     if (filters.debtStatus === "overdue") {
@@ -248,6 +257,7 @@ async function loadFilteredData(req) {
     WHERE dp.branch_id = ?
   `;
   paymentSql = appendDateFilter(paymentSql, paymentParams, "dp", "paid_at", filters);
+  paymentSql = appendCustomerIdFilter(paymentSql, paymentParams, "d", filters);
   paymentSql = appendCustomerFilter(paymentSql, paymentParams, "d", filters);
   paymentSql += ` ORDER BY dp.paid_at DESC, dp.id DESC LIMIT ${MAX_ROWS}`;
 
