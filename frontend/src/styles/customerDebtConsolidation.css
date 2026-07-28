@@ -1127,3 +1127,100 @@
     transition: none;
   }
 }
+
+/* Customer-level SMS and WhatsApp reminder actions. */
+.customer-debt-card-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.customer-debt-consolidation-card > .customer-debt-card-actions {
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.customer-debt-card-actions button {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 9px 13px;
+  font-size: 0.76rem;
+}
+
+.customer-debt-whatsapp-button {
+  background: #15803d !important;
+  color: #ffffff !important;
+}
+
+.customer-debt-reminder-button {
+  border-color: #c8d7e4 !important;
+  background: #ffffff !important;
+  color: #123a5a !important;
+}
+
+.customer-debt-detail-reminder-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #d9e4ed;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f7fbfe, #ffffff);
+}
+
+.customer-debt-detail-reminder-actions > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.customer-debt-detail-reminder-actions > div:first-child strong {
+  color: #102a43;
+}
+
+.customer-debt-detail-reminder-actions > div:first-child span {
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.customer-debt-detail-reminder-actions > div:last-child {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .customer-debt-card-actions {
+    justify-content: stretch;
+  }
+
+  .customer-debt-card-actions button {
+    flex: 1 1 160px;
+  }
+}
+
+@media (max-width: 720px) {
+  .customer-debt-card-actions,
+  .customer-debt-detail-reminder-actions,
+  .customer-debt-detail-reminder-actions > div:last-child {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .customer-debt-card-actions button,
+  .customer-debt-detail-reminder-actions button {
+    width: 100%;
+  }
+}
+
