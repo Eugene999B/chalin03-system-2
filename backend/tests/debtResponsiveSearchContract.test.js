@@ -51,7 +51,7 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
   assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
-  assert.match(serviceWorker, /chalin03-premium-debt-dashboard-v12/);
+  assert.match(serviceWorker, /chalin03-mobile-debt-contrast-v13/);
 });
 
 test("premium debt dashboard uses compact desktop cards and mobile stacking", () => {
@@ -67,4 +67,21 @@ test("premium debt dashboard uses compact desktop cards and mobile stacking", ()
   assert.match(responsiveCss, /@media \(max-width: 720px\)/);
   assert.match(responsiveCss, /@media \(max-width: 460px\)/);
   assert.match(responsiveCss, /prefers-reduced-motion/);
+});
+
+test("mobile outstanding balance keeps guaranteed high contrast", () => {
+  const contrastCss = read(
+    "frontend",
+    "public",
+    "debt-mobile-contrast-hotfix.css"
+  );
+  const indexHtml = read("frontend", "index.html");
+  const serviceWorker = read("frontend", "public", "sw.js");
+
+  assert.match(contrastCss, /background-color:\s*#08253f\s*!important/);
+  assert.match(contrastCss, /opacity:\s*1\s*!important/);
+  assert.match(contrastCss, /color:\s*#ffffff\s*!important/);
+  assert.match(contrastCss, /@media \(max-width: 720px\)/);
+  assert.match(indexHtml, /debt-mobile-contrast-hotfix\.css/);
+  assert.match(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
 });
