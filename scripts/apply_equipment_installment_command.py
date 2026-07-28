@@ -119,8 +119,8 @@ def verify_generated_source() -> None:
         "frontend/src/pages/EquipmentInstallmentCommandPage.jsx": [
             "Installment Command Centre",
             "Collections Queue",
-            "Portfolio at Risk",
-            "Promise to Pay",
+            "Portfolio risk",
+            "Promise to pay",
         ],
         "frontend/public/sw.js": ["chalin03-installment-command-centre-v16"],
     }
