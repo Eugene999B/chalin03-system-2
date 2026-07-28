@@ -51,5 +51,5 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
   assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
-  assert.match(serviceWorker, /chalin03-debt-responsive-search-v10/);
+  assert.match(serviceWorker, /chalin03-customer-debt-statement-v11/);
 });
