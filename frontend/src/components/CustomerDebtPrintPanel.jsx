@@ -36,6 +36,7 @@ function downloadBlob(response, fallbackName) {
 export default function CustomerDebtPrintPanel({
   currentStoreCode = "STORE",
   preferredCustomer = null,
+  preferredCustomerId = null,
   reportType = "debt",
 }) {
   const preferredSearch = useMemo(
@@ -48,10 +49,12 @@ export default function CustomerDebtPrintPanel({
     [preferredCustomer]
   );
 
+  const exactCustomerSelected = Boolean(preferredCustomerId);
   const [filters, setFilters] = useState({
-    from: defaultFromDate(),
-    to: dateInputValue(new Date()),
+    from: exactCustomerSelected ? "" : defaultFromDate(),
+    to: exactCustomerSelected ? "" : dateInputValue(new Date()),
     customer: preferredSearch,
+    customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
     debt_status: "",
   });
   const [exporting, setExporting] = useState("");
@@ -59,9 +62,15 @@ export default function CustomerDebtPrintPanel({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!preferredSearch) return;
-    setFilters((current) => ({ ...current, customer: preferredSearch }));
-  }, [preferredSearch]);
+    if (!preferredSearch && !preferredCustomerId) return;
+    setFilters((current) => ({
+      ...current,
+      from: preferredCustomerId ? "" : current.from,
+      to: preferredCustomerId ? "" : current.to,
+      customer: preferredSearch || current.customer,
+      customer_id: preferredCustomerId ? String(preferredCustomerId) : "",
+    }));
+  }, [preferredSearch, preferredCustomerId]);
 
   async function createReport(format) {
     setError("");
@@ -82,6 +91,7 @@ export default function CustomerDebtPrintPanel({
             from: filters.from,
             to: filters.to,
             customer: filters.customer.trim(),
+            customer_id: filters.customer_id,
             debt_status: reportType === "debt" ? filters.debt_status : "",
           },
           responseType: "blob",
@@ -127,7 +137,9 @@ export default function CustomerDebtPrintPanel({
           <p>Filtered Financial Export</p>
           <h2>{reportType === "debt" ? "Debt Report" : "Customer Statement"}</h2>
           <span>
-            Date only prints the whole date range. Adding a customer name or phone narrows that same result.
+            {exactCustomerSelected
+              ? "This customer opens with complete debt history. Choose dates only when you need a shorter period."
+              : "Date only prints the whole date range. Adding a customer name or phone narrows that same result."}
           </span>
         </div>
         <div className="customer-debt-print-badge">Screen Filters → Export</div>
@@ -168,6 +180,7 @@ export default function CustomerDebtPrintPanel({
               setFilters((current) => ({ ...current, customer: event.target.value }))
             }
             placeholder="Leave blank for all customers"
+            readOnly={exactCustomerSelected}
           />
         </label>
 
@@ -206,7 +219,9 @@ export default function CustomerDebtPrintPanel({
       </div>
 
       <small className="customer-debt-print-note">
-        The generated file contains the exact selected store, date range, customer search and debt status shown above.
+        {exactCustomerSelected
+          ? "The generated file contains this exact customer’s complete history unless you choose a date range or debt status."
+          : "The generated file contains the exact selected store, date range, customer search and debt status shown above."}
       </small>
     </section>
   );
