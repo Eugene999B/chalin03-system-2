@@ -1237,6 +1237,25 @@ async function sendCustomerDebtReminderSms({
       Number(branchId),
       Number(customerId)
     );
+    const frequency = await reminderFrequencyStats(
+      connection,
+      Number(branchId),
+      customer.customer_id
+    );
+    const limitReason = automaticLimitReason(frequency, current.settings);
+    if (limitReason) {
+      const descriptions = {
+        maximum_7_day_limit: `This customer has reached the saved limit of ${current.settings.max_sms_7_days} debt reminder SMS in 7 days.`,
+        maximum_30_day_limit: `This customer has reached the saved limit of ${current.settings.max_sms_30_days} debt reminder SMS in 30 days.`,
+        minimum_hours_not_reached: `Wait at least ${current.settings.minimum_hours_between_sms} hours between debt reminder SMS for this customer.`,
+      };
+      throw appError(
+        descriptions[limitReason] || "This reminder is blocked by Debt Reminder Settings.",
+        429,
+        "MANUAL_DEBT_SMS_LIMIT_REACHED"
+      );
+    }
+
     const reminder = manualReminderType(customer, ghanaClock().date);
     const sourceReference = `debt-customer:${customer.customer_id}:manual:${Date.now()}`;
     const result = await sendLoggedCustomerSms(connection, {

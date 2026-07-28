@@ -219,8 +219,10 @@ export default function DebtReminderSettingsPanel({
       const response = await axiosClient.post("/debt-reminders/run", {
         confirmation: "SEND DEBT REMINDERS",
       });
-      setMessage(response.data.message || "Debt reminder run completed.");
+      const runMessage =
+        response.data.message || "Debt reminder run completed.";
       await Promise.all([previewToday(), loadHistory()]);
+      setMessage(runMessage);
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||

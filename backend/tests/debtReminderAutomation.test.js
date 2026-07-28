@@ -191,6 +191,7 @@ test("scheduler stores settings safely and deduplicates automatic SMS", () => {
   assert.match(service, /max_sms_7_days/);
   assert.match(service, /max_sms_30_days/);
   assert.match(service, /minimum_hours_between_sms/);
+  assert.match(service, /MANUAL_DEBT_SMS_LIMIT_REACHED/);
   assert.match(service, /startDebtReminderScheduler/);
 });
 

@@ -676,14 +676,9 @@ export default function CustomerDebtConsolidationPanel({
                     className="secondary-button customer-debt-reminder-button"
                     onClick={() => sendCustomerReminderSms(customer.customer_id)}
                     disabled={
-                      !customer.customer_phone ||
                       sendingReminderCustomerId === Number(customer.customer_id)
                     }
-                    title={
-                      customer.customer_phone
-                        ? "Send one consolidated SMS for this customer account"
-                        : "Add a customer phone number before sending SMS"
-                    }
+                    title="Send one consolidated SMS for this customer account"
                   >
                     {sendingReminderCustomerId === Number(customer.customer_id)
                       ? "Sending SMS..."
@@ -696,14 +691,9 @@ export default function CustomerDebtConsolidationPanel({
                       openCustomerReminderWhatsApp(customer.customer_id)
                     }
                     disabled={
-                      !customer.customer_phone ||
                       openingWhatsAppCustomerId === Number(customer.customer_id)
                     }
-                    title={
-                      customer.customer_phone
-                        ? "Open a prepared consolidated WhatsApp reminder"
-                        : "Add a customer phone number before using WhatsApp"
-                    }
+                    title="Open a prepared consolidated WhatsApp reminder"
                   >
                     {openingWhatsAppCustomerId === Number(customer.customer_id)
                       ? "Opening WhatsApp..."
@@ -789,7 +779,6 @@ export default function CustomerDebtConsolidationPanel({
                         sendCustomerReminderSms(selectedCustomer.customer?.id)
                       }
                       disabled={
-                        !selectedCustomer.customer?.phone ||
                         sendingReminderCustomerId ===
                           Number(selectedCustomer.customer?.id)
                       }
@@ -806,7 +795,6 @@ export default function CustomerDebtConsolidationPanel({
                         openCustomerReminderWhatsApp(selectedCustomer.customer?.id)
                       }
                       disabled={
-                        !selectedCustomer.customer?.phone ||
                         openingWhatsAppCustomerId ===
                           Number(selectedCustomer.customer?.id)
                       }
