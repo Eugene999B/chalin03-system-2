@@ -1,13 +1,11 @@
-const CACHE_NAME = "chalin03-mobile-debt-contrast-v13";
+const CACHE_NAME = "chalin03-debt-dashboard-source-v14";
 
 const CORE_ASSETS = [
   "/",
   "/site.webmanifest",
   "/favicon-192x192.png",
   "/favicon-512x512.png",
-  "/chalin03-logo.png",
-  "/debt-responsive-hotfix.css",
-  "/debt-mobile-contrast-hotfix.css"
+  "/chalin03-logo.png"
 ];
 
 function buildOfflineResponse() {

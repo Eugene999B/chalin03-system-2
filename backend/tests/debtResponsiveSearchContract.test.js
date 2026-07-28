@@ -16,22 +16,21 @@ test("customer debt modal stays above navigation and supports mobile", () => {
     "components",
     "CustomerDebtConsolidationPanel.jsx"
   );
-  const responsiveCss = read(
+  const css = read(
     "frontend",
-    "public",
-    "debt-responsive-hotfix.css"
+    "src",
+    "styles",
+    "customerDebtConsolidation.css"
   );
-  const indexHtml = read("frontend", "index.html");
 
   assert.match(source, /customer-debt-detail-backdrop/);
   assert.match(source, /customer-debt-detail-content/);
   assert.match(source, /customer-debt-close-button/);
   assert.match(source, /aria-modal="true"/);
-  assert.match(responsiveCss, /z-index:\s*100000/);
-  assert.match(responsiveCss, /height:\s*100dvh/);
-  assert.match(responsiveCss, /max-height:\s*100dvh/);
-  assert.match(responsiveCss, /position:\s*sticky/);
-  assert.match(indexHtml, /debt-responsive-hotfix\.css/);
+  assert.match(css, /z-index:\s*100000/);
+  assert.match(css, /height:\s*100dvh/);
+  assert.match(css, /max-height:\s*100dvh/);
+  assert.match(css, /position:\s*sticky/);
 });
 
 test("debt and merge searches expose identifying information", () => {
@@ -50,38 +49,50 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_phone/);
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
-  assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
-  assert.match(serviceWorker, /chalin03-mobile-debt-contrast-v13/);
+  assert.match(serviceWorker, /chalin03-debt-dashboard-source-v14/);
+  assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
+  assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
 });
 
-test("premium debt dashboard uses compact desktop cards and mobile stacking", () => {
-  const responsiveCss = read(
+test("bundled debt dashboard uses compact desktop cards and mobile stacking", () => {
+  const css = read(
     "frontend",
-    "public",
-    "debt-responsive-hotfix.css"
+    "src",
+    "styles",
+    "customerDebtConsolidation.css"
   );
 
-  assert.match(responsiveCss, /\.customer-debt-consolidation-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,/);
-  assert.match(responsiveCss, /\.customer-debt-consolidation-card\s*\{[\s\S]*border-radius:\s*23px/);
-  assert.match(responsiveCss, /\.customer-debt-consolidation-heading\s*\{[\s\S]*linear-gradient/);
-  assert.match(responsiveCss, /@media \(max-width: 720px\)/);
-  assert.match(responsiveCss, /@media \(max-width: 460px\)/);
-  assert.match(responsiveCss, /prefers-reduced-motion/);
+  assert.match(
+    css,
+    /\.customer-debt-consolidation-list\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,/
+  );
+  assert.match(
+    css,
+    /\.customer-debt-consolidation-card\s*\{[\s\S]*border-radius:\s*22px/
+  );
+  assert.match(
+    css,
+    /\.customer-debt-consolidation-heading\s*\{[\s\S]*linear-gradient/
+  );
+  assert.match(css, /@media \(max-width: 720px\)/);
+  assert.match(css, /@media \(max-width: 460px\)/);
+  assert.match(css, /prefers-reduced-motion/);
 });
 
-test("mobile outstanding balance keeps guaranteed high contrast", () => {
-  const contrastCss = read(
+test("mobile outstanding balance keeps guaranteed high contrast in bundled CSS", () => {
+  const css = read(
     "frontend",
-    "public",
-    "debt-mobile-contrast-hotfix.css"
+    "src",
+    "styles",
+    "customerDebtConsolidation.css"
   );
   const indexHtml = read("frontend", "index.html");
-  const serviceWorker = read("frontend", "public", "sw.js");
 
-  assert.match(contrastCss, /background-color:\s*#08253f\s*!important/);
-  assert.match(contrastCss, /opacity:\s*1\s*!important/);
-  assert.match(contrastCss, /color:\s*#ffffff\s*!important/);
-  assert.match(contrastCss, /@media \(max-width: 720px\)/);
-  assert.match(indexHtml, /debt-mobile-contrast-hotfix\.css/);
-  assert.match(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
+  assert.match(css, /background:\s*#08253f/);
+  assert.match(css, /background-image:\s*linear-gradient\(135deg, #06172b/);
+  assert.match(css, /opacity:\s*1/);
+  assert.match(css, /color:\s*#ffffff/);
+  assert.match(css, /@media \(max-width: 720px\)/);
+  assert.doesNotMatch(indexHtml, /debt-responsive-hotfix\.css/);
+  assert.doesNotMatch(indexHtml, /debt-mobile-contrast-hotfix\.css/);
 });

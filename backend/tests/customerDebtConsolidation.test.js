@@ -77,14 +77,16 @@ test("Debts page defaults to customer consolidation with optional audit records"
   assert.match(component, /CustomerDebtPrintPanel/);
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /\.customer-debt-detail-modal/);
+  assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
-test("service worker cache is advanced for the mobile debt contrast release", () => {
+test("service worker cache is advanced for the bundled debt dashboard release", () => {
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
-  assert.match(serviceWorker, /chalin03-mobile-debt-contrast-v13/);
-  assert.match(serviceWorker, /debt-responsive-hotfix\.css/);
-  assert.match(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
-  assert.match(indexHtml, /debt-mobile-contrast-hotfix\.css/);
+  assert.match(serviceWorker, /chalin03-debt-dashboard-source-v14/);
+  assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
+  assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
+  assert.doesNotMatch(indexHtml, /debt-responsive-hotfix\.css/);
+  assert.doesNotMatch(indexHtml, /debt-mobile-contrast-hotfix\.css/);
 });
