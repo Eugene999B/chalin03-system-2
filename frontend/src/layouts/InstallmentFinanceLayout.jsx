@@ -1,4 +1,4 @@
-import { Navigate } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -74,12 +74,13 @@ const navigationSections = [
 
 export default function InstallmentFinanceLayout() {
   const { user } = useAuth();
+  const location = useLocation();
 
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
     return <Navigate to="/equipment-hire" replace />;
   }
 
-  ensureFinanceUiCompatibilityPermissions(user);
+  ensureFinanceUiCompatibilityPermissions(user, location.pathname);
 
   return (
     <BusinessWorkspaceLayout
