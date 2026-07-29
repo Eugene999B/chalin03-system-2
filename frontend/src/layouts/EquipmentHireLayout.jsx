@@ -1,3 +1,4 @@
+import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
 import { HIRE_VIEW_PERMISSIONS } from "../security/permissionRules";
 
@@ -8,9 +9,10 @@ const navigationSections = [
       {
         title: "Hire Operations Dashboard",
         description: "Hire contracts, dispatch, revenue, balances and equipment availability",
-        path: "/equipment-hire-operations",
+        path: "/equipment-hire-operations?division=hire",
         icon: "🏗️",
         end: true,
+        matchSearch: true,
         anyPermissions: HIRE_VIEW_PERMISSIONS,
       },
       {
@@ -93,11 +95,17 @@ const navigationSections = [
     ],
   },
   {
-    title: "Separate Division",
+    title: "Equipment Divisions",
     items: [
       {
+        title: "Back to Equipment Divisions",
+        description: "Choose Equipment Hire or Installment Finance",
+        path: "/equipment-hire",
+        icon: "◫",
+      },
+      {
         title: "Open Equipment Installment Finance",
-        description: "Switch to sales applications, credit, agreements, collections and ownership",
+        description: "Switch to applications, credit, agreements, collections and ownership",
         path: "/equipment-installment-finance",
         icon: "🏦",
         permissions: ["fleet.assets.view"],
@@ -191,6 +199,14 @@ const navigationSections = [
 ];
 
 export default function EquipmentHireLayout() {
+  const location = useLocation();
+  const isHireEntry =
+    new URLSearchParams(location.search).get("division") === "hire";
+
+  if (location.pathname === "/equipment-hire-operations" && !isHireEntry) {
+    return <Navigate to="/equipment-hire" replace />;
+  }
+
   return (
     <BusinessWorkspaceLayout
       workspaceCode="equipment_hire"

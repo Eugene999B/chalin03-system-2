@@ -1,5 +1,7 @@
-const CACHE_NAME = "chalin03-installment-runtime-stability-v18";
-// Previous verified cache marker: chalin03-installment-finance-separation-v17
+const CACHE_NAME = "chalin03-equipment-division-gateway-v19";
+// Previous verified cache markers:
+// chalin03-installment-runtime-stability-v18
+// chalin03-installment-finance-separation-v17
 
 const CORE_ASSETS = [
   "/",
