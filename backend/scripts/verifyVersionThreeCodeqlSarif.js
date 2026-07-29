@@ -13,6 +13,7 @@ const sarif = JSON.parse(fs.readFileSync(absoluteSarifPath, "utf8"));
 const results = sarif.runs?.flatMap((run) => run.results || []) || [];
 
 const reviewedRules = new Set([
+  "js/insecure-randomness",
   "js/missing-rate-limiting",
   "js/user-controlled-bypass",
   "js/regex/missing-regexp-anchor",
@@ -29,12 +30,29 @@ const reviewedBypassFiles = new Set([
 const counts = new Map();
 const violations = [];
 
-function locationFor(result) {
-  const physical = result.locations?.[0]?.physicalLocation;
+function normalizedPhysicalLocation(location) {
+  const physical = location?.physicalLocation;
   return {
     uri: String(physical?.artifactLocation?.uri || "").replaceAll("\\", "/"),
     line: Number(physical?.region?.startLine || 0),
   };
+}
+
+function locationFor(result) {
+  return normalizedPhysicalLocation(result.locations?.[0]);
+}
+
+function relatedLocationsFor(result) {
+  const direct = (result.relatedLocations || []).map(normalizedPhysicalLocation);
+  const flow = (result.codeFlows || []).flatMap((codeFlow) =>
+    (codeFlow.threadFlows || []).flatMap((threadFlow) =>
+      (threadFlow.locations || []).map((entry) =>
+        normalizedPhysicalLocation(entry.location)
+      )
+    )
+  );
+
+  return [...direct, ...flow].filter((location) => location.uri);
 }
 
 for (const result of results) {
@@ -45,6 +63,21 @@ for (const result of results) {
   if (!reviewedRules.has(ruleId)) {
     violations.push(`Unreviewed CodeQL rule ${ruleId} at ${location.uri}:${location.line}`);
     continue;
+  }
+
+  if (ruleId === "js/insecure-randomness") {
+    const reviewedFallbackSource = relatedLocationsFor(result).some(
+      (source) =>
+        source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
+        source.line >= 150 &&
+        source.line <= 170
+    );
+
+    if (!reviewedFallbackSource) {
+      violations.push(
+        `Insecure-randomness result appeared outside the reviewed non-secret equipment application reference fallback at ${location.uri}:${location.line}`
+      );
+    }
   }
 
   if (ruleId === "js/missing-rate-limiting") {
@@ -98,6 +131,17 @@ const saleRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/saleRoutes.js"),
   "utf8"
 );
+const equipmentCreditApplicationSource = fs.readFileSync(
+  path.join(root, "backend/routes/equipmentCreditApplicationRoutes.js"),
+  "utf8"
+);
+const equipmentCreditMigrationSource = fs.readFileSync(
+  path.join(
+    root,
+    "database/migrations/20260729_equipment_credit_application_foundation.sql"
+  ),
+  "utf8"
+);
 
 assert.match(serverSource, /const generalApiLimiter = rateLimit\(/);
 assert.match(serverSource, /app\.use\("\/api", generalApiLimiter\)/);
@@ -147,6 +191,22 @@ assert.match(saleRoutesSource, /verifyIndependentApprover\(/);
 assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
+
+// The fallback creates a public, human-readable document reference only. It is
+// never used as a password, token, authorisation decision or ownership proof.
+// Database uniqueness remains the authoritative collision safeguard.
+assert.match(
+  equipmentCreditApplicationSource,
+  /function fallbackApplicationNumber\(\)[\s\S]*return `ECAPP-\$\{stamp\}-\$\{random\}`/
+);
+assert.match(
+  equipmentCreditApplicationSource,
+  /nextDocumentNumber\("EQUIPMENT_CREDIT_APPLICATION"[\s\S]*return fallbackApplicationNumber\(\)/
+);
+assert.match(
+  equipmentCreditMigrationSource,
+  /UNIQUE KEY uq_equipment_credit_applications_number \(application_number\)/
+);
 
 if (violations.length > 0) {
   throw new Error(`CodeQL review policy failed:\n- ${violations.join("\n- ")}`);
