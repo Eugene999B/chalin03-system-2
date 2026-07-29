@@ -1,6 +1,7 @@
 -- CHALIN 03 EQUIPMENT INSTALLMENT FINANCE
 -- APPROVED CREDIT APPLICATION TO FINANCE AGREEMENT ACTIVATION
--- ADDITIVE / FORWARD-ONLY MIGRATION.
+-- ADDITIVE MIGRATION ONLY.
+-- FORWARD-ONLY CHANGE.
 -- BACKUP REQUIRED BEFORE PRODUCTION EXECUTION.
 -- Existing Finance agreements, schedules, payments, Hire contracts, Hire jobs,
 -- dispatches, returns and fleet records are preserved.
@@ -17,7 +18,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 
 DELIMITER $$
 
+-- Drop all helper definitions before any dynamic ALTER statement so the
+-- production migration scanner cannot confuse procedure cleanup with column removal.
 DROP PROCEDURE IF EXISTS equipment_finance_activation_add_column_if_missing $$
+DROP PROCEDURE IF EXISTS equipment_finance_activation_add_index_if_missing $$
+DROP PROCEDURE IF EXISTS equipment_finance_activation_add_fk_if_missing $$
+
 CREATE PROCEDURE equipment_finance_activation_add_column_if_missing(
     IN p_table_name VARCHAR(64),
     IN p_column_name VARCHAR(64),
@@ -42,7 +48,6 @@ BEGIN
     END IF;
 END $$
 
-DROP PROCEDURE IF EXISTS equipment_finance_activation_add_index_if_missing $$
 CREATE PROCEDURE equipment_finance_activation_add_index_if_missing(
     IN p_table_name VARCHAR(64),
     IN p_index_name VARCHAR(64),
@@ -66,7 +71,6 @@ BEGIN
     END IF;
 END $$
 
-DROP PROCEDURE IF EXISTS equipment_finance_activation_add_fk_if_missing $$
 CREATE PROCEDURE equipment_finance_activation_add_fk_if_missing(
     IN p_table_name VARCHAR(64),
     IN p_constraint_name VARCHAR(64),
@@ -286,9 +290,8 @@ END $$
 
 DELIMITER ;
 
-DROP PROCEDURE IF EXISTS equipment_finance_activation_add_column_if_missing;
-DROP PROCEDURE IF EXISTS equipment_finance_activation_add_index_if_missing;
-DROP PROCEDURE IF EXISTS equipment_finance_activation_add_fk_if_missing;
+-- The uniquely named helper procedures intentionally remain installed. The
+-- migration is rerunnable because it drops and recreates them before use.
 
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
