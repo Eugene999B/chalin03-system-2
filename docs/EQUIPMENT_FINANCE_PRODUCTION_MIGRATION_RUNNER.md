@@ -66,7 +66,7 @@ Before changing schema, the runner:
 - confirms the selected database matches `CHALIN03_EXPECTED_DATABASE`; and
 - acquires the MySQL advisory lock `chalin03:production-migrations:20260729-equipment-finance`.
 
-The runner executes only the reviewed files listed in its immutable migration plan. It does not scan the migrations folder and does not execute `database/schema.sql`.
+The runner executes only the reviewed files listed in its immutable migration plan. It does not scan the migrations folder. **Never run `database/schema.sql` against production.**
 
 ## Successful completion
 
