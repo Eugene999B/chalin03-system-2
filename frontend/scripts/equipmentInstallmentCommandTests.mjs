@@ -72,7 +72,7 @@ assert.match(financeLayout, /Equipment Installment Finance/);
 assert.match(financeLayout, /Independent finance division/);
 assert.match(financeLayout, /Separated from Equipment Hire operations/);
 assert.match(financeLayout, /Finance Command Centre/);
-assert.match(financeLayout, /Applications & Agreements/);
+assert.match(financeLayout, /Credit Applications & Approval/);
 assert.match(financeLayout, /Installment Documents & Reports/);
 assert.match(financeLayout, /Open Equipment Hire Operations/);
 assert.match(financeLayout, /workspaceCode="equipment_hire"/);
