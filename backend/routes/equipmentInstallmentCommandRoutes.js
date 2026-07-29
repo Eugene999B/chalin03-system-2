@@ -6,9 +6,7 @@ const {
   FOLLOW_UP_TYPES,
   getAgreementReminderPreview,
   getInstallmentAccount,
-  getInstallmentPortfolio,
   getInstallmentReminderSettings,
-  listInstallmentCollections,
   listInstallmentReminderHistory,
   previewInstallmentReminders,
   recordInstallmentFollowUp,
@@ -16,6 +14,10 @@ const {
   saveInstallmentReminderSettings,
   sendManualInstallmentReminder,
 } = require("../services/equipmentInstallmentCommandService");
+const {
+  getInstallmentPortfolio,
+  listInstallmentCollections,
+} = require("../services/equipmentInstallmentReadModelService");
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
@@ -36,7 +38,7 @@ function locationIdFromScope(req, { required = false } = {}) {
   if (Number.isInteger(locationId) && locationId > 0) return locationId;
   if (required) {
     const error = new Error(
-      "Choose a specific Equipment Sales & Hire location before changing installment records or settings."
+      "Choose a specific equipment location before changing installment records or settings."
     );
     error.statusCode = 400;
     error.code = "INSTALLMENT_LOCATION_REQUIRED";

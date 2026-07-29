@@ -84,7 +84,7 @@ test("service worker cache is advanced for the bundled debt dashboard release", 
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
-  assert.match(serviceWorker, /chalin03-installment-finance-separation-v17/);
+  assert.match(serviceWorker, /chalin03-installment-runtime-stability-v18/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
   assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
   assert.doesNotMatch(indexHtml, /debt-responsive-hotfix\.css/);
