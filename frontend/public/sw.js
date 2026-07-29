@@ -129,7 +129,7 @@ self.addEventListener("fetch", (event) => {
     fetch(request)
       .then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse || cachedResponseOrOffline(request);
+          return networkResponse || buildOfflineResponse();
         }
 
         const responseClone = networkResponse.clone();
