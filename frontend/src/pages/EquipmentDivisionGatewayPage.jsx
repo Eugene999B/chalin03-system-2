@@ -1,23 +1,26 @@
 import { Link, Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { HIRE_VIEW_PERMISSIONS } from "../security/permissionRules";
+import {
+  EQUIPMENT_DIVISIONS,
+  canAccessEquipmentDivision,
+} from "../security/equipmentDivisionAccess";
 import "../styles/equipmentDivisionGateway.css";
 import "../styles/equipmentDivisionGateway.mobile.css";
 
 const hireFeatures = [
-  "Customer hire enquiries and availability",
-  "Hire quotations and contracts",
-  "Dispatch, job cards and work logs",
+  "Hire customer enquiries and availability",
+  "Hire quotations and Hire contracts",
+  "Dispatch, job cards and Hire work logs",
   "Hire invoices, payments and balances",
-  "Return inspection and utilisation reports",
+  "Return inspection and Hire utilisation reports",
 ];
 
 const financeFeatures = [
-  "Installment portfolio command centre",
-  "Applications, quotations and agreements",
-  "Scheduled payments and customer accounts",
-  "Collections, reminders and risk control",
-  "Delivery, completion and ownership transfer",
+  "Credit applications, KYC and affordability",
+  "Finance approval and installment agreements",
+  "Scheduled installment payments and accounts",
+  "Finance collections, reminders and risk control",
+  "Finance delivery completion and ownership transfer",
 ];
 
 function AccessBadge({ allowed }) {
@@ -25,7 +28,7 @@ function AccessBadge({ allowed }) {
     <span
       className={`equipment-gateway__access ${allowed ? "is-allowed" : "is-restricted"}`}
     >
-      {allowed ? "Access available" : "Permission required"}
+      {allowed ? "Assigned division" : "Different staff division"}
     </span>
   );
 }
@@ -66,7 +69,7 @@ function DivisionCard({
       </ul>
 
       <div className="equipment-gateway__card-action">
-        <strong>{allowed ? action : "Your account cannot open this division"}</strong>
+        <strong>{allowed ? action : "This account belongs to the other division"}</strong>
         <span aria-hidden="true">→</span>
       </div>
     </>
@@ -91,12 +94,7 @@ function DivisionCard({
 }
 
 export default function EquipmentDivisionGatewayPage() {
-  const {
-    isLoggedIn,
-    workspaceCode,
-    effectivePermissions = [],
-    user,
-  } = useAuth();
+  const { isLoggedIn, workspaceCode, user } = useAuth();
 
   if (!isLoggedIn) {
     return <Navigate to="/login?workspace=equipment_hire" replace />;
@@ -106,20 +104,11 @@ export default function EquipmentDivisionGatewayPage() {
     return <Navigate to="/login?workspace=equipment_hire" replace />;
   }
 
-  const role = String(user?.role || "").toLowerCase();
-  const privileged = [
-    "admin",
-    "administrator",
-    "manager",
-    "system_administrator",
-  ].includes(role);
-  const canOpenHire =
-    privileged ||
-    HIRE_VIEW_PERMISSIONS.some((permission) =>
-      effectivePermissions.includes(permission)
-    );
-  const canOpenFinance =
-    privileged || effectivePermissions.includes("fleet.assets.view");
+  const canOpenHire = canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.HIRE);
+  const canOpenFinance = canAccessEquipmentDivision(
+    user,
+    EQUIPMENT_DIVISIONS.FINANCE
+  );
   const displayName = user?.full_name || user?.username || "Authorised staff";
 
   return (
@@ -150,30 +139,30 @@ export default function EquipmentDivisionGatewayPage() {
       <section className="equipment-gateway__hero">
         <div className="equipment-gateway__hero-copy">
           <div className="equipment-gateway__badges">
-            <span>One secure equipment workspace</span>
-            <span>Two independent divisions</span>
-            <span>Shared records, separate workflows</span>
+            <span>Two independent staff divisions</span>
+            <span>Role-isolated work queues</span>
+            <span>Reference-only equipment register</span>
           </div>
-          <p className="equipment-gateway__eyebrow">Choose your operating division</p>
+          <p className="equipment-gateway__eyebrow">Open your assigned division</p>
           <h1>
             Equipment Hire <em>or</em> Installment Finance
           </h1>
           <p>
-            Enter the division that matches the customer journey. Hire work and
-            installment-finance work remain clearly separated, while authorised
-            customers, machines and equipment locations stay consistent underneath.
+            Each ordinary staff account belongs to one division. Hire jobs remain in
+            Equipment Hire Operations, while credit, installment and ownership work
+            remains in Equipment Installment Finance.
           </p>
         </div>
 
         <aside className="equipment-gateway__principle">
           <span aria-hidden="true">🛡️</span>
           <div>
-            <small>Protected separation</small>
-            <strong>No duplicate customers or machines</strong>
+            <small>Hard division boundary</small>
+            <strong>No staff workflow crossover</strong>
             <p>
-              Hire contracts never become installment agreements, and finance
-              accounts never become Hire jobs. Shared equipment safeguards prevent
-              conflicting assignments.
+              Hire contracts never become finance accounts, finance applications never
+              become Hire jobs, and a Hire employee cannot open Finance work merely
+              because the employee can view a machine.
             </p>
           </div>
         </aside>
@@ -182,25 +171,25 @@ export default function EquipmentDivisionGatewayPage() {
       <section className="equipment-gateway__division-grid" aria-label="Equipment divisions">
         <DivisionCard
           tone="hire"
-          eyebrow="Operational division"
+          eyebrow="Hire staff division"
           icon="🏗️"
           title="Equipment Hire Operations"
-          description="For temporary equipment use, customer jobs, dispatch, billing and returns."
+          description="Temporary equipment use, customer Hire jobs, dispatch, Hire billing and returns."
           features={hireFeatures}
           route="/equipment-hire-operations?division=hire"
-          action="Open Equipment Hire"
+          action="Open assigned Hire work"
           allowed={canOpenHire}
         />
 
         <DivisionCard
           tone="finance"
-          eyebrow="Finance division"
+          eyebrow="Finance staff division"
           icon="🏦"
           title="Equipment Installment Finance"
-          description="For equipment purchase applications, scheduled payments, collections and ownership."
+          description="Equipment purchase credit, installment accounts, collections and ownership."
           features={financeFeatures}
           route="/equipment-installment-finance"
-          action="Open Installment Finance"
+          action="Open assigned Finance work"
           allowed={canOpenFinance}
         />
       </section>
@@ -208,19 +197,19 @@ export default function EquipmentDivisionGatewayPage() {
       <section className="equipment-gateway__shared-strip">
         <div>
           <span aria-hidden="true">🚜</span>
-          <p><strong>One equipment register</strong><small>Identity, pictures, condition and availability remain consistent.</small></p>
+          <p><strong>Reference-only machine identity</strong><small>Both divisions may identify the same physical machine without sharing a job, contract or account.</small></p>
         </div>
         <div>
           <span aria-hidden="true">👥</span>
-          <p><strong>Reusable customer identity</strong><small>Customer details are shared safely without mixing commercial records.</small></p>
+          <p><strong>Independent customer transactions</strong><small>A customer identity may be recognised, but Hire and Finance commercial records remain separate.</small></p>
         </div>
         <div>
-          <span aria-hidden="true">📍</span>
-          <p><strong>Authorised locations</strong><small>Both divisions respect the equipment locations granted to the staff account.</small></p>
+          <span aria-hidden="true">👔</span>
+          <p><strong>Division-specific staff roles</strong><small>Hire employees cannot enter Finance work, and Finance employees cannot enter Hire operations.</small></p>
         </div>
         <div>
-          <span aria-hidden="true">🔐</span>
-          <p><strong>Separate permissions</strong><small>Unavailable divisions remain protected by server and route permissions.</small></p>
+          <span aria-hidden="true">📊</span>
+          <p><strong>Separate evidence and reports</strong><small>Each division keeps its own documents, balances, audit actions and operating reports.</small></p>
         </div>
       </section>
 
