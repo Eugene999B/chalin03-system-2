@@ -3,6 +3,7 @@ const path = require("path");
 const { pool } = require("../config/db");
 const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const equipmentSalesFinalizationRoutes = require("../routes/equipmentSalesFinalizationRoutes");
+const equipmentCreditApplicationRoutes = require("../routes/equipmentCreditApplicationRoutes");
 const {
   startEquipmentSalesReminderScheduler,
 } = require("./equipmentSalesReminderService");
@@ -198,6 +199,23 @@ if (!equipmentSalesRoutes.__chalin03FinalizationMounted) {
     enumerable: false,
     writable: false,
   });
+}
+
+if (!equipmentSalesRoutes.__chalin03CreditApplicationsMounted) {
+  equipmentSalesRoutes.use(
+    "/credit-applications",
+    equipmentCreditApplicationRoutes
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03CreditApplicationsMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
 }
 
 async function tableExists(connection, tableName) {
