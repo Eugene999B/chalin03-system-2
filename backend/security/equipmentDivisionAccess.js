@@ -5,13 +5,6 @@ const EQUIPMENT_DIVISIONS = Object.freeze({
   FINANCE: "finance",
 });
 
-const ADMIN_ROLES = new Set([
-  "admin",
-  "administrator",
-  "system_administrator",
-  "super_admin",
-]);
-
 const HIRE_WORKSPACE_ROLES = new Set([
   "manager",
   "hire_officer",
@@ -48,7 +41,7 @@ function workspaceRoleFor(user = {}) {
 }
 
 function isEquipmentAdministrator(user = {}) {
-  return isOriginalSystemAdministrator(user) || ADMIN_ROLES.has(normalizeCode(user.role));
+  return isOriginalSystemAdministrator(user);
 }
 
 function hasEquipmentDivisionAccess(user = {}, division) {
