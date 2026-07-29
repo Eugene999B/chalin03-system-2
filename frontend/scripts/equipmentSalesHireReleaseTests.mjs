@@ -8,6 +8,7 @@ const root = path.resolve(here, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
+const app = read("src/App.jsx");
 const wrapper = read("src/pages/FleetAssetsPage.jsx");
 const sharedFleet = read("src/pages/SharedFleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
@@ -22,18 +23,28 @@ const retirementBridge = read(
   "src/utils/sparePartsInstallmentRetirementBridge.js"
 );
 const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
+const financeLayout = read("src/layouts/InstallmentFinanceLayout.jsx");
 const axiosClient = read("src/api/axiosClient.js");
 
 assert.match(wrapper, /isEquipmentHireWorkspace/);
 assert.match(wrapper, /EquipmentCataloguePage/);
-assert.match(wrapper, /EquipmentSalesWorkspacePage/);
-assert.match(wrapper, /EquipmentSalesReportsPage/);
+assert.match(wrapper, /Navigate/);
 assert.match(wrapper, /view === "sales"/);
 assert.match(wrapper, /view === "reports"/);
+assert.match(wrapper, /to="\/equipment-installment-finance\/applications"/);
+assert.match(wrapper, /to="\/equipment-installment-finance\/reports"/);
 assert.match(wrapper, /SharedFleetAssetsPage/);
+assert.doesNotMatch(wrapper, /<EquipmentSalesWorkspacePage/);
+assert.doesNotMatch(wrapper, /<EquipmentSalesReportsPage/);
 assert.doesNotMatch(wrapper, /EquipmentSalesPage/);
 assert.match(sharedFleet, /axiosClient\.get\("\/fleet\/summary"\)/);
 assert.match(sharedFleet, /FleetAssetsPage/);
+
+assert.match(app, /path="\/equipment-installment-finance"/);
+assert.match(app, /EquipmentSalesWorkspacePage/);
+assert.match(app, /EquipmentSalesReportsPage/);
+assert.match(app, /InstallmentFinanceLayout/);
+assert.match(app, /allowedWorkspaces=\{EQUIPMENT_HIRE_WORKSPACE\}/);
 
 assert.match(catalogue, /Equipment Sales &amp; Hire/);
 assert.match(catalogue, /Equipment Catalogue/);
@@ -136,17 +147,24 @@ assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
 assert.match(retirementBridge, /window\.location\.pathname !== "\/installments"/);
 assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
 assert.match(retirementBridge, /option\[value="installment"\]/);
-assert.match(retirementBridge, /Equipment installments are handled in Equipment Sales & Hire/);
+assert.match(retirementBridge, /Equipment installments are handled in Equipment Installment Finance/);
 assert.match(retirementBridge, /Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales/);
 
-assert.match(hireLayout, /workspaceName="Equipment Sales & Hire"/);
+assert.match(hireLayout, /workspaceName="Equipment Hire Operations"/);
 assert.match(hireLayout, /title: "Equipment Catalogue"/);
-assert.match(hireLayout, /title: "Sales & Installments"/);
-assert.match(hireLayout, /title: "Sales Documents & Reports"/);
-assert.match(hireLayout, /fleet\?view=sales/);
-assert.match(hireLayout, /fleet\?view=reports/);
+assert.match(hireLayout, /Open Equipment Installment Finance/);
+assert.doesNotMatch(hireLayout, /title: "Sales & Installments"/);
+assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
 assert.match(hireLayout, /permissions: \["fleet\.assets\.view"\]/);
-assert.match(hireLayout, /Spare Parts stores are never used here/);
+assert.match(hireLayout, /Separated from Installment Finance/);
+
+assert.match(financeLayout, /workspaceName="Equipment Installment Finance"/);
+assert.match(financeLayout, /Finance Command Centre/);
+assert.match(financeLayout, /Applications & Agreements/);
+assert.match(financeLayout, /Installment Documents & Reports/);
+assert.match(financeLayout, /Open Equipment Hire Operations/);
+assert.match(financeLayout, /workspaceCode="equipment_hire"/);
+assert.match(financeLayout, /Separated from Equipment Hire operations/);
 
 assert.match(axiosClient, /equipmentMediaCaptureBridge/);
 assert.match(axiosClient, /sparePartsInstallmentRetirementBridge/);
@@ -157,5 +175,5 @@ assert.match(axiosClient, /response\.data\.delivery/);
 assert.match(axiosClient, /response\.data\.ownership/);
 
 console.log(
-  "Equipment Sales & Hire final catalogue, sales, documents, reports, secure photos, reminders and Spare Parts retirement contracts passed."
+  "Equipment Hire and Equipment Installment Finance separation contracts passed."
 );
