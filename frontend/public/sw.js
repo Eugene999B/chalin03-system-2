@@ -1,5 +1,6 @@
-const CACHE_NAME = "chalin03-equipment-division-isolation-v21";
+const CACHE_NAME = "chalin03-finance-agreement-activation-v22";
 // Previous verified cache markers:
+// chalin03-equipment-division-isolation-v21
 // chalin03-credit-application-interface-v20
 // chalin03-equipment-division-gateway-v19
 // chalin03-installment-runtime-stability-v18
