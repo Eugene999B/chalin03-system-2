@@ -83,12 +83,18 @@ const navigationSections = [
     ],
   },
   {
-    title: "Separate Division",
+    title: "Equipment Divisions",
     items: [
+      {
+        title: "Back to Equipment Divisions",
+        description: "Choose Equipment Hire or Installment Finance",
+        path: "/equipment-hire",
+        icon: "◫",
+      },
       {
         title: "Open Equipment Hire Operations",
         description: "Switch to Hire enquiries, contracts, dispatch, invoices and returns",
-        path: "/equipment-hire-operations",
+        path: "/equipment-hire-operations?division=hire",
         icon: "🏗️",
         permissions: ["fleet.assets.view"],
       },
