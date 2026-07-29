@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router";
+import EquipmentDivisionStaffManager from "../components/EquipmentDivisionStaffManager";
 import { useAuth } from "../context/AuthContext";
 import {
   EQUIPMENT_DIVISIONS,
@@ -133,6 +134,7 @@ export default function EquipmentDivisionGatewayPage() {
             <small>Secure staff session</small>
             <strong>{displayName}</strong>
           </div>
+          <EquipmentDivisionStaffManager user={user} />
         </div>
       </header>
 
