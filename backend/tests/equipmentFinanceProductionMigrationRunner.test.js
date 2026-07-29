@@ -6,9 +6,12 @@ const test = require("node:test");
 const runner = require("../scripts/runEquipmentFinanceProductionMigrations");
 
 const root = path.resolve(__dirname, "../..");
-const packageJson = JSON.parse(
-  fs.readFileSync(path.join(root, "backend/package.json"), "utf8")
-);
+const read = (relativePath) =>
+  fs.readFileSync(path.join(root, relativePath), "utf8");
+const packageJson = JSON.parse(read("backend/package.json"));
+const runnerSource = read("backend/scripts/runEquipmentFinanceProductionMigrations.js");
+const runnerGuide = read("docs/EQUIPMENT_FINANCE_PRODUCTION_MIGRATION_RUNNER.md");
+const migrationIndex = read("database/migrations/README.md");
 
 function validEnvironment() {
   return {
@@ -66,6 +69,15 @@ test("Finance runner requires production and both verified backups", () => {
       CHALIN03_MIGRATION_RELEASE: "another-release",
     })
   );
+});
+
+test("Finance runner requires exact database identity and advisory locking", () => {
+  assert.match(runnerSource, /CHALIN03_EXPECTED_DATABASE/);
+  assert.match(runnerSource, /Set CHALIN03_EXPECTED_DATABASE/);
+  assert.match(runnerSource, /SELECT GET_LOCK\(\?, 30\) AS acquired/);
+  assert.match(runnerSource, /SELECT RELEASE_LOCK\(\?\) AS released/);
+  assert.match(runnerSource, /multipleStatements: false/);
+  assert.doesNotMatch(runnerSource, /database\/schema\.sql/);
 });
 
 test("SQL splitter supports delimiter-protected procedures and triggers", () => {
@@ -126,5 +138,38 @@ test("Finance migration command is separate from the legacy production runner", 
   assert.equal(
     packageJson.scripts["migrate:production"],
     "node scripts/runProductionMigrations.js"
+  );
+});
+
+test("runner documentation preserves the non-automatic safety contract", () => {
+  for (const expected of [
+    "npm run migrate:equipment-finance:production",
+    "CHALIN03_EQUIPMENT_FINANCE_MIGRATIONS_ENABLED=true",
+    "CHALIN03_SIGNED_BACKUP_CONFIRMED=true",
+    "CHALIN03_SQL_BACKUP_CONFIRMED=true",
+    "CHALIN03_MIGRATION_RELEASE=20260729_EQUIPMENT_FINANCE_COMPLETE",
+    "CHALIN03_EXPECTED_DATABASE",
+    "The runner is **not automatic**",
+    "All approved Equipment Finance migrations and verifiers passed.",
+    "set `CHALIN03_EQUIPMENT_FINANCE_MIGRATIONS_ENABLED=false`",
+    "never run `database/schema.sql`",
+  ]) {
+    assert.match(runnerGuide, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+
+  for (const filename of [
+    "20260729_equipment_credit_application_foundation.sql",
+    "20260729_equipment_finance_agreement_activation.sql",
+    "20260729_equipment_finance_deposit_reservation.sql",
+    "20260729_equipment_finance_final_lifecycle.sql",
+  ]) {
+    assert.match(runnerGuide, new RegExp(filename.replaceAll(".", "\\.")));
+    assert.match(migrationIndex, new RegExp(filename.replaceAll(".", "\\.")));
+  }
+
+  assert.match(migrationIndex, /Complete approved-credit lifecycle/);
+  assert.match(
+    migrationIndex,
+    /docs\/EQUIPMENT_FINANCE_PRODUCTION_MIGRATION_RUNNER\.md/
   );
 });
