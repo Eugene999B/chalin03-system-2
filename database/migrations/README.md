@@ -127,29 +127,51 @@ or MoMo balance, credit or another external source remain in accounting reports
 but do not reduce that day's expected settlement. Never run `database/schema.sql`
 against Railway production.
 
-## Equipment Installment Finance — Credit Application, KYC and Affordability
+## Equipment Installment Finance — Complete approved-credit lifecycle
 
-Production migration order:
+Before applying any Finance migration, verify both a current Professional Backup
+and a separate current SQL/database backup.
+
+The complete production order is:
 
 1. `20260729_equipment_credit_application_foundation.sql`
 2. `20260729_equipment_credit_application_foundation_verify.sql`
+3. `20260729_equipment_finance_agreement_activation.sql`
+4. `20260729_equipment_finance_agreement_activation_verify.sql`
+5. `20260729_equipment_finance_deposit_reservation.sql`
+6. `20260729_equipment_finance_deposit_reservation_verify.sql`
+7. `20260729_equipment_finance_final_lifecycle.sql`
+8. `20260729_equipment_finance_final_lifecycle_verify.sql`
 
-Before applying this migration, verify both a current Professional Backup and a
-separate SQL backup. The migration is additive and idempotent. It creates only the
-credit-application, KYC and decision-history foundation and records itself in
-`schema_migrations`.
+These additive migrations create the controlled Finance progression from credit
+application and KYC through agreement activation, deposit and machine
+reservation, installment collections, delivery handover and final ownership
+transfer. They preserve existing Equipment Hire contracts, jobs, dispatches,
+invoices, payments, returns, workers and historical legacy Equipment Sales
+agreements.
 
-The migration does not create or update an installment agreement, payment
-schedule, payment, Hire contract, equipment lock, delivery record, ownership
-transfer or SMS setting. An approved application remains a credit decision only.
+The approved one-command runner is:
 
-Follow the complete controlled procedure in:
+```text
+npm run migrate:equipment-finance:production
+```
 
-`docs/EQUIPMENT_CREDIT_APPLICATION_PRODUCTION_RUNBOOK.md`
+The runner is not automatic. It requires the exact release token, both backup
+confirmations, the expected production database name and a MySQL advisory lock.
+It applies each migration and immediately rejects any verifier result that is not
+numeric zero.
 
-The read-only verification must report:
+Follow the complete runner procedure in:
 
-- `missing_credit_tables = 0`;
-- `missing_credit_columns = 0`;
-- `invalid_credit_application_rows = 0`;
-- `orphan_credit_evidence_rows = 0`.
+`docs/EQUIPMENT_FINANCE_PRODUCTION_MIGRATION_RUNNER.md`
+
+Individual stage runbooks remain available for investigation and controlled
+manual execution:
+
+- `docs/EQUIPMENT_CREDIT_APPLICATION_PRODUCTION_RUNBOOK.md`
+- `docs/EQUIPMENT_FINANCE_AGREEMENT_ACTIVATION_RUNBOOK.md`
+- `docs/EQUIPMENT_FINANCE_DEPOSIT_RESERVATION_PRODUCTION_RUNBOOK.md`
+- `docs/EQUIPMENT_FINANCE_FINAL_LIFECYCLE_PRODUCTION_RUNBOOK.md`
+
+Automatic installment SMS remains disabled unless enabled through a separate
+reviewed release. Never run `database/schema.sql` against Railway production.
