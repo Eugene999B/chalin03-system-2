@@ -143,6 +143,17 @@ The complete production order is:
 7. `20260729_equipment_finance_final_lifecycle.sql`
 8. `20260729_equipment_finance_final_lifecycle_verify.sql`
 
+The credit-foundation verifier must explicitly report:
+
+- `missing_credit_tables = 0`;
+- `missing_credit_columns = 0`;
+- `invalid_credit_application_rows = 0`;
+- `orphan_credit_evidence_rows = 0`.
+
+Every subsequent Finance verifier problem count must also be exactly `0`. The
+one-command runner rejects missing result sets, non-numeric values and non-zero
+problem counts before it can continue to the next stage.
+
 These additive migrations create the controlled Finance progression from credit
 application and KYC through agreement activation, deposit and machine
 reservation, installment collections, delivery handover and final ownership
