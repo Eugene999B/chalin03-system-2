@@ -96,7 +96,8 @@ assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
 assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
 assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
 assert.match(divisionAccess, /canAccessEquipmentDivision/);
-assert.match(divisionAccess, /Number\(user\.id\) === 1/);
+assert.match(divisionAccess, /is_original_system_administrator/);
+assert.doesNotMatch(divisionAccess, /Number\(user\.id\) === 1/);
 
 assert.match(fleetPage, /Navigate/);
 assert.match(fleetPage, /\["installments", "sales", "reports"\]\.includes\(view\)/);
