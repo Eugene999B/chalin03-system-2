@@ -89,9 +89,12 @@ WHERE agreement.credit_application_id IS NOT NULL
   AND (
       agreement.sale_type <> 'installment'
       OR agreement.activation_source <> 'approved_credit_application'
-      OR agreement.equipment_commitment_status <> 'not_reserved'
       OR application.id IS NULL
       OR application.agreement_id <> agreement.id
+      OR (
+          agreement.agreement_status = 'approved'
+          AND agreement.equipment_commitment_status <> 'not_reserved'
+      )
   );
 
 SELECT COUNT(*) AS forbidden_hire_link_columns
