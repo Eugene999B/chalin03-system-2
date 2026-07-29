@@ -2,6 +2,7 @@ import { Link, Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { HIRE_VIEW_PERMISSIONS } from "../security/permissionRules";
 import "../styles/equipmentDivisionGateway.css";
+import "../styles/equipmentDivisionGatewayMobile.css";
 
 const hireFeatures = [
   "Customer hire enquiries and availability",
