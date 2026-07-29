@@ -5,6 +5,7 @@ const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const equipmentSalesFinalizationRoutes = require("../routes/equipmentSalesFinalizationRoutes");
 const equipmentCreditApplicationRoutes = require("../routes/equipmentCreditApplicationRoutes");
 const equipmentFinanceAgreementActivationRoutes = require("../routes/equipmentFinanceAgreementActivationRoutes");
+const equipmentFinanceDepositReservationRoutes = require("../routes/equipmentFinanceDepositReservationRoutes");
 const {
   startEquipmentSalesReminderScheduler,
 } = require("./equipmentSalesReminderService");
@@ -227,6 +228,23 @@ if (!equipmentSalesRoutes.__chalin03FinanceAgreementActivationMounted) {
   Object.defineProperty(
     equipmentSalesRoutes,
     "__chalin03FinanceAgreementActivationMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
+}
+
+if (!equipmentSalesRoutes.__chalin03FinanceDepositReservationMounted) {
+  equipmentSalesRoutes.use(
+    "/deposit-reservations",
+    equipmentFinanceDepositReservationRoutes
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03FinanceDepositReservationMounted",
     {
       value: true,
       configurable: false,
