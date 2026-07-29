@@ -73,7 +73,7 @@ function addRetirementNotice() {
   const notice = document.createElement("div");
   notice.dataset.chalinSparePartsRetirementNotice = "1";
   notice.textContent =
-    "Equipment installments are handled in Equipment Sales & Hire. Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales.";
+    "Equipment installments are handled in Equipment Installment Finance. Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales.";
   Object.assign(notice.style, {
     margin: "10px 0 4px",
     padding: "10px 12px",
@@ -197,7 +197,7 @@ function redirectRetiredRoute() {
   if (window.location.pathname !== "/installments") return false;
   sessionStorage.setItem(
     "chalin03_login_notice",
-    "Spare Parts installments have moved to Equipment Sales & Hire."
+    "Spare Parts installments have moved to Equipment Installment Finance."
   );
   window.location.replace("/new-sale");
   return true;
@@ -220,7 +220,7 @@ export function assertSparePartsInstallmentRequestAllowed(config) {
 
   if (method === "post" && /(?:^|\/)sales$/.test(url) && paymentType === "installment") {
     const error = new Error(
-      "Spare Parts installment sales have moved to Equipment Sales & Hire."
+      "Spare Parts installment sales have moved to Equipment Installment Finance."
     );
     error.code = "SPARE_PARTS_INSTALLMENTS_RETIRED";
     throw error;

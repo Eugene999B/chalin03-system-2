@@ -9,6 +9,7 @@ import WorkspaceRoute from "./components/WorkspaceRoute";
 import SparePartsLayout from "./layouts/SparePartsLayout";
 import MiningLayout from "./layouts/MiningLayout";
 import EquipmentHireLayout from "./layouts/EquipmentHireLayout";
+import InstallmentFinanceLayout from "./layouts/InstallmentFinanceLayout";
 import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
@@ -54,6 +55,15 @@ const MiningOperationsPage = lazy(() => import("./pages/MiningOperationsPage"));
 const MiningControlCentrePage = lazy(() => import("./pages/MiningControlCentrePage"));
 const EquipmentHireOperationsPage = lazy(() =>
   import("./pages/EquipmentHireOperationsPage")
+);
+const EquipmentInstallmentCommandPage = lazy(() =>
+  import("./pages/EquipmentInstallmentCommandPage")
+);
+const EquipmentSalesWorkspacePage = lazy(() =>
+  import("./pages/EquipmentSalesWorkspacePage")
+);
+const EquipmentSalesReportsPage = lazy(() =>
+  import("./pages/EquipmentSalesReportsPage")
 );
 const HireCommercialControlPage = lazy(() =>
   import("./pages/HireCommercialControlPage")
@@ -496,7 +506,7 @@ export default function App() {
             />
           </Route>
 
-          {/* Equipment Hire has its own layout, sidebar and route tree. */}
+          {/* Equipment Hire is an operational division with its own sidebar. */}
           <Route
             path="/equipment-hire-operations"
             element={
@@ -585,6 +595,106 @@ export default function App() {
             <Route
               path="fleet"
               element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
+            />
+            <Route
+              path="documents"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.documents,
+                <OperationsDocumentsAccountingPage workspaceScope="equipment_hire" />
+              )}
+            />
+            <Route
+              path="shared-controls"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.shared,
+                <SharedReportsDocumentsPage />
+              )}
+            />
+            <Route
+              path="workers"
+              element={permissionOnlyPage(
+                "workers.view",
+                <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="employment-documents"
+              element={permissionOnlyPage(
+                "workers.documents.view",
+                <EmploymentDocumentsPage />
+              )}
+            />
+            <Route
+              path="document-signature-settings"
+              element={permissionOnlyPage(
+                "security.admin",
+                <DocumentSignatureSettingsPage />
+              )}
+            />
+            <Route
+              path="administration"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.administration,
+                <WorkspaceAdministrationPage workspace="equipment_hire" />
+              )}
+            />
+            <Route
+              path="notifications"
+              element={permissionOnlyPage(
+                "notifications.view",
+                <NotificationCentrePage />
+              )}
+            />
+            <Route
+              path="help"
+              element={safe(<WorkspaceHelpPage workspace="equipment_hire" />)}
+            />
+            <Route
+              path="change-password"
+              element={safe(<ChangePasswordPage />)}
+            />
+          </Route>
+
+          {/* Installment Finance is a separate division using the same protected equipment data. */}
+          <Route
+            path="/equipment-installment-finance"
+            element={
+              <WorkspaceShell allowedWorkspaces={EQUIPMENT_HIRE_WORKSPACE}>
+                <InstallmentFinanceLayout />
+              </WorkspaceShell>
+            }
+          >
+            <Route
+              index
+              element={permissionOnlyPage(
+                "fleet.assets.view",
+                <EquipmentInstallmentCommandPage />
+              )}
+            />
+            <Route
+              path="applications"
+              element={permissionOnlyPage(
+                "fleet.assets.view",
+                <EquipmentSalesWorkspacePage />
+              )}
+            />
+            <Route
+              path="reports"
+              element={permissionOnlyPage(
+                "fleet.assets.view",
+                <EquipmentSalesReportsPage />
+              )}
+            />
+            <Route
+              path="catalogue"
+              element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
+            />
+            <Route
+              path="customers"
+              element={permissionPage(
+                HIRE_SECTION_PERMISSIONS.customers,
+                <EquipmentHireOperationsPage section="customers" />
+              )}
             />
             <Route
               path="documents"

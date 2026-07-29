@@ -1,9 +1,6 @@
-import { useSearchParams } from "react-router";
+import { Navigate, useSearchParams } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import EquipmentCataloguePage from "./EquipmentCataloguePage";
-import EquipmentInstallmentCommandPage from "./EquipmentInstallmentCommandPage";
-import EquipmentSalesReportsPage from "./EquipmentSalesReportsPage";
-import EquipmentSalesWorkspacePage from "./EquipmentSalesWorkspacePage";
 import SharedFleetAssetsPage from "./SharedFleetAssetsPage";
 
 export default function FleetAssetsPage() {
@@ -17,15 +14,15 @@ export default function FleetAssetsPage() {
   const view = searchParams.get("view");
 
   if (view === "installments") {
-    return <EquipmentInstallmentCommandPage />;
+    return <Navigate to="/equipment-installment-finance" replace />;
   }
 
   if (view === "sales") {
-    return <EquipmentSalesWorkspacePage />;
+    return <Navigate to="/equipment-installment-finance/applications" replace />;
   }
 
   if (view === "reports") {
-    return <EquipmentSalesReportsPage />;
+    return <Navigate to="/equipment-installment-finance/reports" replace />;
   }
 
   if (view === "maintenance") {

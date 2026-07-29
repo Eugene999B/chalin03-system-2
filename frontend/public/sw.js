@@ -1,4 +1,4 @@
-const CACHE_NAME = "chalin03-installment-command-centre-v16";
+const CACHE_NAME = "chalin03-installment-finance-separation-v17";
 
 const CORE_ASSETS = [
   "/",
