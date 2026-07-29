@@ -171,6 +171,9 @@ BEFORE INSERT ON equipment_sale_agreements
 FOR EACH ROW
 BEGIN
     DECLARE v_matches INT DEFAULT 0;
+    DECLARE v_asset_available INT DEFAULT 0;
+    DECLARE v_active_sale_locks INT DEFAULT 0;
+    DECLARE v_active_agreements INT DEFAULT 0;
 
     IF NEW.sale_type = 'installment' THEN
         IF NEW.credit_application_id IS NULL THEN
@@ -194,6 +197,41 @@ BEGIN
         IF v_matches <> 1 THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'Approved Finance application does not match this installment agreement.';
+        END IF;
+
+        SELECT COUNT(*)
+          INTO v_asset_available
+        FROM fleet_assets asset
+        WHERE asset.id = NEW.asset_id
+          AND asset.is_active = TRUE
+          AND asset.operational_purpose IN ('sale_only','sale_or_hire')
+          AND asset.sale_status = 'available';
+
+        IF v_asset_available <> 1 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'The equipment is not currently available for Finance agreement activation.';
+        END IF;
+
+        SELECT COUNT(*)
+          INTO v_active_sale_locks
+        FROM equipment_asset_sale_locks sale_lock
+        WHERE sale_lock.asset_id = NEW.asset_id
+          AND sale_lock.released_at IS NULL;
+
+        IF v_active_sale_locks <> 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'The equipment already has an active sale or installment lock.';
+        END IF;
+
+        SELECT COUNT(*)
+          INTO v_active_agreements
+        FROM equipment_sale_agreements agreement
+        WHERE agreement.asset_id = NEW.asset_id
+          AND agreement.agreement_status NOT IN ('completed','cancelled','defaulted');
+
+        IF v_active_agreements <> 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'The equipment already belongs to another live Finance agreement.';
         END IF;
 
         SET NEW.activation_source = 'approved_credit_application';
@@ -255,6 +293,6 @@ DROP PROCEDURE IF EXISTS equipment_finance_activation_add_fk_if_missing;
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
     '20260729_equipment_finance_agreement_activation',
-    'Link approved Finance credit applications to separate installment agreements and enforce the approval gate without creating Hire jobs, payments, machine locks, delivery or SMS evidence.'
+    'Link approved Finance credit applications to separate installment agreements and enforce the approval and equipment-availability gates without creating Hire jobs, payments, machine locks, delivery or SMS evidence.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
