@@ -32,7 +32,7 @@ const layout = read(
 );
 const serviceWorker = read("frontend", "public", "sw.js");
 
-test("Finance applications route through the protected credit foundation", () => {
+ test("Finance applications route through the protected credit foundation", () => {
   assert.match(wrapper, /EquipmentCreditApplicationsPage/);
   assert.match(
     page,
@@ -85,14 +85,16 @@ test("credit approval interface cannot activate an agreement or reserve equipmen
   );
 });
 
-test("credit interface is responsive and discoverable in Finance navigation", () => {
+test("credit interface is responsive and discoverable only in Finance navigation", () => {
   assert.match(layout, /Credit Applications & Approval/);
-  assert.match(layout, /KYC, affordability, manager review and credit decisions/);
+  assert.match(layout, /Finance applications, KYC, affordability and independent decisions/);
+  assert.match(layout, /No access to Hire jobs or contracts/);
+  assert.doesNotMatch(layout, /Open Equipment Hire Operations/);
   assert.match(css, /\.credit-app__metrics/);
   assert.match(css, /\.credit-app__drawer/);
   assert.match(css, /\.credit-app__form-grid/);
   assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /@media \(max-width: 400px\)/);
   assert.match(css, /prefers-reduced-motion/);
-  assert.match(serviceWorker, /chalin03-credit-application-interface-v20/);
+  assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
 });
