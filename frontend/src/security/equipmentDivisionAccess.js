@@ -20,12 +20,6 @@ export const FINANCE_WORKSPACE_ROLES = Object.freeze([
   "finance_auditor",
 ]);
 
-const ADMIN_ROLES = new Set([
-  "admin",
-  "administrator",
-  "system_administrator",
-  "super_admin",
-]);
 const HIRE_ROLE_SET = new Set(HIRE_WORKSPACE_ROLES);
 const FINANCE_ROLE_SET = new Set(FINANCE_WORKSPACE_ROLES);
 
@@ -41,7 +35,11 @@ export function equipmentWorkspaceRole(user = {}) {
 }
 
 export function isEquipmentAdministrator(user = {}) {
-  return ADMIN_ROLES.has(normalized(user.role));
+  return (
+    Number(user.id) === 1 &&
+    normalized(user.username) === "admin" &&
+    normalized(user.role) === "admin"
+  );
 }
 
 export function canAccessEquipmentDivision(user = {}, division) {
