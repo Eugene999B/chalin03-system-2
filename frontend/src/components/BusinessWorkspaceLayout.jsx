@@ -74,6 +74,10 @@ export default function BusinessWorkspaceLayout({
   description,
   theme,
   navigationSections,
+  independenceLabel = "Independent workspace",
+  contextHeading = "Active operating context",
+  workspaceEyebrow = "Current business workspace",
+  separationBadge = "Separated from Spare Parts",
 }) {
   const auth = useAuth();
   const { user, role, workspaceRole, logout } = auth;
@@ -164,13 +168,13 @@ export default function BusinessWorkspaceLayout({
         </div>
 
         <div className="bwl-independent-note">
-          <span>Independent workspace</span>
+          <span>{independenceLabel}</span>
           <p>{description}</p>
         </div>
 
         {showContextSelector ? (
           <div className="bwl-context-summary">
-            <small>Active operating context</small>
+            <small>{contextHeading}</small>
             <strong>{contextStatus}</strong>
             <span>
               {selectedContextId
@@ -237,7 +241,7 @@ export default function BusinessWorkspaceLayout({
       <div className="bwl-main">
         <header className="bwl-topbar">
           <div>
-            <small>Current business workspace</small>
+            <small>{workspaceEyebrow}</small>
             <strong>
               <span aria-hidden="true">{icon}</span> {workspaceName}
             </strong>
@@ -245,7 +249,9 @@ export default function BusinessWorkspaceLayout({
 
           <div className="bwl-topbar-right">
             {showContextSelector ? <WorkspaceContextSelector compact /> : null}
-            <span className="bwl-separation-badge">Separated from Spare Parts</span>
+            {separationBadge ? (
+              <span className="bwl-separation-badge">{separationBadge}</span>
+            ) : null}
             <button type="button" onClick={switchBusiness}>
               Switch Business
             </button>
