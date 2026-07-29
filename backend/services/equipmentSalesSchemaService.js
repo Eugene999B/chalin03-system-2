@@ -4,6 +4,7 @@ const { pool } = require("../config/db");
 const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const equipmentSalesFinalizationRoutes = require("../routes/equipmentSalesFinalizationRoutes");
 const equipmentCreditApplicationRoutes = require("../routes/equipmentCreditApplicationRoutes");
+const equipmentFinanceAgreementActivationRoutes = require("../routes/equipmentFinanceAgreementActivationRoutes");
 const {
   startEquipmentSalesReminderScheduler,
 } = require("./equipmentSalesReminderService");
@@ -209,6 +210,23 @@ if (!equipmentSalesRoutes.__chalin03CreditApplicationsMounted) {
   Object.defineProperty(
     equipmentSalesRoutes,
     "__chalin03CreditApplicationsMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
+}
+
+if (!equipmentSalesRoutes.__chalin03FinanceAgreementActivationMounted) {
+  equipmentSalesRoutes.use(
+    "/agreement-activations",
+    equipmentFinanceAgreementActivationRoutes
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03FinanceAgreementActivationMounted",
     {
       value: true,
       configurable: false,
