@@ -1,0 +1,657 @@
+.finance-deposit {
+  display: grid;
+  gap: 1.15rem;
+  padding: clamp(1rem, 2vw, 1.75rem);
+  color: #18221c;
+}
+
+.finance-deposit__hero,
+.finance-deposit__boundary,
+.finance-deposit__metrics article,
+.finance-deposit__toolbar,
+.finance-deposit__queue,
+.finance-deposit__foundation {
+  border: 1px solid rgba(47, 78, 58, 0.14);
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 16px 42px rgba(26, 49, 34, 0.08);
+}
+
+.finance-deposit__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  background:
+    radial-gradient(circle at top right, rgba(224, 188, 88, 0.28), transparent 35%),
+    linear-gradient(135deg, #173b2a 0%, #2d5a3e 55%, #675b2f 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+.finance-deposit__hero p,
+.finance-deposit__queue > header p,
+.finance-deposit__foundation p,
+.finance-deposit__drawer > header p {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.finance-deposit__hero h1 {
+  max-width: 50rem;
+  margin: 0;
+  font-size: clamp(1.55rem, 3.2vw, 2.6rem);
+  line-height: 1.06;
+}
+
+.finance-deposit__hero > div > span {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 700;
+}
+
+.finance-deposit__hero-actions,
+.finance-deposit__card-actions,
+.finance-deposit__form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.finance-deposit a,
+.finance-deposit button,
+.finance-deposit input,
+.finance-deposit select,
+.finance-deposit textarea {
+  font: inherit;
+}
+
+.finance-deposit__hero-actions a,
+.finance-deposit__hero-actions button,
+.finance-deposit__card-actions button,
+.finance-deposit__form-actions button {
+  min-height: 2.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(29, 67, 43, 0.18);
+  border-radius: 0.8rem;
+  background: #fff;
+  color: #204b32;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.finance-deposit__hero-actions a,
+.finance-deposit__hero-actions button {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+
+.finance-deposit button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.finance-deposit button.is-primary,
+.finance-deposit__card-actions .is-primary {
+  border-color: #1f5c36;
+  background: #1f5c36;
+  color: #fff;
+}
+
+.finance-deposit__boundary,
+.finance-deposit__foundation {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.finance-deposit__boundary {
+  background: linear-gradient(135deg, #f7fbf7, #fffdf3);
+}
+
+.finance-deposit__boundary > span,
+.finance-deposit__foundation > span {
+  font-size: 1.8rem;
+}
+
+.finance-deposit__boundary strong,
+.finance-deposit__warning strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.finance-deposit__boundary p,
+.finance-deposit__warning p,
+.finance-deposit__empty p,
+.finance-deposit__metrics p {
+  margin: 0;
+  color: #637069;
+  line-height: 1.55;
+}
+
+.finance-deposit__alert {
+  padding: 0.95rem 1.05rem;
+  border: 1px solid transparent;
+  border-radius: 0.9rem;
+  font-weight: 700;
+}
+
+.finance-deposit__alert.is-error {
+  border-color: #e3aaa5;
+  background: #fff0ef;
+  color: #8f2822;
+}
+
+.finance-deposit__alert.is-success {
+  border-color: #a8d4b8;
+  background: #eefaf2;
+  color: #22643a;
+}
+
+.finance-deposit__alert.is-warning {
+  border-color: #e4c788;
+  background: #fff8e7;
+  color: #755916;
+}
+
+.finance-deposit__alert.is-info {
+  border-color: #a9c2dc;
+  background: #eff7ff;
+  color: #315978;
+}
+
+.finance-deposit__foundation {
+  padding: clamp(1.25rem, 3vw, 2rem);
+  background: #fff9ea;
+}
+
+.finance-deposit__foundation h2 {
+  margin: 0 0 0.45rem;
+}
+
+.finance-deposit__foundation small {
+  display: block;
+  margin-top: 0.55rem;
+  color: #765e2d;
+}
+
+.finance-deposit__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.finance-deposit__metrics article {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.finance-deposit__metrics article > span {
+  font-size: 1.55rem;
+}
+
+.finance-deposit__metrics small,
+.finance-deposit__facts span,
+.finance-deposit__review span {
+  display: block;
+  color: #758079;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.finance-deposit__metrics strong {
+  display: block;
+  margin: 0.16rem 0;
+  font-size: 1.28rem;
+}
+
+.finance-deposit__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem);
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.finance-deposit__toolbar label,
+.finance-deposit__field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.finance-deposit__toolbar label > span,
+.finance-deposit__field > span {
+  font-size: 0.77rem;
+  font-weight: 800;
+  color: #4d5c53;
+}
+
+.finance-deposit input,
+.finance-deposit select,
+.finance-deposit textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cfd9d1;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #17251b;
+  padding: 0.72rem 0.8rem;
+  outline: none;
+}
+
+.finance-deposit input:focus,
+.finance-deposit select:focus,
+.finance-deposit textarea:focus,
+.finance-deposit button:focus-visible,
+.finance-deposit a:focus-visible {
+  border-color: #2e7547;
+  box-shadow: 0 0 0 3px rgba(46, 117, 71, 0.16);
+  outline: none;
+}
+
+.finance-deposit__queue {
+  overflow: hidden;
+}
+
+.finance-deposit__queue > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid #e7ece8;
+}
+
+.finance-deposit__queue h2 {
+  margin: 0;
+}
+
+.finance-deposit__queue > header small {
+  color: #66736b;
+  font-weight: 700;
+}
+
+.finance-deposit__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.finance-deposit__card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid #dce5de;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #fff, #fbfdfb);
+}
+
+.finance-deposit__card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.finance-deposit__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.finance-deposit__image {
+  width: 4rem;
+  height: 4rem;
+  flex: 0 0 4rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe4dd;
+  border-radius: 0.8rem;
+  background: #f3f6f3;
+  font-size: 1.6rem;
+}
+
+.finance-deposit__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.finance-deposit__card-top small {
+  color: #6d786f;
+  font-weight: 800;
+}
+
+.finance-deposit__card-top h3 {
+  margin: 0.2rem 0;
+}
+
+.finance-deposit__card-top p {
+  margin: 0;
+  color: #637168;
+  overflow-wrap: anywhere;
+}
+
+.finance-deposit__status {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 1.75rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: #edf1ee;
+  color: #435149;
+  font-size: 0.7rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.finance-deposit__status.is-awaiting {
+  background: #edf2f8;
+  color: #405c79;
+}
+
+.finance-deposit__status.is-partial {
+  background: #fff2d6;
+  color: #76580e;
+}
+
+.finance-deposit__status.is-reserved {
+  background: #e6f6eb;
+  color: #24643a;
+}
+
+.finance-deposit__progress {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e9eeea;
+}
+
+.finance-deposit__progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #d2a63d, #2f7848);
+  transition: width 180ms ease;
+}
+
+.finance-deposit__facts,
+.finance-deposit__review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.finance-deposit__facts > div,
+.finance-deposit__review > div {
+  padding: 0.7rem;
+  border-radius: 0.75rem;
+  background: #f4f7f4;
+}
+
+.finance-deposit__facts strong,
+.finance-deposit__review strong {
+  display: block;
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.finance-deposit__safeguards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.finance-deposit__safeguards span {
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: #edf7ef;
+  color: #2c653d;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.finance-deposit__card-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.finance-deposit__reserved-note {
+  color: #477054;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.finance-deposit__empty,
+.finance-deposit__loading {
+  padding: 2.25rem 1rem;
+  text-align: center;
+}
+
+.finance-deposit__empty > span {
+  font-size: 2rem;
+}
+
+.finance-deposit__empty h3 {
+  margin: 0.65rem 0 0.3rem;
+}
+
+.finance-deposit__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(9, 20, 13, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.finance-deposit__drawer {
+  width: min(44rem, 96vw);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #f8faf8;
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.25);
+  animation: financeDepositSlide 170ms ease-out;
+}
+
+.finance-deposit__drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.2rem 1.3rem;
+  background: #173b2a;
+  color: #fff;
+}
+
+.finance-deposit__drawer > header h2 {
+  margin: 0;
+}
+
+.finance-deposit__drawer > header span {
+  display: block;
+  margin-top: 0.35rem;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.finance-deposit__drawer > header button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.45rem;
+  cursor: pointer;
+}
+
+.finance-deposit__drawer-body {
+  overflow: auto;
+  padding: 1.2rem;
+}
+
+.finance-deposit__form {
+  display: grid;
+  gap: 1rem;
+}
+
+.finance-deposit__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.finance-deposit__field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.finance-deposit__field small {
+  color: #738078;
+  line-height: 1.4;
+}
+
+.finance-deposit__warning {
+  padding: 0.95rem;
+  border: 1px solid #e2c77f;
+  border-radius: 0.85rem;
+  background: #fff9e8;
+}
+
+.finance-deposit__confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border: 1px solid #9bc5a9;
+  border-radius: 0.85rem;
+  background: #eff9f2;
+  cursor: pointer;
+}
+
+.finance-deposit__confirmation input {
+  width: auto;
+  margin-top: 0.2rem;
+  accent-color: #1f5c36;
+}
+
+.finance-deposit__confirmation strong,
+.finance-deposit__confirmation small {
+  display: block;
+}
+
+.finance-deposit__confirmation small {
+  margin-top: 0.3rem;
+  color: #5f7265;
+  line-height: 1.45;
+}
+
+.finance-deposit__form-actions {
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+@keyframes financeDepositSlide {
+  from {
+    transform: translateX(2rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 1000px) {
+  .finance-deposit__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .finance-deposit__hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-deposit__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .finance-deposit {
+    padding: 0.75rem;
+    gap: 0.8rem;
+  }
+
+  .finance-deposit__hero,
+  .finance-deposit__boundary,
+  .finance-deposit__foundation {
+    border-radius: 1rem;
+  }
+
+  .finance-deposit__hero-actions,
+  .finance-deposit__hero-actions a,
+  .finance-deposit__hero-actions button,
+  .finance-deposit__card-actions,
+  .finance-deposit__card-actions button,
+  .finance-deposit__form-actions,
+  .finance-deposit__form-actions button {
+    width: 100%;
+  }
+
+  .finance-deposit__metrics,
+  .finance-deposit__toolbar,
+  .finance-deposit__facts,
+  .finance-deposit__review,
+  .finance-deposit__form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-deposit__cards {
+    padding: 0.7rem;
+  }
+
+  .finance-deposit__card-top,
+  .finance-deposit__queue > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .finance-deposit__identity {
+    width: 100%;
+  }
+
+  .finance-deposit__drawer {
+    width: 100%;
+  }
+
+  .finance-deposit__drawer-body {
+    padding: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finance-deposit__drawer,
+  .finance-deposit__progress > div {
+    animation: none;
+    transition: none;
+  }
+}
