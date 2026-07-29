@@ -10,6 +10,10 @@
   backdrop-filter: blur(12px);
 }
 
+.equipment-division-staff__open-compact {
+  display: none;
+}
+
 .equipment-division-staff__open:hover,
 .equipment-division-staff__open:focus-visible {
   background: rgba(255, 255, 255, 0.2);
@@ -212,8 +216,16 @@
 
 @media (max-width: 760px) {
   .equipment-division-staff__open {
-    padding: 0.5rem 0.72rem;
-    font-size: 0.78rem;
+    padding: 0.48rem 0.62rem;
+    font-size: 0.72rem;
+  }
+
+  .equipment-division-staff__open-full {
+    display: none;
+  }
+
+  .equipment-division-staff__open-compact {
+    display: inline;
   }
 
   .equipment-division-staff__backdrop {
