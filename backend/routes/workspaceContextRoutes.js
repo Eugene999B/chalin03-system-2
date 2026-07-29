@@ -2,6 +2,7 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
+const equipmentDivisionAdminRoutes = require("./equipmentDivisionAdminRoutes");
 
 const router = express.Router();
 
@@ -57,7 +58,7 @@ async function getWorkspaceDefinition(req, res) {
     res.status(403).json({
       status: "error",
       message:
-        "Site and location selection is available only inside Mining Operations or Equipment Hire.",
+        "Site and location selection is available only inside Mining Operations or Equipment Business.",
     });
     return null;
   }
@@ -246,6 +247,7 @@ async function logActivity(req, action, details) {
 }
 
 router.use(requireAuth);
+router.use("/equipment-divisions", equipmentDivisionAdminRoutes);
 
 // GET /api/workspace-context/options
 router.get("/options", async (req, res) => {
@@ -277,7 +279,7 @@ router.get("/options", async (req, res) => {
         options.length === 0
           ? definition.code === "mining"
             ? "No active Mining site is available for this account."
-            : "No active Equipment Hire location is available for this account."
+            : "No active Equipment location is available for this account."
           : "Workspace locations loaded successfully.",
     });
   } catch (error) {
@@ -354,7 +356,7 @@ router.put("/default/:contextId", async (req, res) => {
       message:
         definition.code === "mining"
           ? "Default Mining site updated successfully."
-          : "Default Equipment Hire location updated successfully.",
+          : "Default Equipment location updated successfully.",
       context_id: contextId,
       context_type: definition.contextType,
     });
