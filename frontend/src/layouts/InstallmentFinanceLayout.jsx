@@ -36,6 +36,14 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Deposit & Machine Reservation",
+        description: "Record the controlled opening deposit and reserve the approved machine",
+        path: "/equipment-installment-finance/applications?stage=deposit",
+        icon: "🔒",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Installment Documents & Reports",
         description: "Finance agreements, receipts, aging, collections and expected payments",
         path: "/equipment-installment-finance/reports",
@@ -101,7 +109,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Finance location reference"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated credit applications, agreement activation, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated credit applications, agreement activation, controlled deposits, machine reservations, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
