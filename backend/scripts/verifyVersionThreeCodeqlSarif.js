@@ -205,7 +205,7 @@ assert.match(
 );
 assert.match(
   equipmentCreditMigrationSource,
-  /UNIQUE KEY uq_equipment_credit_applications_number \(application_number\)/
+  /application_number VARCHAR\(80\) NOT NULL UNIQUE/
 );
 
 if (violations.length > 0) {
