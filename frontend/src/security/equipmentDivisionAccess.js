@@ -60,7 +60,7 @@ export function canAccessEquipmentDivision(user = {}, division) {
   return false;
 }
 
-export function ensureFinanceUiCompatibilityPermissions(user = {}) {
+export function ensureFinanceUiCompatibilityPermissions(user = {}, pathname = "") {
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) return [];
 
   const current = Array.isArray(user.effective_permissions)
@@ -72,9 +72,15 @@ export function ensureFinanceUiCompatibilityPermissions(user = {}) {
   // to the authenticated Finance interface. The backend independently rejects
   // Finance roles on Hire APIs and rejects Finance catalogue writes.
   permissions.add("fleet.assets.view");
+  permissions.delete("fleet.assets.manage");
+
+  const financeCatalogueOnly = String(pathname || "").startsWith(
+    "/equipment-installment-finance/catalogue"
+  );
   if (
-    isEquipmentAdministrator(user) ||
-    FINANCE_WORK_ROLE_SET.has(equipmentWorkspaceRole(user))
+    !financeCatalogueOnly &&
+    (isEquipmentAdministrator(user) ||
+      FINANCE_WORK_ROLE_SET.has(equipmentWorkspaceRole(user)))
   ) {
     permissions.add("fleet.assets.manage");
   }
