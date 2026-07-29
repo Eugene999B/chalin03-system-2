@@ -13,8 +13,15 @@ const readProject = (...parts) =>
 
 const page = readFrontend("src", "pages", "EquipmentInstallmentCommandPage.jsx");
 const css = readFrontend("src", "styles", "equipmentInstallmentCommand.css");
+const app = readFrontend("src", "App.jsx");
 const fleetPage = readFrontend("src", "pages", "FleetAssetsPage.jsx");
-const layout = readFrontend("src", "layouts", "EquipmentHireLayout.jsx");
+const hireLayout = readFrontend("src", "layouts", "EquipmentHireLayout.jsx");
+const financeLayout = readFrontend("src", "layouts", "InstallmentFinanceLayout.jsx");
+const workspaceLayout = readFrontend(
+  "src",
+  "components",
+  "BusinessWorkspaceLayout.jsx"
+);
 const serviceWorker = readFrontend("public", "sw.js");
 const route = readProject("backend", "routes", "equipmentInstallmentCommandRoutes.js");
 const service = readProject(
@@ -48,14 +55,45 @@ assert.match(page, /manual_whatsapp_enabled/);
 assert.match(page, /maximum_hours_between_sms|minimum_hours_between_sms/);
 assert.match(page, /max_messages_per_run/);
 
-assert.match(fleetPage, /EquipmentInstallmentCommandPage/);
+assert.match(app, /InstallmentFinanceLayout/);
+assert.match(app, /path="\/equipment-installment-finance"/);
+assert.match(app, /EquipmentInstallmentCommandPage/);
+assert.match(app, /EquipmentSalesWorkspacePage/);
+assert.match(app, /EquipmentSalesReportsPage/);
+assert.match(app, /allowedWorkspaces=\{EQUIPMENT_HIRE_WORKSPACE\}/);
+assert.doesNotMatch(app, /const INSTALLMENT_WORKSPACE/);
+
+assert.match(financeLayout, /Equipment Installment Finance/);
+assert.match(financeLayout, /Independent finance division/);
+assert.match(financeLayout, /Separated from Equipment Hire operations/);
+assert.match(financeLayout, /Finance Command Centre/);
+assert.match(financeLayout, /Applications & Agreements/);
+assert.match(financeLayout, /Installment Documents & Reports/);
+assert.match(financeLayout, /Open Equipment Hire Operations/);
+assert.match(financeLayout, /workspaceCode="equipment_hire"/);
+
+assert.match(hireLayout, /Equipment Hire Operations/);
+assert.match(hireLayout, /Independent Hire division/);
+assert.match(hireLayout, /Separated from Installment Finance/);
+assert.match(hireLayout, /Open Equipment Installment Finance/);
+assert.doesNotMatch(hireLayout, /title: "Installment Command Centre"/);
+assert.doesNotMatch(hireLayout, /title: "Sales & Installments"/);
+assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
+
+assert.match(fleetPage, /Navigate/);
 assert.match(fleetPage, /view === "installments"/);
-assert.match(layout, /Installment Command Centre/);
-assert.match(layout, /fleet\?view=installments/);
+assert.match(fleetPage, /to="\/equipment-installment-finance"/);
+assert.match(fleetPage, /to="\/equipment-installment-finance\/applications"/);
+assert.match(fleetPage, /to="\/equipment-installment-finance\/reports"/);
+assert.doesNotMatch(fleetPage, /<EquipmentInstallmentCommandPage/);
+
+assert.match(workspaceLayout, /independenceLabel = "Independent workspace"/);
+assert.match(workspaceLayout, /contextHeading = "Active operating context"/);
+assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /installment-command__account-grid/);
 assert.match(css, /installment-command__backdrop/);
-assert.match(serviceWorker, /chalin03-installment-command-centre-v16/);
+assert.match(serviceWorker, /chalin03-installment-finance-separation-v17/);
 
 assert.match(route, /\/portfolio/);
 assert.match(route, /\/collections/);
@@ -67,4 +105,4 @@ assert.match(service, /automatic_sms_enabled: false/);
 assert.match(service, /GET_LOCK/);
 assert.doesNotMatch(service, /CREATE TABLE|ALTER TABLE|DROP TABLE|TRUNCATE TABLE/i);
 
-console.log("Equipment Installment Command Centre source contract passed.");
+console.log("Equipment Installment Finance separation contract passed.");
