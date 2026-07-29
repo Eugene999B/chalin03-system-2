@@ -58,6 +58,12 @@ test("Hire and Installment Finance keep separate navigation and staff identities
     "layouts",
     "InstallmentFinanceLayout.jsx"
   );
+  const divisionAccess = read(
+    "frontend",
+    "src",
+    "security",
+    "equipmentDivisionAccess.js"
+  );
 
   assert.match(hireLayout, /workspaceName="Equipment Hire Operations"/);
   assert.match(hireLayout, /Independent Hire staff division/);
@@ -69,11 +75,18 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.match(financeLayout, /Independent Finance staff division/);
   assert.match(financeLayout, /No access to Hire jobs or contracts/);
   assert.match(financeLayout, /Back to Equipment Divisions/);
+  assert.match(financeLayout, /ensureFinanceUiCompatibilityPermissions\(user\)/);
   assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
   assert.doesNotMatch(financeLayout, /\/equipment-hire-operations\?division=hire/);
   assert.doesNotMatch(financeLayout, /title: "Hire Contracts"/);
   assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
   assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
+
+  assert.match(divisionAccess, /function ensureFinanceUiCompatibilityPermissions/);
+  assert.match(divisionAccess, /permissions\.add\("fleet\.assets\.view"\)/);
+  assert.match(divisionAccess, /FINANCE_WORK_ROLE_SET/);
+  assert.match(divisionAccess, /backend independently rejects/);
+  assert.doesNotMatch(divisionAccess, /HIRE_ROLE_SET\.has[^\n]*fleet\.assets\.manage/);
 });
 
 test("gateway remains mobile-safe and exposes protected staff assignment", () => {
