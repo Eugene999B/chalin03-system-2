@@ -1,15 +1,16 @@
 const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const installmentCommandRoutes = require("../routes/equipmentInstallmentCommandRoutes");
+const equipmentFinanceFinalLifecycleRoutes = require("../routes/equipmentFinanceFinalLifecycleRoutes");
 const {
   buildInstallmentReminderMessage,
   defaultInstallmentReminderSettings,
   refreshEquipmentInstallmentStatuses,
   runEquipmentSalesReminderSync,
-  startEquipmentSalesReminderScheduler,
+  startEquipmentSalesReminderScheduler: startUnderlyingEquipmentSalesReminderScheduler,
 } = require("./equipmentInstallmentCommandService");
 
 // Compatibility evidence retained for the established Equipment Sales release contract.
-// The command service now provides the implementation for equipment_sales_reminder_log,
+// The command service provides the implementation for equipment_sales_reminder_log,
 // INSERT IGNORE reminderKey claims, due_soon, due_today and overdue reminders.
 const LEGACY_COMPATIBILITY = Object.freeze({
   dueSoonEnvironment: "EQUIPMENT_SALES_REMINDER_DAYS_BEFORE",
@@ -22,6 +23,11 @@ const LEGACY_COMPATIBILITY = Object.freeze({
   ),
 });
 
+const AUTOMATIC_SMS_APPROVED =
+  String(process.env.EQUIPMENT_INSTALLMENT_AUTOMATIC_SMS_APPROVED || "")
+    .trim()
+    .toLowerCase() === "true";
+
 if (!equipmentSalesRoutes.__chalin03InstallmentCommandMounted) {
   equipmentSalesRoutes.use("/installment-command", installmentCommandRoutes);
   Object.defineProperty(equipmentSalesRoutes, "__chalin03InstallmentCommandMounted", {
@@ -30,6 +36,34 @@ if (!equipmentSalesRoutes.__chalin03InstallmentCommandMounted) {
     enumerable: false,
     writable: false,
   });
+}
+
+if (!equipmentSalesRoutes.__chalin03FinanceFinalLifecycleMounted) {
+  equipmentSalesRoutes.use(
+    "/finance-lifecycle",
+    equipmentFinanceFinalLifecycleRoutes
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03FinanceFinalLifecycleMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
+}
+
+function startEquipmentSalesReminderScheduler() {
+  if (!AUTOMATIC_SMS_APPROVED) {
+    return {
+      started: false,
+      automatic_sms_enabled: false,
+      reason: "Automatic installment SMS requires a separate approved release.",
+    };
+  }
+  return startUnderlyingEquipmentSalesReminderScheduler();
 }
 
 function buildMessage(row, type) {
@@ -55,7 +89,7 @@ function buildMessage(row, type) {
   return buildInstallmentReminderMessage({
     account,
     location: {
-      hire_location_name: row?.hire_location_name || "Equipment Sales & Hire",
+      hire_location_name: row?.hire_location_name || "Equipment Installment Finance",
       payment_phone: row?.payment_phone || "",
     },
     settings: defaultInstallmentReminderSettings(),
@@ -64,6 +98,7 @@ function buildMessage(row, type) {
 }
 
 module.exports = {
+  AUTOMATIC_SMS_APPROVED,
   LEGACY_COMPATIBILITY,
   buildMessage,
   refreshEquipmentInstallmentStatuses,

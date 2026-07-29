@@ -7,6 +7,16 @@ import {
   ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
 
+const BLOCKED_FINANCE_PATHS = [
+  "/equipment-installment-finance/customers",
+  "/equipment-installment-finance/documents",
+  "/equipment-installment-finance/shared-controls",
+  "/equipment-installment-finance/workers",
+  "/equipment-installment-finance/employment-documents",
+  "/equipment-installment-finance/document-signature-settings",
+  "/equipment-installment-finance/administration",
+];
+
 const navigationSections = [
   {
     title: "Installment Finance",
@@ -29,7 +39,7 @@ const navigationSections = [
       },
       {
         title: "Agreement Activation",
-        description: "Activate approved Finance agreements and schedules without Hire crossover",
+        description: "Create the approved Finance agreement and installment schedule",
         path: "/equipment-installment-finance/applications?stage=activation",
         icon: "📄",
         matchSearch: true,
@@ -44,6 +54,30 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Installment Collections",
+        description: "Record controlled payments, receipts and schedule allocations",
+        path: "/equipment-installment-finance/applications?stage=collections",
+        icon: "💳",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
+        title: "Delivery Handover",
+        description: "Record Finance handover only after the approved payment threshold",
+        path: "/equipment-installment-finance/applications?stage=delivery",
+        icon: "🚜",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
+        title: "Ownership Transfer",
+        description: "Transfer ownership only after full payment and controlled delivery",
+        path: "/equipment-installment-finance/applications?stage=ownership",
+        icon: "📜",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Installment Documents & Reports",
         description: "Finance agreements, receipts, aging, collections and expected payments",
         path: "/equipment-installment-finance/reports",
@@ -54,7 +88,7 @@ const navigationSections = [
         title: "Finance Equipment Reference",
         description: "Read-only machine identity and availability reference for Finance work",
         path: "/equipment-installment-finance/catalogue",
-        icon: "🚜",
+        icon: "🔎",
         permissions: ["fleet.assets.view"],
       },
     ],
@@ -89,12 +123,22 @@ const navigationSections = [
   },
 ];
 
+function isBlockedFinancePath(pathname) {
+  return BLOCKED_FINANCE_PATHS.some(
+    (blockedPath) => pathname === blockedPath || pathname.startsWith(`${blockedPath}/`)
+  );
+}
+
 export default function InstallmentFinanceLayout() {
   const { user } = useAuth();
   const location = useLocation();
 
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
     return <Navigate to="/equipment-hire" replace />;
+  }
+
+  if (isBlockedFinancePath(location.pathname)) {
+    return <Navigate to="/equipment-installment-finance" replace />;
   }
 
   ensureFinanceUiCompatibilityPermissions(user, location.pathname);
@@ -109,7 +153,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Finance location reference"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated credit applications, agreement activation, controlled deposits, machine reservations, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
