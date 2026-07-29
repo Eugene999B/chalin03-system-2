@@ -52,8 +52,8 @@ async function cachedResponseOrOffline(request, fallbackRequest = null) {
 async function cacheCoreAssets() {
   const cache = await caches.open(CACHE_NAME);
 
-  // The app shell is essential for React routes. Cache it first so one missing
-  // icon or manifest cannot cause the entire service-worker install to fail.
+  // Cache the React app shell first. Optional icons must never invalidate the
+  // service-worker installation or direct authenticated route navigation.
   await cache.add(new Request("/", { cache: "reload" }));
 
   await Promise.allSettled(
@@ -63,31 +63,19 @@ async function cacheCoreAssets() {
   );
 }
 
-async function networkNavigation(request) {
-  try {
-    const response = await fetch(request);
-    if (response?.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.put("/", response.clone());
-      return response;
-    }
-
-    const cachedShell = await caches.match("/");
-    return cachedShell || response || buildOfflineResponse();
-  } catch {
-    try {
-      const rootResponse = await fetch(new Request("/", { cache: "no-store" }));
-      if (rootResponse?.ok) {
+function networkNavigation(request) {
+  return fetch(request)
+    .then(async (response) => {
+      if (response?.ok) {
         const cache = await caches.open(CACHE_NAME);
-        await cache.put("/", rootResponse.clone());
-        return rootResponse;
+        await cache.put("/", response.clone());
+        return response;
       }
-    } catch {
-      // Fall through to the previously cached application shell.
-    }
 
-    return cachedResponseOrOffline("/");
-  }
+      const cachedShell = await caches.match("/");
+      return cachedShell || response || buildOfflineResponse();
+    })
+    .catch(() => cachedResponseOrOffline("/"));
 }
 
 self.addEventListener("install", (event) => {
