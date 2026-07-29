@@ -30,16 +30,16 @@ function normalized(value) {
     .replace(/[\s-]+/g, "_");
 }
 
+function enabled(value) {
+  return [true, 1, "1", "true"].includes(value);
+}
+
 export function equipmentWorkspaceRole(user = {}) {
   return normalized(user.workspace_role || user.access_role || user.role);
 }
 
 export function isEquipmentAdministrator(user = {}) {
-  return (
-    Number(user.id) === 1 &&
-    normalized(user.username) === "admin" &&
-    normalized(user.role) === "admin"
-  );
+  return enabled(user.is_original_system_administrator);
 }
 
 export function canAccessEquipmentDivision(user = {}, division) {
