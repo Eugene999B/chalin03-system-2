@@ -24,6 +24,15 @@ const navigationSections = [
         description: "Finance applications, KYC, affordability and independent decisions",
         path: "/equipment-installment-finance/applications",
         icon: "📝",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
+        title: "Agreement Activation",
+        description: "Activate approved Finance agreements and schedules without Hire crossover",
+        path: "/equipment-installment-finance/applications?stage=activation",
+        icon: "📄",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
@@ -92,7 +101,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Finance location reference"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated credit applications, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated credit applications, agreement activation, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
