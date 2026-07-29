@@ -75,7 +75,11 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.match(financeLayout, /Independent Finance staff division/);
   assert.match(financeLayout, /No access to Hire jobs or contracts/);
   assert.match(financeLayout, /Back to Equipment Divisions/);
-  assert.match(financeLayout, /ensureFinanceUiCompatibilityPermissions\(user\)/);
+  assert.match(financeLayout, /useLocation/);
+  assert.match(
+    financeLayout,
+    /ensureFinanceUiCompatibilityPermissions\(user, location\.pathname\)/
+  );
   assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
   assert.doesNotMatch(financeLayout, /\/equipment-hire-operations\?division=hire/);
   assert.doesNotMatch(financeLayout, /title: "Hire Contracts"/);
@@ -84,6 +88,8 @@ test("Hire and Installment Finance keep separate navigation and staff identities
 
   assert.match(divisionAccess, /function ensureFinanceUiCompatibilityPermissions/);
   assert.match(divisionAccess, /permissions\.add\("fleet\.assets\.view"\)/);
+  assert.match(divisionAccess, /permissions\.delete\("fleet\.assets\.manage"\)/);
+  assert.match(divisionAccess, /financeCatalogueOnly/);
   assert.match(divisionAccess, /FINANCE_WORK_ROLE_SET/);
   assert.match(divisionAccess, /backend independently rejects/);
   assert.doesNotMatch(divisionAccess, /HIRE_ROLE_SET\.has[^\n]*fleet\.assets\.manage/);
