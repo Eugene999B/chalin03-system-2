@@ -22,6 +22,12 @@ export const FINANCE_WORKSPACE_ROLES = Object.freeze([
 
 const HIRE_ROLE_SET = new Set(HIRE_WORKSPACE_ROLES);
 const FINANCE_ROLE_SET = new Set(FINANCE_WORKSPACE_ROLES);
+const FINANCE_WORK_ROLE_SET = new Set([
+  "finance_manager",
+  "credit_officer",
+  "collections_officer",
+  "finance_accountant",
+]);
 
 function normalized(value) {
   return String(value || "")
@@ -52,6 +58,35 @@ export function canAccessEquipmentDivision(user = {}, division) {
     return FINANCE_ROLE_SET.has(workspaceRole);
   }
   return false;
+}
+
+export function ensureFinanceUiCompatibilityPermissions(user = {}) {
+  if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) return [];
+
+  const current = Array.isArray(user.effective_permissions)
+    ? user.effective_permissions
+    : [];
+  const permissions = new Set(current);
+
+  // Existing Finance pages use fleet permission names internally. Add them only
+  // to the authenticated Finance interface. The backend independently rejects
+  // Finance roles on Hire APIs and rejects Finance catalogue writes.
+  permissions.add("fleet.assets.view");
+  if (
+    isEquipmentAdministrator(user) ||
+    FINANCE_WORK_ROLE_SET.has(equipmentWorkspaceRole(user))
+  ) {
+    permissions.add("fleet.assets.manage");
+  }
+
+  const resolved = [...permissions].sort();
+  if (Array.isArray(user.effective_permissions)) {
+    user.effective_permissions.splice(0, user.effective_permissions.length, ...resolved);
+    return user.effective_permissions;
+  }
+
+  user.effective_permissions = resolved;
+  return user.effective_permissions;
 }
 
 export function equipmentDivisionForUser(user = {}) {
