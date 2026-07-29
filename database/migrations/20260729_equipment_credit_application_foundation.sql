@@ -1,6 +1,7 @@
 -- CHALIN 03 EQUIPMENT INSTALLMENT FINANCE
 -- CREDIT APPLICATION, KYC AND AFFORDABILITY FOUNDATION
--- ADDITIVE AND IDEMPOTENT MIGRATION ONLY.
+-- ADDITIVE MIGRATION ONLY.
+-- Idempotent: rerunning this migration preserves existing records.
 -- BACKUP REQUIRED BEFORE PRODUCTION EXECUTION.
 -- Existing customers, quotations, agreements, schedules, payments, Hire contracts
 -- and fleet records are preserved.
