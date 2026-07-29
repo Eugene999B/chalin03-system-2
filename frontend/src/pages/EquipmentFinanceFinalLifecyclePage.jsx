@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -157,7 +157,10 @@ function initialCollection(account, detail) {
     : Number(account.outstanding_balance || 0);
   return {
     amount: String(
-      Math.min(nextBalance || account.outstanding_balance, account.outstanding_balance).toFixed(2)
+      Math.min(
+        nextBalance || Number(account.outstanding_balance || 0),
+        Number(account.outstanding_balance || 0)
+      ).toFixed(2)
     ),
     payment_method: "cash",
     reference_number: "",
@@ -191,6 +194,207 @@ function initialOwnership(account) {
     notes: "",
     idempotency_key: secureRequestKey("finance-ownership", account.agreement_id),
   };
+}
+
+function CollectionFields({ form, setForm, maximum }) {
+  return (
+    <div className="finance-lifecycle__form-grid">
+      <Field title="Collection amount">
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          max={maximum}
+          required
+          value={form.amount}
+          onChange={(event) => setForm({ ...form, amount: event.target.value })}
+        />
+      </Field>
+      <Field title="Payment method">
+        <select
+          value={form.payment_method}
+          onChange={(event) => setForm({ ...form, payment_method: event.target.value })}
+        >
+          {PAYMENT_METHODS.map(([value, title]) => (
+            <option value={value} key={value}>{title}</option>
+          ))}
+        </select>
+      </Field>
+      <Field title="Reference number">
+        <input
+          value={form.reference_number}
+          onChange={(event) => setForm({ ...form, reference_number: event.target.value })}
+          placeholder="MoMo, bank, cheque or internal reference"
+        />
+      </Field>
+      <Field title="Collection notes" wide>
+        <textarea
+          rows="4"
+          value={form.notes}
+          onChange={(event) => setForm({ ...form, notes: event.target.value })}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function DeliveryFields({ form, setForm }) {
+  return (
+    <div className="finance-lifecycle__form-grid">
+      <Field title="Handover date and time">
+        <input
+          type="datetime-local"
+          required
+          value={form.delivery_datetime}
+          onChange={(event) => setForm({ ...form, delivery_datetime: event.target.value })}
+        />
+      </Field>
+      <Field title="Machine condition">
+        <select
+          value={form.condition_status}
+          onChange={(event) => setForm({ ...form, condition_status: event.target.value })}
+        >
+          {CONDITIONS.map((condition) => (
+            <option value={condition} key={condition}>{label(condition)}</option>
+          ))}
+        </select>
+      </Field>
+      <Field title="Meter reading">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={form.meter_reading}
+          onChange={(event) => setForm({ ...form, meter_reading: event.target.value })}
+        />
+      </Field>
+      <Field title="Fuel level percentage">
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="0.01"
+          value={form.fuel_level_percent}
+          onChange={(event) => setForm({ ...form, fuel_level_percent: event.target.value })}
+        />
+      </Field>
+      <Field title="Receiving person">
+        <input
+          required
+          value={form.receiving_person}
+          onChange={(event) => setForm({ ...form, receiving_person: event.target.value })}
+        />
+      </Field>
+      <Field title="Receiving phone">
+        <input
+          value={form.receiving_phone}
+          onChange={(event) => setForm({ ...form, receiving_phone: event.target.value })}
+        />
+      </Field>
+      <Field title="Destination" wide>
+        <input
+          value={form.destination}
+          onChange={(event) => setForm({ ...form, destination: event.target.value })}
+        />
+      </Field>
+      <Field title="Attachments and tools" wide>
+        <textarea
+          rows="3"
+          value={form.attachments_tools}
+          onChange={(event) => setForm({ ...form, attachments_tools: event.target.value })}
+        />
+      </Field>
+      <Field title="Customer signature evidence URL" wide>
+        <input
+          value={form.customer_signature_url}
+          onChange={(event) => setForm({ ...form, customer_signature_url: event.target.value })}
+        />
+      </Field>
+      <Field title="Delivery note evidence URL" wide>
+        <input
+          value={form.delivery_note_url}
+          onChange={(event) => setForm({ ...form, delivery_note_url: event.target.value })}
+        />
+      </Field>
+      <Field title="Handover notes" wide>
+        <textarea
+          rows="4"
+          value={form.notes}
+          onChange={(event) => setForm({ ...form, notes: event.target.value })}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function OwnershipFields({ form, setForm }) {
+  return (
+    <div className="finance-lifecycle__form-grid">
+      <Field title="Transfer date">
+        <input
+          type="date"
+          required
+          value={form.transfer_date}
+          onChange={(event) => setForm({ ...form, transfer_date: event.target.value })}
+        />
+      </Field>
+      <Field title="Registration transfer reference">
+        <input
+          value={form.registration_transfer_reference}
+          onChange={(event) =>
+            setForm({ ...form, registration_transfer_reference: event.target.value })
+          }
+        />
+      </Field>
+      <Field title="Ownership document evidence URL" wide>
+        <input
+          value={form.ownership_document_url}
+          onChange={(event) =>
+            setForm({ ...form, ownership_document_url: event.target.value })
+          }
+        />
+      </Field>
+      <Field title="Ownership notes" wide>
+        <textarea
+          rows="4"
+          value={form.notes}
+          onChange={(event) => setForm({ ...form, notes: event.target.value })}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function belongsToStage(account, stage) {
+  if (stage === "collections") {
+    return (
+      account.reserved &&
+      !account.ownership_id &&
+      Number(account.outstanding_balance || 0) > 0.01
+    );
+  }
+  if (stage === "delivery") {
+    return account.reserved && !account.delivery_id && !account.ownership_id;
+  }
+  return (
+    account.reserved &&
+    Boolean(account.delivery_id) &&
+    account.fully_paid &&
+    !account.ownership_id
+  );
+}
+
+function matchesSearch(account, search) {
+  const term = search.trim().toLowerCase();
+  if (!term) return true;
+  return [
+    account.agreement_number,
+    account.application_number,
+    account.customer_name,
+    account.customer_phone,
+    account.asset_code,
+    account.asset_name,
+  ].some((value) => String(value || "").toLowerCase().includes(term));
 }
 
 export default function EquipmentFinanceFinalLifecyclePage() {
@@ -276,62 +480,18 @@ export default function EquipmentFinanceFinalLifecyclePage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const stageAccounts = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return accounts.filter((account) => {
-      let included = false;
-      if (stage === "collections") {
-        included =
-          account.reserved &&
-          !account.ownership_id &&
-          Number(account.outstanding_balance || 0) > 0.01;
-      } else if (stage === "delivery") {
-        included = account.reserved && !account.delivery_id && !account.ownership_id;
-      } else {
-        included =
-          account.reserved &&
-          Boolean(account.delivery_id) &&
-          account.fully_paid &&
-          !account.ownership_id;
-      }
-      if (!included) return false;
-      if (!term) return true;
-      return [
-        account.agreement_number,
-        account.application_number,
-        account.customer_name,
-        account.customer_phone,
-        account.asset_code,
-        account.asset_name,
-      ].some((value) => String(value || "").toLowerCase().includes(term));
-    });
-  }, [accounts, search, stage]);
-
-  const summary = useMemo(
-    () => ({
-      collections: accounts.filter(
-        (account) =>
-          account.reserved &&
-          !account.ownership_id &&
-          Number(account.outstanding_balance || 0) > 0.01
-      ).length,
-      delivery: accounts.filter(
-        (account) => account.reserved && !account.delivery_id && !account.ownership_id
-      ).length,
-      ownership: accounts.filter(
-        (account) =>
-          account.reserved &&
-          Boolean(account.delivery_id) &&
-          account.fully_paid &&
-          !account.ownership_id
-      ).length,
-      outstanding: accounts.reduce(
-        (total, account) => total + Number(account.outstanding_balance || 0),
-        0
-      ),
-    }),
-    [accounts]
+  const stageAccounts = accounts.filter(
+    (account) => belongsToStage(account, stage) && matchesSearch(account, search)
   );
+  const summary = {
+    collections: accounts.filter((account) => belongsToStage(account, "collections")).length,
+    delivery: accounts.filter((account) => belongsToStage(account, "delivery")).length,
+    ownership: accounts.filter((account) => belongsToStage(account, "ownership")).length,
+    outstanding: accounts.reduce(
+      (total, account) => total + Number(account.outstanding_balance || 0),
+      0
+    ),
+  };
 
   async function openAction(account) {
     if (!selectedContextId) {
@@ -374,12 +534,10 @@ export default function EquipmentFinanceFinalLifecyclePage() {
     setProblem("");
     setNotice("");
     try {
-      const endpoint =
-        stage === "collections"
-          ? "collections"
-          : stage === "delivery"
-            ? "delivery"
-            : "ownership-transfer";
+      let endpoint = "ownership-transfer";
+      if (stage === "collections") endpoint = "collections";
+      else if (stage === "delivery") endpoint = "delivery";
+
       const response = await axiosClient.post(
         `${API}/accounts/${selected.agreement_id}/${endpoint}`,
         form
@@ -396,7 +554,9 @@ export default function EquipmentFinanceFinalLifecyclePage() {
         response.data?.message ||
           "The controlled Finance lifecycle action was recorded without Hire crossover or SMS."
       );
-      closeAction();
+      setSelected(null);
+      setDetail(null);
+      setForm(null);
       await load();
     } catch (error) {
       setProblem(errorMessage(error, "Could not save the Finance lifecycle action."));
@@ -445,14 +605,12 @@ export default function EquipmentFinanceFinalLifecyclePage() {
           <strong>{label(receipt.stage)} evidence:</strong> {receipt.number || "Recorded"} · {receipt.agreement_number}
         </div>
       ) : null}
-
       {!selectedContextId ? (
         <div className="finance-lifecycle__alert is-warning">
           Choose one Finance location before loading or changing lifecycle records. The
           administrator-wide location view is read-only.
         </div>
       ) : null}
-
       {!canAct ? (
         <div className="finance-lifecycle__alert is-info">
           Your Finance role may review this queue but cannot complete its transaction.
@@ -482,59 +640,16 @@ export default function EquipmentFinanceFinalLifecyclePage() {
       {readiness.ready === true ? (
         <>
           <section className="finance-lifecycle__metrics">
-            <article>
-              <span>💳</span>
-              <div>
-                <small>Collection accounts</small>
-                <strong>{summary.collections}</strong>
-                <p>Reserved accounts with balance remaining</p>
-              </div>
-            </article>
-            <article>
-              <span>🚜</span>
-              <div>
-                <small>Awaiting delivery</small>
-                <strong>{summary.delivery}</strong>
-                <p>Reserved machines without handover evidence</p>
-              </div>
-            </article>
-            <article>
-              <span>📜</span>
-              <div>
-                <small>Ownership ready</small>
-                <strong>{summary.ownership}</strong>
-                <p>Fully paid and delivered agreements</p>
-              </div>
-            </article>
-            <article>
-              <span>🏦</span>
-              <div>
-                <small>Portfolio outstanding</small>
-                <strong>{money(summary.outstanding)}</strong>
-                <p>Approved-credit Finance balance</p>
-              </div>
-            </article>
+            <article><span>💳</span><div><small>Collection accounts</small><strong>{summary.collections}</strong><p>Reserved accounts with balance remaining</p></div></article>
+            <article><span>🚜</span><div><small>Awaiting delivery</small><strong>{summary.delivery}</strong><p>Reserved machines without handover evidence</p></div></article>
+            <article><span>📜</span><div><small>Ownership ready</small><strong>{summary.ownership}</strong><p>Fully paid and delivered agreements</p></div></article>
+            <article><span>🏦</span><div><small>Portfolio outstanding</small><strong>{money(summary.outstanding)}</strong><p>Approved-credit Finance balance</p></div></article>
           </section>
 
           <nav className="finance-lifecycle__stages" aria-label="Finance lifecycle stages">
-            <Link
-              className={stage === "collections" ? "is-active" : ""}
-              to="/equipment-installment-finance/applications?stage=collections"
-            >
-              Collections
-            </Link>
-            <Link
-              className={stage === "delivery" ? "is-active" : ""}
-              to="/equipment-installment-finance/applications?stage=delivery"
-            >
-              Delivery Handover
-            </Link>
-            <Link
-              className={stage === "ownership" ? "is-active" : ""}
-              to="/equipment-installment-finance/applications?stage=ownership"
-            >
-              Ownership Transfer
-            </Link>
+            <Link className={stage === "collections" ? "is-active" : ""} to="/equipment-installment-finance/applications?stage=collections">Collections</Link>
+            <Link className={stage === "delivery" ? "is-active" : ""} to="/equipment-installment-finance/applications?stage=delivery">Delivery Handover</Link>
+            <Link className={stage === "ownership" ? "is-active" : ""} to="/equipment-installment-finance/applications?stage=ownership">Ownership Transfer</Link>
           </nav>
 
           <section className="finance-lifecycle__toolbar">
@@ -549,14 +664,7 @@ export default function EquipmentFinanceFinalLifecyclePage() {
           </section>
 
           <section className="finance-lifecycle__queue">
-            <header>
-              <div>
-                <p>Controlled Finance work</p>
-                <h2>{copy.queue}</h2>
-              </div>
-              <small>{stageAccounts.length} record(s)</small>
-            </header>
-
+            <header><div><p>Controlled Finance work</p><h2>{copy.queue}</h2></div><small>{stageAccounts.length} record(s)</small></header>
             {loading ? (
               <div className="finance-lifecycle__empty">Loading Finance accounts…</div>
             ) : stageAccounts.length ? (
@@ -564,24 +672,9 @@ export default function EquipmentFinanceFinalLifecyclePage() {
                 {stageAccounts.map((account) => (
                   <article className="finance-lifecycle__card" key={account.agreement_id}>
                     <div className="finance-lifecycle__card-top">
-                      <div>
-                        <small>{account.agreement_number}</small>
-                        <h3>{account.customer_name}</h3>
-                        <p>{account.asset_code} · {account.asset_name}</p>
-                      </div>
-                      <StatusPill
-                        value={
-                          account.ownership_id
-                            ? "ownership_transferred"
-                            : account.delivery_id
-                              ? "delivered"
-                              : account.delivery_eligible
-                                ? "eligible"
-                                : "threshold_pending"
-                        }
-                      />
+                      <div><small>{account.agreement_number}</small><h3>{account.customer_name}</h3><p>{account.asset_code} · {account.asset_name}</p></div>
+                      <StatusPill value={account.ownership_id ? "ownership_transferred" : account.delivery_id ? "delivered" : account.delivery_eligible ? "eligible" : "threshold_pending"} />
                     </div>
-
                     <div className="finance-lifecycle__facts">
                       <div><span>Application</span><strong>{account.application_number}</strong></div>
                       <div><span>Outstanding</span><strong>{money(account.outstanding_balance)}</strong></div>
@@ -590,43 +683,22 @@ export default function EquipmentFinanceFinalLifecyclePage() {
                       <div><span>Delivery policy</span><strong>{label(account.delivery_policy)}</strong></div>
                       <div><span>Machine state</span><strong>{label(account.equipment_commitment_status)}</strong></div>
                     </div>
-
-                    {stage === "delivery" && !account.delivery_eligible ? (
-                      <div className="finance-lifecycle__note is-warning">
-                        Payment threshold not reached; delivery remains blocked.
-                      </div>
-                    ) : null}
-
+                    {stage === "delivery" && !account.delivery_eligible ? <div className="finance-lifecycle__note is-warning">Payment threshold not reached; delivery remains blocked.</div> : null}
                     <div className="finance-lifecycle__card-actions">
-                      <button
-                        type="button"
-                        className="is-primary"
-                        onClick={() => openAction(account)}
-                        disabled={!canAct || (stage === "delivery" && !account.delivery_eligible)}
-                      >
-                        {copy.action}
-                      </button>
+                      <button type="button" className="is-primary" onClick={() => openAction(account)} disabled={!canAct || (stage === "delivery" && !account.delivery_eligible)}>{copy.action}</button>
                     </div>
                   </article>
                 ))}
               </div>
             ) : (
-              <div className="finance-lifecycle__empty">
-                <span aria-hidden="true">✅</span>
-                <strong>{copy.empty}</strong>
-                <p>No action is required for the selected Finance location and filter.</p>
-              </div>
+              <div className="finance-lifecycle__empty"><span aria-hidden="true">✅</span><strong>{copy.empty}</strong><p>No action is required for the selected Finance location and filter.</p></div>
             )}
           </section>
         </>
       ) : null}
 
       {selected && form ? (
-        <Drawer
-          title={`${copy.action}: ${selected.agreement_number}`}
-          subtitle={`${selected.customer_name} · ${selected.asset_code}`}
-          onClose={closeAction}
-        >
+        <Drawer title={`${copy.action}: ${selected.agreement_number}`} subtitle={`${selected.customer_name} · ${selected.asset_code}`} onClose={closeAction}>
           <form className="finance-lifecycle__form" onSubmit={submit}>
             <section className="finance-lifecycle__review">
               <div><span>Total agreement</span><strong>{money(selected.total_amount)}</strong></div>
@@ -635,202 +707,13 @@ export default function EquipmentFinanceFinalLifecyclePage() {
               <div><span>Delivery status</span><strong>{label(selected.delivery_status)}</strong></div>
             </section>
 
-            {stage === "collections" ? (
-              <div className="finance-lifecycle__form-grid">
-                <Field title="Collection amount">
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    max={selected.outstanding_balance}
-                    required
-                    value={form.amount}
-                    onChange={(event) => setForm({ ...form, amount: event.target.value })}
-                  />
-                </Field>
-                <Field title="Payment method">
-                  <select
-                    value={form.payment_method}
-                    onChange={(event) =>
-                      setForm({ ...form, payment_method: event.target.value })
-                    }
-                  >
-                    {PAYMENT_METHODS.map(([value, title]) => (
-                      <option value={value} key={value}>{title}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field title="Reference number">
-                  <input
-                    value={form.reference_number}
-                    onChange={(event) =>
-                      setForm({ ...form, reference_number: event.target.value })
-                    }
-                    placeholder="MoMo, bank, cheque or internal reference"
-                  />
-                </Field>
-                <Field title="Collection notes" wide>
-                  <textarea
-                    rows="4"
-                    value={form.notes}
-                    onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  />
-                </Field>
-              </div>
-            ) : null}
-
-            {stage === "delivery" ? (
-              <div className="finance-lifecycle__form-grid">
-                <Field title="Handover date and time">
-                  <input
-                    type="datetime-local"
-                    required
-                    value={form.delivery_datetime}
-                    onChange={(event) =>
-                      setForm({ ...form, delivery_datetime: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Machine condition">
-                  <select
-                    value={form.condition_status}
-                    onChange={(event) =>
-                      setForm({ ...form, condition_status: event.target.value })
-                    }
-                  >
-                    {CONDITIONS.map((condition) => (
-                      <option value={condition} key={condition}>{label(condition)}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field title="Meter reading">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.meter_reading}
-                    onChange={(event) =>
-                      setForm({ ...form, meter_reading: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Fuel level percentage">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={form.fuel_level_percent}
-                    onChange={(event) =>
-                      setForm({ ...form, fuel_level_percent: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Receiving person">
-                  <input
-                    required
-                    value={form.receiving_person}
-                    onChange={(event) =>
-                      setForm({ ...form, receiving_person: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Receiving phone">
-                  <input
-                    value={form.receiving_phone}
-                    onChange={(event) =>
-                      setForm({ ...form, receiving_phone: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Destination" wide>
-                  <input
-                    value={form.destination}
-                    onChange={(event) => setForm({ ...form, destination: event.target.value })}
-                  />
-                </Field>
-                <Field title="Attachments and tools" wide>
-                  <textarea
-                    rows="3"
-                    value={form.attachments_tools}
-                    onChange={(event) =>
-                      setForm({ ...form, attachments_tools: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Customer signature evidence URL" wide>
-                  <input
-                    value={form.customer_signature_url}
-                    onChange={(event) =>
-                      setForm({ ...form, customer_signature_url: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Delivery note evidence URL" wide>
-                  <input
-                    value={form.delivery_note_url}
-                    onChange={(event) =>
-                      setForm({ ...form, delivery_note_url: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Handover notes" wide>
-                  <textarea
-                    rows="4"
-                    value={form.notes}
-                    onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  />
-                </Field>
-              </div>
-            ) : null}
-
-            {stage === "ownership" ? (
-              <div className="finance-lifecycle__form-grid">
-                <Field title="Transfer date">
-                  <input
-                    type="date"
-                    required
-                    value={form.transfer_date}
-                    onChange={(event) =>
-                      setForm({ ...form, transfer_date: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Registration transfer reference">
-                  <input
-                    value={form.registration_transfer_reference}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        registration_transfer_reference: event.target.value,
-                      })
-                    }
-                  />
-                </Field>
-                <Field title="Ownership document evidence URL" wide>
-                  <input
-                    value={form.ownership_document_url}
-                    onChange={(event) =>
-                      setForm({ ...form, ownership_document_url: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field title="Ownership notes" wide>
-                  <textarea
-                    rows="4"
-                    value={form.notes}
-                    onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  />
-                </Field>
-              </div>
-            ) : null}
+            {stage === "collections" ? <CollectionFields form={form} setForm={setForm} maximum={selected.outstanding_balance} /> : null}
+            {stage === "delivery" ? <DeliveryFields form={form} setForm={setForm} /> : null}
+            {stage === "ownership" ? <OwnershipFields form={form} setForm={setForm} /> : null}
 
             <div className="finance-lifecycle__confirmation">
               <strong>Controlled result</strong>
-              <p>
-                This action writes only Finance evidence. It will not create Hire work and
-                will not send automatic or transaction-triggered SMS.
-              </p>
+              <p>This action writes only Finance evidence. It will not create Hire work and will not send automatic or transaction-triggered SMS.</p>
             </div>
 
             {detail?.schedule?.length && stage === "collections" ? (
@@ -842,14 +725,7 @@ export default function EquipmentFinanceFinalLifecyclePage() {
                   .map((row) => (
                     <div key={row.id}>
                       <span>#{row.sequence_number} · {dateLabel(row.due_date)}</span>
-                      <strong>
-                        {money(
-                          Number(row.scheduled_amount || 0) +
-                            Number(row.late_charge_amount || 0) -
-                            Number(row.waived_charge_amount || 0) -
-                            Number(row.amount_paid || 0)
-                        )}
-                      </strong>
+                      <strong>{money(Number(row.scheduled_amount || 0) + Number(row.late_charge_amount || 0) - Number(row.waived_charge_amount || 0) - Number(row.amount_paid || 0))}</strong>
                     </div>
                   ))}
               </section>
@@ -857,9 +733,7 @@ export default function EquipmentFinanceFinalLifecyclePage() {
 
             <div className="finance-lifecycle__form-actions">
               <button type="button" onClick={closeAction} disabled={saving}>Cancel</button>
-              <button type="submit" className="is-primary" disabled={saving}>
-                {saving ? "Saving…" : copy.action}
-              </button>
+              <button type="submit" className="is-primary" disabled={saving}>{saving ? "Saving…" : copy.action}</button>
             </div>
           </form>
         </Drawer>
