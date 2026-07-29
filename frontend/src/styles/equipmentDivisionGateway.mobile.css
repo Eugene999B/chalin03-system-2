@@ -1,0 +1,269 @@
+/* Mobile-first compact gateway.
+   The equipment division choice must behave like the login workspace chooser:
+   one screen, two clear choices, no page scrolling. */
+
+@media (max-width: 620px) {
+  .equipment-gateway {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100svh;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    padding: 0 12px 10px;
+    overflow: hidden;
+  }
+
+  .equipment-gateway__topbar,
+  .equipment-gateway__hero,
+  .equipment-gateway__division-grid {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .equipment-gateway__topbar {
+    min-height: 58px;
+    gap: 10px;
+  }
+
+  .equipment-gateway__logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .equipment-gateway__brand {
+    min-width: 0;
+    gap: 9px;
+  }
+
+  .equipment-gateway__brand > span:last-child {
+    min-width: 0;
+  }
+
+  .equipment-gateway__brand > span:last-child small,
+  .equipment-gateway__identity small {
+    display: none;
+  }
+
+  .equipment-gateway__brand strong {
+    display: block;
+    overflow: hidden;
+    font-size: 0.82rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .equipment-gateway__identity {
+    max-width: 42%;
+    min-width: 0;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: 12px;
+  }
+
+  .equipment-gateway__identity strong {
+    display: block;
+    overflow: hidden;
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .equipment-gateway__status-dot {
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 0 3px rgba(31, 157, 99, 0.12);
+  }
+
+  .equipment-gateway__hero {
+    display: block;
+    padding: 10px 0 9px;
+  }
+
+  .equipment-gateway__badges,
+  .equipment-gateway__principle,
+  .equipment-gateway__shared-strip,
+  .equipment-gateway__footer {
+    display: none;
+  }
+
+  .equipment-gateway__eyebrow {
+    font-size: 0.62rem;
+    letter-spacing: 0.09em;
+  }
+
+  .equipment-gateway__hero h1 {
+    max-width: none;
+    margin: 3px 0 4px;
+    font-size: clamp(1.45rem, 7vw, 1.95rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .equipment-gateway__hero-copy > p:last-child {
+    display: -webkit-box;
+    max-width: none;
+    margin: 0;
+    overflow: hidden;
+    color: #607086;
+    font-size: 0.73rem;
+    line-height: 1.28;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .equipment-gateway__division-grid {
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    overflow: hidden;
+  }
+
+  .equipment-gateway__division-card {
+    min-height: 0;
+    height: 100%;
+    padding: 11px 13px 10px;
+    border-radius: 18px;
+    box-shadow: 0 9px 24px rgba(16, 37, 60, 0.09);
+  }
+
+  .equipment-gateway__division-card::before {
+    height: 4px;
+  }
+
+  .equipment-gateway__division-card::after {
+    width: 150px;
+    height: 150px;
+    right: -74px;
+    top: -82px;
+  }
+
+  .equipment-gateway__division-card:not(.is-disabled):hover {
+    transform: none;
+  }
+
+  .equipment-gateway__card-top {
+    min-height: 36px;
+    gap: 8px;
+  }
+
+  .equipment-gateway__division-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    font-size: 1.15rem;
+  }
+
+  .equipment-gateway__access {
+    max-width: none;
+    padding: 5px 7px;
+    font-size: 0.56rem;
+    text-align: center;
+    letter-spacing: 0.035em;
+  }
+
+  .equipment-gateway__card-copy {
+    margin-top: 5px;
+  }
+
+  .equipment-gateway__card-copy > p {
+    font-size: 0.57rem;
+    letter-spacing: 0.075em;
+  }
+
+  .equipment-gateway__card-copy h2 {
+    margin: 2px 0 2px;
+    font-size: clamp(1rem, 4.6vw, 1.22rem);
+    line-height: 1.06;
+    letter-spacing: -0.025em;
+  }
+
+  .equipment-gateway__card-copy > span {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 0.67rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .equipment-gateway__division-card ul {
+    display: none;
+  }
+
+  .equipment-gateway__card-action {
+    min-height: 34px;
+    margin-top: auto;
+    padding: 7px 10px;
+    border-radius: 11px;
+  }
+
+  .equipment-gateway__card-action strong {
+    overflow: hidden;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .equipment-gateway__card-action span {
+    flex: 0 0 auto;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .equipment-gateway {
+    padding-inline: 9px;
+  }
+
+  .equipment-gateway__brand strong {
+    font-size: 0.76rem;
+  }
+
+  .equipment-gateway__hero h1 {
+    font-size: 1.35rem;
+  }
+
+  .equipment-gateway__division-card {
+    padding-inline: 11px;
+  }
+}
+
+@media (max-width: 620px) and (max-height: 680px) {
+  .equipment-gateway__topbar {
+    min-height: 52px;
+  }
+
+  .equipment-gateway__hero {
+    padding: 6px 0;
+  }
+
+  .equipment-gateway__hero-copy > p:last-child,
+  .equipment-gateway__card-copy > span,
+  .equipment-gateway__access {
+    display: none;
+  }
+
+  .equipment-gateway__hero h1 {
+    margin-bottom: 0;
+    font-size: 1.3rem;
+  }
+
+  .equipment-gateway__division-card {
+    padding-top: 9px;
+  }
+
+  .equipment-gateway__division-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+
+  .equipment-gateway__card-action {
+    min-height: 30px;
+    padding-block: 5px;
+  }
+}
