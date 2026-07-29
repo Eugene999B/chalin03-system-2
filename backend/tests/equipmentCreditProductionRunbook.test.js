@@ -46,8 +46,8 @@ test("verification and smoke test preserve the agreement activation boundary", (
     "invalid_credit_application_rows = 0",
     "orphan_credit_evidence_rows = 0",
   ]) {
-    assert.match(runbook, new RegExp(result.replace(" = ", " = ")));
-    assert.match(migrationReadme, new RegExp(result.replace(" = ", " = ")));
+    assert.ok(runbook.includes(result), `Runbook must require ${result}`);
+    assert.ok(migrationReadme.includes(result), `Migration README must require ${result}`);
   }
   assert.match(verification, /missing_credit_tables/);
   assert.match(verification, /missing_credit_columns/);
