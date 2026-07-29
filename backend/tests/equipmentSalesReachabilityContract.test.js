@@ -13,11 +13,15 @@ const boundary = read(
 );
 const schemaService = read("backend/services/equipmentSalesSchemaService.js");
 const salesRoutes = read("backend/routes/equipmentSalesRoutes.js");
+const creditRoutes = read("backend/routes/equipmentCreditApplicationRoutes.js");
 const finalizationRoutes = read(
   "backend/routes/equipmentSalesFinalizationRoutes.js"
 );
 const workspacePage = read(
   "frontend/src/pages/EquipmentSalesWorkspacePage.jsx"
+);
+const creditPage = read(
+  "frontend/src/pages/EquipmentCreditApplicationsPage.jsx"
 );
 const reportsPage = read("frontend/src/pages/EquipmentSalesReportsPage.jsx");
 
@@ -67,13 +71,19 @@ test("Equipment Sales finalization routes remain attached exactly once", () => {
   assert.match(finalizationRoutes, /["']\/reports\/management["']/);
 });
 
-test("frontend Equipment Sales pages use the protected catalogue sales path", () => {
+test("frontend Finance applications use the protected credit path and cannot finalize sales", () => {
+  assert.match(workspacePage, /EquipmentCreditApplicationsPage/);
   assert.match(
-    workspacePage,
-    /const API = ["']\/equipment-catalogue\/sales["']/
+    creditPage,
+    /const API = ["']\/equipment-catalogue\/sales\/credit-applications["']/
   );
   assert.match(
     reportsPage,
     /const API = ["']\/equipment-catalogue\/sales["']/
   );
+  assert.match(creditRoutes, /router\.post\(\s*["']\/["']/);
+  assert.match(creditRoutes, /["']\/:id\/kyc\/verify["']/);
+  assert.match(creditRoutes, /["']\/:id\/review["']/);
+  assert.doesNotMatch(creditPage, /axiosClient\.post\([^\n]*\/agreements/);
+  assert.doesNotMatch(creditPage, /ownership-transfer|equipment reserved/);
 });
