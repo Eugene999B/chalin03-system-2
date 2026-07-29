@@ -7,6 +7,7 @@ platform.
 
 - Never run `database/schema.sql` against the production Railway database.
 - Create and verify a Professional Backup before every production migration.
+- Create and verify a separate SQL backup before every production migration.
 - Apply only migrations that are missing from `schema_migrations`.
 - Run the matching `*_verify.sql` file immediately after the migration.
 - Do not run automatic destructive rollback SQL. Correct forward with another
@@ -68,7 +69,6 @@ phone numbers are not deleted; phone login remains disabled for duplicates until
 an administrator assigns unique numbers. The migration never runs
 `database/schema.sql` and never sends SMS.
 
-
 ## Release 3F-B — Professional Installment Sales
 
 Production-safe migration order:
@@ -126,3 +126,30 @@ funded by petty cash, earlier business funds, owner/manager funds, a separate ba
 or MoMo balance, credit or another external source remain in accounting reports
 but do not reduce that day's expected settlement. Never run `database/schema.sql`
 against Railway production.
+
+## Equipment Installment Finance — Credit Application, KYC and Affordability
+
+Production migration order:
+
+1. `20260729_equipment_credit_application_foundation.sql`
+2. `20260729_equipment_credit_application_foundation_verify.sql`
+
+Before applying this migration, verify both a current Professional Backup and a
+separate SQL backup. The migration is additive and idempotent. It creates only the
+credit-application, KYC and decision-history foundation and records itself in
+`schema_migrations`.
+
+The migration does not create or update an installment agreement, payment
+schedule, payment, Hire contract, equipment lock, delivery record, ownership
+transfer or SMS setting. An approved application remains a credit decision only.
+
+Follow the complete controlled procedure in:
+
+`docs/EQUIPMENT_CREDIT_APPLICATION_PRODUCTION_RUNBOOK.md`
+
+The read-only verification must report:
+
+- `missing_credit_tables = 0`;
+- `missing_credit_columns = 0`;
+- `invalid_credit_application_rows = 0`;
+- `orphan_credit_evidence_rows = 0`.
