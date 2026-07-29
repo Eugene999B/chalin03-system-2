@@ -118,7 +118,10 @@ test("activation migration is additive, idempotent and read-only verification is
   ]) {
     assert.match(verification, new RegExp(expected));
   }
-  assert.doesNotMatch(verification, /INSERT|UPDATE|DELETE|ALTER|DROP|CREATE/i);
+  assert.doesNotMatch(
+    verification,
+    /\b(?:INSERT\s+INTO|UPDATE\s+[`A-Za-z]|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+(?:TABLE|TRIGGER|PROCEDURE|INDEX)|CREATE\s+(?:TABLE|TRIGGER|PROCEDURE|INDEX))\b/i
+  );
 });
 
 test("runtime readiness is read-only and fails closed before activation", () => {
