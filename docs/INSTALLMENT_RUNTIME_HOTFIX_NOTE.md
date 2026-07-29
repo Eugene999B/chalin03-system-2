@@ -1,1 +1,0 @@
-The runtime hotfix is intentionally isolated from the advanced credit-application work. See INSTALLMENT_RUNTIME_HOTFIX_SCOPE.md.
