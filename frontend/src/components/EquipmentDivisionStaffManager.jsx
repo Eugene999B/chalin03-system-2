@@ -104,8 +104,10 @@ export default function EquipmentDivisionStaffManager({ user }) {
         type="button"
         className="equipment-division-staff__open"
         onClick={() => setOpen(true)}
+        aria-label="Manage Equipment division staff"
       >
-        Manage Division Staff
+        <span className="equipment-division-staff__open-full">Manage Division Staff</span>
+        <span className="equipment-division-staff__open-compact">Staff</span>
       </button>
 
       {open ? (
