@@ -29,6 +29,11 @@ const service = readProject(
   "services",
   "equipmentInstallmentCommandService.js"
 );
+const readModel = readProject(
+  "backend",
+  "services",
+  "equipmentInstallmentReadModelService.js"
+);
 
 for (const text of [
   "Installment Command Centre",
@@ -93,16 +98,24 @@ assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /installment-command__account-grid/);
 assert.match(css, /installment-command__backdrop/);
-assert.match(serviceWorker, /chalin03-installment-finance-separation-v17/);
+assert.match(serviceWorker, /chalin03-installment-runtime-stability-v18/);
+assert.match(serviceWorker, /cacheCoreAssets/);
+assert.match(serviceWorker, /networkNavigation/);
+assert.doesNotMatch(serviceWorker, /status:\s*503/);
 
 assert.match(route, /\/portfolio/);
 assert.match(route, /\/collections/);
+assert.match(route, /equipmentInstallmentReadModelService/);
 assert.match(route, /follow-ups/);
 assert.match(route, /reminders\/preview/);
+assert.match(readModel, /resilient_read_model/);
+assert.match(readModel, /information_schema\.COLUMNS/);
+assert.match(readModel, /optional_evidence_deferred/);
+assert.doesNotMatch(readModel, /UPDATE equipment_sale_agreements/);
 assert.match(service, /portfolio_at_risk_rate/);
 assert.match(service, /EQUIPMENT_INSTALLMENT_FOLLOW_UP_RECORDED/);
 assert.match(service, /automatic_sms_enabled: false/);
 assert.match(service, /GET_LOCK/);
 assert.doesNotMatch(service, /CREATE TABLE|ALTER TABLE|DROP TABLE|TRUNCATE TABLE/i);
 
-console.log("Equipment Installment Finance separation contract passed.");
+console.log("Equipment Installment Finance runtime stability contract passed.");
