@@ -25,7 +25,8 @@ assert.match(
   /title: "Maintenance Register"[\s\S]*?fleet\?view=maintenance[\s\S]*?matchSearch: true/
 );
 assert.match(equipmentLayout, /path: "\/equipment-hire-operations\/fleet"/);
-assert.match(equipmentLayout, /path: "\/equipment-installment-finance"/);
+assert.match(equipmentLayout, /Back to Equipment Divisions/);
+assert.doesNotMatch(equipmentLayout, /path: "\/equipment-installment-finance"/);
 assert.doesNotMatch(equipmentLayout, /fleet\?view=sales/);
 assert.doesNotMatch(equipmentLayout, /fleet\?view=reports/);
 assert.doesNotMatch(equipmentLayout, /fleet\?view=installments/);
@@ -34,13 +35,13 @@ assert.match(financeLayout, /path: "\/equipment-installment-finance"/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance\/applications"/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance\/reports"/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance\/catalogue"/);
+assert.doesNotMatch(financeLayout, /path: "\/equipment-hire-operations/);
 assert.match(app, /path="\/equipment-installment-finance"/);
 
-assert.match(fleetPage, /view === "installments"/);
-assert.match(fleetPage, /view === "sales"/);
-assert.match(fleetPage, /view === "reports"/);
+assert.match(fleetPage, /\["installments", "sales", "reports"\]\.includes\(view\)/);
 assert.match(fleetPage, /view === "maintenance"/);
 assert.match(fleetPage, /return <SharedFleetAssetsPage \/>/);
+assert.match(fleetPage, /Navigate to="\/equipment-hire"/);
 assert.match(fleetPage, /Navigate to="\/equipment-installment-finance/);
 
 console.log("Equipment Hire and Installment Finance navigation contracts passed.");
