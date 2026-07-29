@@ -97,81 +97,81 @@ export const businessWorkspaces = [
   },
   {
     code: "equipment_hire",
-    name: "Equipment Hire",
-    shortName: "Equipment Hire",
+    name: "Equipment Hire & Installment Finance",
+    shortName: "Equipment Business",
     icon: "🚜",
     route: "/equipment-hire",
     status: "Operational",
     statusTone: "live",
-    openRoute: "/equipment-hire-operations",
+    openRoute: "/equipment-hire",
     requiresBranch: false,
-    loginContextTitle: "Independent Equipment Hire Workspace",
+    loginContextTitle: "Choose Hire or Installment Finance",
     loginContextMessage:
-      "No Spare Parts store is used. Hire yards, offices and work locations will be created and managed by an administrator inside Equipment Hire.",
+      "Sign in once, then choose the independent Equipment Hire Operations or Equipment Installment Finance division. Both use the same protected customer, machine and location foundation without mixing their workflows.",
     rolloutMessage:
-      "The Equipment Hire workspace is ready. Log in to open the protected workspace.",
+      "The Equipment business gateway is ready. Log in and choose Hire Operations or Installment Finance.",
     description:
-      "Quotations, contracts, dispatch, job cards, invoices, payments and returns.",
+      "Two independent divisions for equipment hiring and installment-finance operations.",
     accent: "blue",
-    headline: "Run excavator and heavy-equipment hiring professionally.",
+    headline: "Choose the right equipment division for every customer journey.",
     summary:
-      "The Equipment Hire workspace will manage the full customer journey from enquiry and quotation to equipment return, invoicing and debt follow-up while using the same shared machine register as Mining Operations.",
+      "Equipment Hire manages quotations, contracts, dispatch, work, invoicing and returns. Equipment Installment Finance manages applications, agreements, scheduled payments, collections and ownership. Machines, customers and authorised locations remain consistent underneath both divisions.",
     modules: [
       {
-        icon: "👥",
-        title: "Hire Customers",
+        icon: "🏗️",
+        title: "Equipment Hire Operations",
         description:
-          "Store customer contacts, payment terms, credit limits and account history.",
+          "Manage hire enquiries, availability, quotations, contracts, dispatch, job cards, invoices, payments and returns.",
       },
       {
-        icon: "📝",
-        title: "Quotations",
+        icon: "🏦",
+        title: "Equipment Installment Finance",
         description:
-          "Prepare hourly, daily, weekly, monthly or fixed-price hire quotations.",
+          "Manage finance applications, equipment sales agreements, schedules, collections, reminders and ownership transfer.",
       },
       {
         icon: "📅",
-        title: "Availability & Booking",
+        title: "Shared Equipment Availability",
         description:
-          "See machine availability and prevent overlapping mining and hire assignments.",
+          "Register each machine once and prevent an active hire assignment from conflicting with a sale or installment reservation.",
       },
       {
-        icon: "🤝",
-        title: "Contracts",
+        icon: "👥",
+        title: "Protected Customer Identity",
         description:
-          "Control rates, deposits, dates, fuel responsibility, operators and terms.",
-      },
-      {
-        icon: "🚚",
-        title: "Dispatch & Mobilization",
-        description:
-          "Record release inspection, meter, fuel level, attachments and destination.",
-      },
-      {
-        icon: "⏱️",
-        title: "Work Logs & Job Cards",
-        description:
-          "Capture billable hours, idle time, breakdowns and customer confirmation.",
+          "Reuse verified customer identities while keeping Hire contracts and Installment Finance accounts operationally separate.",
       },
       {
         icon: "🧾",
-        title: "Invoices & Payments",
+        title: "Commercial Documents",
         description:
-          "Create invoices, receive deposits and payments, and track outstanding balances.",
+          "Produce the correct quotation, contract, agreement, invoice, receipt, delivery and ownership evidence for each division.",
       },
       {
-        icon: "🔍",
-        title: "Return Inspection",
+        icon: "🔔",
+        title: "Collections & Notifications",
         description:
-          "Record return condition, damage, fuel, missing items and final account.",
+          "Follow up hire balances and installment obligations through the correct division, permissions and audit trail.",
+      },
+      {
+        icon: "📊",
+        title: "Independent Reporting",
+        description:
+          "Review hire utilisation and revenue separately from installment portfolio, aging, risk and expected collections.",
+      },
+      {
+        icon: "🛡️",
+        title: "Location & Permission Control",
+        description:
+          "Staff work only within authorised equipment locations and actions granted to their accounts.",
       },
     ],
     workflow: [
-      "Register customers and receive an equipment enquiry.",
-      "Check shared-fleet availability and prepare a quotation.",
-      "Approve the contract, deposit and equipment assignment.",
-      "Dispatch the machine and record approved daily work logs.",
-      "Invoice, receive payments, inspect the return and close the contract.",
+      "Sign in to the protected Equipment business workspace.",
+      "Choose Equipment Hire Operations or Equipment Installment Finance.",
+      "Work inside the selected division's dedicated navigation and controls.",
+      "Switch divisions through the gateway without creating duplicate records.",
+      "Review separate reports while management retains one consistent equipment register.",
     ],
   },
 ];
