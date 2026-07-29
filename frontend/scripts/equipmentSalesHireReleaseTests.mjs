@@ -25,14 +25,18 @@ const retirementBridge = read(
 );
 const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
 const financeLayout = read("src/layouts/InstallmentFinanceLayout.jsx");
+const divisionAccess = read("src/security/equipmentDivisionAccess.js");
+const staffManager = read("src/components/EquipmentDivisionStaffManager.jsx");
 const axiosClient = read("src/api/axiosClient.js");
 
 assert.match(wrapper, /isEquipmentHireWorkspace/);
 assert.match(wrapper, /EquipmentCataloguePage/);
 assert.match(wrapper, /Navigate/);
-assert.match(wrapper, /view === "sales"/);
-assert.match(wrapper, /view === "reports"/);
-assert.match(wrapper, /to="\/equipment-installment-finance\/applications"/);
+assert.match(wrapper, /\["installments", "sales", "reports"\]\.includes\(view\)/);
+assert.match(wrapper, /canAccessEquipmentDivision/);
+assert.match(wrapper, /EQUIPMENT_DIVISIONS\.FINANCE/);
+assert.match(wrapper, /to="\/equipment-hire"/);
+assert.match(wrapper, /to="\/equipment-installment-finance"/);
 assert.match(wrapper, /to="\/equipment-installment-finance\/reports"/);
 assert.match(wrapper, /SharedFleetAssetsPage/);
 assert.doesNotMatch(wrapper, /<EquipmentSalesWorkspacePage/);
@@ -154,20 +158,31 @@ assert.match(retirementBridge, /Equipment installments are handled in Equipment 
 assert.match(retirementBridge, /Spare Parts supports Cash, MoMo, Bank, Credit and Mixed sales/);
 
 assert.match(hireLayout, /workspaceName="Equipment Hire Operations"/);
-assert.match(hireLayout, /title: "Equipment Catalogue"/);
-assert.match(hireLayout, /Open Equipment Installment Finance/);
+assert.match(hireLayout, /title: "Hire Equipment Register"/);
+assert.match(hireLayout, /Independent Hire staff division/);
+assert.match(hireLayout, /No access to Finance applications or accounts/);
+assert.doesNotMatch(hireLayout, /Open Equipment Installment Finance/);
 assert.doesNotMatch(hireLayout, /title: "Sales & Installments"/);
 assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
 assert.match(hireLayout, /permissions: \["fleet\.assets\.view"\]/);
-assert.match(hireLayout, /Separated from Installment Finance/);
 
 assert.match(financeLayout, /workspaceName="Equipment Installment Finance"/);
 assert.match(financeLayout, /Finance Command Centre/);
 assert.match(financeLayout, /Credit Applications & Approval/);
 assert.match(financeLayout, /Installment Documents & Reports/);
-assert.match(financeLayout, /Open Equipment Hire Operations/);
+assert.match(financeLayout, /Back to Equipment Divisions/);
 assert.match(financeLayout, /workspaceCode="equipment_hire"/);
-assert.match(financeLayout, /Separated from Equipment Hire operations/);
+assert.match(financeLayout, /No access to Hire jobs or contracts/);
+assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
+assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
+assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
+
+assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
+assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
+assert.match(divisionAccess, /canAccessEquipmentDivision/);
+assert.match(staffManager, /Manage Division Staff/);
+assert.match(staffManager, /exactly one role family/);
+assert.match(staffManager, /workspace-context\/equipment-divisions\/staff/);
 
 assert.match(axiosClient, /equipmentMediaCaptureBridge/);
 assert.match(axiosClient, /sparePartsInstallmentRetirementBridge/);
