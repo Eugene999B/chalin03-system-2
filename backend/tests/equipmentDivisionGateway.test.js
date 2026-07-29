@@ -70,23 +70,44 @@ test("Hire and Installment Finance keep separate navigation identities", () => {
   assert.doesNotMatch(financeLayout, /title: "Dispatch & Job Cards"/);
 });
 
-test("gateway is responsive, accessible and does not introduce backend storage", () => {
+test("desktop gateway is responsive, accessible and does not introduce backend storage", () => {
   const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
   const css = read("frontend", "src", "styles", "equipmentDivisionGateway.css");
-  const serviceWorker = read("frontend", "public", "sw.js");
 
   assert.match(gateway, /aria-label="Equipment divisions"/);
   assert.match(gateway, /aria-disabled="true"/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /@media \(max-width: 900px\)/);
-  assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
-  assert.match(serviceWorker, /chalin03-equipment-division-gateway-v19/);
 
   const changedFeatureSources = `${gateway}\n${css}`;
   assert.doesNotMatch(
     changedFeatureSources,
     /CREATE TABLE|ALTER TABLE|DROP TABLE|INSERT INTO|UPDATE equipment_|DELETE FROM/i
   );
+});
+
+test("mobile equipment gateway fits one viewport without long content", () => {
+  const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
+  const mobileCss = read(
+    "frontend",
+    "src",
+    "styles",
+    "equipmentDivisionGatewayMobile.css"
+  );
+  const serviceWorker = read("frontend", "public", "sw.js");
+
+  assert.match(gateway, /equipmentDivisionGatewayMobile\.css/);
+  assert.match(mobileCss, /@media \(max-width: 700px\)/);
+  assert.match(mobileCss, /height: 100dvh/);
+  assert.match(mobileCss, /overflow: hidden/);
+  assert.match(
+    mobileCss,
+    /grid-template-rows: repeat\(2, minmax\(0, 1fr\)\)/
+  );
+  assert.match(mobileCss, /\.equipment-gateway__division-card ul \{[\s\S]*display: none/);
+  assert.match(mobileCss, /\.equipment-gateway__shared-strip,[\s\S]*display: none/);
+  assert.match(mobileCss, /@media \(max-width: 700px\) and \(max-height: 650px\)/);
+  assert.match(mobileCss, /orientation: landscape/);
+  assert.match(serviceWorker, /chalin03-equipment-mobile-gateway-v20/);
 });
