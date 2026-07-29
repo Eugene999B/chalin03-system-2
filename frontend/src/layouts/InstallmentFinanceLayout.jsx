@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   EQUIPMENT_DIVISIONS,
   canAccessEquipmentDivision,
+  ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
 
 const navigationSections = [
@@ -77,6 +78,8 @@ export default function InstallmentFinanceLayout() {
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
     return <Navigate to="/equipment-hire" replace />;
   }
+
+  ensureFinanceUiCompatibilityPermissions(user);
 
   return (
     <BusinessWorkspaceLayout
