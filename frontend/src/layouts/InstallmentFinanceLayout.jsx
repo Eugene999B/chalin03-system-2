@@ -6,15 +6,15 @@ const navigationSections = [
     items: [
       {
         title: "Finance Command Centre",
-        description: "Portfolio health, risk, collections queue and expected cash flow",
+        description: "Existing portfolio health, risk, collections queue and expected cash flow",
         path: "/equipment-installment-finance",
         icon: "🎯",
         end: true,
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Applications & Agreements",
-        description: "Enquiries, quotations, approvals, agreements, payments and ownership",
+        title: "Credit Applications & Approval",
+        description: "Approved quotations, KYC, affordability, manager review and credit decisions",
         path: "/equipment-installment-finance/applications",
         icon: "📝",
         permissions: ["fleet.assets.view"],
@@ -149,7 +149,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Finance location context"
       workspaceEyebrow="Current finance division"
       separationBadge="Separated from Equipment Hire operations"
-      description="Dedicated equipment sales, credit, installment, collections and ownership division. It shares authorised customers, machines and locations with Equipment Hire without mixing Hire contracts or operational records."
+      description="Dedicated equipment credit, installment collections and ownership division. New installment customers pass through KYC, affordability and manager approval before any later agreement activation, while existing accounts remain in the Finance Command Centre."
       navigationSections={navigationSections}
     />
   );

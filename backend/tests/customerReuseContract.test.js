@@ -34,15 +34,27 @@ test("New Sale can search, select and submit a saved customer", () => {
   assert.match(source, /Clear & Enter New Customer/);
 });
 
-test("Equipment Hire and Equipment Sales continue using reusable customer IDs", () => {
+test("Equipment Hire and Equipment Finance continue using reusable customer IDs", () => {
   const hire = read("frontend", "src", "pages", "EquipmentHireOperationsPage.jsx");
-  const sales = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
-  const backend = read("backend", "routes", "equipmentSalesRoutes.js");
+  const creditPage = read(
+    "frontend",
+    "src",
+    "pages",
+    "EquipmentCreditApplicationsPage.jsx"
+  );
+  const salesBackend = read("backend", "routes", "equipmentSalesRoutes.js");
+  const creditBackend = read(
+    "backend",
+    "routes",
+    "equipmentCreditApplicationRoutes.js"
+  );
   assert.match(hire, /customer_id:/);
   assert.match(hire, /Choose hire customer/);
-  assert.match(sales, /customer_id:/);
-  assert.match(sales, /Choose customer/);
-  assert.match(backend, /FROM hire_customers/);
+  assert.match(creditPage, /quotation_id/);
+  assert.match(creditPage, /customer_name_snapshot/);
+  assert.match(creditBackend, /quotation\.customer_id/);
+  assert.match(creditBackend, /customer_id, enquiry_id/);
+  assert.match(salesBackend, /FROM hire_customers/);
 });
 
 

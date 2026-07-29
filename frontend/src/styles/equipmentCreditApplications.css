@@ -1,0 +1,1059 @@
+.credit-app {
+  --credit-ink: #132336;
+  --credit-muted: #66758a;
+  --credit-line: #dce5ee;
+  --credit-surface: #ffffff;
+  min-height: 100%;
+  padding: 28px;
+  color: var(--credit-ink);
+  background:
+    radial-gradient(circle at 0 0, rgba(174, 131, 41, 0.1), transparent 30rem),
+    linear-gradient(180deg, #f7f9fc, #eef3f7);
+}
+
+.credit-app *,
+.credit-app *::before,
+.credit-app *::after {
+  box-sizing: border-box;
+}
+
+.credit-app button,
+.credit-app input,
+.credit-app select,
+.credit-app textarea {
+  font: inherit;
+}
+
+.credit-app button,
+.credit-app a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.credit-app__hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px;
+  border: 1px solid rgba(119, 83, 16, 0.16);
+  border-radius: 26px;
+  background:
+    linear-gradient(120deg, rgba(23, 40, 61, 0.98), rgba(41, 58, 79, 0.96)),
+    #18283c;
+  color: #fff;
+  box-shadow: 0 22px 58px rgba(18, 35, 55, 0.16);
+}
+
+.credit-app__hero p,
+.credit-app__list > header p,
+.credit-app__drawer-header p,
+.credit-app__foundation p {
+  margin: 0;
+  color: #d9b960;
+  font-size: 0.73rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.credit-app__hero h1 {
+  max-width: 780px;
+  margin: 8px 0 10px;
+  font-size: clamp(1.8rem, 4vw, 3.3rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.credit-app__hero > div > span {
+  color: #c7d1df;
+  font-size: 0.92rem;
+}
+
+.credit-app__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.credit-app__hero-actions a,
+.credit-app__hero-actions button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.credit-app__hero-actions button {
+  border-color: #d7b455;
+  background: #d7b455;
+  color: #172638;
+}
+
+.credit-app__hero-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.credit-app__boundary,
+.credit-app__approved-boundary {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid #d9e3ec;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.credit-app__boundary > span,
+.credit-app__approved-boundary > span {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: #eef3f8;
+  font-size: 1.2rem;
+}
+
+.credit-app__boundary p,
+.credit-app__approved-boundary p {
+  margin: 4px 0 0;
+  color: var(--credit-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.credit-app__alert {
+  margin-top: 14px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.credit-app__alert.is-error {
+  border: 1px solid #edb9b9;
+  background: #fff0f0;
+  color: #8b2f2f;
+}
+
+.credit-app__alert.is-success {
+  border: 1px solid #a9dabc;
+  background: #edf9f2;
+  color: #176642;
+}
+
+.credit-app__alert.is-warning {
+  border: 1px solid #e8d19a;
+  background: #fff8e8;
+  color: #7b5913;
+}
+
+.credit-app__foundation {
+  min-height: 330px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 650px);
+  align-content: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 22px;
+  padding: 42px;
+  border: 1px dashed #c8a65a;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.88);
+  text-align: left;
+}
+
+.credit-app__foundation > span {
+  font-size: 3rem;
+}
+
+.credit-app__foundation h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+}
+
+.credit-app__foundation div > span,
+.credit-app__foundation small {
+  display: block;
+  color: var(--credit-muted);
+  line-height: 1.6;
+}
+
+.credit-app__foundation small {
+  margin-top: 12px;
+  font-weight: 750;
+}
+
+.credit-app__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.credit-app__metric {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--credit-line);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(19, 35, 54, 0.06);
+}
+
+.credit-app__metric > span {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: #eef3f7;
+  font-size: 1.2rem;
+}
+
+.credit-app__metric div {
+  min-width: 0;
+}
+
+.credit-app__metric small,
+.credit-app__facts span,
+.credit-app__detail-row span,
+.credit-app__field > span,
+.credit-app__toolbar label span {
+  color: var(--credit-muted);
+  font-size: 0.73rem;
+  font-weight: 760;
+}
+
+.credit-app__metric strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 1.25rem;
+  text-overflow: ellipsis;
+}
+
+.credit-app__metric p {
+  margin: 4px 0 0;
+  color: var(--credit-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.credit-app__toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--credit-line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.credit-app__toolbar label,
+.credit-app__field {
+  display: grid;
+  gap: 6px;
+}
+
+.credit-app__toolbar input,
+.credit-app__toolbar select,
+.credit-app__toolbar button,
+.credit-app__field input,
+.credit-app__field select,
+.credit-app__field textarea {
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 12px;
+  border: 1px solid #cad6e1;
+  border-radius: 11px;
+  background: #fff;
+  color: var(--credit-ink);
+  outline: none;
+}
+
+.credit-app__toolbar button {
+  width: auto;
+  padding-inline: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.credit-app__toolbar input:focus,
+.credit-app__toolbar select:focus,
+.credit-app__field input:focus,
+.credit-app__field select:focus,
+.credit-app__field textarea:focus {
+  border-color: #8b6a22;
+  box-shadow: 0 0 0 3px rgba(139, 106, 34, 0.12);
+}
+
+.credit-app__field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.credit-app__field small {
+  color: #7b8798;
+  font-size: 0.7rem;
+}
+
+.credit-app__loading {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  margin-top: 18px;
+  border: 1px solid var(--credit-line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--credit-muted);
+  font-weight: 800;
+}
+
+.credit-app__list {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--credit-line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.credit-app__list > header,
+.credit-app__detail-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.credit-app__list > header h2,
+.credit-app__detail-section h3 {
+  margin: 4px 0 0;
+}
+
+.credit-app__list > header small {
+  color: var(--credit-muted);
+  font-weight: 700;
+}
+
+.credit-app__cards {
+  display: grid;
+  gap: 13px;
+  margin-top: 16px;
+}
+
+.credit-app__card {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d9e3ec;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 9px 28px rgba(19, 35, 54, 0.06);
+}
+
+.credit-app__card-image {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, #eaf0f5, #dce6ee);
+  font-size: 2.5rem;
+}
+
+.credit-app__card-image img,
+.credit-app__detail-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.credit-app__card-main {
+  min-width: 0;
+  padding: 16px;
+}
+
+.credit-app__card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.credit-app__card-top small {
+  color: #8a6a25;
+  font-weight: 850;
+}
+
+.credit-app__card-top h3 {
+  margin: 3px 0;
+  font-size: 1.12rem;
+}
+
+.credit-app__card-top p {
+  margin: 0;
+  color: var(--credit-muted);
+  font-size: 0.8rem;
+}
+
+.credit-app__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d1dce6;
+  border-radius: 999px;
+  background: #eef3f7;
+  color: #4f6073;
+  font-size: 0.64rem;
+  font-weight: 850;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.credit-app__status.is-approved,
+.credit-app__status.is-verified,
+.credit-app__status.is-eligible,
+.credit-app__status.is-low {
+  border-color: #a9d7ba;
+  background: #eaf8ef;
+  color: #176a42;
+}
+
+.credit-app__status.is-submitted,
+.credit-app__status.is-under_review,
+.credit-app__status.is-manual_review,
+.credit-app__status.is-medium,
+.credit-app__status.is-complete {
+  border-color: #d9c48d;
+  background: #fff7df;
+  color: #7c5b12;
+}
+
+.credit-app__status.is-declined,
+.credit-app__status.is-rejected,
+.credit-app__status.is-ineligible,
+.credit-app__status.is-critical {
+  border-color: #e4abab;
+  background: #fff0f0;
+  color: #8b3030;
+}
+
+.credit-app__status.is-changes_requested,
+.credit-app__status.is-high,
+.credit-app__status.is-incomplete {
+  border-color: #e6c28f;
+  background: #fff4e6;
+  color: #8b5418;
+}
+
+.credit-app__risk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.credit-app__risk-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--credit-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.credit-app__facts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.credit-app__facts > div {
+  min-width: 0;
+  padding: 9px;
+  border-radius: 10px;
+  background: #f5f8fb;
+}
+
+.credit-app__facts strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.credit-app__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.credit-app__card-actions button,
+.credit-app__form-actions button {
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid #cbd7e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #23374c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.credit-app__card-actions button.is-primary,
+.credit-app__form-actions button.is-primary {
+  border-color: #1c4769;
+  background: #1c4769;
+  color: #fff;
+}
+
+.credit-app__card-actions button.is-approve {
+  border-color: #217148;
+  background: #217148;
+  color: #fff;
+}
+
+.credit-app__empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.credit-app__empty > span {
+  font-size: 2rem;
+}
+
+.credit-app__empty h3 {
+  margin: 8px 0 4px;
+}
+
+.credit-app__empty p {
+  max-width: 540px;
+  margin: 0;
+  color: var(--credit-muted);
+  line-height: 1.55;
+}
+
+.credit-app__backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 22, 35, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.credit-app__drawer {
+  width: min(920px, 96vw);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #f4f7fa;
+  box-shadow: -20px 0 60px rgba(8, 19, 31, 0.25);
+}
+
+.credit-app__drawer.is-small {
+  width: min(520px, 96vw);
+}
+
+.credit-app__drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #d9e3ec;
+  background: #fff;
+}
+
+.credit-app__drawer-header h2 {
+  margin: 5px 0 4px;
+  font-size: 1.45rem;
+}
+
+.credit-app__drawer-header > div > span {
+  color: var(--credit-muted);
+  font-size: 0.83rem;
+}
+
+.credit-app__drawer-header > button {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 1px solid #d1dce6;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.credit-app__drawer-body {
+  overflow: auto;
+  padding: 20px;
+}
+
+.credit-app__form {
+  display: grid;
+  gap: 16px;
+}
+
+.credit-app__form-section,
+.credit-app__detail-section {
+  padding: 18px;
+  border: 1px solid #dbe4ed;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.credit-app__form-section > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.credit-app__form-section > header > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #1e3d58;
+  color: #fff;
+  font-weight: 850;
+}
+
+.credit-app__form-section h3 {
+  margin: 0 0 3px;
+}
+
+.credit-app__form-section header p {
+  margin: 0;
+  color: var(--credit-muted);
+  font-size: 0.8rem;
+}
+
+.credit-app__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.credit-app__field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.credit-app__checks {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.credit-app__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d9e3ec;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.credit-app__check input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.credit-app__check span {
+  display: grid;
+  gap: 2px;
+}
+
+.credit-app__check small {
+  color: var(--credit-muted);
+  line-height: 1.4;
+}
+
+.credit-app__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+
+.credit-app__form-actions button {
+  min-height: 42px;
+  padding-inline: 16px;
+  font-size: 0.8rem;
+}
+
+.credit-app__form-actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.credit-app__detail {
+  display: grid;
+  gap: 14px;
+}
+
+.credit-app__detail-identity {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #dbe4ed;
+  border-radius: 19px;
+  background: #fff;
+}
+
+.credit-app__detail-image {
+  min-height: 132px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #e9f0f5;
+  font-size: 2.6rem;
+}
+
+.credit-app__detail-identity p {
+  margin: 0;
+  color: #88691f;
+  font-size: 0.73rem;
+  font-weight: 850;
+}
+
+.credit-app__detail-identity h3 {
+  margin: 5px 0;
+  font-size: 1.5rem;
+}
+
+.credit-app__detail-identity > div > span {
+  color: var(--credit-muted);
+}
+
+.credit-app__detail-identity > div > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.credit-app__detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.credit-app__detail-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e0e7ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.credit-app__detail-row strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.credit-app__detail-section > header {
+  margin-bottom: 12px;
+}
+
+.credit-app__detail-section > header span {
+  color: var(--credit-muted);
+  font-size: 0.76rem;
+}
+
+.credit-app__recommendation {
+  margin: 0;
+  color: #33485f;
+  line-height: 1.6;
+}
+
+.credit-app__detail-section pre {
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 12px;
+  background: #f4f7fa;
+  color: #536378;
+  font-family: inherit;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.credit-app__timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.credit-app__timeline article {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.credit-app__timeline article > span {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #b08a31;
+  box-shadow: 0 0 0 4px rgba(176, 138, 49, 0.12);
+}
+
+.credit-app__timeline div {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8ee;
+}
+
+.credit-app__timeline small {
+  display: block;
+  margin-top: 2px;
+  color: var(--credit-muted);
+}
+
+.credit-app__timeline p {
+  margin: 5px 0 0;
+  color: #4f6073;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.credit-app__approved-boundary {
+  margin-top: 0;
+  border-color: #a9d7ba;
+  background: #edf9f2;
+}
+
+.credit-app__decision > p {
+  margin: 0 0 16px;
+  color: #4c5e72;
+  line-height: 1.6;
+}
+
+@media (max-width: 1180px) {
+  .credit-app__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .credit-app__facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .credit-app {
+    padding: 18px;
+  }
+
+  .credit-app__hero {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 22px;
+  }
+
+  .credit-app__hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .credit-app__toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .credit-app__toolbar button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .credit-app__card {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+
+  .credit-app__detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .credit-app {
+    padding: 12px;
+  }
+
+  .credit-app__hero {
+    gap: 16px;
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .credit-app__hero h1 {
+    font-size: 1.75rem;
+  }
+
+  .credit-app__hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .credit-app__hero-actions a,
+  .credit-app__hero-actions button {
+    width: 100%;
+  }
+
+  .credit-app__boundary {
+    padding: 13px;
+  }
+
+  .credit-app__boundary > span {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  .credit-app__metrics,
+  .credit-app__toolbar,
+  .credit-app__form-grid,
+  .credit-app__detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-app__metric {
+    padding: 14px;
+  }
+
+  .credit-app__toolbar button {
+    grid-column: auto;
+  }
+
+  .credit-app__list {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .credit-app__list > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .credit-app__card {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-app__card-image {
+    height: 145px;
+  }
+
+  .credit-app__card-top {
+    gap: 10px;
+  }
+
+  .credit-app__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .credit-app__card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .credit-app__card-actions button {
+    width: 100%;
+  }
+
+  .credit-app__drawer {
+    width: 100%;
+  }
+
+  .credit-app__drawer-header {
+    padding: 16px;
+  }
+
+  .credit-app__drawer-body {
+    padding: 12px;
+  }
+
+  .credit-app__form-section,
+  .credit-app__detail-section {
+    padding: 14px;
+  }
+
+  .credit-app__detail-identity {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .credit-app__detail-image {
+    height: 160px;
+  }
+
+  .credit-app__form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .credit-app__foundation {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    text-align: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .credit-app__facts,
+  .credit-app__card-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-app__risk-row {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credit-app *,
+  .credit-app *::before,
+  .credit-app *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
