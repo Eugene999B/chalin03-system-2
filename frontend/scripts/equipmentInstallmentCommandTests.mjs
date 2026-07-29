@@ -17,6 +17,11 @@ const app = readFrontend("src", "App.jsx");
 const fleetPage = readFrontend("src", "pages", "FleetAssetsPage.jsx");
 const hireLayout = readFrontend("src", "layouts", "EquipmentHireLayout.jsx");
 const financeLayout = readFrontend("src", "layouts", "InstallmentFinanceLayout.jsx");
+const divisionAccess = readFrontend(
+  "src",
+  "security",
+  "equipmentDivisionAccess.js"
+);
 const workspaceLayout = readFrontend(
   "src",
   "components",
@@ -69,26 +74,36 @@ assert.match(app, /allowedWorkspaces=\{EQUIPMENT_HIRE_WORKSPACE\}/);
 assert.doesNotMatch(app, /const INSTALLMENT_WORKSPACE/);
 
 assert.match(financeLayout, /Equipment Installment Finance/);
-assert.match(financeLayout, /Independent finance division/);
-assert.match(financeLayout, /Separated from Equipment Hire operations/);
+assert.match(financeLayout, /Independent Finance staff division/);
+assert.match(financeLayout, /No access to Hire jobs or contracts/);
 assert.match(financeLayout, /Finance Command Centre/);
 assert.match(financeLayout, /Credit Applications & Approval/);
 assert.match(financeLayout, /Installment Documents & Reports/);
-assert.match(financeLayout, /Open Equipment Hire Operations/);
+assert.match(financeLayout, /Back to Equipment Divisions/);
 assert.match(financeLayout, /workspaceCode="equipment_hire"/);
+assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
+assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
+assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
 
 assert.match(hireLayout, /Equipment Hire Operations/);
-assert.match(hireLayout, /Independent Hire division/);
-assert.match(hireLayout, /Separated from Installment Finance/);
-assert.match(hireLayout, /Open Equipment Installment Finance/);
+assert.match(hireLayout, /Independent Hire staff division/);
+assert.match(hireLayout, /No access to Finance applications or accounts/);
+assert.doesNotMatch(hireLayout, /Open Equipment Installment Finance/);
 assert.doesNotMatch(hireLayout, /title: "Installment Command Centre"/);
 assert.doesNotMatch(hireLayout, /title: "Sales & Installments"/);
 assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
 
+assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
+assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
+assert.match(divisionAccess, /canAccessEquipmentDivision/);
+assert.match(divisionAccess, /is_original_system_administrator/);
+assert.doesNotMatch(divisionAccess, /Number\(user\.id\) === 1/);
+
 assert.match(fleetPage, /Navigate/);
-assert.match(fleetPage, /view === "installments"/);
+assert.match(fleetPage, /\["installments", "sales", "reports"\]\.includes\(view\)/);
+assert.match(fleetPage, /EQUIPMENT_DIVISIONS\.FINANCE/);
+assert.match(fleetPage, /to="\/equipment-hire"/);
 assert.match(fleetPage, /to="\/equipment-installment-finance"/);
-assert.match(fleetPage, /to="\/equipment-installment-finance\/applications"/);
 assert.match(fleetPage, /to="\/equipment-installment-finance\/reports"/);
 assert.doesNotMatch(fleetPage, /<EquipmentInstallmentCommandPage/);
 
@@ -98,7 +113,7 @@ assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /installment-command__account-grid/);
 assert.match(css, /installment-command__backdrop/);
-assert.match(serviceWorker, /chalin03-installment-runtime-stability-v18/);
+assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
 assert.match(serviceWorker, /cacheCoreAssets/);
 assert.match(serviceWorker, /networkNavigation/);
 assert.doesNotMatch(serviceWorker, /status:\s*503/);

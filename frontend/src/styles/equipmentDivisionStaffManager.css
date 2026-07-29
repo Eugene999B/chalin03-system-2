@@ -1,0 +1,254 @@
+.equipment-division-staff__open {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  padding: 0.68rem 1rem;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.equipment-division-staff__open-compact {
+  display: none;
+}
+
+.equipment-division-staff__open:hover,
+.equipment-division-staff__open:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+.equipment-division-staff__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(4, 15, 29, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.equipment-division-staff__panel {
+  width: min(980px, 100%);
+  max-height: min(90dvh, 860px);
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  background: #f7f9fc;
+  color: #15243a;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+}
+
+.equipment-division-staff__panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  background: #10233d;
+  color: #ffffff;
+}
+
+.equipment-division-staff__panel header p,
+.equipment-division-staff__panel header h2,
+.equipment-division-staff__panel header span {
+  margin: 0;
+}
+
+.equipment-division-staff__panel header p {
+  margin-bottom: 0.28rem;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.equipment-division-staff__panel header h2 {
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+
+.equipment-division-staff__panel header span {
+  display: block;
+  max-width: 680px;
+  margin-top: 0.42rem;
+  line-height: 1.5;
+  opacity: 0.82;
+}
+
+.equipment-division-staff__panel header > button {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.equipment-division-staff__rules {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #dfe6ef;
+  background: #fff5d8;
+}
+
+.equipment-division-staff__rules span {
+  color: #52647b;
+  line-height: 1.45;
+}
+
+.equipment-division-staff__alert {
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.equipment-division-staff__alert.is-error {
+  background: #ffe5e5;
+  color: #8a2020;
+}
+
+.equipment-division-staff__alert.is-success {
+  background: #e2f7ea;
+  color: #166534;
+}
+
+.equipment-division-staff__body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+  padding: 1.25rem 1.5rem calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+.equipment-division-staff__card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.8fr) auto;
+  align-items: end;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #dfe6ef;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.equipment-division-staff__card h3,
+.equipment-division-staff__card p {
+  margin: 0;
+}
+
+.equipment-division-staff__card h3 {
+  margin-top: 0.4rem;
+}
+
+.equipment-division-staff__card p {
+  margin-top: 0.22rem;
+  color: #63738a;
+}
+
+.equipment-division-staff__division {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 900;
+  background: #e8f1ff;
+  color: #164b91;
+}
+
+.equipment-division-staff__division.is-finance {
+  background: #f7ead7;
+  color: #7a4a12;
+}
+
+.equipment-division-staff__card label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 800;
+}
+
+.equipment-division-staff__card select {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid #cbd6e4;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+.equipment-division-staff__card > button {
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: #10233d;
+  color: #ffffff;
+  padding: 0.62rem 0.9rem;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.equipment-division-staff__card > button:disabled,
+.equipment-division-staff__panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.equipment-division-staff__empty {
+  padding: 2rem;
+  border: 1px dashed #cbd6e4;
+  border-radius: 16px;
+  text-align: center;
+  color: #63738a;
+}
+
+@media (max-width: 760px) {
+  .equipment-division-staff__open {
+    padding: 0.48rem 0.62rem;
+    font-size: 0.72rem;
+  }
+
+  .equipment-division-staff__open-full {
+    display: none;
+  }
+
+  .equipment-division-staff__open-compact {
+    display: inline;
+  }
+
+  .equipment-division-staff__backdrop {
+    padding: 0;
+  }
+
+  .equipment-division-staff__panel {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .equipment-division-staff__panel > header,
+  .equipment-division-staff__rules,
+  .equipment-division-staff__body {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .equipment-division-staff__card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}

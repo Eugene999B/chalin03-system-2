@@ -43,6 +43,6 @@ assert.match(app, /EmploymentDocumentsPage/);
 assert.match(app, /DocumentSignatureSettingsPage/);
 assert.match(spareLayout, /Employment & HR Documents/);
 assert.match(miningLayout, /Employment & HR Documents/);
-assert.match(hireLayout, /Employment & HR Documents/);
+assert.match(hireLayout, /Hire Employment Documents/);
 
 console.log("Standalone employment documents and signature frontend checks passed.");

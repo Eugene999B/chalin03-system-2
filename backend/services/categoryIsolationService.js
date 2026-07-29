@@ -3,6 +3,12 @@ const {
   requireSparePartsBranchContext,
 } = require("../middleware/sparePartsBranchContextMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const {
+  hasEquipmentDivisionAccess,
+  requiredEquipmentDivisionForRequest,
+  applyEquipmentDivisionCompatibilityPermissions,
+  divisionAccessDeniedMessage,
+} = require("../security/equipmentDivisionAccess");
 
 const CATEGORY_CODES = Object.freeze([
   "spare_parts",
@@ -13,7 +19,7 @@ const CATEGORY_CODES = Object.freeze([
 const CATEGORY_LABELS = Object.freeze({
   spare_parts: "Spare Parts",
   mining: "Mining Operations",
-  equipment_hire: "Equipment Sales & Hire",
+  equipment_hire: "Equipment Business",
 });
 
 const SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS = Object.freeze(
@@ -243,6 +249,26 @@ function requireWorkspaceCategory(...allowedWorkspaceCodes) {
         message:
           "This API belongs to a different independent business category. Switch business and login to the correct category.",
       });
+    }
+
+    if (activeWorkspace === "equipment_hire") {
+      const requiredDivision = requiredEquipmentDivisionForRequest(req);
+      if (
+        requiredDivision &&
+        !hasEquipmentDivisionAccess(req.user, requiredDivision)
+      ) {
+        return res.status(403).json({
+          status: "error",
+          code: "EQUIPMENT_DIVISION_ACCESS_DENIED",
+          division: requiredDivision,
+          message: divisionAccessDeniedMessage(requiredDivision),
+        });
+      }
+
+      // Legacy Finance endpoints still name fleet permissions internally. These
+      // permissions exist only for this already-approved Finance request and do
+      // not grant access to Hire jobs, the Fleet API or catalogue writes.
+      applyEquipmentDivisionCompatibilityPermissions(req);
     }
 
     return requiresStoreContext

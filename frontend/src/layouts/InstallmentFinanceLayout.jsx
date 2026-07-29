@@ -1,4 +1,11 @@
+import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
+import { useAuth } from "../context/AuthContext";
+import {
+  EQUIPMENT_DIVISIONS,
+  canAccessEquipmentDivision,
+  ensureFinanceUiCompatibilityPermissions,
+} from "../security/equipmentDivisionAccess";
 
 const navigationSections = [
   {
@@ -6,7 +13,7 @@ const navigationSections = [
     items: [
       {
         title: "Finance Command Centre",
-        description: "Existing portfolio health, risk, collections queue and expected cash flow",
+        description: "Finance portfolio health, risk, collections and expected cash flow",
         path: "/equipment-installment-finance",
         icon: "🎯",
         end: true,
@@ -14,108 +21,35 @@ const navigationSections = [
       },
       {
         title: "Credit Applications & Approval",
-        description: "Approved quotations, KYC, affordability, manager review and credit decisions",
+        description: "Finance applications, KYC, affordability and independent decisions",
         path: "/equipment-installment-finance/applications",
         icon: "📝",
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Finance Customers",
-        description: "Shared customer identities, contacts and credit information",
-        path: "/equipment-installment-finance/customers",
-        icon: "👤",
-        permissions: ["hire.customers.view"],
-      },
-      {
         title: "Installment Documents & Reports",
-        description: "Agreements, receipts, aging, collections, profit and expected payments",
+        description: "Finance agreements, receipts, aging, collections and expected payments",
         path: "/equipment-installment-finance/reports",
         icon: "📊",
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Finance Equipment Catalogue",
-        description: "Saleable machines, identity, pictures, prices and availability safeguards",
+        title: "Finance Equipment Reference",
+        description: "Read-only machine identity and availability reference for Finance work",
         path: "/equipment-installment-finance/catalogue",
         icon: "🚜",
         permissions: ["fleet.assets.view"],
       },
-      {
-        title: "Finance Notifications",
-        description: "Approval, payment, overdue, delivery and ownership alerts",
-        path: "/equipment-installment-finance/notifications",
-        icon: "🔔",
-        permissions: ["notifications.view"],
-      },
     ],
   },
   {
-    title: "Finance Resources",
-    items: [
-      {
-        title: "Finance Documents",
-        description: "Installment documents and shared accounting evidence",
-        path: "/equipment-installment-finance/documents",
-        icon: "📄",
-        permissions: ["operations.documents.view"],
-      },
-      {
-        title: "Shared Reports & Audit",
-        description: "Search evidence, export reports and review protected access records",
-        path: "/equipment-installment-finance/shared-controls",
-        icon: "📚",
-        permissions: ["shared.control.view"],
-      },
-      {
-        title: "Finance Workforce",
-        description: "Staff profiles, location assignments, licences and expiries",
-        path: "/equipment-installment-finance/workers",
-        icon: "👔",
-        permissions: ["workers.view"],
-      },
-      {
-        title: "Employment & HR Documents",
-        description: "Prepare approved staff letters before worker registration",
-        path: "/equipment-installment-finance/employment-documents",
-        icon: "✍️",
-        permissions: ["workers.documents.view"],
-      },
-    ],
-  },
-  {
-    title: "Equipment Divisions",
+    title: "Division Control",
     items: [
       {
         title: "Back to Equipment Divisions",
-        description: "Choose Equipment Hire or Installment Finance",
+        description: "Return to the protected division gateway",
         path: "/equipment-hire",
         icon: "◫",
-      },
-      {
-        title: "Open Equipment Hire Operations",
-        description: "Switch to Hire enquiries, contracts, dispatch, invoices and returns",
-        path: "/equipment-hire-operations?division=hire",
-        icon: "🏗️",
-        permissions: ["fleet.assets.view"],
-      },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      {
-        title: "Document Signature Settings",
-        description: "Boss signature for approved finance and employment documents",
-        path: "/equipment-installment-finance/document-signature-settings",
-        icon: "🖋️",
-        permissions: ["security.admin"],
-      },
-      {
-        title: "Finance Location & Access",
-        description: "Shared equipment locations and staff workspace assignments",
-        path: "/equipment-installment-finance/administration",
-        icon: "⚙️",
-        permissions: ["workspace.admin"],
       },
     ],
   },
@@ -124,7 +58,7 @@ const navigationSections = [
     items: [
       {
         title: "Installment Finance Help",
-        description: "Guide for applications, agreements, collections and customer protection",
+        description: "Guide for credit, approvals, collections and customer protection",
         path: "/equipment-installment-finance/help",
         icon: "❓",
       },
@@ -139,17 +73,26 @@ const navigationSections = [
 ];
 
 export default function InstallmentFinanceLayout() {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
+    return <Navigate to="/equipment-hire" replace />;
+  }
+
+  ensureFinanceUiCompatibilityPermissions(user, location.pathname);
+
   return (
     <BusinessWorkspaceLayout
       workspaceCode="equipment_hire"
       workspaceName="Equipment Installment Finance"
       icon="🏦"
       theme="earth"
-      independenceLabel="Independent finance division"
-      contextHeading="Finance location context"
-      workspaceEyebrow="Current finance division"
-      separationBadge="Separated from Equipment Hire operations"
-      description="Dedicated equipment credit, installment collections and ownership division. New installment customers pass through KYC, affordability and manager approval before any later agreement activation, while existing accounts remain in the Finance Command Centre."
+      independenceLabel="Independent Finance staff division"
+      contextHeading="Finance location reference"
+      workspaceEyebrow="Current staff division"
+      separationBadge="No access to Hire jobs or contracts"
+      description="Dedicated credit applications, installment accounts, collections and ownership work. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices and returns remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
