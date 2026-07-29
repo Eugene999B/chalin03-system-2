@@ -18,6 +18,11 @@ function roundMoney(value) {
   return Number(numberValue(value).toFixed(2));
 }
 
+function roundSignedMoney(value, fallback = 0) {
+  const number = Number(value);
+  return Number((Number.isFinite(number) ? number : fallback).toFixed(2));
+}
+
 function roundPercent(value) {
   return Number(numberValue(value).toFixed(2));
 }
@@ -133,7 +138,7 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
       existingDebt +
       proposedMonthlyInstallment
   );
-  const netSurplus = roundMoney(totalIncome - totalCommitments);
+  const netSurplus = roundSignedMoney(totalIncome - totalCommitments);
   const debtServiceRatio = roundPercent(
     totalIncome > 0
       ? ((existingDebt + proposedMonthlyInstallment) / totalIncome) * 100
@@ -146,7 +151,7 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
     quotedTotal > 0 ? (proposedDeposit / quotedTotal) * 100 : 0
   );
   const surplusRatio = roundPercent(
-    totalIncome > 0 ? Math.max(netSurplus, 0) / totalIncome * 100 : 0
+    totalIncome > 0 ? (Math.max(netSurplus, 0) / totalIncome) * 100 : 0
   );
   const kycStatus = determineKycStatus(kyc, financedAmount);
   const guarantorRequired = financedAmount >= POLICY.guarantorRequiredFromAmount;
@@ -209,7 +214,8 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
 
   if (
     reasons.length ||
-    proposedMonthlyInstallment > Math.max(totalIncome - monthlyBusinessCosts - monthlyHousehold - existingDebt, 0)
+    proposedMonthlyInstallment >
+      Math.max(totalIncome - monthlyBusinessCosts - monthlyHousehold - existingDebt, 0)
   ) {
     affordabilityStatus = "ineligible";
     recommendation =
