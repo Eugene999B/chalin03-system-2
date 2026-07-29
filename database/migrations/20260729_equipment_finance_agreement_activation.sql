@@ -208,7 +208,17 @@ FOR EACH ROW
 BEGIN
     DECLARE v_matches INT DEFAULT 0;
 
-    IF NEW.sale_type = 'installment' THEN
+    -- Existing pre-migration installment agreements remain operational. Their
+    -- payments, balances and status may continue to update without retroactively
+    -- inventing a credit application. Any new or newly linked installment flow
+    -- must pass the approved Finance application gate.
+    IF NEW.sale_type = 'installment'
+       AND NOT (
+           OLD.sale_type = 'installment'
+           AND OLD.credit_application_id IS NULL
+           AND NEW.credit_application_id IS NULL
+           AND OLD.activation_source = 'legacy'
+       ) THEN
         IF NEW.credit_application_id IS NULL THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'Installment agreements require an approved Finance credit application.';
