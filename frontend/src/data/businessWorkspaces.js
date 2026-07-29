@@ -105,73 +105,73 @@ export const businessWorkspaces = [
     statusTone: "live",
     openRoute: "/equipment-hire",
     requiresBranch: false,
-    loginContextTitle: "Choose Hire or Installment Finance",
+    loginContextTitle: "Open Your Assigned Equipment Division",
     loginContextMessage:
-      "Sign in once, then choose the independent Equipment Hire Operations or Equipment Installment Finance division. Both use the same protected customer, machine and location foundation without mixing their workflows.",
+      "Sign in once, then the gateway checks the staff member's assigned division. Hire employees open only Equipment Hire Operations. Finance employees open only Equipment Installment Finance. Ordinary staff roles cannot work in both.",
     rolloutMessage:
-      "The Equipment business gateway is ready. Log in and choose Hire Operations or Installment Finance.",
+      "The Equipment gateway is ready. Log in to open only the division assigned to your staff role.",
     description:
-      "Two independent divisions for equipment hiring and installment-finance operations.",
+      "Two hard-separated staff divisions for equipment hiring and installment-finance operations.",
     accent: "blue",
-    headline: "Choose the right equipment division for every customer journey.",
+    headline: "Keep every Hire job and every Finance account in its own division.",
     summary:
-      "Equipment Hire manages quotations, contracts, dispatch, work, invoicing and returns. Equipment Installment Finance manages applications, agreements, scheduled payments, collections and ownership. Machines, customers and authorised locations remain consistent underneath both divisions.",
+      "Equipment Hire owns Hire enquiries, Hire quotations, Hire contracts, dispatch, job cards, Hire invoices and returns. Equipment Installment Finance owns credit applications, KYC, approvals, installment accounts, collections and ownership. A reference-only equipment identity may be recognised by both divisions, but their staff work, documents, balances and audit actions never merge.",
     modules: [
       {
         icon: "🏗️",
         title: "Equipment Hire Operations",
         description:
-          "Manage hire enquiries, availability, quotations, contracts, dispatch, job cards, invoices, payments and returns.",
+          "Hire-only staff manage Hire enquiries, availability, quotations, contracts, dispatch, job cards, invoices, payments and returns.",
       },
       {
         icon: "🏦",
         title: "Equipment Installment Finance",
         description:
-          "Manage finance applications, equipment sales agreements, schedules, collections, reminders and ownership transfer.",
+          "Finance-only staff manage credit applications, KYC, approvals, installment accounts, collections and ownership transfer.",
       },
       {
-        icon: "📅",
-        title: "Shared Equipment Availability",
+        icon: "🚜",
+        title: "Reference-Only Equipment Identity",
         description:
-          "Register each machine once and prevent an active hire assignment from conflicting with a sale or installment reservation.",
+          "Each physical machine keeps one identity, picture and status reference without turning a Hire job into a Finance account or a Finance account into a Hire job.",
       },
       {
         icon: "👥",
-        title: "Protected Customer Identity",
+        title: "Independent Customer Transactions",
         description:
-          "Reuse verified customer identities while keeping Hire contracts and Installment Finance accounts operationally separate.",
+          "A known customer may be identified consistently, but Hire contracts and Finance accounts remain separate commercial records.",
+      },
+      {
+        icon: "👔",
+        title: "Division-Specific Staff",
+        description:
+          "Hire officers, dispatchers and Hire accountants cannot open Finance work. Finance staff cannot open Hire jobs, dispatch, invoices or returns.",
       },
       {
         icon: "🧾",
-        title: "Commercial Documents",
+        title: "Separate Commercial Evidence",
         description:
-          "Produce the correct quotation, contract, agreement, invoice, receipt, delivery and ownership evidence for each division.",
-      },
-      {
-        icon: "🔔",
-        title: "Collections & Notifications",
-        description:
-          "Follow up hire balances and installment obligations through the correct division, permissions and audit trail.",
+          "Hire documents remain Hire evidence. Finance applications, agreements, receipts and ownership evidence remain Finance evidence.",
       },
       {
         icon: "📊",
         title: "Independent Reporting",
         description:
-          "Review hire utilisation and revenue separately from installment portfolio, aging, risk and expected collections.",
+          "Hire utilisation and Hire revenue are reported separately from Finance portfolio, aging, risk and expected collections.",
       },
       {
         icon: "🛡️",
-        title: "Location & Permission Control",
+        title: "Server-Enforced Division Boundary",
         description:
-          "Staff work only within authorised equipment locations and actions granted to their accounts.",
+          "The browser, routes and API independently reject cross-division access even when a staff member knows the other division's URL.",
       },
     ],
     workflow: [
-      "Sign in to the protected Equipment business workspace.",
-      "Choose Equipment Hire Operations or Equipment Installment Finance.",
-      "Work inside the selected division's dedicated navigation and controls.",
-      "Switch divisions through the gateway without creating duplicate records.",
-      "Review separate reports while management retains one consistent equipment register.",
+      "Sign in to the protected Equipment Business gateway.",
+      "The system checks the staff member's Hire-only or Finance-only role.",
+      "Open only the assigned division's navigation, records and reports.",
+      "Return to the gateway without carrying a job or account into the other division.",
+      "The protected System Administrator remains the only account allowed to supervise both divisions.",
     ],
   },
 ];
