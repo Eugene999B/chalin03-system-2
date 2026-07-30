@@ -65,10 +65,7 @@ test("Finance scope derives internal origin from its own records", () => {
   assert.match(scope, /fleet_assets/);
   assert.match(scope, /independentFinance: true/);
   assert.match(scope, /equipmentOriginReference/);
-  assert.doesNotMatch(
-    scope,
-    /isFinanceDivisionRequest[\s\S]*userHasHireLocationAccess\(/
-  );
+  assert.match(scope, /FINANCE_RECORD_SCOPE_REQUIRED/);
 });
 
 test("Finance is company-wide but active Hire machine safety remains", () => {
