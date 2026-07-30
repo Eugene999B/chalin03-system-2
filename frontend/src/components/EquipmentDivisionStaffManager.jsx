@@ -143,7 +143,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
             <p>Protected System Administrator control</p>
             <h2 id="equipment-division-staff-title">Equipment Division Staff</h2>
             <span>
-              Assign each ordinary employee to one role family. Changing division
+              Assign each ordinary employee to exactly one role family. Changing division
               immediately revokes that employee&apos;s existing sessions.
             </span>
           </div>
