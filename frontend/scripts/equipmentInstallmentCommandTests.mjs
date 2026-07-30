@@ -27,6 +27,8 @@ const workspaceLayout = readFrontend(
   "components",
   "BusinessWorkspaceLayout.jsx"
 );
+const workspaceContext = readFrontend("src", "context", "WorkspaceContext.jsx");
+const axiosClient = readFrontend("src", "api", "axiosClient.js");
 const serviceWorker = readFrontend("public", "sw.js");
 const route = readProject("backend", "routes", "equipmentInstallmentCommandRoutes.js");
 const service = readProject(
@@ -80,7 +82,9 @@ assert.match(financeLayout, /Finance Command Centre/);
 assert.match(financeLayout, /Credit Applications & Approval/);
 assert.match(financeLayout, /Installment Documents & Reports/);
 assert.match(financeLayout, /Back to Equipment Divisions/);
-assert.match(financeLayout, /workspaceCode="equipment_hire"/);
+assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
+assert.match(financeLayout, /Finance staff do not select Hire locations/);
+assert.doesNotMatch(financeLayout, /workspaceCode="equipment_hire"/);
 assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
 assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
 assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
@@ -110,6 +114,10 @@ assert.doesNotMatch(fleetPage, /<EquipmentInstallmentCommandPage/);
 assert.match(workspaceLayout, /independenceLabel = "Independent workspace"/);
 assert.match(workspaceLayout, /contextHeading = "Active operating context"/);
 assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
+assert.match(workspaceContext, /Company-wide Finance portfolio/);
+assert.match(workspaceContext, /isManagedWorkspace: false/);
+assert.match(axiosClient, /X-Chalin03-Division/);
+assert.match(axiosClient, /installment_finance/);
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /installment-command__account-grid/);
 assert.match(css, /installment-command__backdrop/);
