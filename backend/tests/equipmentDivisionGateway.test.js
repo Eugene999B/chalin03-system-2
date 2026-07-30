@@ -133,7 +133,7 @@ test("gateway remains responsive and exposes a protected staff manager", () => {
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 900px\)/);
   assert.match(css, /@media \(max-width: 680px\)/);
-  assert.match(css, /Back to Equipment Login/);
+  assert.match(gateway, /Back to Equipment Login/);
   assert.match(staffManager, /Manage Division Staff/);
   assert.match(staffManager, /createPortal\(manager, document\.body\)/);
   assert.match(staffManager, /One employee\. One division\./);
