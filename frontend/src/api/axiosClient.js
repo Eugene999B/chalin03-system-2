@@ -30,6 +30,13 @@ function isPublicSessionRequest(config) {
   return PUBLIC_SESSION_PATHS.has(cleanRequestPath(config?.url));
 }
 
+function isInstallmentFinanceScreen() {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/equipment-installment-finance")
+  );
+}
+
 function getStoredUser() {
   try {
     const storedUser = localStorage.getItem(USER_KEY);
@@ -150,7 +157,10 @@ axiosClient.interceptors.request.use((config) => {
   const requestToken = publicSessionRequest ? "" : token;
   const { workspaceCode, branchId, branchCode, branchName } =
     getStoredSessionInfo();
-  const workspaceContextId = getStoredWorkspaceContextId(workspaceCode);
+  const financeScreen = isInstallmentFinanceScreen();
+  const workspaceContextId = financeScreen
+    ? ""
+    : getStoredWorkspaceContextId(workspaceCode);
 
   // Keep the exact token used by this request. A late 401 from an older desktop
   // session must never be allowed to erase a newer successful login.
@@ -166,7 +176,12 @@ axiosClient.interceptors.request.use((config) => {
     config.headers["X-Chalin03-Workspace"] = String(workspaceCode);
   }
 
-  if (workspaceContextId) {
+  if (financeScreen) {
+    config.headers["X-Chalin03-Division"] = "installment_finance";
+    if (config.headers?.["X-Chalin03-Context-Id"]) {
+      delete config.headers["X-Chalin03-Context-Id"];
+    }
+  } else if (workspaceContextId) {
     config.headers["X-Chalin03-Context-Id"] = workspaceContextId;
   }
 
