@@ -1,6 +1,11 @@
 const { pool } = require("../config/db");
+const {
+  EQUIPMENT_DIVISIONS,
+  hasEquipmentDivisionAccess,
+} = require("../security/equipmentDivisionAccess");
 
 const EQUIPMENT_HIRE_WORKSPACE = "equipment_hire";
+const FINANCE_DIVISION_HEADER = "installment_finance";
 
 class HireLocationScopeError extends Error {
   constructor(statusCode, message, code = "HIRE_LOCATION_SCOPE_ERROR") {
@@ -37,6 +42,35 @@ function requestedHireLocationId(req) {
     req.headers["x-chalin03-context-id"] ||
       req.body?.hire_location_id ||
       req.query?.hire_location_id
+  );
+}
+
+function requestPath(req) {
+  return String(req.originalUrl || req.url || req.path || "/")
+    .split("?")[0]
+    .toLowerCase();
+}
+
+function financeSalesPath(req) {
+  const path = requestPath(req);
+  const marker = "/api/equipment-catalogue/sales";
+  const index = path.indexOf(marker);
+  if (index < 0) return null;
+  return path.slice(index + marker.length) || "/";
+}
+
+function isFinanceDivisionRequest(req) {
+  const division = cleanText(req.headers["x-chalin03-division"], 80).toLowerCase();
+  const authorised = hasEquipmentDivisionAccess(
+    req.user || {},
+    EQUIPMENT_DIVISIONS.FINANCE
+  );
+  if (!authorised) return false;
+
+  return (
+    financeSalesPath(req) !== null ||
+    (division === FINANCE_DIVISION_HEADER &&
+      requestPath(req).startsWith("/api/equipment-catalogue"))
   );
 }
 
@@ -85,6 +119,145 @@ async function userHasHireLocationAccess(
   return rows.length > 0;
 }
 
+async function locationFromRecord(connection, tableName, recordId) {
+  const allowedTables = new Set([
+    "equipment_sales_enquiries",
+    "equipment_sales_quotations",
+    "equipment_credit_applications",
+    "equipment_sale_agreements",
+    "fleet_assets",
+  ]);
+  if (!allowedTables.has(tableName) || !positiveId(recordId)) return null;
+
+  const [rows] = await connection.query(
+    `SELECT hire_location_id FROM ${tableName} WHERE id = ? LIMIT 1`,
+    [recordId]
+  );
+  return positiveId(rows[0]?.hire_location_id);
+}
+
+async function resolveFinanceRecordLocation(req, connection = pool) {
+  const path = financeSalesPath(req);
+  if (path === null) return null;
+
+  const method = String(req.method || "GET").toUpperCase();
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  let match;
+
+  if (method === "POST" && path === "/credit-applications") {
+    const quotationId = positiveId(
+      body.quotation_id || body.application?.quotation_id
+    );
+    return locationFromRecord(connection, "equipment_sales_quotations", quotationId);
+  }
+
+  match = path.match(/^\/credit-applications\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(
+      connection,
+      "equipment_credit_applications",
+      match[1]
+    );
+  }
+
+  match = path.match(/^\/agreement-activations\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(
+      connection,
+      "equipment_credit_applications",
+      match[1]
+    );
+  }
+
+  match = path.match(/^\/deposit-reservations\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sale_agreements", match[1]);
+  }
+
+  match = path.match(/^\/finance-lifecycle\/accounts\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sale_agreements", match[1]);
+  }
+
+  match = path.match(/^\/installment-command\/agreements\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sale_agreements", match[1]);
+  }
+
+  match = path.match(/^\/agreements\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sale_agreements", match[1]);
+  }
+
+  match = path.match(/^\/quotations\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sales_quotations", match[1]);
+  }
+
+  match = path.match(/^\/enquiries\/(\d+)(?:\/|$)/);
+  if (match) {
+    return locationFromRecord(connection, "equipment_sales_enquiries", match[1]);
+  }
+
+  if (method === "POST" && path === "/quotations") {
+    return locationFromRecord(connection, "fleet_assets", body.asset_id);
+  }
+
+  const agreementId = positiveId(body.agreement_id);
+  if (agreementId) {
+    return locationFromRecord(connection, "equipment_sale_agreements", agreementId);
+  }
+
+  const assetId = positiveId(body.asset_id);
+  if (assetId) {
+    return locationFromRecord(connection, "fleet_assets", assetId);
+  }
+
+  const explicitOriginId = positiveId(body.equipment_origin_location_id);
+  if (explicitOriginId) return explicitOriginId;
+
+  return null;
+}
+
+async function resolveIndependentFinanceScope(
+  req,
+  { connection = pool, requireSelection = false } = {}
+) {
+  const path = financeSalesPath(req);
+  const method = String(req.method || "GET").toUpperCase();
+  const locationId = await resolveFinanceRecordLocation(req, connection);
+
+  if (locationId) {
+    return {
+      locationId,
+      location: null,
+      allLocations: false,
+      automaticAccess: true,
+      independentFinance: true,
+      equipmentOriginReference: true,
+    };
+  }
+
+  if (method === "GET" || !requireSelection) {
+    return {
+      locationId: null,
+      location: null,
+      allLocations: true,
+      automaticAccess: true,
+      independentFinance: true,
+      equipmentOriginReference: false,
+    };
+  }
+
+  throw new HireLocationScopeError(
+    400,
+    path === "/enquiries"
+      ? "Create Finance work from a selected machine or controlled Finance document. A Hire location is not used for Finance enquiries."
+      : "The Finance action could not resolve its machine or document reference. Refresh the controlled Finance record and try again.",
+    "FINANCE_RECORD_SCOPE_REQUIRED"
+  );
+}
+
 async function resolveHireLocationScope(
   req,
   { connection = pool, requireSelection = false } = {}
@@ -95,6 +268,13 @@ async function resolveHireLocationScope(
       "Equipment Hire records are available only inside the Equipment Hire workspace.",
       "WRONG_WORKSPACE"
     );
+  }
+
+  if (isFinanceDivisionRequest(req)) {
+    return resolveIndependentFinanceScope(req, {
+      connection,
+      requireSelection,
+    });
   }
 
   const role = userRole(req);
@@ -179,7 +359,7 @@ function hireLocationWhere(scope, alias, column = "hire_location_id") {
 }
 
 function assertRecordInHireLocation(scope, recordLocationId, label = "Record") {
-  if (!scope?.locationId) return;
+  if (!scope?.locationId || scope?.independentFinance) return;
 
   if (Number(recordLocationId) !== Number(scope.locationId)) {
     throw new HireLocationScopeError(
@@ -203,9 +383,13 @@ function sendHireLocationScopeError(res, error) {
 
 module.exports = {
   EQUIPMENT_HIRE_WORKSPACE,
+  FINANCE_DIVISION_HEADER,
   HireLocationScopeError,
   positiveId,
   requestedHireLocationId,
+  isFinanceDivisionRequest,
+  resolveFinanceRecordLocation,
+  resolveIndependentFinanceScope,
   resolveHireLocationScope,
   appendHireLocationFilter,
   hireLocationWhere,
