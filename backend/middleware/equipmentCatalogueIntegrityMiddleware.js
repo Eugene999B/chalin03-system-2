@@ -10,6 +10,7 @@ const {
   ensureEquipmentSalesSchema,
 } = require("../services/equipmentSalesSchemaService");
 const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
+const equipmentFinanceIndependentRoutes = require("../routes/equipmentFinanceIndependentRoutes");
 
 const HIRE_PURPOSES = new Set(["hire_only", "company_operations"]);
 const SALE_PURPOSES = new Set(["sale_only", "sale_or_hire"]);
@@ -118,9 +119,16 @@ function dispatchEquipmentSalesRouter(req, res, next) {
   const originalUrl = req.url;
   req.url = req.url.replace(/^\/sales(?=\/|\?|$)/, "") || "/";
 
-  return equipmentSalesRoutes(req, res, (error) => {
-    req.url = originalUrl;
-    return next(error);
+  return equipmentFinanceIndependentRoutes(req, res, (independentError) => {
+    if (independentError) {
+      req.url = originalUrl;
+      return next(independentError);
+    }
+
+    return equipmentSalesRoutes(req, res, (error) => {
+      req.url = originalUrl;
+      return next(error);
+    });
   });
 }
 

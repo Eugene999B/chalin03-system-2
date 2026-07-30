@@ -145,15 +145,15 @@ export default function InstallmentFinanceLayout() {
 
   return (
     <BusinessWorkspaceLayout
-      workspaceCode="equipment_hire"
+      workspaceCode="equipment_installment_finance"
       workspaceName="Equipment Installment Finance"
       icon="🏦"
       theme="earth"
       independenceLabel="Independent Finance staff division"
-      contextHeading="Finance location reference"
+      contextHeading="Company-wide Finance portfolio"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated company-wide credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );

@@ -1,5 +1,6 @@
-const CACHE_NAME = "chalin03-finance-final-lifecycle-v24";
+const CACHE_NAME = "chalin03-independent-hire-finance-v25";
 // Previous verified cache markers:
+// chalin03-finance-final-lifecycle-v24
 // chalin03-finance-deposit-reservation-v23
 // chalin03-finance-agreement-activation-v22
 // chalin03-equipment-division-isolation-v21
