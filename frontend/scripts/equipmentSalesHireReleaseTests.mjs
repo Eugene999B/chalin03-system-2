@@ -28,6 +28,7 @@ const financeLayout = read("src/layouts/InstallmentFinanceLayout.jsx");
 const divisionAccess = read("src/security/equipmentDivisionAccess.js");
 const staffManager = read("src/components/EquipmentDivisionStaffManager.jsx");
 const axiosClient = read("src/api/axiosClient.js");
+const workspaceContext = read("src/context/WorkspaceContext.jsx");
 
 assert.match(wrapper, /isEquipmentHireWorkspace/);
 assert.match(wrapper, /EquipmentCataloguePage/);
@@ -171,8 +172,10 @@ assert.match(financeLayout, /Finance Command Centre/);
 assert.match(financeLayout, /Credit Applications & Approval/);
 assert.match(financeLayout, /Installment Documents & Reports/);
 assert.match(financeLayout, /Back to Equipment Divisions/);
-assert.match(financeLayout, /workspaceCode="equipment_hire"/);
+assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
+assert.match(financeLayout, /Finance staff do not select Hire locations/);
 assert.match(financeLayout, /No access to Hire jobs or contracts/);
+assert.doesNotMatch(financeLayout, /workspaceCode="equipment_hire"/);
 assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
 assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
 assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
@@ -189,8 +192,12 @@ assert.match(axiosClient, /sparePartsInstallmentRetirementBridge/);
 assert.match(axiosClient, /assertSparePartsInstallmentRequestAllowed/);
 assert.match(axiosClient, /equipment_hire: "chalin03_active_context_equipment_hire"/);
 assert.match(axiosClient, /X-Chalin03-Context-Id/);
+assert.match(axiosClient, /X-Chalin03-Division/);
+assert.match(axiosClient, /installment_finance/);
 assert.match(axiosClient, /response\.data\.delivery/);
 assert.match(axiosClient, /response\.data\.ownership/);
+assert.match(workspaceContext, /Company-wide Finance portfolio/);
+assert.match(workspaceContext, /isManagedWorkspace: false/);
 
 console.log(
   "Equipment Hire and Equipment Installment Finance separation contracts passed."
