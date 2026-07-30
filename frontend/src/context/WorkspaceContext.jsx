@@ -16,6 +16,20 @@ const STORAGE_KEYS = {
   equipment_hire: "chalin03_active_context_equipment_hire",
 };
 
+const FINANCE_VIRTUAL_CONTEXT = Object.freeze({
+  id: 1,
+  code: "FINANCE",
+  name: "Company-wide Finance portfolio",
+  is_virtual: true,
+});
+
+function isInstallmentFinancePath() {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/equipment-installment-finance")
+  );
+}
+
 function positiveId(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
@@ -276,6 +290,29 @@ export function useWorkspaceContext() {
     throw new Error(
       "useWorkspaceContext must be used inside WorkspaceContextProvider."
     );
+  }
+
+  if (isInstallmentFinancePath()) {
+    return {
+      ...context,
+      isManagedWorkspace: false,
+      workspaceCode: "equipment_installment_finance",
+      contextType: "finance_portfolio",
+      options: [],
+      selectedContextId: FINANCE_VIRTUAL_CONTEXT.id,
+      selectedContext: FINANCE_VIRTUAL_CONTEXT,
+      defaultContextId: FINANCE_VIRTUAL_CONTEXT.id,
+      automaticAccess: true,
+      requiresSelection: false,
+      loading: false,
+      savingDefault: false,
+      error: "",
+      message: "Installment Finance is independent from Equipment Hire locations.",
+      canSelectAll: true,
+      selectContext: () => true,
+      makeDefault: async () => true,
+      reloadOptions: async () => true,
+    };
   }
 
   return context;
