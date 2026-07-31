@@ -5,6 +5,7 @@ const INSTALL_MARKER = Symbol.for(
   "chalin03.equipmentFinanceImageCompatibilityInstalled"
 );
 
+// Accepted protected evidence MIME family: image/jpeg|jpg|png|webp.
 function parseDataImage(value) {
   const match = String(value || "").match(
     /^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=]+)$/i
