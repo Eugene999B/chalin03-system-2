@@ -38,7 +38,8 @@ for (const text of [
   assert.match(page, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
 
-assert.match(page, /\/installment-command\/collections/);
+assert.match(page, /equipment-catalogue\/sales\/installment-command/);
+assert.match(page, /\$\{API\}\/collections/);
 assert.match(page, /\/follow-ups\/\$\{correction\.id\}\/corrections/);
 assert.match(page, /responseType: "blob"/);
 assert.match(page, /documents\/\$\{type\}\.pdf/);
