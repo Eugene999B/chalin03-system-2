@@ -7,9 +7,10 @@ import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositRes
 import EquipmentFinanceExcavatorsPage from "./EquipmentFinanceExcavatorsPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
 import EquipmentFinanceGuidePage from "./EquipmentFinanceGuidePage";
+import EquipmentFinanceOperationalPolishPage from "./EquipmentFinanceOperationalPolishPage";
+import EquipmentFinanceOperationalStartPage from "./EquipmentFinanceOperationalStartPage";
 import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage";
 import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
-import EquipmentFinanceStartWizardPage from "./EquipmentFinanceStartWizardPage";
 
 const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "documents", "staff"]);
@@ -19,7 +20,11 @@ export default function EquipmentSalesWorkspacePage() {
   const stage = new URLSearchParams(location.search).get("stage");
 
   if (stage === "start") {
-    return <EquipmentFinanceStartWizardPage />;
+    return <EquipmentFinanceOperationalStartPage />;
+  }
+
+  if (stage === "operations") {
+    return <EquipmentFinanceOperationalPolishPage />;
   }
 
   if (stage === "customers") {

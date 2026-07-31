@@ -12,6 +12,7 @@ const {
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
+const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 
 const router = express.Router();
 
@@ -100,12 +101,17 @@ function financePolicy() {
     machine_active_hire_check_enabled: true,
     guided_start_enabled: true,
     installment_offer_created_automatically: true,
+    operational_polish_enabled: true,
+    private_case_documents: true,
+    server_draft_autosave: true,
+    controlled_amendments: true,
   };
 }
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
+router.use(equipmentFinanceOperationalPolishRoutes);
 
 // The final lifecycle query now returns professional agreement/document fields.
 // Check the professional migration before handing the URL to that router so a

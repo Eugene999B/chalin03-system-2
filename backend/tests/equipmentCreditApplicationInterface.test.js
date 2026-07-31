@@ -8,6 +8,12 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
+const operationalStart = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceOperationalStartPage.jsx"
+);
 const wrapper = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const css = read("frontend", "src", "styles", "equipmentFinancePhaseOne.css");
 const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx");
@@ -15,7 +21,9 @@ const serviceWorker = read("frontend", "public", "sw.js");
 
 test("Finance applications route through the protected credit foundation", () => {
   assert.match(wrapper, /EquipmentFinanceApplicationsPage/);
-  assert.match(wrapper, /EquipmentFinanceStartWizardPage/);
+  assert.match(wrapper, /EquipmentFinanceOperationalStartPage/);
+  assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
+  assert.match(operationalStart, /drafts\/start-installment/);
   assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
   assert.match(applications, /axiosClient\.get\(`\$\{API\}\/readiness`\)/);
   assert.match(applications, /axiosClient\.get\(API\)/);

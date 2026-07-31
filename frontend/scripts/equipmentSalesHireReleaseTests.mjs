@@ -12,6 +12,7 @@ const app = read("src/App.jsx");
 const fleetWrapper = read("src/pages/FleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
 const workspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
+const operationalStart = read("src/pages/EquipmentFinanceOperationalStartPage.jsx");
 const applications = read("src/pages/EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("src/pages/EquipmentFinanceStartWizardPage.jsx");
 const customers = read("src/pages/EquipmentFinanceCustomerCentrePage.jsx");
@@ -51,10 +52,12 @@ assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
 
 for (const title of [
   "Finance Home",
+  "Task & Approval Inbox",
   "Start New Installment",
   "Customers",
   "Excavators",
   "Applications & Approvals",
+  "Case Operations",
   "Active Installments",
   "Payments & Arrears",
   "Documents & Reports",
@@ -67,7 +70,8 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinanceStartWizardPage",
+  "EquipmentFinanceOperationalStartPage",
+  "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
   "EquipmentFinanceApplicationsPage",
@@ -79,7 +83,10 @@ for (const pageName of [
 ]) {
   assert.match(workspace, new RegExp(pageName));
 }
+assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
+assert.match(operationalStart, /drafts\/start-installment/);
 assert.match(workspace, /stage === "start"/);
+assert.match(workspace, /stage === "operations"/);
 assert.match(workspace, /stage === "customers"/);
 assert.match(workspace, /stage === "machines"/);
 assert.match(workspace, /stage === "activation"/);

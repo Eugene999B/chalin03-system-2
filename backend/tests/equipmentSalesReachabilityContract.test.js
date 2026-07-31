@@ -7,6 +7,12 @@ const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const app = read("frontend", "src", "App.jsx");
 const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const operationalStart = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceOperationalStartPage.jsx"
+);
 const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
 const backend = read("backend", "routes", "equipmentFinancePhaseOneRoutes.js");
@@ -21,7 +27,8 @@ test("all simplified Finance routes resolve through the protected Finance layout
 
 test("workspace query stages resolve to explicit Finance pages", () => {
   for (const pageName of [
-    "EquipmentFinanceStartWizardPage",
+    "EquipmentFinanceOperationalStartPage",
+    "EquipmentFinanceOperationalPolishPage",
     "EquipmentFinanceCustomerCentrePage",
     "EquipmentFinanceExcavatorsPage",
     "EquipmentFinanceApplicationsPage",
@@ -33,6 +40,7 @@ test("workspace query stages resolve to explicit Finance pages", () => {
   ]) {
     assert.match(workspace, new RegExp(pageName));
   }
+  assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
 });
 
 test("new applications use the protected automatic Offer path", () => {
