@@ -83,8 +83,12 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.doesNotMatch(hireLayout, /title: "Finance Command Centre"/);
 
   assert.match(financeLayout, /workspaceName="Equipment Installment Finance"/);
-  assert.match(financeLayout, /Independent Finance staff division/);
+  assert.match(financeLayout, /independenceLabel=""/);
+  assert.match(financeLayout, /description=""/);
+  assert.doesNotMatch(financeLayout, /Independent Finance staff division/);
+  assert.doesNotMatch(financeLayout, /A complete excavator installment lifecycle/);
   assert.match(financeLayout, /No access to Hire jobs or contracts/);
+  assert.match(financeLayout, /Staff & Workforce/);
   assert.match(financeLayout, /Back to Equipment Divisions/);
   assert.match(financeLayout, /useLocation/);
   assert.match(

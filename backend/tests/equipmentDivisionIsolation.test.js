@@ -211,6 +211,11 @@ test("Finance compatibility permissions never unlock Hire APIs or auditor writes
 test("staff administration exposes controlled dual assignments and revokes sessions", () => {
   const category = read("backend", "services", "categoryIsolationService.js");
   const adminRoute = read("backend", "routes", "equipmentDivisionAdminRoutes.js");
+  const roleTemplates = read(
+    "backend",
+    "security",
+    "equipmentBusinessRoleTemplates.js"
+  );
   const contextRoute = read("backend", "routes", "workspaceContextRoutes.js");
   const manager = read(
     "frontend",
@@ -223,10 +228,11 @@ test("staff administration exposes controlled dual assignments and revokes sessi
   assert.match(category, /requiredEquipmentDivisionForRequest/);
   assert.match(category, /applyEquipmentDivisionCompatibilityPermissions/);
   assert.match(adminRoute, /Only the protected System Administrator/);
-  assert.match(adminRoute, /authorised_dual_staff_may_access_both: true/);
-  assert.match(adminRoute, /equipment_business_manager/);
-  assert.match(adminRoute, /equipment_business_accountant/);
-  assert.match(adminRoute, /equipment_business_auditor/);
+  assert.match(adminRoute, /dual_roles_require_explicit_approval: true/);
+  assert.match(roleTemplates, /equipment_business_manager/);
+  assert.match(roleTemplates, /equipment_business_accountant/);
+  assert.match(roleTemplates, /equipment_business_auditor/);
+  assert.match(roleTemplates, /division:\s*EQUIPMENT_DIVISIONS\.BOTH/);
   assert.match(adminRoute, /revokeUserSessions/);
   assert.match(adminRoute, /EQUIPMENT_STAFF_DIVISION_ASSIGNED/);
   assert.match(contextRoute, /router\.use\("\/equipment-divisions", equipmentDivisionAdminRoutes\)/);
