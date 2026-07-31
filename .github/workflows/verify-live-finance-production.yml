@@ -1,0 +1,75 @@
+name: Verify Live Finance Production
+
+on:
+  push:
+    branches:
+      - ops/verify-finance-production
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Wait for Railway and verify public services
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live-smoke
+
+          check_url() {
+            local name="$1"
+            local url="$2"
+            local attempt=1
+            local max_attempts=40
+
+            while [ "$attempt" -le "$max_attempts" ]; do
+              echo "[$name] attempt $attempt/$max_attempts"
+              status="$(curl \
+                --silent \
+                --show-error \
+                --location \
+                --max-time 25 \
+                --connect-timeout 10 \
+                --user-agent 'Chalin03-GitHub-Production-Smoke/1.0' \
+                --output "live-smoke/${name}.body" \
+                --dump-header "live-smoke/${name}.headers" \
+                --write-out '%{http_code}' \
+                "$url" || true)"
+
+              echo "HTTP $status" | tee "live-smoke/${name}.status"
+              if [ "$status" = "200" ]; then
+                echo "[$name] healthy"
+                return 0
+              fi
+
+              sleep 10
+              attempt=$((attempt + 1))
+            done
+
+            echo "[$name] did not become healthy" >&2
+            sed -n '1,80p' "live-smoke/${name}.headers" >&2 || true
+            sed -n '1,120p' "live-smoke/${name}.body" >&2 || true
+            return 1
+          }
+
+          check_url api-health https://api.chalin03.com/api/health
+          check_url api-root https://api.chalin03.com/
+          check_url website https://www.chalin03.com/
+
+          grep -Eiq 'success|ok|healthy|running|chalin' live-smoke/api-health.body
+          grep -Eiq 'chalin|api|success|running' live-smoke/api-root.body
+          grep -Eiq 'chalin|root' live-smoke/website.body
+
+          echo 'Live Chalin 03 production services verified successfully.'
+
+      - name: Preserve live smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-finance-production-smoke
+          path: live-smoke
+          if-no-files-found: warn
+          retention-days: 14
