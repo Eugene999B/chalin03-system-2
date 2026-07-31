@@ -9,6 +9,10 @@ function read(...parts) {
   return fs.readFileSync(path.join(root, ...parts), "utf8");
 }
 
+function compact(value) {
+  return String(value).replace(/\s+/g, " ");
+}
+
 const {
   automaticLimitReason,
   buildCustomerDebtReminderMessage,
@@ -198,8 +202,9 @@ test("scheduler stores settings safely and deduplicates automatic SMS", () => {
   assert.match(service, /startDebtReminderScheduler/);
 });
 
-test("server and consolidated customer UI expose the debt reminder feature", () => {
+test("server and consolidated customer UI expose reconciled debt reminders", () => {
   const server = read("backend", "server.js");
+  const source = compact(server);
   const component = read(
     "frontend",
     "src",
@@ -221,7 +226,10 @@ test("server and consolidated customer UI expose the debt reminder feature", () 
   const sw = read("frontend", "public", "sw.js");
 
   assert.match(server, /debtReminderRoutes/);
-  assert.match(server, /app\.use\("\/api\/debt-reminders"/);
+  assert.match(
+    source,
+    /"\/api\/debt-reminders", requireAuth, sparePartsBoundary, reconcileCreditReturnDebts, debtReminderRoutes/
+  );
   assert.match(server, /startDebtReminderScheduler\(\)/);
   assert.match(component, /DebtReminderSettingsPanel/);
   assert.match(component, /Send SMS Reminder/);

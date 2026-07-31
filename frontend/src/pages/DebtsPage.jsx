@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import CustomerDebtConsolidationPanel from "../components/CustomerDebtConsolidationPanel";
+import HistoricalDebtPaymentHistory from "../components/DebtPaymentHistory";
 import { useAuth } from "../context/AuthContext";
 import { formatBusinessDate, formatBusinessDateTime } from "../utils/businessDate";
 import "../styles/debtDesk.css";
@@ -1334,7 +1335,15 @@ export default function DebtsPage() {
                   <DebtReceipts debts={selected.debts} />
                 ) : null}
                 {detailTab === "payments" ? (
-                  <PaymentHistory payments={selected.payments} />
+                  <PaymentHistory
+                    payments={selected.payments}
+                    debts={selected.debts}
+                    customer={selected.customer}
+                    storeCode={storeCode}
+                    storeName={storeName}
+                    storeLocation={storeLocation}
+                    onError={setError}
+                  />
                 ) : null}
               </section>
             </>
@@ -1579,35 +1588,24 @@ function DebtReceipts({ debts = [] }) {
   );
 }
 
-function PaymentHistory({ payments = [] }) {
-  if (!payments.length) {
-    return (
-      <div className="debt-desk__empty is-compact">
-        <p>No debt payments have been recorded for this customer.</p>
-      </div>
-    );
-  }
-
+function PaymentHistory({
+  payments = [],
+  debts = [],
+  customer,
+  storeCode,
+  storeName,
+  storeLocation,
+  onError,
+}) {
   return (
-    <div className="debt-desk__payment-history">
-      {payments.map((payment) => (
-        <article key={payment.id}>
-          <div className="debt-desk__payment-icon">↓</div>
-          <div>
-            <strong>{money(payment.amount)}</strong>
-            <span>
-              {dateTimeLabel(payment.paid_at)} ·{" "}
-              {paymentMethodLabel(payment.payment_method)}
-            </span>
-            <small>
-              {payment.received_by_name || "Staff"}
-              {displayPaymentNote(payment.notes)
-                ? ` · ${displayPaymentNote(payment.notes)}`
-                : ""}
-            </small>
-          </div>
-        </article>
-      ))}
-    </div>
+    <HistoricalDebtPaymentHistory
+      payments={payments}
+      debts={debts}
+      customer={customer}
+      storeCode={storeCode}
+      storeName={storeName}
+      storeLocation={storeLocation}
+      onError={onError}
+    />
   );
 }
