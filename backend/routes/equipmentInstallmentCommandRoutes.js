@@ -22,9 +22,12 @@ const {
 const {
   getInstallmentPortfolio,
 } = require("../services/equipmentInstallmentReadModelService");
+const equipmentFinanceRecoveryGovernanceRoutes = require("./equipmentFinanceRecoveryGovernanceRoutes");
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
+
+router.use("/governance", equipmentFinanceRecoveryGovernanceRoutes);
 
 function positiveId(value, label) {
   const id = Number(value);
