@@ -66,6 +66,7 @@ test("credit interface is phone-first and discoverable only in Finance", () => {
   assert.match(css, /\.finance-simple/);
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /grid-template-columns:\s*1fr/);
-  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /\.finance-simple__sticky-actions/);
+  assert.match(css, /bottom:\s*0/);
   assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
 });
