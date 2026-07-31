@@ -258,7 +258,7 @@ test("agreement document pack is automatic, versioned, signed and checksum prote
   }
   assert.match(professionalService, /snapshot_checksum/);
   assert.match(professionalService, /createHash\("sha256"\)/);
-  assert.match(professionalService, /application\/msword/);
+  assert.match(professionalRoutes, /application\/msword/);
   assert.match(professionalService, /PDFDocument/);
   assert.match(professionalService, /EXCAVATOR SALE & INSTALLMENT AGREEMENT/);
   assert.match(professionalService, /Machine Identity and Photo Annexure/);
