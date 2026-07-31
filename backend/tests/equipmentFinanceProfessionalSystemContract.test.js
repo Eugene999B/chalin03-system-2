@@ -17,9 +17,10 @@ test("professional backend keeps settings, documents, reminders and machine evid
   assert.match(professionalRoutes, /documents/i);
   assert.match(professionalRoutes, /reminder/i);
   assert.match(professionalRoutes, /requirePermission/);
-  assert.match(machineRoutes, /machine-register/);
-  assert.match(machineRoutes, /asset_media|media/i);
-  assert.match(machineRoutes, /assertMachineStillEditable/);
+  assert.match(machineRoutes, /createFinanceMachine/);
+  assert.match(machineRoutes, /updateFinanceMachine/);
+  assert.match(machineRoutes, /listProfessionalMachines/);
+  assert.match(machineRoutes, /normalizePhotoPayload/);
 });
 
 test("professional Finance is exposed through simple daily navigation", () => {
@@ -42,9 +43,11 @@ test("professional Finance is exposed through simple daily navigation", () => {
 });
 
 test("one excavator page provides full evidence and safe editing", () => {
-  assert.match(excavators, /Excavator Register/);
-  assert.match(excavators, /Edit excavator|Edit details/i);
-  assert.match(excavators, /objectFit:\s*"contain"|object-fit:\s*contain/);
+  assert.match(excavators, /<h1>Excavators<\/h1>/);
+  assert.match(excavators, /Machine register/);
+  assert.match(excavators, /Edit details/);
+  assert.match(excavators, /finance-simple__machine-image/);
+  assert.match(excavators, /finance-simple__photo-viewer/);
   assert.match(excavators, /serial_number/);
   assert.match(excavators, /chassis_number/);
   assert.match(excavators, /engine_number/);
