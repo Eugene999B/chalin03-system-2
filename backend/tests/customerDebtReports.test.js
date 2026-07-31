@@ -66,7 +66,7 @@ test("filter API supports date ranges, optional customer and all export formats"
   assert.match(serverSource, /\/api\/customer-statement-workspace/);
 });
 
-test("filtered export controls remain available from statements and advanced debt tools", () => {
+test("filtered exports remain available from statements and the customer identity workspace", () => {
   assert.match(statementWorkspace, /Customer Name or Phone/);
   assert.match(statementWorkspace, /Leave blank for all customers/);
   assert.match(statementWorkspace, /Apply Filters/);
@@ -81,7 +81,8 @@ test("filtered export controls remain available from statements and advanced deb
   assert.match(printPanel, /createReport\("word"\)/);
   assert.match(printPanel, /createReport\("excel"\)/);
   assert.match(debtsPage, /CustomerDebtConsolidationPanel/);
-  assert.match(debtsPage, /Advanced debt tools/);
+  assert.match(debtsPage, /Customer identity and debt controls/);
+  assert.match(debtsPage, /exports and\s+receipt-level audit/);
   assert.match(consolidationPanel, /<CustomerDebtPrintPanel/);
   assert.match(consolidationPanel, /reportType="debt"/);
 });
