@@ -29,6 +29,13 @@ const debtsPage = fs.readFileSync(
   path.resolve(__dirname, "../../frontend/src/pages/DebtsPage.jsx"),
   "utf8"
 );
+const consolidationPanel = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    "../../frontend/src/components/CustomerDebtConsolidationPanel.jsx"
+  ),
+  "utf8"
+);
 const printPanel = fs.readFileSync(
   path.resolve(
     __dirname,
@@ -59,7 +66,7 @@ test("filter API supports date ranges, optional customer and all export formats"
   assert.match(serverSource, /\/api\/customer-statement-workspace/);
 });
 
-test("filtered export controls are available from statements and debts", () => {
+test("filtered export controls remain available from statements and advanced debt tools", () => {
   assert.match(statementWorkspace, /Customer Name or Phone/);
   assert.match(statementWorkspace, /Leave blank for all customers/);
   assert.match(statementWorkspace, /Apply Filters/);
@@ -73,6 +80,8 @@ test("filtered export controls are available from statements and debts", () => {
   assert.match(printPanel, /createReport\("print"\)/);
   assert.match(printPanel, /createReport\("word"\)/);
   assert.match(printPanel, /createReport\("excel"\)/);
-  assert.match(debtsPage, /<CustomerDebtPrintPanel/);
-  assert.match(debtsPage, /reportType="debt"/);
+  assert.match(debtsPage, /CustomerDebtConsolidationPanel/);
+  assert.match(debtsPage, /Advanced debt tools/);
+  assert.match(consolidationPanel, /<CustomerDebtPrintPanel/);
+  assert.match(consolidationPanel, /reportType="debt"/);
 });
