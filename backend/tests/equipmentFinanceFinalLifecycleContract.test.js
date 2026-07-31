@@ -30,11 +30,12 @@ test("professional lifecycle stages remain reachable inside simplified account w
 });
 
 test("machine evidence and money remain complete on phone layouts", () => {
-  assert.match(excavators, /objectFit:\s*"contain"|object-fit:\s*contain/);
+  assert.match(excavators, /finance-simple__machine-image/);
+  assert.match(excavators, /finance-simple__photo-viewer/);
   assert.match(styles, /object-fit:\s*contain/);
   assert.match(styles, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /white-space:\s*normal/);
-  assert.match(styles, /@media \(max-width: 620px\)/);
+  assert.match(styles, /@media \(max-width: 720px\)/);
 });
 
 test("Finance lifecycle never requires a Hire-location selector", () => {
