@@ -9,6 +9,7 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const routes = read("backend", "routes", "debtRoutes.js");
 const page = read("frontend", "src", "pages", "DebtsPage.jsx");
 const css = read("frontend", "src", "styles", "debtDesk.css");
+const hotfixCss = read("frontend", "src", "styles", "debtDeskLiveHotfix.css");
 
 const DEBT_DELETE = /DELETE\s+FROM\s+(?:debts|debt_payments)\b/i;
 const RUNTIME_DDL = /\b(?:CREATE|ALTER|DROP|TRUNCATE)\s+(?:TABLE|DATABASE)\b/i;
@@ -21,17 +22,23 @@ test("Debt Desk resolves the current sale identity without deleting snapshots", 
   assert.match(routes, /debt_customer_name_snapshot/);
   assert.match(routes, /sale_customer_name/);
   assert.match(page, /Current customer names shown/);
-  assert.match(page, /Original snapshots remain preserved for audit/);
+  assert.match(page, /Original snapshots remain preserved\s+for audit/);
+  assert.match(page, /identity_changed/);
   assert.doesNotMatch(routes, DEBT_DELETE);
   assert.doesNotMatch(routes, RUNTIME_DDL);
 });
 
-test("customer-first endpoints keep receipt detail while simplifying navigation", () => {
+test("customer-first navigation uses a production-compatible reader and retains detail fallbacks", () => {
   assert.match(routes, /router\.get\("\/customers"/);
   assert.match(routes, /router\.get\("\/customers\/:customerKey"/);
   assert.match(routes, /customer-\(\\d\+\)/);
   assert.match(routes, /legacy-\(\\d\+\)/);
   assert.match(page, /Customer Debt Desk/);
+  assert.match(page, /axiosClient\.get\("\/debts"\)/);
+  assert.doesNotMatch(page, /axiosClient\.get\("\/debts\/customers",\s*\{/);
+  assert.match(page, /buildDebtDeskAccounts/);
+  assert.match(page, /\/debt-customers\/\$\{linkedMatch\[1\]\}/);
+  assert.match(page, /\/debts\/\$\{legacyMatch\[1\]\}/);
   assert.match(page, /Search customer name, phone or location/);
   assert.match(page, /Pay full balance/);
   assert.match(page, /Record partial payment/);
@@ -76,12 +83,20 @@ test("payment retries are idempotency-gated and audit evidence stays append-only
   assert.doesNotMatch(routes, /UPDATE debt_payments/);
 });
 
-test("advanced controls remain available but no longer dominate the daily workflow", () => {
-  assert.match(page, /Advanced debt tools/);
-  assert.match(page, /Duplicate-customer merge, reminder settings and receipt-level audit view/);
+test("duplicate resolution is visible, controlled and mobile-safe", () => {
+  assert.match(page, /Resolve duplicate customers/);
+  assert.match(page, /Customer Identity Centre/);
+  assert.match(page, /Customer identity and debt controls/);
+  assert.match(page, /Professional duplicate merge, reminder settings, exports and\s+receipt-level audit/);
+  assert.match(page, /openCustomerIdentityTools/);
   assert.match(page, /showAdvancedTools \?/);
   assert.match(page, /CustomerDebtConsolidationPanel/);
   assert.match(css, /debt-desk__advanced/);
+  assert.match(hotfixCss, /debt-desk__identity-centre-callout/);
+  assert.match(hotfixCss, /customer-debt-merge-panel/);
+  assert.match(hotfixCss, /@media \(max-width: 700px\)/);
+  assert.match(hotfixCss, /@media \(max-width: 420px\)/);
+  assert.match(hotfixCss, /position: sticky/);
 });
 
 test("Debt Desk is responsive and keeps the customer file usable on phones", () => {
@@ -90,4 +105,6 @@ test("Debt Desk is responsive and keeps the customer file usable on phones", () 
   assert.match(css, /position:fixed;inset:0;z-index:1200/);
   assert.match(css, /min-height:100dvh/);
   assert.match(css, /focus-visible/);
+  assert.match(hotfixCss, /grid-template-columns: 1fr/);
+  assert.match(hotfixCss, /width: 100%/);
 });

@@ -64,15 +64,19 @@ test("exact customer exports use customer id and retain print and downloads", ()
   assert.match(printPanel, /createReport\("excel"\)/);
 });
 
-test("Debt Desk is customer-first while consolidation stays available as an advanced tool", () => {
+test("Debt Desk uses the live-safe reader while professional consolidation stays visible", () => {
   const page = read("frontend/src/pages/DebtsPage.jsx");
   const component = read("frontend/src/components/CustomerDebtConsolidationPanel.jsx");
   const css = read("frontend/src/styles/customerDebtConsolidation.css");
+  const hotfixCss = read("frontend/src/styles/debtDeskLiveHotfix.css");
 
   assert.match(page, /Customer Debt Desk/);
-  assert.match(page, /axiosClient\.get\("\/debts\/customers"/);
+  assert.match(page, /axiosClient\.get\("\/debts"\)/);
+  assert.doesNotMatch(page, /axiosClient\.get\("\/debts\/customers",\s*\{/);
+  assert.match(page, /buildDebtDeskAccounts/);
   assert.match(page, /showAdvancedTools, setShowAdvancedTools/);
-  assert.match(page, /Advanced debt tools/);
+  assert.match(page, /Customer identity and debt controls/);
+  assert.match(page, /Resolve duplicate customers/);
   assert.match(page, /CustomerDebtConsolidationPanel/);
   assert.doesNotMatch(page, /showIndividualDebts, setShowIndividualDebts/);
   assert.match(component, /One customer, one clear debt overview/);
@@ -82,12 +86,16 @@ test("Debt Desk is customer-first while consolidation stays available as an adva
   assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /\.customer-debt-detail-modal/);
   assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(hotfixCss, /customer-debt-merge-panel/);
+  assert.match(hotfixCss, /@media \(max-width: 700px\)/);
+  assert.match(hotfixCss, /@media \(max-width: 420px\)/);
 });
 
-test("service worker cache is advanced for the rebuilt Debt Desk release", () => {
+test("service worker cache is advanced for the live Debt Desk hotfix", () => {
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
+  assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-live-hotfix-v31/);
   assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-v30/);
   assert.match(serviceWorker, /chalin03-finance-recovery-governance-v29/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
