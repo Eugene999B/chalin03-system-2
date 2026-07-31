@@ -73,8 +73,8 @@ async function loadUnprocessedReturns(connection, branchId) {
      WHERE r.branch_id = ?
        AND marker.id IS NULL
      ORDER BY r.returned_at ASC, r.id ASC
-     LIMIT ?`,
-    [RECONCILIATION_ACTION, branchId, MAX_RETURNS_PER_PASS]
+     LIMIT ${MAX_RETURNS_PER_PASS}`,
+    [RECONCILIATION_ACTION, branchId]
   );
   return rows;
 }
@@ -108,13 +108,12 @@ async function applyReturnToDebts(connection, returnRow) {
     const adjustment = roundMoney(Math.min(unappliedCredit, oldBalance));
     const newBalance = roundMoney(Math.max(oldBalance - adjustment, 0));
     const newAmountOwed = roundMoney(
-      Math.max(Number(debt.amount_paid || 0), Number(debt.amount_owed || 0) - adjustment)
+      Math.max(
+        Number(debt.amount_paid || 0),
+        Number(debt.amount_owed || 0) - adjustment
+      )
     );
-    const newStatus = debtStatus(
-      newBalance,
-      debt.amount_paid,
-      adjustment
-    );
+    const newStatus = debtStatus(newBalance, debt.amount_paid, adjustment);
 
     await connection.query(
       `UPDATE debts
@@ -136,7 +135,7 @@ async function applyReturnToDebts(connection, returnRow) {
   if (debtReduction > 0) {
     await connection.query(
       `UPDATE sales
-       SET balance = GREATEST(balance - ?, 0)
+       SET balance = GREATEST(COALESCE(balance, 0) - ?, 0)
        WHERE id = ? AND branch_id = ?`,
       [debtReduction, returnRow.sale_id, returnRow.branch_id]
     );
