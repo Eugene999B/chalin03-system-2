@@ -40,7 +40,10 @@ test("first Phase 3 startup uses the controlled migration runner", () => {
   assert.match(startupSource, /migrationRecordExists/);
   assert.match(startupSource, /runEquipmentFinanceOperationalPolishMigration/);
   assert.match(startupSource, /CHALIN03_EXPECTED_DATABASE/);
-  assert.match(startupSource, /20260731_EQUIPMENT_FINANCE_OPERATIONAL_POLISH/);
+  assert.match(
+    migrationSource,
+    /20260731_EQUIPMENT_FINANCE_OPERATIONAL_POLISH/
+  );
   assert.match(migrationSource, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
   assert.match(migrationSource, /CHALIN03_SQL_BACKUP_CONFIRMED/);
   assert.match(migrationSource, /GET_LOCK/);
