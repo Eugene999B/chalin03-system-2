@@ -13,10 +13,13 @@ const wrapper = read("src/pages/FleetAssetsPage.jsx");
 const sharedFleet = read("src/pages/SharedFleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
 const salesWorkspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
-const creditPage = read("src/pages/EquipmentCreditApplicationsPage.jsx");
+const applicationsPage = read("src/pages/EquipmentFinanceApplicationsPage.jsx");
+const startWizard = read("src/pages/EquipmentFinanceStartWizardPage.jsx");
+const customerCentre = read("src/pages/EquipmentFinanceCustomerCentrePage.jsx");
+const excavatorsPage = read("src/pages/EquipmentFinanceExcavatorsPage.jsx");
 const reportsPage = read("src/pages/EquipmentSalesReportsPage.jsx");
 const catalogueStyles = read("src/styles/equipmentCatalogue.css");
-const creditStyles = read("src/styles/equipmentCreditApplications.css");
+const phaseOneStyles = read("src/styles/equipmentFinancePhaseOne.css");
 const reportsStyles = read("src/styles/equipmentSalesReports.css");
 const secureUpload = read("src/utils/equipmentMediaCaptureBridge.js");
 const secureUploadStyles = read("src/styles/equipmentSecureUpload.css");
@@ -95,35 +98,47 @@ assert.match(secureUploadStyles, /equipment-secure-upload__legacy-url/);
 assert.match(secureUploadStyles, /display: none !important/);
 assert.match(secureUploadStyles, /equipment-secure-upload__preview\.is-ready/);
 
-assert.match(salesWorkspace, /EquipmentCreditApplicationsPage/);
-assert.match(creditPage, /Credit application, KYC and affordability/);
+assert.match(salesWorkspace, /EquipmentFinanceStartWizardPage/);
+assert.match(salesWorkspace, /EquipmentFinanceCustomerCentrePage/);
+assert.match(salesWorkspace, /EquipmentFinanceExcavatorsPage/);
+assert.match(salesWorkspace, /EquipmentFinanceApplicationsPage/);
+assert.match(salesWorkspace, /stage === "start"/);
+assert.match(salesWorkspace, /stage === "customers"/);
+assert.match(salesWorkspace, /stage === "machines"/);
+assert.match(salesWorkspace, /FINAL_LIFECYCLE_STAGES/);
+
+assert.match(applicationsPage, /Applications and approvals/i);
 assert.match(
-  creditPage,
+  applicationsPage,
   /const API = "\/equipment-catalogue\/sales\/credit-applications"/
 );
-assert.match(creditPage, /const SALES_API = "\/equipment-catalogue\/sales"/);
-assert.match(creditPage, /\/readiness/);
-assert.match(creditPage, /\/quotations/);
-assert.match(creditPage, /kyc\/verify/);
-assert.match(creditPage, /"review"/);
-assert.match(creditPage, /"assess"/);
-assert.match(creditPage, /"submit"/);
-assert.match(creditPage, /monthly_salary_income/);
-assert.match(creditPage, /existing_monthly_debt/);
-assert.match(creditPage, /credit_assessment_consent_confirmed/);
-assert.match(creditPage, /identity_document_url/);
-assert.match(creditPage, /Approve credit application/);
-assert.match(creditPage, /Agreement activation remains a separate controlled release/);
-assert.match(creditPage, /effectivePermissions\.includes\("fleet\.assets\.manage"\)/);
-assert.doesNotMatch(creditPage, /axiosClient\.post\(`\$\{SALES_API\}\/agreements/);
-assert.doesNotMatch(creditPage, /ownership-transfer|equipment reserved|terms_accepted/);
+assert.match(applicationsPage, /\/readiness/);
+assert.match(applicationsPage, /kyc\/verify/);
+assert.match(applicationsPage, /"review"/);
+assert.match(applicationsPage, /"assess"/);
+assert.match(applicationsPage, /"submit"/);
+assert.match(applicationsPage, /Approve credit application/);
+assert.match(applicationsPage, /No Hire-location selection is needed/);
+assert.doesNotMatch(applicationsPage, /Choose a specific equipment location/);
+assert.doesNotMatch(applicationsPage, /axiosClient\.post\(`\$\{SALES_API\}\/agreements/);
 
-assert.match(creditStyles, /\.credit-app\s*\{/);
-assert.match(creditStyles, /\.credit-app__metrics/);
-assert.match(creditStyles, /\.credit-app__drawer/);
-assert.match(creditStyles, /\.credit-app__form-grid/);
-assert.match(creditStyles, /@media \(max-width: 620px\)/);
-assert.match(creditStyles, /grid-template-columns: 1fr;/);
+assert.match(startWizard, /Start New Installment/);
+assert.match(startWizard, /Installment Offer/);
+assert.match(startWizard, /created automatically/i);
+assert.match(startWizard, /\/equipment-finance\/professional\/phase-one\/start-installment/);
+assert.doesNotMatch(startWizard, /Choose a Finance location|Choose a Hire location/);
+assert.match(customerCentre, /Customer Centre/);
+assert.match(customerCentre, /\/phase-one\/customers/);
+assert.match(excavatorsPage, /Excavator Register/);
+assert.match(excavatorsPage, /objectFit:\s*"contain"|object-fit:\s*contain/);
+assert.match(excavatorsPage, /Edit excavator|Edit details/i);
+
+assert.match(phaseOneStyles, /\.finance-simple/);
+assert.match(phaseOneStyles, /overflow-wrap:\s*anywhere/);
+assert.match(phaseOneStyles, /object-fit:\s*contain/);
+assert.match(phaseOneStyles, /@media \(max-width: 620px\)/);
+assert.match(phaseOneStyles, /grid-template-columns:\s*1fr/);
+assert.match(phaseOneStyles, /env\(safe-area-inset-bottom\)/);
 
 assert.match(reportsPage, /Documents &amp; Management Reports/);
 assert.match(reportsPage, /\/reports\/management/);
@@ -168,17 +183,23 @@ assert.doesNotMatch(hireLayout, /title: "Sales Documents & Reports"/);
 assert.match(hireLayout, /permissions: \["fleet\.assets\.view"\]/);
 
 assert.match(financeLayout, /workspaceName="Equipment Installment Finance"/);
-assert.match(financeLayout, /Finance Command Centre/);
-assert.match(financeLayout, /Credit Applications & Approval/);
-assert.match(financeLayout, /Installment Documents & Reports/);
+assert.match(financeLayout, /title: "Finance Home"/);
+assert.match(financeLayout, /title: "Start New Installment"/);
+assert.match(financeLayout, /title: "Customers"/);
+assert.match(financeLayout, /title: "Excavators"/);
+assert.match(financeLayout, /title: "Applications & Approvals"/);
+assert.match(financeLayout, /title: "Active Installments"/);
+assert.match(financeLayout, /title: "Payments & Arrears"/);
+assert.match(financeLayout, /title: "Documents & Reports"/);
+assert.match(financeLayout, /title: "Help & Guide"/);
 assert.match(financeLayout, /Back to Equipment Divisions/);
 assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
-assert.match(financeLayout, /Finance staff do not select Hire locations/);
+assert.match(financeLayout, /no Hire-location selection/i);
 assert.match(financeLayout, /No access to Hire jobs or contracts/);
 assert.doesNotMatch(financeLayout, /workspaceCode="equipment_hire"/);
 assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
-assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
-assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
+assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
+assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
 assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
@@ -200,5 +221,5 @@ assert.match(workspaceContext, /Company-wide Finance portfolio/);
 assert.match(workspaceContext, /isManagedWorkspace: false/);
 
 console.log(
-  "Equipment Hire and Equipment Installment Finance separation contracts passed."
+  "Equipment Hire separation and simplified Installment Finance contracts passed."
 );
