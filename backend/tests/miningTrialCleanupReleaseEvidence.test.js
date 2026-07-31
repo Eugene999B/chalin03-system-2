@@ -12,10 +12,19 @@ const releaseEvidence = fs.readFileSync(
   "utf8"
 );
 
+const NORMAL_BACKEND_START =
+  "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const APPROVED_PROFESSIONAL_FINANCE_GATE =
+  "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && ";
+
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
+  assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
   assert.equal(
-    packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    packageJson.scripts.start === NORMAL_BACKEND_START ||
+      packageJson.scripts.start ===
+        `${APPROVED_PROFESSIONAL_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    true,
+    "Startup may be normal or use only the reviewed one-time Professional Finance gate."
   );
   assert.equal(
     fs.existsSync(
