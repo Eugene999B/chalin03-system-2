@@ -82,7 +82,7 @@ test("filtered exports remain available from statements and the customer identit
   assert.match(printPanel, /createReport\("excel"\)/);
   assert.match(debtsPage, /CustomerDebtConsolidationPanel/);
   assert.match(debtsPage, /Customer identity and debt controls/);
-  assert.match(debtsPage, /exports and receipt-level audit/);
+  assert.match(debtsPage, /exports and\s+receipt-level audit/);
   assert.match(consolidationPanel, /<CustomerDebtPrintPanel/);
   assert.match(consolidationPanel, /reportType="debt"/);
 });
