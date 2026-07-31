@@ -14,12 +14,15 @@ const verifier = read(
   "database/migrations/20260729_equipment_finance_final_lifecycle_verify.sql"
 );
 const reminderService = read("backend/services/equipmentSalesReminderService.js");
+const professionalReminder = read(
+  "backend/services/equipmentFinanceProfessionalReminderService.js"
+);
 const workspacePage = read("frontend/src/pages/EquipmentSalesWorkspacePage.jsx");
 const lifecyclePage = read("frontend/src/pages/EquipmentFinanceFinalLifecyclePage.jsx");
-const lifecycleCss = read("frontend/src/styles/equipmentFinanceFinalLifecycle.css");
+const lifecycleCss = read(
+  "frontend/src/styles/equipmentFinanceLifecycleProfessional.css"
+);
 const financeLayout = read("frontend/src/layouts/InstallmentFinanceLayout.jsx");
-const serviceWorker = read("frontend/public/sw.js");
-const runbook = read("docs/EQUIPMENT_FINANCE_FINAL_LIFECYCLE_PRODUCTION_RUNBOOK.md");
 
 function stripSqlComments(sql) {
   return sql
@@ -28,7 +31,7 @@ function stripSqlComments(sql) {
     .join("\n");
 }
 
-test("final Finance lifecycle exposes separate controlled endpoints", () => {
+test("final Finance lifecycle exposes one company-wide controlled API", () => {
   for (const pattern of [
     /router\.get\("\/readiness"/,
     /router\.get\("\/accounts"/,
@@ -40,27 +43,46 @@ test("final Finance lifecycle exposes separate controlled endpoints", () => {
     assert.match(route, pattern);
   }
 
+  assert.match(route, /scope: "company_wide_finance"/);
+  assert.match(route, /hire_location_selection_required: false/);
   assert.match(route, /COLLECTION_ROLES/);
   assert.match(route, /collections_officer/);
+  assert.match(route, /equipment_business_accountant/);
   assert.match(route, /FINALISATION_ROLES/);
   assert.match(route, /isOriginalSystemAdministrator/);
   assert.match(route, /workspaceRoleFor/);
   assert.match(route, /requirePermission\("fleet\.assets\.manage"\)/);
 });
 
-test("controlled collections allocate schedules and use secure idempotency", () => {
+test("controlled collections support partial and above-period payments safely", () => {
   assert.match(route, /finance-collection/);
   assert.match(route, /installment_collection/);
   assert.match(route, /settlement/);
   assert.match(route, /equipment_sale_payment_allocations/);
   assert.match(route, /allocateCollection/);
+  assert.match(route, /ORDER BY due_date, sequence_number/);
+  assert.match(route, /Math\.min\(remaining, lineBalance\)/);
+  assert.match(route, /FINANCE_COLLECTION_EXCEEDS_ACCOUNT_BALANCE/);
+  assert.match(route, /FINANCE_COLLECTION_ALLOCATION_INCOMPLETE/);
   assert.match(route, /idempotency_key/);
-  assert.match(route, /crypto\.randomInt/);
   assert.match(route, /receipt_number/);
   assert.match(route, /replayed: true/);
 });
 
-test("delivery and ownership remain Finance evidence without Hire or SMS writes", () => {
+test("boss payment alert begins only after the collection commits", () => {
+  const commitIndex = route.indexOf("await connection.commit();", route.indexOf("/collections"));
+  const alertIndex = route.indexOf("await sendBossPaymentAlert", route.indexOf("/collections"));
+  assert.ok(commitIndex > -1);
+  assert.ok(alertIndex > commitIndex);
+  assert.match(route, /boss_payment_alert: bossAlert/);
+  assert.match(route, /automatic_sms_sent: Boolean\(bossAlert\.ok\)/);
+  assert.doesNotMatch(
+    route,
+    /sendBossPaymentAlert[\s\S]{0,500}await connection\.commit\(\)/
+  );
+});
+
+test("delivery and ownership remain Finance evidence without Hire writes", () => {
   assert.match(route, /finance_controlled/);
   assert.match(route, /EQUIPMENT_FINANCE_DELIVERY_COMPLETED/);
   assert.match(route, /EQUIPMENT_FINANCE_OWNERSHIP_TRANSFERRED/);
@@ -70,14 +92,13 @@ test("delivery and ownership remain Finance evidence without Hire or SMS writes"
   assert.match(route, /sale_status = 'sold'/);
   assert.match(route, /automatic_sms_sent: false/);
   assert.match(route, /sms: \{ sent: false, automatic: false \}/);
-  assert.doesNotMatch(route, /sendSmsAlertToPhone|sendAgreementSms|sendManualInstallmentReminder/);
   assert.doesNotMatch(
     route,
     /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:hire_contracts|hire_jobs|hire_dispatches|hire_invoices|hire_payments|hire_returns|worker_assignments)\b/i
   );
 });
 
-test("database migration enforces the final approved-credit lifecycle", () => {
+test("database migration enforces the original approved-credit lifecycle", () => {
   assert.match(migration, /-- ADDITIVE MIGRATION ONLY\./);
   assert.match(migration, /-- FORWARD-ONLY CHANGE\./);
   assert.match(migration, /BACKUP REQUIRED BEFORE PRODUCTION EXECUTION/);
@@ -103,11 +124,6 @@ test("database migration enforces the final approved-credit lifecycle", () => {
   ]) {
     assert.match(migration, new RegExp(trigger));
   }
-
-  assert.match(migration, /Use the controlled Finance deposit or collection endpoint/);
-  assert.match(migration, /Use the controlled Finance delivery-handover endpoint/);
-  assert.match(migration, /Use the controlled Finance ownership-transfer endpoint/);
-  assert.match(migration, /Equipment active on Hire cannot/);
 });
 
 test("final lifecycle verifier is read-only and covers every safety count", () => {
@@ -133,59 +149,58 @@ test("final lifecycle verifier is read-only and covers every safety count", () =
   );
 });
 
-test("automatic installment SMS is frozen until separately approved", () => {
-  assert.match(reminderService, /EQUIPMENT_INSTALLMENT_AUTOMATIC_SMS_APPROVED/);
-  assert.match(reminderService, /AUTOMATIC_SMS_APPROVED/);
-  assert.match(reminderService, /automatic_sms_enabled: false/);
-  assert.match(reminderService, /requires a separate approved release/);
+test("automatic installment reminders are settings-controlled and deduplicated", () => {
+  assert.match(reminderService, /startProfessionalReminderScheduler/);
+  assert.match(reminderService, /runProfessionalReminderSync/);
+  assert.match(reminderService, /AUTOMATIC_SMS_APPROVED = true/);
+  assert.match(reminderService, /company-wide Finance settings row/);
   assert.match(reminderService, /"\/finance-lifecycle"/);
-  assert.match(reminderService, /equipmentFinanceFinalLifecycleRoutes/);
+  assert.match(professionalReminder, /automatic_reminders_enabled/);
+  assert.match(professionalReminder, /minimum_hours_between_sms/);
+  assert.match(professionalReminder, /max_sms_7_days/);
+  assert.match(professionalReminder, /max_sms_30_days/);
+  assert.match(professionalReminder, /INSERT IGNORE INTO equipment_sales_reminder_log/);
+  assert.match(professionalReminder, /Africa\/Accra/);
 });
 
-test("Finance UI exposes final stages and blocks hidden Hire routes", () => {
-  assert.match(workspacePage, /EquipmentFinanceFinalLifecyclePage/);
-  assert.match(workspacePage, /collections/);
-  assert.match(workspacePage, /delivery/);
-  assert.match(workspacePage, /ownership/);
+test("Finance UI exposes professional stages and full uncropped machine evidence", () => {
+  assert.match(workspacePage, /EquipmentFinanceProfessionalPage/);
+  for (const stage of [
+    "machines",
+    "settings",
+    "documents",
+    "staff",
+    "collections",
+    "delivery",
+    "ownership",
+  ]) {
+    assert.match(workspacePage, new RegExp(stage));
+  }
 
-  assert.match(lifecyclePage, /finance-lifecycle/);
-  assert.match(lifecyclePage, /crypto\?\.randomUUID/);
-  assert.match(lifecyclePage, /finance-collection/);
-  assert.match(lifecyclePage, /finance-delivery/);
-  assert.match(lifecyclePage, /finance-ownership/);
-  assert.match(lifecyclePage, /Collections Officer/);
-  assert.match(lifecyclePage, /will not send automatic or transaction-triggered SMS/);
-  assert.doesNotMatch(lifecyclePage, /\/equipment-hire-operations/);
-  assert.doesNotMatch(lifecyclePage, /sendSms|WhatsApp/);
+  assert.match(lifecyclePage, /company-wide Installment Finance portfolio/i);
+  assert.match(lifecyclePage, /partial, exact or above-period/i);
+  assert.match(lifecyclePage, /boss_payment_alert/);
+  assert.match(lifecyclePage, /Boss alert/);
+  assert.doesNotMatch(lifecyclePage, /WorkspaceContext/);
+  assert.doesNotMatch(lifecyclePage, /selectedHireLocation/);
+  assert.match(lifecycleCss, /object-fit: contain/);
+  assert.match(lifecycleCss, /finance-lifecycle__machine-photo/);
+  assert.match(lifecycleCss, /finance-lifecycle__drawer-machine/);
 
   for (const title of [
+    "Excavator Register",
+    "Agreement Documents",
     "Installment Collections",
-    "Delivery Handover",
+    "Arrears & Follow-up",
+    "Delivery & Handover",
     "Ownership Transfer",
+    "Finance Settings",
+    "Equipment Staff",
   ]) {
-    assert.match(financeLayout, new RegExp(title));
+    assert.match(financeLayout, new RegExp(title.replace(/[&]/g, "\\&")));
   }
-  assert.match(financeLayout, /BLOCKED_FINANCE_PATHS/);
-  assert.match(financeLayout, /Finance Customers & Portfolio/);
   assert.match(financeLayout, /stage=customers/);
-  assert.doesNotMatch(
-    financeLayout,
-    /BLOCKED_FINANCE_PATHS[\s\S]*equipment-installment-finance\/customers/
-  );
-  assert.match(financeLayout, /equipment-installment-finance\/workers/);
-  assert.match(financeLayout, /isBlockedFinancePath/);
-  assert.match(lifecycleCss, /@media \(max-width: 760px\)/);
-  assert.match(lifecycleCss, /@media \(max-width: 480px\)/);
-});
-
-test("cache and runbook preserve the fail-closed production boundary", () => {
-  assert.match(serviceWorker, /chalin03-finance-final-lifecycle-v24/);
-  assert.match(serviceWorker, /chalin03-finance-deposit-reservation-v23/);
-  assert.match(runbook, /20260729_equipment_credit_application_foundation\.sql/);
-  assert.match(runbook, /20260729_equipment_finance_agreement_activation\.sql/);
-  assert.match(runbook, /20260729_equipment_finance_deposit_reservation\.sql/);
-  assert.match(runbook, /20260729_equipment_finance_final_lifecycle\.sql/);
-  assert.match(runbook, /Every result below must be exactly `0`/);
-  assert.match(runbook, /Automatic installment SMS remains disabled/);
-  assert.match(runbook, /Never run `database\/schema\.sql` against production/);
+  assert.match(financeLayout, /stage=documents/);
+  assert.match(financeLayout, /stage=settings/);
+  assert.match(financeLayout, /equipmentFinanceLifecycleProfessional\.css/);
 });

@@ -12,6 +12,16 @@ const independentRoutes = read(
   "routes",
   "equipmentFinanceIndependentRoutes.js"
 );
+const professionalRoutes = read(
+  "backend",
+  "routes",
+  "equipmentFinanceProfessionalRoutes.js"
+);
+const professionalMigration = read(
+  "database",
+  "migrations",
+  "20260731_equipment_finance_professional_rebuild.sql"
+);
 const integrityMiddleware = read(
   "backend",
   "middleware",
@@ -77,10 +87,21 @@ test("Finance is company-wide but active Hire machine safety remains", () => {
   assert.match(lifecycleRoutes, /active_hire_count/);
 });
 
-test("automatic Finance SMS remains fail-closed", () => {
-  assert.match(independentRoutes, /automatic_sms_enabled: false/);
-  assert.match(independentRoutes, /FINANCE_AUTOMATIC_REMINDERS_DISABLED/);
-  assert.match(independentRoutes, /Automatic installment reminders are disabled/);
+test("automatic Finance reminders default fail-closed and become configurable only through audited settings", () => {
+  assert.match(
+    professionalMigration,
+    /automatic_reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE/
+  );
+  assert.match(
+    professionalRoutes,
+    /automatic_sms_enabled: settings\.automatic_reminders_enabled/
+  );
+  assert.match(
+    professionalRoutes,
+    /Automatic reminders are currently disabled in Finance Settings/
+  );
+  assert.match(professionalRoutes, /requirePermission\("fleet\.assets\.manage"\)/);
+  assert.match(professionalRoutes, /updateProfessionalSettings/);
   assert.doesNotMatch(independentRoutes, /sendSmsAlertToPhone|sendManualInstallmentReminder/);
 });
 
