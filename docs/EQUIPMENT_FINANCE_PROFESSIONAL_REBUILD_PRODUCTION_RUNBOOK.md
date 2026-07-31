@@ -14,9 +14,9 @@ Never run `database/schema.sql` against production. Never replace the live datab
 
 ## What the migration adds
 
-The release preserves every current Equipment Hire, Finance, Mining and Spare Parts record. It adds:
+The release preserves current Equipment Hire, Finance, Mining and Spare Parts records. It adds:
 
-- extra exact-machine identity and commercial fields on `fleet_assets`
+- exact machine identity and commercial fields on `fleet_assets`
 - issued-agreement identity fields on `equipment_sale_agreements`
 - company-wide Finance settings and immutable settings history
 - controlled document signatures
@@ -24,6 +24,28 @@ The release preserves every current Equipment Hire, Finance, Mining and Spare Pa
 - boss payment-alert evidence
 
 No business table is truncated, reset or bulk-deleted.
+
+## Backup policy for the Railway Hobby deployment
+
+A fresh signed Chalin 03 Professional Backup downloaded from the application is mandatory.
+
+For this deployment, the migration runner automatically creates a protected database-side safety snapshot before applying any professional Finance statement. This replaces the unavailable separate Railway database-download gate for the current plan.
+
+The automatic snapshot contains complete copies of the three existing tables touched or relied on by this release:
+
+- `fleet_assets`
+- `equipment_sale_agreements`
+- `schema_migrations`
+
+The copies are stored as:
+
+- `chalin03_snap_20260731_fin_fleet_assets`
+- `chalin03_snap_20260731_fin_sale_agreements`
+- `chalin03_snap_20260731_fin_schema_migrations`
+
+Snapshot evidence is recorded in `chalin03_migration_safety_snapshots`. The runner refuses to continue unless every snapshot exists and its copied row count matches the recorded count. A completed snapshot is reused and reverified; it is never overwritten during later startup attempts.
+
+This database-side snapshot supplements the signed application backup. It does not replace normal long-term backup practice.
 
 ## Required prerequisites
 
@@ -36,11 +58,8 @@ Do not begin until all of the following are true:
    - `20260729_equipment_finance_final_lifecycle`
 2. The current live service is healthy.
 3. No Finance staff are entering applications, deposits, collections, delivery or ownership records during the short migration window.
-4. Two verified backups exist:
-   - a signed Chalin 03 Professional Backup downloaded from the system
-   - a separate SQL backup from Railway/MySQL
-5. Both backups have been checked for non-zero file size, readable metadata and the expected production database identity.
-6. The exact production database name is known.
+4. A fresh signed Chalin 03 Professional Backup has been downloaded and safely retained.
+5. The exact production database name is known through the Railway MySQL variable reference.
 
 ## Temporary migration environment controls
 
@@ -50,7 +69,6 @@ Set these only for the controlled migration operation:
 NODE_ENV=production
 CHALIN03_EQUIPMENT_FINANCE_PROFESSIONAL_ENABLED=true
 CHALIN03_SIGNED_BACKUP_CONFIRMED=true
-CHALIN03_SQL_BACKUP_CONFIRMED=true
 CHALIN03_MIGRATION_RELEASE=20260731_EQUIPMENT_FINANCE_PROFESSIONAL
 CHALIN03_EXPECTED_DATABASE=<exact Railway production database name>
 ```
@@ -65,33 +83,45 @@ DB_PASSWORD or MYSQLPASSWORD
 DB_NAME or MYSQLDATABASE
 ```
 
-TLS remains governed by the existing production database settings. Do not weaken an external database TLS configuration for this migration.
+TLS remains governed by the existing production database settings.
 
-## Run the migration
+`CHALIN03_SQL_BACKUP_CONFIRMED` is not required for this release because the runner creates and verifies the database-side safety snapshot automatically.
 
-From the `backend` directory of the exact reviewed release commit:
+## GitHub-controlled Railway execution
 
-```bash
-npm ci
-npm run migrate:equipment-finance:professional:production
+The reviewed production release temporarily starts the backend with:
+
+```text
+node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js
 ```
+
+Railway therefore performs the migration before the API starts. Any failed gate exits non-zero and prevents the new backend from becoming healthy.
 
 The runner will:
 
 1. refuse any non-production environment
 2. require the exact release confirmation
-3. require both backup confirmations
+3. require the signed Chalin 03 backup confirmation
 4. compare the connected database with `CHALIN03_EXPECTED_DATABASE`
 5. verify the four Finance prerequisite migration records
 6. acquire one MySQL advisory lock
-7. apply only the approved professional Finance migration
-8. run only the approved read-only verifier
-9. reject the operation unless every verifier count is zero
-10. release the advisory lock
+7. create or verify the database-side safety snapshot
+8. apply only the approved professional Finance migration
+9. run only the approved read-only verifier
+10. reject the operation unless every verifier count is zero
+11. release the advisory lock
+12. start the normal backend only after successful verification
 
 ## Required successful output
 
-The runner must report that it connected to the approved database and that the Professional Equipment Installment Finance migration verified successfully.
+Railway logs must report:
+
+```text
+Database-side Professional Finance safety snapshot created and verified.
+Professional Equipment Installment Finance migration verified successfully.
+```
+
+When the migration is already recorded, a later startup may instead report that the migration record already exists before re-running the idempotent verifier.
 
 All ten verifier results must be exactly `0`:
 
@@ -108,48 +138,40 @@ invalid_professional_finance_payment_alerts = 0
 professional_finance_migration_record_missing = 0
 ```
 
-Any non-zero result means the release is not accepted. Do not promote the application while a verifier problem remains.
+Any non-zero result means the release is not accepted.
 
-## Remove temporary controls
+## Remove temporary controls and startup gate
 
-After successful verification, remove or reset the temporary migration controls:
+After successful production verification:
+
+1. merge an immediate cleanup release restoring the normal backend start command
+2. remove or reset:
 
 ```text
 CHALIN03_EQUIPMENT_FINANCE_PROFESSIONAL_ENABLED
 CHALIN03_SIGNED_BACKUP_CONFIRMED
-CHALIN03_SQL_BACKUP_CONFIRMED
 CHALIN03_MIGRATION_RELEASE
 CHALIN03_EXPECTED_DATABASE
 ```
 
-They are not ordinary runtime settings and should not remain enabled.
-
-## Application promotion order
-
-1. Complete and verify the database migration.
-2. Promote the exact verified application release from `main` to `production`.
-3. Wait for Railway backend deployment to report healthy.
-4. Wait for the frontend deployment to report healthy.
-5. Hard-refresh one test browser or allow the new service-worker cache to activate.
-6. Perform the smoke tests below before ordinary staff use.
+The protected snapshot tables and manifest remain in the database as release evidence until a separate reviewed retention decision is made.
 
 ## Production smoke tests
 
-### Readiness and the former 500 error
+### Readiness and former 500 error
 
 1. Open **Installment Finance → Ownership Transfer**.
 2. Confirm the account queue loads without a raw 500 response.
 3. Confirm the page is company-wide and does not demand a Hire-location selector.
-4. Confirm a missing migration would show a controlled readiness warning rather than technical SQL details.
+4. Confirm readiness problems show a controlled message rather than SQL details.
 
 ### Exact excavator register
 
 1. Open **Excavator Register**.
 2. Register a test excavator with code, make, model, serial/chassis, selling price and a full main photo.
 3. Add front, rear, cabin and serial-plate pictures.
-4. Confirm each picture shows the whole image using contain-fit rather than cropping.
-5. Confirm the machine reports Finance-ready only when required evidence is present.
-6. Confirm a duplicate code, serial, chassis, engine or registration number is rejected safely.
+4. Confirm every picture shows the whole image using contain-fit rather than cropping.
+5. Confirm duplicate code, serial, chassis, engine or registration numbers are rejected safely.
 
 ### Application and agreement
 
@@ -157,83 +179,61 @@ They are not ordinary runtime settings and should not remain enabled.
 2. Capture buyer identity, Ghana Card or accepted ID, address, income, commitments and guarantor evidence.
 3. Complete independent review and approve the application.
 4. Activate the agreement and confirm the schedule dates and amounts are exact.
-5. Confirm no payment, Hire job or machine reservation is created during approval or activation.
 
 ### Documents
 
 1. In **Finance Settings**, review the seeded terms with the company’s Ghana lawyer.
-2. Enter reviewer name and date, then mark the version approved only after legal review.
+2. Mark the terms approved only after legal review.
 3. Capture seller, buyer, witness and guarantor signatures as required.
-4. Issue both PDF and Word agreement documents.
-5. Confirm the document includes:
-   - Chalin 03 company identity
-   - buyer and guarantor details
-   - exact excavator identity
-   - purchase price, deposit and financed balance
-   - full installment schedule
-   - versioned terms and conditions
-   - full uncropped excavator and identity-plate photos
-   - signatures
-   - immutable document number and checksum evidence
-6. Re-download the issued document and confirm it remains linked to the same snapshot.
-
-### Deposit and machine reservation
-
-1. Record a partial opening deposit and confirm the machine is not reserved yet.
-2. Complete the required deposit and confirm reservation occurs atomically.
-3. Confirm an active Hire assignment blocks Finance reservation or handover.
+4. Issue PDF and Word-compatible agreement documents.
+5. Confirm the pack contains company identity, buyer and guarantor details, exact excavator identity, commercial terms, schedule, terms, full photos, signatures, document number and checksum.
 
 ### Collections and boss alert
 
-Use a test agreement with multiple future schedule lines.
-
-1. Record less than the current period amount; confirm the schedule line becomes partial.
-2. Record the rest after the due date; confirm the oldest due line is completed first.
-3. Record more than the current period amount but less than the account balance; confirm the excess advances future schedule lines.
-4. Attempt more than the final account balance; confirm it is rejected before saving.
-5. Repeat the same request key; confirm the original receipt is returned without a duplicate payment.
-6. Confirm the boss SMS alert starts only after the payment commits.
-7. Temporarily use an invalid or disabled boss alert configuration and confirm the payment remains saved while alert status is reported separately.
-8. Confirm the payment receipt, allocations, outstanding balance and staff identity remain exact.
+1. Record a payment below the current period amount and confirm a partial allocation.
+2. Complete the amount after the due date and confirm oldest-due-first allocation.
+3. Record more than the current period amount and confirm the excess advances future schedule lines.
+4. Attempt more than the final account balance and confirm rejection before saving.
+5. Repeat the same request key and confirm no duplicate payment.
+6. Confirm the boss SMS starts only after the payment commits.
+7. Confirm an alert failure never rolls back the saved receipt.
 
 ### Reminders
 
 1. Keep automatic reminders disabled initially.
 2. Preview due-soon, due-today and overdue candidates.
-3. Configure Ghana reminder time, due-soon days, repeat interval and SMS frequency limits.
-4. Enable automatic reminders only after the boss approves the wording and phone configuration.
-5. Run the manual confirmation action once.
-6. Confirm duplicate protection and 7-day/30-day/minimum-hour limits.
+3. Configure Ghana reminder time, repeat interval and SMS limits.
+4. Enable reminders only after the boss approves wording and phone configuration.
 
 ### Delivery and ownership
 
-1. Confirm delivery remains blocked before the configured payment threshold.
+1. Confirm delivery is blocked before the configured payment threshold.
 2. Record machine condition, meter, fuel, tools, receiving person and evidence after eligibility.
-3. Confirm delivery does not create Hire work.
-4. Confirm ownership remains blocked while any balance remains.
-5. After full settlement and delivery, complete ownership transfer with date and authority/registration reference.
-6. Confirm the exact excavator becomes sold and cannot return to Hire availability.
+3. Confirm ownership remains blocked while any balance remains.
+4. After full settlement and delivery, complete ownership transfer.
+5. Confirm the excavator becomes sold and cannot return to Hire availability.
 
 ### Staff access
 
-1. Assign a Hire-only employee and confirm Finance remains unavailable.
-2. Assign a Finance-only employee and confirm Hire Operations remains unavailable.
-3. Assign Equipment Business Manager or Accountant and confirm one login can open both divisions.
-4. Confirm the dual auditor can inspect both but cannot write.
-5. Confirm changing an assignment revokes existing sessions and records an audit event.
+1. Confirm Hire-only staff cannot open Finance.
+2. Confirm Finance-only staff cannot open Hire Operations.
+3. Confirm approved Equipment Business Manager or Accountant roles can open both divisions with one login.
+4. Confirm the dual auditor is read-only.
+5. Confirm assignment changes revoke active sessions and write an audit event.
 
 ## Failure handling
 
 This is a forward-only additive release. Do not delete Finance rows or restore an old schema over new business records.
 
-When a migration statement or verifier fails:
+When a snapshot, migration statement or verifier fails:
 
 1. stop application promotion
-2. retain both backups
-3. preserve the complete migration log
-4. identify the exact failed statement or non-zero verifier result
-5. correct forward with another reviewed additive migration when necessary
-6. rerun the verifier
-7. promote only after every result is zero
+2. retain the signed application backup
+3. preserve the complete Railway migration log
+4. retain the database-side snapshot tables and manifest
+5. identify the exact failed statement or non-zero verifier result
+6. correct forward with another reviewed additive migration when necessary
+7. rerun the verifier
+8. promote only after every result is zero
 
-When the application deploy fails after a successful database migration, keep the prior healthy application deployment active and correct the application forward. The new database objects are additive and do not require destructive rollback.
+When the application deployment fails after a successful database migration, keep the prior healthy application deployment active and correct the application forward. The new database objects are additive and do not require destructive rollback.

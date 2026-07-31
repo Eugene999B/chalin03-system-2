@@ -28,13 +28,18 @@ test("Railway startup is fail-closed behind the exact professional Finance migra
   );
 });
 
-test("professional Finance Railway gate requires both backups and exact release identity", () => {
+test("professional Finance Railway gate requires signed backup, safety snapshot and exact release identity", () => {
   assert.match(
     runnerSource,
     /CHALIN03_EQUIPMENT_FINANCE_PROFESSIONAL_ENABLED/
   );
   assert.match(runnerSource, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
-  assert.match(runnerSource, /CHALIN03_SQL_BACKUP_CONFIRMED/);
+  assert.match(runnerSource, /chalin03_migration_safety_snapshots/);
+  assert.match(runnerSource, /createOrVerifySafetySnapshot/);
+  assert.doesNotMatch(
+    runnerSource,
+    /Confirm the separate verified SQL backup first/
+  );
   assert.match(
     runnerSource,
     /20260731_EQUIPMENT_FINANCE_PROFESSIONAL/
@@ -47,8 +52,10 @@ test("professional Finance Railway gate requires both backups and exact release 
   );
 });
 
-test("professional Finance Railway gate cannot run the reset schema", () => {
+test("professional Finance Railway gate cannot run destructive production reset operations", () => {
   assert.doesNotMatch(runnerSource, /database\/schema\.sql/);
   assert.doesNotMatch(runnerSource, /TRUNCATE\s+TABLE/i);
   assert.doesNotMatch(runnerSource, /DROP\s+DATABASE/i);
+  assert.doesNotMatch(runnerSource, /DELETE\s+FROM/i);
+  assert.match(runnerSource, /INSERT IGNORE INTO/);
 });
