@@ -6,6 +6,10 @@ const {
   getFinanceCustomerPortfolio,
   listFinanceCustomers,
 } = require("../services/equipmentFinanceCustomerPortfolioService");
+const {
+  assertProfessionalSchema,
+} = require("../services/equipmentFinanceProfessionalService");
+const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 
 const router = express.Router();
@@ -96,10 +100,25 @@ function financePolicy() {
   };
 }
 
-// Professional settings, excavator register, issued documents, signatures,
-// boss payment alerts and company-wide reminders are dispatched before the
-// compatibility read models below and before the shared legacy sales router.
+router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
+
+// The final lifecycle query now returns professional agreement/document fields.
+// Check the professional migration before handing the URL to that router so a
+// missing additive migration becomes a controlled 503 rather than a raw SQL 500.
+router.use("/finance-lifecycle", async (_req, res, next) => {
+  try {
+    await assertProfessionalSchema();
+    return next();
+  } catch (error) {
+    return res.status(Number(error.statusCode || 503)).json({
+      status: "error",
+      code: error.code || "EQUIPMENT_FINANCE_PROFESSIONAL_MIGRATION_REQUIRED",
+      message: error.message,
+      ...(error.readiness ? { readiness: error.readiness } : {}),
+    });
+  }
+});
 
 router.get(
   "/finance-customers",
