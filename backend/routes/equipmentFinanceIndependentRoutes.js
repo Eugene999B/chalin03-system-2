@@ -6,30 +6,9 @@ const {
   getFinanceCustomerPortfolio,
   listFinanceCustomers,
 } = require("../services/equipmentFinanceCustomerPortfolioService");
+const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 
 const router = express.Router();
-
-const COMPANY_WIDE_SETTINGS = Object.freeze({
-  automatic_sms_enabled: false,
-  manual_sms_enabled: true,
-  manual_whatsapp_enabled: true,
-  reminder_time: "09:00",
-  due_soon_enabled: true,
-  due_soon_days: [7, 3, 1],
-  due_today_enabled: true,
-  overdue_enabled: true,
-  overdue_start_days: 1,
-  overdue_repeat_days: 3,
-  max_sms_7_days: 3,
-  max_sms_30_days: 8,
-  minimum_hours_between_sms: 24,
-  minimum_balance: 1,
-  max_messages_per_run: 50,
-  skip_weekends: false,
-  include_payment_phone: true,
-  message_template:
-    "CHALIN03: Dear {customer_name}, your equipment installment {agreement_number} for {equipment_name} has GHS {outstanding_balance} outstanding. {due_sentence}{payment_sentence} Thank you.",
-});
 
 function activationCandidate(application) {
   return {
@@ -111,10 +90,16 @@ function financePolicy() {
     scope: "company_wide",
     hire_location_selection_required: false,
     hire_workflow_access: false,
-    automatic_sms_enabled: false,
+    professional_settings_enabled: true,
+    boss_payment_alert_after_commit: true,
     machine_active_hire_check_enabled: true,
   };
 }
+
+// Professional settings, excavator register, issued documents, signatures,
+// boss payment alerts and company-wide reminders are dispatched before the
+// compatibility read models below and before the shared legacy sales router.
+router.use(equipmentFinanceProfessionalRoutes);
 
 router.get(
   "/finance-customers",
@@ -250,76 +235,5 @@ router.get(
 // Keeping a second accounts implementation here caused production requests to
 // bypass the lifecycle readiness gate and surface raw SQL errors as HTTP 500.
 
-router.get(
-  "/installment-command/settings",
-  requirePermission("fleet.assets.view"),
-  (_req, res) =>
-    res.json({
-      status: "success",
-      hire_location_id: null,
-      scope: "company_wide_finance",
-      settings: COMPANY_WIDE_SETTINGS,
-      sms: {
-        automatic_available: false,
-        automatic_sms_enabled: false,
-        reason: "Automatic installment SMS remains disabled until a separate approved release.",
-      },
-      policy: financePolicy(),
-    })
-);
-
-router.put(
-  "/installment-command/settings",
-  requirePermission("fleet.assets.manage"),
-  (_req, res) =>
-    res.status(409).json({
-      status: "error",
-      code: "FINANCE_AUTOMATIC_REMINDERS_DISABLED",
-      message:
-        "Company-wide automatic Finance reminder settings remain disabled until a separate approved release.",
-      policy: financePolicy(),
-    })
-);
-
-router.get(
-  "/installment-command/reminders/preview",
-  requirePermission("fleet.assets.manage"),
-  (_req, res) =>
-    res.json({
-      status: "success",
-      count: 0,
-      reminders: [],
-      disabled: true,
-      message: "Automatic installment reminders are disabled.",
-      policy: financePolicy(),
-    })
-);
-
-router.post(
-  "/installment-command/reminders/run",
-  requirePermission("fleet.assets.manage"),
-  (_req, res) =>
-    res.status(409).json({
-      status: "error",
-      code: "FINANCE_AUTOMATIC_REMINDERS_DISABLED",
-      message: "Automatic installment reminders are disabled and were not sent.",
-      policy: financePolicy(),
-    })
-);
-
-router.get(
-  "/installment-command/reminders/history",
-  requirePermission("fleet.assets.view"),
-  (_req, res) =>
-    res.json({
-      status: "success",
-      count: 0,
-      history: [],
-      scope: "company_wide_finance",
-      policy: financePolicy(),
-    })
-);
-
 module.exports = router;
-module.exports.COMPANY_WIDE_SETTINGS = COMPANY_WIDE_SETTINGS;
 module.exports.financePolicy = financePolicy;
