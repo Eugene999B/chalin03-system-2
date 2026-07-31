@@ -81,12 +81,20 @@ test("stale active agreement is derived as overdue without mutating balances", (
 });
 
 test("command routes use the resilient portfolio service", () => {
-  const source = fs.readFileSync(
+  const routeSource = fs.readFileSync(
     path.resolve(__dirname, "../routes/equipmentInstallmentCommandRoutes.js"),
     "utf8"
   );
+  const arrearsSource = fs.readFileSync(
+    path.resolve(__dirname, "../services/equipmentFinanceArrearsService.js"),
+    "utf8"
+  );
 
-  assert.match(source, /equipmentInstallmentReadModelService/);
-  assert.match(source, /getInstallmentPortfolio/);
-  assert.match(source, /listInstallmentCollections/);
+  assert.match(routeSource, /equipmentInstallmentReadModelService/);
+  assert.match(routeSource, /getInstallmentPortfolio/);
+  assert.match(routeSource, /equipmentFinanceArrearsService/);
+  assert.match(routeSource, /listFinanceArrears/);
+  assert.match(arrearsSource, /equipmentInstallmentReadModelService/);
+  assert.match(arrearsSource, /listInstallmentCollections/);
+  assert.match(arrearsSource, /agingBucket/);
 });

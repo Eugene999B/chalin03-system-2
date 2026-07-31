@@ -37,6 +37,14 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Arrears & Collections Control",
+        description: "Due-today work, aging, promises, follow-ups, statements and corrections",
+        path: "/equipment-installment-finance/applications?stage=arrears",
+        icon: "📞",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Credit Applications & Approval",
         description: "Finance applications, KYC, affordability and independent decisions",
         path: "/equipment-installment-finance/applications",
@@ -160,7 +168,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Company-wide Finance portfolio"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated company-wide Finance customers, credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated company-wide Finance customers, credit applications, agreements, arrears evidence, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
