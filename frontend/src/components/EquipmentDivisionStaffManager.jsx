@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import axiosClient from "../api/axiosClient";
 import { isEquipmentAdministrator } from "../security/equipmentDivisionAccess";
 import "../styles/equipmentDivisionStaffManager.css";
@@ -29,6 +30,7 @@ function RoleOptions({ title, roles }) {
 
 export default function EquipmentDivisionStaffManager({ user }) {
   const allowed = isEquipmentAdministrator(user);
+  const closeButtonRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState([]);
@@ -47,6 +49,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
     if (!allowed) return;
     setLoading(true);
     setProblem("");
+
     try {
       const response = await axiosClient.get(API);
       const nextStaff = response.data?.staff || [];
@@ -72,18 +75,41 @@ export default function EquipmentDivisionStaffManager({ user }) {
     if (open) load();
   }, [load, open]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    function onKeyDown(event) {
+      if (event.key === "Escape" && !savingId) {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, savingId]);
+
   if (!allowed) return null;
 
   async function save(person) {
     const workspaceRole = selections[person.id];
+
     if (!allRoles.has(workspaceRole)) {
       setProblem("Choose one valid Hire-only or Finance-only role.");
       return;
     }
+
     const division = roles.finance.includes(workspaceRole) ? "finance" : "hire";
     setSavingId(person.id);
     setProblem("");
     setNotice("");
+
     try {
       const response = await axiosClient.put(`${API}/${person.id}`, {
         division,
@@ -98,6 +124,133 @@ export default function EquipmentDivisionStaffManager({ user }) {
     }
   }
 
+  const manager = open ? (
+    <div
+      className="equipment-division-staff__backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !savingId) setOpen(false);
+      }}
+    >
+      <section
+        className="equipment-division-staff__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="equipment-division-staff-title"
+      >
+        <header>
+          <div>
+            <p>Protected System Administrator control</p>
+            <h2 id="equipment-division-staff-title">Equipment Division Staff</h2>
+            <span>
+              Assign each ordinary employee to exactly one role family. Changing division
+              immediately revokes that employee&apos;s existing sessions.
+            </span>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={() => setOpen(false)}
+            disabled={Boolean(savingId)}
+            aria-label="Close division staff manager"
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="equipment-division-staff__rules">
+          <strong>One employee. One division. No workflow crossover.</strong>
+          <span>
+            Hire roles open Hire work only. Finance roles open credit and installment
+            work only. The machine register remains reference-only for Finance staff.
+          </span>
+        </div>
+
+        {problem ? (
+          <div className="equipment-division-staff__alert is-error" role="alert">
+            {problem}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="equipment-division-staff__alert is-success" role="status">
+            {notice}
+          </div>
+        ) : null}
+
+        <div className="equipment-division-staff__body">
+          {loading ? (
+            <div className="equipment-division-staff__empty">
+              Loading staff assignments…
+            </div>
+          ) : null}
+
+          {!loading && staff.length === 0 ? (
+            <div className="equipment-division-staff__empty">
+              No ordinary Equipment staff accounts are available yet.
+            </div>
+          ) : null}
+
+          {!loading
+            ? staff.map((person) => {
+                const selection = selections[person.id] || "";
+                const finance = roles.finance.includes(selection);
+
+                return (
+                  <article key={person.id} className="equipment-division-staff__card">
+                    <div>
+                      <span
+                        className={`equipment-division-staff__division ${
+                          finance ? "is-finance" : "is-hire"
+                        }`}
+                      >
+                        {finance ? "Finance-only" : "Hire-only"}
+                      </span>
+                      <h3>{person.full_name || person.username}</h3>
+                      <p>
+                        @{person.username} · {label(person.global_role)}
+                      </p>
+                    </div>
+
+                    <label>
+                      <span>Assigned staff role</span>
+                      <select
+                        value={selection}
+                        onChange={(event) =>
+                          setSelections((current) => ({
+                            ...current,
+                            [person.id]: event.target.value,
+                          }))
+                        }
+                      >
+                        <RoleOptions
+                          title="Equipment Hire Operations"
+                          roles={roles.hire}
+                        />
+                        <RoleOptions
+                          title="Equipment Installment Finance"
+                          roles={roles.finance}
+                        />
+                      </select>
+                    </label>
+
+                    <button
+                      type="button"
+                      disabled={Number(savingId) === Number(person.id)}
+                      onClick={() => save(person)}
+                    >
+                      {Number(savingId) === Number(person.id)
+                        ? "Applying boundary…"
+                        : "Save Assignment"}
+                    </button>
+                  </article>
+                );
+              })
+            : null}
+        </div>
+      </section>
+    </div>
+  ) : null;
+
   return (
     <>
       <button
@@ -106,107 +259,15 @@ export default function EquipmentDivisionStaffManager({ user }) {
         onClick={() => setOpen(true)}
         aria-label="Manage Equipment division staff"
       >
-        <span className="equipment-division-staff__open-full">Manage Division Staff</span>
+        <span className="equipment-division-staff__open-full">
+          Manage Division Staff
+        </span>
         <span className="equipment-division-staff__open-compact">Staff</span>
       </button>
 
-      {open ? (
-        <div
-          className="equipment-division-staff__backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !savingId) setOpen(false);
-          }}
-        >
-          <section
-            className="equipment-division-staff__panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="equipment-division-staff-title"
-          >
-            <header>
-              <div>
-                <p>Protected System Administrator control</p>
-                <h2 id="equipment-division-staff-title">Equipment Division Staff</h2>
-                <span>
-                  Assign every ordinary employee to exactly one role family. Changing
-                  division revokes the employee&apos;s existing sessions immediately.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                disabled={Boolean(savingId)}
-                aria-label="Close division staff manager"
-              >
-                ×
-              </button>
-            </header>
-
-            <div className="equipment-division-staff__rules">
-              <strong>No ordinary staff member can belong to both divisions.</strong>
-              <span>
-                Hire roles open Hire jobs only. Finance roles open credit and installment
-                work only. The equipment register is reference-only for Finance staff.
-              </span>
-            </div>
-
-            {problem ? <div className="equipment-division-staff__alert is-error">{problem}</div> : null}
-            {notice ? <div className="equipment-division-staff__alert is-success">{notice}</div> : null}
-
-            <div className="equipment-division-staff__body">
-              {loading ? <div className="equipment-division-staff__empty">Loading staff assignments…</div> : null}
-              {!loading && staff.length === 0 ? (
-                <div className="equipment-division-staff__empty">
-                  No ordinary Equipment staff accounts are available yet.
-                </div>
-              ) : null}
-
-              {!loading
-                ? staff.map((person) => {
-                    const selection = selections[person.id] || "";
-                    const finance = roles.finance.includes(selection);
-                    return (
-                      <article key={person.id} className="equipment-division-staff__card">
-                        <div>
-                          <span className={`equipment-division-staff__division ${finance ? "is-finance" : "is-hire"}`}>
-                            {finance ? "Finance-only" : "Hire-only"}
-                          </span>
-                          <h3>{person.full_name || person.username}</h3>
-                          <p>@{person.username} · {label(person.global_role)}</p>
-                        </div>
-                        <label>
-                          <span>Assigned staff role</span>
-                          <select
-                            value={selection}
-                            onChange={(event) =>
-                              setSelections((current) => ({
-                                ...current,
-                                [person.id]: event.target.value,
-                              }))
-                            }
-                          >
-                            <RoleOptions title="Equipment Hire Operations" roles={roles.hire} />
-                            <RoleOptions title="Equipment Installment Finance" roles={roles.finance} />
-                          </select>
-                        </label>
-                        <button
-                          type="button"
-                          disabled={Number(savingId) === Number(person.id)}
-                          onClick={() => save(person)}
-                        >
-                          {Number(savingId) === Number(person.id)
-                            ? "Applying boundary…"
-                            : "Save Division Assignment"}
-                        </button>
-                      </article>
-                    );
-                  })
-                : null}
-            </div>
-          </section>
-        </div>
-      ) : null}
+      {typeof document !== "undefined" && manager
+        ? createPortal(manager, document.body)
+        : null}
     </>
   );
 }

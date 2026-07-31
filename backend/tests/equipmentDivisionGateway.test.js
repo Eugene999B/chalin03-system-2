@@ -21,17 +21,28 @@ test("equipment login presents one business with two role-isolated divisions", (
 
 test("authenticated equipment portal opens the protected division gateway", () => {
   const portal = read("frontend", "src", "pages", "EquipmentHirePortalPage.jsx");
+  const landing = read(
+    "frontend",
+    "src",
+    "pages",
+    "EquipmentBusinessLandingPage.jsx"
+  );
   const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
 
   assert.match(portal, /isLoggedIn && workspaceCode === "equipment_hire"/);
   assert.match(portal, /<EquipmentDivisionGatewayPage \/>/);
+  assert.match(portal, /<EquipmentBusinessLandingPage \/>/);
+  assert.match(landing, /Two divisions\./);
+  assert.match(landing, /Back to Main Login/);
   assert.match(gateway, /Equipment Hire Operations/);
   assert.match(gateway, /Equipment Installment Finance/);
   assert.match(gateway, /\/equipment-hire-operations\?division=hire/);
   assert.match(gateway, /\/equipment-installment-finance/);
   assert.match(gateway, /canAccessEquipmentDivision/);
-  assert.match(gateway, /No staff workflow crossover/);
-  assert.match(gateway, /Reference-only machine identity/);
+  assert.match(gateway, /Protected division boundary/);
+  assert.match(gateway, /Hire jobs never become Finance accounts/);
+  assert.match(gateway, /await logout\(\)/);
+  assert.match(gateway, /Back to Login/);
   assert.doesNotMatch(gateway, /HIRE_VIEW_PERMISSIONS/);
   assert.doesNotMatch(gateway, /effectivePermissions\.includes\("fleet\.assets\.view"\)/);
   assert.match(gateway, /workspaceCode !== "equipment_hire"/);
@@ -95,31 +106,42 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.doesNotMatch(divisionAccess, /HIRE_ROLE_SET\.has[^\n]*fleet\.assets\.manage/);
 });
 
-test("gateway remains mobile-safe and exposes protected staff assignment", () => {
+test("gateway remains responsive and exposes a protected staff manager", () => {
   const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
-  const css = read("frontend", "src", "styles", "equipmentDivisionGateway.css");
-  const mobileCss = read("frontend", "src", "styles", "equipmentDivisionGateway.mobile.css");
+  const css = read(
+    "frontend",
+    "src",
+    "styles",
+    "equipmentBusinessExperience.css"
+  );
   const staffManager = read(
     "frontend",
     "src",
     "components",
     "EquipmentDivisionStaffManager.jsx"
   );
+  const staffCss = read(
+    "frontend",
+    "src",
+    "styles",
+    "equipmentDivisionStaffManager.css"
+  );
   const serviceWorker = read("frontend", "public", "sw.js");
 
-  assert.match(gateway, /aria-label="Equipment divisions"/);
+  assert.match(gateway, /aria-label="Equipment Business divisions"/);
   assert.match(gateway, /aria-disabled="true"/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 900px\)/);
-  assert.match(css, /@media \(max-width: 620px\)/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /prefers-reduced-motion/);
-  assert.match(mobileCss, /100dvh/);
+  assert.match(css, /@media \(max-width: 680px\)/);
+  assert.match(gateway, /Back to Equipment Login/);
   assert.match(staffManager, /Manage Division Staff/);
-  assert.match(staffManager, /exactly one role family/);
-  assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
+  assert.match(staffManager, /createPortal\(manager, document\.body\)/);
+  assert.match(staffManager, /One employee\. One division\./);
+  assert.match(staffCss, /z-index: 99999/);
+  assert.match(staffCss, /isolation: isolate/);
+  assert.match(serviceWorker, /chalin03-equipment-business-experience-v26/);
 
-  const changedFeatureSources = `${gateway}\n${css}\n${mobileCss}\n${staffManager}`;
+  const changedFeatureSources = `${gateway}\n${css}\n${staffManager}\n${staffCss}`;
   assert.doesNotMatch(
     changedFeatureSources,
     /CREATE TABLE|ALTER TABLE|DROP TABLE|INSERT INTO|UPDATE equipment_|DELETE FROM/i
