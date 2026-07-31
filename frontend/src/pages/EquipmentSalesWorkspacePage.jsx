@@ -1,6 +1,7 @@
 import { useLocation } from "react-router";
 import EquipmentCreditApplicationsPage from "./EquipmentCreditApplicationsPage";
 import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
+import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
 import EquipmentFinanceCustomersPage from "./EquipmentFinanceCustomersPage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
@@ -13,6 +14,10 @@ export default function EquipmentSalesWorkspacePage() {
 
   if (stage === "customers") {
     return <EquipmentFinanceCustomersPage />;
+  }
+
+  if (stage === "arrears") {
+    return <EquipmentFinanceArrearsPage />;
   }
 
   if (stage === "activation") {
