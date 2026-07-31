@@ -36,7 +36,8 @@ test("workspace query stages resolve to explicit Finance pages", () => {
 });
 
 test("new applications use the protected automatic Offer path", () => {
-  assert.match(wizard, /\/equipment-finance\/professional\/phase-one\/start-installment/);
+  assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
+  assert.match(wizard, /`\$\{API\}\/start-installment`/);
   assert.match(backend, /\/phase-one\/start-installment/);
   assert.match(backend, /equipment_sales_quotations/);
   assert.match(backend, /equipment_credit_applications/);
