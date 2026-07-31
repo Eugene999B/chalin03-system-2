@@ -64,13 +64,17 @@ test("exact customer exports use customer id and retain print and downloads", ()
   assert.match(printPanel, /createReport\("excel"\)/);
 });
 
-test("Debts page defaults to customer consolidation with optional audit records", () => {
+test("Debt Desk is customer-first while consolidation stays available as an advanced tool", () => {
   const page = read("frontend/src/pages/DebtsPage.jsx");
   const component = read("frontend/src/components/CustomerDebtConsolidationPanel.jsx");
   const css = read("frontend/src/styles/customerDebtConsolidation.css");
 
+  assert.match(page, /Customer Debt Desk/);
+  assert.match(page, /axiosClient\.get\("\/debts\/customers"/);
+  assert.match(page, /showAdvancedTools, setShowAdvancedTools/);
+  assert.match(page, /Advanced debt tools/);
   assert.match(page, /CustomerDebtConsolidationPanel/);
-  assert.match(page, /showIndividualDebts, setShowIndividualDebts/);
+  assert.doesNotMatch(page, /showIndividualDebts, setShowIndividualDebts/);
   assert.match(component, /One customer, one clear debt overview/);
   assert.match(component, /Open Full Debt Breakdown/);
   assert.match(component, /Merge Duplicate Customers/);
@@ -80,11 +84,12 @@ test("Debts page defaults to customer consolidation with optional audit records"
   assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
-test("service worker cache is advanced for the bundled debt dashboard release", () => {
+test("service worker cache is advanced for the rebuilt Debt Desk release", () => {
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
-  assert.match(serviceWorker, /chalin03-installment-runtime-stability-v18/);
+  assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-v30/);
+  assert.match(serviceWorker, /chalin03-finance-recovery-governance-v29/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
   assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
   assert.doesNotMatch(indexHtml, /debt-responsive-hotfix\.css/);
