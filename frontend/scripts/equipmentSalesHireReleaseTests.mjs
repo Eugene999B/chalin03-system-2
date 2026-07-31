@@ -27,7 +27,6 @@ const divisionAccess = read("src/security/equipmentDivisionAccess.js");
 const axiosClient = read("src/api/axiosClient.js");
 const workspaceContext = read("src/context/WorkspaceContext.jsx");
 
-// Equipment Hire remains location-bound and separate.
 assert.match(hireLayout, /workspaceName="Equipment Hire Operations"/);
 assert.match(hireLayout, /title: "Hire Equipment Register"/);
 assert.match(hireLayout, /Independent Hire staff division/);
@@ -38,7 +37,6 @@ assert.match(catalogue, /operational_purpose/);
 assert.match(catalogue, /target_selling_price/);
 assert.match(catalogue, /standard_hire_rate/);
 
-// Finance has its own route tree and no Hire transaction context.
 assert.match(app, /path="\/equipment-installment-finance"/);
 assert.match(app, /InstallmentFinanceLayout/);
 assert.match(app, /EquipmentSalesWorkspacePage/);
@@ -51,7 +49,6 @@ assert.match(financeLayout, /No access to Hire jobs or contracts/);
 assert.doesNotMatch(financeLayout, /workspaceCode="equipment_hire"/);
 assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
 
-// The sidebar presents the simple daily journey.
 for (const title of [
   "Finance Home",
   "Start New Installment",
@@ -69,7 +66,6 @@ for (const title of [
 assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
-// One grouped workspace keeps every governed stage reachable.
 for (const pageName of [
   "EquipmentFinanceStartWizardPage",
   "EquipmentFinanceCustomerCentrePage",
@@ -90,21 +86,20 @@ assert.match(workspace, /stage === "activation"/);
 assert.match(workspace, /stage === "deposit"/);
 assert.match(workspace, /FINAL_LIFECYCLE_STAGES/);
 
-// Starting a case creates the Installment Offer automatically.
 assert.match(wizard, /Start New Installment/);
 assert.match(wizard, /Installment Offer/);
 assert.match(wizard, /created automatically/i);
-assert.match(wizard, /\/equipment-finance\/professional\/phase-one\/start-installment/);
+assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
+assert.match(wizard, /`\$\{API\}\/start-installment`/);
 assert.match(wizard, /customer_name/);
 assert.match(wizard, /asset_id/);
-assert.match(wizard, /sale_price/);
-assert.match(wizard, /deposit_amount/);
+assert.match(wizard, /selling_price/);
+assert.match(wizard, /deposit/);
 assert.match(wizard, /payment_frequency/);
 assert.match(wizard, /installment_count/);
 assert.match(wizard, /customer_consent_confirmed/);
 assert.doesNotMatch(wizard, /Choose a Finance location|Choose a Hire location/);
 
-// Applications retain KYC, affordability and independent decisions.
 assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
 assert.match(applications, /\/readiness/);
 assert.match(applications, /\/assess/);
@@ -116,7 +111,6 @@ assert.match(applications, /Request changes/);
 assert.match(applications, /No Hire-location selection is needed/);
 assert.doesNotMatch(applications, /ownership-transfer|deliveries\/complete/);
 
-// Customer and excavator centres are reusable and complete.
 assert.match(customers, /Customer Centre/);
 assert.match(customers, /\/phase-one\/customers/);
 assert.match(customers, /Start New Installment/);
@@ -127,7 +121,6 @@ assert.match(excavators, /chassis_number/);
 assert.match(excavators, /engine_number/);
 assert.match(excavators, /objectFit:\s*"contain"|object-fit:\s*contain/);
 
-// Phone layouts show complete money and photos without horizontal overflow.
 assert.match(phaseOneStyles, /\.finance-simple/);
 assert.match(phaseOneStyles, /overflow-wrap:\s*anywhere/);
 assert.match(phaseOneStyles, /white-space:\s*normal/);
@@ -136,7 +129,6 @@ assert.match(phaseOneStyles, /@media \(max-width: 620px\)/);
 assert.match(phaseOneStyles, /grid-template-columns:\s*1fr/);
 assert.match(phaseOneStyles, /env\(safe-area-inset-bottom\)/);
 
-// Existing document, upload and retirement controls remain present.
 assert.match(reports, /Documents &amp; Management Reports/);
 assert.match(reports, /documents\/agreement\.pdf/);
 assert.match(reports, /documents\/statement\.pdf/);
