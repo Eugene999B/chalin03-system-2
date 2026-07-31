@@ -9,6 +9,10 @@ function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
 }
 
+function compact(value) {
+  return String(value).replace(/\s+/g, " ");
+}
+
 test("customer debt consolidation backend preserves records and merges identities", () => {
   const route = read("backend/routes/customerDebtConsolidationRoutes.js");
 
@@ -33,16 +37,17 @@ test("customer debt breakdown contains receipts, items and payments", () => {
   assert.match(route, /payments: paymentsByDebt/);
 });
 
-test("server exposes the consolidation route inside Spare Parts", () => {
+test("server exposes the consolidation route inside Spare Parts after return reconciliation", () => {
   const server = read("backend/server.js");
+  const source = compact(server);
 
   assert.match(
     server,
     /const customerDebtConsolidationRoutes = require\("\.\/routes\/customerDebtConsolidationRoutes"\);/
   );
   assert.match(
-    server,
-    /app\.use\("\/api\/debt-customers", requireAuth, sparePartsBoundary, customerDebtConsolidationRoutes\);/
+    source,
+    /"\/api\/debt-customers", requireAuth, sparePartsBoundary, reconcileCreditReturnDebts, customerDebtConsolidationRoutes/
   );
 });
 
@@ -91,10 +96,11 @@ test("Debt Desk uses the live-safe reader while professional consolidation stays
   assert.match(hotfixCss, /@media \(max-width: 420px\)/);
 });
 
-test("service worker cache is advanced for the live Debt Desk hotfix", () => {
+test("service worker cache retains the verified Debt Desk history", () => {
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
+  assert.match(serviceWorker, /chalin03-credit-return-debt-reconciliation-v32/);
   assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-live-hotfix-v31/);
   assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-v30/);
   assert.match(serviceWorker, /chalin03-finance-recovery-governance-v29/);
