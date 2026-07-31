@@ -29,13 +29,25 @@ test("professional Finance runner is locked to one exact release and migration",
   assert.doesNotMatch(runner, /database\/schema\.sql/);
 });
 
-test("professional Finance runner requires production and two verified backups", () => {
+test("professional Finance runner requires production and the signed system backup", () => {
   assert.match(runner, /NODE_ENV=production/);
   assert.match(runner, /CHALIN03_EQUIPMENT_FINANCE_PROFESSIONAL_ENABLED/);
   assert.match(runner, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
-  assert.match(runner, /CHALIN03_SQL_BACKUP_CONFIRMED/);
+  assert.doesNotMatch(runner, /Confirm the separate verified SQL backup first/);
   assert.match(runner, /CHALIN03_MIGRATION_RELEASE/);
   assert.match(runner, /four approved 20260729 Equipment Finance prerequisite migrations/);
+});
+
+test("professional Finance runner creates and verifies a database-side safety snapshot", () => {
+  assert.match(runner, /chalin03_migration_safety_snapshots/);
+  assert.match(runner, /chalin03_snap_20260731_fin_fleet_assets/);
+  assert.match(runner, /chalin03_snap_20260731_fin_sale_agreements/);
+  assert.match(runner, /chalin03_snap_20260731_fin_schema_migrations/);
+  assert.match(runner, /CREATE TABLE .* LIKE/s);
+  assert.match(runner, /INSERT INTO .* SELECT \*/s);
+  assert.match(runner, /sourceCount !== snapshotCount/);
+  assert.match(runner, /snapshot_status = 'ready'/);
+  assert.match(runner, /createOrVerifySafetySnapshot/);
 });
 
 test("professional Finance runner rejects every non-zero verifier result", () => {
@@ -64,6 +76,7 @@ test("professional Finance migration command is separate from legacy runners", (
   );
   assert.match(runbook, /migrate:equipment-finance:professional:production/);
   assert.match(runbook, /Never run `database\/schema\.sql`/);
-  assert.match(runbook, /two verified backups/i);
+  assert.match(runbook, /signed Chalin 03 Professional Backup/i);
+  assert.match(runbook, /database-side safety snapshot/i);
   assert.match(runbook, /all ten verifier results must be exactly `0`/i);
 });
