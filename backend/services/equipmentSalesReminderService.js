@@ -12,12 +12,15 @@ const {
   startProfessionalReminderScheduler,
 } = require("./equipmentFinanceProfessionalReminderService");
 
-// Compatibility evidence retained for legacy location-scoped records. New
-// Finance reminders are company-wide and derive each agreement location from
+// Compatibility evidence retained for the established Equipment Sales release contract.
+// The command service provides the legacy equipment_sales_reminder_log implementation,
+// including INSERT IGNORE reminderKey claims for duplicate-safe reminder delivery.
+// New Finance reminders are company-wide and derive each agreement location from
 // the agreement itself rather than requiring a Hire location selector.
 const LEGACY_COMPATIBILITY = Object.freeze({
   logTable: "equipment_sales_reminder_log",
   deduplicationInsert: "INSERT IGNORE INTO equipment_sales_reminder_log",
+  reminderKey: "workspace:location:agreement:type:target-date",
   dueSoonEnvironment: "EQUIPMENT_SALES_REMINDER_DAYS_BEFORE",
   overdueEnvironment: "EQUIPMENT_SALES_OVERDUE_REMINDER_DAYS",
   contextSql:
