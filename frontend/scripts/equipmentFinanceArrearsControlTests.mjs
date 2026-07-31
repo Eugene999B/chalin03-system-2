@@ -51,7 +51,7 @@ assert.doesNotMatch(page, /sendSms|WhatsApp Reminder|automatic_sms_enabled/);
 
 assert.match(dispatcher, /EquipmentFinanceArrearsPage/);
 assert.match(dispatcher, /stage === "arrears"/);
-assert.match(layout, /Arrears & Collections Control/);
+assert.match(layout, /title: "Payments & Arrears"/);
 assert.match(layout, /stage=arrears/);
 assert.match(layout, /Company-wide Finance portfolio/);
 assert.doesNotMatch(layout, /Finance staff select Hire locations/);
