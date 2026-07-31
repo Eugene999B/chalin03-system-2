@@ -8,7 +8,6 @@ import {
 } from "../security/equipmentDivisionAccess";
 
 const BLOCKED_FINANCE_PATHS = [
-  "/equipment-installment-finance/customers",
   "/equipment-installment-finance/documents",
   "/equipment-installment-finance/shared-controls",
   "/equipment-installment-finance/workers",
@@ -27,6 +26,14 @@ const navigationSections = [
         path: "/equipment-installment-finance",
         icon: "🎯",
         end: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
+        title: "Finance Customers & Portfolio",
+        description: "Customer identity, KYC, agreements, schedules, receipts and ownership",
+        path: "/equipment-installment-finance/applications?stage=customers",
+        icon: "👥",
+        matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
@@ -153,7 +160,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Company-wide Finance portfolio"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated company-wide credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated company-wide Finance customers, credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );

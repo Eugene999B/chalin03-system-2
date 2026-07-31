@@ -2,6 +2,10 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const {
+  getFinanceCustomerPortfolio,
+  listFinanceCustomers,
+} = require("../services/equipmentFinanceCustomerPortfolioService");
 
 const router = express.Router();
 
@@ -173,6 +177,36 @@ function financePolicy() {
     machine_active_hire_check_enabled: true,
   };
 }
+
+router.get(
+  "/finance-customers",
+  requirePermission("fleet.assets.view"),
+  async (req, res, next) => {
+    try {
+      const result = await listFinanceCustomers({
+        search: req.query.search,
+        status: req.query.status,
+        limit: req.query.limit,
+      });
+      return res.json({ status: "success", ...result });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+router.get(
+  "/finance-customers/:customerId",
+  requirePermission("fleet.assets.view"),
+  async (req, res, next) => {
+    try {
+      const result = await getFinanceCustomerPortfolio(req.params.customerId);
+      return res.json({ status: "success", ...result });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
 
 router.get(
   "/agreement-activations/candidates",
