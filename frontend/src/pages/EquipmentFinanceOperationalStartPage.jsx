@@ -6,6 +6,7 @@ import "../styles/equipmentFinanceOperationalPolish.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
 const DRAFT_KEY = "chalin03.finance.start-installment.v1";
+const DRAFT_CONFLICT_CODE = "FINANCE_DRAFT_VERSION_CONFLICT";
 const POLL_MS = 900;
 
 function parseLocalDraft() {
@@ -171,41 +172,51 @@ export default function EquipmentFinanceOperationalStartPage() {
     };
   }, [canServerSave, restoreServerDraft]);
 
-  const saveCurrentDraft = useCallback(async () => {
-    if (!canServerSave || savingRef.current || conflict) return;
-    const payload = parseLocalDraft();
-    if (!payload) return;
-    savingRef.current = true;
-    queuedRef.current = false;
-    setSaveState("saving");
-    setProblem("");
-    try {
-      const response = await axiosClient.put(`${API}/drafts/start-installment`, {
-        payload,
-        known_version: versionRef.current,
-      });
-      const draft = response.data?.draft;
-      versionRef.current = draft?.version ?? versionRef.current;
-      setProgress(draft?.progress || localProgress(payload));
-      setLastSavedAt(draft?.last_saved_at || new Date().toISOString());
-      setSaveState("saved");
-    } catch (error) {
-      if (error.response?.status === 409 && error.response?.data?.current_draft) {
-        setConflict(error.response.data.current_draft);
-        setSaveState("conflict");
-        setProblem(error.response.data.message);
-      } else {
-        setSaveState("offline");
-        setProblem(
-          error.response?.data?.message ||
-            "Server autosave failed. The current device copy remains available."
-        );
+  const saveCurrentDraft = useCallback(
+    async (forceConflictResolution = false) => {
+      if (!canServerSave || savingRef.current || (conflict && !forceConflictResolution)) return;
+      const payload = parseLocalDraft();
+      if (!payload) return;
+      savingRef.current = true;
+      queuedRef.current = false;
+      setSaveState("saving");
+      setProblem("");
+      try {
+        const response = await axiosClient.put(`${API}/drafts/start-installment`, {
+          payload,
+          known_version: versionRef.current,
+        });
+        const draft = response.data?.draft;
+        versionRef.current = draft?.version ?? versionRef.current;
+        setConflict(null);
+        setProgress(draft?.progress || localProgress(payload));
+        setLastSavedAt(draft?.last_saved_at || new Date().toISOString());
+        setSaveState("saved");
+      } catch (error) {
+        if (
+          error.response?.status === 409 &&
+          error.response?.data?.code === DRAFT_CONFLICT_CODE &&
+          error.response?.data?.current_draft
+        ) {
+          setConflict(error.response.data.current_draft);
+          setSaveState("conflict");
+          setProblem(error.response.data.message);
+        } else {
+          setSaveState("offline");
+          setProblem(
+            error.response?.data?.message ||
+              "Server autosave failed. The current device copy remains available."
+          );
+        }
+      } finally {
+        savingRef.current = false;
+        if (queuedRef.current) {
+          window.setTimeout(() => saveCurrentDraft(forceConflictResolution), 100);
+        }
       }
-    } finally {
-      savingRef.current = false;
-      if (queuedRef.current) window.setTimeout(saveCurrentDraft, 100);
-    }
-  }, [canServerSave, conflict]);
+    },
+    [canServerSave, conflict]
+  );
 
   useEffect(() => {
     if (!ready) return undefined;
@@ -245,10 +256,9 @@ export default function EquipmentFinanceOperationalStartPage() {
 
   async function keepDeviceVersion() {
     versionRef.current = conflict?.version ?? versionRef.current;
-    setConflict(null);
     setProblem("");
     setSaveState("pending");
-    await saveCurrentDraft();
+    await saveCurrentDraft(true);
   }
 
   const statusText = useMemo(() => {
