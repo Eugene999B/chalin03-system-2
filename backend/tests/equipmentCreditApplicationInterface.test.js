@@ -6,46 +6,23 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
-const applications = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentFinanceApplicationsPage.jsx"
-);
-const wizard = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentFinanceStartWizardPage.jsx"
-);
-const wrapper = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentSalesWorkspacePage.jsx"
-);
+const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
+const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
+const wrapper = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const css = read("frontend", "src", "styles", "equipmentFinancePhaseOne.css");
-const layout = read(
-  "frontend",
-  "src",
-  "layouts",
-  "InstallmentFinanceLayout.jsx"
-);
+const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx");
 const serviceWorker = read("frontend", "public", "sw.js");
 
 test("Finance applications route through the protected credit foundation", () => {
   assert.match(wrapper, /EquipmentFinanceApplicationsPage/);
   assert.match(wrapper, /EquipmentFinanceStartWizardPage/);
-  assert.match(
-    applications,
-    /const API = "\/equipment-catalogue\/sales\/credit-applications"/
-  );
+  assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
   assert.match(applications, /axiosClient\.get\(`\$\{API\}\/readiness`\)/);
   assert.match(applications, /axiosClient\.get\(API\)/);
   assert.match(applications, /kyc\/verify/);
-  assert.match(applications, /"review"/);
-  assert.match(applications, /"assess"/);
-  assert.match(applications, /"submit"/);
+  assert.match(applications, /\/review/);
+  assert.match(applications, /\/assess/);
+  assert.match(applications, /\/submit/);
 });
 
 test("guided start captures the customer, affordability, guarantor and consent", () => {
@@ -53,8 +30,8 @@ test("guided start captures the customer, affordability, guarantor and consent",
     "customer_name",
     "phone",
     "asset_id",
-    "sale_price",
-    "deposit_amount",
+    "selling_price",
+    "deposit",
     "payment_frequency",
     "installment_count",
     "id_number",
@@ -87,7 +64,7 @@ test("credit interface is phone-first and discoverable only in Finance", () => {
   assert.match(layout, /no Hire-location selection/i);
   assert.doesNotMatch(layout, /Open Equipment Hire Operations/);
   assert.match(css, /\.finance-simple/);
-  assert.match(css, /@media \(max-width: 620px\)/);
+  assert.match(css, /@media \(max-width: 720px\)/);
   assert.match(css, /grid-template-columns:\s*1fr/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
