@@ -3,7 +3,14 @@ const { isOriginalSystemAdministrator } = require("./systemAdminIdentity");
 const EQUIPMENT_DIVISIONS = Object.freeze({
   HIRE: "hire",
   FINANCE: "finance",
+  BOTH: "both",
 });
+
+const DUAL_DIVISION_ROLES = new Set([
+  "equipment_business_manager",
+  "equipment_business_accountant",
+  "equipment_business_auditor",
+]);
 
 const HIRE_WORKSPACE_ROLES = new Set([
   "manager",
@@ -12,6 +19,7 @@ const HIRE_WORKSPACE_ROLES = new Set([
   "fleet_officer",
   "accountant",
   "auditor",
+  ...DUAL_DIVISION_ROLES,
 ]);
 
 const FINANCE_WORKSPACE_ROLES = new Set([
@@ -20,6 +28,7 @@ const FINANCE_WORKSPACE_ROLES = new Set([
   "collections_officer",
   "finance_accountant",
   "finance_auditor",
+  ...DUAL_DIVISION_ROLES,
 ]);
 
 const FINANCE_WRITE_ROLES = new Set([
@@ -27,6 +36,14 @@ const FINANCE_WRITE_ROLES = new Set([
   "credit_officer",
   "collections_officer",
   "finance_accountant",
+  "equipment_business_manager",
+  "equipment_business_accountant",
+]);
+
+const SHARED_REGISTER_WRITE_ROLES = new Set([
+  "finance_manager",
+  "equipment_business_manager",
+  "equipment_business_accountant",
 ]);
 
 function normalizeCode(value) {
@@ -54,6 +71,9 @@ function hasEquipmentDivisionAccess(user = {}, division) {
   }
   if (division === EQUIPMENT_DIVISIONS.FINANCE) {
     return FINANCE_WORKSPACE_ROLES.has(workspaceRole);
+  }
+  if (division === EQUIPMENT_DIVISIONS.BOTH) {
+    return DUAL_DIVISION_ROLES.has(workspaceRole);
   }
   return false;
 }
@@ -85,9 +105,16 @@ function requiredEquipmentDivisionForRequest(req = {}) {
       return EQUIPMENT_DIVISIONS.FINANCE;
     }
 
-    // The master equipment register may be viewed by either division. Only Hire
-    // staff may change it; Finance receives a reference-only view.
+    // The master equipment register is shared evidence. Hire roles and
+    // specifically authorised Finance/dual roles may maintain it; all other
+    // Finance roles retain reference-only access.
     if (method !== "GET") {
+      const role = workspaceRoleFor(req.user);
+      if (SHARED_REGISTER_WRITE_ROLES.has(role)) {
+        return hasEquipmentDivisionAccess(req.user, EQUIPMENT_DIVISIONS.FINANCE)
+          ? EQUIPMENT_DIVISIONS.FINANCE
+          : EQUIPMENT_DIVISIONS.HIRE;
+      }
       return EQUIPMENT_DIVISIONS.HIRE;
     }
   }
@@ -113,11 +140,15 @@ function applyEquipmentDivisionCompatibilityPermissions(req = {}) {
   if (baseUrl !== "/api/equipment-catalogue") return;
 
   const permissions = ["fleet.assets.view"];
+  const role = workspaceRoleFor(req.user);
   const financeSalesRequest = /^\/sales(?:\/|$)/.test(path);
+  const sharedRegisterWrite =
+    !financeSalesRequest && method !== "GET" && SHARED_REGISTER_WRITE_ROLES.has(role);
   const financeWriteAllowed =
-    financeSalesRequest &&
     method !== "GET" &&
-    (isEquipmentAdministrator(req.user) || FINANCE_WRITE_ROLES.has(workspaceRoleFor(req.user)));
+    (isEquipmentAdministrator(req.user) ||
+      (financeSalesRequest && FINANCE_WRITE_ROLES.has(role)) ||
+      sharedRegisterWrite);
 
   if (financeWriteAllowed) permissions.push("fleet.assets.manage");
   addRequestPermissions(req, permissions);
@@ -125,15 +156,17 @@ function applyEquipmentDivisionCompatibilityPermissions(req = {}) {
 
 function divisionAccessDeniedMessage(division) {
   return division === EQUIPMENT_DIVISIONS.FINANCE
-    ? "This staff account belongs to Equipment Hire Operations and cannot open Installment Finance work. Assign a Finance-only role before access is allowed."
-    : "This staff account belongs to Equipment Installment Finance and cannot open Hire jobs, contracts, dispatch, invoices or returns. Assign a Hire-only role before access is allowed.";
+    ? "This staff account has not been assigned to Installment Finance. Assign a Finance or dual Equipment Business role before access is allowed."
+    : "This staff account has not been assigned to Equipment Hire Operations. Assign a Hire or dual Equipment Business role before access is allowed.";
 }
 
 module.exports = {
   EQUIPMENT_DIVISIONS,
+  DUAL_DIVISION_ROLES,
   HIRE_WORKSPACE_ROLES,
   FINANCE_WORKSPACE_ROLES,
   FINANCE_WRITE_ROLES,
+  SHARED_REGISTER_WRITE_ROLES,
   workspaceRoleFor,
   isEquipmentAdministrator,
   hasEquipmentDivisionAccess,
