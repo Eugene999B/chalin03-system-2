@@ -132,7 +132,9 @@ assert.match(phaseOneStyles, /grid-template-columns:\s*1fr/);
 assert.match(phaseOneStyles, /\.finance-simple__sticky-actions/);
 assert.match(phaseOneStyles, /bottom:\s*0/);
 
-assert.match(reports, /Documents &amp; Management Reports/);
+assert.match(reports, /Documents &amp; Reports/);
+assert.match(reports, /\/reports\/management/);
+assert.match(reports, /\/reports\/export\.csv/);
 assert.match(reports, /documents\/agreement\.pdf/);
 assert.match(reports, /documents\/statement\.pdf/);
 assert.match(reports, /documents\/delivery\.pdf/);
