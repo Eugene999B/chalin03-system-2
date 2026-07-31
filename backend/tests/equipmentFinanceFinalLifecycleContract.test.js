@@ -166,7 +166,12 @@ test("Finance UI exposes final stages and blocks hidden Hire routes", () => {
     assert.match(financeLayout, new RegExp(title));
   }
   assert.match(financeLayout, /BLOCKED_FINANCE_PATHS/);
-  assert.match(financeLayout, /equipment-installment-finance\/customers/);
+  assert.match(financeLayout, /Finance Customers & Portfolio/);
+  assert.match(financeLayout, /stage=customers/);
+  assert.doesNotMatch(
+    financeLayout,
+    /BLOCKED_FINANCE_PATHS[\s\S]*equipment-installment-finance\/customers/
+  );
   assert.match(financeLayout, /equipment-installment-finance\/workers/);
   assert.match(financeLayout, /isBlockedFinancePath/);
   assert.match(lifecycleCss, /@media \(max-width: 760px\)/);
