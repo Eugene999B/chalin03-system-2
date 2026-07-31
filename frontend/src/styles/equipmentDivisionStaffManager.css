@@ -1,13 +1,13 @@
 .equipment-division-staff__open {
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
   color: inherit;
-  padding: 0.68rem 1rem;
+  padding: 0.62rem 0.9rem;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
-  backdrop-filter: blur(12px);
 }
 
 .equipment-division-staff__open-compact {
@@ -16,42 +16,49 @@
 
 .equipment-division-staff__open:hover,
 .equipment-division-staff__open:focus-visible {
-  background: rgba(255, 255, 255, 0.2);
-  outline: none;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .equipment-division-staff__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 4000;
+  z-index: 99999;
+  isolation: isolate;
   display: grid;
   place-items: center;
-  padding: 1rem;
-  background: rgba(4, 15, 29, 0.76);
-  backdrop-filter: blur(10px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  background: rgba(3, 13, 27, 0.82);
+  backdrop-filter: blur(9px);
 }
 
 .equipment-division-staff__panel {
   width: min(980px, 100%);
-  max-height: min(90dvh, 860px);
+  max-height: min(88dvh, 820px);
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
   background: #f7f9fc;
   color: #15243a;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
 }
 
 .equipment-division-staff__panel > header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1.35rem 1.5rem;
-  background: #10233d;
-  color: #ffffff;
+  gap: 18px;
+  min-width: 0;
+  padding: 22px 24px;
+  background: #071d39;
+  color: #fff;
+}
+
+.equipment-division-staff__panel header > div {
+  min-width: 0;
 }
 
 .equipment-division-staff__panel header p,
@@ -61,44 +68,47 @@
 }
 
 .equipment-division-staff__panel header p {
-  margin-bottom: 0.28rem;
-  font-size: 0.76rem;
+  margin-bottom: 5px;
+  color: #e4b336;
+  font-size: 0.74rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.72;
 }
 
 .equipment-division-staff__panel header h2 {
-  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .equipment-division-staff__panel header span {
   display: block;
-  max-width: 680px;
-  margin-top: 0.42rem;
+  max-width: 720px;
+  margin-top: 8px;
+  color: #c2d0df;
   line-height: 1.5;
-  opacity: 0.82;
+  overflow-wrap: anywhere;
 }
 
 .equipment-division-staff__panel header > button {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 1.5rem;
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  font-size: 1.45rem;
   cursor: pointer;
 }
 
 .equipment-division-staff__rules {
   display: grid;
-  gap: 0.25rem;
-  padding: 1rem 1.5rem;
+  gap: 4px;
+  padding: 16px 24px;
   border-bottom: 1px solid #dfe6ef;
-  background: #fff5d8;
+  background: #fff4d1;
 }
 
 .equipment-division-staff__rules span {
@@ -107,9 +117,9 @@
 }
 
 .equipment-division-staff__alert {
-  margin: 0.75rem 1.5rem 0;
-  padding: 0.8rem 1rem;
-  border-radius: 12px;
+  margin: 12px 24px 0;
+  padding: 12px 14px;
+  border-radius: 11px;
   font-weight: 700;
 }
 
@@ -126,45 +136,52 @@
 .equipment-division-staff__body {
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   display: grid;
   align-content: start;
-  gap: 0.9rem;
-  padding: 1.25rem 1.5rem calc(1.25rem + env(safe-area-inset-bottom));
+  gap: 12px;
+  padding: 18px 24px calc(22px + env(safe-area-inset-bottom));
 }
 
 .equipment-division-staff__card {
+  min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.8fr) auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(240px, 0.9fr) auto;
   align-items: end;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid #dfe6ef;
-  border-radius: 16px;
-  background: #ffffff;
+  border-radius: 15px;
+  background: #fff;
+}
+
+.equipment-division-staff__card > * {
+  min-width: 0;
 }
 
 .equipment-division-staff__card h3,
 .equipment-division-staff__card p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .equipment-division-staff__card h3 {
-  margin-top: 0.4rem;
+  margin-top: 6px;
 }
 
 .equipment-division-staff__card p {
-  margin-top: 0.22rem;
+  margin-top: 3px;
   color: #63738a;
 }
 
 .equipment-division-staff__division {
   display: inline-flex;
   border-radius: 999px;
-  padding: 0.28rem 0.62rem;
-  font-size: 0.74rem;
-  font-weight: 900;
+  padding: 4px 9px;
   background: #e8f1ff;
   color: #164b91;
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
 .equipment-division-staff__division.is-finance {
@@ -174,30 +191,31 @@
 
 .equipment-division-staff__card label {
   display: grid;
-  gap: 0.35rem;
+  gap: 6px;
   font-weight: 800;
 }
 
 .equipment-division-staff__card select {
   width: 100%;
-  min-height: 2.75rem;
+  min-height: 44px;
   border: 1px solid #cbd6e4;
   border-radius: 10px;
-  background: #ffffff;
+  background: #fff;
   padding: 0.55rem 0.7rem;
   font: inherit;
 }
 
 .equipment-division-staff__card > button {
-  min-height: 2.75rem;
+  min-height: 44px;
   border: 0;
   border-radius: 10px;
-  background: #10233d;
-  color: #ffffff;
+  background: #071d39;
+  color: #fff;
   padding: 0.62rem 0.9rem;
   font: inherit;
   font-weight: 900;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .equipment-division-staff__card > button:disabled,
@@ -207,15 +225,27 @@
 }
 
 .equipment-division-staff__empty {
-  padding: 2rem;
+  padding: 30px 18px;
   border: 1px dashed #cbd6e4;
-  border-radius: 16px;
+  border-radius: 15px;
   text-align: center;
   color: #63738a;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 800px) {
+  .equipment-division-staff__card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .equipment-division-staff__card > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
   .equipment-division-staff__open {
+    min-height: 38px;
     padding: 0.48rem 0.62rem;
     font-size: 0.72rem;
   }
@@ -229,13 +259,14 @@
   }
 
   .equipment-division-staff__backdrop {
+    place-items: stretch;
     padding: 0;
   }
 
   .equipment-division-staff__panel {
     width: 100%;
-    height: 100dvh;
-    max-height: none;
+    min-height: 100dvh;
+    max-height: 100dvh;
     border: 0;
     border-radius: 0;
   }
@@ -243,12 +274,25 @@
   .equipment-division-staff__panel > header,
   .equipment-division-staff__rules,
   .equipment-division-staff__body {
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
-  .equipment-division-staff__card {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+  .equipment-division-staff__panel > header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .equipment-division-staff__panel header span {
+    font-size: 0.84rem;
+  }
+
+  .equipment-division-staff__rules {
+    font-size: 0.86rem;
+  }
+
+  .equipment-division-staff__alert {
+    margin-inline: 16px;
   }
 }
