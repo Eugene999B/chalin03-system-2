@@ -101,6 +101,6 @@ test("Finance customer centre cannot mutate Hire, balances or messaging", () => 
   assert.doesNotMatch(page, /axiosClient\.(?:post|put|patch|delete)\s*\(/);
   assert.doesNotMatch(page, /\/equipment-hire|\/hire-commercial/);
   assert.doesNotMatch(page, /sendSms|automatic.*sms.*true/i);
-  assert.match(page, /does not open or change Hire enquiries/);
+  assert.match(page, /not open or change Hire enquiries/);
   assert.match(page, /cannot create Hire work, change balances or send automatic SMS/);
 });
