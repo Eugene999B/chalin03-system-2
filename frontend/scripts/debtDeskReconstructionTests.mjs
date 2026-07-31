@@ -15,6 +15,7 @@ const page = readFrontend("src", "pages", "DebtsPage.jsx");
 const css = readFrontend("src", "styles", "debtDesk.css");
 const routes = readProject("backend", "routes", "debtRoutes.js");
 const serviceWorker = readFrontend("public", "sw.js");
+const packageManifest = JSON.parse(readFrontend("package.json"));
 
 for (const text of [
   "Customer Debt Desk",
@@ -40,9 +41,17 @@ assert.match(page, /pay_full_balance: payFullBalance/);
 assert.match(page, /request_key: paymentRequestKey/);
 assert.match(page, /buildAllocationPreview/);
 assert.match(page, /displayPaymentNote/);
+assert.match(page, /printPaymentReceipt/);
 assert.match(page, /CustomerDebtConsolidationPanel/);
 assert.doesNotMatch(page, /Choose debt/);
 assert.doesNotMatch(page, /showIndividualDebts/);
+
+assert.equal(packageManifest.scripts.build, "vite build");
+assert.doesNotMatch(
+  packageManifest.scripts.build,
+  /patchDebtPaymentReceipt/,
+  "the production build must not rewrite the reconstructed Debt Desk"
+);
 
 assert.match(routes, /router\.get\("\/customers"/);
 assert.match(routes, /router\.post\("\/customers\/:customerKey\/payments"/);
