@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -30,7 +30,7 @@ const RECOVERY_ACTIONS = [
   ["recovery_note", "Recovery note"],
 ];
 
-const emptyReschedule = {
+const EMPTY_RESCHEDULE = {
   payment_frequency: "monthly",
   installment_count: 6,
   first_due_date: "",
@@ -38,17 +38,14 @@ const emptyReschedule = {
   affordability_notes: "",
   reason: "",
 };
-
-const emptyDefault = {
+const EMPTY_DEFAULT = {
   reason: "",
   evidence_reference: "",
   customer_demand_summary: "",
   guarantor_contact_summary: "",
 };
-
-const emptyDecision = { decision: "approve", reason: "" };
-
-const emptyRecovery = {
+const EMPTY_DECISION = { decision: "approve", reason: "" };
+const EMPTY_RECOVERY = {
   action_type: "customer_demand",
   notes: "",
   next_action_date: "",
@@ -166,26 +163,14 @@ function AccountCard({ account, onOpen }) {
           <Pill value={account.agreement_status} tone="status" />
         </div>
       </header>
-
       <div className="finance-governance__figures">
-        <div>
-          <span>Outstanding</span>
-          <strong>{money(account.outstanding_balance)}</strong>
-        </div>
+        <div><span>Outstanding</span><strong>{money(account.outstanding_balance)}</strong></div>
         <div className={Number(account.overdue_amount || 0) > 0 ? "is-danger" : ""}>
-          <span>Overdue</span>
-          <strong>{money(account.overdue_amount)}</strong>
+          <span>Overdue</span><strong>{money(account.overdue_amount)}</strong>
         </div>
-        <div>
-          <span>Days past due</span>
-          <strong>{Number(account.days_past_due || 0)}</strong>
-        </div>
-        <div>
-          <span>Next due</span>
-          <strong>{dateLabel(account.next_due_date)}</strong>
-        </div>
+        <div><span>Days past due</span><strong>{Number(account.days_past_due || 0)}</strong></div>
+        <div><span>Next due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
       </div>
-
       <div className="finance-governance__signals">
         <div>
           <span>Reschedule review</span>
@@ -202,10 +187,10 @@ function AccountCard({ account, onOpen }) {
           <strong>
             {account.pending_default_request
               ? `Pending #${account.pending_default_request.id}`
-              : account.eligible_for_default
-                ? "Eligible"
-                : account.agreement_status === "defaulted"
-                  ? "Default declared"
+              : account.agreement_status === "defaulted"
+                ? "Default declared"
+                : account.eligible_for_default
+                  ? "Eligible"
                   : "Not eligible"}
           </strong>
         </div>
@@ -215,11 +200,8 @@ function AccountCard({ account, onOpen }) {
           <small>{dateLabel(account.recovery_next_action_date)}</small>
         </div>
       </div>
-
       <footer>
-        <button type="button" onClick={() => onOpen(account.id)}>
-          Open governance file
-        </button>
+        <button type="button" onClick={() => onOpen(account.id)}>Open governance file</button>
       </footer>
     </article>
   );
@@ -233,14 +215,7 @@ function Schedule({ rows = [] }) {
     <div className="finance-governance__table-wrap">
       <table>
         <thead>
-          <tr>
-            <th>#</th>
-            <th>Due</th>
-            <th>Scheduled</th>
-            <th>Paid</th>
-            <th>Remaining</th>
-            <th>Status</th>
-          </tr>
+          <tr><th>#</th><th>Due</th><th>Scheduled</th><th>Paid</th><th>Remaining</th><th>Status</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => {
@@ -325,10 +300,10 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [busy, setBusy] = useState("");
   const [tab, setTab] = useState("overview");
-  const [reschedule, setReschedule] = useState(emptyReschedule);
-  const [defaultRequest, setDefaultRequest] = useState(emptyDefault);
-  const [decision, setDecision] = useState(emptyDecision);
-  const [recovery, setRecovery] = useState(emptyRecovery);
+  const [reschedule, setReschedule] = useState(EMPTY_RESCHEDULE);
+  const [defaultRequest, setDefaultRequest] = useState(EMPTY_DEFAULT);
+  const [decision, setDecision] = useState(EMPTY_DECISION);
+  const [recovery, setRecovery] = useState(EMPTY_RECOVERY);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -350,7 +325,7 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
     return () => window.clearTimeout(timer);
   }, [loadList]);
 
-  const openAccount = useCallback(async (agreementId, preserveTab = false) => {
+  async function openAccount(agreementId, preserveTab = false) {
     setSelectedLoading(true);
     setError("");
     try {
@@ -362,22 +337,13 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
     } finally {
       setSelectedLoading(false);
     }
-  }, []);
+  }
 
-  const refreshSelected = useCallback(async () => {
-    if (!selected?.account?.id) return;
-    await Promise.all([openAccount(selected.account.id, true), loadList()]);
-  }, [selected?.account?.id, openAccount, loadList]);
-
-  const proposalPreview = useMemo(() => {
-    if (!selected?.account) return [];
-    return buildPreview(
-      selected.account.outstanding_balance,
-      reschedule.installment_count,
-      reschedule.first_due_date,
-      reschedule.payment_frequency
-    );
-  }, [selected?.account, reschedule]);
+  async function refreshSelected() {
+    const agreementId = selected?.account?.id;
+    if (!agreementId) return;
+    await Promise.all([openAccount(agreementId, true), loadList()]);
+  }
 
   async function submit(path, payload, busyKey, successText) {
     setBusy(busyKey);
@@ -405,7 +371,7 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       "reschedule",
       "Reschedule request recorded."
     );
-    if (done) setReschedule(emptyReschedule);
+    if (done) setReschedule(EMPTY_RESCHEDULE);
   }
 
   async function handleDefault(event) {
@@ -417,7 +383,7 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       "default",
       "Default review request recorded."
     );
-    if (done) setDefaultRequest(emptyDefault);
+    if (done) setDefaultRequest(EMPTY_DEFAULT);
   }
 
   async function handleDecision(event, requestId) {
@@ -428,7 +394,7 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       `decision:${requestId}`,
       "Governance decision recorded."
     );
-    if (done) setDecision(emptyDecision);
+    if (done) setDecision(EMPTY_DECISION);
   }
 
   async function handleRecovery(event) {
@@ -440,14 +406,23 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       "recovery",
       "Recovery action recorded."
     );
-    if (done) setRecovery(emptyRecovery);
+    if (done) setRecovery(EMPTY_RECOVERY);
   }
 
   const summary = data.summary || {};
   const account = selected?.account;
-  const pendingRequests = selected?.governance?.requests?.filter(
-    (request) => request.request_status === "pending"
-  ) || [];
+  const pendingRequests =
+    selected?.governance?.requests?.filter(
+      (request) => request.request_status === "pending"
+    ) || [];
+  const proposalPreview = account
+    ? buildPreview(
+        account.outstanding_balance,
+        reschedule.installment_count,
+        reschedule.first_due_date,
+        reschedule.payment_frequency
+      )
+    : [];
 
   return (
     <main className="finance-governance">
@@ -483,11 +458,7 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       <section className="finance-governance__controls">
         <label>
           <span>Search Finance accounts</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Customer, agreement, phone or machine"
-          />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Customer, agreement, phone or machine" />
         </label>
         <label>
           <span>Governance queue</span>
@@ -525,9 +496,13 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
       )}
 
       {selected || selectedLoading ? (
-        <div className="finance-governance__backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !busy) setSelected(null);
-        }}>
+        <div
+          className="finance-governance__backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !busy) setSelected(null);
+          }}
+        >
           <section className="finance-governance__drawer" role="dialog" aria-modal="true" aria-label="Finance governance file">
             {selectedLoading && !selected ? (
               <div className="finance-governance__loading">Opening governance evidence…</div>
@@ -584,7 +559,12 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
                         <form onSubmit={handleReschedule} className="finance-governance__form">
                           <header><h3>Prepare reschedule request</h3><p>No schedule changes until independent approval.</p></header>
                           <div className="finance-governance__form-grid">
-                            <label><span>Frequency</span><select value={reschedule.payment_frequency} onChange={(event) => setReschedule((current) => ({ ...current, payment_frequency: event.target.value }))}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option></select></label>
+                            <label>
+                              <span>Frequency</span>
+                              <select value={reschedule.payment_frequency} onChange={(event) => setReschedule((current) => ({ ...current, payment_frequency: event.target.value }))}>
+                                <option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option>
+                              </select>
+                            </label>
                             <label><span>Installments</span><input type="number" min="1" max="60" value={reschedule.installment_count} onChange={(event) => setReschedule((current) => ({ ...current, installment_count: event.target.value }))} /></label>
                             <label><span>First due date</span><input type="date" required value={reschedule.first_due_date} onChange={(event) => setReschedule((current) => ({ ...current, first_due_date: event.target.value }))} /></label>
                             <label><span>Customer consent / meeting reference</span><input required value={reschedule.customer_consent_reference} onChange={(event) => setReschedule((current) => ({ ...current, customer_consent_reference: event.target.value }))} /></label>
@@ -594,7 +574,11 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
                           {reschedule.first_due_date ? (
                             <div className="finance-governance__preview">
                               <strong>Replacement plan preview · {money(account.outstanding_balance)}</strong>
-                              <div>{proposalPreview.slice(0, 6).map((row) => <span key={row.sequence}>#{row.sequence} {dateLabel(row.due_date)} · {money(row.amount)}</span>)}</div>
+                              <div>
+                                {proposalPreview.slice(0, 6).map((row) => (
+                                  <span key={row.sequence}>#{row.sequence} {dateLabel(row.due_date)} · {money(row.amount)}</span>
+                                ))}
+                              </div>
                               {proposalPreview.length > 6 ? <small>Plus {proposalPreview.length - 6} additional installment(s).</small> : null}
                             </div>
                           ) : null}
@@ -615,12 +599,20 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
 
                       {pendingRequests.map((request) => (
                         <article key={request.id} className="finance-governance__pending">
-                          <header><div><small>Pending request #{request.id}</small><h3>{label(request.request_type)}</h3></div><Pill value="pending" tone="governance" /></header>
+                          <header>
+                            <div><small>Pending request #{request.id}</small><h3>{label(request.request_type)}</h3></div>
+                            <Pill value="pending" tone="governance" />
+                          </header>
                           <p>{request.details}</p>
                           <dl>
                             <div><dt>Prepared by</dt><dd>{request.recorded_by_name}</dd></div>
                             <div><dt>Prepared</dt><dd>{dateLabel(request.created_at, true)}</dd></div>
-                            {request.request_type === "reschedule" ? <><div><dt>Frequency</dt><dd>{label(request.metadata.proposed_payment_frequency)}</dd></div><div><dt>Installments</dt><dd>{request.metadata.proposed_installment_count}</dd></div><div><dt>First due</dt><dd>{dateLabel(request.metadata.proposed_first_due_date)}</dd></div></> : <div><dt>Days past due</dt><dd>{request.metadata.days_past_due_snapshot}</dd></div>}
+                            {request.request_type === "reschedule" ? (
+                              <>
+                                <div><dt>Frequency</dt><dd>{label(request.metadata.proposed_payment_frequency)}</dd></div>
+                                <div><dt>Installments</dt><dd>{request.metadata.proposed_installment_count}</dd></div>
+                              </>
+                            ) : <div><dt>Days past due</dt><dd>{request.metadata.days_past_due_snapshot}</dd></div>}
                           </dl>
                           {canDecide ? (
                             <form onSubmit={(event) => handleDecision(event, request.id)} className="finance-governance__decision">
@@ -632,7 +624,9 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
                         </article>
                       ))}
 
-                      {!canPrepare && !pendingRequests.length ? <Empty title="Read-only governance access" detail="Your Finance role can review evidence but cannot prepare or decide requests." /> : null}
+                      {!canPrepare && !pendingRequests.length ? (
+                        <Empty title="Read-only governance access" detail="Your Finance role can review evidence but cannot prepare or decide requests." />
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -640,7 +634,10 @@ export default function EquipmentFinanceRecoveryGovernancePage() {
                     <div className="finance-governance__recovery">
                       {account.agreement_status === "defaulted" && canRecover ? (
                         <form onSubmit={handleRecovery} className="finance-governance__form is-critical">
-                          <header><h3>Record recovery action</h3><p>This records evidence only. It does not execute repossession, legal action or fleet changes.</p></header>
+                          <header>
+                            <h3>Record recovery action</h3>
+                            <p>This records evidence only. It does not execute repossession, legal action or fleet changes.</p>
+                          </header>
                           <div className="finance-governance__form-grid">
                             <label><span>Action</span><select value={recovery.action_type} onChange={(event) => setRecovery((current) => ({ ...current, action_type: event.target.value }))}>{RECOVERY_ACTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
                             <label><span>Next action date</span><input type="date" value={recovery.next_action_date} onChange={(event) => setRecovery((current) => ({ ...current, next_action_date: event.target.value }))} /></label>
