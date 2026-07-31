@@ -2,6 +2,15 @@ const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
+  installFinanceImageCompatibility,
+  normalizePhotoPayload,
+} = require("../services/equipmentFinanceImageCompatibilityService");
+
+// Install before the professional routes module is loaded by the parent router,
+// so signatures and issued document downloads also receive PDF-safe images.
+installFinanceImageCompatibility();
+
+const {
   createFinanceMachine,
   machineLocations,
   updateFinanceMachine,
@@ -40,7 +49,9 @@ router.get("/", requirePermission("fleet.assets.view"), async (req, res) => {
       image_policy: {
         crop: false,
         object_fit: "contain",
-        protected_photo_limit_bytes: 49152,
+        protected_photo_limit_bytes: 48128,
+        stored_formats: ["image/jpeg", "image/png"],
+        legacy_webp_download_compatibility: true,
       },
     });
   } catch (error) {
@@ -59,14 +70,16 @@ router.get("/locations", requirePermission("fleet.assets.view"), async (_req, re
 
 router.post("/", requirePermission("fleet.assets.manage"), async (req, res) => {
   try {
+    const input = await normalizePhotoPayload(req.body || {});
     const machine = await createFinanceMachine({
-      input: req.body || {},
+      input,
       userId: userId(req),
       req,
     });
     return res.status(201).json({
       status: "success",
-      message: "Excavator registered with its complete identity and photo evidence.",
+      message:
+        "Excavator registered with its complete identity and uncropped, document-compatible photo evidence.",
       machine,
     });
   } catch (error) {
@@ -76,15 +89,16 @@ router.post("/", requirePermission("fleet.assets.manage"), async (req, res) => {
 
 router.put("/:assetId", requirePermission("fleet.assets.manage"), async (req, res) => {
   try {
+    const input = await normalizePhotoPayload(req.body || {});
     const machine = await updateFinanceMachine({
       assetId: req.params.assetId,
-      input: req.body || {},
+      input,
       userId: userId(req),
       req,
     });
     return res.json({
       status: "success",
-      message: "Finance machine identity and evidence updated.",
+      message: "Finance machine identity and photo evidence updated.",
       machine,
     });
   } catch (error) {
