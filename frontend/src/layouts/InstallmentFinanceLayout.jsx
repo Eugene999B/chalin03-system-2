@@ -37,6 +37,13 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Finance Equipment Reference",
+        description: "Read-only machine identity and availability reference for Finance work",
+        path: "/equipment-installment-finance/catalogue",
+        icon: "🔎",
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Finance Customers & Portfolio",
         description: "Buyer identity, KYC, agreements, schedules, receipts and complete account file",
         path: "/equipment-installment-finance/applications?stage=customers",
