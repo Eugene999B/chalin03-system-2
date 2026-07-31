@@ -17,6 +17,7 @@ const {
 // the agreement itself rather than requiring a Hire location selector.
 const LEGACY_COMPATIBILITY = Object.freeze({
   logTable: "equipment_sales_reminder_log",
+  deduplicationInsert: "INSERT IGNORE INTO equipment_sales_reminder_log",
   dueSoonEnvironment: "EQUIPMENT_SALES_REMINDER_DAYS_BEFORE",
   overdueEnvironment: "EQUIPMENT_SALES_OVERDUE_REMINDER_DAYS",
   contextSql:
