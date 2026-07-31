@@ -1,5 +1,6 @@
-const CACHE_NAME = "chalin03-equipment-business-experience-v26";
+const CACHE_NAME = "chalin03-finance-customer-portfolio-v27";
 // Previous verified cache markers:
+// chalin03-equipment-business-experience-v26
 // chalin03-independent-hire-finance-v25
 // chalin03-finance-final-lifecycle-v24
 // chalin03-finance-deposit-reservation-v23
