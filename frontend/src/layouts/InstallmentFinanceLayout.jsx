@@ -37,7 +37,7 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Finance Customers",
+        title: "Finance Customers & Portfolio",
         description: "Buyer identity, KYC, agreements, schedules, receipts and complete account file",
         path: "/equipment-installment-finance/applications?stage=customers",
         icon: "👥",
@@ -46,7 +46,7 @@ const navigationSections = [
       },
       {
         title: "Credit Applications & Approval",
-        description: "Select the excavator, capture KYC, affordability, guarantor and independent decision",
+        description: "Finance applications, KYC, affordability and independent decisions for the selected excavator",
         path: "/equipment-installment-finance/applications",
         icon: "📝",
         matchSearch: true,
@@ -70,7 +70,7 @@ const navigationSections = [
       },
       {
         title: "Deposit & Reservation",
-        description: "Record the controlled opening deposit and reserve the exact approved machine",
+        description: "Deposit & Machine Reservation with controlled opening-payment evidence",
         path: "/equipment-installment-finance/applications?stage=deposit",
         icon: "🔒",
         matchSearch: true,
@@ -91,7 +91,7 @@ const navigationSections = [
       },
       {
         title: "Arrears & Follow-up",
-        description: "Due-today work, aging, reminders, promises, statements and controlled corrections",
+        description: "Arrears & Collections Control for due-today work, aging, reminders, promises and statements",
         path: "/equipment-installment-finance/applications?stage=arrears",
         icon: "📞",
         matchSearch: true,
@@ -99,7 +99,7 @@ const navigationSections = [
       },
       {
         title: "Rescheduling, Waivers & Recovery",
-        description: "Independent approvals, replacement plans, default review and lawful recovery evidence",
+        description: "Rescheduling, Default & Recovery with independent approvals and lawful evidence",
         path: "/equipment-installment-finance/applications?stage=governance",
         icon: "🛡️",
         matchSearch: true,
@@ -128,7 +128,7 @@ const navigationSections = [
     items: [
       {
         title: "Finance Documents & Reports",
-        description: "Agreement register, payment evidence, statements, aging and management reports",
+        description: "Installment Documents & Reports for agreements, payment evidence, statements and aging",
         path: "/equipment-installment-finance/reports",
         icon: "📊",
         permissions: ["fleet.assets.view"],
@@ -143,7 +143,7 @@ const navigationSections = [
       },
       {
         title: "Equipment Staff",
-        description: "Hire-only, Finance-only and approved dual-business staff roles",
+        description: "Manage Division Staff with Hire-only, Finance-only and approved dual-business roles",
         path: "/equipment-installment-finance/applications?stage=staff",
         icon: "🧑🏾‍💼",
         matchSearch: true,
@@ -151,7 +151,7 @@ const navigationSections = [
       },
       {
         title: "Back to Equipment Divisions",
-        description: "Open Hire Operations or return to the protected Equipment Business gateway",
+        description: "Return to the protected Equipment Business division gateway",
         path: "/equipment-hire",
         icon: "◫",
       },
@@ -202,10 +202,10 @@ export default function InstallmentFinanceLayout() {
       workspaceName="Equipment Installment Finance"
       icon="🏦"
       theme="earth"
-      independenceLabel="Professional excavator finance division"
-      contextHeading="Company-wide installment portfolio"
+      independenceLabel="Independent Finance staff division"
+      contextHeading="Company-wide installment portfolio — Finance staff do not select Hire locations"
       workspaceEyebrow="Current Equipment Business division"
-      separationBadge="Finance records stay separate from Hire jobs"
+      separationBadge="No access to Hire jobs or contracts"
       description="A complete excavator installment lifecycle: exact-machine registration and photos, buyer KYC and affordability, independent approval, agreement and schedule generation, signatures and Word/PDF documents, deposits, reservations, partial and excess-period payment allocation, boss payment alerts, reminders, arrears and rescheduling, delivery evidence, settlement and ownership transfer. Approved dual Equipment Business roles may open both Hire and Finance from one login, while every action remains permission-controlled and audit recorded."
       navigationSections={navigationSections}
     />
