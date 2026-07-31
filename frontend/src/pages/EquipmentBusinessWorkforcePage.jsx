@@ -29,13 +29,6 @@ const EMPTY_STAFF = {
   default_location_id: "",
 };
 
-function normalized(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-}
-
 function label(value) {
   return String(value || "Not assigned")
     .replaceAll("_", " ")
@@ -421,7 +414,7 @@ function StaffRegister({ staff, roleTemplates, savingId, onAssign, basePath }) {
                 >
                   {savingId === person.id ? "Applying…" : "Apply Role"}
                 </button>
-                <Link to={`${basePath}/workers`}>
+                <Link to={`${basePath}/workforce?tab=profiles`}>
                   {person.worker_profile_linked ? "Open Worker Profiles" : "Create Worker Profile"}
                 </Link>
               </div>
