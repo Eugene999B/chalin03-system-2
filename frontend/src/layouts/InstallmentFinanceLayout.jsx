@@ -45,6 +45,14 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Rescheduling, Default & Recovery",
+        description: "Independent approvals, replacement plans, default reviews and recovery evidence",
+        path: "/equipment-installment-finance/applications?stage=governance",
+        icon: "🛡️",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Credit Applications & Approval",
         description: "Finance applications, KYC, affordability and independent decisions",
         path: "/equipment-installment-finance/applications",
@@ -168,7 +176,7 @@ export default function InstallmentFinanceLayout() {
       contextHeading="Company-wide Finance portfolio"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated company-wide Finance customers, credit applications, agreements, arrears evidence, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
+      description="Dedicated company-wide Finance customers, credit applications, agreements, arrears evidence, rescheduling and default governance, recovery evidence, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
