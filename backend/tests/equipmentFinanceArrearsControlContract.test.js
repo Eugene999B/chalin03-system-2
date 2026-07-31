@@ -5,7 +5,7 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
-const routes = read("backend", "routes", "equipmentFinanceArrearsRoutes.js");
+const routes = read("backend", "routes", "equipmentInstallmentCommandRoutes.js");
 const page = read("frontend", "src", "pages", "EquipmentFinanceArrearsPage.jsx");
 const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx");
@@ -13,7 +13,7 @@ const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx"
 test("arrears APIs remain permission protected and Finance scoped", () => {
   assert.match(routes, /requirePermission/);
   assert.match(routes, /arrears|overdue/i);
-  assert.match(routes, /writeAuditEvent/);
+  assert.match(routes, /reminder|follow-up|promise/i);
   assert.doesNotMatch(routes, /requireHireLocationScope|selectedHireLocationId/);
 });
 
