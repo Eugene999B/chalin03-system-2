@@ -10,8 +10,6 @@ import "../styles/equipmentFinanceLifecycleProfessional.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
-  "/equipment-installment-finance/workers",
-  "/equipment-installment-finance/employment-documents",
   "/equipment-installment-finance/document-signature-settings",
   "/equipment-installment-finance/administration",
 ];
@@ -89,6 +87,13 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Staff & Workforce",
+        description: "Staff logins, roles, profiles, ID cards, documents and permission overrides",
+        path: "/equipment-installment-finance/workforce",
+        icon: "👷",
+        permissions: ["workers.view"],
+      },
+      {
         title: "Finance Settings",
         description: "Payment rules, reminders, boss alerts, delivery and legal agreement terms",
         path: "/equipment-installment-finance/applications?stage=settings",
@@ -150,11 +155,11 @@ export default function InstallmentFinanceLayout() {
       workspaceName="Equipment Installment Finance"
       icon="🏦"
       theme="earth"
-      independenceLabel="Independent Finance staff division"
+      independenceLabel=""
+      description=""
       contextHeading="Company-wide Finance portfolio — no Hire-location selection"
       workspaceEyebrow="Current Equipment Business division"
       separationBadge="No access to Hire jobs or contracts"
-      description="A simple excavator installment journey: create or select the customer, choose the exact excavator, set the price and payment plan, complete KYC, approve the application, prepare the agreement, collect payments, manage arrears, deliver and transfer ownership. Detailed lifecycle controls remain inside each account instead of crowding the daily sidebar."
       navigationSections={navigationSections}
     />
   );

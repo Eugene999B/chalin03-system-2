@@ -69,12 +69,16 @@ assert.match(app, /allowedWorkspaces=\{EQUIPMENT_HIRE_WORKSPACE\}/);
 assert.doesNotMatch(app, /const INSTALLMENT_WORKSPACE/);
 
 assert.match(financeLayout, /Equipment Installment Finance/);
-assert.match(financeLayout, /Independent Finance staff division/);
+assert.match(financeLayout, /independenceLabel=""/);
+assert.match(financeLayout, /description=""/);
+assert.doesNotMatch(financeLayout, /Independent Finance staff division/);
+assert.doesNotMatch(financeLayout, /A complete excavator installment lifecycle/);
 assert.match(financeLayout, /No access to Hire jobs or contracts/);
 assert.match(financeLayout, /Finance Home/);
 assert.match(financeLayout, /Start New Installment/);
 assert.match(financeLayout, /Applications & Approvals/);
 assert.match(financeLayout, /Documents & Reports/);
+assert.match(financeLayout, /Staff & Workforce/);
 assert.match(financeLayout, /Back to Equipment Divisions/);
 assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
 assert.match(financeLayout, /no Hire-location selection/i);
@@ -105,6 +109,7 @@ assert.match(fleetPage, /to="\/equipment-installment-finance\/reports"/);
 assert.doesNotMatch(fleetPage, /<EquipmentInstallmentCommandPage/);
 
 assert.match(workspaceLayout, /independenceLabel = "Independent workspace"/);
+assert.match(workspaceLayout, /const showIndependentNote = Boolean\(independenceLabel \|\| description\)/);
 assert.match(workspaceLayout, /contextHeading = "Active operating context"/);
 assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
 assert.match(workspaceContext, /Company-wide Finance portfolio/);
@@ -136,4 +141,4 @@ assert.match(service, /automatic_sms_enabled: false/);
 assert.match(service, /GET_LOCK/);
 assert.doesNotMatch(service, /CREATE TABLE|ALTER TABLE|DROP TABLE|TRUNCATE TABLE/i);
 
-console.log("Equipment Installment Finance simple home and runtime stability contract passed.");
+console.log("Equipment Installment Finance simple home and compact sidebar contract passed.");
