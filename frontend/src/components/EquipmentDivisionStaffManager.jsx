@@ -155,7 +155,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
         <header>
           <div>
             <p>Protected System Administrator control</p>
-            <h2 id="equipment-division-staff-title">Equipment Business Staff</h2>
+            <h2 id="equipment-division-staff-title">Manage Division Staff</h2>
             <span>
               Assign Hire-only, Finance-only or approved dual-business roles. Every
               assignment change revokes the employee&apos;s existing sessions.
@@ -287,7 +287,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
         aria-label="Manage Equipment Business staff"
       >
         <span className="equipment-division-staff__open-full">
-          Manage Equipment Staff
+          Manage Division Staff
         </span>
         <span className="equipment-division-staff__open-compact">Staff</span>
       </button>
