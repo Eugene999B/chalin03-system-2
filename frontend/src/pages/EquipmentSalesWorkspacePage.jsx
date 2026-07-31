@@ -1,6 +1,7 @@
 import { useLocation } from "react-router";
 import EquipmentCreditApplicationsPage from "./EquipmentCreditApplicationsPage";
 import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
+import EquipmentFinanceCustomersPage from "./EquipmentFinanceCustomersPage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
 
@@ -9,6 +10,10 @@ const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"])
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
+
+  if (stage === "customers") {
+    return <EquipmentFinanceCustomersPage />;
+  }
 
   if (stage === "activation") {
     return <EquipmentFinanceAgreementActivationPage />;
