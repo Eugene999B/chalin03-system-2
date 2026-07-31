@@ -17,6 +17,7 @@ function message(error, fallback) {
 }
 
 function RoleOptions({ title, roles }) {
+  if (!roles?.length) return null;
   return (
     <optgroup label={title}>
       {roles.map((role) => (
@@ -34,14 +35,19 @@ export default function EquipmentDivisionStaffManager({ user }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState([]);
-  const [roles, setRoles] = useState({ hire: [], finance: [] });
+  const [roles, setRoles] = useState({ hire: [], finance: [], both: [] });
   const [selections, setSelections] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
 
   const allRoles = useMemo(
-    () => new Set([...(roles.hire || []), ...(roles.finance || [])]),
+    () =>
+      new Set([
+        ...(roles.hire || []),
+        ...(roles.finance || []),
+        ...(roles.both || []),
+      ]),
     [roles]
   );
 
@@ -53,7 +59,11 @@ export default function EquipmentDivisionStaffManager({ user }) {
     try {
       const response = await axiosClient.get(API);
       const nextStaff = response.data?.staff || [];
-      const nextRoles = response.data?.roles || { hire: [], finance: [] };
+      const nextRoles = response.data?.roles || {
+        hire: [],
+        finance: [],
+        both: [],
+      };
       setStaff(nextStaff);
       setRoles(nextRoles);
       setSelections(
@@ -83,9 +93,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
     closeButtonRef.current?.focus();
 
     function onKeyDown(event) {
-      if (event.key === "Escape" && !savingId) {
-        setOpen(false);
-      }
+      if (event.key === "Escape" && !savingId) setOpen(false);
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -97,15 +105,21 @@ export default function EquipmentDivisionStaffManager({ user }) {
 
   if (!allowed) return null;
 
+  function divisionForSelection(workspaceRole) {
+    if (roles.both.includes(workspaceRole)) return "both";
+    if (roles.finance.includes(workspaceRole)) return "finance";
+    return "hire";
+  }
+
   async function save(person) {
     const workspaceRole = selections[person.id];
 
     if (!allRoles.has(workspaceRole)) {
-      setProblem("Choose one valid Hire-only or Finance-only role.");
+      setProblem("Choose a valid Hire, Finance or dual Equipment Business role.");
       return;
     }
 
-    const division = roles.finance.includes(workspaceRole) ? "finance" : "hire";
+    const division = divisionForSelection(workspaceRole);
     setSavingId(person.id);
     setProblem("");
     setNotice("");
@@ -115,10 +129,10 @@ export default function EquipmentDivisionStaffManager({ user }) {
         division,
         workspace_role: workspaceRole,
       });
-      setNotice(response.data?.message || "Division assignment updated.");
+      setNotice(response.data?.message || "Equipment staff assignment updated.");
       await load();
     } catch (error) {
-      setProblem(message(error, "Could not update the division assignment."));
+      setProblem(message(error, "Could not update the Equipment staff assignment."));
     } finally {
       setSavingId(null);
     }
@@ -141,10 +155,10 @@ export default function EquipmentDivisionStaffManager({ user }) {
         <header>
           <div>
             <p>Protected System Administrator control</p>
-            <h2 id="equipment-division-staff-title">Equipment Division Staff</h2>
+            <h2 id="equipment-division-staff-title">Equipment Business Staff</h2>
             <span>
-              Assign each ordinary employee to exactly one role family. Changing division
-              immediately revokes that employee&apos;s existing sessions.
+              Assign Hire-only, Finance-only or approved dual-business roles. Every
+              assignment change revokes the employee&apos;s existing sessions.
             </span>
           </div>
           <button
@@ -152,17 +166,18 @@ export default function EquipmentDivisionStaffManager({ user }) {
             type="button"
             onClick={() => setOpen(false)}
             disabled={Boolean(savingId)}
-            aria-label="Close division staff manager"
+            aria-label="Close Equipment staff manager"
           >
             ×
           </button>
         </header>
 
         <div className="equipment-division-staff__rules">
-          <strong>One employee. One division. No workflow crossover.</strong>
+          <strong>One login can serve both divisions only through an approved dual role.</strong>
           <span>
-            Hire roles open Hire work only. Finance roles open credit and installment
-            work only. The machine register remains reference-only for Finance staff.
+            Equipment Business Manager and Accountant may work across Hire and Finance.
+            Equipment Business Auditor can inspect both but remains read-only. Every API
+            still checks the exact action permission.
           </span>
         </div>
 
@@ -193,17 +208,25 @@ export default function EquipmentDivisionStaffManager({ user }) {
           {!loading
             ? staff.map((person) => {
                 const selection = selections[person.id] || "";
-                const finance = roles.finance.includes(selection);
+                const division = divisionForSelection(selection);
 
                 return (
                   <article key={person.id} className="equipment-division-staff__card">
                     <div>
                       <span
                         className={`equipment-division-staff__division ${
-                          finance ? "is-finance" : "is-hire"
+                          division === "finance"
+                            ? "is-finance"
+                            : division === "both"
+                              ? "is-both"
+                              : "is-hire"
                         }`}
                       >
-                        {finance ? "Finance-only" : "Hire-only"}
+                        {division === "both"
+                          ? "Hire + Finance"
+                          : division === "finance"
+                            ? "Finance-only"
+                            : "Hire-only"}
                       </span>
                       <h3>{person.full_name || person.username}</h3>
                       <p>
@@ -223,6 +246,10 @@ export default function EquipmentDivisionStaffManager({ user }) {
                         }
                       >
                         <RoleOptions
+                          title="Equipment Business — Hire and Finance"
+                          roles={roles.both}
+                        />
+                        <RoleOptions
                           title="Equipment Hire Operations"
                           roles={roles.hire}
                         />
@@ -239,7 +266,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
                       onClick={() => save(person)}
                     >
                       {Number(savingId) === Number(person.id)
-                        ? "Applying boundary…"
+                        ? "Applying permissions…"
                         : "Save Assignment"}
                     </button>
                   </article>
@@ -257,10 +284,10 @@ export default function EquipmentDivisionStaffManager({ user }) {
         type="button"
         className="equipment-division-staff__open"
         onClick={() => setOpen(true)}
-        aria-label="Manage Equipment division staff"
+        aria-label="Manage Equipment Business staff"
       >
         <span className="equipment-division-staff__open-full">
-          Manage Division Staff
+          Manage Equipment Staff
         </span>
         <span className="equipment-division-staff__open-compact">Staff</span>
       </button>
