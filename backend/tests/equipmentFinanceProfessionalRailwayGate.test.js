@@ -17,18 +17,21 @@ const runnerSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-test("Railway startup is fail-closed behind the exact professional Finance migration", () => {
+test("completed professional Finance migration is not rerun during ordinary Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
-  assert.ok(
-    packageJson.scripts.start.indexOf(
-      "runEquipmentFinanceProfessionalRebuildMigration.js"
-    ) < packageJson.scripts.start.indexOf("server.js")
+  assert.doesNotMatch(
+    packageJson.scripts.start,
+    /runEquipmentFinanceProfessionalRebuildMigration\.js/
+  );
+  assert.equal(
+    packageJson.scripts["migrate:equipment-finance:professional:production"],
+    "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js"
   );
 });
 
-test("professional Finance Railway gate requires signed backup, safety snapshot and exact release identity", () => {
+test("professional Finance manual gate retains backup, safety snapshot and exact release controls", () => {
   assert.match(
     runnerSource,
     /CHALIN03_EQUIPMENT_FINANCE_PROFESSIONAL_ENABLED/
@@ -52,7 +55,7 @@ test("professional Finance Railway gate requires signed backup, safety snapshot 
   );
 });
 
-test("professional Finance Railway gate cannot run destructive production reset operations", () => {
+test("professional Finance manual gate cannot run destructive production reset operations", () => {
   assert.doesNotMatch(runnerSource, /database\/schema\.sql/);
   assert.doesNotMatch(runnerSource, /TRUNCATE\s+TABLE/i);
   assert.doesNotMatch(runnerSource, /DROP\s+DATABASE/i);
