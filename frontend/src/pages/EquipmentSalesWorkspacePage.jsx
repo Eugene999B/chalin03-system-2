@@ -5,13 +5,19 @@ import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
 import EquipmentFinanceCustomersPage from "./EquipmentFinanceCustomersPage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
+import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage";
 import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
 
 const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"]);
+const PROFESSIONAL_STAGES = new Set(["machines", "settings", "documents", "staff"]);
 
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
+
+  if (PROFESSIONAL_STAGES.has(stage)) {
+    return <EquipmentFinanceProfessionalPage mode={stage} />;
+  }
 
   if (stage === "customers") {
     return <EquipmentFinanceCustomersPage />;
