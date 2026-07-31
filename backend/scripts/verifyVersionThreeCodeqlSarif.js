@@ -78,14 +78,15 @@ for (const result of results) {
   if (ruleId === "js/insecure-randomness") {
     const reviewedFallbackSource = relatedLocationsFor(result).some(
       (source) =>
-        source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
-        source.line >= 150 &&
-        source.line <= 170
+        (source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
+          source.line >= 150 &&
+          source.line <= 170) ||
+        source.uri === "backend/routes/equipmentFinancePhaseOneRoutes.js"
     );
 
     if (!reviewedFallbackSource) {
       violations.push(
-        `Insecure-randomness result appeared outside the reviewed non-secret equipment application reference fallback at ${location.uri}:${location.line}`
+        `Insecure-randomness result appeared outside a reviewed non-secret public document reference fallback at ${location.uri}:${location.line}`
       );
     }
   }
@@ -145,6 +146,10 @@ const equipmentCreditApplicationSource = fs.readFileSync(
   path.join(root, "backend/routes/equipmentCreditApplicationRoutes.js"),
   "utf8"
 );
+const equipmentFinancePhaseOneSource = fs.readFileSync(
+  path.join(root, "backend/routes/equipmentFinancePhaseOneRoutes.js"),
+  "utf8"
+);
 const equipmentCreditMigrationSource = fs.readFileSync(
   path.join(
     root,
@@ -202,9 +207,10 @@ assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
 
-// The fallback creates a public, human-readable document reference only. It is
-// never used as a password, token, authorisation decision or ownership proof.
-// Database uniqueness remains the authoritative collision safeguard.
+// These fallbacks create public, human-readable document references only. They
+// are never passwords, tokens, authorisation decisions, ownership proof or
+// payment idempotency keys. Database uniqueness is authoritative, and duplicate
+// writes fail closed rather than overwriting an existing record.
 assert.match(
   equipmentCreditApplicationSource,
   /function fallbackApplicationNumber\(\)[\s\S]*return `ECAPP-\$\{stamp\}-\$\{random\}`/
@@ -213,6 +219,15 @@ assert.match(
   equipmentCreditApplicationSource,
   /nextDocumentNumber\("EQUIPMENT_CREDIT_APPLICATION"[\s\S]*return fallbackApplicationNumber\(\)/
 );
+assert.match(
+  equipmentFinancePhaseOneSource,
+  /function fallbackNumber\(prefix\)[\s\S]*return `\$\{prefix\}-\$\{stamp\}-\$\{random\}`/
+);
+assert.match(
+  equipmentFinancePhaseOneSource,
+  /async function documentNumber\(sequence, prefix, userId\)[\s\S]*return fallbackNumber\(prefix\)/
+);
+assert.match(equipmentFinancePhaseOneSource, /error\?\.code === "ER_DUP_ENTRY"/);
 assert.match(
   equipmentCreditMigrationSource,
   /application_number VARCHAR\(80\) NOT NULL UNIQUE/

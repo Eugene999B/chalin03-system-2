@@ -11,33 +11,13 @@ const readFrontend = (...parts) =>
 const readProject = (...parts) =>
   fs.readFileSync(path.join(projectRoot, ...parts), "utf8");
 
-const page = readFrontend(
-  "src",
-  "pages",
-  "EquipmentFinanceRecoveryGovernancePage.jsx"
-);
-const css = readFrontend(
-  "src",
-  "styles",
-  "equipmentFinanceRecoveryGovernance.css"
-);
+const page = readFrontend("src", "pages", "EquipmentFinanceRecoveryGovernancePage.jsx");
+const css = readFrontend("src", "styles", "equipmentFinanceRecoveryGovernance.css");
 const dispatcher = readFrontend("src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const layout = readFrontend("src", "layouts", "InstallmentFinanceLayout.jsx");
-const commandRoutes = readProject(
-  "backend",
-  "routes",
-  "equipmentInstallmentCommandRoutes.js"
-);
-const governanceRoutes = readProject(
-  "backend",
-  "routes",
-  "equipmentFinanceRecoveryGovernanceRoutes.js"
-);
-const governanceService = readProject(
-  "backend",
-  "services",
-  "equipmentFinanceRecoveryGovernanceService.js"
-);
+const commandRoutes = readProject("backend", "routes", "equipmentInstallmentCommandRoutes.js");
+const governanceRoutes = readProject("backend", "routes", "equipmentFinanceRecoveryGovernanceRoutes.js");
+const governanceService = readProject("backend", "services", "equipmentFinanceRecoveryGovernanceService.js");
 const serviceWorker = readFrontend("public", "sw.js");
 
 for (const text of [
@@ -80,8 +60,9 @@ assert.doesNotMatch(page, /sendSms|automatic_sms_enabled|WhatsApp Reminder/);
 
 assert.match(dispatcher, /EquipmentFinanceRecoveryGovernancePage/);
 assert.match(dispatcher, /stage === "governance"/);
-assert.match(layout, /Rescheduling, Default & Recovery/);
-assert.match(layout, /stage=governance/);
+assert.match(layout, /title: "Payments & Arrears"/);
+assert.match(layout, /stage=arrears/);
+assert.doesNotMatch(layout, /stage=governance/);
 assert.match(layout, /Company-wide Finance portfolio/);
 
 assert.match(commandRoutes, /equipmentFinanceRecoveryGovernanceRoutes/);
