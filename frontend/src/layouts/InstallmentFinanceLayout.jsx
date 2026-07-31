@@ -210,7 +210,7 @@ export default function InstallmentFinanceLayout() {
       icon="🏦"
       theme="earth"
       independenceLabel="Independent Finance staff division"
-      contextHeading="Company-wide installment portfolio — Finance staff do not select Hire locations"
+      contextHeading="Company-wide Finance portfolio — Finance staff do not select Hire locations"
       workspaceEyebrow="Current Equipment Business division"
       separationBadge="No access to Hire jobs or contracts"
       description="A complete excavator installment lifecycle: exact-machine registration and photos, buyer KYC and affordability, independent approval, agreement and schedule generation, signatures and Word/PDF documents, deposits, reservations, partial and excess-period payment allocation, boss payment alerts, reminders, arrears and rescheduling, delivery evidence, settlement and ownership transfer. Approved dual Equipment Business roles may open both Hire and Finance from one login, while every action remains permission-controlled and audit recorded."
