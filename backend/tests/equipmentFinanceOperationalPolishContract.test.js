@@ -214,7 +214,8 @@ test("timeline, inbox and data-quality controls cover the complete case lifecycl
   assert.match(serviceSource, /buyer_identity_missing/);
   assert.match(serviceSource, /customer_consent_missing/);
   assert.match(serviceSource, /machine_identity_missing/);
-  assert.match(serviceSource, /document_buyer_id_front_missing/);
+  assert.match(serviceSource, /document_\$\{category\}_missing/);
+  assert.match(serviceSource, /buyer_id_front/);
   assert.match(serviceSource, /official_agreement_missing/);
   assert.match(serviceSource, /Boss payment alert failed/);
   assert.match(serviceSource, /pending_approval/);
