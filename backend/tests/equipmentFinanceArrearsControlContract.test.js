@@ -25,8 +25,9 @@ test("Payments and Arrears is discoverable in the simplified Finance journey", (
 });
 
 test("arrears interface keeps follow-up and account evidence available", () => {
+  assert.match(page, /const API = "\/equipment-catalogue\/sales\/installment-command"/);
   assert.match(page, /arrears|overdue/i);
   assert.match(page, /reminder|follow-up|promise/i);
   assert.match(page, /axiosClient/);
-  assert.match(page, /equipment-installment-finance/);
+  assert.match(page, /collection account/i);
 });
