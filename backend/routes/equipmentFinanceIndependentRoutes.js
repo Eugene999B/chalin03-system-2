@@ -105,68 +105,6 @@ function depositCandidate(agreement) {
   };
 }
 
-function deliveryAllowed(agreement) {
-  const paid = Number(agreement.amount_paid || 0);
-  const total = Number(agreement.total_amount || 0);
-  if (agreement.delivery_policy === "immediate") return true;
-  if (agreement.delivery_policy === "after_deposit") {
-    return paid + 0.01 >= Number(agreement.deposit_required || 0);
-  }
-  if (agreement.delivery_policy === "after_percentage") {
-    return (
-      total > 0 &&
-      (paid / total) * 100 + 0.0001 >=
-        Number(agreement.delivery_threshold_percent || 0)
-    );
-  }
-  return Number(agreement.outstanding_balance || 0) <= 0.01;
-}
-
-function lifecycleAccount(agreement) {
-  return {
-    agreement_id: agreement.id,
-    agreement_number: agreement.agreement_number,
-    agreement_status: agreement.agreement_status,
-    application_id: agreement.credit_application_id,
-    application_number: agreement.application_number,
-    customer_id: agreement.customer_id,
-    customer_name: agreement.customer_name,
-    customer_phone: agreement.customer_phone,
-    customer_address: agreement.customer_address,
-    asset_id: agreement.asset_id,
-    asset_code: agreement.asset_code,
-    asset_name: agreement.asset_name,
-    main_image_url: agreement.main_image_url,
-    finance_location_name: agreement.equipment_origin_name,
-    equipment_origin_name: agreement.equipment_origin_name,
-    total_amount: Number(agreement.total_amount || 0),
-    deposit_required: Number(agreement.deposit_required || 0),
-    deposit_received: Number(agreement.deposit_received || 0),
-    amount_paid: Number(agreement.amount_paid || 0),
-    outstanding_balance: Number(agreement.outstanding_balance || 0),
-    overdue_amount: Number(agreement.overdue_amount || 0),
-    next_due_date: agreement.next_due_date,
-    last_payment_at: agreement.last_payment_at,
-    delivery_policy: agreement.delivery_policy,
-    delivery_threshold_percent: Number(agreement.delivery_threshold_percent || 0),
-    delivery_eligible: deliveryAllowed(agreement),
-    equipment_commitment_status: agreement.equipment_commitment_status,
-    reserved: agreement.equipment_commitment_status === "reserved",
-    delivery_id: agreement.delivery_id,
-    delivery_number: agreement.delivery_number,
-    delivery_datetime: agreement.delivery_datetime,
-    delivery_status: agreement.delivery_status,
-    handover_stage: agreement.handover_stage,
-    ownership_id: agreement.ownership_id,
-    transfer_number: agreement.transfer_number,
-    transfer_date: agreement.transfer_date,
-    ownership_status: agreement.ownership_status,
-    transfer_stage: agreement.transfer_stage,
-    fully_paid: Number(agreement.outstanding_balance || 0) <= 0.01,
-    active_hire_count: Number(agreement.active_hire_count || 0),
-  };
-}
-
 function financePolicy() {
   return {
     division: "installment_finance",
@@ -308,78 +246,9 @@ router.get(
   }
 );
 
-router.get(
-  "/finance-lifecycle/accounts",
-  requirePermission("fleet.assets.view"),
-  async (_req, res, next) => {
-    try {
-      const [rows] = await pool.query(
-        `SELECT
-           agreement.*,
-           application.application_number,
-           application.application_status,
-           application.kyc_status,
-           application.affordability_status,
-           customer.customer_name,
-           customer.phone AS customer_phone,
-           customer.address AS customer_address,
-           asset.asset_code,
-           asset.asset_name,
-           asset.main_image_url,
-           asset.current_meter,
-           asset.sale_status AS asset_sale_status,
-           asset.operational_purpose,
-           asset.is_active AS asset_is_active,
-           location.name AS equipment_origin_name,
-           sale_lock.id AS active_lock_id,
-           sale_lock.lock_status AS active_lock_status,
-           delivery.id AS delivery_id,
-           delivery.delivery_number,
-           delivery.delivery_datetime,
-           delivery.status AS delivery_status,
-           delivery.handover_stage,
-           ownership.id AS ownership_id,
-           ownership.transfer_number,
-           ownership.transfer_date,
-           ownership.status AS ownership_status,
-           ownership.transfer_stage,
-           (SELECT COUNT(*)
-              FROM hire_contract_assets hire_asset
-             WHERE hire_asset.asset_id = agreement.asset_id
-               AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
-           (SELECT MAX(payment.payment_date)
-              FROM equipment_sale_payments payment
-             WHERE payment.agreement_id = agreement.id
-               AND payment.is_voided = FALSE) AS last_payment_at
-         FROM equipment_sale_agreements agreement
-         INNER JOIN equipment_credit_applications application
-           ON application.id = agreement.credit_application_id
-         INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
-         INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-         LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
-         LEFT JOIN equipment_asset_sale_locks sale_lock
-           ON sale_lock.agreement_id = agreement.id
-          AND sale_lock.released_at IS NULL
-         LEFT JOIN equipment_deliveries delivery ON delivery.agreement_id = agreement.id
-         LEFT JOIN equipment_ownership_transfers ownership
-           ON ownership.agreement_id = agreement.id
-         WHERE agreement.sale_type = 'installment'
-           AND agreement.activation_source = 'approved_credit_application'
-         ORDER BY agreement.created_at DESC
-         LIMIT 400`
-      );
-      const accounts = rows.map(lifecycleAccount);
-      return res.json({
-        status: "success",
-        count: accounts.length,
-        accounts,
-        policy: financePolicy(),
-      });
-    } catch (error) {
-      return next(error);
-    }
-  }
-);
+// The authoritative final lifecycle router owns /finance-lifecycle/*.
+// Keeping a second accounts implementation here caused production requests to
+// bypass the lifecycle readiness gate and surface raw SQL errors as HTTP 500.
 
 router.get(
   "/installment-command/settings",
