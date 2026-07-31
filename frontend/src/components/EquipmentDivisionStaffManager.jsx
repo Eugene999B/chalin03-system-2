@@ -177,7 +177,7 @@ export default function EquipmentDivisionStaffManager({ user }) {
           <span>
             Each assignment belongs to exactly one role family. Approved Equipment
             Business Manager, Accountant and Auditor roles are the controlled dual-family
-            exception, with every API still checking the exact action permission.
+            exception. Every API still checks the exact action permission.
           </span>
         </div>
 
