@@ -126,6 +126,7 @@ export default function BusinessWorkspaceLayout({
   const displayName = user?.full_name || user?.username || "Authorized User";
   const showContextSelector =
     isManagedWorkspace && workspaceName !== "Group Executive Control";
+  const showIndependentNote = Boolean(independenceLabel || description);
   const contextStatus = selectedContext
     ? `${selectedContext.code ? `${selectedContext.code} — ` : ""}${
         selectedContext.name
@@ -167,10 +168,12 @@ export default function BusinessWorkspaceLayout({
           </div>
         </div>
 
-        <div className="bwl-independent-note">
-          <span>{independenceLabel}</span>
-          <p>{description}</p>
-        </div>
+        {showIndependentNote ? (
+          <div className="bwl-independent-note">
+            {independenceLabel ? <span>{independenceLabel}</span> : null}
+            {description ? <p>{description}</p> : null}
+          </div>
+        ) : null}
 
         {showContextSelector ? (
           <div className="bwl-context-summary">
