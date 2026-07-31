@@ -17,8 +17,11 @@ function compact(value) {
 test("returned credit value reduces debt exactly once without double-refunding", () => {
   assert.match(middleware, /returnedValue\s*-\s*refundedValue/);
   assert.match(middleware, /Math\.min\(unappliedCredit, oldBalance\)/);
-  assert.match(middleware, /Math\.max\(Number\(debt\.amount_paid/);
-  assert.match(middleware, /GREATEST\(balance - \?, 0\)/);
+  assert.match(middleware, /Math\.max\(\s*Number\(debt\.amount_paid/);
+  assert.match(
+    middleware,
+    /GREATEST\(COALESCE\(balance, 0\) - \?, 0\)/
+  );
   assert.match(middleware, /\[CreditReturn:\$\{returnRow\.id\}\]/);
   assert.match(middleware, /marker\.details LIKE CONCAT/);
 });
