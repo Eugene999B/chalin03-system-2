@@ -73,7 +73,8 @@ assert.doesNotMatch(customers, /useWorkspaceContext/);
 assert.match(excavators, /One source of truth/);
 assert.match(excavators, /Edit details/);
 assert.match(excavators, /Editing locked/);
-assert.match(excavators, /object-fit:\s*contain/);
+assert.match(excavators, /finance-simple__machine-image/);
+assert.match(excavators, /finance-simple__photo-viewer/);
 assert.doesNotMatch(excavators, /useWorkspaceContext/);
 
 assert.match(applications, /Applications and approvals/i);
