@@ -37,6 +37,9 @@ const {
   requireSparePartsBranchContext,
 } = require("./middleware/sparePartsBranchContextMiddleware");
 const {
+  reconcileCreditReturnDebts,
+} = require("./middleware/creditReturnDebtReconciliationMiddleware");
+const {
   requireWorkspaceCategory,
 } = require("./services/categoryIsolationService");
 const {
@@ -288,9 +291,27 @@ app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
-app.use("/api/debts", requireAuth, sparePartsBoundary, debtRoutes);
-app.use("/api/debt-customers", requireAuth, sparePartsBoundary, customerDebtConsolidationRoutes);
-app.use("/api/debt-reminders", requireAuth, sparePartsBoundary, debtReminderRoutes);
+app.use(
+  "/api/debts",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  debtRoutes
+);
+app.use(
+  "/api/debt-customers",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  customerDebtConsolidationRoutes
+);
+app.use(
+  "/api/debt-reminders",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  debtReminderRoutes
+);
 app.use("/api/reports", requireAuth, sparePartsBoundary, reportRoutes);
 app.use(
   "/api/users",
@@ -334,17 +355,25 @@ app.use(
   requireSparePartsBranchContext,
   dailyClosingRoutes
 );
-app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
+app.use(
+  "/api/customer-statements",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  customerStatementRoutes
+);
 app.use(
   "/api/customer-debt-reports",
   requireAuth,
   sparePartsBoundary,
+  reconcileCreditReturnDebts,
   customerDebtReportRoutes
 );
 app.use(
   "/api/customer-statement-workspace",
   requireAuth,
   sparePartsBoundary,
+  reconcileCreditReturnDebts,
   customerStatementWorkspaceRoutes
 );
 app.use("/api/maintenance", requireAuth, sparePartsBoundary, maintenanceRoutes);
