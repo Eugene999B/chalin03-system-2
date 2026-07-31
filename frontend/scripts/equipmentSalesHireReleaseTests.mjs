@@ -114,20 +114,23 @@ assert.doesNotMatch(applications, /ownership-transfer|deliveries\/complete/);
 assert.match(customers, /Customer Centre/);
 assert.match(customers, /\/phase-one\/customers/);
 assert.match(customers, /Start New Installment/);
-assert.match(excavators, /Excavator Register/);
-assert.match(excavators, /Edit excavator|Edit details/i);
+assert.match(excavators, /<h1>Excavators<\/h1>/);
+assert.match(excavators, /Machine register/);
+assert.match(excavators, /Edit details/);
 assert.match(excavators, /serial_number/);
 assert.match(excavators, /chassis_number/);
 assert.match(excavators, /engine_number/);
-assert.match(excavators, /objectFit:\s*"contain"|object-fit:\s*contain/);
+assert.match(excavators, /finance-simple__machine-image/);
+assert.match(excavators, /finance-simple__photo-viewer/);
 
 assert.match(phaseOneStyles, /\.finance-simple/);
 assert.match(phaseOneStyles, /overflow-wrap:\s*anywhere/);
 assert.match(phaseOneStyles, /white-space:\s*normal/);
 assert.match(phaseOneStyles, /object-fit:\s*contain/);
-assert.match(phaseOneStyles, /@media \(max-width: 620px\)/);
+assert.match(phaseOneStyles, /@media \(max-width: 720px\)/);
 assert.match(phaseOneStyles, /grid-template-columns:\s*1fr/);
-assert.match(phaseOneStyles, /env\(safe-area-inset-bottom\)/);
+assert.match(phaseOneStyles, /\.finance-simple__sticky-actions/);
+assert.match(phaseOneStyles, /bottom:\s*0/);
 
 assert.match(reports, /Documents &amp; Management Reports/);
 assert.match(reports, /documents\/agreement\.pdf/);
