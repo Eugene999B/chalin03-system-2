@@ -6,6 +6,7 @@ const { revokeUserSessions } = require("../services/categoryIsolationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
   EQUIPMENT_DIVISIONS,
+  DUAL_DIVISION_ROLES,
   HIRE_WORKSPACE_ROLES,
   FINANCE_WORKSPACE_ROLES,
 } = require("../security/equipmentDivisionAccess");
@@ -13,6 +14,7 @@ const {
 const router = express.Router();
 const HIRE_ROLES = new Set(HIRE_WORKSPACE_ROLES);
 const FINANCE_ROLES = new Set(FINANCE_WORKSPACE_ROLES);
+const DUAL_ROLES = new Set(DUAL_DIVISION_ROLES);
 const ALL_DIVISION_ROLES = new Set([...HIRE_ROLES, ...FINANCE_ROLES]);
 
 function normalized(value) {
@@ -28,6 +30,7 @@ function positiveId(value) {
 }
 
 function divisionForRole(role) {
+  if (DUAL_ROLES.has(role)) return EQUIPMENT_DIVISIONS.BOTH;
   if (HIRE_ROLES.has(role)) return EQUIPMENT_DIVISIONS.HIRE;
   if (FINANCE_ROLES.has(role)) return EQUIPMENT_DIVISIONS.FINANCE;
   return null;
@@ -35,9 +38,20 @@ function divisionForRole(role) {
 
 function globalRoleForDivisionRole(role, currentRole) {
   if (normalized(currentRole) === "admin") return "admin";
-  if (["manager", "finance_manager"].includes(role)) return "manager";
-  if (["auditor", "finance_auditor"].includes(role)) return "auditor";
+  if (["manager", "finance_manager", "equipment_business_manager"].includes(role)) {
+    return "manager";
+  }
+  if (["auditor", "finance_auditor", "equipment_business_auditor"].includes(role)) {
+    return "auditor";
+  }
   return "staff";
+}
+
+function divisionLabel(division) {
+  if (division === EQUIPMENT_DIVISIONS.BOTH) return "Equipment Hire and Installment Finance";
+  return division === EQUIPMENT_DIVISIONS.HIRE
+    ? "Equipment Hire"
+    : "Installment Finance";
 }
 
 function requireSystemAdministrator(req, res, next) {
@@ -46,7 +60,7 @@ function requireSystemAdministrator(req, res, next) {
       status: "error",
       code: "EQUIPMENT_DIVISION_ADMIN_REQUIRED",
       message:
-        "Only the protected System Administrator can move staff between Equipment Hire and Installment Finance divisions.",
+        "Only the protected System Administrator can assign Equipment Hire, Installment Finance or approved dual-division roles.",
     });
   }
   return next();
@@ -101,13 +115,19 @@ router.get("/staff", async (_req, res) => {
       status: "success",
       staff,
       roles: {
-        hire: [...HIRE_ROLES],
-        finance: [...FINANCE_ROLES],
+        hire: [...HIRE_ROLES].filter((role) => !DUAL_ROLES.has(role)),
+        finance: [...FINANCE_ROLES].filter((role) => !DUAL_ROLES.has(role)),
+        both: [...DUAL_ROLES],
       },
       policy: {
-        ordinary_staff_may_access_both: false,
+        authorised_dual_staff_may_access_both: true,
         system_administrator_may_supervise_both: true,
-        machine_register_mode_for_finance: "reference_only",
+        action_permissions_remain_separate: true,
+        shared_machine_register_write_roles: [
+          "finance_manager",
+          "equipment_business_manager",
+          "equipment_business_accountant",
+        ],
       },
     });
   } catch (error) {
@@ -120,22 +140,22 @@ router.get("/staff", async (_req, res) => {
 });
 
 router.put("/staff/:userId", async (req, res) => {
-  const userId = positiveId(req.params.userId);
+  const targetUserId = positiveId(req.params.userId);
   const workspaceRole = normalized(req.body?.workspace_role || req.body?.role);
   const requestedDivision = normalized(req.body?.division);
   const roleDivision = divisionForRole(workspaceRole);
 
-  if (!userId || !ALL_DIVISION_ROLES.has(workspaceRole) || !roleDivision) {
+  if (!targetUserId || !ALL_DIVISION_ROLES.has(workspaceRole) || !roleDivision) {
     return res.status(400).json({
       status: "error",
-      message: "Choose one valid Hire-only or Finance-only staff role.",
+      message: "Choose a valid Hire, Finance or approved dual Equipment Business role.",
     });
   }
 
   if (requestedDivision && requestedDivision !== roleDivision) {
     return res.status(400).json({
       status: "error",
-      message: "The selected role does not belong to the selected Equipment division.",
+      message: "The selected role does not belong to the selected Equipment division scope.",
     });
   }
 
@@ -151,7 +171,7 @@ router.put("/staff/:userId", async (req, res) => {
        WHERE id = ?
        LIMIT 1
        FOR UPDATE`,
-      [userId]
+      [targetUserId]
     );
     const user = users[0];
     if (!user) {
@@ -180,20 +200,17 @@ router.put("/staff/:userId", async (req, res) => {
       `SELECT id
        FROM business_units
        WHERE code = 'equipment_hire' AND is_enabled = TRUE
-       LIMIT 1`,
-      []
+       LIMIT 1`
     );
     const businessUnitId = Number(businessUnits[0]?.id || 0);
-    if (!businessUnitId) {
-      throw new Error("Equipment Business unit is not enabled.");
-    }
+    if (!businessUnitId) throw new Error("Equipment Business unit is not enabled.");
 
     const [beforeRows] = await connection.query(
       `SELECT access_role, can_access
        FROM user_business_access
        WHERE user_id = ? AND business_unit_id = ?
        LIMIT 1`,
-      [userId, businessUnitId]
+      [targetUserId, businessUnitId]
     );
     const beforeRole = normalized(beforeRows[0]?.access_role);
     const beforeDivision = divisionForRole(beforeRole);
@@ -203,7 +220,7 @@ router.put("/staff/:userId", async (req, res) => {
       `UPDATE users
        SET role = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [nextGlobalRole, userId]
+      [nextGlobalRole, targetUserId]
     );
     await connection.query(
       `INSERT INTO user_business_access (
@@ -213,13 +230,13 @@ router.put("/staff/:userId", async (req, res) => {
          access_role = VALUES(access_role),
          can_access = TRUE,
          updated_at = CURRENT_TIMESTAMP`,
-      [userId, businessUnitId, workspaceRole, req.user.id]
+      [targetUserId, businessUnitId, workspaceRole, req.user.id]
     );
 
     const revokedSessions = await revokeUserSessions(
       connection,
-      userId,
-      `Equipment division assignment changed to ${roleDivision}`
+      targetUserId,
+      `Equipment assignment changed to ${roleDivision}`
     );
 
     await writeAuditEvent({
@@ -228,18 +245,18 @@ router.put("/staff/:userId", async (req, res) => {
       action: "EQUIPMENT_STAFF_DIVISION_ASSIGNED",
       actionType: "equipment.staff.division.assign",
       entityType: "user",
-      entityId: userId,
+      entityId: targetUserId,
       workspaceCode: "equipment_hire",
       severity: "critical",
       outcome: "success",
-      details: `${user.full_name || user.username} was assigned to the ${roleDivision} division as ${workspaceRole}.`,
+      details: `${user.full_name || user.username} was assigned as ${workspaceRole} for ${divisionLabel(roleDivision)}.`,
       metadata: {
         before_role: beforeRole || null,
         before_division: beforeDivision,
         after_role: workspaceRole,
         after_division: roleDivision,
         revoked_sessions: revokedSessions,
-        ordinary_staff_may_access_both: false,
+        authorised_dual_staff_may_access_both: true,
       },
     });
 
@@ -247,9 +264,9 @@ router.put("/staff/:userId", async (req, res) => {
 
     return res.json({
       status: "success",
-      message: `${user.full_name || user.username} is now ${roleDivision === "hire" ? "Hire-only" : "Finance-only"}. Existing sessions were revoked so the new boundary applies at the next login.`,
+      message: `${user.full_name || user.username} can now access ${divisionLabel(roleDivision)} under the ${workspaceRole.replaceAll("_", " ")} role. Existing sessions were revoked so the new permissions apply at the next login.`,
       assignment: {
-        user_id: userId,
+        user_id: targetUserId,
         division: roleDivision,
         workspace_role: workspaceRole,
         global_role: nextGlobalRole,
