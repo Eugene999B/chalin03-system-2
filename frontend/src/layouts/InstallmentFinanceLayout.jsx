@@ -6,6 +6,7 @@ import {
   canAccessEquipmentDivision,
   ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
+import "../styles/equipmentFinanceLifecycleProfessional.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
