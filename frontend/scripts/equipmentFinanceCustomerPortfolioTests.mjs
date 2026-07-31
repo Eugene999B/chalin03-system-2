@@ -11,51 +11,50 @@ function assert(condition, message) {
 
 const dispatcher = read("src/pages/EquipmentSalesWorkspacePage.jsx");
 const layout = read("src/layouts/InstallmentFinanceLayout.jsx");
-const page = read("src/pages/EquipmentFinanceCustomersPage.jsx");
-const css = read("src/styles/equipmentFinanceCustomers.css");
-const serviceWorker = read("public/sw.js");
+const page = read("src/pages/EquipmentFinanceCustomerCentrePage.jsx");
+const css = read("src/styles/equipmentFinancePhaseOne.css");
 
 assert(
-  dispatcher.includes('import EquipmentFinanceCustomersPage from "./EquipmentFinanceCustomersPage"') &&
+  dispatcher.includes('import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage"') &&
     dispatcher.includes('stage === "customers"') &&
-    dispatcher.includes("<EquipmentFinanceCustomersPage />"),
-  "The Finance stage dispatcher must open the customer portfolio page."
+    dispatcher.includes("<EquipmentFinanceCustomerCentrePage />"),
+  "The Finance stage dispatcher must open the standalone Customer Centre."
 );
 assert(
-  layout.includes("Finance Customers & Portfolio") &&
+  layout.includes('title: "Customers"') &&
     layout.includes("/equipment-installment-finance/applications?stage=customers") &&
-    !layout.match(
-      /BLOCKED_FINANCE_PATHS[\s\S]*"\/equipment-installment-finance\/customers"/
-    ),
-  "Finance navigation must expose its own customer portfolio without reopening Hire customers."
+    layout.includes("company-wide Finance customers"),
+  "Finance navigation must expose company-wide customers without reopening Hire customers."
 );
 assert(
-  page.includes('const API = "/equipment-catalogue/sales/finance-customers"') &&
-    page.includes("Applications & KYC") &&
-    page.includes("Delivery & Ownership") &&
-    page.includes("Finance-only customer record"),
-  "The customer centre must cover the controlled Finance lifecycle."
+  page.includes('const API = "/equipment-catalogue/sales/phase-one/customers"') &&
+    page.includes("Finance Customer Centre") &&
+    page.includes("Add Customer") &&
+    page.includes("Start Installment") &&
+    page.includes("finance_application_count") &&
+    page.includes("finance_agreement_count") &&
+    page.includes("outstanding_balance"),
+  "The Customer Centre must create reusable records and show their Finance portfolio history."
 );
 assert(
-  !/axiosClient\.(?:post|put|patch|delete)\s*\(/.test(page),
-  "Piece 4A must remain a read-only customer portfolio release."
+  page.includes("axiosClient.get(API)") &&
+    page.includes("axiosClient.post(API, payload)") &&
+    page.includes("axiosClient.put(`${API}/${editing.id}`, payload)") &&
+    page.includes("confirm_duplicate"),
+  "Authorised Finance staff must be able to create and update duplicate-protected customers."
 );
 assert(
-  !page.includes("/equipment-hire") &&
-    !page.includes("/hire-commercial") &&
-    page.includes("cannot create Hire work, change balances or send automatic SMS"),
-  "The Finance customer centre must not expose Hire workflows or automatic messaging."
+  !page.includes("useWorkspaceContext") &&
+    !page.includes("selectedContextId") &&
+    !page.includes("Choose a Hire location"),
+  "Finance customer work must remain company-wide and independent of Hire location context."
 );
 assert(
-  css.includes("@media (max-width: 760px)") &&
-    css.includes("@media (max-width: 480px)") &&
-    css.includes("height: 100dvh") &&
-    css.includes("z-index: 100000"),
-  "The Finance customer centre must remain usable on desktop and mobile."
-);
-assert(
-  serviceWorker.includes("chalin03-finance-customer-portfolio-v27"),
-  "The service-worker cache must advance for the Finance customer portfolio release."
+  css.includes(".finance-simple__customer-grid") &&
+    css.includes("@media (max-width: 720px)") &&
+    css.includes("grid-template-columns: 1fr") &&
+    css.includes("overflow-wrap: anywhere"),
+  "The standalone Customer Centre must remain phone-first and readable."
 );
 
-console.log("Finance customer portfolio frontend contracts passed.");
+console.log("Standalone Finance Customer Centre contracts passed.");
