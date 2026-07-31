@@ -13,6 +13,7 @@ const sarif = JSON.parse(fs.readFileSync(absoluteSarifPath, "utf8"));
 const results = sarif.runs?.flatMap((run) => run.results || []) || [];
 
 const reviewedRules = new Set([
+  "js/incomplete-sanitization",
   "js/insecure-randomness",
   "js/missing-rate-limiting",
   "js/user-controlled-bypass",
@@ -63,6 +64,15 @@ for (const result of results) {
   if (!reviewedRules.has(ruleId)) {
     violations.push(`Unreviewed CodeQL rule ${ruleId} at ${location.uri}:${location.line}`);
     continue;
+  }
+
+  if (ruleId === "js/incomplete-sanitization") {
+    const isStaticContractTest = location.uri.startsWith("backend/tests/");
+    if (!isStaticContractTest) {
+      violations.push(
+        `Incomplete sanitization appeared outside a reviewed static contract test at ${location.uri}:${location.line}`
+      );
+    }
   }
 
   if (ruleId === "js/insecure-randomness") {
