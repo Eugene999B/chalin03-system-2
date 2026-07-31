@@ -5,6 +5,7 @@ import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
 import EquipmentFinanceCustomersPage from "./EquipmentFinanceCustomersPage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
+import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
 
 const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"]);
 
@@ -18,6 +19,10 @@ export default function EquipmentSalesWorkspacePage() {
 
   if (stage === "arrears") {
     return <EquipmentFinanceArrearsPage />;
+  }
+
+  if (stage === "governance") {
+    return <EquipmentFinanceRecoveryGovernancePage />;
   }
 
   if (stage === "activation") {
