@@ -120,6 +120,7 @@ export default function EquipmentFinanceOperationalStartPage() {
   const [problem, setProblem] = useState("");
   const lastDraftTextRef = useRef(window.localStorage.getItem(DRAFT_KEY));
   const versionRef = useRef(null);
+  const conflictRef = useRef(null);
   const savingRef = useRef(false);
   const queuedRef = useRef(false);
 
@@ -174,7 +175,13 @@ export default function EquipmentFinanceOperationalStartPage() {
 
   const saveCurrentDraft = useCallback(
     async (forceConflictResolution = false) => {
-      if (!canServerSave || savingRef.current || (conflict && !forceConflictResolution)) return;
+      if (
+        !canServerSave ||
+        savingRef.current ||
+        (conflictRef.current && !forceConflictResolution)
+      ) {
+        return;
+      }
       const payload = parseLocalDraft();
       if (!payload) return;
       savingRef.current = true;
@@ -188,6 +195,7 @@ export default function EquipmentFinanceOperationalStartPage() {
         });
         const draft = response.data?.draft;
         versionRef.current = draft?.version ?? versionRef.current;
+        conflictRef.current = null;
         setConflict(null);
         setProgress(draft?.progress || localProgress(payload));
         setLastSavedAt(draft?.last_saved_at || new Date().toISOString());
@@ -198,6 +206,7 @@ export default function EquipmentFinanceOperationalStartPage() {
           error.response?.data?.code === DRAFT_CONFLICT_CODE &&
           error.response?.data?.current_draft
         ) {
+          conflictRef.current = error.response.data.current_draft;
           setConflict(error.response.data.current_draft);
           setSaveState("conflict");
           setProblem(error.response.data.message);
@@ -210,28 +219,29 @@ export default function EquipmentFinanceOperationalStartPage() {
         }
       } finally {
         savingRef.current = false;
-        if (queuedRef.current) {
-          window.setTimeout(() => saveCurrentDraft(forceConflictResolution), 100);
-        }
       }
     },
-    [canServerSave, conflict]
+    [canServerSave]
   );
 
   useEffect(() => {
     if (!ready) return undefined;
     const timer = window.setInterval(() => {
       const currentText = window.localStorage.getItem(DRAFT_KEY);
-      if (currentText === lastDraftTextRef.current) return;
+      const changed = currentText !== lastDraftTextRef.current;
+      if (!changed && !queuedRef.current) return;
       lastDraftTextRef.current = currentText;
       const payload = parseLocalDraft();
       setProgress(localProgress(payload || {}));
       if (!canServerSave) return;
       if (!payload) {
+        queuedRef.current = false;
         axiosClient
           .delete(`${API}/drafts/start-installment`)
           .then(() => {
             versionRef.current = null;
+            conflictRef.current = null;
+            setConflict(null);
             setLastSavedAt(null);
             setSaveState("ready");
           })
@@ -248,14 +258,15 @@ export default function EquipmentFinanceOperationalStartPage() {
   }, [canServerSave, ready, saveCurrentDraft]);
 
   function useServerVersion() {
-    restoreServerDraft(conflict);
+    restoreServerDraft(conflictRef.current);
+    conflictRef.current = null;
     setConflict(null);
     setProblem("");
     setSaveState("restored");
   }
 
   async function keepDeviceVersion() {
-    versionRef.current = conflict?.version ?? versionRef.current;
+    versionRef.current = conflictRef.current?.version ?? versionRef.current;
     setProblem("");
     setSaveState("pending");
     await saveCurrentDraft(true);
