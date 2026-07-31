@@ -5,8 +5,7 @@ require("dotenv").config();
 
 const RELEASE_CONFIRMATION = "20260731_EQUIPMENT_FINANCE_PROFESSIONAL";
 const MIGRATION_RECORD = "20260731_equipment_finance_professional_rebuild";
-const MIGRATION_LOCK_NAME =
-  "chalin03:production-migrations:20260731-equipment-finance-professional";
+const MIGRATION_LOCK_NAME = "chalin03:fin-prof:20260731";
 const MIGRATION_FILE = "20260731_equipment_finance_professional_rebuild.sql";
 const VERIFIER_FILE = "20260731_equipment_finance_professional_rebuild_verify.sql";
 const SNAPSHOT_MANIFEST_TABLE = "chalin03_migration_safety_snapshots";
