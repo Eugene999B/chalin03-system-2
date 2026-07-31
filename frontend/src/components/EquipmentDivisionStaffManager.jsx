@@ -173,11 +173,11 @@ export default function EquipmentDivisionStaffManager({ user }) {
         </header>
 
         <div className="equipment-division-staff__rules">
-          <strong>One login can serve both divisions only through an approved dual role.</strong>
+          <strong>One employee. One division.</strong>
           <span>
-            Equipment Business Manager and Accountant may work across Hire and Finance.
-            Equipment Business Auditor can inspect both but remains read-only. Every API
-            still checks the exact action permission.
+            Each assignment belongs to exactly one role family. Approved Equipment
+            Business Manager, Accountant and Auditor roles are the controlled dual-family
+            exception, with every API still checking the exact action permission.
           </span>
         </div>
 
