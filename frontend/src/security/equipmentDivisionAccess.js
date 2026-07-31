@@ -78,6 +78,8 @@ export function canAccessEquipmentDivision(user = {}, division) {
   return false;
 }
 
+// This frontend guard improves navigation only; the backend independently rejects
+// every request that lacks the exact division and action permission.
 export function ensureFinanceUiCompatibilityPermissions(user = {}, pathname = "") {
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) return [];
 
