@@ -1,62 +1,38 @@
 import { useLocation } from "react-router";
-import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
-import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
-import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage";
-import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
-import EquipmentFinanceExcavatorsPage from "./EquipmentFinanceExcavatorsPage";
-import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
+import EquipmentFinanceCustomerPortfolioPage from "./EquipmentFinanceCustomerPortfolioPage";
 import EquipmentFinanceGuidePage from "./EquipmentFinanceGuidePage";
-import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage";
-import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
-import EquipmentFinanceStartWizardPage from "./EquipmentFinanceStartWizardPage";
+import EquipmentFinanceOperationalPolishPage from "./EquipmentFinanceOperationalPolishPage";
+import EquipmentFinanceOperationalStartPage from "./EquipmentFinanceOperationalStartPage";
+import EquipmentFinanceSettingsPage from "./EquipmentFinanceSettingsPage";
+import EquipmentInstallmentCommandPage from "./EquipmentInstallmentCommandPage";
+import FleetAssetsPage from "./FleetAssetsPage";
 
-const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"]);
-const PROFESSIONAL_STAGES = new Set(["settings", "documents", "staff"]);
+const STAGES = new Set([
+  "applications",
+  "start",
+  "customers",
+  "machines",
+  "collections",
+  "arrears",
+  "settings",
+  "guide",
+  "operations",
+]);
 
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
-  const stage = new URLSearchParams(location.search).get("stage");
+  const requested = new URLSearchParams(location.search).get("stage") || "applications";
+  const stage = STAGES.has(requested) ? requested : "applications";
 
-  if (stage === "start") {
-    return <EquipmentFinanceStartWizardPage />;
+  if (stage === "start") return <EquipmentFinanceOperationalStartPage />;
+  if (stage === "customers") return <EquipmentFinanceCustomerPortfolioPage />;
+  if (stage === "machines") return <FleetAssetsPage />;
+  if (stage === "collections" || stage === "arrears") {
+    return <EquipmentInstallmentCommandPage initialView={stage} />;
   }
-
-  if (stage === "customers") {
-    return <EquipmentFinanceCustomerCentrePage />;
-  }
-
-  if (stage === "machines") {
-    return <EquipmentFinanceExcavatorsPage />;
-  }
-
-  if (stage === "guide") {
-    return <EquipmentFinanceGuidePage />;
-  }
-
-  if (PROFESSIONAL_STAGES.has(stage)) {
-    return <EquipmentFinanceProfessionalPage mode={stage} />;
-  }
-
-  if (stage === "arrears") {
-    return <EquipmentFinanceArrearsPage />;
-  }
-
-  if (stage === "governance") {
-    return <EquipmentFinanceRecoveryGovernancePage />;
-  }
-
-  if (stage === "activation") {
-    return <EquipmentFinanceAgreementActivationPage />;
-  }
-
-  if (stage === "deposit") {
-    return <EquipmentFinanceDepositReservationPage />;
-  }
-
-  if (FINAL_LIFECYCLE_STAGES.has(stage)) {
-    return <EquipmentFinanceFinalLifecyclePage />;
-  }
-
+  if (stage === "settings") return <EquipmentFinanceSettingsPage />;
+  if (stage === "guide") return <EquipmentFinanceGuidePage />;
+  if (stage === "operations") return <EquipmentFinanceOperationalPolishPage />;
   return <EquipmentFinanceApplicationsPage />;
 }
