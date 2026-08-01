@@ -10,6 +10,7 @@ const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
+const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
@@ -101,6 +102,9 @@ function financePolicy() {
     machine_active_hire_check_enabled: true,
     guided_start_enabled: true,
     installment_offer_created_automatically: true,
+    exact_schedule_preview_enabled: true,
+    custom_interval_days_enabled: true,
+    non_working_day_rules_enabled: true,
     operational_polish_enabled: true,
     private_case_documents: true,
     server_draft_autosave: true,
@@ -109,6 +113,7 @@ function financePolicy() {
 }
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
+router.use(equipmentFinanceScheduleRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);

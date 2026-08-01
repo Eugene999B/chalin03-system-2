@@ -1,3 +1,8 @@
+const {
+  intervalDaysFor,
+  monthlyEquivalent: scheduleMonthlyEquivalent,
+} = require("./equipmentFinanceScheduleService");
+
 const POLICY = Object.freeze({
   standardDebtServiceRatioPercent: 40,
   manualReviewDebtServiceRatioPercent: 50,
@@ -40,20 +45,26 @@ function periodicAmount(financedAmount, installmentCount) {
   return roundMoney(numberValue(financedAmount) / count);
 }
 
-function monthlyEquivalent(periodic, frequency) {
-  const amount = numberValue(periodic);
-  const normalized = textValue(frequency).toLowerCase();
-  if (normalized === "weekly") return roundMoney((amount * 52) / 12);
-  if (normalized === "fortnightly") return roundMoney((amount * 26) / 12);
-  return roundMoney(amount);
+function monthlyEquivalent(periodic, frequency, intervalDays = null) {
+  return scheduleMonthlyEquivalent(
+    periodic,
+    textValue(frequency).toLowerCase(),
+    intervalDays
+  );
 }
 
-function termMonths(count, frequency) {
+function termMonths(count, frequency, intervalDays = null) {
   const installments = Math.max(1, Math.floor(numberValue(count, 1)));
   const normalized = textValue(frequency).toLowerCase();
-  if (normalized === "weekly") return Number(((installments * 12) / 52).toFixed(1));
+  if (normalized === "weekly") {
+    return Number(((installments * 12) / 52).toFixed(1));
+  }
   if (normalized === "fortnightly") {
     return Number(((installments * 12) / 26).toFixed(1));
+  }
+  if (normalized === "custom") {
+    const days = intervalDaysFor("custom", intervalDays) || 30;
+    return Number(((installments * days) / 30.436875).toFixed(1));
   }
   return installments;
 }
@@ -119,10 +130,29 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
     1,
     Math.floor(numberValue(input.proposed_installment_count, 12))
   );
-  const frequency = textValue(input.proposed_frequency || "monthly").toLowerCase();
+  const frequency = textValue(
+    input.proposed_frequency || "monthly"
+  ).toLowerCase();
+  const proposedIntervalDays =
+    frequency === "monthly"
+      ? null
+      : intervalDaysFor(
+          frequency,
+          input.proposed_interval_days ??
+            input.custom_interval_days ??
+            input.payment_interval_days
+        );
   const periodic = periodicAmount(financedAmount, installmentCount);
-  const proposedMonthlyInstallment = monthlyEquivalent(periodic, frequency);
-  const calculatedTermMonths = termMonths(installmentCount, frequency);
+  const proposedMonthlyInstallment = monthlyEquivalent(
+    periodic,
+    frequency,
+    proposedIntervalDays
+  );
+  const calculatedTermMonths = termMonths(
+    installmentCount,
+    frequency,
+    proposedIntervalDays
+  );
 
   const monthlySalary = roundMoney(input.monthly_salary_income);
   const monthlyBusiness = roundMoney(input.monthly_business_income);
@@ -161,7 +191,9 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
   let riskScore = 0;
   if (kycStatus === "incomplete") {
     riskScore += 30;
-    reasons.push("Required customer identity, consent or guarantor information is incomplete.");
+    reasons.push(
+      "Required customer identity, consent or guarantor information is incomplete."
+    );
   } else if (kycStatus !== "verified") {
     riskScore += 15;
     warnings.push("KYC evidence is complete but has not been fully verified.");
@@ -210,12 +242,16 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
   riskScore = Math.min(100, Math.round(riskScore));
 
   let affordabilityStatus = "eligible";
-  let recommendation = "Eligible within the standard internal affordability policy.";
+  let recommendation =
+    "Eligible within the standard internal affordability policy.";
 
   if (
     reasons.length ||
     proposedMonthlyInstallment >
-      Math.max(totalIncome - monthlyBusinessCosts - monthlyHousehold - existingDebt, 0)
+      Math.max(
+        totalIncome - monthlyBusinessCosts - monthlyHousehold - existingDebt,
+        0
+      )
   ) {
     affordabilityStatus = "ineligible";
     recommendation =
@@ -238,6 +274,7 @@ function evaluateCreditApplication(input = {}, kyc = {}) {
     proposed_deposit: proposedDeposit,
     financed_amount: financedAmount,
     proposed_frequency: frequency,
+    proposed_interval_days: proposedIntervalDays,
     proposed_installment_count: installmentCount,
     periodic_installment_amount: periodic,
     proposed_installment_amount: proposedMonthlyInstallment,
