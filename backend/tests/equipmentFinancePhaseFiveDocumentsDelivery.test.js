@@ -50,6 +50,18 @@ test("private documents use authenticated AES-256-GCM encryption and integrity c
   assert.doesNotMatch(service, /public_url/i);
 });
 
+test("private document uploads are explicitly rate limited before database access", () => {
+  assert.match(routes, /require\("express-rate-limit"\)/);
+  assert.match(routes, /const privateDocumentUploadLimiter = rateLimit\(/);
+  assert.match(routes, /windowMs:\s*15 \* 60 \* 1000/);
+  assert.match(routes, /max:\s*30/);
+  assert.match(routes, /FINANCE_DOCUMENT_UPLOAD_RATE_LIMITED/);
+  assert.match(
+    routes,
+    /router\.post\(\s*"\/cases\/:agreementId\/documents",\s*privateDocumentUploadLimiter,\s*requirePermission\("fleet\.assets\.manage"\)/
+  );
+});
+
 test("document review and approval require independent actors", () => {
   assert.match(service, /uploaded_by[\s\S]*cannot independently review/i);
   assert.match(service, /FINANCE_DOCUMENT_INDEPENDENT_REVIEW_REQUIRED/);
