@@ -16,6 +16,7 @@ const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfession
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
 const equipmentFinanceDocumentsDeliveryRoutes = require("./equipmentFinanceDocumentsDeliveryRoutes");
+const equipmentFinancePhaseFiveDeliveryRoutes = require("./equipmentFinancePhaseFiveDeliveryRoutes");
 
 const router = express.Router();
 
@@ -126,6 +127,7 @@ function financePolicy() {
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
 router.use("/documents-delivery", equipmentFinanceDocumentsDeliveryRoutes);
+router.use("/finance-lifecycle", equipmentFinancePhaseFiveDeliveryRoutes);
 router.use(equipmentFinanceScheduleRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
