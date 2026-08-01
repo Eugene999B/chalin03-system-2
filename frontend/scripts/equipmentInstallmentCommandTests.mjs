@@ -12,6 +12,21 @@ const readProject = (...parts) =>
   fs.readFileSync(path.join(projectRoot, ...parts), "utf8");
 
 const page = readFrontend("src", "pages", "EquipmentInstallmentCommandPage.jsx");
+const minimalWorkflow = readFrontend(
+  "src",
+  "pages",
+  "EquipmentFinanceMinimalWorkflowPage.jsx"
+);
+const advancedPage = readFrontend(
+  "src",
+  "pages",
+  "EquipmentInstallmentCommandAdvancedPage.jsx"
+);
+const collections = readFrontend(
+  "src",
+  "pages",
+  "EquipmentFinanceCollectionsMinimalPage.jsx"
+);
 const css = readFrontend("src", "styles", "equipmentFinancePhaseOne.css");
 const app = readFrontend("src", "App.jsx");
 const fleetPage = readFrontend("src", "pages", "FleetAssetsPage.jsx");
@@ -42,23 +57,35 @@ const readModel = readProject(
   "equipmentInstallmentReadModelService.js"
 );
 
+assert.match(page, /EquipmentFinanceMinimalWorkflowPage/);
+assert.match(page, /EquipmentInstallmentCommandAdvancedPage/);
+assert.match(page, /view.*advanced/);
+
 for (const text of [
-  "Simple Finance home",
-  "What do you need to do today?",
-  "Start New Installment",
-  "Add or Find Customer",
-  "Register Excavator",
-  "Review Applications",
-  "Record Payment",
-  "Work Arrears",
-  "Finance is company-wide",
+  "Equipment Installment Workflow",
+  "Complete these nine actions",
+  "Equipment list",
+  "Add equipment",
+  "Customer selection",
+  "Create installment agreement",
+  "Configure terms",
+  "Preview schedule",
+  "Activate agreement",
+  "Record payment",
+  "Balance and payment history",
+  "backend",
 ]) {
-  assert.match(page, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(minimalWorkflow, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 }
-assert.match(page, /Promise\.allSettled/);
-assert.match(page, /outstanding_balance/);
-assert.match(page, /GHS/);
-assert.doesNotMatch(page, /useWorkspaceContext|selectedContextId/);
+assert.match(minimalWorkflow, /Promise\.allSettled/);
+assert.match(minimalWorkflow, /outstanding_balance/);
+assert.match(minimalWorkflow, /official-outstanding-balance/);
+assert.match(minimalWorkflow, /GHS/);
+assert.doesNotMatch(minimalWorkflow, /useWorkspaceContext|selectedContextId/);
+assert.match(advancedPage, /Installment Command Centre|What do you need to do today/i);
+assert.match(collections, /Collections &amp; Payment History/);
+assert.match(collections, /account-detail-official-balance/);
+assert.match(collections, /payment-history/);
 
 assert.match(app, /InstallmentFinanceLayout/);
 assert.match(app, /path="\/equipment-installment-finance"/);
@@ -124,8 +151,8 @@ assert.match(serviceWorker, /cacheCoreAssets/);
 assert.match(serviceWorker, /networkNavigation/);
 assert.doesNotMatch(serviceWorker, /status:\s*503/);
 
-// The resilient command backend remains available for lifecycle/reminder work even though
-// the default home now presents a simpler daily entry point.
+// The resilient command backend remains available for advanced lifecycle/reminder work even
+// though the default home now presents the nine-step Phase 3 path.
 assert.match(route, /\/portfolio/);
 assert.match(route, /\/collections/);
 assert.match(route, /equipmentInstallmentReadModelService/);
@@ -141,4 +168,4 @@ assert.match(service, /automatic_sms_enabled: false/);
 assert.match(service, /GET_LOCK/);
 assert.doesNotMatch(service, /CREATE TABLE|ALTER TABLE|DROP TABLE|TRUNCATE TABLE/i);
 
-console.log("Equipment Installment Finance simple home and compact sidebar contract passed.");
+console.log("Equipment Installment Finance nine-step workflow contract passed.");
