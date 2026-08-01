@@ -11,6 +11,7 @@ const {
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
+const equipmentFinanceApplicationDetailRoutes = require("./equipmentFinanceApplicationDetailRoutes");
 const equipmentFinanceCompanyWideApplicationRoutes = require("./equipmentFinanceCompanyWideApplicationRoutes");
 const equipmentFinanceCompanyWideLifecycleRoutes = require("./equipmentFinanceCompanyWideLifecycleRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
@@ -122,6 +123,7 @@ function financePolicy() {
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
+router.use("/credit-applications", equipmentFinanceApplicationDetailRoutes);
 router.use("/credit-applications", equipmentFinanceCompanyWideApplicationRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
