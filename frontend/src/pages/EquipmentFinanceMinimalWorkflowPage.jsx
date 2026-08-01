@@ -6,78 +6,15 @@ import "../styles/equipmentFinanceMinimalWorkflow.css";
 const SALES_API = "/equipment-catalogue/sales";
 
 const WORKFLOW_STEPS = [
-  {
-    number: 1,
-    title: "Equipment list",
-    description: "See every excavator that can be sold on installment and its current availability.",
-    to: "/equipment-installment-finance/applications?stage=machines",
-    action: "View equipment",
-    key: "equipment",
-  },
-  {
-    number: 2,
-    title: "Add equipment",
-    description: "Register the exact excavator, identifiers, selling price and photographs.",
-    to: "/equipment-installment-finance/applications?stage=machines&action=add",
-    action: "Add equipment",
-    key: "equipment",
-  },
-  {
-    number: 3,
-    title: "Customer selection",
-    description: "Select an existing Finance customer or create a new customer without duplicates.",
-    to: "/equipment-installment-finance/applications?stage=start",
-    action: "Choose customer",
-    key: "customers",
-  },
-  {
-    number: 4,
-    title: "Create installment agreement",
-    description: "Create the company-wide draft and its automatic Installment Offer.",
-    to: "/equipment-installment-finance/applications?stage=start",
-    action: "Start installment",
-    key: "drafts",
-  },
-  {
-    number: 5,
-    title: "Configure terms",
-    description: "Set selling price, deposit, payment interval, number of payments and first due date.",
-    to: "/equipment-installment-finance/applications?stage=start",
-    action: "Configure terms",
-    key: "drafts",
-  },
-  {
-    number: 6,
-    title: "Preview schedule",
-    description: "Use the backend-generated exact dates and amounts before saving the draft.",
-    to: "/equipment-installment-finance/applications?stage=start",
-    action: "Preview schedule",
-    key: "drafts",
-  },
-  {
-    number: 7,
-    title: "Activate agreement",
-    description: "Activate an approved application and create the authoritative installment schedule.",
-    to: "/equipment-installment-finance/applications?stage=activation",
-    action: "Activate agreement",
-    key: "activation",
-  },
-  {
-    number: 8,
-    title: "Record payment",
-    description: "Record the protected opening deposit and reserve the exact excavator; later payments continue in Collections.",
-    to: "/equipment-installment-finance/applications?stage=deposit",
-    action: "Record opening deposit",
-    key: "collections",
-  },
-  {
-    number: 9,
-    title: "Balance and payment history",
-    description: "View the official server balance, schedule allocation and complete payment history.",
-    to: "/equipment-installment-finance/applications?stage=collections",
-    action: "View account",
-    key: "accounts",
-  },
+  { number: 1, title: "Equipment list", description: "See every excavator that can be sold on installment and its current availability.", to: "/equipment-installment-finance/applications?stage=machines", action: "View equipment", key: "equipment" },
+  { number: 2, title: "Add equipment", description: "Register the exact excavator, identifiers, selling price and photographs.", to: "/equipment-installment-finance/applications?stage=machines&action=add", action: "Add equipment", key: "equipment" },
+  { number: 3, title: "Customer selection", description: "Select an existing Finance customer or create a new customer without duplicates.", to: "/equipment-installment-finance/applications?stage=start", action: "Choose customer", key: "customers" },
+  { number: 4, title: "Create installment agreement", description: "Create the company-wide draft and its automatic Installment Offer.", to: "/equipment-installment-finance/applications?stage=start", action: "Start installment", key: "drafts" },
+  { number: 5, title: "Configure terms", description: "Set selling price, deposit, payment interval, number of payments and first due date.", to: "/equipment-installment-finance/applications?stage=start", action: "Configure terms", key: "drafts" },
+  { number: 6, title: "Preview schedule", description: "Use the backend-generated exact dates and amounts before saving the draft.", to: "/equipment-installment-finance/applications?stage=start", action: "Preview schedule", key: "drafts" },
+  { number: 7, title: "Activate agreement", description: "Activate an approved application and create the authoritative installment schedule.", to: "/equipment-installment-finance/applications?stage=activation", action: "Activate agreement", key: "activation" },
+  { number: 8, title: "Record payment", description: "Record the protected opening deposit and reserve the exact excavator; later payments continue in Collections.", to: "/equipment-installment-finance/applications?stage=deposit", action: "Record opening deposit", key: "collections" },
+  { number: 9, title: "Balance and payment history", description: "View the official server balance, schedule allocation and complete payment history.", to: "/equipment-installment-finance/applications?stage=collections", action: "View account", key: "accounts" },
 ];
 
 const PHASE_FOUR_ACTIONS = [
@@ -89,6 +26,19 @@ const PHASE_FOUR_ACTIONS = [
   "Restructure schedule",
   "Waive charge with authorization",
   "Preserve the complete audit trail",
+];
+
+const PHASE_FIVE_ACTIONS = [
+  "Encrypt KYC documents",
+  "Capture guarantor documents",
+  "Preserve agreement attachments",
+  "Restrict private document access",
+  "Complete independent review",
+  "Approve the case documents",
+  "Authorize equipment delivery",
+  "Confirm physical handover",
+  "Enforce staff permissions",
+  "Preserve the activity log",
 ];
 
 function money(value) {
@@ -115,18 +65,10 @@ function errorMessage(error, fallback) {
 }
 
 function StepStatus({ stepKey, data }) {
-  if (stepKey === "equipment") {
-    return <span>{data.availableMachines} available</span>;
-  }
-  if (stepKey === "customers") {
-    return <span>{data.customers} customers</span>;
-  }
-  if (stepKey === "activation") {
-    return <span>{data.activationCandidates} awaiting activation</span>;
-  }
-  if (["collections", "accounts"].includes(stepKey)) {
-    return <span>{data.activeAccounts} active accounts</span>;
-  }
+  if (stepKey === "equipment") return <span>{data.availableMachines} available</span>;
+  if (stepKey === "customers") return <span>{data.customers} customers</span>;
+  if (stepKey === "activation") return <span>{data.activationCandidates} awaiting activation</span>;
+  if (["collections", "accounts"].includes(stepKey)) return <span>{data.activeAccounts} active accounts</span>;
   return <span>Guided workflow</span>;
 }
 
@@ -139,7 +81,6 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
 
   useEffect(() => {
     let active = true;
-
     async function load() {
       setLoading(true);
       setProblem("");
@@ -148,9 +89,7 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
         axiosClient.get(`${SALES_API}/agreement-activations/candidates`),
         axiosClient.get(`${SALES_API}/finance-lifecycle/accounts`),
       ]);
-
       if (!active) return;
-
       const [bootstrapResult, activationResult, accountsResult] = results;
       if (bootstrapResult.status === "fulfilled") {
         setBootstrap({
@@ -164,31 +103,22 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
       if (accountsResult.status === "fulfilled") {
         setAccounts(accountsResult.value.data?.accounts || []);
       }
-
       const failures = results.filter((result) => result.status === "rejected");
       if (failures.length === results.length) {
         setProblem(errorMessage(failures[0].reason, "Could not load the installment workflow."));
       }
       setLoading(false);
     }
-
     load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const status = useMemo(() => {
     const availableMachines = bootstrap.machines.filter(
-      (machine) =>
-        machine.sale_status === "available" &&
-        machine.readiness?.ready !== false &&
-        Number(machine.active_application_count || 0) === 0
+      (machine) => machine.sale_status === "available" && machine.readiness?.ready !== false && Number(machine.active_application_count || 0) === 0
     ).length;
     const activeAccounts = accounts.filter(
-      (account) =>
-        Number(account.outstanding_balance || 0) > 0 &&
-        !["completed", "cancelled"].includes(String(account.agreement_status || ""))
+      (account) => Number(account.outstanding_balance || 0) > 0 && !["completed", "cancelled"].includes(String(account.agreement_status || ""))
     ).length;
     return {
       availableMachines,
@@ -199,14 +129,9 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
   }, [accounts, activationCandidates, bootstrap]);
 
   const recentAccounts = useMemo(
-    () =>
-      [...accounts]
-        .sort((left, right) =>
-          String(right.last_payment_date || right.created_at || "").localeCompare(
-            String(left.last_payment_date || left.created_at || "")
-          )
-        )
-        .slice(0, 5),
+    () => [...accounts]
+      .sort((left, right) => String(right.last_payment_date || right.created_at || "").localeCompare(String(left.last_payment_date || left.created_at || "")))
+      .slice(0, 5),
     [accounts]
   );
 
@@ -216,21 +141,13 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
         <div>
           <p>Equipment Installment Finance</p>
           <h1>Equipment Installment Workflow</h1>
-          <span>
-            Complete the essential sale journey in order. Official schedules, balances,
-            payments and correction entries always come from the backend.
-          </span>
+          <span>Complete the essential sale journey in order. Official schedules, balances, payments and correction entries always come from the backend.</span>
         </div>
-        <Link className="finance-flow__advanced" to="/equipment-installment-finance?view=advanced">
-          Advanced command centre
-        </Link>
+        <Link className="finance-flow__advanced" to="/equipment-installment-finance?view=advanced">Advanced command centre</Link>
       </header>
 
       {problem ? <div className="finance-flow__notice is-error" role="alert">{problem}</div> : null}
-      <div className="finance-flow__notice" role="note">
-        The frontend never calculates or stores the official debt balance. It displays the
-        backend balance after every payment, reversal, waiver, return credit, penalty or damage entry.
-      </div>
+      <div className="finance-flow__notice" role="note">The frontend never calculates or stores the official debt balance. It displays the backend balance after every payment, reversal, waiver, return credit, penalty or damage entry.</div>
 
       <section className="finance-flow__summary" aria-label="Workflow status">
         <article><span>Available equipment</span><strong>{loading ? "…" : status.availableMachines}</strong></article>
@@ -241,26 +158,16 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
 
       <section className="finance-flow__section">
         <div className="finance-flow__section-head">
-          <div>
-            <p>Phase 3 · One controlled path</p>
-            <h2>Complete these nine actions</h2>
-          </div>
-          <Link className="finance-flow__primary" to="/equipment-installment-finance/applications?stage=start">
-            Start New Installment
-          </Link>
+          <div><p>Phase 3 · One controlled path</p><h2>Complete these nine actions</h2></div>
+          <Link className="finance-flow__primary" to="/equipment-installment-finance/applications?stage=start">Start New Installment</Link>
         </div>
-
         <div className="finance-flow__steps">
           {WORKFLOW_STEPS.map((step) => (
             <article className="finance-flow__step" key={step.number} data-testid={`finance-step-${step.number}`}>
               <b>{step.number}</b>
               <div>
-                <div className="finance-flow__step-title">
-                  <h3>{step.title}</h3>
-                  <StepStatus stepKey={step.key} data={status} />
-                </div>
-                <p>{step.description}</p>
-                <Link to={step.to}>{step.action} →</Link>
+                <div className="finance-flow__step-title"><h3>{step.title}</h3><StepStatus stepKey={step.key} data={status} /></div>
+                <p>{step.description}</p><Link to={step.to}>{step.action} →</Link>
               </div>
             </article>
           ))}
@@ -269,78 +176,51 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
 
       <section className="finance-flow__section" data-testid="phase4-controls">
         <div className="finance-flow__section-head">
-          <div>
-            <p>Phase 4 · Sensitive financial scenarios</p>
-            <h2>Corrections use approvals and accounting entries</h2>
-          </div>
-          <Link
-            className="finance-flow__primary"
-            to="/equipment-installment-finance/applications?stage=corrections"
-          >
-            Open Corrections & Returns
-          </Link>
+          <div><p>Phase 4 · Sensitive financial scenarios</p><h2>Corrections use approvals and accounting entries</h2></div>
+          <Link className="finance-flow__primary" to="/equipment-installment-finance/applications?stage=corrections">Open Corrections & Returns</Link>
         </div>
         <div className="finance-flow__steps">
           {PHASE_FOUR_ACTIONS.map((action, index) => (
             <article className="finance-flow__step" key={action}>
               <b>{index + 1}</b>
-              <div>
-                <div className="finance-flow__step-title">
-                  <h3>{action}</h3>
-                  <span>Append-only evidence</span>
-                </div>
-                <p>
-                  The original record remains unchanged or is explicitly voided; the approved
-                  correction is preserved in the Finance ledger and audit trail.
-                </p>
-              </div>
+              <div><div className="finance-flow__step-title"><h3>{action}</h3><span>Append-only evidence</span></div><p>The original record remains unchanged or is explicitly voided; the approved correction is preserved in the Finance ledger and audit trail.</p></div>
             </article>
           ))}
         </div>
-        <div className="finance-flow__notice" role="note">
-          Returned equipment settlement: outstanding balance − approved return credit − refundable
-          amounts + penalties or damages = final settlement balance. The active policy version and
-          all approved components are recorded with the return.
+        <div className="finance-flow__notice" role="note">Returned equipment settlement: outstanding balance − approved return credit − refundable amounts + penalties or damages = final settlement balance. The active policy version and all approved components are recorded with the return.</div>
+        <Link to="/equipment-installment-finance/applications?stage=governance">Open default and schedule-restructure governance →</Link>
+      </section>
+
+      <section className="finance-flow__section" data-testid="phase5-controls">
+        <div className="finance-flow__section-head">
+          <div><p>Phase 5 · Documents, approvals, roles and delivery</p><h2>Private evidence controls the final handover</h2></div>
+          <Link className="finance-flow__primary" to="/equipment-installment-finance/applications?stage=documents-delivery">Open Documents & Delivery</Link>
         </div>
-        <Link to="/equipment-installment-finance/applications?stage=governance">
-          Open default and schedule-restructure governance →
-        </Link>
+        <div className="finance-flow__steps">
+          {PHASE_FIVE_ACTIONS.map((action, index) => (
+            <article className="finance-flow__step" key={action}>
+              <b>{index + 1}</b>
+              <div><div className="finance-flow__step-title"><h3>{action}</h3><span>Independent control</span></div><p>Each action is permission checked on the server and preserved with the actor, time, reason, request evidence and Finance case reference.</p></div>
+            </article>
+          ))}
+        </div>
+        <div className="finance-flow__notice" role="note">Delivery is blocked until required KYC, guarantor and agreement documents are encrypted, independently reviewed and separately approved. The requester cannot authorize delivery, and the authorizer cannot confirm the physical handover.</div>
       </section>
 
       <section className="finance-flow__section" data-testid="official-account-balances">
         <div className="finance-flow__section-head">
-          <div>
-            <p>Backend source of truth</p>
-            <h2>Recent installment accounts</h2>
-          </div>
+          <div><p>Backend source of truth</p><h2>Recent installment accounts</h2></div>
           <Link to="/equipment-installment-finance/applications?stage=collections">Open collections</Link>
         </div>
-
         {loading ? <div className="finance-flow__empty">Loading official balances…</div> : null}
-        {!loading && !recentAccounts.length ? (
-          <div className="finance-flow__empty">No active installment account has been created yet.</div>
-        ) : null}
+        {!loading && !recentAccounts.length ? <div className="finance-flow__empty">No active installment account has been created yet.</div> : null}
         {!loading && recentAccounts.length ? (
           <div className="finance-flow__accounts">
             {recentAccounts.map((account) => (
               <article key={account.agreement_id || account.id} data-testid="finance-account-row">
-                <div>
-                  <small>{account.agreement_number}</small>
-                  <strong>{account.customer_name}</strong>
-                  <span>{account.asset_code} · {account.asset_name}</span>
-                </div>
-                <div>
-                  <span>Official balance</span>
-                  <strong data-testid="official-outstanding-balance">
-                    {money(account.outstanding_balance)}
-                  </strong>
-                  <small>Last payment: {dateLabel(account.last_payment_date)}</small>
-                </div>
-                <Link
-                  to={`/equipment-installment-finance/applications?stage=collections&agreement=${account.agreement_id || account.id}`}
-                >
-                  Payment history
-                </Link>
+                <div><small>{account.agreement_number}</small><strong>{account.customer_name}</strong><span>{account.asset_code} · {account.asset_name}</span></div>
+                <div><span>Official balance</span><strong data-testid="official-outstanding-balance">{money(account.outstanding_balance)}</strong><small>Last payment: {dateLabel(account.last_payment_date)}</small></div>
+                <Link to={`/equipment-installment-finance/applications?stage=collections&agreement=${account.agreement_id || account.id}`}>Payment history</Link>
               </article>
             ))}
           </div>
