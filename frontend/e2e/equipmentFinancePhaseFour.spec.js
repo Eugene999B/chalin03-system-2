@@ -323,8 +323,9 @@ test("independent approver posts a returned excavator settlement and the backend
   await expect(page.getByTestId("phase4-ledger-entry")).toHaveCount(5);
   await expect(page.getByText("Approved Return Credit")).toBeVisible();
   await expect(page.getByText("Approved Damage Charge")).toBeVisible();
-  await expect(page.getByText("ERC-PHASE4-001")).toBeVisible();
-  await expect(page.getByText("Posted", { exact: true })).toBeVisible();
+  const originalReceiptRow = page.getByRole("row", { name: /ERC-PHASE4-001/ });
+  await expect(originalReceiptRow).toBeVisible();
+  await expect(originalReceiptRow.getByText("Posted", { exact: true })).toBeVisible();
   await expect(page.getByText("EFR-PHASE4-001")).toBeVisible();
   await expect(page.getByText("Final balance: GHS 350.00")).toBeVisible();
 });
