@@ -79,7 +79,7 @@ for (const pageName of [
   "EquipmentFinanceDepositReservationPage",
   "EquipmentFinanceArrearsPage",
   "EquipmentFinanceRecoveryGovernancePage",
-  "EquipmentFinanceFinalLifecyclePage",
+  "EquipmentFinanceCompanyWideLifecyclePage",
 ]) {
   assert.match(workspace, new RegExp(pageName));
 }
