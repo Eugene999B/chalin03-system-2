@@ -10,20 +10,23 @@ const read = (...parts) => fs.readFileSync(path.join(frontendRoot, ...parts), "u
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const workspace = read("src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const home = read("src", "pages", "EquipmentInstallmentCommandPage.jsx");
+const minimalWorkflow = read("src", "pages", "EquipmentFinanceMinimalWorkflowPage.jsx");
 const wizard = read("src", "pages", "EquipmentFinanceStartWizardPage.jsx");
 const customers = read("src", "pages", "EquipmentFinanceCustomerCentrePage.jsx");
 const excavators = read("src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
 const applications = read("src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const activation = read("src", "pages", "EquipmentFinanceAgreementActivationPage.jsx");
 const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPage.jsx");
+const collections = read("src", "pages", "EquipmentFinanceCollectionsMinimalPage.jsx");
 const reports = read("src", "pages", "EquipmentSalesReportsPage.jsx");
 const guide = read("src", "pages", "EquipmentFinanceGuidePage.jsx");
 const css = read("src", "styles", "equipmentFinancePhaseOne.css");
 
-for (const stage of ["start", "customers", "machines", "guide"]) {
+for (const stage of ["start", "customers", "machines", "guide", "activation", "deposit", "collections"]) {
   assert.match(workspace, new RegExp(`stage === "${stage}"`));
 }
 assert.match(workspace, /EquipmentFinanceApplicationsPage/);
+assert.match(workspace, /EquipmentFinanceCollectionsMinimalPage/);
 assert.doesNotMatch(workspace, /EquipmentCreditApplicationsPage/);
 
 for (const title of [
@@ -41,31 +44,43 @@ for (const title of [
 }
 assert.doesNotMatch(layout, /Finance Equipment Reference/);
 
+assert.match(home, /EquipmentFinanceMinimalWorkflowPage/);
+assert.match(home, /EquipmentInstallmentCommandAdvancedPage/);
 for (const phrase of [
-  "What do you need to do today?",
-  "Customer → Excavator → Price &amp; Plan",
-  "Start New Installment",
-  "Finance is company-wide",
+  "Equipment Installment Workflow",
+  "Complete these nine actions",
+  "Equipment list",
+  "Add equipment",
+  "Customer selection",
+  "Create installment agreement",
+  "Configure terms",
+  "Preview schedule",
+  "Activate agreement",
+  "Record payment",
+  "Balance and payment history",
 ]) {
-  assert.match(home, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(minimalWorkflow, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 }
+assert.match(minimalWorkflow, /company-wide|Company-wide/);
+assert.match(minimalWorkflow, /official-outstanding-balance/);
 
 for (const phrase of [
-  "Select existing customer",
-  "Create new customer",
+  "Start New Installment",
   "Select the exact excavator",
-  "Installment Offer is created automatically",
-  "Create Installment Draft",
-  "Draft saved automatically",
+  "Set the exact payment interval",
+  "Customer assessment",
+  "Review and create the draft",
+  "Create Draft Installment",
 ]) {
   assert.match(wizard, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
-assert.match(wizard, /localStorage/);
+assert.match(wizard, /schedule-preview/);
 assert.match(wizard, /customer_consent_confirmed/);
 assert.match(wizard, /credit_assessment_consent_confirmed/);
 assert.doesNotMatch(wizard, /selectedContextId|useWorkspaceContext/);
+assert.doesNotMatch(wizard, /Choose a Hire location|Choose a Finance location/);
 
-assert.match(customers, /Finance Customer Centre/);
+assert.match(customers, /Customer Centre/);
 assert.match(customers, /Add Customer/);
 assert.match(customers, /Start Installment/);
 assert.doesNotMatch(customers, /useWorkspaceContext/);
@@ -86,6 +101,11 @@ for (const page of [activation, deposit, reports]) {
   assert.match(page, /company-wide|Company-wide/);
   assert.doesNotMatch(page, /selectedContextId|useWorkspaceContext/);
 }
+assert.match(collections, /Collections &amp; Payment History/);
+assert.match(collections, /account-detail-official-balance/);
+assert.match(collections, /payment-history/);
+assert.match(collections, /backend after committed payments/i);
+assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
 assert.match(guide, /What should I do first/);
 assert.match(guide, /What is an Installment Offer/);
@@ -100,4 +120,4 @@ assert.match(css, /white-space:\s*normal/);
 assert.match(css, /position:\s*sticky/);
 assert.match(css, /min-height:\s*44px/);
 
-console.log("Equipment Finance Phase 1 usability contract passed.");
+console.log("Equipment Finance Phase 3 usability contract passed.");

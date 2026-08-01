@@ -25,6 +25,12 @@ const wizard = readProject(
   "pages",
   "EquipmentFinanceStartWizardPage.jsx"
 );
+const minimalWorkflow = readProject(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceMinimalWorkflowPage.jsx"
+);
 const layout = readProject(
   "frontend",
   "src",
@@ -44,22 +50,28 @@ test("Phase 1 mounts one company-wide guided Finance workflow", () => {
 });
 
 test("Start New Installment creates the commercial offer automatically", () => {
-  assert.match(route, /equipment_sales_quotations/);
-  assert.match(route, /equipment_sales_quotation_items/);
-  assert.match(route, /status, subtotal/);
-  assert.match(route, /'approved'/);
+  assert.match(route, /INSERT INTO equipment_sales_quotations SET \?/);
+  assert.match(route, /INSERT INTO equipment_sales_quotation_items SET \?/);
+  assert.match(route, /status:\s*"approved"/);
+  assert.match(route, /subtotal:\s*offer\.selling_price/);
+  assert.match(route, /hire_location_id:\s*null/);
   assert.match(route, /created_automatically:\s*true/);
   assert.match(route, /equipment_credit_applications/);
   assert.match(route, /equipment_credit_application_kyc/);
   assert.match(route, /equipment_credit_application_decisions/);
   assert.match(route, /Installment Offer and draft credit application created/);
-  assert.match(wizard, /Installment Offer is created automatically/);
+  assert.match(minimalWorkflow, /automatic Installment Offer/);
+  assert.match(wizard, /create a draft/i);
   assert.doesNotMatch(wizard, /Choose a Finance location|Choose a Hire location/);
 });
 
 test("Finance customers are reusable and duplicate protected", () => {
   assert.match(route, /POSSIBLE_DUPLICATE_FINANCE_CUSTOMER/);
-  assert.match(route, /phone = \? OR LOWER\(customer_name\) = LOWER\(\?\)/);
+  assert.match(
+    route,
+    /REPLACE\(REPLACE\(REPLACE\(REPLACE\(phone, '\+', ''\), ' ', ''\), '-', ''\), '233', '0'\) = \?/
+  );
+  assert.match(route, /OR LOWER\(customer_name\) = LOWER\(\?\)/);
   assert.match(route, /EQUIPMENT_FINANCE_CUSTOMER_CREATED/);
   assert.match(route, /EQUIPMENT_FINANCE_CUSTOMER_UPDATED/);
 });

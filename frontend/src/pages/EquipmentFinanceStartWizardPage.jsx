@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
 const API = "/equipment-catalogue/sales/phase-one";
-const DRAFT_KEY = "chalin03.finance.start-installment.v1";
+const DRAFT_KEY = "chalin03.finance.start-installment.v2";
 
 const STEP_TITLES = [
   "Customer",
   "Excavator",
-  "Price & plan",
-  "KYC & affordability",
-  "Review",
+  "Payment plan",
+  "Optional assessment",
+  "Review & create",
 ];
 
 function todayPlus(days) {
@@ -20,7 +21,7 @@ function todayPlus(days) {
   return date.toISOString().slice(0, 10);
 }
 
-function initialState() {
+function blankState() {
   return {
     customerMode: "existing",
     customer_id: "",
@@ -38,8 +39,10 @@ function initialState() {
       selling_price: "",
       deposit: "",
       payment_frequency: "monthly",
+      custom_interval_days: "30",
       installment_count: "12",
       first_due_date: todayPlus(30),
+      non_working_day_rule: "exact",
       notes: "",
     },
     kyc: {
@@ -68,14 +71,26 @@ function initialState() {
       credit_assessment_consent_confirmed: false,
     },
     affordability: {
-      monthly_salary_income: "0",
-      monthly_business_income: "0",
-      monthly_other_income: "0",
-      monthly_business_costs: "0",
-      monthly_household_expenses: "0",
-      existing_monthly_debt: "0",
+      monthly_salary_income: "",
+      monthly_business_income: "",
+      monthly_other_income: "",
+      monthly_business_costs: "",
+      monthly_household_expenses: "",
+      existing_monthly_debt: "",
       assessment_notes: "",
     },
+  };
+}
+
+function deepMergeDraft(saved = {}) {
+  const base = blankState();
+  return {
+    ...base,
+    ...saved,
+    customer: { ...base.customer, ...(saved.customer || {}) },
+    offer: { ...base.offer, ...(saved.offer || {}) },
+    kyc: { ...base.kyc, ...(saved.kyc || {}) },
+    affordability: { ...base.affordability, ...(saved.affordability || {}) },
   };
 }
 
@@ -96,9 +111,22 @@ function money(value) {
 }
 
 function label(value) {
-  return String(value || "")
+  return String(value || "Not recorded")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function dateLabel(value) {
+  if (!value) return "Not selected";
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime())
+    ? String(value)
+    : parsed.toLocaleDateString("en-GH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
 }
 
 function Field({ title, children, wide = false, hint = "" }) {
@@ -118,19 +146,82 @@ function MoneyField({ title, value, onChange, hint = "" }) {
         inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value.replace(/[^0-9.,]/g, ""))}
-        placeholder="0.00"
+        placeholder="Leave empty or enter 0.00"
       />
       <strong className="finance-simple__money">{money(value)}</strong>
     </Field>
   );
 }
 
+function SchedulePreview({ preview, loading, problem }) {
+  if (loading) {
+    return <div className="finance-simple__notice is-info">Calculating exact payment dates…</div>;
+  }
+  if (problem) {
+    return <div className="finance-simple__notice is-error">{problem}</div>;
+  }
+  if (!preview?.schedule?.length) return null;
+  const firstRows = preview.schedule.slice(0, 8);
+  const finalRows = preview.schedule.length > 11 ? preview.schedule.slice(-3) : [];
+  const visibleRows = [...firstRows, ...finalRows];
+  return (
+    <section className="finance-simple__section">
+      <div className="finance-simple__section-header">
+        <div>
+          <p className="finance-simple__eyebrow">Exact schedule preview</p>
+          <h3>{preview.schedule.length} payment date(s)</h3>
+          <span className="finance-simple__muted">
+            First {dateLabel(preview.first_due_date)} · Final {dateLabel(preview.final_due_date)}
+          </span>
+        </div>
+        <strong className="finance-simple__money">{money(preview.periodic_amount)}</strong>
+      </div>
+      <div className="finance-simple__facts">
+        <div><span>Financed amount</span><strong>{money(preview.financed_amount)}</strong></div>
+        <div><span>Normal payment</span><strong>{money(preview.periodic_amount)}</strong></div>
+        <div><span>Final payment</span><strong>{money(preview.final_payment_amount)}</strong></div>
+        <div><span>Date rule</span><strong>{label(preview.non_working_day_rule)}</strong></div>
+      </div>
+      <div className="finance-simple__schedule-list">
+        {visibleRows.map((row, index) => (
+          <article key={`${row.sequence_number}-${row.due_date}`}>
+            {index === 8 && finalRows.length ? <small>… remaining dates …</small> : null}
+            <span>Payment {row.sequence_number}</span>
+            <strong>{dateLabel(row.due_date)}</strong>
+            <b>{money(row.scheduled_amount)}</b>
+          </article>
+        ))}
+      </div>
+      <details>
+        <summary>Show every exact payment date</summary>
+        <div className="finance-simple__schedule-list">
+          {preview.schedule.map((row) => (
+            <article key={`all-${row.sequence_number}-${row.due_date}`}>
+              <span>Payment {row.sequence_number}</span>
+              <strong>{dateLabel(row.due_date)}</strong>
+              <b>{money(row.scheduled_amount)}</b>
+            </article>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 export default function EquipmentFinanceStartWizardPage() {
+  const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const preselectedCustomer = new URLSearchParams(location.search).get("customer") || "";
+  const query = new URLSearchParams(location.search);
+  const preselectedCustomer = query.get("customer") || "";
+  const preselectedAsset = query.get("asset") || "";
+  const role = String(user?.role || "").toLowerCase();
+  const canCreate =
+    effectivePermissions.includes("fleet.assets.manage") ||
+    ["system_administrator", "super_admin", "admin", "administrator"].includes(role);
+
   const [step, setStep] = useState(0);
-  const [data, setData] = useState(initialState);
+  const [data, setData] = useState(blankState);
   const [customers, setCustomers] = useState([]);
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +230,9 @@ export default function EquipmentFinanceStartWizardPage() {
   const [notice, setNotice] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [machineSearch, setMachineSearch] = useState("");
+  const [schedulePreview, setSchedulePreview] = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleProblem, setScheduleProblem] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -153,18 +247,19 @@ export default function EquipmentFinanceStartWizardPage() {
         const saved = window.localStorage.getItem(DRAFT_KEY);
         if (saved) {
           try {
-            const parsed = JSON.parse(saved);
-            setData((current) => ({ ...current, ...parsed }));
+            setData(deepMergeDraft(JSON.parse(saved)));
             setNotice("Your unfinished installment draft was restored on this device.");
           } catch {
             window.localStorage.removeItem(DRAFT_KEY);
           }
         }
-        if (preselectedCustomer) {
+        if (preselectedCustomer || preselectedAsset) {
           setData((current) => ({
             ...current,
-            customerMode: "existing",
-            customer_id: preselectedCustomer,
+            ...(preselectedCustomer
+              ? { customerMode: "existing", customer_id: preselectedCustomer }
+              : {}),
+            ...(preselectedAsset ? { asset_id: preselectedAsset } : {}),
           }));
         }
       } catch (error) {
@@ -177,7 +272,7 @@ export default function EquipmentFinanceStartWizardPage() {
     return () => {
       active = false;
     };
-  }, [preselectedCustomer]);
+  }, [preselectedAsset, preselectedCustomer]);
 
   useEffect(() => {
     if (loading) return;
@@ -190,6 +285,20 @@ export default function EquipmentFinanceStartWizardPage() {
   const selectedMachine = machines.find(
     (machine) => String(machine.id) === String(data.asset_id)
   );
+
+  useEffect(() => {
+    if (!selectedMachine) return;
+    setData((current) => {
+      if (current.offer.selling_price) return current;
+      return {
+        ...current,
+        offer: {
+          ...current.offer,
+          selling_price: String(selectedMachine.target_selling_price || ""),
+        },
+      };
+    });
+  }, [selectedMachine]);
 
   const filteredCustomers = useMemo(() => {
     const term = customerSearch.trim().toLowerCase();
@@ -224,7 +333,35 @@ export default function EquipmentFinanceStartWizardPage() {
     numberValue(data.offer.selling_price) - numberValue(data.offer.deposit),
     0
   );
-  const periodicAmount = financedAmount / Math.max(numberValue(data.offer.installment_count), 1);
+
+  useEffect(() => {
+    const offer = data.offer;
+    const valid =
+      numberValue(offer.selling_price) > 0 &&
+      numberValue(offer.deposit) <= numberValue(offer.selling_price) &&
+      Number(offer.installment_count) > 0 &&
+      Boolean(offer.first_due_date) &&
+      (offer.payment_frequency !== "custom" || Number(offer.custom_interval_days) > 0);
+    if (!valid) {
+      setSchedulePreview(null);
+      setScheduleProblem("");
+      return undefined;
+    }
+    const timer = window.setTimeout(async () => {
+      setScheduleLoading(true);
+      setScheduleProblem("");
+      try {
+        const response = await axiosClient.post(`${API}/schedule-preview`, { offer });
+        setSchedulePreview(response.data?.schedule || null);
+      } catch (error) {
+        setSchedulePreview(null);
+        setScheduleProblem(errorMessage(error, "Could not calculate the exact dates."));
+      } finally {
+        setScheduleLoading(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [data.offer]);
 
   function updateSection(section, field, value) {
     setData((current) => ({
@@ -246,6 +383,7 @@ export default function EquipmentFinanceStartWizardPage() {
   }
 
   function validateStep(index) {
+    if (!canCreate) return "Your account can view Finance but cannot create a new installment.";
     if (index === 0) {
       if (data.customerMode === "existing" && !data.customer_id) {
         return "Select an existing customer or choose Create new customer.";
@@ -267,37 +405,13 @@ export default function EquipmentFinanceStartWizardPage() {
         return "Enter at least one installment payment.";
       }
       if (!data.offer.first_due_date) return "Choose the first payment due date.";
-    }
-    if (index === 3) {
-      const customerAddress =
-        data.kyc.residential_address ||
-        selectedCustomer?.address ||
-        data.customer.address;
       if (
-        !data.kyc.id_number.trim() ||
-        !data.kyc.employment_type ||
-        !data.kyc.occupation.trim() ||
-        !String(customerAddress || "").trim()
+        data.offer.payment_frequency === "custom" &&
+        Number(data.offer.custom_interval_days) < 1
       ) {
-        return "Complete the customer ID, employment type, occupation and residential address.";
+        return "Enter how many days should pass between payments.";
       }
-      if (!data.kyc.customer_consent_confirmed || !data.kyc.credit_assessment_consent_confirmed) {
-        return "Confirm both customer consent declarations.";
-      }
-      if (financedAmount >= 100000) {
-        if (
-          !data.kyc.guarantor_name.trim() ||
-          !data.kyc.guarantor_phone.trim() ||
-          !data.kyc.guarantor_id_number.trim()
-        ) {
-          return "This financed amount requires the guarantor name, phone and ID number.";
-        }
-      }
-      const income =
-        numberValue(data.affordability.monthly_salary_income) +
-        numberValue(data.affordability.monthly_business_income) +
-        numberValue(data.affordability.monthly_other_income);
-      if (income <= 0) return "Enter the customer’s monthly income before review.";
+      if (!schedulePreview) return scheduleProblem || "Wait for the exact schedule preview.";
     }
     return "";
   }
@@ -320,7 +434,7 @@ export default function EquipmentFinanceStartWizardPage() {
   }
 
   async function submit() {
-    for (let index = 0; index < STEP_TITLES.length - 1; index += 1) {
+    for (const index of [0, 1, 2]) {
       const issue = validateStep(index);
       if (issue) {
         setStep(index);
@@ -354,9 +468,15 @@ export default function EquipmentFinanceStartWizardPage() {
       };
       const response = await axiosClient.post(`${API}/start-installment`, payload);
       window.localStorage.removeItem(DRAFT_KEY);
-      const applicationNumber = response.data?.application?.application_number || "the draft";
-      setNotice(`${applicationNumber} was created with its automatic Installment Offer.`);
-      window.setTimeout(() => navigate(response.data?.next_path || "/equipment-installment-finance/applications"), 900);
+      const applicationNumber = response.data?.application?.application_number || "The draft";
+      setNotice(`${applicationNumber} was created with its exact payment dates.`);
+      window.setTimeout(
+        () =>
+          navigate(
+            response.data?.next_path || "/equipment-installment-finance/applications"
+          ),
+        900
+      );
     } catch (error) {
       setProblem(errorMessage(error, "Could not start the installment."));
     } finally {
@@ -366,21 +486,36 @@ export default function EquipmentFinanceStartWizardPage() {
 
   function clearDraft() {
     window.localStorage.removeItem(DRAFT_KEY);
-    setData(initialState());
+    setData(blankState());
+    setSchedulePreview(null);
     setStep(0);
     setProblem("");
-    setNotice("The local draft was cleared.");
+    setNotice("The draft was cleared.");
   }
+
+  const optionalMissing = [
+    !data.kyc.id_number && "Customer ID",
+    !data.kyc.employment_type && "Employment or business type",
+    !data.kyc.occupation && "Occupation",
+    !data.kyc.residential_address && !selectedCustomer?.address && !data.customer.address && "Address",
+    numberValue(data.affordability.monthly_salary_income) +
+      numberValue(data.affordability.monthly_business_income) +
+      numberValue(data.affordability.monthly_other_income) <=
+      0 && "Affordability income",
+    !data.kyc.customer_consent_confirmed && "Customer consent",
+    !data.kyc.credit_assessment_consent_confirmed && "Credit assessment consent",
+    financedAmount >= 100000 && !data.kyc.guarantor_name && "Guarantor",
+  ].filter(Boolean);
 
   return (
     <main className="finance-simple">
       <header className="finance-simple__hero">
         <div>
-          <p>Simple guided workflow</p>
+          <p>Company-wide guided workflow</p>
           <h1>Start New Installment</h1>
           <span>
-            Choose the customer and exact excavator, set the payment plan, complete KYC,
-            then create one draft application. The Installment Offer is created automatically.
+            Choose the customer and exact excavator, calculate every payment date, then
+            create a draft. KYC and affordability can be completed later before submission.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -391,11 +526,16 @@ export default function EquipmentFinanceStartWizardPage() {
         </div>
       </header>
 
+      {!canCreate ? (
+        <div className="finance-simple__notice is-error" role="alert">
+          Your account has view-only Finance access. Ask an authorised administrator for
+          installment-creation permission before entering customer information.
+        </div>
+      ) : null}
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
       <div className="finance-simple__notice is-info">
-        Finance is company-wide. You do not need to choose a Hire location; the system keeps
-        the excavator’s physical yard only as internal storage information.
+        Installment Finance is company-wide. No operational location is selected or stored on the case.
       </div>
 
       <nav className="finance-simple__steps" aria-label="Installment steps">
@@ -420,12 +560,19 @@ export default function EquipmentFinanceStartWizardPage() {
             <div>
               <p className="finance-simple__eyebrow">Step 1</p>
               <h2>Who is buying the excavator?</h2>
-              <span className="finance-simple__muted">Search first to avoid duplicate customer records.</span>
+              <span className="finance-simple__muted">Search first to avoid duplicate records.</span>
             </div>
             <select
               value={data.customerMode}
-              onChange={(event) => setData((current) => ({ ...current, customerMode: event.target.value, customer_id: "" }))}
+              onChange={(event) =>
+                setData((current) => ({
+                  ...current,
+                  customerMode: event.target.value,
+                  customer_id: "",
+                }))
+              }
               aria-label="Customer mode"
+              disabled={!canCreate}
             >
               <option value="existing">Select existing customer</option>
               <option value="new">Create new customer</option>
@@ -445,41 +592,27 @@ export default function EquipmentFinanceStartWizardPage() {
               </div>
               <div className="finance-simple__customer-grid">
                 {filteredCustomers.map((customer) => (
-                  <article
-                    className={`finance-simple__customer ${String(data.customer_id) === String(customer.id) ? "is-selected" : ""}`}
+                  <button
+                    type="button"
                     key={customer.id}
+                    className={String(data.customer_id) === String(customer.id) ? "is-selected" : ""}
+                    onClick={() => setData((current) => ({ ...current, customer_id: String(customer.id) }))}
                   >
-                    <div className="finance-simple__customer-body">
-                      <span className="finance-simple__pill">{customer.customer_code}</span>
-                      <h3>{customer.customer_name}</h3>
-                      <p>{customer.phone || "No phone"}</p>
-                      <small>{customer.address || "No address recorded"}</small>
-                      <div className="finance-simple__facts">
-                        <div><span>Applications</span><strong>{customer.finance_application_count || 0}</strong></div>
-                        <div><span>Outstanding</span><strong>{money(customer.outstanding_balance)}</strong></div>
-                      </div>
-                      <button
-                        className={String(data.customer_id) === String(customer.id) ? "is-primary" : ""}
-                        type="button"
-                        onClick={() => setData((current) => ({ ...current, customer_id: String(customer.id) }))}
-                      >
-                        {String(data.customer_id) === String(customer.id) ? "Selected" : "Select customer"}
-                      </button>
-                    </div>
-                  </article>
+                    <strong>{customer.customer_name}</strong>
+                    <span>{customer.phone || "No phone"}</span>
+                    <small>{customer.customer_code} · {money(customer.outstanding_balance)}</small>
+                  </button>
                 ))}
               </div>
-              {!filteredCustomers.length ? <div className="finance-simple__empty">No matching customer. Choose Create new customer.</div> : null}
             </>
           ) : (
             <div className="finance-simple__grid">
-              <Field title="Full name"><input value={data.customer.customer_name} onChange={(event) => updateSection("customer", "customer_name", event.target.value)} /></Field>
+              <Field title="Customer name"><input value={data.customer.customer_name} onChange={(event) => updateSection("customer", "customer_name", event.target.value)} /></Field>
               <Field title="Customer type"><select value={data.customer.customer_type} onChange={(event) => updateSection("customer", "customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field>
-              <Field title="Phone"><input inputMode="tel" value={data.customer.phone} onChange={(event) => updateSection("customer", "phone", event.target.value)} /></Field>
-              <Field title="WhatsApp phone"><input inputMode="tel" value={data.customer.whatsapp_phone} onChange={(event) => updateSection("customer", "whatsapp_phone", event.target.value)} /></Field>
-              <Field title="Email"><input type="email" value={data.customer.email} onChange={(event) => updateSection("customer", "email", event.target.value)} /></Field>
-              <Field title="Contact person"><input value={data.customer.contact_person} onChange={(event) => updateSection("customer", "contact_person", event.target.value)} /></Field>
-              <Field title="Address" wide><textarea value={data.customer.address} onChange={(event) => updateSection("customer", "address", event.target.value)} /></Field>
+              <Field title="Phone number"><input inputMode="tel" value={data.customer.phone} onChange={(event) => updateSection("customer", "phone", event.target.value)} /></Field>
+              <Field title="WhatsApp phone" hint="Optional"><input inputMode="tel" value={data.customer.whatsapp_phone} onChange={(event) => updateSection("customer", "whatsapp_phone", event.target.value)} /></Field>
+              <Field title="Email" hint="Optional"><input type="email" value={data.customer.email} onChange={(event) => updateSection("customer", "email", event.target.value)} /></Field>
+              <Field title="Address" hint="Optional for draft"><textarea value={data.customer.address} onChange={(event) => updateSection("customer", "address", event.target.value)} /></Field>
             </div>
           )}
         </section>
@@ -488,137 +621,108 @@ export default function EquipmentFinanceStartWizardPage() {
       {!loading && step === 1 ? (
         <section className="finance-simple__panel">
           <div className="finance-simple__section-header">
-            <div><p className="finance-simple__eyebrow">Step 2</p><h2>Select the exact excavator</h2><span className="finance-simple__muted">Only Finance-ready, available machines without an active application appear here.</span></div>
-            <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=machines">Register an excavator</Link>
+            <div><p className="finance-simple__eyebrow">Step 2</p><h2>Select the exact excavator</h2><span className="finance-simple__muted">Only sale-ready machines without an active case appear.</span></div>
           </div>
-          <div className="finance-simple__grid"><Field title="Search excavators" wide><input value={machineSearch} onChange={(event) => setMachineSearch(event.target.value)} placeholder="Code, make, model, serial or chassis" /></Field></div>
-          <div className="finance-simple__machine-grid">
-            {filteredMachines.map((machine) => {
-              const photo = machine.media?.find((item) => item.is_primary)?.file_url || machine.main_image_url;
-              return (
-                <article className={`finance-simple__machine ${String(data.asset_id) === String(machine.id) ? "is-selected" : ""}`} key={machine.id}>
-                  <div className="finance-simple__machine-image">{photo ? <img src={photo} alt={machine.asset_name} /> : <span>🚜</span>}</div>
-                  <div className="finance-simple__machine-body">
-                    <span className="finance-simple__pill is-good">Available</span>
-                    <h3>{machine.asset_code} — {machine.asset_name}</h3>
-                    <p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ")}</p>
-                    <div className="finance-simple__facts"><div><span>Serial / chassis</span><strong>{machine.serial_number || machine.chassis_number}</strong></div><div><span>Sale value</span><strong>{money(machine.target_selling_price)}</strong></div></div>
-                    <button className={String(data.asset_id) === String(machine.id) ? "is-primary" : ""} type="button" onClick={() => chooseMachine(machine)}>{String(data.asset_id) === String(machine.id) ? "Selected" : "Select excavator"}</button>
-                  </div>
-                </article>
-              );
-            })}
+          <div className="finance-simple__grid"><Field title="Search excavator" wide><input value={machineSearch} onChange={(event) => setMachineSearch(event.target.value)} placeholder="Code, make, model, serial or chassis" /></Field></div>
+          <div className="finance-simple__cards">
+            {filteredMachines.map((machine) => (
+              <article className={`finance-simple__card ${String(data.asset_id) === String(machine.id) ? "is-selected" : ""}`} key={machine.id}>
+                <div className="finance-simple__machine-image">{machine.main_image_url ? <img src={machine.main_image_url} alt={machine.asset_name} /> : <span>🚜</span>}</div>
+                <div className="finance-simple__card-body"><small>{machine.asset_code}</small><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" ")}</p><div className="finance-simple__facts"><div><span>Target price</span><strong>{money(machine.target_selling_price)}</strong></div><div><span>Serial</span><strong>{machine.serial_number || "Not recorded"}</strong></div></div><button className="is-primary" type="button" onClick={() => chooseMachine(machine)}>{String(data.asset_id) === String(machine.id) ? "✓ Selected" : "Select this excavator"}</button></div>
+              </article>
+            ))}
           </div>
-          {!filteredMachines.length ? <div className="finance-simple__empty">No available Finance-ready excavator matches this search.</div> : null}
         </section>
       ) : null}
 
       {!loading && step === 2 ? (
         <section className="finance-simple__panel">
-          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 3</p><h2>Set price and payment plan</h2><span className="finance-simple__muted">This creates the commercial Installment Offer automatically—there is no separate quotation page.</span></div></div>
+          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 3</p><h2>Set the exact payment interval</h2><span className="finance-simple__muted">The dates shown here become the approved Offer and agreement dates.</span></div></div>
           <div className="finance-simple__grid">
-            <MoneyField title="Agreed selling price" value={data.offer.selling_price} onChange={(value) => updateSection("offer", "selling_price", value)} />
+            <MoneyField title="Selling price" value={data.offer.selling_price} onChange={(value) => updateSection("offer", "selling_price", value)} />
             <MoneyField title="Opening deposit" value={data.offer.deposit} onChange={(value) => updateSection("offer", "deposit", value)} />
-            <Field title="Payment frequency"><select value={data.offer.payment_frequency} onChange={(event) => updateSection("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option><option value="custom">Custom</option></select></Field>
-            <Field title="Number of payments"><input type="number" min="1" max="520" value={data.offer.installment_count} onChange={(event) => updateSection("offer", "installment_count", event.target.value)} /></Field>
-            <Field title="First payment due date"><input type="date" value={data.offer.first_due_date} onChange={(event) => updateSection("offer", "first_due_date", event.target.value)} /></Field>
-            <Field title="Offer note"><input value={data.offer.notes} onChange={(event) => updateSection("offer", "notes", event.target.value)} placeholder="Optional commercial note" /></Field>
+            <Field title="Payment pattern"><select value={data.offer.payment_frequency} onChange={(event) => updateSection("offer", "payment_frequency", event.target.value)}><option value="weekly">Every 7 days</option><option value="fortnightly">Every 14 days</option><option value="monthly">Monthly on the selected date</option><option value="custom">Choose number of days</option></select></Field>
+            {data.offer.payment_frequency === "custom" ? <Field title="Days between payments" hint="For example: 10, 21 or 30 days"><input type="number" min="1" max="365" inputMode="numeric" value={data.offer.custom_interval_days} onChange={(event) => updateSection("offer", "custom_interval_days", event.target.value)} /></Field> : null}
+            <Field title="Number of payments"><input type="number" min="1" max="520" inputMode="numeric" value={data.offer.installment_count} onChange={(event) => updateSection("offer", "installment_count", event.target.value)} /></Field>
+            <Field title="First payment date"><input type="date" value={data.offer.first_due_date} onChange={(event) => updateSection("offer", "first_due_date", event.target.value)} /></Field>
+            <Field title="Weekend handling"><select value={data.offer.non_working_day_rule} onChange={(event) => updateSection("offer", "non_working_day_rule", event.target.value)}><option value="exact">Keep the exact date</option><option value="next_weekday">Move to next weekday</option><option value="previous_weekday">Move to previous weekday</option></select></Field>
+            <Field title="Internal note" wide hint="Optional"><textarea value={data.offer.notes} onChange={(event) => updateSection("offer", "notes", event.target.value)} /></Field>
           </div>
-          <div className="finance-simple__summary">
-            <article><span>Financed balance</span><strong className="finance-simple__money">{money(financedAmount)}</strong></article>
-            <article><span>Approximate payment</span><strong className="finance-simple__money">{money(periodicAmount)}</strong><small>Per selected payment period; the final schedule handles rounding.</small></article>
-          </div>
+          <SchedulePreview preview={schedulePreview} loading={scheduleLoading} problem={scheduleProblem} />
         </section>
       ) : null}
 
       {!loading && step === 3 ? (
         <section className="finance-simple__panel">
-          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 4</p><h2>KYC, guarantor and affordability</h2><span className="finance-simple__muted">Save the application as a draft now; an authorised reviewer verifies the evidence before approval.</span></div></div>
+          <div className="finance-simple__notice is-info"><strong>Everything on this step is optional when creating the draft.</strong><p>Complete it now when available, or open the draft later before submission and approval.</p></div>
+          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 4</p><h2>Customer assessment</h2><span className="finance-simple__muted">Missing information will be shown as a later checklist—not a creation error.</span></div></div>
+          <h3>Identity and work</h3>
           <div className="finance-simple__grid">
-            <Field title="ID type"><input value={data.kyc.id_type} onChange={(event) => updateSection("kyc", "id_type", event.target.value)} /></Field>
-            <Field title="ID number"><input value={data.kyc.id_number} onChange={(event) => updateSection("kyc", "id_number", event.target.value)} /></Field>
-            <Field title="Date of birth"><input type="date" value={data.kyc.date_of_birth} onChange={(event) => updateSection("kyc", "date_of_birth", event.target.value)} /></Field>
-            <Field title="Nationality"><input value={data.kyc.nationality} onChange={(event) => updateSection("kyc", "nationality", event.target.value)} /></Field>
-            <Field title="Employment / business type"><select value={data.kyc.employment_type} onChange={(event) => updateSection("kyc", "employment_type", event.target.value)}><option value="">Choose type</option><option value="salaried">Salaried</option><option value="self_employed">Self-employed</option><option value="contractor">Contractor</option><option value="farmer">Farmer</option><option value="pensioner">Pensioner</option><option value="other">Other</option></select></Field>
-            <Field title="Occupation"><input value={data.kyc.occupation} onChange={(event) => updateSection("kyc", "occupation", event.target.value)} /></Field>
-            <Field title="Employer / business name"><input value={data.kyc.employer_business_name} onChange={(event) => updateSection("kyc", "employer_business_name", event.target.value)} /></Field>
-            <Field title="Business registration number"><input value={data.kyc.business_registration_number} onChange={(event) => updateSection("kyc", "business_registration_number", event.target.value)} /></Field>
-            <Field title="Residential address" wide><textarea value={data.kyc.residential_address} onChange={(event) => updateSection("kyc", "residential_address", event.target.value)} placeholder={selectedCustomer?.address || data.customer.address || "Current residential address"} /></Field>
-            <Field title="Work address" wide><textarea value={data.kyc.work_address} onChange={(event) => updateSection("kyc", "work_address", event.target.value)} /></Field>
-            <Field title="Years at residence"><input type="number" min="0" max="200" value={data.kyc.years_at_residence} onChange={(event) => updateSection("kyc", "years_at_residence", event.target.value)} /></Field>
-            <Field title="Years in work / business"><input type="number" min="0" max="200" value={data.kyc.years_in_employment_business} onChange={(event) => updateSection("kyc", "years_in_employment_business", event.target.value)} /></Field>
+            <Field title="ID type" hint="Optional"><input value={data.kyc.id_type} onChange={(event) => updateSection("kyc", "id_type", event.target.value)} /></Field>
+            <Field title="ID number" hint="Optional"><input value={data.kyc.id_number} onChange={(event) => updateSection("kyc", "id_number", event.target.value)} /></Field>
+            <Field title="Date of birth" hint="Optional"><input type="date" value={data.kyc.date_of_birth} onChange={(event) => updateSection("kyc", "date_of_birth", event.target.value)} /></Field>
+            <Field title="Employment or business type" hint="Optional"><select value={data.kyc.employment_type} onChange={(event) => updateSection("kyc", "employment_type", event.target.value)}><option value="">Not recorded yet</option><option value="salaried">Salaried</option><option value="self_employed">Self-employed</option><option value="contractor">Contractor</option><option value="pensioner">Pensioner</option><option value="farmer">Farmer</option><option value="other">Other</option></select></Field>
+            <Field title="Occupation" hint="Optional"><input value={data.kyc.occupation} onChange={(event) => updateSection("kyc", "occupation", event.target.value)} /></Field>
+            <Field title="Employer or business" hint="Optional"><input value={data.kyc.employer_business_name} onChange={(event) => updateSection("kyc", "employer_business_name", event.target.value)} /></Field>
+            <Field title="Residential address" wide hint="Optional for draft"><textarea value={data.kyc.residential_address} onChange={(event) => updateSection("kyc", "residential_address", event.target.value)} /></Field>
           </div>
-
-          <div className="finance-simple__section">
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Emergency contact</p><h2>Someone we can reach</h2></div></div>
-            <div className="finance-simple__grid is-three">
-              <Field title="Name"><input value={data.kyc.emergency_contact_name} onChange={(event) => updateSection("kyc", "emergency_contact_name", event.target.value)} /></Field>
-              <Field title="Phone"><input inputMode="tel" value={data.kyc.emergency_contact_phone} onChange={(event) => updateSection("kyc", "emergency_contact_phone", event.target.value)} /></Field>
-              <Field title="Relationship"><input value={data.kyc.emergency_contact_relationship} onChange={(event) => updateSection("kyc", "emergency_contact_relationship", event.target.value)} /></Field>
-            </div>
-          </div>
-
-          <div className="finance-simple__section">
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Guarantor</p><h2>{financedAmount >= 100000 ? "Required for this amount" : "Optional guarantor"}</h2></div></div>
-            <div className="finance-simple__grid">
-              <Field title="Guarantor name"><input value={data.kyc.guarantor_name} onChange={(event) => updateSection("kyc", "guarantor_name", event.target.value)} /></Field>
-              <Field title="Guarantor phone"><input inputMode="tel" value={data.kyc.guarantor_phone} onChange={(event) => updateSection("kyc", "guarantor_phone", event.target.value)} /></Field>
-              <Field title="Guarantor ID number"><input value={data.kyc.guarantor_id_number} onChange={(event) => updateSection("kyc", "guarantor_id_number", event.target.value)} /></Field>
-              <Field title="Relationship"><input value={data.kyc.guarantor_relationship} onChange={(event) => updateSection("kyc", "guarantor_relationship", event.target.value)} /></Field>
-              <Field title="Guarantor address" wide><textarea value={data.kyc.guarantor_address} onChange={(event) => updateSection("kyc", "guarantor_address", event.target.value)} /></Field>
-            </div>
-          </div>
-
-          <div className="finance-simple__section">
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Monthly affordability</p><h2>Income and commitments</h2></div></div>
-            <div className="finance-simple__grid is-three">
-              <MoneyField title="Salary income" value={data.affordability.monthly_salary_income} onChange={(value) => updateSection("affordability", "monthly_salary_income", value)} />
-              <MoneyField title="Business income" value={data.affordability.monthly_business_income} onChange={(value) => updateSection("affordability", "monthly_business_income", value)} />
-              <MoneyField title="Other income" value={data.affordability.monthly_other_income} onChange={(value) => updateSection("affordability", "monthly_other_income", value)} />
-              <MoneyField title="Business costs" value={data.affordability.monthly_business_costs} onChange={(value) => updateSection("affordability", "monthly_business_costs", value)} />
-              <MoneyField title="Household expenses" value={data.affordability.monthly_household_expenses} onChange={(value) => updateSection("affordability", "monthly_household_expenses", value)} />
-              <MoneyField title="Existing monthly debt" value={data.affordability.existing_monthly_debt} onChange={(value) => updateSection("affordability", "existing_monthly_debt", value)} />
-              <Field title="Assessment note" wide><textarea value={data.affordability.assessment_notes} onChange={(event) => updateSection("affordability", "assessment_notes", event.target.value)} /></Field>
-            </div>
-          </div>
-
+          <h3>Monthly affordability</h3>
           <div className="finance-simple__grid">
-            <label className="finance-simple__check"><input type="checkbox" checked={data.kyc.customer_consent_confirmed} onChange={(event) => updateSection("kyc", "customer_consent_confirmed", event.target.checked)} /><span><strong>Customer consent confirmed</strong><small>The customer agrees that these details may be used for the installment application.</small></span></label>
-            <label className="finance-simple__check"><input type="checkbox" checked={data.kyc.credit_assessment_consent_confirmed} onChange={(event) => updateSection("kyc", "credit_assessment_consent_confirmed", event.target.checked)} /><span><strong>Credit assessment consent confirmed</strong><small>The customer understands the affordability and verification review.</small></span></label>
+            <MoneyField title="Salary income" value={data.affordability.monthly_salary_income} onChange={(value) => updateSection("affordability", "monthly_salary_income", value)} hint="Optional for draft" />
+            <MoneyField title="Business income" value={data.affordability.monthly_business_income} onChange={(value) => updateSection("affordability", "monthly_business_income", value)} hint="Optional for draft" />
+            <MoneyField title="Other income" value={data.affordability.monthly_other_income} onChange={(value) => updateSection("affordability", "monthly_other_income", value)} hint="Optional for draft" />
+            <MoneyField title="Business costs" value={data.affordability.monthly_business_costs} onChange={(value) => updateSection("affordability", "monthly_business_costs", value)} hint="Optional" />
+            <MoneyField title="Household expenses" value={data.affordability.monthly_household_expenses} onChange={(value) => updateSection("affordability", "monthly_household_expenses", value)} hint="Optional" />
+            <MoneyField title="Existing monthly debt" value={data.affordability.existing_monthly_debt} onChange={(value) => updateSection("affordability", "existing_monthly_debt", value)} hint="Optional" />
+          </div>
+          <h3>Consent and guarantor</h3>
+          <div className="finance-simple__checks">
+            <label><input type="checkbox" checked={data.kyc.customer_consent_confirmed} onChange={(event) => updateSection("kyc", "customer_consent_confirmed", event.target.checked)} /> Customer consent confirmed</label>
+            <label><input type="checkbox" checked={data.kyc.credit_assessment_consent_confirmed} onChange={(event) => updateSection("kyc", "credit_assessment_consent_confirmed", event.target.checked)} /> Credit assessment consent confirmed</label>
+          </div>
+          <div className="finance-simple__grid">
+            <Field title="Guarantor name" hint={financedAmount >= 100000 ? "Complete before submission" : "Optional"}><input value={data.kyc.guarantor_name} onChange={(event) => updateSection("kyc", "guarantor_name", event.target.value)} /></Field>
+            <Field title="Guarantor phone" hint="Optional for draft"><input value={data.kyc.guarantor_phone} onChange={(event) => updateSection("kyc", "guarantor_phone", event.target.value)} /></Field>
+            <Field title="Guarantor ID number" hint="Optional for draft"><input value={data.kyc.guarantor_id_number} onChange={(event) => updateSection("kyc", "guarantor_id_number", event.target.value)} /></Field>
           </div>
         </section>
       ) : null}
 
       {!loading && step === 4 ? (
         <section className="finance-simple__panel">
-          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 5</p><h2>Review before creating the draft</h2><span className="finance-simple__muted">Nothing is delivered, reserved or transferred here. The manager must review and approve the application later.</span></div></div>
+          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Step 5</p><h2>Review and create the draft</h2><span className="finance-simple__muted">Only customer, excavator and valid payment terms are required now.</span></div></div>
           <div className="finance-simple__summary">
             <article><span>Customer</span><strong>{selectedCustomer?.customer_name || data.customer.customer_name}</strong><small>{selectedCustomer?.phone || data.customer.phone}</small></article>
-            <article><span>Excavator</span><strong>{selectedMachine ? `${selectedMachine.asset_code} — ${selectedMachine.asset_name}` : "Not selected"}</strong><small>{selectedMachine?.serial_number || selectedMachine?.chassis_number}</small></article>
-            <article><span>Selling price</span><strong className="finance-simple__money">{money(data.offer.selling_price)}</strong></article>
-            <article><span>Deposit</span><strong className="finance-simple__money">{money(data.offer.deposit)}</strong></article>
-            <article><span>Financed balance</span><strong className="finance-simple__money">{money(financedAmount)}</strong></article>
-            <article><span>Payment plan</span><strong>{data.offer.installment_count} {label(data.offer.payment_frequency)} payments</strong><small>First due {data.offer.first_due_date}</small></article>
-            <article><span>Customer ID</span><strong>{data.kyc.id_type}: {data.kyc.id_number}</strong></article>
-            <article><span>Guarantor</span><strong>{data.kyc.guarantor_name || "Not recorded"}</strong><small>{data.kyc.guarantor_phone}</small></article>
+            <article><span>Excavator</span><strong>{selectedMachine?.asset_code} — {selectedMachine?.asset_name}</strong><small>{[selectedMachine?.make, selectedMachine?.model].filter(Boolean).join(" ")}</small></article>
+            <article><span>Selling price</span><strong>{money(data.offer.selling_price)}</strong></article>
+            <article><span>Deposit</span><strong>{money(data.offer.deposit)}</strong></article>
+            <article><span>Financed amount</span><strong>{money(financedAmount)}</strong></article>
+            <article><span>Payment interval</span><strong>{data.offer.payment_frequency === "custom" ? `Every ${data.offer.custom_interval_days} days` : label(data.offer.payment_frequency)}</strong></article>
+            <article><span>Exact dates</span><strong>{schedulePreview?.schedule?.length || 0} payments</strong><small>{dateLabel(schedulePreview?.first_due_date)} → {dateLabel(schedulePreview?.final_due_date)}</small></article>
+            <article><span>Normal payment</span><strong>{money(schedulePreview?.periodic_amount)}</strong></article>
           </div>
-          <div className="finance-simple__notice is-info">The system will automatically create an approved commercial Installment Offer and one draft credit application. KYC verification and credit approval remain separate controlled actions.</div>
+          {optionalMissing.length ? (
+            <div className="finance-simple__notice is-warning">
+              <strong>Complete before submission for approval:</strong>
+              <p>{optionalMissing.join(", ")}.</p>
+              <small>These items do not block draft creation.</small>
+            </div>
+          ) : (
+            <div className="finance-simple__notice">Assessment information is ready for later verification.</div>
+          )}
+          <SchedulePreview preview={schedulePreview} loading={false} problem="" />
         </section>
       ) : null}
 
       {!loading ? (
-        <footer className="finance-simple__sticky-actions">
-          <span>Step {step + 1} of {STEP_TITLES.length}: {STEP_TITLES[step]}</span>
-          <div>
-            {step > 0 ? <button type="button" onClick={goBack}>Back</button> : null}
-            <button type="button" onClick={() => setNotice("Draft saved automatically on this device.")}>Save draft</button>
-            {step < STEP_TITLES.length - 1 ? (
-              <button className="is-primary" type="button" onClick={continueForward}>Continue</button>
-            ) : (
-              <button className="is-primary" type="button" onClick={submit} disabled={saving}>{saving ? "Creating draft…" : "Create Installment Draft"}</button>
-            )}
-          </div>
-        </footer>
+        <div className="finance-simple__sticky-actions">
+          {step > 0 ? <button type="button" onClick={goBack} disabled={saving}>Back</button> : <span />}
+          {step < STEP_TITLES.length - 1 ? (
+            <button className="is-primary" type="button" onClick={continueForward} disabled={!canCreate}>Continue</button>
+          ) : (
+            <button className="is-primary" type="button" onClick={submit} disabled={saving || !canCreate}>{saving ? "Creating draft…" : "Create Draft Installment"}</button>
+          )}
+        </div>
       ) : null}
     </main>
   );

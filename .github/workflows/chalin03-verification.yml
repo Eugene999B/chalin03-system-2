@@ -102,3 +102,47 @@ jobs:
             frontend/frontend-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  finance-phase-three-browser:
+    name: Finance Phase 3 Chromium journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the complete Finance Phase 3 journey
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseThree.spec.js 2>&1 | tee finance-phase-three-browser.log
+
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-phase-three-browser-evidence
+          path: |
+            frontend/finance-phase-three-browser.log
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7
