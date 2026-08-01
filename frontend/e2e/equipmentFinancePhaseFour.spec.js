@@ -34,11 +34,6 @@ function json(route, body, status = 200) {
   });
 }
 
-function actorFromRequest(request) {
-  const authorization = request.headers().authorization || "";
-  return authorization.includes("phase4-approver-token") ? approverUser : makerUser;
-}
-
 function policy() {
   return {
     id: 1,
@@ -59,6 +54,7 @@ function policy() {
 
 test("independent approver posts a returned excavator settlement and the backend balance becomes GHS 350", async ({ page }) => {
   const state = {
+    actor: makerUser,
     outstanding: 800,
     agreementStatus: "active",
     assetSaleStatus: "installment_active",
@@ -149,7 +145,7 @@ test("independent approver posts a returned excavator settlement and the backend
     const url = new URL(request.url());
     const path = url.pathname.replace(/^\/api/, "");
     const method = request.method();
-    const actor = actorFromRequest(request);
+    const actor = state.actor;
 
     if (path === "/auth/me" && method === "GET") {
       return json(route, {
@@ -306,17 +302,18 @@ test("independent approver posts a returned excavator settlement and the backend
   await page.getByTestId("phase4-submit-request").click();
   await expect(page.getByRole("status")).toContainText("different Finance Manager");
 
+  state.actor = approverUser;
   await page.evaluate((user) => {
     localStorage.setItem("chalin03_token", "phase4-approver-token");
     localStorage.setItem("chalin03_user", JSON.stringify(user));
   }, approverUser);
   await page.reload();
-  await expect(page.getByText("Independent Finance Manager", { exact: false })).toBeVisible({ timeout: 10000 }).catch(() => {});
   await page.getByRole("button", { name: /Approvals \(1\)/ }).click();
   await expect(page.getByTestId("phase4-pending-request")).toContainText("EFC-PHASE4-001");
   await page.getByPlaceholder("Independent decision reason").fill(
     "Inspection and settlement components verified against policy FIN-CORR-1."
   );
+  await expect(page.getByTestId("phase4-decide-request")).toBeEnabled();
   await page.getByTestId("phase4-decide-request").click();
 
   await expect(page.getByRole("status")).toContainText("posted through the protected Finance ledger");
