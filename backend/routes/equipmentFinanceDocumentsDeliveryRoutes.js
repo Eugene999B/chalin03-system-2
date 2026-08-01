@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
@@ -22,6 +23,19 @@ const {
 } = require("../services/equipmentFinanceDocumentsDeliveryService");
 
 const router = express.Router();
+
+const privateDocumentUploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "FINANCE_DOCUMENT_UPLOAD_RATE_LIMITED",
+    message:
+      "Too many private document uploads were attempted. Wait briefly before trying again.",
+  },
+});
 
 const DOCUMENT_UPLOAD_ROLES = new Set([
   "finance_manager",
@@ -205,6 +219,7 @@ router.get(
 
 router.post(
   "/cases/:agreementId/documents",
+  privateDocumentUploadLimiter,
   requirePermission("fleet.assets.manage"),
   asyncHandler(async (req, res) => {
     assertRole(req, DOCUMENT_UPLOAD_ROLES, "Only authorised Finance case staff can upload private documents.");
@@ -370,3 +385,4 @@ module.exports.DOCUMENT_REVIEW_ROLES = DOCUMENT_REVIEW_ROLES;
 module.exports.DOCUMENT_UPLOAD_ROLES = DOCUMENT_UPLOAD_ROLES;
 module.exports.PRIVATE_DOCUMENT_VIEW_ROLES = PRIVATE_DOCUMENT_VIEW_ROLES;
 module.exports.capabilitiesFor = capabilitiesFor;
+module.exports.privateDocumentUploadLimiter = privateDocumentUploadLimiter;
