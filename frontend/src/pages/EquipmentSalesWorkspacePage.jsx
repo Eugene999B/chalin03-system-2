@@ -2,6 +2,7 @@ import { useLocation } from "react-router";
 import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
 import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
+import EquipmentFinanceCollectionsMinimalPage from "./EquipmentFinanceCollectionsMinimalPage";
 import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
 import EquipmentFinanceExcavatorsPage from "./EquipmentFinanceExcavatorsPage";
@@ -12,7 +13,7 @@ import EquipmentFinanceOperationalStartPage from "./EquipmentFinanceOperationalS
 import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage";
 import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
 
-const FINAL_LIFECYCLE_STAGES = new Set(["collections", "delivery", "ownership"]);
+const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "documents", "staff"]);
 
 export default function EquipmentSalesWorkspacePage() {
@@ -57,6 +58,10 @@ export default function EquipmentSalesWorkspacePage() {
 
   if (stage === "deposit") {
     return <EquipmentFinanceDepositReservationPage />;
+  }
+
+  if (stage === "collections") {
+    return <EquipmentFinanceCollectionsMinimalPage />;
   }
 
   if (FINAL_LIFECYCLE_STAGES.has(stage)) {

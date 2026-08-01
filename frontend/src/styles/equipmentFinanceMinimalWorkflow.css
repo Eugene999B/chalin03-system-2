@@ -1,0 +1,245 @@
+.finance-flow {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  color: #17202a;
+}
+
+.finance-flow__hero,
+.finance-flow__section,
+.finance-flow__summary article,
+.finance-flow__notice {
+  border: 1px solid #d8dee7;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(25, 39, 60, 0.06);
+}
+
+.finance-flow__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.finance-flow__hero p,
+.finance-flow__section-head p {
+  margin: 0 0 0.35rem;
+  color: #536273;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.finance-flow__hero h1,
+.finance-flow__section h2,
+.finance-flow__step h3 {
+  margin: 0;
+}
+
+.finance-flow__hero span {
+  display: block;
+  max-width: 48rem;
+  margin-top: 0.65rem;
+  color: #536273;
+  line-height: 1.55;
+}
+
+.finance-flow a {
+  color: #174f8a;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.finance-flow a:hover {
+  text-decoration: underline;
+}
+
+.finance-flow__advanced,
+.finance-flow__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.7rem 1rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.finance-flow__advanced {
+  border: 1px solid #bcc8d6;
+  background: #f7f9fc;
+}
+
+.finance-flow__primary {
+  background: #174f8a;
+  color: #fff !important;
+}
+
+.finance-flow__notice {
+  padding: 0.9rem 1rem;
+  background: #eef6ff;
+  color: #1d4e78;
+  line-height: 1.45;
+}
+
+.finance-flow__notice.is-error {
+  border-color: #e7b4b4;
+  background: #fff1f1;
+  color: #8b1d1d;
+}
+
+.finance-flow__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.finance-flow__summary article {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.finance-flow__summary span,
+.finance-flow__accounts span,
+.finance-flow__accounts small {
+  color: #687789;
+}
+
+.finance-flow__summary strong {
+  font-size: 1.7rem;
+}
+
+.finance-flow__section {
+  padding: 1.25rem;
+}
+
+.finance-flow__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.finance-flow__steps {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.finance-flow__step {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid #e1e6ed;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.finance-flow__step > b {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #174f8a;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.finance-flow__step-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.finance-flow__step-title span {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #526274;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.finance-flow__step p {
+  margin: 0.35rem 0 0.65rem;
+  color: #596879;
+  line-height: 1.45;
+}
+
+.finance-flow__accounts {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.finance-flow__accounts article {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(12rem, 0.8fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #e1e6ed;
+  border-radius: 14px;
+}
+
+.finance-flow__accounts article > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.finance-flow__accounts strong[data-testid="official-outstanding-balance"] {
+  color: #8a3f00;
+  font-size: 1.1rem;
+}
+
+.finance-flow__empty {
+  padding: 1.5rem;
+  border: 1px dashed #c7d0dc;
+  border-radius: 14px;
+  color: #667587;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .finance-flow__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-flow__accounts article {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .finance-flow {
+    padding: 0.75rem;
+  }
+
+  .finance-flow__hero,
+  .finance-flow__section-head,
+  .finance-flow__step-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finance-flow__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-flow__step {
+    grid-template-columns: 38px minmax(0, 1fr);
+    padding: 0.85rem;
+  }
+
+  .finance-flow__step > b {
+    width: 36px;
+    height: 36px;
+  }
+}

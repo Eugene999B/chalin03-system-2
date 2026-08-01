@@ -7,6 +7,12 @@ const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const routes = read("backend", "routes", "equipmentFinanceFinalLifecycleRoutes.js");
 const page = read("frontend", "src", "pages", "EquipmentFinanceFinalLifecyclePage.jsx");
+const collections = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceCollectionsMinimalPage.jsx"
+);
 const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
 const excavators = read("frontend", "src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
 const styles = read("frontend", "src", "styles", "equipmentFinancePhaseOne.css");
@@ -20,11 +26,15 @@ test("final lifecycle keeps controlled collections, delivery and ownership APIs"
   assert.match(routes, /writeAuditEvent/);
 });
 
-test("professional lifecycle stages remain reachable inside simplified account work", () => {
+test("minimal collections is separate while delivery and ownership remain advanced", () => {
+  assert.match(workspace, /stage === "collections"/);
+  assert.match(workspace, /EquipmentFinanceCollectionsMinimalPage/);
   assert.match(workspace, /FINAL_LIFECYCLE_STAGES/);
-  assert.match(workspace, /"collections", "delivery", "ownership"/);
+  assert.match(workspace, /"delivery", "ownership"/);
   assert.match(workspace, /EquipmentFinanceFinalLifecyclePage/);
-  assert.match(page, /collection|payment/i);
+  assert.match(collections, /Collections &amp; Payment History/);
+  assert.match(collections, /account-detail-official-balance/);
+  assert.match(collections, /payment-history/);
   assert.match(page, /delivery/i);
   assert.match(page, /ownership/i);
 });
@@ -40,5 +50,6 @@ test("machine evidence and money remain complete on phone layouts", () => {
 
 test("Finance lifecycle never requires a Hire-location selector", () => {
   assert.doesNotMatch(page, /selectedHireLocationId|requireHireLocationScope|Choose a Hire location/);
+  assert.doesNotMatch(collections, /selectedHireLocationId|requireHireLocationScope|Choose a Hire location/);
   assert.doesNotMatch(workspace, /EquipmentHireOperationsPage/);
 });

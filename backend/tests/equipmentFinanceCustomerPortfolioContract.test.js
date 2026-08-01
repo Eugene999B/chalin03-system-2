@@ -13,7 +13,11 @@ const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx"
 test("Finance Customer Centre creates and reuses company-wide customer records", () => {
   assert.match(routes, /\/phase-one\/customers/);
   assert.match(routes, /POSSIBLE_DUPLICATE_FINANCE_CUSTOMER/);
-  assert.match(routes, /phone = \? OR LOWER\(customer_name\) = LOWER\(\?\)/);
+  assert.match(
+    routes,
+    /REPLACE\(REPLACE\(REPLACE\(REPLACE\(phone, '\+', ''\), ' ', ''\), '-', ''\), '233', '0'\) = \?/
+  );
+  assert.match(routes, /OR LOWER\(customer_name\) = LOWER\(\?\)/);
   assert.match(routes, /EQUIPMENT_FINANCE_CUSTOMER_CREATED/);
   assert.match(routes, /EQUIPMENT_FINANCE_CUSTOMER_UPDATED/);
 });
