@@ -10,6 +10,8 @@ const page = read("src/pages/EquipmentFinanceDocumentsDeliveryPage.jsx");
 const routePage = read("src/pages/EquipmentSalesWorkspacePage.jsx");
 const workflow = read("src/pages/EquipmentFinanceMinimalWorkflowPage.jsx");
 const css = read("src/styles/equipmentFinanceDocumentsDelivery.css");
+const downloadBridge = read("src/utils/secureFinanceDocumentDownloadBridge.js");
+const indexHtml = read("index.html");
 
 assert.match(page, /phase5-documents-delivery-page/);
 assert.match(page, /Required documents/);
@@ -37,5 +39,12 @@ assert.match(workflow, /Phase 5/);
 assert.match(workflow, /documents-delivery/);
 assert.match(css, /@media \(max-width: 680px\)/);
 assert.match(css, /phase5-permissions/);
+assert.match(indexHtml, /secureFinanceDocumentDownloadBridge\.js/);
+assert.match(downloadBridge, /Authorization: `Bearer \$\{token\}`/);
+assert.match(downloadBridge, /"X-Chalin03-Division": "installment_finance"/);
+assert.match(downloadBridge, /cache: "no-store"/);
+assert.match(downloadBridge, /URL\.createObjectURL/);
+assert.match(downloadBridge, /URL\.revokeObjectURL/);
+assert.doesNotMatch(downloadBridge, /[?&](token|access_token)=/i);
 
 console.log("Equipment Finance Phase 5 frontend source contracts passed.");
