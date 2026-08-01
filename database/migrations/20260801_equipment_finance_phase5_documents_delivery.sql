@@ -1,7 +1,10 @@
--- CHALIN 03 EQUIPMENT INSTALLMENT FINANCE
--- PHASE 5: PRIVATE DOCUMENTS, INDEPENDENT APPROVALS AND DELIVERY CONTROL
--- ADDITIVE, FORWARD-ONLY MIGRATION.
--- No existing Finance, Hire, Mining, Spare Parts, payment, schedule or audit row is deleted or rewritten.
+-- CHALIN 03 PRODUCTION MIGRATION
+-- EQUIPMENT FINANCE PHASE 5 PRIVATE DOCUMENTS, APPROVALS AND DELIVERY
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Professional Backup and SQL backup verified.
+-- Do not run database/schema.sql against production.
+-- Existing Finance, Hire, Mining, Spare Parts, payment, schedule, correction,
+-- document, delivery and audit records are preserved.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
     id INT AUTO_INCREMENT PRIMARY KEY,
