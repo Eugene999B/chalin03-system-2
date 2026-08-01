@@ -25,15 +25,20 @@ const migrationSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinanceOperationalPolishStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-test("Railway runs the Phase 3 gate before accepting API traffic", () => {
+test("Railway runs the Phase 1 schema and Phase 3 gates before accepting API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
-  assert.ok(
-    packageJson.scripts.start.indexOf(
-      "runEquipmentFinanceOperationalPolishStartup.js"
-    ) < packageJson.scripts.start.indexOf("server.js")
+  const phaseOneIndex = packageJson.scripts.start.indexOf(
+    "runEquipmentFinancePhaseOneSchemaStartup.js"
   );
+  const phaseThreeIndex = packageJson.scripts.start.indexOf(
+    "runEquipmentFinanceOperationalPolishStartup.js"
+  );
+  const serverIndex = packageJson.scripts.start.indexOf("server.js");
+  assert.ok(phaseOneIndex >= 0);
+  assert.ok(phaseThreeIndex > phaseOneIndex);
+  assert.ok(serverIndex > phaseThreeIndex);
 });
 
 test("first Phase 3 startup uses the controlled migration runner", () => {
