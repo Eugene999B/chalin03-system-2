@@ -8,13 +8,9 @@ Migration SQL: `database/migrations/20260731_equipment_finance_operational_polis
 
 Verifier SQL: `database/migrations/20260731_equipment_finance_operational_polish_verify.sql`
 
-Runner: `backend/scripts/runEquipmentFinanceOperationalPolishMigration.js`
+Controlled runner: `backend/scripts/runEquipmentFinanceOperationalPolishMigration.js`
 
-Command from `backend`:
-
-```powershell
-npm run migrate:equipment-finance:operational-polish:production
-```
+Railway startup gate: `backend/scripts/runEquipmentFinanceOperationalPolishStartup.js`
 
 ## Release boundary
 
@@ -30,7 +26,7 @@ This release adds private operational support tables for:
 
 It does not alter the structure of existing Finance applications, agreements, schedules, payments, issued documents or boss-alert records.
 
-The migration runner compares row counts before and after migration for:
+The runner compares row counts before and after migration for:
 
 - `equipment_credit_applications`
 - `equipment_sale_agreements`
@@ -40,73 +36,50 @@ The migration runner compares row counts before and after migration for:
 
 Any row-count change aborts the release.
 
+## Backup protection for the Railway Hobby plan
+
+Railway Hobby does not provide the separate managed SQL backup used by higher plans. The release therefore uses two available protections:
+
+1. A fresh signed **Chalin 03 Professional Backup** downloaded from the live website and retained outside Railway.
+2. An automatic database-side safety snapshot created by the controlled migration runner before any Phase 3 SQL is applied.
+
+The runner copies and verifies all five preserved Finance evidence tables into release-specific snapshot tables. It records their exact row counts in `chalin03_phase3_finance_safety_snapshots`. A missing table, wrong database identity, incomplete copy or count mismatch stops the deployment.
+
+The legacy `CHALIN03_SQL_BACKUP_CONFIRMED` variable is not required for this Railway Hobby release. It may remain present, but the runner does not rely on it.
+
 ## Mandatory production gate
 
-Do not merge the `main` to `production` release pull request until every item below is complete.
+Before the `main` to `production` release is merged:
 
-1. Download a fresh signed **Chalin 03 Professional Backup** from the live system.
-2. Create a separate fresh Railway/MySQL SQL backup.
-3. Verify that both files exist, are non-zero and can be opened or listed successfully.
-4. Confirm the exact Railway production database name.
-5. Run the approved migration command against the Railway backend service environment.
-6. Confirm the final success line exactly:
+1. Confirm that the fresh signed website backup exists, is non-zero and has been retained safely.
+2. Confirm the exact Railway production database name.
+3. Confirm that all required Railway variables below are present.
+4. Merge only the reviewed production pull request from `main` to `production`.
+5. Railway must run the startup gate before the API server starts.
+6. Confirm the final migration success line exactly:
 
 ```text
 Equipment Finance Phase 3 operational polish migration verified successfully.
 ```
 
-7. Confirm all seven verifier outputs are zero.
+7. Confirm the new deployment becomes healthy.
 8. Remove or reset the temporary migration controls after success.
-9. Only then merge the production release pull request.
 
 ## Temporary Railway controls
 
-Add these only to the backend/API service for the controlled migration operation:
+These values belong on the backend/API service for the controlled migration deployment:
 
 ```text
 CHALIN03_EQUIPMENT_FINANCE_OPERATIONAL_POLISH_ENABLED=true
 CHALIN03_SIGNED_BACKUP_CONFIRMED=true
-CHALIN03_SQL_BACKUP_CONFIRMED=true
 CHALIN03_MIGRATION_RELEASE=20260731_EQUIPMENT_FINANCE_OPERATIONAL_POLISH
 CHALIN03_EXPECTED_DATABASE=${{MySQL.MYSQLDATABASE}}
-```
-
-The runner also requires:
-
-```text
 NODE_ENV=production
 ```
 
 Normal Railway MySQL variables may use `DB_*` or `MYSQL*` names.
 
-`CHALIN03_PRODUCTION_MIGRATIONS_ENABLED=true` does not replace the Phase 3 release controls above.
-
-After changing Railway variables, apply **Deploy Changes** before running the migration command.
-
-## Approved execution from Windows PowerShell
-
-Use the local repository that is connected to Railway CLI:
-
-```powershell
-cd C:\Users\DDK\Desktop\chalin03-system
-
-git fetch origin
-git checkout main
-git pull --ff-only origin main
-git rev-parse HEAD
-```
-
-Confirm the printed SHA matches the exact verified Phase 3 `main` release commit recorded in the open production pull request.
-
-Then run:
-
-```powershell
-cd backend
-npm ci
-railway run npm run migrate:equipment-finance:operational-polish:production
-```
-
-Do not paste secrets into chat or screenshots. The complete non-secret migration output must be retained as release evidence.
+No local computer, PowerShell command or Railway CLI command is required. GitHub controls the release and Railway executes the gate during deployment.
 
 ## Required verifier outputs
 
@@ -128,16 +101,17 @@ Any non-zero result blocks production promotion.
 
 This is a forward-only additive migration.
 
-Do not drop the new tables and do not restore over live production merely because the command reports a verifier problem.
+Do not drop new tables and do not restore over live production merely because Railway reports a verifier problem.
 
 Instead:
 
-1. Keep the production pull request open and unmerged.
-2. Preserve the full error output.
+1. Keep the failed deployment from becoming active.
+2. Preserve the exact Railway error output.
 3. Verify the connected database identity.
-4. Confirm both fresh backups still exist.
-5. Prepare a forward-only corrective migration or verifier fix.
-6. Re-run the controlled command only after review.
+4. Confirm the signed website backup is still retained.
+5. Verify the database-side safety snapshot status and row counts.
+6. Prepare a forward-only corrective pull request.
+7. Redeploy only after review and green GitHub checks.
 
 ## Post-migration cleanup
 
@@ -146,9 +120,10 @@ Remove or reset these temporary values after a successful verified run:
 ```text
 CHALIN03_EQUIPMENT_FINANCE_OPERATIONAL_POLISH_ENABLED
 CHALIN03_SIGNED_BACKUP_CONFIRMED
-CHALIN03_SQL_BACKUP_CONFIRMED
 CHALIN03_MIGRATION_RELEASE
 ```
+
+`CHALIN03_SQL_BACKUP_CONFIRMED` is not part of the Railway Hobby release gate and may be removed.
 
 Keep `CHALIN03_EXPECTED_DATABASE` when it is already part of the production database-safety configuration.
 
@@ -156,17 +131,13 @@ Keep `CHALIN03_EXPECTED_DATABASE` when it is already part of the production data
 
 After the production branch deploys:
 
-1. Sign in as the protected System Administrator or Finance Manager.
-2. Open **Equipment Installment Finance → Task & Approval Inbox**.
-3. Confirm the inbox and case list load without a raw SQL error.
-4. Open **Start New Installment**, enter one harmless draft field and confirm the server-save indicator changes to Saved.
-5. Clear the draft and confirm no test application is submitted.
-6. Open an existing Finance case and confirm its chronology loads.
-7. Upload a small non-sensitive test PDF or image, verify it, download it and confirm it is not exposed by a public URL.
+1. Sign out and sign back in as the protected original System Administrator.
+2. Confirm all Spare Parts pages, Backup & Restore, Security Centre and System Operations are visible.
+3. Open **Equipment Installment Finance → Task & Approval Inbox**.
+4. Confirm the inbox and case list load without a raw SQL error.
+5. Open **Start New Installment**, enter one harmless draft field and confirm the server-save indicator changes to Saved.
+6. Clear the draft and confirm no test application is submitted.
+7. Open an existing Finance case and confirm its chronology loads.
 8. Run a schedule simulation and confirm no live balance changes.
-9. Create a low-risk test correction, approve it and confirm the original snapshot remains visible.
-10. Open an existing payment receipt and confirm allocation, outstanding balance and boss-alert status display.
-11. Record one copy or print sharing action and confirm it appears in the timeline.
-12. Confirm Hire, Mining and Spare Parts workspaces continue to load normally.
-
-Do not use a real customer identity document for the smoke test unless business operations require it.
+9. Open an existing payment receipt and confirm allocation, outstanding balance and boss-alert status display.
+10. Confirm Hire, Mining and Spare Parts workspaces continue to load normally.
