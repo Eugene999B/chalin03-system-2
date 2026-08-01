@@ -417,7 +417,7 @@ test("administrator completes the minimal installment workflow and sees the back
   await dialog.getByLabel("Equipment code").fill("EXC-PH3-001");
   await dialog.getByLabel("Machine name").fill("Phase 3 Excavator");
   await dialog.getByLabel("Make").fill("Caterpillar");
-  await dialog.getByLabel("Model").fill("320 GC");
+  await dialog.getByLabel("Model", { exact: true }).fill("320 GC");
   await dialog.getByLabel("Serial number").fill("PHASE3-SERIAL-001");
   await dialog.getByLabel("Target selling price").fill("1000");
   await dialog.getByLabel("Minimum approved price").fill("900");
