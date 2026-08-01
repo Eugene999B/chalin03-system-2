@@ -5,7 +5,7 @@ on:
     branches:
       - fix/finance-company-wide-stabilization
     paths:
-      - .finance-stabilization-bundle.tar.gz.b64
+      - .finance-stabilization-bundle.part*
 
 permissions:
   contents: write
@@ -21,19 +21,34 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Verify and extract reviewed bundle
+      - name: Check whether all reviewed bundle parts exist
+        id: bundle
         shell: bash
         run: |
           set -euo pipefail
-          test -f .finance-stabilization-bundle.tar.gz.b64
-          base64 --decode .finance-stabilization-bundle.tar.gz.b64 > /tmp/finance-stabilization-bundle.tar.gz
+          count=$(find . -maxdepth 1 -type f -name '.finance-stabilization-bundle.part*' | wc -l | tr -d ' ')
+          if [ "$count" != "11" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Waiting for all 11 reviewed bundle parts; currently present: $count."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify and extract reviewed bundle
+        if: steps.bundle.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat $(find . -maxdepth 1 -type f -name '.finance-stabilization-bundle.part*' | sort) > /tmp/finance-stabilization-bundle.tar.gz.b64
+          base64 --decode /tmp/finance-stabilization-bundle.tar.gz.b64 > /tmp/finance-stabilization-bundle.tar.gz
           echo "14d2e71a5a663458b27087360de388c50cacf56d3d4f183a7668b86e7c0506d9  /tmp/finance-stabilization-bundle.tar.gz" | sha256sum --check --strict
           tar -tzf /tmp/finance-stabilization-bundle.tar.gz | grep -Ev '(^|/)\.\.?(/|$)' >/tmp/finance-bundle-files.txt
           tar -xzf /tmp/finance-stabilization-bundle.tar.gz -C .
-          rm -f .finance-stabilization-bundle.tar.gz.b64
+          rm -f .finance-stabilization-bundle.part*
           rm -f .github/workflows/apply-finance-stabilization-bundle.yml
 
       - name: Commit reviewed Finance stabilization
+        if: steps.bundle.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
