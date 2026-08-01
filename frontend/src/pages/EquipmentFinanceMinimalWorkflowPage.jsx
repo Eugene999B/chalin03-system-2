@@ -65,9 +65,9 @@ const WORKFLOW_STEPS = [
   {
     number: 8,
     title: "Record payment",
-    description: "Record a partial, exact or advance payment against the active agreement.",
-    to: "/equipment-installment-finance/applications?stage=collections",
-    action: "Record payment",
+    description: "Record the protected opening deposit and reserve the exact excavator; later payments continue in Collections.",
+    to: "/equipment-installment-finance/applications?stage=deposit",
+    action: "Record opening deposit",
     key: "collections",
   },
   {
