@@ -17,9 +17,9 @@ const runnerSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinanceOperationalPolishStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-test("completed professional Finance migration is not rerun during Phase 3 Railway startup", () => {
+test("completed professional Finance migration is not rerun during Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
   assert.doesNotMatch(
     packageJson.scripts.start,
