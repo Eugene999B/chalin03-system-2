@@ -70,7 +70,7 @@ test("delivery requires a separate request, authorization and physical confirmer
   assert.match(deliveryRoutes, /authorization_number/);
   assert.match(deliveryRoutes, /validateDeliveryAuthorization/);
   assert.match(deliveryRoutes, /completeDeliveryAuthorization/);
-  assert.match(deliveryRoutes, /authorization_status = 'consumed'/);
+  assert.match(service, /authorization_status = 'consumed'/);
   assert.match(deliveryRoutes, /EQUIPMENT_FINANCE_DELIVERY_COMPLETED/);
 });
 
