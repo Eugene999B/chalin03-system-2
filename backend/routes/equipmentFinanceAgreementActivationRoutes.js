@@ -7,6 +7,10 @@ const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
+const {
+  buildFinanceSchedule,
+  FinanceScheduleError,
+} = require("../services/equipmentFinanceScheduleService");
 
 const router = express.Router();
 
@@ -16,12 +20,17 @@ const REQUIRED_COLUMNS = Object.freeze({
     "credit_application_id",
     "activation_source",
     "equipment_commitment_status",
+    "payment_interval_days",
+    "non_working_day_rule",
   ],
   equipment_credit_applications: [
     "agreement_id",
     "agreement_activated_by",
     "agreement_activated_at",
     "agreement_activation_notes",
+    "proposed_interval_days",
+    "proposed_non_working_day_rule",
+    "proposed_periodic_amount",
   ],
 });
 const REQUIRED_TRIGGERS = Object.freeze([
@@ -69,7 +78,9 @@ function boolValue(value, fallback = false) {
 function dateOnly(value, fallback = null) {
   const text = cleanText(value, 20);
   if (!text) return fallback;
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : text;
 }
 
 function ghanaToday() {
@@ -83,18 +94,6 @@ function ghanaToday() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function locationId(req) {
-  const id = positiveId(req.hireLocationScope?.locationId);
-  if (!id) {
-    throw new ActivationError(
-      400,
-      "Choose a specific Finance location before activating an agreement.",
-      "EQUIPMENT_FINANCE_LOCATION_REQUIRED"
-    );
-  }
-  return id;
-}
-
 function assertActivationOfficer(req) {
   if (isOriginalSystemAdministrator(req.user)) return;
   if (!ACTIVATION_ROLES.has(workspaceRoleFor(req.user))) {
@@ -106,46 +105,28 @@ function assertActivationOfficer(req) {
   }
 }
 
-function addSchedulePeriod(dateText, frequency, periods) {
-  const base = new Date(`${dateText}T00:00:00Z`);
-  if (frequency === "weekly") base.setUTCDate(base.getUTCDate() + periods * 7);
-  else if (frequency === "fortnightly") {
-    base.setUTCDate(base.getUTCDate() + periods * 14);
-  } else if (frequency === "monthly") {
-    const originalDay = base.getUTCDate();
-    base.setUTCDate(1);
-    base.setUTCMonth(base.getUTCMonth() + periods);
-    const lastDay = new Date(
-      Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)
-    ).getUTCDate();
-    base.setUTCDate(Math.min(originalDay, lastDay));
-  } else {
-    base.setUTCDate(base.getUTCDate() + periods * 30);
-  }
-  return base.toISOString().slice(0, 10);
-}
-
-function buildSchedule(totalAmount, count, firstDueDate, frequency) {
-  const totalCents = Math.round(Number(totalAmount || 0) * 100);
-  const baseCents = Math.floor(totalCents / count);
-  let assignedCents = 0;
-  const rows = [];
-
-  for (let index = 0; index < count; index += 1) {
-    const cents = index === count - 1 ? totalCents - assignedCents : baseCents;
-    assignedCents += cents;
-    rows.push({
-      sequence_number: index + 1,
-      due_date: addSchedulePeriod(firstDueDate, frequency, index),
-      scheduled_amount: Number((cents / 100).toFixed(2)),
-    });
-  }
-  return rows;
+function buildSchedule(
+  totalAmount,
+  count,
+  firstDueDate,
+  frequency,
+  intervalDays = null,
+  nonWorkingDayRule = "exact"
+) {
+  return buildFinanceSchedule({
+    selling_price: totalAmount,
+    deposit: 0,
+    installment_count: count,
+    first_due_date: firstDueDate,
+    payment_frequency: frequency,
+    custom_interval_days: intervalDays,
+    non_working_day_rule: nonWorkingDayRule,
+  }).schedule;
 }
 
 function fallbackAgreementNumber() {
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-  return `ESA-${stamp}-${String(crypto.randomInt(0, 10000)).padStart(4, "0")}`;
+  return `ESA-${stamp}-${String(crypto.randomInt(0, 1000000)).padStart(6, "0")}`;
 }
 
 async function agreementNumber(req) {
@@ -169,10 +150,7 @@ async function schemaStatus(connection = pool) {
     tableNames
   );
   const found = new Map(tableNames.map((tableName) => [tableName, new Set()]));
-  for (const row of columnRows) {
-    if (!found.has(row.TABLE_NAME)) found.set(row.TABLE_NAME, new Set());
-    found.get(row.TABLE_NAME).add(row.COLUMN_NAME);
-  }
+  for (const row of columnRows) found.get(row.TABLE_NAME)?.add(row.COLUMN_NAME);
   const missingColumns = [];
   for (const [tableName, columns] of Object.entries(REQUIRED_COLUMNS)) {
     for (const column of columns) {
@@ -207,8 +185,8 @@ async function assertSchemaReady(connection = pool) {
   if (!status.ready) {
     const error = new ActivationError(
       503,
-      "Finance agreement activation is being prepared. Apply and verify the approved activation migration first.",
-      "EQUIPMENT_FINANCE_ACTIVATION_FOUNDATION_REQUIRED"
+      "Finance agreement activation is being prepared. Apply and verify the company-wide stabilization first.",
+      "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED"
     );
     error.readiness = status;
     throw error;
@@ -217,20 +195,19 @@ async function assertSchemaReady(connection = pool) {
 }
 
 function sendError(res, error, fallbackMessage) {
-  if (error instanceof ActivationError) {
-    return res.status(error.statusCode).json({
+  if (error instanceof ActivationError || error instanceof FinanceScheduleError) {
+    return res.status(Number(error.statusCode || 400)).json({
       status: "error",
       code: error.code,
       message: error.message,
-      readiness: error.readiness,
+      ...(error.readiness ? { readiness: error.readiness } : {}),
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_ACTIVATION_FOUNDATION_REQUIRED",
-      message:
-        "Finance agreement activation is being prepared. Apply and verify the approved activation migration first.",
+      code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
+      message: "Finance agreement activation is being prepared. Try again after deployment completes.",
     });
   }
   if (error?.errno === 1644 || error?.sqlState === "45000") {
@@ -270,7 +247,7 @@ async function withTransaction(work) {
   }
 }
 
-async function loadApplication(connection, applicationId, selectedLocationId, lock = false) {
+async function loadApplication(connection, applicationId, lock = false) {
   const [rows] = await connection.query(
     `SELECT
        application.*,
@@ -295,6 +272,8 @@ async function loadApplication(connection, applicationId, selectedLocationId, lo
        quotation.total_amount,
        quotation.deposit_required AS quotation_deposit_required,
        quotation.proposed_first_due_date,
+       quotation.proposed_interval_days AS quotation_interval_days,
+       quotation.proposed_non_working_day_rule AS quotation_non_working_day_rule,
        quotation.delivery_policy,
        quotation.delivery_threshold_percent,
        quotation.terms AS quotation_terms,
@@ -326,10 +305,9 @@ async function loadApplication(connection, applicationId, selectedLocationId, lo
      INNER JOIN fleet_assets asset
        ON asset.id = application.asset_id
      WHERE application.id = ?
-       AND application.hire_location_id = ?
      ORDER BY item.line_number
      LIMIT 1 ${lock ? "FOR UPDATE" : ""}`,
-    [applicationId, selectedLocationId]
+    [applicationId]
   );
   return rows[0] || null;
 }
@@ -342,7 +320,29 @@ async function loadAgreement(connection, agreementId) {
   return rows[0] || null;
 }
 
+function scheduleForApplication(application) {
+  return buildFinanceSchedule({
+    selling_price: Number(application.financed_amount || 0),
+    deposit: 0,
+    installment_count: Number(application.proposed_installment_count || 0),
+    first_due_date: application.proposed_first_due_date,
+    payment_frequency: application.proposed_frequency,
+    custom_interval_days:
+      application.proposed_interval_days ?? application.quotation_interval_days,
+    non_working_day_rule:
+      application.proposed_non_working_day_rule ||
+      application.quotation_non_working_day_rule ||
+      "exact",
+  });
+}
+
 function activationCandidate(application) {
+  let exactSchedule = null;
+  try {
+    exactSchedule = scheduleForApplication(application);
+  } catch (_error) {
+    exactSchedule = null;
+  }
   return {
     id: application.id,
     application_number: application.application_number,
@@ -365,10 +365,23 @@ function activationCandidate(application) {
     approved_deposit: Number(application.proposed_deposit || 0),
     financed_amount: Number(application.financed_amount || 0),
     payment_frequency: application.proposed_frequency,
+    payment_interval_days:
+      application.proposed_interval_days ?? application.quotation_interval_days ?? null,
+    non_working_day_rule:
+      application.proposed_non_working_day_rule ||
+      application.quotation_non_working_day_rule ||
+      "exact",
     installment_count: Number(application.proposed_installment_count || 0),
+    periodic_amount: Number(
+      application.proposed_periodic_amount || exactSchedule?.periodic_amount || 0
+    ),
     proposed_first_due_date: application.proposed_first_due_date,
+    final_due_date: exactSchedule?.final_due_date || null,
+    exact_schedule: exactSchedule?.schedule || [],
     agreement_id: application.agreement_id || null,
     agreement_activated_at: application.agreement_activated_at || null,
+    company_wide_finance: true,
+    hire_location_id: null,
     safeguards: {
       creates_hire_job: false,
       creates_hire_contract: false,
@@ -399,10 +412,9 @@ router.get(
 router.get(
   "/candidates",
   requirePermission("fleet.assets.view"),
-  async (req, res) => {
+  async (_req, res) => {
     try {
       await assertSchemaReady(pool);
-      const selectedLocationId = locationId(req);
       const [rows] = await pool.query(
         `SELECT
            application.*,
@@ -411,6 +423,8 @@ router.get(
            quotation.quotation_number,
            quotation.status AS quotation_status,
            quotation.proposed_first_due_date,
+           quotation.proposed_interval_days AS quotation_interval_days,
+           quotation.proposed_non_working_day_rule AS quotation_non_working_day_rule,
            item.asset_code_snapshot,
            item.asset_name_snapshot
          FROM equipment_credit_applications application
@@ -421,16 +435,19 @@ router.get(
          INNER JOIN equipment_sales_quotation_items item
            ON item.quotation_id = quotation.id
           AND item.asset_id = application.asset_id
-         WHERE application.hire_location_id = ?
-           AND application.application_status = 'approved'
+         WHERE application.application_status = 'approved'
            AND application.kyc_status = 'verified'
            AND application.affordability_status IN ('eligible','manual_review')
-         ORDER BY application.reviewed_at DESC, application.id DESC`,
-        [selectedLocationId]
+         ORDER BY application.reviewed_at DESC, application.id DESC`
       );
       return res.json({
         status: "success",
         candidates: rows.map(activationCandidate),
+        policy: {
+          scope: "company_wide",
+          hire_location_selection_required: false,
+          approved_schedule_is_immutable: true,
+        },
       });
     } catch (error) {
       return sendError(res, error, "Could not load approved Finance applications.");
@@ -444,17 +461,11 @@ router.get(
   async (req, res) => {
     try {
       await assertSchemaReady(pool);
-      const selectedLocationId = locationId(req);
       const applicationId = positiveId(req.params.applicationId);
       if (!applicationId) {
         throw new ActivationError(400, "Invalid Finance credit application ID.");
       }
-      const application = await loadApplication(
-        pool,
-        applicationId,
-        selectedLocationId,
-        false
-      );
+      const application = await loadApplication(pool, applicationId, false);
       if (!application) {
         throw new ActivationError(404, "Finance credit application was not found.");
       }
@@ -479,7 +490,6 @@ router.post(
     try {
       assertActivationOfficer(req);
       await assertSchemaReady(pool);
-      const selectedLocationId = locationId(req);
       const applicationId = positiveId(req.params.applicationId);
       const graceDays = wholeNumber(req.body.grace_days, 0, 90);
       const termsAccepted = boolValue(req.body.terms_accepted, false);
@@ -487,29 +497,20 @@ router.post(
       if (!applicationId || graceDays === undefined || termsAccepted !== true) {
         throw new ActivationError(
           400,
-          "Confirm the Finance agreement terms, first due date and grace days before activation."
+          "Confirm the Finance agreement terms and grace days before activation."
         );
       }
 
       const number = await agreementNumber(req);
       const activated = await withTransaction(async (connection) => {
-        const application = await loadApplication(
-          connection,
-          applicationId,
-          selectedLocationId,
-          true
-        );
+        const application = await loadApplication(connection, applicationId, true);
         if (!application) {
           throw new ActivationError(404, "Finance credit application was not found.");
         }
 
         if (application.agreement_id) {
-          const existingAgreement = await loadAgreement(
-            connection,
-            application.agreement_id
-          );
           return {
-            agreement: existingAgreement,
+            agreement: await loadAgreement(connection, application.agreement_id),
             already_activated: true,
             schedule: [],
           };
@@ -531,13 +532,13 @@ router.post(
         if (!["eligible", "manual_review"].includes(application.affordability_status)) {
           throw new ActivationError(
             409,
-            "The approved affordability decision is not eligible for agreement activation."
+            "Complete and approve the affordability assessment before agreement activation."
           );
         }
         if (!["approved", "accepted"].includes(application.quotation_status)) {
           throw new ActivationError(
             409,
-            "The linked installment quotation is no longer approved or accepted."
+            "The linked Installment Offer is no longer approved or accepted."
           );
         }
         if (!application.asset_is_active) {
@@ -553,34 +554,33 @@ router.post(
           );
         }
 
-        const firstDueDate = dateOnly(
-          req.body.first_due_date,
-          dateOnly(application.proposed_first_due_date, null)
-        );
-        if (!firstDueDate) {
+        const approvedFirstDueDate = dateOnly(application.proposed_first_due_date, null);
+        const requestedFirstDueDate = dateOnly(req.body.first_due_date, approvedFirstDueDate);
+        if (!approvedFirstDueDate || requestedFirstDueDate === undefined) {
+          throw new ActivationError(409, "The approved first installment due date is missing.");
+        }
+        if (requestedFirstDueDate !== approvedFirstDueDate) {
           throw new ActivationError(
-            400,
-            "Enter the approved first installment due date."
+            409,
+            "The approved first due date cannot be changed during activation. Create a controlled amendment and obtain approval first.",
+            "FINANCE_APPROVED_TERMS_AMENDMENT_REQUIRED"
           );
         }
-        if (firstDueDate < ghanaToday()) {
+        if (approvedFirstDueDate < ghanaToday()) {
           throw new ActivationError(
-            400,
-            "The first installment due date cannot be before today."
+            409,
+            "The approved first due date is now in the past. Create a controlled schedule amendment before activation.",
+            "FINANCE_APPROVED_TERMS_AMENDMENT_REQUIRED"
           );
         }
 
-        const installmentCount = Number(application.proposed_installment_count || 0);
-        const financedAmount = Number(application.financed_amount || 0);
+        const exactSchedule = scheduleForApplication(application);
+        const schedule = exactSchedule.schedule;
+        const installmentCount = exactSchedule.installment_count;
+        const financedAmount = exactSchedule.financed_amount;
         const quotedTotal = Number(application.quoted_total || 0);
         const approvedDeposit = Number(application.proposed_deposit || 0);
-        if (
-          installmentCount < 1 ||
-          financedAmount <= 0 ||
-          quotedTotal <= 0 ||
-          approvedDeposit < 0 ||
-          approvedDeposit > quotedTotal
-        ) {
+        if (quotedTotal <= 0 || approvedDeposit < 0 || approvedDeposit > quotedTotal) {
           throw new ActivationError(
             409,
             "The approved Finance terms are incomplete or internally inconsistent."
@@ -598,23 +598,17 @@ router.post(
         if (conflicts.length) {
           throw new ActivationError(
             409,
-            `Finance agreement ${conflicts[0].agreement_number} already uses this approved application or quotation.`,
+            `Finance agreement ${conflicts[0].agreement_number} already uses this approved application or Installment Offer.`,
             "EQUIPMENT_FINANCE_AGREEMENT_ALREADY_EXISTS"
           );
         }
 
-        const schedule = buildSchedule(
-          financedAmount,
-          installmentCount,
-          firstDueDate,
-          application.proposed_frequency
-        );
         const agreementFields = {
           agreement_number: number,
           credit_application_id: application.id,
           activation_source: "approved_credit_application",
           equipment_commitment_status: "not_reserved",
-          hire_location_id: application.hire_location_id,
+          hire_location_id: null,
           quotation_id: application.quotation_id,
           quotation_item_id: application.quotation_item_id,
           enquiry_id: application.enquiry_id || null,
@@ -637,10 +631,7 @@ router.post(
           ),
           customer_id_type: nullableText(application.id_type, 60),
           customer_id_number: nullableText(application.id_number, 120),
-          customer_id_document_url: nullableText(
-            application.identity_document_url,
-            10000
-          ),
+          customer_id_document_url: nullableText(application.identity_document_url, 10000),
           asset_code_snapshot: application.asset_code_snapshot,
           asset_name_snapshot: application.asset_name_snapshot,
           asset_type_snapshot: application.asset_type_snapshot,
@@ -659,11 +650,13 @@ router.post(
           scheduled_total: financedAmount,
           amount_paid: 0,
           outstanding_balance: quotedTotal,
-          payment_frequency: application.proposed_frequency,
+          payment_frequency: exactSchedule.payment_frequency,
+          payment_interval_days: exactSchedule.custom_interval_days,
+          non_working_day_rule: exactSchedule.non_working_day_rule,
           installment_count: installmentCount,
-          first_due_date: firstDueDate,
+          first_due_date: approvedFirstDueDate,
           next_due_date: schedule[0]?.due_date || null,
-          final_due_date: schedule.at(-1)?.due_date || null,
+          final_due_date: exactSchedule.final_due_date,
           grace_days: graceDays,
           delivery_policy: application.delivery_policy,
           delivery_threshold_percent: application.delivery_threshold_percent,
@@ -672,10 +665,7 @@ router.post(
           guarantor_location: nullableText(application.guarantor_address, 180),
           guarantor_id_type: nullableText(application.guarantor_id_type, 60),
           guarantor_id_number: nullableText(application.guarantor_id_number, 120),
-          guarantor_document_url: nullableText(
-            application.guarantor_document_url,
-            10000
-          ),
+          guarantor_document_url: nullableText(application.guarantor_document_url, 10000),
           terms_accepted: true,
           agreement_notes:
             activationNotes || nullableText(application.quotation_terms, 5000),
@@ -690,12 +680,9 @@ router.post(
           );
         }
 
-        const columns = Object.keys(agreementFields);
-        const values = Object.values(agreementFields);
         const [insert] = await connection.query(
-          `INSERT INTO equipment_sale_agreements (${columns.join(", ")})
-           VALUES (${columns.map(() => "?").join(", ")})`,
-          values
+          `INSERT INTO equipment_sale_agreements SET ?`,
+          agreementFields
         );
 
         for (const row of schedule) {
@@ -704,12 +691,7 @@ router.post(
                agreement_id, sequence_number, due_date, scheduled_amount,
                amount_paid, schedule_status
              ) VALUES (?, ?, ?, ?, 0, 'upcoming')`,
-            [
-              insert.insertId,
-              row.sequence_number,
-              row.due_date,
-              row.scheduled_amount,
-            ]
+            [insert.insertId, row.sequence_number, row.due_date, row.scheduled_amount]
           );
         }
 
@@ -717,7 +699,7 @@ router.post(
           `UPDATE equipment_credit_applications
            SET agreement_id = ?, agreement_activated_by = ?,
                agreement_activated_at = NOW(), agreement_activation_notes = ?,
-               updated_by = ?
+               hire_location_id = NULL, updated_by = ?
            WHERE id = ?`,
           [
             insert.insertId,
@@ -728,17 +710,11 @@ router.post(
           ]
         );
         await connection.query(
-          `UPDATE equipment_sales_quotations SET status = 'converted' WHERE id = ?`,
+          `UPDATE equipment_sales_quotations
+           SET status = 'converted', hire_location_id = NULL
+           WHERE id = ?`,
           [application.quotation_id]
         );
-        if (application.enquiry_id) {
-          await connection.query(
-            `UPDATE equipment_sales_enquiries
-             SET status = 'won', updated_by = ?
-             WHERE id = ?`,
-            [positiveId(req.user?.id), application.enquiry_id]
-          );
-        }
 
         await writeAuditEvent({
           connection,
@@ -747,8 +723,8 @@ router.post(
           actionType: "equipment.finance.agreement.activate",
           entityType: "equipment_sale_agreement",
           entityId: insert.insertId,
-          workspaceCode: "equipment_hire",
-          hireLocationId: application.hire_location_id,
+          workspaceCode: "equipment_installment_finance",
+          hireLocationId: null,
           severity: "notice",
           outcome: "success",
           details: `Activated Finance agreement ${number} from approved credit application ${application.application_number}.`,
@@ -759,7 +735,12 @@ router.post(
             total_amount: quotedTotal,
             deposit_required: approvedDeposit,
             financed_amount: financedAmount,
+            payment_frequency: exactSchedule.payment_frequency,
+            payment_interval_days: exactSchedule.custom_interval_days,
+            first_due_date: approvedFirstDueDate,
+            final_due_date: exactSchedule.final_due_date,
             installment_count: installmentCount,
+            hire_location_id: null,
             equipment_reserved: false,
             hire_contract_created: false,
             payment_recorded: false,
@@ -778,11 +759,13 @@ router.post(
         status: "success",
         message: activated.already_activated
           ? "This approved application already has a Finance agreement."
-          : "Finance agreement and installment schedule activated. No payment, equipment reservation, Hire job or SMS was created.",
+          : "Finance agreement and exact installment schedule activated. No payment, equipment reservation, Hire job or SMS was created.",
         agreement: activated.agreement,
         schedule: activated.schedule,
         already_activated: activated.already_activated,
         safeguards: {
+          company_wide_finance: true,
+          hire_location_id: null,
           equipment_reserved: false,
           fleet_status_changed: false,
           payment_recorded: false,
