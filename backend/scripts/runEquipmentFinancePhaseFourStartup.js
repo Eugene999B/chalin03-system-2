@@ -3,17 +3,27 @@ const path = require("node:path");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
-const MIGRATION_FILE = "20260801_equipment_finance_phase4_corrections_settlements.sql";
-const VERIFIER_FILE = "20260801_equipment_finance_phase4_corrections_settlements_verify.sql";
-const MIGRATION_RECORD = "equipment_finance_phase4_corrections_settlements";
 const MIGRATION_LOCK = "chalin03:equipment-finance:phase4";
-
 const REQUIRED_TABLES = Object.freeze([
   "equipment_finance_asset_returns",
   "equipment_finance_correction_policies",
   "equipment_finance_correction_policy_history",
   "equipment_finance_correction_requests",
   "equipment_finance_ledger_entries",
+]);
+const RELEASES = Object.freeze([
+  {
+    record: "equipment_finance_phase4_corrections_settlements",
+    migration: "20260801_equipment_finance_phase4_corrections_settlements.sql",
+    verifier: "20260801_equipment_finance_phase4_corrections_settlements_verify.sql",
+    validate: validateCorrectionSchema,
+  },
+  {
+    record: "equipment_finance_phase4_balance_guard",
+    migration: "20260801_equipment_finance_phase4_balance_guard.sql",
+    verifier: "20260801_equipment_finance_phase4_balance_guard_verify.sql",
+    validate: validateBalanceGuard,
+  },
 ]);
 
 function requiredEnv(primaryName, fallbackName) {
@@ -100,7 +110,7 @@ async function verifyDatabaseIdentity(connection) {
   return databaseName;
 }
 
-async function migrationRecordExists(connection) {
+async function migrationRecordExists(connection, record) {
   const [[tableRow]] = await connection.query(
     `SELECT COUNT(*) AS present
      FROM information_schema.TABLES
@@ -110,7 +120,7 @@ async function migrationRecordExists(connection) {
   if (Number(tableRow?.present || 0) !== 1) return false;
   const [[row]] = await connection.query(
     "SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?",
-    [MIGRATION_RECORD]
+    [record]
   );
   return Number(row?.applied || 0) === 1;
 }
@@ -129,13 +139,13 @@ async function executeStatements(connection, statements, label) {
   return results;
 }
 
-function validateVerifierResults(results) {
+function validateCorrectionSchema(results, record) {
   if (results.length !== 5) {
-    throw new Error(`Phase 4 verifier returned ${results.length} result sets instead of 5.`);
+    throw new Error(`Phase 4 correction verifier returned ${results.length} result sets instead of 5.`);
   }
   const [migrationRows, tableRows, policyRows, columnRows, orphanRows] = results;
-  if (migrationRows.length !== 1 || migrationRows[0].migration_name !== MIGRATION_RECORD) {
-    throw new Error("Phase 4 migration record was not verified.");
+  if (migrationRows.length !== 1 || migrationRows[0].migration_name !== record) {
+    throw new Error("Phase 4 correction migration record was not verified.");
   }
   const tables = new Set(tableRows.map((row) => String(row.TABLE_NAME || "")));
   const missing = REQUIRED_TABLES.filter((table) => !tables.has(table));
@@ -151,6 +161,27 @@ function validateVerifierResults(results) {
   }
 }
 
+function validateBalanceGuard(results, record) {
+  if (results.length !== 3) {
+    throw new Error(`Phase 4 balance verifier returned ${results.length} result sets instead of 3.`);
+  }
+  const [migrationRows, triggerRows, invalidRows] = results;
+  if (migrationRows.length !== 1 || migrationRows[0].migration_name !== record) {
+    throw new Error("Phase 4 balance-guard migration record was not verified.");
+  }
+  if (
+    triggerRows.length !== 1 ||
+    triggerRows[0].TRIGGER_NAME !== "trg_equipment_finance_phase4_balance_guard_before_update" ||
+    triggerRows[0].EVENT_MANIPULATION !== "UPDATE" ||
+    triggerRows[0].ACTION_TIMING !== "BEFORE"
+  ) {
+    throw new Error("The Phase 4 ledger-aware agreement balance guard is missing.");
+  }
+  if (Number(invalidRows[0]?.invalid_controlled_balances || 0) !== 0) {
+    throw new Error("The Phase 4 verifier found controlled agreements with stale balances.");
+  }
+}
+
 async function runEquipmentFinancePhaseFourStartup() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
@@ -160,24 +191,26 @@ async function runEquipmentFinancePhaseFourStartup() {
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the Phase 4 migration lock.");
 
-    const applied = await migrationRecordExists(connection);
-    if (!applied) {
-      console.log(`Applying controlled Equipment Finance Phase 4 migration on ${databaseName}.`);
-      await executeStatements(
+    for (const release of RELEASES) {
+      const applied = await migrationRecordExists(connection, release.record);
+      if (!applied) {
+        console.log(`Applying ${release.record} on ${databaseName}.`);
+        await executeStatements(
+          connection,
+          splitSqlScript(readMigrationFile(release.migration)),
+          `Equipment Finance Phase 4 migration ${release.record}`
+        );
+      }
+      const verifierResults = await executeStatements(
         connection,
-        splitSqlScript(readMigrationFile(MIGRATION_FILE)),
-        "Equipment Finance Phase 4 migration"
+        splitSqlScript(readMigrationFile(release.verifier)),
+        `Equipment Finance Phase 4 verifier ${release.record}`
       );
+      release.validate(verifierResults, release.record);
+      console.log(`Verified ${release.record} on ${databaseName}.`);
     }
 
-    const verifierResults = await executeStatements(
-      connection,
-      splitSqlScript(readMigrationFile(VERIFIER_FILE)),
-      "Equipment Finance Phase 4 verifier"
-    );
-    validateVerifierResults(verifierResults);
-    console.log(`Equipment Finance Phase 4 schema verified on ${databaseName}.`);
-    return { applied: true, database_name: databaseName };
+    return { applied: true, database_name: databaseName, releases: RELEASES.map((item) => item.record) };
   } finally {
     if (lockAcquired) {
       try {
@@ -199,14 +232,14 @@ if (require.main === module) {
 }
 
 module.exports = {
-  MIGRATION_FILE,
-  MIGRATION_RECORD,
+  MIGRATION_LOCK,
+  RELEASES,
   REQUIRED_TABLES,
-  VERIFIER_FILE,
   executeStatements,
   migrationRecordExists,
   runEquipmentFinancePhaseFourStartup,
   splitSqlScript,
-  validateVerifierResults,
+  validateBalanceGuard,
+  validateCorrectionSchema,
   verifyDatabaseIdentity,
 };
