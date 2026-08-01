@@ -78,15 +78,14 @@ for (const result of results) {
   if (ruleId === "js/insecure-randomness") {
     const reviewedFallbackSource = relatedLocationsFor(result).some(
       (source) =>
-        (source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
-          source.line >= 150 &&
-          source.line <= 170) ||
-        source.uri === "backend/routes/equipmentFinancePhaseOneRoutes.js"
+        source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
+        source.line >= 150 &&
+        source.line <= 170
     );
 
     if (!reviewedFallbackSource) {
       violations.push(
-        `Insecure-randomness result appeared outside a reviewed non-secret public document reference fallback at ${location.uri}:${location.line}`
+        `Insecure-randomness result appeared outside the one reviewed non-secret public document reference fallback at ${location.uri}:${location.line}`
       );
     }
   }
@@ -207,10 +206,11 @@ assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
 
-// These fallbacks create public, human-readable document references only. They
-// are never passwords, tokens, authorisation decisions, ownership proof or
-// payment idempotency keys. Database uniqueness is authoritative, and duplicate
-// writes fail closed rather than overwriting an existing record.
+// The legacy credit-application fallback creates a public, human-readable
+// document reference only. It is never a password, token, authorisation
+// decision, ownership proof or payment idempotency key. Database uniqueness is
+// authoritative, and duplicate writes fail closed rather than overwriting an
+// existing record.
 assert.match(
   equipmentCreditApplicationSource,
   /function fallbackApplicationNumber\(\)[\s\S]*return `ECAPP-\$\{stamp\}-\$\{random\}`/
@@ -219,13 +219,18 @@ assert.match(
   equipmentCreditApplicationSource,
   /nextDocumentNumber\("EQUIPMENT_CREDIT_APPLICATION"[\s\S]*return fallbackApplicationNumber\(\)/
 );
+
+// Phase 3 no longer relies on Math.random for the guided Finance fallback.
+// It must use Node's cryptographic random integer generator, and any future
+// insecure-randomness finding in this route is deliberately not allowlisted.
+assert.match(equipmentFinancePhaseOneSource, /const crypto = require\("crypto"\)/);
 assert.match(
   equipmentFinancePhaseOneSource,
-  /function fallbackNumber\(prefix\)[\s\S]*return `\$\{prefix\}-\$\{stamp\}-\$\{random\}`/
+  /function fallbackNumber\(prefix\)[\s\S]*crypto\.randomInt\(0, 1000000\)[\s\S]*padStart\(6, "0"\)/
 );
 assert.match(
   equipmentFinancePhaseOneSource,
-  /async function documentNumber\(sequence, prefix, userId\)[\s\S]*return fallbackNumber\(prefix\)/
+  /async function documentNumber\(sequence, prefix, actorId\)[\s\S]*nextDocumentNumber\(sequence, \{ userId: actorId \}\)[\s\S]*return fallbackNumber\(prefix\)/
 );
 assert.match(equipmentFinancePhaseOneSource, /error\?\.code === "ER_DUP_ENTRY"/);
 assert.match(
