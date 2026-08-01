@@ -6,6 +6,7 @@ import EquipmentFinanceCollectionsMinimalPage from "./EquipmentFinanceCollection
 import EquipmentFinanceCorrectionsPage from "./EquipmentFinanceCorrectionsPage";
 import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage";
 import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
+import EquipmentFinanceDocumentsDeliveryPage from "./EquipmentFinanceDocumentsDeliveryPage";
 import EquipmentFinanceExcavatorsPage from "./EquipmentFinanceExcavatorsPage";
 import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
 import EquipmentFinanceGuidePage from "./EquipmentFinanceGuidePage";
@@ -55,6 +56,10 @@ export default function EquipmentSalesWorkspacePage() {
 
   if (stage === "corrections") {
     return <EquipmentFinanceCorrectionsPage />;
+  }
+
+  if (stage === "documents-delivery") {
+    return <EquipmentFinanceDocumentsDeliveryPage />;
   }
 
   if (stage === "activation") {
