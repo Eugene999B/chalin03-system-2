@@ -14,6 +14,7 @@ const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
+const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
 
 const router = express.Router();
 
@@ -109,10 +110,14 @@ function financePolicy() {
     private_case_documents: true,
     server_draft_autosave: true,
     controlled_amendments: true,
+    correction_ledger_enabled: true,
+    independent_correction_approval: true,
+    configurable_return_settlement_policy: true,
   };
 }
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
+router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
 router.use(equipmentFinanceScheduleRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);

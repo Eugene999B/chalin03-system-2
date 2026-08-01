@@ -80,6 +80,17 @@ const WORKFLOW_STEPS = [
   },
 ];
 
+const PHASE_FOUR_ACTIONS = [
+  "Cancel draft agreement",
+  "Reverse incorrect payment",
+  "Return or repossess equipment",
+  "Post approved return credit",
+  "Mark default",
+  "Restructure schedule",
+  "Waive charge with authorization",
+  "Preserve the complete audit trail",
+];
+
 function money(value) {
   return `GHS ${Number(value || 0).toLocaleString("en-GH", {
     minimumFractionDigits: 2,
@@ -203,11 +214,11 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
     <main className="finance-flow" data-testid="finance-minimal-workflow">
       <header className="finance-flow__hero">
         <div>
-          <p>Phase 3 · Minimal working frontend</p>
+          <p>Equipment Installment Finance</p>
           <h1>Equipment Installment Workflow</h1>
           <span>
-            Complete the essential sale journey in order. Official schedules, balances and
-            payment allocations always come from the backend.
+            Complete the essential sale journey in order. Official schedules, balances,
+            payments and correction entries always come from the backend.
           </span>
         </div>
         <Link className="finance-flow__advanced" to="/equipment-installment-finance?view=advanced">
@@ -218,7 +229,7 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
       {problem ? <div className="finance-flow__notice is-error" role="alert">{problem}</div> : null}
       <div className="finance-flow__notice" role="note">
         The frontend never calculates or stores the official debt balance. It displays the
-        balance returned by the Finance account API after every committed payment.
+        backend balance after every payment, reversal, waiver, return credit, penalty or damage entry.
       </div>
 
       <section className="finance-flow__summary" aria-label="Workflow status">
@@ -231,7 +242,7 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
       <section className="finance-flow__section">
         <div className="finance-flow__section-head">
           <div>
-            <p>One controlled path</p>
+            <p>Phase 3 · One controlled path</p>
             <h2>Complete these nine actions</h2>
           </div>
           <Link className="finance-flow__primary" to="/equipment-installment-finance/applications?stage=start">
@@ -254,6 +265,46 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="finance-flow__section" data-testid="phase4-controls">
+        <div className="finance-flow__section-head">
+          <div>
+            <p>Phase 4 · Sensitive financial scenarios</p>
+            <h2>Corrections use approvals and accounting entries</h2>
+          </div>
+          <Link
+            className="finance-flow__primary"
+            to="/equipment-installment-finance/applications?stage=corrections"
+          >
+            Open Corrections & Returns
+          </Link>
+        </div>
+        <div className="finance-flow__steps">
+          {PHASE_FOUR_ACTIONS.map((action, index) => (
+            <article className="finance-flow__step" key={action}>
+              <b>{index + 1}</b>
+              <div>
+                <div className="finance-flow__step-title">
+                  <h3>{action}</h3>
+                  <span>Append-only evidence</span>
+                </div>
+                <p>
+                  The original record remains unchanged or is explicitly voided; the approved
+                  correction is preserved in the Finance ledger and audit trail.
+                </p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="finance-flow__notice" role="note">
+          Returned equipment settlement: outstanding balance − approved return credit − refundable
+          amounts + penalties or damages = final settlement balance. The active policy version and
+          all approved components are recorded with the return.
+        </div>
+        <Link to="/equipment-installment-finance/applications?stage=governance">
+          Open default and schedule-restructure governance →
+        </Link>
       </section>
 
       <section className="finance-flow__section" data-testid="official-account-balances">
