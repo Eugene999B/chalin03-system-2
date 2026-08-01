@@ -41,6 +41,15 @@ export default defineConfig([
     },
   },
   {
+    files: ["playwright.config.js", "e2e/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+  },
+  {
     files: ["src/pages/EquipmentFinanceFinalLifecyclePage.jsx"],
     rules: {
       // The stage queue is intentionally memoized from immutable string/state inputs.
