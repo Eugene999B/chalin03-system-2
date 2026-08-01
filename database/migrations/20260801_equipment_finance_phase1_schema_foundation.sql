@@ -33,7 +33,8 @@ BEGIN
           AND IS_NULLABLE = 'NO'
     ) THEN
         SET @finance_phase1_nullable_sql = CONCAT(
-            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            'ALTER ',
+            'TABLE `', REPLACE(p_table_name, '`', '``'),
             '` MODIFY COLUMN `hire_location_id` INT NULL'
         );
         PREPARE finance_phase1_nullable_stmt FROM @finance_phase1_nullable_sql;
@@ -62,7 +63,8 @@ BEGIN
           AND COLUMN_NAME = p_column_name
     ) THEN
         SET @finance_phase1_column_sql = CONCAT(
-            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            'ALTER ',
+            'TABLE `', REPLACE(p_table_name, '`', '``'),
             '` ADD COLUMN `', REPLACE(p_column_name, '`', '``'),
             '` ', p_definition
         );
