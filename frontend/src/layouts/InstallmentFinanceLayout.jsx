@@ -8,11 +8,24 @@ import {
 } from "../security/equipmentDivisionAccess";
 import "../styles/equipmentFinanceLifecycleProfessional.css";
 
-const BLOCKED_FINANCE_PATHS = [
-  "/equipment-installment-finance/shared-controls",
-  "/equipment-installment-finance/document-signature-settings",
-  "/equipment-installment-finance/administration",
-];
+const LEGACY_FINANCE_REDIRECTS = Object.freeze({
+  "/equipment-installment-finance/catalogue":
+    "/equipment-installment-finance/applications?stage=machines",
+  "/equipment-installment-finance/customers":
+    "/equipment-installment-finance/applications?stage=customers",
+  "/equipment-installment-finance/documents":
+    "/equipment-installment-finance/reports",
+  "/equipment-installment-finance/shared-controls":
+    "/equipment-installment-finance/reports",
+  "/equipment-installment-finance/workers":
+    "/equipment-installment-finance/workforce",
+  "/equipment-installment-finance/employment-documents":
+    "/equipment-installment-finance/workforce",
+  "/equipment-installment-finance/document-signature-settings":
+    "/equipment-installment-finance/applications?stage=settings",
+  "/equipment-installment-finance/administration":
+    "/equipment-installment-finance/workforce",
+});
 
 const navigationSections = [
   {
@@ -36,7 +49,7 @@ const navigationSections = [
       },
       {
         title: "Start New Installment",
-        description: "Customer → excavator → payment plan → KYC → draft application",
+        description: "Customer → excavator → exact payment dates → draft application",
         path: "/equipment-installment-finance/applications?stage=start",
         icon: "➕",
         matchSearch: true,
@@ -60,7 +73,7 @@ const navigationSections = [
       },
       {
         title: "Applications & Approvals",
-        description: "Draft completion, KYC verification, affordability and manager decisions",
+        description: "Draft corrections, KYC, affordability, exact schedules and decisions",
         path: "/equipment-installment-finance/applications",
         icon: "📝",
         matchSearch: true,
@@ -76,7 +89,7 @@ const navigationSections = [
       },
       {
         title: "Active Installments",
-        description: "Open approved accounts, schedules and installment collections",
+        description: "Open exact schedules and record controlled installment collections",
         path: "/equipment-installment-finance/applications?stage=collections",
         icon: "💳",
         matchSearch: true,
@@ -97,7 +110,7 @@ const navigationSections = [
     items: [
       {
         title: "Documents & Reports",
-        description: "Agreements, receipts, statements, payment evidence and management reports",
+        description: "Issued agreements, receipts, statements, evidence and management reports",
         path: "/equipment-installment-finance/reports",
         icon: "📊",
         permissions: ["fleet.assets.view"],
@@ -145,10 +158,13 @@ const navigationSections = [
   },
 ];
 
-function isBlockedFinancePath(pathname) {
-  return BLOCKED_FINANCE_PATHS.some(
-    (blockedPath) => pathname === blockedPath || pathname.startsWith(`${blockedPath}/`)
+function legacyFinanceRedirect(pathname) {
+  const exact = LEGACY_FINANCE_REDIRECTS[pathname];
+  if (exact) return exact;
+  const entry = Object.entries(LEGACY_FINANCE_REDIRECTS).find(([legacyPath]) =>
+    pathname.startsWith(`${legacyPath}/`)
   );
+  return entry?.[1] || null;
 }
 
 export default function InstallmentFinanceLayout() {
@@ -159,8 +175,9 @@ export default function InstallmentFinanceLayout() {
     return <Navigate to="/equipment-hire" replace />;
   }
 
-  if (isBlockedFinancePath(location.pathname)) {
-    return <Navigate to="/equipment-installment-finance" replace />;
+  const redirect = legacyFinanceRedirect(location.pathname);
+  if (redirect) {
+    return <Navigate to={redirect} replace />;
   }
 
   ensureFinanceUiCompatibilityPermissions(user, location.pathname);
