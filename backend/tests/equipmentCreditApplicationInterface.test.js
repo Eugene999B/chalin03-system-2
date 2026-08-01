@@ -8,6 +8,12 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
+const minimalWorkflow = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceMinimalWorkflowPage.jsx"
+);
 const operationalStart = read(
   "frontend",
   "src",
@@ -33,7 +39,7 @@ test("Finance applications route through the protected credit foundation", () =>
   assert.match(applications, /\/submit/);
 });
 
-test("guided start captures the customer, affordability, guarantor and consent", () => {
+test("guided start captures the customer, terms, affordability, guarantor and consent", () => {
   for (const field of [
     "customer_name",
     "phone",
@@ -53,8 +59,10 @@ test("guided start captures the customer, affordability, guarantor and consent",
   ]) {
     assert.match(wizard, new RegExp(field));
   }
-  assert.match(wizard, /Installment Offer/);
-  assert.match(wizard, /created automatically/i);
+  assert.match(wizard, /create a draft/i);
+  assert.match(wizard, /schedule-preview/);
+  assert.match(minimalWorkflow, /automatic Installment Offer/);
+  assert.match(minimalWorkflow, /Preview schedule/);
   assert.doesNotMatch(wizard, /Choose a specific equipment location|Choose a Hire location/);
 });
 
