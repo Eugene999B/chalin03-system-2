@@ -44,10 +44,12 @@ test("Phase 1 mounts one company-wide guided Finance workflow", () => {
 });
 
 test("Start New Installment creates the commercial offer automatically", () => {
-  assert.match(route, /equipment_sales_quotations/);
-  assert.match(route, /equipment_sales_quotation_items/);
-  assert.match(route, /status, subtotal/);
-  assert.match(route, /'approved'/);
+  assert.match(route, /INSERT INTO equipment_sales_quotations SET \?/);
+  assert.match(route, /INSERT INTO equipment_sales_quotation_items SET \?/);
+  assert.match(route, /status:\s*"approved"/);
+  assert.match(route, /hire_location_id:\s*null/);
+  assert.match(route, /proposed_interval_days/);
+  assert.match(route, /proposed_non_working_day_rule/);
   assert.match(route, /created_automatically:\s*true/);
   assert.match(route, /equipment_credit_applications/);
   assert.match(route, /equipment_credit_application_kyc/);
