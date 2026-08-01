@@ -8,13 +8,35 @@ const MIGRATION_RECORD = "20260731_equipment_finance_operational_polish";
 const MIGRATION_LOCK_NAME = "chalin03:fin-ops:20260731";
 const MIGRATION_FILE = "20260731_equipment_finance_operational_polish.sql";
 const VERIFIER_FILE = "20260731_equipment_finance_operational_polish_verify.sql";
-const PRESERVED_TABLES = Object.freeze([
-  "equipment_credit_applications",
-  "equipment_sale_agreements",
-  "equipment_sale_payments",
-  "equipment_finance_issued_documents",
-  "equipment_finance_payment_alerts",
+const SNAPSHOT_MANIFEST_TABLE = "chalin03_phase3_finance_safety_snapshots";
+const SNAPSHOT_TABLES = Object.freeze([
+  Object.freeze({
+    source: "equipment_credit_applications",
+    snapshot: "chalin03_snap_20260731_ops_credit_apps",
+    countColumn: "credit_applications_rows",
+  }),
+  Object.freeze({
+    source: "equipment_sale_agreements",
+    snapshot: "chalin03_snap_20260731_ops_sale_agreements",
+    countColumn: "sale_agreements_rows",
+  }),
+  Object.freeze({
+    source: "equipment_sale_payments",
+    snapshot: "chalin03_snap_20260731_ops_sale_payments",
+    countColumn: "sale_payments_rows",
+  }),
+  Object.freeze({
+    source: "equipment_finance_issued_documents",
+    snapshot: "chalin03_snap_20260731_ops_issued_documents",
+    countColumn: "issued_documents_rows",
+  }),
+  Object.freeze({
+    source: "equipment_finance_payment_alerts",
+    snapshot: "chalin03_snap_20260731_ops_payment_alerts",
+    countColumn: "payment_alerts_rows",
+  }),
 ]);
+const PRESERVED_TABLES = Object.freeze(SNAPSHOT_TABLES.map((item) => item.source));
 const EXPECTED_PROBLEMS = Object.freeze([
   "missing_operational_polish_tables",
   "missing_operational_polish_columns",
@@ -38,6 +60,14 @@ function requiredEnv(primaryName, fallbackName) {
     );
   }
   return value;
+}
+
+function quoteIdentifier(value) {
+  const identifier = String(value || "").trim();
+  if (!/^[A-Za-z0-9_]+$/.test(identifier)) {
+    throw new Error(`Unsafe SQL identifier: ${identifier}`);
+  }
+  return `\`${identifier}\``;
 }
 
 function getSslConfig(env = process.env) {
@@ -66,9 +96,6 @@ function assertReleaseGates(env = process.env) {
   }
   if (!truthy(env.CHALIN03_SIGNED_BACKUP_CONFIRMED)) {
     throw new Error("Confirm a fresh verified signed Chalin 03 Professional Backup first.");
-  }
-  if (!truthy(env.CHALIN03_SQL_BACKUP_CONFIRMED)) {
-    throw new Error("Confirm a separate fresh Railway/MySQL SQL backup first.");
   }
   if (String(env.CHALIN03_MIGRATION_RELEASE || "").trim() !== RELEASE_CONFIRMATION) {
     throw new Error(
@@ -152,12 +179,25 @@ function connectionOptions() {
   };
 }
 
+async function tableExists(connection, tableName) {
+  const [[row]] = await connection.query(
+    "SELECT COUNT(*) AS present FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+    [tableName]
+  );
+  return Number(row?.present || 0) === 1;
+}
+
+async function tableRowCount(connection, tableName) {
+  const [rows] = await connection.query(
+    `SELECT COUNT(*) AS row_count FROM ${quoteIdentifier(tableName)}`
+  );
+  return Number(rows[0]?.row_count || 0);
+}
+
 async function tableRowCounts(connection) {
   const counts = {};
   for (const tableName of PRESERVED_TABLES) {
-    if (!/^[A-Za-z0-9_]+$/.test(tableName)) throw new Error("Unsafe preserved table name.");
-    const [rows] = await connection.query(`SELECT COUNT(*) AS row_count FROM \`${tableName}\``);
-    counts[tableName] = Number(rows[0]?.row_count || 0);
+    counts[tableName] = await tableRowCount(connection, tableName);
   }
   return counts;
 }
@@ -170,6 +210,115 @@ function assertPreservedCounts(before, after) {
       );
     }
   }
+}
+
+async function ensureSnapshotManifest(connection) {
+  await connection.query(`CREATE TABLE IF NOT EXISTS ${quoteIdentifier(SNAPSHOT_MANIFEST_TABLE)} (
+    release_id VARCHAR(100) NOT NULL PRIMARY KEY,
+    database_name VARCHAR(150) NOT NULL,
+    snapshot_status ENUM('creating','ready') NOT NULL DEFAULT 'creating',
+    credit_applications_rows BIGINT NOT NULL DEFAULT 0,
+    sale_agreements_rows BIGINT NOT NULL DEFAULT 0,
+    sale_payments_rows BIGINT NOT NULL DEFAULT 0,
+    issued_documents_rows BIGINT NOT NULL DEFAULT 0,
+    payment_alerts_rows BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    verified_at DATETIME NULL
+  )`);
+}
+
+async function verifyReadySafetySnapshot(connection, manifest) {
+  for (const item of SNAPSHOT_TABLES) {
+    if (!(await tableExists(connection, item.snapshot))) {
+      throw new Error(`Required database-side Phase 3 safety snapshot ${item.snapshot} is missing.`);
+    }
+    const actual = await tableRowCount(connection, item.snapshot);
+    const expected = Number(manifest[item.countColumn] || 0);
+    if (actual !== expected) {
+      throw new Error(
+        `Phase 3 safety snapshot ${item.snapshot} has ${actual} rows; expected ${expected}.`
+      );
+    }
+  }
+}
+
+async function createOrVerifySafetySnapshot(connection, databaseName) {
+  await ensureSnapshotManifest(connection);
+  const [rows] = await connection.query(
+    `SELECT * FROM ${quoteIdentifier(SNAPSHOT_MANIFEST_TABLE)} WHERE release_id = ? LIMIT 1`,
+    [RELEASE_CONFIRMATION]
+  );
+  const existing = rows[0];
+
+  if (existing?.snapshot_status === "ready") {
+    if (String(existing.database_name || "") !== databaseName) {
+      throw new Error("Phase 3 safety snapshot database identity does not match the connected database.");
+    }
+    await verifyReadySafetySnapshot(connection, existing);
+    console.log("Existing database-side Phase 3 safety snapshot verified.");
+    return;
+  }
+
+  await connection.query(
+    `INSERT INTO ${quoteIdentifier(SNAPSHOT_MANIFEST_TABLE)} (release_id, database_name, snapshot_status)
+     VALUES (?, ?, 'creating')
+     ON DUPLICATE KEY UPDATE database_name = VALUES(database_name), snapshot_status = 'creating'`,
+    [RELEASE_CONFIRMATION, databaseName]
+  );
+
+  const counts = {};
+  for (const item of SNAPSHOT_TABLES) {
+    if (!(await tableExists(connection, item.source))) {
+      throw new Error(`Cannot snapshot missing source table ${item.source}.`);
+    }
+    if (!(await tableExists(connection, item.snapshot))) {
+      await connection.query(
+        `CREATE TABLE ${quoteIdentifier(item.snapshot)} LIKE ${quoteIdentifier(item.source)}`
+      );
+    }
+    await connection.query(
+      `INSERT IGNORE INTO ${quoteIdentifier(item.snapshot)} SELECT * FROM ${quoteIdentifier(item.source)}`
+    );
+    const sourceCount = await tableRowCount(connection, item.source);
+    const snapshotCount = await tableRowCount(connection, item.snapshot);
+    if (sourceCount !== snapshotCount) {
+      throw new Error(
+        `Phase 3 safety snapshot ${item.snapshot} copied ${snapshotCount} of ${sourceCount} rows.`
+      );
+    }
+    counts[item.countColumn] = snapshotCount;
+  }
+
+  await connection.query(
+    `UPDATE ${quoteIdentifier(SNAPSHOT_MANIFEST_TABLE)}
+     SET snapshot_status = 'ready',
+         credit_applications_rows = ?,
+         sale_agreements_rows = ?,
+         sale_payments_rows = ?,
+         issued_documents_rows = ?,
+         payment_alerts_rows = ?,
+         verified_at = CURRENT_TIMESTAMP
+     WHERE release_id = ?`,
+    [
+      counts.credit_applications_rows,
+      counts.sale_agreements_rows,
+      counts.sale_payments_rows,
+      counts.issued_documents_rows,
+      counts.payment_alerts_rows,
+      RELEASE_CONFIRMATION,
+    ]
+  );
+
+  const [readyRows] = await connection.query(
+    `SELECT * FROM ${quoteIdentifier(SNAPSHOT_MANIFEST_TABLE)}
+     WHERE release_id = ? AND snapshot_status = 'ready' LIMIT 1`,
+    [RELEASE_CONFIRMATION]
+  );
+  if (!readyRows[0]) {
+    throw new Error("Database-side Phase 3 safety snapshot was not finalised.");
+  }
+  await verifyReadySafetySnapshot(connection, readyRows[0]);
+  console.log("Database-side Phase 3 safety snapshot created and verified.");
 }
 
 async function runEquipmentFinanceOperationalPolishMigration() {
@@ -203,6 +352,16 @@ async function runEquipmentFinanceOperationalPolishMigration() {
     ]);
     lockAcquired = Number(lockRow?.acquired) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the Phase 3 Finance migration lock.");
+
+    const [[migrationRow]] = await connection.query(
+      "SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?",
+      [MIGRATION_RECORD]
+    );
+    if (Number(migrationRow?.applied || 0) === 0) {
+      await createOrVerifySafetySnapshot(connection, databaseName);
+    } else {
+      console.log("Phase 3 migration record already exists; verifying release state.");
+    }
 
     const beforeCounts = await tableRowCounts(connection);
     const migrationStatements = splitSqlScript(readSql(MIGRATION_FILE));
@@ -248,9 +407,12 @@ module.exports = {
   MIGRATION_RECORD,
   PRESERVED_TABLES,
   RELEASE_CONFIRMATION,
+  SNAPSHOT_MANIFEST_TABLE,
+  SNAPSHOT_TABLES,
   VERIFIER_FILE,
-  assertReleaseGates,
   assertPreservedCounts,
+  assertReleaseGates,
+  createOrVerifySafetySnapshot,
   runEquipmentFinanceOperationalPolishMigration,
   splitSqlScript,
   validateVerifierResults,
