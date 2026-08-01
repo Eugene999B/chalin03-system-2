@@ -5,7 +5,7 @@ import EquipmentFinanceStartWizardPage from "./EquipmentFinanceStartWizardPage";
 import "../styles/equipmentFinanceOperationalPolish.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
-const DRAFT_KEY = "chalin03.finance.start-installment.v1";
+const DRAFT_KEY = "chalin03.finance.start-installment.v2";
 const DRAFT_CONFLICT_CODE = "FINANCE_DRAFT_VERSION_CONFLICT";
 const POLL_MS = 900;
 
@@ -33,30 +33,42 @@ function localProgress(payload = {}) {
   const deposit = numberValue(payload.offer?.deposit);
   const financed = Math.max(sellingPrice - deposit, 0);
   const guarantorRequired = financed >= 100000;
-  const checks = [
+  const frequency = String(payload.offer?.payment_frequency || "monthly");
+  const creationChecks = [
     {
       code: "customer",
-      label: "Customer",
+      label: "Customer selected",
+      required_for_draft: true,
       complete:
         (payload.customerMode === "existing" && Boolean(payload.customer_id)) ||
         (payload.customerMode === "new" &&
           Boolean(text(payload.customer?.customer_name)) &&
           Boolean(text(payload.customer?.phone))),
     },
-    { code: "machine", label: "Excavator", complete: Boolean(payload.asset_id) },
+    {
+      code: "machine",
+      label: "Exact excavator selected",
+      required_for_draft: true,
+      complete: Boolean(payload.asset_id),
+    },
     {
       code: "plan",
-      label: "Payment plan",
+      label: "Exact payment plan ready",
+      required_for_draft: true,
       complete:
         sellingPrice > 0 &&
         deposit >= 0 &&
         deposit <= sellingPrice &&
         numberValue(payload.offer?.installment_count) > 0 &&
-        Boolean(payload.offer?.first_due_date),
+        Boolean(payload.offer?.first_due_date) &&
+        (frequency !== "custom" || numberValue(payload.offer?.custom_interval_days) > 0),
     },
+  ];
+  const assessmentChecks = [
     {
       code: "kyc",
-      label: "KYC details",
+      label: "KYC for submission",
+      required_for_draft: false,
       complete:
         Boolean(text(payload.kyc?.id_number)) &&
         Boolean(text(payload.kyc?.employment_type)) &&
@@ -65,7 +77,8 @@ function localProgress(payload = {}) {
     },
     {
       code: "affordability",
-      label: "Affordability",
+      label: "Affordability for submission",
+      required_for_draft: false,
       complete:
         numberValue(payload.affordability?.monthly_salary_income) +
           numberValue(payload.affordability?.monthly_business_income) +
@@ -74,7 +87,8 @@ function localProgress(payload = {}) {
     },
     {
       code: "consent",
-      label: "Consent",
+      label: "Consent for submission",
+      required_for_draft: false,
       complete: Boolean(
         payload.kyc?.customer_consent_confirmed &&
           payload.kyc?.credit_assessment_consent_confirmed
@@ -82,7 +96,8 @@ function localProgress(payload = {}) {
     },
     {
       code: "guarantor",
-      label: guarantorRequired ? "Guarantor" : "Guarantor not required",
+      label: guarantorRequired ? "Guarantor for submission" : "Guarantor not required",
+      required_for_draft: false,
       complete:
         !guarantorRequired ||
         Boolean(
@@ -92,12 +107,20 @@ function localProgress(payload = {}) {
         ),
     },
   ];
-  const completed = checks.filter((item) => item.complete).length;
+  const checks = [...creationChecks, ...assessmentChecks];
+  const completeCount = checks.filter((item) => item.complete).length;
+  const creationComplete = creationChecks.filter((item) => item.complete).length;
+  const assessmentComplete = assessmentChecks.filter((item) => item.complete).length;
   return {
     checklist: checks,
-    complete_count: completed,
+    complete_count: completeCount,
     total_count: checks.length,
-    completion_percent: Number(((completed / checks.length) * 100).toFixed(2)),
+    completion_percent: Number(((completeCount / checks.length) * 100).toFixed(2)),
+    creation_complete_count: creationComplete,
+    creation_total_count: creationChecks.length,
+    creation_ready: creationComplete === creationChecks.length,
+    assessment_complete_count: assessmentComplete,
+    assessment_total_count: assessmentChecks.length,
   };
 }
 
@@ -129,7 +152,7 @@ export default function EquipmentFinanceOperationalStartPage() {
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft.payload));
     lastDraftTextRef.current = JSON.stringify(draft.payload);
     versionRef.current = Number(draft.version || 1);
-    setProgress(draft.progress || localProgress(draft.payload));
+    setProgress(localProgress(draft.payload));
     setLastSavedAt(draft.last_saved_at || null);
   }, []);
 
@@ -197,7 +220,7 @@ export default function EquipmentFinanceOperationalStartPage() {
         versionRef.current = draft?.version ?? versionRef.current;
         conflictRef.current = null;
         setConflict(null);
-        setProgress(draft?.progress || localProgress(payload));
+        setProgress(localProgress(payload));
         setLastSavedAt(draft?.last_saved_at || new Date().toISOString());
         setSaveState("saved");
       } catch (error) {
@@ -303,7 +326,7 @@ export default function EquipmentFinanceOperationalStartPage() {
           <div>
             <strong>{statusText}</strong>
             <small>
-              {progress.complete_count || 0} of {progress.total_count || 7} checklist items complete
+              {progress.creation_complete_count || 0} of {progress.creation_total_count || 3} draft requirements · {progress.assessment_complete_count || 0} of {progress.assessment_total_count || 4} later assessment items
             </small>
           </div>
         </div>
@@ -311,11 +334,14 @@ export default function EquipmentFinanceOperationalStartPage() {
           <div>
             <span style={{ width: `${progress.completion_percent || 0}%` }} />
           </div>
-          <strong>{Math.round(progress.completion_percent || 0)}%</strong>
+          <strong>{progress.creation_ready ? "Draft ready" : "Building draft"}</strong>
         </div>
         <div className="finance-draft-bar__checks">
           {(progress.checklist || []).map((item) => (
-            <span className={item.complete ? "is-complete" : ""} key={item.code}>
+            <span
+              className={`${item.complete ? "is-complete" : ""} ${item.required_for_draft ? "is-required" : "is-later"}`}
+              key={item.code}
+            >
               {item.complete ? "✓" : "○"} {item.label}
             </span>
           ))}
