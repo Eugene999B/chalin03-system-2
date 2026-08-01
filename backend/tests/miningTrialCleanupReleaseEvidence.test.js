@@ -16,19 +16,23 @@ const NORMAL_BACKEND_START =
   "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 const APPROVED_PROFESSIONAL_FINANCE_GATE =
   "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && ";
+const APPROVED_PHASE1_FINANCE_GATE =
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && ";
 const APPROVED_PHASE3_FINANCE_GATE =
   "node scripts/runEquipmentFinanceOperationalPolishStartup.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
   assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
+  const approvedStarts = new Set([
+    NORMAL_BACKEND_START,
+    `${APPROVED_PROFESSIONAL_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    `${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+  ]);
   assert.equal(
-    packageJson.scripts.start === NORMAL_BACKEND_START ||
-      packageJson.scripts.start ===
-        `${APPROVED_PROFESSIONAL_FINANCE_GATE}${NORMAL_BACKEND_START}` ||
-      packageJson.scripts.start ===
-        `${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    approvedStarts.has(packageJson.scripts.start),
     true,
-    "Startup may be normal or use only a reviewed Equipment Finance startup gate."
+    "Startup may be normal or use only reviewed Equipment Finance startup gates."
   );
   assert.equal(
     fs.existsSync(
