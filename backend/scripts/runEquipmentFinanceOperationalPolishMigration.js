@@ -97,6 +97,9 @@ function assertReleaseGates(env = process.env) {
   if (!truthy(env.CHALIN03_SIGNED_BACKUP_CONFIRMED)) {
     throw new Error("Confirm a fresh verified signed Chalin 03 Professional Backup first.");
   }
+  // Railway Hobby does not provide a separate SQL export. The legacy
+  // CHALIN03_SQL_BACKUP_CONFIRMED flag is deliberately not required; the
+  // migration creates and verifies database-side safety snapshots instead.
   if (String(env.CHALIN03_MIGRATION_RELEASE || "").trim() !== RELEASE_CONFIRMATION) {
     throw new Error(
       `Set CHALIN03_MIGRATION_RELEASE=${RELEASE_CONFIRMATION} for this exact release.`
