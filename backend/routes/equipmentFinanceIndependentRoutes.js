@@ -11,6 +11,7 @@ const {
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
+const equipmentFinanceCompanyWideApplicationRoutes = require("./equipmentFinanceCompanyWideApplicationRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 
@@ -39,11 +40,15 @@ function activationCandidate(application) {
     approved_deposit: Number(application.proposed_deposit || 0),
     financed_amount: Number(application.financed_amount || 0),
     payment_frequency: application.proposed_frequency,
+    payment_interval_days: application.proposed_interval_days || null,
+    non_working_day_rule: application.proposed_non_working_day_rule || "exact",
     installment_count: Number(application.proposed_installment_count || 0),
+    periodic_amount: Number(application.proposed_periodic_amount || 0),
     proposed_first_due_date: application.proposed_first_due_date,
     agreement_id: application.agreement_id || null,
     agreement_activated_at: application.agreement_activated_at || null,
-    equipment_origin_location_id: application.hire_location_id || null,
+    company_wide_finance: true,
+    hire_location_id: null,
     safeguards: {
       creates_hire_job: false,
       creates_hire_contract: false,
@@ -81,12 +86,16 @@ function depositCandidate(agreement) {
     financed_amount: Number(agreement.financed_amount || 0),
     outstanding_balance: Number(agreement.outstanding_balance || 0),
     payment_frequency: agreement.payment_frequency,
+    payment_interval_days: agreement.payment_interval_days || null,
+    non_working_day_rule: agreement.non_working_day_rule || "exact",
     installment_count: agreement.installment_count,
     first_due_date: agreement.first_due_date,
+    final_due_date: agreement.final_due_date,
     deposit_completed_at: agreement.deposit_completed_at,
     reservation_activated_at: agreement.reservation_activated_at,
     reserved: agreement.equipment_commitment_status === "reserved",
-    equipment_origin_name: agreement.equipment_origin_name || null,
+    company_wide_finance: true,
+    hire_location_id: null,
   };
 }
 
@@ -94,6 +103,7 @@ function financePolicy() {
   return {
     division: "installment_finance",
     scope: "company_wide",
+    hire_location_id: null,
     hire_location_selection_required: false,
     hire_workflow_access: false,
     professional_settings_enabled: true,
@@ -101,6 +111,7 @@ function financePolicy() {
     machine_active_hire_check_enabled: true,
     guided_start_enabled: true,
     installment_offer_created_automatically: true,
+    exact_schedule_enabled: true,
     operational_polish_enabled: true,
     private_case_documents: true,
     server_draft_autosave: true,
@@ -110,12 +121,10 @@ function financePolicy() {
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
+router.use("/credit-applications", equipmentFinanceCompanyWideApplicationRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 
-// The final lifecycle query now returns professional agreement/document fields.
-// Check the professional migration before handing the URL to that router so a
-// missing additive migration becomes a controlled 503 rather than a raw SQL 500.
 router.use("/finance-lifecycle", async (_req, res, next) => {
   try {
     await assertProfessionalSchema();
@@ -219,7 +228,6 @@ router.get(
            asset.operational_purpose,
            asset.sale_status,
            asset.is_active AS asset_is_active,
-           location.name AS equipment_origin_name,
            sale_lock.lock_status AS active_lock_status,
            sale_lock.released_at AS active_lock_released_at,
            (SELECT COUNT(*)
@@ -231,7 +239,6 @@ router.get(
            ON application.id = agreement.credit_application_id
          INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
          INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-         LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
          LEFT JOIN equipment_asset_sale_locks sale_lock
            ON sale_lock.agreement_id = agreement.id
           AND sale_lock.released_at IS NULL
@@ -259,10 +266,6 @@ router.get(
     }
   }
 );
-
-// The authoritative final lifecycle router owns /finance-lifecycle/*.
-// Keeping a second accounts implementation here caused production requests to
-// bypass the lifecycle readiness gate and surface raw SQL errors as HTTP 500.
 
 module.exports = router;
 module.exports.financePolicy = financePolicy;
