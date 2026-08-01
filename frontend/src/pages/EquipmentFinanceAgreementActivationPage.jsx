@@ -20,17 +20,35 @@ function money(value) {
 }
 
 function label(value) {
-  return String(value || "")
+  return String(value || "Not recorded")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function dateLabel(value) {
+  if (!value) return "Not recorded";
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime())
+    ? String(value)
+    : parsed.toLocaleDateString("en-GH", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
 }
 
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function intervalLabel(candidate) {
+  if (candidate.payment_frequency === "custom") {
+    return `Every ${candidate.payment_interval_days || "?"} days`;
+  }
+  if (candidate.payment_frequency === "weekly") return "Every 7 days";
+  if (candidate.payment_frequency === "fortnightly") return "Every 14 days";
+  return "Monthly";
 }
 
 export default function EquipmentFinanceAgreementActivationPage() {
@@ -45,7 +63,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
     Boolean(user?.is_original_system_administrator) ||
     ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(activeRole) ||
     ACTIVATION_ROLES.has(activeRole);
-  const [readiness, setReadiness] = useState({ ready: null, missing_tables: [] });
+  const [readiness, setReadiness] = useState({ ready: null });
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +71,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ first_due_date: today(), grace_days: "0", activation_notes: "", terms_accepted: false });
+  const [form, setForm] = useState({ grace_days: "0", activation_notes: "", terms_accepted: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,11 +85,8 @@ export default function EquipmentFinanceAgreementActivationPage() {
       setCandidates(response.data?.candidates || []);
     } catch (error) {
       const responseReadiness = error?.response?.data?.readiness;
-      if (responseReadiness?.ready === false) {
-        setReadiness(responseReadiness);
-      } else {
-        setProblem(errorMessage(error, "Could not load approved Finance applications."));
-      }
+      if (responseReadiness?.ready === false) setReadiness(responseReadiness);
+      else setProblem(errorMessage(error, "Could not load approved Finance applications."));
     } finally {
       setLoading(false);
     }
@@ -104,14 +119,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
       return;
     }
     setSelected(candidate);
-    setForm({
-      first_due_date: candidate.proposed_first_due_date
-        ? String(candidate.proposed_first_due_date).slice(0, 10)
-        : today(),
-      grace_days: "0",
-      activation_notes: "",
-      terms_accepted: false,
-    });
+    setForm({ grace_days: "0", activation_notes: "", terms_accepted: false });
     setProblem("");
   }
 
@@ -124,9 +132,12 @@ export default function EquipmentFinanceAgreementActivationPage() {
     setSaving(true);
     setProblem("");
     try {
-      const response = await axiosClient.post(`${API}/${selected.id}`, form);
+      const response = await axiosClient.post(`${API}/${selected.id}`, {
+        ...form,
+        first_due_date: selected.proposed_first_due_date,
+      });
       setSelected(null);
-      setNotice(response.data?.message || "Agreement activated with its installment schedule.");
+      setNotice(response.data?.message || "Agreement activated with its exact schedule.");
       await load();
     } catch (error) {
       setProblem(errorMessage(error, "Could not activate the agreement."));
@@ -142,8 +153,8 @@ export default function EquipmentFinanceAgreementActivationPage() {
           <p>Approved application → agreement</p>
           <h1>Activate Agreement</h1>
           <span>
-            Create the installment agreement and exact dated schedule from an approved,
-            KYC-verified application. Finance is company-wide; no Hire location is selected here.
+            Activate the exact approved price, deposit, interval and dated schedule. Finance is
+            company-wide and no Hire location is used.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -152,11 +163,18 @@ export default function EquipmentFinanceAgreementActivationPage() {
         </div>
       </header>
 
-      {problem ? <div className="finance-simple__notice is-error">{problem}</div> : null}
-      {notice ? <div className="finance-simple__notice">{notice}</div> : null}
-      <div className="finance-simple__notice is-info">Activation does not record a payment, reserve the machine, deliver it or transfer ownership.</div>
+      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
+      <div className="finance-simple__notice is-info">
+        Approved dates cannot be changed here. Use a numbered, approved schedule amendment when a date must change.
+      </div>
 
-      {readiness.ready === false ? <section className="finance-simple__section"><h2>Agreement activation is not ready</h2><p>Missing: {(readiness.missing_tables || []).join(", ")}</p></section> : null}
+      {readiness.ready === false ? (
+        <section className="finance-simple__section">
+          <h2>Agreement activation is not ready</h2>
+          <p>Missing: {(readiness.missing_columns || readiness.missing_tables || []).join(", ")}</p>
+        </section>
+      ) : null}
 
       {readiness.ready === true ? (
         <section className="finance-simple__section">
@@ -170,9 +188,21 @@ export default function EquipmentFinanceAgreementActivationPage() {
             {visible.map((candidate) => (
               <article className="finance-simple__card" key={candidate.id}>
                 <div className="finance-simple__card-body">
-                  <div className="finance-simple__card-head"><div><small>{candidate.application_number}</small><h3>{candidate.customer_name}</h3><p>{candidate.asset_code} — {candidate.asset_name}</p></div><span className={`finance-simple__pill ${candidate.agreement_id ? "is-good" : "is-warning"}`}>{candidate.agreement_id ? "Activated" : "Awaiting activation"}</span></div>
-                  <div className="finance-simple__facts"><div><span>Automatic Installment Offer</span><strong>{candidate.quotation_number}</strong></div><div><span>Total</span><strong>{money(candidate.quoted_total)}</strong></div><div><span>Deposit</span><strong>{money(candidate.approved_deposit)}</strong></div><div><span>Financed</span><strong>{money(candidate.financed_amount)}</strong></div><div><span>Payments</span><strong>{candidate.installment_count} · {label(candidate.payment_frequency)}</strong></div><div><span>First due</span><strong>{candidate.proposed_first_due_date ? String(candidate.proposed_first_due_date).slice(0, 10) : "Set during activation"}</strong></div></div>
-                  <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate} onClick={() => open(candidate)}>{candidate.agreement_id ? "Agreement activated" : "Activate Agreement"}</button>
+                  <div className="finance-simple__card-head">
+                    <div><small>{candidate.application_number}</small><h3>{candidate.customer_name}</h3><p>{candidate.asset_code} — {candidate.asset_name}</p></div>
+                    <span className={`finance-simple__pill ${candidate.agreement_id ? "is-good" : "is-warning"}`}>{candidate.agreement_id ? "Activated" : "Awaiting activation"}</span>
+                  </div>
+                  <div className="finance-simple__facts">
+                    <div><span>Installment Offer</span><strong>{candidate.quotation_number}</strong></div>
+                    <div><span>Total</span><strong>{money(candidate.quoted_total)}</strong></div>
+                    <div><span>Deposit</span><strong>{money(candidate.approved_deposit)}</strong></div>
+                    <div><span>Financed</span><strong>{money(candidate.financed_amount)}</strong></div>
+                    <div><span>Payment interval</span><strong>{intervalLabel(candidate)}</strong></div>
+                    <div><span>Normal payment</span><strong>{money(candidate.periodic_amount)}</strong></div>
+                    <div><span>First due</span><strong>{dateLabel(candidate.proposed_first_due_date)}</strong></div>
+                    <div><span>Final due</span><strong>{dateLabel(candidate.final_due_date)}</strong></div>
+                  </div>
+                  <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate} onClick={() => open(candidate)}>{candidate.agreement_id ? "Agreement activated" : "Review Exact Schedule"}</button>
                 </div>
               </article>
             ))}
@@ -183,15 +213,37 @@ export default function EquipmentFinanceAgreementActivationPage() {
       {selected ? (
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Activate Finance agreement" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Final activation check</p><h2>{selected.application_number}</h2><span className="finance-simple__muted">{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span></div><button type="button" onClick={() => setSelected(null)}>Close</button></div>
+            <div className="finance-simple__section-header">
+              <div><p className="finance-simple__eyebrow">Approved terms</p><h2>{selected.application_number}</h2><span className="finance-simple__muted">{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span></div>
+              <button type="button" onClick={() => setSelected(null)}>Close</button>
+            </div>
+            <div className="finance-simple__summary">
+              <article><span>Interval</span><strong>{intervalLabel(selected)}</strong></article>
+              <article><span>Payments</span><strong>{selected.installment_count}</strong></article>
+              <article><span>First due</span><strong>{dateLabel(selected.proposed_first_due_date)}</strong></article>
+              <article><span>Final due</span><strong>{dateLabel(selected.final_due_date)}</strong></article>
+              <article><span>Normal payment</span><strong>{money(selected.periodic_amount)}</strong></article>
+              <article><span>Weekend rule</span><strong>{label(selected.non_working_day_rule)}</strong></article>
+            </div>
+            <details open>
+              <summary>Exact approved schedule</summary>
+              <div className="finance-simple__schedule-list">
+                {(selected.exact_schedule || []).map((row) => (
+                  <article key={`${row.sequence_number}-${row.due_date}`}>
+                    <span>Payment {row.sequence_number}</span>
+                    <strong>{dateLabel(row.due_date)}</strong>
+                    <b>{money(row.scheduled_amount)}</b>
+                  </article>
+                ))}
+              </div>
+            </details>
             <form onSubmit={activate}>
               <div className="finance-simple__grid">
-                <label className="finance-simple__field"><span>First installment due date</span><input type="date" value={form.first_due_date} onChange={(event) => setForm((current) => ({ ...current, first_due_date: event.target.value }))} required /></label>
-                <label className="finance-simple__field"><span>Grace days</span><input type="number" min="0" max="365" value={form.grace_days} onChange={(event) => setForm((current) => ({ ...current, grace_days: event.target.value }))} /></label>
+                <label className="finance-simple__field"><span>Grace days</span><input type="number" min="0" max="90" value={form.grace_days} onChange={(event) => setForm((current) => ({ ...current, grace_days: event.target.value }))} /></label>
                 <label className="finance-simple__field is-wide"><span>Activation note</span><textarea value={form.activation_notes} onChange={(event) => setForm((current) => ({ ...current, activation_notes: event.target.value }))} /></label>
-                <label className="finance-simple__check is-wide"><input type="checkbox" checked={form.terms_accepted} onChange={(event) => setForm((current) => ({ ...current, terms_accepted: event.target.checked }))} /><span><strong>Approved terms confirmed</strong><small>I confirm the approved application, customer, exact excavator, price, deposit and payment plan.</small></span></label>
+                <label className="finance-simple__check is-wide"><input type="checkbox" checked={form.terms_accepted} onChange={(event) => setForm((current) => ({ ...current, terms_accepted: event.target.checked }))} /><span><strong>Exact approved terms confirmed</strong><small>I confirm the customer, exact excavator, price, deposit, payment interval and every due date above.</small></span></label>
               </div>
-              <div className="finance-simple__sticky-actions"><span>Agreement and schedule only</span><div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Activating…" : "Activate Agreement"}</button></div></div>
+              <div className="finance-simple__sticky-actions"><span>No payment or reservation is created here</span><div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Activating…" : "Activate Exact Agreement"}</button></div></div>
             </form>
           </section>
         </div>

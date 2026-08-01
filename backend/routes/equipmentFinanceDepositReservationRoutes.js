@@ -78,18 +78,6 @@ function boolValue(value, fallback = false) {
   return undefined;
 }
 
-function selectedLocationId(req) {
-  const id = positiveId(req.hireLocationScope?.locationId);
-  if (!id) {
-    throw new DepositError(
-      400,
-      "Choose a specific Finance location before collecting a deposit or reserving equipment.",
-      "EQUIPMENT_FINANCE_LOCATION_REQUIRED"
-    );
-  }
-  return id;
-}
-
 function assertDepositOfficer(req) {
   if (isOriginalSystemAdministrator(req.user)) return;
   if (!DEPOSIT_ROLES.has(workspaceRoleFor(req.user))) {
@@ -103,12 +91,12 @@ function assertDepositOfficer(req) {
 
 function fallbackNumber(prefix) {
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-  return `${prefix}-${stamp}-${String(crypto.randomInt(0, 10000)).padStart(4, "0")}`;
+  return `${prefix}-${stamp}-${String(crypto.randomInt(0, 1000000)).padStart(6, "0")}`;
 }
 
-async function documentNumber(sequenceCode, prefix, userId) {
+async function documentNumber(sequenceCode, prefix, actorId) {
   try {
-    return await nextDocumentNumber(sequenceCode, { userId: positiveId(userId) });
+    return await nextDocumentNumber(sequenceCode, { userId: positiveId(actorId) });
   } catch (_error) {
     return fallbackNumber(prefix);
   }
@@ -125,10 +113,7 @@ async function schemaStatus(connection = pool) {
     tableNames
   );
   const found = new Map(tableNames.map((tableName) => [tableName, new Set()]));
-  for (const row of columnRows) {
-    if (!found.has(row.TABLE_NAME)) found.set(row.TABLE_NAME, new Set());
-    found.get(row.TABLE_NAME).add(row.COLUMN_NAME);
-  }
+  for (const row of columnRows) found.get(row.TABLE_NAME)?.add(row.COLUMN_NAME);
 
   const missingColumns = [];
   for (const [tableName, columns] of Object.entries(REQUIRED_COLUMNS)) {
@@ -164,8 +149,8 @@ async function assertSchemaReady(connection = pool) {
   if (!status.ready) {
     const error = new DepositError(
       503,
-      "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
-      "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
+      "Finance deposit collection and equipment reservation are being prepared. Apply and verify the company-wide stabilization first.",
+      "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED"
     );
     error.readiness = status;
     throw error;
@@ -179,15 +164,14 @@ function sendError(res, error, fallbackMessage) {
       status: "error",
       code: error.code,
       message: error.message,
-      readiness: error.readiness,
+      ...(error.readiness ? { readiness: error.readiness } : {}),
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
-      message:
-        "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
+      code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
+      message: "Finance deposit collection and equipment reservation are being prepared.",
     });
   }
   if (error?.errno === 1644 || error?.sqlState === "45000") {
@@ -227,7 +211,7 @@ async function withTransaction(work) {
   }
 }
 
-async function loadAgreement(connection, agreementId, locationId, lock = false) {
+async function loadAgreement(connection, agreementId, lock = false) {
   const [rows] = await connection.query(
     `SELECT
        agreement.*,
@@ -243,7 +227,6 @@ async function loadAgreement(connection, agreementId, locationId, lock = false) 
        asset.operational_purpose,
        asset.sale_status,
        asset.is_active AS asset_is_active,
-       location.name AS hire_location_name,
        sale_lock.lock_status AS active_lock_status,
        sale_lock.released_at AS active_lock_released_at,
        (SELECT COUNT(*)
@@ -257,34 +240,20 @@ async function loadAgreement(connection, agreementId, locationId, lock = false) 
        ON customer.id = agreement.customer_id
      INNER JOIN fleet_assets asset
        ON asset.id = agreement.asset_id
-     INNER JOIN business_locations location
-       ON location.id = agreement.hire_location_id
      LEFT JOIN equipment_asset_sale_locks sale_lock
        ON sale_lock.agreement_id = agreement.id
       AND sale_lock.released_at IS NULL
      WHERE agreement.id = ?
-       AND agreement.hire_location_id = ?
+       AND agreement.sale_type = 'installment'
+       AND agreement.activation_source = 'approved_credit_application'
      LIMIT 1 ${lock ? "FOR UPDATE" : ""}`,
-    [agreementId, locationId]
+    [agreementId]
   );
   return rows[0] || null;
 }
 
 function assertControlledAgreement(agreement) {
   if (!agreement) throw new DepositError(404, "Finance agreement was not found.");
-  if (agreement.sale_type !== "installment") {
-    throw new DepositError(409, "Only installment Finance agreements use this deposit stage.");
-  }
-  if (
-    agreement.activation_source !== "approved_credit_application" ||
-    !agreement.credit_application_id
-  ) {
-    throw new DepositError(
-      409,
-      "This is a legacy agreement. Continue managing it through the existing legacy account workflow.",
-      "EQUIPMENT_FINANCE_LEGACY_AGREEMENT"
-    );
-  }
   if (
     agreement.application_status !== "approved" ||
     agreement.kyc_status !== "verified" ||
@@ -307,7 +276,7 @@ function assertAssetCanBeReserved(agreement) {
   if (!agreement.asset_is_active) {
     throw new DepositError(409, "The equipment is not active in the fleet register.");
   }
-  if (!['sale_only', 'sale_or_hire'].includes(agreement.operational_purpose)) {
+  if (!["sale_only", "sale_or_hire"].includes(agreement.operational_purpose)) {
     throw new DepositError(409, "The equipment is not authorised for sale.");
   }
   if (Number(agreement.active_hire_count || 0) > 0) {
@@ -316,10 +285,7 @@ function assertAssetCanBeReserved(agreement) {
       "The equipment is active on a Hire contract and cannot be reserved for Finance."
     );
   }
-  if (
-    agreement.sale_status !== "available" &&
-    agreement.sale_status !== "installment_active"
-  ) {
+  if (!["available", "installment_active"].includes(agreement.sale_status)) {
     throw new DepositError(409, "The equipment is not currently available for reservation.");
   }
   if (
@@ -357,11 +323,16 @@ function candidateShape(agreement) {
     financed_amount: Number(agreement.financed_amount || 0),
     outstanding_balance: Number(agreement.outstanding_balance || 0),
     payment_frequency: agreement.payment_frequency,
+    payment_interval_days: agreement.payment_interval_days,
+    non_working_day_rule: agreement.non_working_day_rule,
     installment_count: agreement.installment_count,
     first_due_date: agreement.first_due_date,
+    final_due_date: agreement.final_due_date,
     deposit_completed_at: agreement.deposit_completed_at,
     reservation_activated_at: agreement.reservation_activated_at,
     reserved: agreement.equipment_commitment_status === "reserved",
+    company_wide_finance: true,
+    hire_location_id: null,
   };
 }
 
@@ -370,12 +341,10 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
     const readiness = await schemaStatus(pool);
     return res.status(readiness.ready ? 200 : 503).json({
       status: readiness.ready ? "success" : "error",
-      code: readiness.ready
-        ? undefined
-        : "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
+      code: readiness.ready ? undefined : "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
       message: readiness.ready
         ? "Finance deposit and reservation controls are ready."
-        : "Apply and verify the approved Finance deposit-reservation migration first.",
+        : "Apply and verify the company-wide Finance stabilization first.",
       readiness,
     });
   } catch (error) {
@@ -383,10 +352,9 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
   }
 });
 
-router.get("/candidates", requirePermission("fleet.assets.view"), async (req, res) => {
+router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     await assertSchemaReady(pool);
-    const locationId = selectedLocationId(req);
     const [rows] = await pool.query(
       `SELECT
          agreement.*,
@@ -402,7 +370,6 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (req, re
          asset.operational_purpose,
          asset.sale_status,
          asset.is_active AS asset_is_active,
-         location.name AS hire_location_name,
          sale_lock.lock_status AS active_lock_status,
          sale_lock.released_at AS active_lock_released_at,
          (SELECT COUNT(*)
@@ -414,23 +381,24 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (req, re
          ON application.id = agreement.credit_application_id
        INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
        INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-       INNER JOIN business_locations location ON location.id = agreement.hire_location_id
        LEFT JOIN equipment_asset_sale_locks sale_lock
          ON sale_lock.agreement_id = agreement.id
         AND sale_lock.released_at IS NULL
-       WHERE agreement.hire_location_id = ?
-         AND agreement.sale_type = 'installment'
+       WHERE agreement.sale_type = 'installment'
          AND agreement.activation_source = 'approved_credit_application'
          AND agreement.agreement_status IN ('approved','active')
        ORDER BY
          CASE WHEN agreement.equipment_commitment_status = 'reserved' THEN 1 ELSE 0 END,
          agreement.approved_at,
-         agreement.id`,
-      [locationId]
+         agreement.id`
     );
     return res.json({
       status: "success",
       candidates: rows.map(candidateShape),
+      policy: {
+        scope: "company_wide",
+        hire_location_selection_required: false,
+      },
       safeguards: {
         hire_work_created: false,
         delivery_created: false,
@@ -450,7 +418,6 @@ router.post(
     try {
       assertDepositOfficer(req);
       await assertSchemaReady(pool);
-      const locationId = selectedLocationId(req);
       const agreementId = positiveId(req.params.agreementId);
       const amount = money(req.body.amount, 0);
       const method = enumValue(req.body.payment_method, PAYMENT_METHODS, undefined);
@@ -463,12 +430,12 @@ router.post(
       if (amount > 0 && method === undefined) {
         throw new DepositError(400, "Choose the payment method for this deposit.");
       }
-      if (amount > 0 && !idempotencyKey) {
-        throw new DepositError(400, "A deposit idempotency key is required.");
+      if (amount > 0 && idempotencyKey.length < 20) {
+        throw new DepositError(400, "A secure deposit request key is required.");
       }
 
       const result = await withTransaction(async (connection) => {
-        const agreement = await loadAgreement(connection, agreementId, locationId, true);
+        const agreement = await loadAgreement(connection, agreementId, true);
         assertControlledAgreement(agreement);
         assertAssetCanBeReserved(agreement);
 
@@ -515,7 +482,6 @@ router.post(
           throw new DepositError(400, "The deposit exceeds the remaining required deposit.");
         }
 
-        let payment = null;
         const depositAfter = Number((received + amount).toFixed(2));
         const depositComplete = depositAfter + 0.01 >= required;
         if (depositComplete && !confirmReservation) {
@@ -525,6 +491,7 @@ router.post(
           );
         }
 
+        let payment = null;
         if (amount > 0) {
           const paymentNumber = await documentNumber(
             "EQUIPMENT_SALE_PAYMENT",
@@ -537,30 +504,27 @@ router.post(
             req.user?.id
           );
           const [paymentInsert] = await connection.query(
-            `INSERT INTO equipment_sale_payments (
-               payment_number, receipt_number, idempotency_key,
-               hire_location_id, agreement_id, credit_application_id,
-               customer_id, payment_date, payment_category, payment_stage,
-               reservation_effect, amount, payment_method, reference_number,
-               notes, received_by, approved_by, approved_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'deposit',
-                       'opening_deposit', ?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [
-              paymentNumber,
-              receiptNumber,
-              idempotencyKey,
-              agreement.hire_location_id,
-              agreement.id,
-              agreement.credit_application_id,
-              agreement.customer_id,
-              depositComplete ? "reserved" : "none",
+            `INSERT INTO equipment_sale_payments SET ?`,
+            {
+              payment_number: paymentNumber,
+              receipt_number: receiptNumber,
+              idempotency_key: idempotencyKey,
+              hire_location_id: null,
+              agreement_id: agreement.id,
+              credit_application_id: agreement.credit_application_id,
+              customer_id: agreement.customer_id,
+              payment_date: new Date(),
+              payment_category: "deposit",
+              payment_stage: "opening_deposit",
+              reservation_effect: depositComplete ? "reserved" : "none",
               amount,
-              method,
-              nullableText(req.body.reference_number, 150),
-              nullableText(req.body.notes, 500),
-              positiveId(req.user?.id),
-              positiveId(req.user?.id),
-            ]
+              payment_method: method,
+              reference_number: nullableText(req.body.reference_number, 150),
+              notes: nullableText(req.body.notes, 500),
+              received_by: positiveId(req.user?.id),
+              approved_by: positiveId(req.user?.id),
+              approved_at: new Date(),
+            }
           );
           const [paymentRows] = await connection.query(
             "SELECT * FROM equipment_sale_payments WHERE id = ? LIMIT 1",
@@ -578,7 +542,8 @@ router.post(
 
         await connection.query(
           `UPDATE equipment_sale_agreements
-           SET deposit_received = ?, amount_paid = ?, outstanding_balance = ?,
+           SET hire_location_id = NULL,
+               deposit_received = ?, amount_paid = ?, outstanding_balance = ?,
                deposit_completed_at = CASE WHEN ? THEN COALESCE(deposit_completed_at, NOW()) ELSE deposit_completed_at END,
                deposit_completed_by = CASE WHEN ? THEN COALESCE(deposit_completed_by, ?) ELSE deposit_completed_by END
            WHERE id = ?`,
@@ -603,17 +568,15 @@ router.post(
           );
           if (!lockRows[0]) {
             await connection.query(
-              `INSERT INTO equipment_asset_sale_locks (
-                 asset_id, agreement_id, hire_location_id, lock_status,
-                 lock_reason, created_by
-               ) VALUES (?, ?, ?, 'installment_active', ?, ?)`,
-              [
-                agreement.asset_id,
-                agreement.id,
-                agreement.hire_location_id,
-                `Reserved after required Finance deposit for ${agreement.agreement_number}`,
-                positiveId(req.user?.id),
-              ]
+              `INSERT INTO equipment_asset_sale_locks SET ?`,
+              {
+                asset_id: agreement.asset_id,
+                agreement_id: agreement.id,
+                hire_location_id: null,
+                lock_status: "installment_active",
+                lock_reason: `Reserved after required Finance deposit for ${agreement.agreement_number}`,
+                created_by: positiveId(req.user?.id),
+              }
             );
             reservationCreated = true;
           }
@@ -627,7 +590,8 @@ router.post(
           );
           await connection.query(
             `UPDATE equipment_sale_agreements
-             SET agreement_status = 'active',
+             SET hire_location_id = NULL,
+                 agreement_status = 'active',
                  equipment_commitment_status = 'reserved',
                  reservation_activated_at = COALESCE(reservation_activated_at, NOW()),
                  reservation_activated_by = COALESCE(reservation_activated_by, ?)
@@ -636,7 +600,7 @@ router.post(
           );
         }
 
-        const refreshed = await loadAgreement(connection, agreement.id, locationId, false);
+        const refreshed = await loadAgreement(connection, agreement.id, false);
         await writeAuditEvent({
           connection,
           req,
@@ -648,8 +612,8 @@ router.post(
             : "equipment.finance.deposit.partial",
           entityType: "equipment_sale_agreement",
           entityId: agreement.id,
-          workspaceCode: "equipment_hire",
-          hireLocationId: agreement.hire_location_id,
+          workspaceCode: "equipment_installment_finance",
+          hireLocationId: null,
           severity: "notice",
           outcome: "success",
           details: depositComplete
@@ -663,6 +627,7 @@ router.post(
             deposit_received: depositAfter,
             deposit_remaining: Number(Math.max(required - depositAfter, 0).toFixed(2)),
             reservation_created: reservationCreated,
+            hire_location_id: null,
             hire_contract_created: false,
             delivery_created: false,
             ownership_transferred: false,
@@ -685,6 +650,8 @@ router.post(
           : "Partial opening deposit recorded. The machine remains available and unreserved until the required deposit is complete.",
         ...result,
         safeguards: {
+          company_wide_finance: true,
+          hire_location_id: null,
           hire_enquiry_created: false,
           hire_contract_created: false,
           hire_job_created: false,

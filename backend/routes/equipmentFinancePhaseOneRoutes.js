@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const express = require("express");
 
 const { pool } = require("../config/db");
@@ -8,6 +9,11 @@ const {
   evaluateCreditApplication,
 } = require("../services/equipmentCreditApplicationPolicy");
 const {
+  buildFinanceSchedule,
+  FinanceScheduleError,
+  monthlyEquivalent,
+} = require("../services/equipmentFinanceScheduleService");
+const {
   assertProfessionalSchema,
   getProfessionalSettings,
   listProfessionalMachines,
@@ -16,7 +22,6 @@ const {
 const router = express.Router();
 
 const CUSTOMER_TYPES = new Set(["individual", "company", "contractor", "government"]);
-const FREQUENCIES = new Set(["weekly", "fortnightly", "monthly", "custom"]);
 const EMPLOYMENT_TYPES = new Set([
   "salaried",
   "self_employed",
@@ -66,7 +71,9 @@ function integerValue(value, fallback = 0, maximum = 520) {
 function dateValue(value, fallback = null) {
   const text = cleanText(value, 20);
   if (!text) return fallback;
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? undefined : text;
 }
 
 function booleanValue(value, fallback = false) {
@@ -91,15 +98,22 @@ function addDays(dateText, days) {
   return date.toISOString().slice(0, 10);
 }
 
-function fallbackNumber(prefix) {
-  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-  const random = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-  return `${prefix}-${stamp}-${random}`;
+function normalizePhone(value) {
+  const digits = cleanText(value, 40).replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("00233")) return `0${digits.slice(5)}`;
+  if (digits.startsWith("233")) return `0${digits.slice(3)}`;
+  return digits;
 }
 
-async function documentNumber(sequence, prefix, userId) {
+function fallbackNumber(prefix) {
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  return `${prefix}-${stamp}-${String(crypto.randomInt(0, 1000000)).padStart(6, "0")}`;
+}
+
+async function documentNumber(sequence, prefix, actorId) {
   try {
-    return await nextDocumentNumber(sequence, { userId });
+    return await nextDocumentNumber(sequence, { userId: actorId });
   } catch (_error) {
     return fallbackNumber(prefix);
   }
@@ -110,8 +124,8 @@ function userId(req) {
 }
 
 function sendError(res, error, fallback) {
-  if (error instanceof PhaseOneError) {
-    return res.status(error.statusCode).json({
+  if (error instanceof PhaseOneError || error instanceof FinanceScheduleError) {
+    return res.status(Number(error.statusCode || 400)).json({
       status: "error",
       code: error.code,
       message: error.message,
@@ -121,11 +135,22 @@ function sendError(res, error, fallback) {
     return res.status(409).json({
       status: "error",
       code: "DUPLICATE_FINANCE_RECORD",
-      message: "That customer, offer or application already exists.",
+      message: "That customer, Installment Offer or application already exists.",
+    });
+  }
+  if (["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error?.code)) {
+    return res.status(503).json({
+      status: "error",
+      code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
+      message: "The company-wide Finance update is still being prepared. Try again after the deployment completes.",
     });
   }
   console.error(fallback, error);
-  return res.status(500).json({ status: "error", message: fallback });
+  return res.status(500).json({
+    status: "error",
+    code: "EQUIPMENT_FINANCE_START_FAILED",
+    message: fallback,
+  });
 }
 
 async function withTransaction(work) {
@@ -155,14 +180,15 @@ async function audit(req, connection, action, entityType, entityId, details, met
     actionType: action,
     entityType,
     entityId,
-    workspaceCode: "equipment_hire",
-    hireLocationId: metadata.storage_location_id || null,
-    severity: /CREATED|UPDATED|OFFER|APPLICATION/.test(action) ? "notice" : "info",
+    workspaceCode: "equipment_installment_finance",
+    hireLocationId: null,
+    severity: /CREATED|UPDATED|OFFER|APPLICATION|STARTED/.test(action) ? "notice" : "info",
     outcome: "success",
     details,
     metadata: {
       finance_division: "installment_finance",
       finance_scope: "company_wide",
+      hire_location_id: null,
       hire_location_selection_required: false,
       ...metadata,
     },
@@ -172,7 +198,7 @@ async function audit(req, connection, action, entityType, entityId, details, met
 function normalizeCustomer(body = {}) {
   const customerName = cleanText(body.customer_name, 180);
   const customerType = cleanText(body.customer_type || "individual", 30).toLowerCase();
-  const phone = nullableText(body.phone, 40);
+  const phone = normalizePhone(body.phone);
   if (!customerName || !CUSTOMER_TYPES.has(customerType)) {
     throw new PhaseOneError(400, "Enter the customer name and choose a valid customer type.");
   }
@@ -183,7 +209,7 @@ function normalizeCustomer(body = {}) {
     customer_name: customerName,
     customer_type: customerType,
     phone,
-    whatsapp_phone: nullableText(body.whatsapp_phone, 40) || phone,
+    whatsapp_phone: normalizePhone(body.whatsapp_phone) || phone,
     email: nullableText(body.email, 150),
     address: nullableText(body.address, 1000),
     contact_person: nullableText(body.contact_person, 150),
@@ -202,7 +228,10 @@ async function findDuplicateCustomer(connection, customer, exceptId = null) {
   const [rows] = await connection.query(
     `SELECT id, customer_code, customer_name, phone, email, address, is_active
      FROM hire_customers
-     WHERE (phone = ? OR LOWER(customer_name) = LOWER(?)) ${except}
+     WHERE (
+       REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '233', '0') = ?
+       OR LOWER(customer_name) = LOWER(?)
+     ) ${except}
      ORDER BY is_active DESC, id DESC
      LIMIT 5`,
     params
@@ -259,34 +288,6 @@ async function customerRecord(connection, customerId, lock = false) {
   return rows[0] || null;
 }
 
-async function storageLocation(connection, preferredId = null) {
-  const params = [];
-  let preferredOrder = "0";
-  if (preferredId) {
-    preferredOrder = "location.id = ?";
-    params.push(preferredId);
-  }
-  const [rows] = await connection.query(
-    `SELECT location.id, location.code, location.name
-     FROM business_locations location
-     INNER JOIN business_units unit ON unit.id = location.business_unit_id
-     WHERE unit.code = 'equipment_hire'
-       AND unit.is_enabled = TRUE
-       AND location.is_active = TRUE
-     ORDER BY ${preferredOrder} DESC, location.id ASC
-     LIMIT 1`,
-    params
-  );
-  if (!rows.length) {
-    throw new PhaseOneError(
-      503,
-      "No active Equipment Business storage location exists. An administrator must create one before an excavator can be financed.",
-      "EQUIPMENT_STORAGE_LOCATION_REQUIRED"
-    );
-  }
-  return rows[0];
-}
-
 async function financeMachine(connection, assetId) {
   const [rows] = await connection.query(
     `SELECT asset.*,
@@ -335,7 +336,7 @@ function normalizeKyc(body = {}, customer = {}) {
     customer_phone_snapshot: nullableText(body.customer_phone_snapshot || customer.phone, 40),
     customer_email_snapshot: nullableText(body.customer_email_snapshot || customer.email, 180),
     customer_address_snapshot: nullableText(body.customer_address_snapshot || customer.address, 3000),
-    id_type: nullableText(body.id_type || "Ghana Card", 80),
+    id_type: nullableText(body.id_type, 80),
     id_number: nullableText(body.id_number, 150),
     date_of_birth: dateValue(body.date_of_birth, null),
     nationality: cleanText(body.nationality || "Ghana", 100),
@@ -348,12 +349,12 @@ function normalizeKyc(body = {}, customer = {}) {
     years_at_residence: integerValue(body.years_at_residence, null, 200),
     years_in_employment_business: integerValue(body.years_in_employment_business, null, 200),
     emergency_contact_name: nullableText(body.emergency_contact_name, 180),
-    emergency_contact_phone: nullableText(body.emergency_contact_phone, 40),
+    emergency_contact_phone: normalizePhone(body.emergency_contact_phone),
     emergency_contact_relationship: nullableText(body.emergency_contact_relationship, 100),
     guarantor_name: nullableText(body.guarantor_name, 180),
-    guarantor_phone: nullableText(body.guarantor_phone, 40),
+    guarantor_phone: normalizePhone(body.guarantor_phone),
     guarantor_address: nullableText(body.guarantor_address, 3000),
-    guarantor_id_type: nullableText(body.guarantor_id_type || "Ghana Card", 80),
+    guarantor_id_type: nullableText(body.guarantor_id_type, 80),
     guarantor_id_number: nullableText(body.guarantor_id_number, 150),
     guarantor_relationship: nullableText(body.guarantor_relationship, 100),
     identity_document_url: nullableText(body.identity_document_url, 10000),
@@ -373,38 +374,35 @@ function normalizeKyc(body = {}, customer = {}) {
     ),
     verification_notes: nullableText(body.verification_notes, 3000),
   };
-  if (kyc.date_of_birth === undefined || kyc.years_at_residence === undefined || kyc.years_in_employment_business === undefined) {
-    throw new PhaseOneError(400, "Check the customer dates and number of years entered.");
+  if (
+    kyc.date_of_birth === undefined ||
+    kyc.years_at_residence === undefined ||
+    kyc.years_in_employment_business === undefined ||
+    kyc.customer_consent_confirmed === undefined ||
+    kyc.credit_assessment_consent_confirmed === undefined
+  ) {
+    throw new PhaseOneError(400, "Check the optional KYC dates, years and consent values entered.");
   }
   return kyc;
 }
 
-function normalizeOffer(body = {}, machine, settings) {
-  const sellingPrice = moneyValue(body.selling_price, Number(machine.target_selling_price || 0));
-  const deposit = moneyValue(body.deposit, 0);
-  const frequency = cleanText(
-    body.payment_frequency || settings?.default_payment_frequency || "monthly",
-    40
-  ).toLowerCase();
-  const installmentCount = integerValue(body.installment_count, 12, 520);
-  const firstDueDate = dateValue(
-    body.first_due_date,
-    addDays(today(), Number(settings?.default_first_due_days || 30))
-  );
-  if (
-    sellingPrice === undefined ||
-    sellingPrice <= 0 ||
-    deposit === undefined ||
-    deposit > sellingPrice ||
-    !FREQUENCIES.has(frequency) ||
-    !installmentCount ||
-    firstDueDate === undefined
-  ) {
-    throw new PhaseOneError(400, "Check the selling price, deposit, payment frequency, number of payments and first due date.");
-  }
+function normalizeOffer(body = {}, machine, settings = {}) {
+  const schedule = buildFinanceSchedule({
+    selling_price: body.selling_price ?? Number(machine.target_selling_price || 0),
+    deposit: body.deposit ?? 0,
+    payment_frequency:
+      body.payment_frequency || settings.default_payment_frequency || "monthly",
+    custom_interval_days:
+      body.custom_interval_days ?? body.payment_interval_days ?? body.proposed_interval_days,
+    installment_count: body.installment_count ?? 12,
+    first_due_date:
+      body.first_due_date || addDays(today(), Number(settings.default_first_due_days || 30)),
+    non_working_day_rule: body.non_working_day_rule || "exact",
+  });
+
   if (
     Number(machine.minimum_selling_price || 0) > 0 &&
-    sellingPrice < Number(machine.minimum_selling_price)
+    schedule.selling_price < Number(machine.minimum_selling_price)
   ) {
     throw new PhaseOneError(
       409,
@@ -412,20 +410,45 @@ function normalizeOffer(body = {}, machine, settings) {
       "FINANCE_OFFER_BELOW_MINIMUM_PRICE"
     );
   }
+
+  const validityDate = dateValue(body.validity_date, addDays(today(), 14));
+  if (validityDate === undefined) {
+    throw new PhaseOneError(400, "Check the Installment Offer validity date.");
+  }
+
   return {
-    selling_price: sellingPrice,
-    deposit,
-    payment_frequency: frequency,
-    installment_count: installmentCount,
-    first_due_date: firstDueDate,
-    validity_date: dateValue(body.validity_date, addDays(today(), 14)),
-    delivery_policy: cleanText(body.delivery_policy || settings?.delivery_policy || "after_deposit", 50),
+    ...schedule,
+    validity_date: validityDate,
+    delivery_policy: cleanText(
+      body.delivery_policy || settings.delivery_policy || "after_deposit",
+      50
+    ),
     delivery_threshold_percent: moneyValue(
       body.delivery_threshold_percent,
-      Number(settings?.delivery_threshold_percent || 0)
+      Number(settings.delivery_threshold_percent || 0)
     ),
-    terms: nullableText(body.terms || settings?.agreement_terms, 30000),
+    terms: nullableText(body.terms || settings.agreement_terms, 30000),
     notes: nullableText(body.notes, 3000),
+  };
+}
+
+function normalizeAffordability(body = {}) {
+  const values = {
+    monthly_salary_income: moneyValue(body.monthly_salary_income, 0),
+    monthly_business_income: moneyValue(body.monthly_business_income, 0),
+    monthly_other_income: moneyValue(body.monthly_other_income, 0),
+    monthly_business_costs: moneyValue(body.monthly_business_costs, 0),
+    monthly_household_expenses: moneyValue(body.monthly_household_expenses, 0),
+    existing_monthly_debt: moneyValue(body.existing_monthly_debt, 0),
+  };
+  if (Object.values(values).some((value) => value === undefined)) {
+    throw new PhaseOneError(400, "Check the optional affordability amounts entered.");
+  }
+  const provided = Object.values(values).some((value) => Number(value || 0) > 0);
+  return {
+    ...values,
+    assessment_notes: nullableText(body.assessment_notes, 4000),
+    provided,
   };
 }
 
@@ -449,7 +472,7 @@ async function insertKyc(connection, applicationId, kyc, actorId) {
        created_by, updated_by
      ) VALUES (
        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?, ?
      )`,
     [
       applicationId,
@@ -484,10 +507,6 @@ async function insertKyc(connection, applicationId, kyc, actorId) {
       kyc.bank_statement_url,
       kyc.business_registration_url,
       kyc.guarantor_document_url,
-      0,
-      0,
-      0,
-      0,
       kyc.customer_consent_confirmed ? 1 : 0,
       kyc.credit_assessment_consent_confirmed ? 1 : 0,
       kyc.verification_notes,
@@ -520,7 +539,7 @@ async function customerList(search = "") {
      FROM hire_customers customer
      WHERE customer.is_active = TRUE ${searchSql}
      ORDER BY customer.updated_at DESC, customer.customer_name ASC
-     LIMIT 500`,
+     LIMIT 250`,
     params
   );
   return rows.map((row) => ({
@@ -533,7 +552,7 @@ async function customerList(search = "") {
 }
 
 async function machinesWithEditability() {
-  const machines = await listProfessionalMachines({ limit: 500 });
+  const machines = await listProfessionalMachines({ limit: 250 });
   if (!machines.length) return [];
   const ids = machines.map((machine) => machine.id);
   const placeholders = ids.map(() => "?").join(",");
@@ -588,13 +607,32 @@ router.get(
         settings,
         policy: {
           scope: "company_wide",
+          hire_location_id: null,
           hire_location_selection_required: false,
           installment_offer_created_automatically: true,
-          user_selects_storage_location: false,
+          exact_schedule_preview_enabled: true,
+          optional_draft_kyc_and_affordability: true,
         },
       });
     } catch (error) {
       return sendError(res, error, "Could not prepare the Start New Installment workspace.");
+    }
+  }
+);
+
+router.post(
+  "/phase-one/schedule-preview",
+  requirePermission("fleet.assets.view"),
+  async (req, res) => {
+    try {
+      const schedule = buildFinanceSchedule(req.body?.offer || req.body || {});
+      return res.json({
+        status: "success",
+        message: "Exact installment dates calculated. No application or account was changed.",
+        schedule,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not calculate the installment schedule.");
     }
   }
 );
@@ -631,7 +669,7 @@ router.post(
           req,
           connection,
           "EQUIPMENT_FINANCE_CUSTOMER_CREATED",
-          "hire_customer",
+          "finance_customer",
           created.id,
           `Created Finance customer ${created.customer_code} — ${created.customer_name}.`
         );
@@ -701,7 +739,7 @@ router.put(
           req,
           connection,
           "EQUIPMENT_FINANCE_CUSTOMER_UPDATED",
-          "hire_customer",
+          "finance_customer",
           customerId,
           `Updated Finance customer ${existing.customer_code}.`
         );
@@ -745,9 +783,8 @@ router.post(
       const result = await withTransaction(async (connection) => {
         const machine = await financeMachine(connection, assetId);
         assertMachineAvailable(machine);
-        const location = await storageLocation(connection, positiveId(machine.hire_location_id));
 
-        let customer = null;
+        let customer;
         const requestedCustomerId = positiveId(req.body?.customer_id);
         if (requestedCustomerId) {
           customer = await customerRecord(connection, requestedCustomerId, true);
@@ -763,167 +800,164 @@ router.post(
 
         const offer = normalizeOffer(req.body?.offer || {}, machine, settings);
         const kyc = normalizeKyc(req.body?.kyc || {}, customer);
-        const applicationInput = {
+        const affordability = normalizeAffordability(req.body?.affordability || {});
+        const assessmentInput = {
           quoted_total: offer.selling_price,
           proposed_deposit: offer.deposit,
           proposed_frequency: offer.payment_frequency,
+          proposed_interval_days: offer.custom_interval_days,
           proposed_installment_count: offer.installment_count,
-          monthly_salary_income: moneyValue(req.body?.affordability?.monthly_salary_income, 0),
-          monthly_business_income: moneyValue(req.body?.affordability?.monthly_business_income, 0),
-          monthly_other_income: moneyValue(req.body?.affordability?.monthly_other_income, 0),
-          monthly_business_costs: moneyValue(req.body?.affordability?.monthly_business_costs, 0),
-          monthly_household_expenses: moneyValue(req.body?.affordability?.monthly_household_expenses, 0),
-          existing_monthly_debt: moneyValue(req.body?.affordability?.existing_monthly_debt, 0),
+          ...affordability,
         };
-        if (Object.values(applicationInput).some((value) => value === undefined)) {
-          throw new PhaseOneError(400, "Check all affordability amounts.");
-        }
-        const assessment = evaluateCreditApplication(applicationInput, kyc);
+        const calculatedAssessment = evaluateCreditApplication(assessmentInput, kyc);
+        const assessment = affordability.provided
+          ? calculatedAssessment
+          : {
+              ...calculatedAssessment,
+              affordability_status: "not_assessed",
+              risk_score: Math.min(Number(calculatedAssessment.risk_score || 0), 50),
+              risk_band: "medium",
+              assessment_recommendation:
+                "Draft created. Complete customer affordability before submitting this application for approval.",
+              reasons: [],
+              warnings: ["Affordability information has not been completed yet."],
+            };
+        const periodicAmount = offer.periodic_amount;
+        const monthlyAmount = monthlyEquivalent(
+          periodicAmount,
+          offer.payment_frequency,
+          offer.custom_interval_days
+        );
 
         const [quotationInsert] = await connection.query(
-          `INSERT INTO equipment_sales_quotations (
-             quotation_number, hire_location_id, enquiry_id, customer_id,
-             quotation_date, validity_date, status, subtotal, discount_amount,
-             tax_rate_percent, tax_amount, total_amount, deposit_required,
-             proposed_frequency, proposed_installment_count,
-             proposed_first_due_date, delivery_policy,
-             delivery_threshold_percent, terms, notes, approval_reason,
-             created_by, approved_by, approved_at
-           ) VALUES (
-             ?, ?, NULL, ?, ?, ?, 'approved', ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-             'Automatically approved as the commercial Installment Offer inside Start New Installment.',
-             ?, ?, NOW()
-           )`,
-          [
-            offerNumber,
-            location.id,
-            customer.id,
-            today(),
-            offer.validity_date,
-            offer.selling_price,
-            offer.selling_price,
-            offer.deposit,
-            offer.payment_frequency,
-            offer.installment_count,
-            offer.first_due_date,
-            offer.delivery_policy,
-            offer.delivery_threshold_percent,
-            offer.terms,
-            offer.notes,
-            actorId,
-            actorId,
-          ]
+          `INSERT INTO equipment_sales_quotations SET ?`,
+          {
+            quotation_number: offerNumber,
+            hire_location_id: null,
+            enquiry_id: null,
+            customer_id: customer.id,
+            quotation_date: today(),
+            validity_date: offer.validity_date,
+            status: "approved",
+            subtotal: offer.selling_price,
+            discount_amount: 0,
+            tax_rate_percent: 0,
+            tax_amount: 0,
+            total_amount: offer.selling_price,
+            deposit_required: offer.deposit,
+            proposed_frequency: offer.payment_frequency,
+            proposed_interval_days: offer.custom_interval_days,
+            proposed_non_working_day_rule: offer.non_working_day_rule,
+            proposed_installment_count: offer.installment_count,
+            proposed_first_due_date: offer.first_due_date,
+            delivery_policy: offer.delivery_policy,
+            delivery_threshold_percent: offer.delivery_threshold_percent,
+            terms: offer.terms,
+            notes: offer.notes,
+            approval_reason:
+              "Automatically approved as the commercial Installment Offer inside Start New Installment.",
+            created_by: actorId,
+            approved_by: actorId,
+            approved_at: new Date(),
+          }
         );
 
         const [itemInsert] = await connection.query(
-          `INSERT INTO equipment_sales_quotation_items (
-             quotation_id, hire_location_id, line_number, asset_id,
-             asset_code_snapshot, asset_name_snapshot, asset_type_snapshot,
-             make_snapshot, model_snapshot, model_year_snapshot,
-             serial_number_snapshot, main_image_url_snapshot, description,
-             quantity, unit_price, discount_amount, tax_amount, line_total
-           ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)`,
-          [
-            quotationInsert.insertId,
-            location.id,
-            machine.id,
-            machine.asset_code,
-            machine.asset_name,
-            machine.asset_type,
-            machine.make,
-            machine.model,
-            machine.model_year,
-            machine.serial_number,
-            machine.main_image_url,
-            `${machine.make || ""} ${machine.model || ""}`.trim() || machine.asset_name,
-            offer.selling_price,
-            offer.selling_price,
-          ]
+          `INSERT INTO equipment_sales_quotation_items SET ?`,
+          {
+            quotation_id: quotationInsert.insertId,
+            hire_location_id: null,
+            line_number: 1,
+            asset_id: machine.id,
+            asset_code_snapshot: machine.asset_code,
+            asset_name_snapshot: machine.asset_name,
+            asset_type_snapshot: machine.asset_type,
+            make_snapshot: machine.make,
+            model_snapshot: machine.model,
+            model_year_snapshot: machine.model_year,
+            serial_number_snapshot: machine.serial_number,
+            main_image_url_snapshot: machine.main_image_url,
+            description:
+              `${machine.make || ""} ${machine.model || ""}`.trim() || machine.asset_name,
+            quantity: 1,
+            unit_price: offer.selling_price,
+            discount_amount: 0,
+            tax_amount: 0,
+            line_total: offer.selling_price,
+          }
         );
 
         const consentAt = kyc.customer_consent_confirmed ? new Date() : null;
-        const assessmentNotes = nullableText(req.body?.affordability?.assessment_notes, 4000);
         const [applicationInsert] = await connection.query(
-          `INSERT INTO equipment_credit_applications (
-             application_number, hire_location_id, customer_id, enquiry_id,
-             quotation_id, asset_id, application_date, application_status,
-             kyc_status, affordability_status, risk_band, risk_score,
-             quoted_total, proposed_deposit, financed_amount,
-             proposed_frequency, proposed_installment_count,
-             proposed_installment_amount, monthly_salary_income,
-             monthly_business_income, monthly_other_income,
-             monthly_business_costs, monthly_household_expenses,
-             existing_monthly_debt, total_monthly_income,
-             total_monthly_commitments, net_monthly_surplus,
-             debt_service_ratio_percent, total_commitment_ratio_percent,
-             deposit_ratio_percent, assessment_recommendation,
-             assessment_notes, customer_consent_at, decision_version,
-             created_by, updated_by
-           ) VALUES (
-             ?, ?, ?, NULL, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
-           )`,
-          [
-            applicationNumber,
-            location.id,
-            customer.id,
-            quotationInsert.insertId,
-            machine.id,
-            today(),
-            assessment.kyc_status,
-            assessment.affordability_status,
-            assessment.risk_band,
-            assessment.risk_score,
-            assessment.quoted_total,
-            assessment.proposed_deposit,
-            assessment.financed_amount,
-            assessment.proposed_frequency,
-            assessment.proposed_installment_count,
-            assessment.proposed_installment_amount,
-            assessment.monthly_salary_income,
-            assessment.monthly_business_income,
-            assessment.monthly_other_income,
-            assessment.monthly_business_costs,
-            assessment.monthly_household_expenses,
-            assessment.existing_monthly_debt,
-            assessment.total_monthly_income,
-            assessment.total_monthly_commitments,
-            assessment.net_monthly_surplus,
-            assessment.debt_service_ratio_percent,
-            assessment.total_commitment_ratio_percent,
-            assessment.deposit_ratio_percent,
-            assessment.assessment_recommendation,
-            assessmentNotes,
-            consentAt,
-            actorId,
-            actorId,
-          ]
+          `INSERT INTO equipment_credit_applications SET ?`,
+          {
+            application_number: applicationNumber,
+            hire_location_id: null,
+            customer_id: customer.id,
+            enquiry_id: null,
+            quotation_id: quotationInsert.insertId,
+            asset_id: machine.id,
+            application_date: today(),
+            application_status: "draft",
+            kyc_status: assessment.kyc_status,
+            affordability_status: assessment.affordability_status,
+            risk_band: assessment.risk_band,
+            risk_score: assessment.risk_score,
+            quoted_total: assessment.quoted_total,
+            proposed_deposit: assessment.proposed_deposit,
+            financed_amount: assessment.financed_amount,
+            proposed_frequency: offer.payment_frequency,
+            proposed_interval_days: offer.custom_interval_days,
+            proposed_non_working_day_rule: offer.non_working_day_rule,
+            proposed_installment_count: offer.installment_count,
+            proposed_installment_amount: monthlyAmount,
+            proposed_periodic_amount: periodicAmount,
+            monthly_salary_income: assessment.monthly_salary_income,
+            monthly_business_income: assessment.monthly_business_income,
+            monthly_other_income: assessment.monthly_other_income,
+            monthly_business_costs: assessment.monthly_business_costs,
+            monthly_household_expenses: assessment.monthly_household_expenses,
+            existing_monthly_debt: assessment.existing_monthly_debt,
+            total_monthly_income: assessment.total_monthly_income,
+            total_monthly_commitments: assessment.total_monthly_commitments,
+            net_monthly_surplus: assessment.net_monthly_surplus,
+            debt_service_ratio_percent: assessment.debt_service_ratio_percent,
+            total_commitment_ratio_percent: assessment.total_commitment_ratio_percent,
+            deposit_ratio_percent: assessment.deposit_ratio_percent,
+            assessment_recommendation: assessment.assessment_recommendation,
+            assessment_notes: affordability.assessment_notes,
+            customer_consent_at: consentAt,
+            decision_version: 1,
+            created_by: actorId,
+            updated_by: actorId,
+          }
         );
 
         await insertKyc(connection, applicationInsert.insertId, kyc, actorId);
         await connection.query(
-          `INSERT INTO equipment_credit_application_decisions (
-             application_id, decision_version, action_type, from_status, to_status,
-             affordability_status, risk_band, risk_score,
-             debt_service_ratio_percent, net_monthly_surplus,
-             notes, snapshot_json, decided_by
-           ) VALUES (?, 1, 'created', NULL, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            applicationInsert.insertId,
-            assessment.affordability_status,
-            assessment.risk_band,
-            assessment.risk_score,
-            assessment.debt_service_ratio_percent,
-            assessment.net_monthly_surplus,
-            "Created through the guided Start New Installment workflow.",
-            JSON.stringify({
+          `INSERT INTO equipment_credit_application_decisions SET ?`,
+          {
+            application_id: applicationInsert.insertId,
+            decision_version: 1,
+            action_type: "created",
+            from_status: null,
+            to_status: "draft",
+            affordability_status: assessment.affordability_status,
+            risk_band: assessment.risk_band,
+            risk_score: assessment.risk_score,
+            debt_service_ratio_percent: assessment.debt_service_ratio_percent,
+            net_monthly_surplus: assessment.net_monthly_surplus,
+            notes:
+              "Created through the company-wide guided Start New Installment workflow. Optional KYC and affordability may be completed before submission.",
+            snapshot_json: JSON.stringify({
               installment_offer_number: offerNumber,
               quotation_item_id: itemInsert.insertId,
               machine: { id: machine.id, code: machine.asset_code, name: machine.asset_name },
+              exact_schedule: offer.schedule,
               assessment,
             }),
-            actorId,
-          ]
+            decided_by: actorId,
+          }
         );
 
         await audit(
@@ -934,13 +968,17 @@ router.post(
           applicationInsert.insertId,
           `Started ${applicationNumber} for ${customer.customer_name} and ${machine.asset_code}.`,
           {
-            storage_location_id: location.id,
             customer_id: customer.id,
             asset_id: machine.id,
             automatic_installment_offer_id: quotationInsert.insertId,
             automatic_installment_offer_number: offerNumber,
             quoted_total: assessment.quoted_total,
             financed_amount: assessment.financed_amount,
+            payment_frequency: offer.payment_frequency,
+            payment_interval_days: offer.custom_interval_days,
+            first_due_date: offer.first_due_date,
+            final_due_date: offer.final_due_date,
+            optional_assessment_outstanding: !affordability.provided,
           }
         );
 
@@ -955,6 +993,7 @@ router.post(
             number: offerNumber,
             status: "approved",
             created_automatically: true,
+            exact_schedule: offer.schedule,
           },
           application: {
             id: applicationInsert.insertId,
@@ -965,14 +1004,14 @@ router.post(
             risk_band: assessment.risk_band,
             risk_score: assessment.risk_score,
           },
-          next_path: "/equipment-installment-finance/applications",
+          next_path: `/equipment-installment-finance/applications?application=${applicationInsert.insertId}`,
         };
       });
 
       return res.status(201).json({
         status: "success",
         message:
-          "Installment Offer and draft credit application created. Continue with verification and manager approval.",
+          "Installment Offer and draft credit application created. Complete any missing KYC or affordability before submission for approval.",
         ...result,
       });
     } catch (error) {
@@ -991,4 +1030,6 @@ router.post(
 
 module.exports = router;
 module.exports.PhaseOneError = PhaseOneError;
+module.exports.normalizeAffordability = normalizeAffordability;
+module.exports.normalizeKyc = normalizeKyc;
 module.exports.normalizeOffer = normalizeOffer;
