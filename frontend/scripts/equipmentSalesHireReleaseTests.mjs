@@ -15,6 +15,8 @@ const workspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
 const operationalStart = read("src/pages/EquipmentFinanceOperationalStartPage.jsx");
 const applications = read("src/pages/EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("src/pages/EquipmentFinanceStartWizardPage.jsx");
+const minimalWorkflow = read("src/pages/EquipmentFinanceMinimalWorkflowPage.jsx");
+const collections = read("src/pages/EquipmentFinanceCollectionsMinimalPage.jsx");
 const customers = read("src/pages/EquipmentFinanceCustomerCentrePage.jsx");
 const excavators = read("src/pages/EquipmentFinanceExcavatorsPage.jsx");
 const reports = read("src/pages/EquipmentSalesReportsPage.jsx");
@@ -77,6 +79,7 @@ for (const pageName of [
   "EquipmentFinanceApplicationsPage",
   "EquipmentFinanceAgreementActivationPage",
   "EquipmentFinanceDepositReservationPage",
+  "EquipmentFinanceCollectionsMinimalPage",
   "EquipmentFinanceArrearsPage",
   "EquipmentFinanceRecoveryGovernancePage",
   "EquipmentFinanceFinalLifecyclePage",
@@ -91,11 +94,13 @@ assert.match(workspace, /stage === "customers"/);
 assert.match(workspace, /stage === "machines"/);
 assert.match(workspace, /stage === "activation"/);
 assert.match(workspace, /stage === "deposit"/);
+assert.match(workspace, /stage === "collections"/);
 assert.match(workspace, /FINAL_LIFECYCLE_STAGES/);
 
 assert.match(wizard, /Start New Installment/);
-assert.match(wizard, /Installment Offer/);
-assert.match(wizard, /created automatically/i);
+assert.match(wizard, /create a draft/i);
+assert.match(minimalWorkflow, /automatic Installment Offer/);
+assert.match(minimalWorkflow, /Complete these nine actions/);
 assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
 assert.match(wizard, /`\$\{API\}\/start-installment`/);
 assert.match(wizard, /customer_name/);
@@ -106,6 +111,12 @@ assert.match(wizard, /payment_frequency/);
 assert.match(wizard, /installment_count/);
 assert.match(wizard, /customer_consent_confirmed/);
 assert.doesNotMatch(wizard, /Choose a Finance location|Choose a Hire location/);
+
+assert.match(collections, /Collections &amp; Payment History/);
+assert.match(collections, /account-detail-official-balance/);
+assert.match(collections, /payment-history/);
+assert.match(collections, /\/collections/);
+assert.match(collections, /backend after committed payments/i);
 
 assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
 assert.match(applications, /\/readiness/);
