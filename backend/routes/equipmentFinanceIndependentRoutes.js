@@ -12,6 +12,7 @@ const {
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
 const equipmentFinanceCompanyWideApplicationRoutes = require("./equipmentFinanceCompanyWideApplicationRoutes");
+const equipmentFinanceCompanyWideLifecycleRoutes = require("./equipmentFinanceCompanyWideLifecycleRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 
@@ -125,19 +126,9 @@ router.use("/credit-applications", equipmentFinanceCompanyWideApplicationRoutes)
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 
-router.use("/finance-lifecycle", async (_req, res, next) => {
-  try {
-    await assertProfessionalSchema();
-    return next();
-  } catch (error) {
-    return res.status(Number(error.statusCode || 503)).json({
-      status: "error",
-      code: error.code || "EQUIPMENT_FINANCE_PROFESSIONAL_MIGRATION_REQUIRED",
-      message: error.message,
-      ...(error.readiness ? { readiness: error.readiness } : {}),
-    });
-  }
-});
+// Every company-wide Finance lifecycle endpoint is handled here before the
+// legacy Sales & Hire router can see the request.
+router.use("/finance-lifecycle", equipmentFinanceCompanyWideLifecycleRoutes);
 
 router.get(
   "/finance-customers",
@@ -174,6 +165,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (_req, res, next) => {
     try {
+      await assertProfessionalSchema();
       const [rows] = await pool.query(
         `SELECT
            application.*,
@@ -213,6 +205,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (_req, res, next) => {
     try {
+      await assertProfessionalSchema();
       const [rows] = await pool.query(
         `SELECT
            agreement.*,
