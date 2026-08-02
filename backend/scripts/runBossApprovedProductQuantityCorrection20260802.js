@@ -2,125 +2,180 @@ const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const CORRECTION_DATE = "2026-08-02";
+const EXPORT_GENERATED_AT = "2026-08-02 09:07:30 UTC";
 const CORRECTION_LOCK = "chalin03:inventory:boss-quantity-correction:20260802";
 const CORRECTION_RECORD = "20260802_boss_approved_product_quantity_correction";
 const TARGET_BRANCH_ID = 1;
-const MIN_MATCH_SCORE = 0.84;
-const MIN_MATCH_MARGIN = 0.08;
-
-const BRAND_OR_CODE_TOKENS = new Set([
-  "gtt",
-  "jcb",
-  "liugong",
-  "sany",
-  "sinopec",
-]);
 
 const PRODUCT_CORRECTIONS = Object.freeze([
-  {
-    label: "Fan belt box 1360",
+  Object.freeze({
+    product_id: 106,
+    requested_name: "Fan belt box 1360",
+    exported_name: "Fan Belt 1360 Box",
+    exported_size: "",
     quantity: 17,
-    aliases: ["Fan belt box 1360", "1360 fan belt box", "Fan belt 1360 box"],
-  },
-  {
-    label: "Locker bolt",
+  }),
+  Object.freeze({
+    product_id: 206,
+    requested_name: "Locker bolt",
+    exported_name: "Locker Bolt",
+    exported_size: "All",
     quantity: 73,
-    aliases: ["Locker bolt", "Lock bolt"],
-  },
-  {
-    label: "80 Bushing",
+  }),
+  Object.freeze({
+    product_id: 243,
+    requested_name: "80 Bushing",
+    exported_name: "80 bushing",
+    exported_size: "All",
     quantity: 22,
-    aliases: ["80 Bushing", "Bushing 80", "80 Bush", "Bush 80"],
-  },
-  {
-    label: "Key nob Liugong",
+  }),
+  Object.freeze({
+    product_id: 249,
+    requested_name: "Key nob Liugong",
+    exported_name: "Key Nob Liugong",
+    exported_size: "Liugong",
     quantity: 6,
-    aliases: ["Key nob Liugong", "Key knob Liugong", "Liugong key knob"],
-  },
-  {
-    label: "Coolant No:1",
+  }),
+  Object.freeze({
+    product_id: 16,
+    requested_name: "Coolant No:1",
+    exported_name: "Coolant NO:1",
+    exported_size: "All",
     quantity: 30,
-    aliases: ["Coolant No:1", "Coolant No 1", "Coolant number 1", "No 1 coolant", "Coolant 1"],
-  },
-  {
-    label: "Cutter",
+  }),
+  Object.freeze({
+    product_id: 181,
+    requested_name: "Cutter",
+    exported_name: "Cutter",
+    exported_size: "All",
     quantity: 0,
-    aliases: ["Cutter"],
-  },
-  {
-    label: "Cylinder engine 6",
+  }),
+  Object.freeze({
+    product_id: 253,
+    requested_name: "Cylinder engine 6",
+    exported_name: "Cylinder Engine 6",
+    exported_size: "None",
     quantity: 0,
-    aliases: ["Cylinder engine 6", "Engine cylinder 6"],
-  },
-  {
-    label: "Fan pulley cap",
+  }),
+  Object.freeze({
+    product_id: 246,
+    requested_name: "Fan pulley cap",
+    exported_name: "Fan Pulley Cap",
+    exported_size: "All",
     quantity: 4,
-    aliases: ["Fan pulley cap", "Pulley fan cap", "Fan pulley cover"],
-  },
-  {
-    label: "Water separator Sany/Liugong/JCB",
+  }),
+  Object.freeze({
+    product_id: 23,
+    requested_name: "Water separator Sany/Liugong/JCB",
+    exported_name: "Water Saparator",
+    exported_size: "Sany/Liugong/JCB",
     quantity: 21,
-    aliases: [
-      "Water separator Sany Liugong JCB",
-      "Water separator Liugong Sany JCB",
-      "Water separator JCB Sany Liugong",
-    ],
-  },
-  {
-    label: "Fuel filter (FF5544)",
+  }),
+  Object.freeze({
+    product_id: 21,
+    requested_name: "Fuel filter (FF5544)",
+    exported_name: "Fuel Filter (FF5544)",
+    exported_size: "All",
     quantity: 61,
-    aliases: ["Fuel filter FF5544", "FF5544 fuel filter"],
-  },
-  {
-    label: "Oil filter (LF3349)",
+  }),
+  Object.freeze({
+    product_id: 20,
+    requested_name: "Oil filter (LF3349)",
+    exported_name: "Oil Filter (LF3349)",
+    exported_size: "All",
     quantity: 30,
-    aliases: ["Oil filter LF3349", "LF3349 oil filter"],
-  },
-  {
-    label: "Pilot filter Liugong",
+  }),
+  Object.freeze({
+    product_id: 55,
+    requested_name: "Pilot filter Liugong",
+    exported_name: "Pilot Filter",
+    exported_size: "Liugong",
     quantity: 8,
-    aliases: ["Pilot filter Liugong", "Liugong pilot filter"],
-  },
-  {
-    label: "Hammer",
+  }),
+  Object.freeze({
+    product_id: 200,
+    requested_name: "Hammer",
+    exported_name: "Hammer",
+    exported_size: "All",
     quantity: 4,
-    aliases: ["Hammer"],
-  },
-  {
-    label: "Gear lever Sany",
+  }),
+  Object.freeze({
+    product_id: 37,
+    requested_name: "Gear lever Sany",
+    exported_name: "Gear Lever",
+    exported_size: "Sany",
     quantity: 2,
-    aliases: ["Gear lever Sany", "Sany gear lever"],
-  },
-  {
-    label: "Key nob JCB",
+  }),
+  Object.freeze({
+    product_id: 50,
+    requested_name: "Key nob JCB",
+    exported_name: "Key Nob JCB",
+    exported_size: "JCB",
     quantity: 2,
-    aliases: ["Key nob JCB", "Key knob JCB", "JCB key knob"],
-  },
-  {
-    label: "Torch light",
+  }),
+  Object.freeze({
+    product_id: 27,
+    requested_name: "Torch light",
+    exported_name: "Torch Light",
+    exported_size: "All",
     quantity: 9,
-    aliases: ["Torch light", "Torchlight"],
-  },
-  {
-    label: "Grease",
+  }),
+  Object.freeze({
+    product_id: 30,
+    requested_name: "Grease",
+    exported_name: "Grease",
+    exported_size: "All",
     quantity: 42,
-    aliases: ["Grease"],
-  },
-  {
-    label: "GTT oil 1L",
+  }),
+  Object.freeze({
+    product_id: 13,
+    requested_name: "GTT oil 1L",
+    exported_name: "GTT OIL 1L",
+    exported_size: "All",
     quantity: 31,
-    aliases: ["GTT oil 1L", "GTT 1L oil", "1 litre GTT oil", "GTT oil 1 litre"],
-  },
-  {
-    label: "Sinopec gear oil",
+  }),
+  Object.freeze({
+    product_id: 5,
+    requested_name: "Sinopec gear oil",
+    exported_name: "Sinopec Gear Oil 18L",
+    exported_size: "All",
     quantity: 24,
-    aliases: ["Sinopec gear oil", "Gear oil Sinopec"],
-  },
-  {
-    label: "Sinopec Hydraulic Oil",
+  }),
+  Object.freeze({
+    product_id: 4,
+    requested_name: "Sinopec Hydraulic Oil",
+    exported_name: "Sinopec Hydraulic Oil 18L",
+    exported_size: "All",
     quantity: 42,
-    aliases: ["Sinopec hydraulic oil", "Hydraulic oil Sinopec"],
-  },
+  }),
+  Object.freeze({
+    product_id: 46,
+    requested_name: "70 pin medium",
+    exported_name: "70 Pin Medium",
+    exported_size: "All",
+    quantity: 14,
+  }),
+  Object.freeze({
+    product_id: 275,
+    requested_name: "80 spacer thick",
+    exported_name: "80 Spacer Thick",
+    exported_size: "All",
+    quantity: 15,
+  }),
+  Object.freeze({
+    product_id: 38,
+    requested_name: "China Rod big",
+    exported_name: "China Rod Big",
+    exported_size: "All",
+    quantity: 10,
+  }),
+  Object.freeze({
+    product_id: 159,
+    requested_name: "Screw driver medium (Star)",
+    exported_name: "Screw Driver Medium (Star)",
+    exported_size: "All",
+    quantity: 8,
+  }),
 ]);
 
 function requiredEnv(primaryName, fallbackName) {
@@ -166,148 +221,87 @@ function connectionOptions() {
   };
 }
 
-function normalizeProductName(value) {
-  let text = String(value || "")
+function normalizeIdentity(value) {
+  return String(value || "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-  text = text
-    .replace(/\bg\s*[._ -]*\s*t\s*[._ -]*\s*t\b/g, "gtt")
-    .replace(/\b(ff|lf)\s*[-_. ]*\s*(\d+)\b/g, "$1$2")
-    .replace(/\b(\d+)\s*(litres?|liters?|ltr|l)\b/g, "$1l")
-    .replace(/\btorch\s*light\b/g, "torchlight")
-    .replace(/\bkey\s+nob\b/g, "key knob")
-    .replace(/\blocker\b/g, "lock")
-    .replace(/\bnumber\b/g, "no")
-    .replace(/\bno\s*[:#.-]*\s*(\d+)\b/g, "$1")
+    .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
-
-  const singularMap = new Map([
-    ["bolts", "bolt"],
-    ["bushes", "bush"],
-    ["bushings", "bushing"],
-    ["filters", "filter"],
-    ["lights", "light"],
-  ]);
-
-  const tokens = text
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter((token) => !["and", "for", "no", "the"].includes(token))
-    .map((token) => singularMap.get(token) || token)
-    .map((token) => (token === "nob" ? "knob" : token))
-    .sort();
-
-  return tokens.join(" ");
 }
 
-function tokenSet(value) {
-  return new Set(normalizeProductName(value).split(" ").filter(Boolean));
-}
-
-function essentialTokens(value) {
-  return [...tokenSet(value)].filter(
-    (token) => /\d/.test(token) || BRAND_OR_CODE_TOKENS.has(token)
-  );
-}
-
-function scoreName(alias, candidateName) {
-  const normalizedAlias = normalizeProductName(alias);
-  const normalizedCandidate = normalizeProductName(candidateName);
-
-  if (!normalizedAlias || !normalizedCandidate) return 0;
-  if (normalizedAlias === normalizedCandidate) return 1;
-
-  const aliasTokens = tokenSet(alias);
-  const candidateTokens = tokenSet(candidateName);
-
-  if (aliasTokens.size <= 1 || candidateTokens.size <= 1) return 0;
-
-  for (const token of essentialTokens(alias)) {
-    if (!candidateTokens.has(token)) return 0;
+function validateCorrectionDefinitions(corrections = PRODUCT_CORRECTIONS) {
+  if (corrections.length !== 24) {
+    throw new Error(`Expected exactly 24 boss-approved corrections, received ${corrections.length}.`);
   }
 
-  const intersection = [...aliasTokens].filter((token) => candidateTokens.has(token)).length;
-  const union = new Set([...aliasTokens, ...candidateTokens]).size;
-  const targetCoverage = intersection / aliasTokens.size;
-  const candidateCoverage = intersection / candidateTokens.size;
-  const jaccard = union ? intersection / union : 0;
+  const ids = new Set();
+  for (const correction of corrections) {
+    if (!Number.isInteger(correction.product_id) || correction.product_id <= 0) {
+      throw new Error(`Invalid product ID for ${correction.requested_name}.`);
+    }
+    if (ids.has(correction.product_id)) {
+      throw new Error(`Duplicate correction product ID ${correction.product_id}.`);
+    }
+    ids.add(correction.product_id);
 
-  if (targetCoverage < 0.75 || candidateCoverage < 0.6) return 0;
+    if (!Number.isInteger(correction.quantity) || correction.quantity < 0) {
+      throw new Error(`Invalid quantity for product ${correction.product_id}.`);
+    }
+    if (!normalizeIdentity(correction.exported_name)) {
+      throw new Error(`Missing exported product name for ID ${correction.product_id}.`);
+    }
+  }
 
-  return Number((jaccard * 0.55 + targetCoverage * 0.25 + candidateCoverage * 0.2).toFixed(6));
+  return [...ids].sort((left, right) => left - right);
 }
 
-function scoreCorrectionAgainstProduct(correction, product) {
-  return Math.max(
-    ...correction.aliases.map((alias) => scoreName(alias, product.name))
-  );
-}
+function resolveExactCorrections(products, corrections = PRODUCT_CORRECTIONS) {
+  const expectedIds = validateCorrectionDefinitions(corrections);
+  const rowsById = new Map(products.map((product) => [Number(product.id), product]));
+  const missingIds = expectedIds.filter((id) => !rowsById.has(id));
 
-function chooseUniqueProduct(correction, products) {
-  const ranked = products
-    .map((product) => ({
-      product,
-      score: scoreCorrectionAgainstProduct(correction, product),
-    }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score || left.product.id - right.product.id);
-
-  if (!ranked.length || ranked[0].score < MIN_MATCH_SCORE) {
-    const candidates = ranked
-      .slice(0, 5)
-      .map((entry) => `${entry.product.id}:${entry.product.name} (${entry.score.toFixed(3)})`)
-      .join(", ");
+  if (missingIds.length) {
     throw new Error(
-      `No safe product match for ${correction.label}. Best candidates: ${candidates || "none"}.`
+      `Exported production product IDs are missing: ${missingIds.join(", ")}. No quantity was changed.`
     );
   }
 
-  const top = ranked[0];
-  const next = ranked[1];
-  const exactTie = next && top.score === 1 && next.score === 1;
-  const weakMargin = next && top.score - next.score < MIN_MATCH_MARGIN;
+  return corrections.map((correction) => {
+    const product = rowsById.get(correction.product_id);
 
-  if (exactTie || weakMargin) {
-    throw new Error(
-      `Ambiguous product match for ${correction.label}: ${ranked
-        .slice(0, 5)
-        .map((entry) => `${entry.product.id}:${entry.product.name} (${entry.score.toFixed(3)})`)
-        .join(", ")}.`
-    );
-  }
-
-  return {
-    ...correction,
-    product: top.product,
-    match_score: top.score,
-  };
-}
-
-function resolveCorrections(products, corrections = PRODUCT_CORRECTIONS) {
-  const resolved = corrections.map((correction) =>
-    chooseUniqueProduct(correction, products)
-  );
-  const usedIds = new Set();
-
-  for (const item of resolved) {
-    if (usedIds.has(item.product.id)) {
+    if (Number(product.branch_id) !== TARGET_BRANCH_ID) {
       throw new Error(
-        `Product ${item.product.id}:${item.product.name} matched more than one correction target.`
+        `Product ${correction.product_id} is in branch ${product.branch_id}, not branch ${TARGET_BRANCH_ID}.`
       );
     }
-    usedIds.add(item.product.id);
-  }
+    if (![1, true, "1"].includes(product.is_active)) {
+      throw new Error(`Product ${correction.product_id} is not active.`);
+    }
 
-  if (resolved.length !== corrections.length) {
-    throw new Error(
-      `Resolved ${resolved.length} products instead of ${corrections.length}.`
-    );
-  }
+    const actualName = normalizeIdentity(product.name);
+    const expectedName = normalizeIdentity(correction.exported_name);
+    if (actualName !== expectedName) {
+      throw new Error(
+        `Product ${correction.product_id} name changed from exported "${correction.exported_name}" to "${product.name}".`
+      );
+    }
 
-  return resolved;
+    const actualSize = normalizeIdentity(product.size);
+    const expectedSize = normalizeIdentity(correction.exported_size);
+    if (actualSize !== expectedSize) {
+      throw new Error(
+        `Product ${correction.product_id} size changed from exported "${correction.exported_size}" to "${product.size || ""}".`
+      );
+    }
+
+    return {
+      ...correction,
+      product,
+      match_method: "exact_product_id_and_exported_identity",
+    };
+  });
 }
 
 async function verifyDatabaseIdentity(connection) {
@@ -349,6 +343,23 @@ function adjustmentType(oldQuantity, newQuantity) {
   return "set";
 }
 
+async function verifyUpdatedQuantity(connection, productId, expectedQuantity) {
+  const [[row]] = await connection.query(
+    `SELECT quantity
+     FROM products
+     WHERE id = ?
+     AND branch_id = ?
+     FOR UPDATE`,
+    [productId, TARGET_BRANCH_ID]
+  );
+
+  if (!row || Number(row.quantity) !== expectedQuantity) {
+    throw new Error(
+      `Product ${productId} did not verify at quantity ${expectedQuantity} after update.`
+    );
+  }
+}
+
 async function applyResolvedCorrections(connection, resolved) {
   const applied = [];
 
@@ -360,21 +371,25 @@ async function applyResolvedCorrections(connection, resolved) {
     const reason =
       "Boss-approved physical stock count correction received on 2026-08-02.";
     const notes = JSON.stringify({
-      requested_name: item.label,
-      matched_product_id: item.product.id,
-      matched_database_name: item.product.name,
-      match_score: item.match_score,
-      matching_rules:
-        "case-insensitive; punctuation, spacing and word-order tolerant; known spelling aliases only",
+      requested_name: item.requested_name,
+      exported_product_id: item.product_id,
+      exported_database_name: item.exported_name,
+      exported_size: item.exported_size,
+      live_database_name: item.product.name,
+      live_size: item.product.size || "",
+      match_method: item.match_method,
+      export_generated_at: EXPORT_GENERATED_AT,
     });
 
     await connection.query(
       `UPDATE products
        SET quantity = ?
        WHERE id = ?
-       AND branch_id = ?`,
-      [newQuantity, item.product.id, TARGET_BRANCH_ID]
+       AND branch_id = ?
+       AND is_active = TRUE`,
+      [newQuantity, item.product_id, TARGET_BRANCH_ID]
     );
+    await verifyUpdatedQuantity(connection, item.product_id, newQuantity);
 
     await connection.query(
       `INSERT INTO stock_adjustments (
@@ -397,7 +412,7 @@ async function applyResolvedCorrections(connection, resolved) {
       ) VALUES (?, ?, ?, 'physical_count', ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
       [
         TARGET_BRANCH_ID,
-        item.product.id,
+        item.product_id,
         adjustmentType(oldQuantity, newQuantity),
         Math.abs(newQuantity - oldQuantity),
         oldQuantity,
@@ -413,12 +428,13 @@ async function applyResolvedCorrections(connection, resolved) {
     );
 
     applied.push({
-      product_id: item.product.id,
+      product_id: item.product_id,
       database_name: item.product.name,
-      requested_name: item.label,
+      size: item.product.size || "",
+      requested_name: item.requested_name,
       old_quantity: oldQuantity,
       new_quantity: newQuantity,
-      match_score: item.match_score,
+      match_method: item.match_method,
       reference,
     });
   }
@@ -428,6 +444,7 @@ async function applyResolvedCorrections(connection, resolved) {
     approved_by: "Boss",
     instruction_source: "Kwabena WhatsApp stock count",
     correction_date: CORRECTION_DATE,
+    export_generated_at: EXPORT_GENERATED_AT,
     product_count: applied.length,
     products: applied,
   });
@@ -455,6 +472,7 @@ async function runBossApprovedProductQuantityCorrection20260802() {
     return { skipped: true, reason: "non-production" };
   }
 
+  const targetIds = validateCorrectionDefinitions();
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
   let transactionStarted = false;
@@ -484,17 +502,17 @@ async function runBossApprovedProductQuantityCorrection20260802() {
     await connection.beginTransaction();
     transactionStarted = true;
 
+    const placeholders = targetIds.map(() => "?").join(", ");
     const [products] = await connection.query(
-      `SELECT id, branch_id, name, quantity, cost_price, is_active
+      `SELECT id, branch_id, name, size, quantity, cost_price, is_active
        FROM products
-       WHERE branch_id = ?
-       AND is_active = TRUE
+       WHERE id IN (${placeholders})
        ORDER BY id ASC
        FOR UPDATE`,
-      [TARGET_BRANCH_ID]
+      targetIds
     );
 
-    const resolved = resolveCorrections(products);
+    const resolved = resolveExactCorrections(products);
     const applied = await applyResolvedCorrections(connection, resolved);
 
     if (applied.length !== PRODUCT_CORRECTIONS.length) {
@@ -511,7 +529,7 @@ async function runBossApprovedProductQuantityCorrection20260802() {
     );
     for (const item of applied) {
       console.log(
-        `${item.reference}: ${item.database_name} ${item.old_quantity} -> ${item.new_quantity}`
+        `${item.reference}: #${item.product_id} ${item.database_name} ${item.old_quantity} -> ${item.new_quantity}`
       );
     }
 
@@ -551,19 +569,16 @@ module.exports = {
   CORRECTION_DATE,
   CORRECTION_LOCK,
   CORRECTION_RECORD,
-  MIN_MATCH_MARGIN,
-  MIN_MATCH_SCORE,
+  EXPORT_GENERATED_AT,
   PRODUCT_CORRECTIONS,
   TARGET_BRANCH_ID,
   adjustmentType,
   applyResolvedCorrections,
-  chooseUniqueProduct,
   correctionRecordExists,
-  essentialTokens,
-  normalizeProductName,
-  resolveCorrections,
+  normalizeIdentity,
+  resolveExactCorrections,
   runBossApprovedProductQuantityCorrection20260802,
-  scoreCorrectionAgainstProduct,
-  scoreName,
+  validateCorrectionDefinitions,
   verifyDatabaseIdentity,
+  verifyUpdatedQuantity,
 };
