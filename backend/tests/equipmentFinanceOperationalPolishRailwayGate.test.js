@@ -7,9 +7,9 @@ const backendDir = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
 const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-test("Railway runs Phase 1 through Phase 5D before API traffic", () => {
+test("Railway runs every reviewed startup gate before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
   const phases = [
     "runEquipmentFinancePhaseOneSchemaStartup.js",
@@ -19,6 +19,7 @@ test("Railway runs Phase 1 through Phase 5D before API traffic", () => {
     "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
     "runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js",
     "runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js",
+    "runBossApprovedProductQuantityCorrection20260802.js",
     "server.js",
   ];
   let previous = -1;
