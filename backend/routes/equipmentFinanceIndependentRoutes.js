@@ -19,6 +19,7 @@ const equipmentFinancePrivateDocumentsRoutes = require("./equipmentFinancePrivat
 const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocumentReviewRoutes");
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
 const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
+const equipmentFinancePhaseSixRoutes = require("./equipmentFinancePhaseSixRoutes");
 
 const router = express.Router();
 
@@ -125,6 +126,11 @@ function financePolicy() {
     correction_ledger_enabled: true,
     independent_correction_approval: true,
     configurable_return_settlement_policy: true,
+    phase6_customer_payment_sms: true,
+    phase6_automatic_reminders: true,
+    phase6_portfolio_reporting: true,
+    phase6_accounting_export: true,
+    phase6_thermal_receipt: true,
   };
 }
 
@@ -137,6 +143,7 @@ router.use(equipmentFinanceScheduleRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
+router.use(equipmentFinancePhaseSixRoutes);
 
 // The protected Phase 5D route must execute before the legacy lifecycle router.
 router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);
