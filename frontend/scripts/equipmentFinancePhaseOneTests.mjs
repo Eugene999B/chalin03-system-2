@@ -43,6 +43,7 @@ for (const title of [
   assert.match(layout, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
 assert.doesNotMatch(layout, /Finance Equipment Reference/);
+assert.match(layout, /Company-wide Finance portfolio/);
 
 assert.match(home, /EquipmentFinanceMinimalWorkflowPage/);
 assert.match(home, /EquipmentInstallmentCommandAdvancedPage/);
@@ -97,10 +98,12 @@ assert.match(applications, /Installment Offer/);
 assert.match(applications, /No Hire-location selection/);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
-for (const page of [activation, deposit, reports]) {
+for (const page of [activation, deposit]) {
   assert.match(page, /company-wide|Company-wide/);
   assert.doesNotMatch(page, /selectedContextId|useWorkspaceContext/);
 }
+assert.match(reports, /Equipment Finance Phase 6/);
+assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);

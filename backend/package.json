@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "start": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
@@ -17,12 +17,20 @@
     "migrate:equipment-finance:phase5b:production": "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
     "migrate:equipment-finance:phase5c:production": "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js",
     "migrate:equipment-finance:phase5d:production": "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js",
+    "migrate:equipment-finance:phase6:production": "node scripts/runEquipmentFinancePhaseSixStartup.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
     "test": "node --test tests/*.test.js"
   },
-  "engines": { "node": ">=20" },
-  "keywords": ["chalin03", "sales", "inventory", "mysql"],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "chalin03",
+    "sales",
+    "inventory",
+    "mysql"
+  ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
   "dependencies": {
@@ -40,5 +48,7 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
-  "devDependencies": { "nodemon": "^3.0.0" }
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
 }
