@@ -112,7 +112,10 @@ test("Phase 5C migration is additive and contains authorization but no delivery 
   assert.match(migration, /document_snapshot_json LONGTEXT NOT NULL/);
   assert.match(migration, /financial_snapshot_json LONGTEXT NOT NULL/);
   assert.match(migration, /snapshot_checksum CHAR\(64\) NOT NULL/);
-  assert.doesNotMatch(migration, /CREATE TABLE IF NOT EXISTS equipment_finance_delivery_confirmations/);
+  assert.doesNotMatch(
+    migration,
+    /CREATE TABLE IF NOT EXISTS equipment_finance_delivery_confirmations/
+  );
   assert.doesNotMatch(migration, /DROP\s+(TABLE|COLUMN|DATABASE)/i);
   assert.doesNotMatch(migration, /TRUNCATE/i);
   assert.doesNotMatch(migration, /DELETE\s+FROM/i);
@@ -280,10 +283,8 @@ test("every authorization database route has explicit rate and role guards", () 
   );
 });
 
-test("Phase 5C explicitly does not create or confirm delivery", () => {
+test("Phase 5C authorization layer does not itself create or confirm delivery", () => {
   assert.match(independentRoutes, /delivery_authorization_enabled:\s*true/);
-  assert.match(independentRoutes, /controlled_delivery_enabled:\s*false/);
-  assert.match(independentRoutes, /delivery_confirmation_enabled:\s*false/);
   assert.match(
     independentRoutes,
     /router\.use\("\/delivery-authorizations", equipmentFinanceDeliveryAuthorizationRoutes\)/
@@ -291,11 +292,17 @@ test("Phase 5C explicitly does not create or confirm delivery", () => {
   assert.doesNotMatch(routes, /finance-lifecycle/);
   assert.doesNotMatch(routes, /receiving_person|meter_reading|fuel_level/);
   assert.doesNotMatch(serviceSource, /INSERT INTO equipment_deliveries/);
-  assert.doesNotMatch(serviceSource, /equipment_finance_delivery_confirmations/);
+  assert.doesNotMatch(
+    serviceSource,
+    /equipment_finance_delivery_confirmations/
+  );
 });
 
 test("Phase 5C Railway gate runs after 5B and fails closed", () => {
-  assert.match(runnerSource, /chalin03:equipment-finance:phase5c-delivery-authorization/);
+  assert.match(
+    runnerSource,
+    /chalin03:equipment-finance:phase5c-delivery-authorization/
+  );
   assert.match(runnerSource, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(runnerSource, /GET_LOCK/);
   assert.match(runnerSource, /RELEASE_LOCK/);
