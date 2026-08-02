@@ -25,32 +25,25 @@ const migrationSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-test("Railway runs Phase 1, Phase 3, Phase 4, Phase 5A and Phase 5B before API traffic", () => {
+test("Railway runs Phase 1 through Phase 5C before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
-  const phaseOneIndex = packageJson.scripts.start.indexOf(
-    "runEquipmentFinancePhaseOneSchemaStartup.js"
-  );
-  const phaseThreeIndex = packageJson.scripts.start.indexOf(
-    "runEquipmentFinanceOperationalPolishStartup.js"
-  );
-  const phaseFourIndex = packageJson.scripts.start.indexOf(
-    "runEquipmentFinancePhaseFourStartup.js"
-  );
-  const phaseFiveAIndex = packageJson.scripts.start.indexOf(
-    "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js"
-  );
-  const phaseFiveBIndex = packageJson.scripts.start.indexOf(
-    "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js"
-  );
-  const serverIndex = packageJson.scripts.start.indexOf("server.js");
-  assert.ok(phaseOneIndex >= 0);
-  assert.ok(phaseThreeIndex > phaseOneIndex);
-  assert.ok(phaseFourIndex > phaseThreeIndex);
-  assert.ok(phaseFiveAIndex > phaseFourIndex);
-  assert.ok(phaseFiveBIndex > phaseFiveAIndex);
-  assert.ok(serverIndex > phaseFiveBIndex);
+  const phases = [
+    "runEquipmentFinancePhaseOneSchemaStartup.js",
+    "runEquipmentFinanceOperationalPolishStartup.js",
+    "runEquipmentFinancePhaseFourStartup.js",
+    "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
+    "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
+    "runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js",
+    "server.js",
+  ];
+  let previous = -1;
+  for (const phase of phases) {
+    const current = packageJson.scripts.start.indexOf(phase);
+    assert.ok(current > previous, `${phase} must run in reviewed order.`);
+    previous = current;
+  }
 });
 
 test("first Phase 3 startup uses the controlled migration runner", () => {

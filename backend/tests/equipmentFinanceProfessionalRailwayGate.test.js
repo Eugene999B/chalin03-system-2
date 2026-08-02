@@ -17,7 +17,7 @@ const runnerSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("completed professional Finance migration is not rerun during Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -25,10 +25,7 @@ test("completed professional Finance migration is not rerun during Railway start
     packageJson.scripts.start,
     /runEquipmentFinanceProfessionalRebuildMigration\.js/
   );
-  assert.match(
-    packageJson.scripts.start,
-    /runEquipmentFinancePhaseFourStartup\.js/
-  );
+  assert.match(packageJson.scripts.start, /runEquipmentFinancePhaseFourStartup\.js/);
   assert.match(
     packageJson.scripts.start,
     /runEquipmentFinancePhaseFiveAPrivateDocumentsStartup\.js/
@@ -36,6 +33,10 @@ test("completed professional Finance migration is not rerun during Railway start
   assert.match(
     packageJson.scripts.start,
     /runEquipmentFinancePhaseFiveBDocumentReviewStartup\.js/
+  );
+  assert.match(
+    packageJson.scripts.start,
+    /runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup\.js/
   );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:professional:production"],
@@ -55,10 +56,7 @@ test("professional Finance manual gate retains backup, safety snapshot and exact
     runnerSource,
     /Confirm the separate verified SQL backup first/
   );
-  assert.match(
-    runnerSource,
-    /20260731_EQUIPMENT_FINANCE_PROFESSIONAL/
-  );
+  assert.match(runnerSource, /20260731_EQUIPMENT_FINANCE_PROFESSIONAL/);
   assert.match(runnerSource, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(runnerSource, /GET_LOCK/);
   assert.match(
