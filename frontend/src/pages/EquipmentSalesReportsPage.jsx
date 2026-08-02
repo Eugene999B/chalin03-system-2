@@ -4,7 +4,8 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
-const API = "/equipment-catalogue/sales/phase6";
+const LEGACY_API = "/equipment-catalogue/sales";
+const API = `${LEGACY_API}/phase6`;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -69,8 +70,10 @@ export default function EquipmentSalesReportsPage() {
   const [arrears, setArrears] = useState(null);
   const [cashFlow, setCashFlow] = useState(null);
   const [messages, setMessages] = useState(null);
+  const [legacyManagement, setLegacyManagement] = useState(null);
   const [selectedAgreementId, setSelectedAgreementId] = useState("");
   const [statement, setStatement] = useState(null);
+  const [legacyDetails, setLegacyDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -80,17 +83,22 @@ export default function EquipmentSalesReportsPage() {
     setLoading(true);
     setProblem("");
     try {
-      const [portfolioResponse, arrearsResponse, cashFlowResponse, messageResponse] =
-        await Promise.all([
-          axiosClient.get(`${API}/portfolio`, { params: filters }),
-          axiosClient.get(`${API}/arrears`, { params: { as_of: filters.date_to } }),
-          axiosClient.get(`${API}/cash-flow`, { params: filters }),
-          axiosClient.get(`${API}/messages`, { params: { limit: 80 } }),
-        ]);
-      setPortfolio(portfolioResponse.data || null);
-      setArrears(arrearsResponse.data || null);
-      setCashFlow(cashFlowResponse.data || null);
-      setMessages(messageResponse.data?.history || null);
+      const results = await Promise.allSettled([
+        axiosClient.get(`${API}/portfolio`, { params: filters }),
+        axiosClient.get(`${API}/arrears`, { params: { as_of: filters.date_to } }),
+        axiosClient.get(`${API}/cash-flow`, { params: filters }),
+        axiosClient.get(`${API}/messages`, { params: { limit: 80 } }),
+        axiosClient.get(`${LEGACY_API}/reports/management`, { params: filters }),
+      ]);
+      const requiredFailure = results.slice(0, 4).find((result) => result.status === "rejected");
+      if (requiredFailure) throw requiredFailure.reason;
+      setPortfolio(results[0].value.data || null);
+      setArrears(results[1].value.data || null);
+      setCashFlow(results[2].value.data || null);
+      setMessages(results[3].value.data?.history || null);
+      setLegacyManagement(
+        results[4].status === "fulfilled" ? results[4].value.data || null : null
+      );
     } catch (error) {
       setProblem(errorMessage(error, "Could not load Equipment Finance Phase 6."));
     } finally {
@@ -126,12 +134,20 @@ export default function EquipmentSalesReportsPage() {
   async function openStatement(agreementId) {
     setSelectedAgreementId(agreementId);
     setStatement(null);
+    setLegacyDetails(null);
     if (!agreementId) return;
     setBusy(true);
     setProblem("");
     try {
-      const response = await axiosClient.get(`${API}/accounts/${agreementId}/statement`);
-      setStatement(response.data?.statement || null);
+      const [statementResult, legacyResult] = await Promise.allSettled([
+        axiosClient.get(`${API}/accounts/${agreementId}/statement`),
+        axiosClient.get(`${LEGACY_API}/agreements/${agreementId}`),
+      ]);
+      if (statementResult.status === "rejected") throw statementResult.reason;
+      setStatement(statementResult.value.data?.statement || null);
+      setLegacyDetails(
+        legacyResult.status === "fulfilled" ? legacyResult.value.data || null : null
+      );
     } catch (error) {
       setProblem(errorMessage(error, "Could not open the customer statement."));
     } finally {
@@ -192,6 +208,7 @@ export default function EquipmentSalesReportsPage() {
   }
 
   const summary = portfolio?.summary || {};
+  const legacySummary = legacyManagement?.summary || {};
   const accounts = portfolio?.accounts || [];
   const selectedAccount = useMemo(
     () => accounts.find((account) => String(account.id) === String(selectedAgreementId)),
@@ -216,11 +233,11 @@ export default function EquipmentSalesReportsPage() {
     <main className="finance-simple" data-testid="phase6-finance-reports">
       <header className="finance-simple__hero">
         <div>
-          <p>Equipment Finance Phase 6</p>
-          <h1>Portfolio, SMS, Reports &amp; Accounting</h1>
+          <p>Equipment Finance Phase 6 — Portfolio, SMS, Reports &amp; Accounting</p>
+          <h1>Documents &amp; Reports</h1>
           <span>
-            Payment alerts, upcoming and overdue reminders, statements, portfolio health,
-            arrears, cash flow, accounting exports and 80 mm thermal receipts.
+            Payment alerts, reminders, statements, portfolio health, arrears, cash flow,
+            accounting exports, professional documents and 80 mm thermal receipts.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -247,7 +264,7 @@ export default function EquipmentSalesReportsPage() {
         <div className="finance-simple__toolbar">
           <div>
             <p className="finance-simple__eyebrow">Controlled reporting period</p>
-            <h2>Filters and Accounting Export</h2>
+            <h2>Filters, Management Report &amp; Accounting Export</h2>
           </div>
           <div className="finance-simple__actions">
             <label className="finance-simple__field">
@@ -270,6 +287,18 @@ export default function EquipmentSalesReportsPage() {
                 }
               />
             </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                download(
+                  `${LEGACY_API}/reports/export.csv?date_from=${filters.date_from}&date_to=${filters.date_to}`,
+                  `equipment-finance-management-${filters.date_from}-${filters.date_to}.csv`
+                )
+              }
+            >
+              Management CSV
+            </button>
             <button
               type="button"
               disabled={busy}
@@ -310,6 +339,17 @@ export default function EquipmentSalesReportsPage() {
             <article className="finance-simple__metric"><span>Overdue</span><strong>{money(summary.overdue_balance)}</strong></article>
             <article className="finance-simple__metric"><span>Active accounts</span><strong>{Number(summary.active_count || 0)}</strong></article>
           </section>
+
+          {legacyManagement ? (
+            <section className="finance-simple__section">
+              <p className="finance-simple__eyebrow">Existing management report compatibility</p>
+              <div className="finance-simple__facts">
+                <div><span>Sales value</span><strong>{money(legacySummary.total_sales_value)}</strong></div>
+                <div><span>Estimated gross profit</span><strong>{money(legacySummary.estimated_gross_profit)}</strong></div>
+                <div><span>Agreements</span><strong>{Number(legacySummary.agreements || 0)}</strong></div>
+              </div>
+            </section>
+          ) : null}
 
           <section className="finance-simple__guide-grid">
             <article className="finance-simple__guide-card">
@@ -437,10 +477,10 @@ export default function EquipmentSalesReportsPage() {
           <section className="finance-simple__section" data-testid="phase6-customer-statement">
             <div className="finance-simple__section-header">
               <div>
-                <p className="finance-simple__eyebrow">Official customer ledger</p>
-                <h2>Customer Statement &amp; Thermal Receipts</h2>
+                <p className="finance-simple__eyebrow">Official customer ledger and professional documents</p>
+                <h2>Customer Statement, Documents &amp; Thermal Receipts</h2>
                 <span className="finance-simple__muted">
-                  Statements and receipts use official agreement, schedule, payment and allocation records.
+                  Existing agreement, statement, delivery, ownership and receipt downloads remain available beside Phase 6 documents.
                 </span>
               </div>
               <select
@@ -479,15 +519,57 @@ export default function EquipmentSalesReportsPage() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      download(
-                        `${API}/accounts/${selectedAgreementId}/statement.pdf`,
-                        `${selectedAccount.agreement_number}-statement.pdf`
-                      )
-                    }
+                    onClick={() => download(
+                      `${API}/accounts/${selectedAgreementId}/statement.pdf`,
+                      `${selectedAccount.agreement_number}-phase6-statement.pdf`
+                    )}
                   >
                     Customer Statement PDF
                   </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => download(
+                      `${LEGACY_API}/agreements/${selectedAgreementId}/documents/agreement.pdf`,
+                      `${selectedAccount.agreement_number}-agreement.pdf`
+                    )}
+                  >
+                    Agreement
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => download(
+                      `${LEGACY_API}/agreements/${selectedAgreementId}/documents/statement.pdf`,
+                      `${selectedAccount.agreement_number}-statement.pdf`
+                    )}
+                  >
+                    Existing Statement
+                  </button>
+                  {legacyDetails?.delivery ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => download(
+                        `${LEGACY_API}/agreements/${selectedAgreementId}/documents/delivery.pdf`,
+                        `${selectedAccount.agreement_number}-delivery-note.pdf`
+                      )}
+                    >
+                      Delivery Note
+                    </button>
+                  ) : null}
+                  {(legacyDetails?.ownership_transfers || []).length ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => download(
+                        `${LEGACY_API}/agreements/${selectedAgreementId}/documents/ownership.pdf`,
+                        `${selectedAccount.agreement_number}-ownership.pdf`
+                      )}
+                    >
+                      Ownership Certificate
+                    </button>
+                  ) : null}
                 </div>
                 <div className="finance-simple__cards">
                   {(statement.payments || []).map((payment) => (
@@ -501,14 +583,22 @@ export default function EquipmentSalesReportsPage() {
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() =>
-                              download(
-                                `${API}/payments/${payment.id}/thermal-receipt.pdf`,
-                                `${payment.receipt_number}-thermal.pdf`
-                              )
-                            }
+                            onClick={() => download(
+                              `${API}/payments/${payment.id}/thermal-receipt.pdf`,
+                              `${payment.receipt_number}-thermal.pdf`
+                            )}
                           >
                             Thermal Receipt
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => download(
+                              `${LEGACY_API}/payments/${payment.id}/receipt.pdf`,
+                              `${payment.receipt_number}.pdf`
+                            )}
+                          >
+                            Existing Receipt
                           </button>
                           {canManage ? (
                             <button type="button" disabled={busy} onClick={() => resendReceipt(payment.id)}>
