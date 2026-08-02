@@ -136,7 +136,7 @@ test("private document routes have explicit permission and rate-limit guards", (
 });
 
 test("Phase 5A exposes upload, download and activity only—not later approvals or delivery", () => {
-  assert.match(routes, /document_uploaded/);
+  assert.match(serviceSource, /document_uploaded/);
   assert.match(serviceSource, /document_downloaded/);
   assert.match(serviceSource, /INSERT INTO equipment_finance_case_activity/);
   assert.match(serviceSource, /writeAuditEvent\(/);
