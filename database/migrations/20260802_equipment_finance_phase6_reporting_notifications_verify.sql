@@ -53,4 +53,5 @@ SELECT COUNT(*) AS invalid_automatic_receipt_history
     ON state.state_key = 'customer_receipt_cutover_at'
   INNER JOIN equipment_sale_payments payment ON payment.id = message.payment_id
  WHERE message.message_type = 'customer_payment_receipt'
+   AND message.sent_by IS NULL
    AND payment.payment_date < CAST(state.state_value AS DATETIME);
