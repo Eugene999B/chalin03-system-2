@@ -81,7 +81,7 @@ function testFullCustomerAndKycFieldsRemainVisible() {
 
 function testDraftCreationStaysLightweight() {
   assert.match(page, /Only the customer legal name and primary phone/);
-  assert.match(page, /missing optional information does not stop draft creation/);
+  assert.match(page, /missing optional information does not stop draft\s+creation/);
   assert.doesNotMatch(page, /required\s+value=\{profile\.kyc/);
   assert.match(page, /Required to create a new-customer draft/);
 }
