@@ -1,0 +1,50 @@
+name: Run auditor period patch on PR
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'hotfix/auditor-reporting-period-banner-20260802'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/auditor-reporting-period-banner-20260802
+          fetch-depth: 0
+
+      - name: Execute the reviewed one-time patch
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/apply-auditor-reporting-period-hotfix.yml').read_text(encoding='utf-8')
+          marker = "python3 <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          patch_script = textwrap.dedent(workflow[start:end])
+          exec(compile(patch_script, 'auditor-reporting-period-hotfix', 'exec'))
+          PY
+
+      - name: Validate hotfix
+        run: |
+          node --check backend/routes/exportRoutes.js
+          node --test backend/tests/auditorReportingPeriodBanner.test.js
+
+      - name: Commit hotfix to the pull request branch
+        run: |
+          git config user.name "Chalin 03 Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/routes/exportRoutes.js backend/tests/auditorReportingPeriodBanner.test.js
+          if git diff --cached --quiet; then
+            echo "No patch changes were needed."
+            exit 0
+          fi
+          git commit -m "Make reporting periods prominent in all main exports [auditor-period-patched]"
+          git push origin HEAD:hotfix/auditor-reporting-period-banner-20260802
