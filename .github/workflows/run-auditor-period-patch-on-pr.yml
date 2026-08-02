@@ -18,19 +18,8 @@ jobs:
           ref: hotfix/auditor-reporting-period-banner-20260802
           fetch-depth: 0
 
-      - name: Execute the reviewed one-time patch
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-          import textwrap
-
-          workflow = Path('.github/workflows/apply-auditor-reporting-period-hotfix.yml').read_text(encoding='utf-8')
-          marker = "python3 <<'PY'\n"
-          start = workflow.index(marker) + len(marker)
-          end = workflow.index("\n          PY", start)
-          patch_script = textwrap.dedent(workflow[start:end])
-          exec(compile(patch_script, 'auditor-reporting-period-hotfix', 'exec'))
-          PY
+      - name: Apply the reviewed structural patch
+        run: python3 .github/scripts/apply_auditor_reporting_period.py
 
       - name: Validate hotfix
         run: |
