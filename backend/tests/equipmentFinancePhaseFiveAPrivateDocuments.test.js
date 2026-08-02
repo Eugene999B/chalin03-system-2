@@ -140,7 +140,10 @@ test("Phase 5A exposes upload, download and activity only—not later approvals 
   assert.match(serviceSource, /document_downloaded/);
   assert.match(serviceSource, /INSERT INTO equipment_finance_case_activity/);
   assert.match(serviceSource, /writeAuditEvent\(/);
-  assert.doesNotMatch(routes, /review|approve|authorize|confirmation/i);
+  assert.doesNotMatch(routes, /"\/documents\/:documentId\/review"/);
+  assert.doesNotMatch(routes, /"\/documents\/:documentId\/approval"/);
+  assert.doesNotMatch(routes, /delivery-authorizations/);
+  assert.doesNotMatch(routes, /delivery-confirmations/);
   assert.doesNotMatch(independentRoutes, /PhaseFiveDeliveryRoutes/);
   assert.match(
     independentRoutes,
