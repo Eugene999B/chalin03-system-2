@@ -19,7 +19,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply the reviewed structural patch
-        run: python3 .github/scripts/apply_auditor_reporting_period.py
+        run: python3 .github/scripts/run_auditor_reporting_period_patch.py
 
       - name: Validate hotfix
         run: |
