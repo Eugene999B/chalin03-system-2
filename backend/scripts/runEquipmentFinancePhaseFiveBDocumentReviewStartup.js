@@ -3,17 +3,12 @@ const path = require("node:path");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
-const MIGRATION_LOCK = "chalin03:equipment-finance:phase5a-private-documents";
-const MIGRATION_RECORD = "equipment_finance_phase5a_private_documents";
+const MIGRATION_LOCK = "chalin03:equipment-finance:phase5b-document-review";
+const MIGRATION_RECORD = "equipment_finance_phase5b_document_review";
 const MIGRATION_FILE =
-  "20260802_equipment_finance_phase5a_private_documents.sql";
+  "20260802_equipment_finance_phase5b_document_review.sql";
 const VERIFIER_FILE =
-  "20260802_equipment_finance_phase5a_private_documents_verify.sql";
-const REQUIRED_TABLES = Object.freeze([
-  "equipment_finance_document_delivery_policy",
-  "equipment_finance_private_documents",
-  "equipment_finance_case_activity",
-]);
+  "20260802_equipment_finance_phase5b_document_review_verify.sql";
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -90,22 +85,20 @@ function splitSqlScript(sqlText) {
   return statements;
 }
 
-function readMigrationFile(filename) {
+function readSqlFile(filename) {
   const filePath = path.resolve(
     __dirname,
     "../../database/migrations",
     filename
   );
   if (!fs.existsSync(filePath)) {
-    throw new Error(`Approved Phase 5A SQL file is missing: ${filePath}`);
+    throw new Error(`Approved Phase 5B SQL file is missing: ${filePath}`);
   }
   return fs.readFileSync(filePath, "utf8");
 }
 
 async function verifyDatabaseIdentity(connection) {
-  const [[row]] = await connection.query(
-    "SELECT DATABASE() AS database_name"
-  );
+  const [[row]] = await connection.query("SELECT DATABASE() AS database_name");
   const databaseName = String(row?.database_name || "").trim();
   const expected = String(
     process.env.CHALIN03_EXPECTED_DATABASE || ""
@@ -154,57 +147,37 @@ async function executeStatements(connection, statements, label) {
   return results;
 }
 
-async function applyForwardCompatiblePolicyVerification(connection, results) {
-  if (!Array.isArray(results) || results.length !== 5) return results;
-  const [[policyRow]] = await connection.query(
-    `SELECT COUNT(*) AS policy_rows
-       FROM equipment_finance_document_delivery_policy
-      WHERE id = 1
-        AND policy_version IS NOT NULL
-        AND allowed_document_categories_json IS NOT NULL
-        AND allowed_mime_types_json IS NOT NULL
-        AND maximum_file_size_bytes > 0`
-  );
-  const normalized = [...results];
-  normalized[2] = [policyRow || { policy_rows: 0 }];
-  return normalized;
-}
-
 function validateVerifierResults(results) {
   if (results.length !== 5) {
     throw new Error(
-      `Phase 5A verifier returned ${results.length} result sets instead of 5.`
+      `Phase 5B verifier returned ${results.length} result sets instead of 5.`
     );
   }
-  const [migrationRows, tableRows, policyRows, columnRows, exposureRows] =
+  const [migrationRows, columnRows, historyRows, policyRows, decisionRows] =
     results;
   if (
     migrationRows.length !== 1 ||
     migrationRows[0].migration_name !== MIGRATION_RECORD
   ) {
-    throw new Error("The Phase 5A migration record was not verified.");
+    throw new Error("The Phase 5B migration record was not verified.");
   }
-  const tables = new Set(
-    tableRows.map((row) => String(row.TABLE_NAME || ""))
-  );
-  const missing = REQUIRED_TABLES.filter((table) => !tables.has(table));
-  if (missing.length) {
-    throw new Error(`Phase 5A tables are missing: ${missing.join(", ")}.`);
+  if (Number(columnRows[0]?.missing_review_columns || 0) !== 0) {
+    throw new Error("The Phase 5B document review columns are incomplete.");
   }
-  if (Number(policyRows[0]?.policy_rows || 0) !== 1) {
-    throw new Error("The Phase 5A private document policy was not verified.");
+  if (Number(historyRows[0]?.missing_history_table || 0) !== 0) {
+    throw new Error("The Phase 5B decision-history table is missing.");
   }
-  if (columnRows.length !== 8) {
-    throw new Error("The Phase 5A encrypted document columns are incomplete.");
+  if (Number(policyRows[0]?.invalid_review_policy || 0) !== 0) {
+    throw new Error("The Phase 5B document review policy is invalid.");
   }
-  if (Number(exposureRows[0]?.exposed_public_locations || 0) !== 0) {
+  if (Number(decisionRows[0]?.invalid_document_decisions || 0) !== 0) {
     throw new Error(
-      "The Phase 5A vault exposes a public document location column."
+      "The Phase 5B verifier found a document decision that violates independent review controls."
     );
   }
 }
 
-async function runEquipmentFinancePhaseFiveAPrivateDocumentsStartup() {
+async function runEquipmentFinancePhaseFiveBDocumentReviewStartup() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
   try {
@@ -215,26 +188,22 @@ async function runEquipmentFinancePhaseFiveAPrivateDocumentsStartup() {
     );
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) {
-      throw new Error("Could not acquire the Phase 5A migration lock.");
+      throw new Error("Could not acquire the Phase 5B migration lock.");
     }
 
     if (!(await migrationRecordExists(connection))) {
       await executeStatements(
         connection,
-        splitSqlScript(readMigrationFile(MIGRATION_FILE)),
-        "Equipment Finance Phase 5A migration"
+        splitSqlScript(readSqlFile(MIGRATION_FILE)),
+        "Equipment Finance Phase 5B migration"
       );
       console.log(`Applied ${MIGRATION_RECORD} on ${databaseName}.`);
     }
 
-    const historicalVerifierResults = await executeStatements(
+    const verifierResults = await executeStatements(
       connection,
-      splitSqlScript(readMigrationFile(VERIFIER_FILE)),
-      "Equipment Finance Phase 5A verifier"
-    );
-    const verifierResults = await applyForwardCompatiblePolicyVerification(
-      connection,
-      historicalVerifierResults
+      splitSqlScript(readSqlFile(VERIFIER_FILE)),
+      "Equipment Finance Phase 5B verifier"
     );
     validateVerifierResults(verifierResults);
     console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
@@ -256,9 +225,9 @@ async function runEquipmentFinancePhaseFiveAPrivateDocumentsStartup() {
 }
 
 if (require.main === module) {
-  runEquipmentFinancePhaseFiveAPrivateDocumentsStartup().catch((error) => {
+  runEquipmentFinancePhaseFiveBDocumentReviewStartup().catch((error) => {
     console.error(
-      "Equipment Finance Phase 5A private document Railway startup gate failed."
+      "Equipment Finance Phase 5B document review Railway startup gate failed."
     );
     console.error(error.message);
     process.exit(1);
@@ -269,12 +238,10 @@ module.exports = {
   MIGRATION_FILE,
   MIGRATION_LOCK,
   MIGRATION_RECORD,
-  REQUIRED_TABLES,
   VERIFIER_FILE,
-  applyForwardCompatiblePolicyVerification,
   executeStatements,
   migrationRecordExists,
-  runEquipmentFinancePhaseFiveAPrivateDocumentsStartup,
+  runEquipmentFinancePhaseFiveBDocumentReviewStartup,
   splitSqlScript,
   validateVerifierResults,
   verifyDatabaseIdentity,

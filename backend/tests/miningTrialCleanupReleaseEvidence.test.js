@@ -24,6 +24,8 @@ const APPROVED_PHASE4_FINANCE_GATE =
   "node scripts/runEquipmentFinancePhaseFourStartup.js && ";
 const APPROVED_PHASE5A_FINANCE_GATE =
   "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && ";
+const APPROVED_PHASE5B_FINANCE_GATE =
+  "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
   assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
@@ -34,6 +36,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
     `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${NORMAL_BACKEND_START}`,
     `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${APPROVED_PHASE5A_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${APPROVED_PHASE5A_FINANCE_GATE}${APPROVED_PHASE5B_FINANCE_GATE}${NORMAL_BACKEND_START}`,
   ]);
   assert.equal(
     approvedStarts.has(packageJson.scripts.start),
