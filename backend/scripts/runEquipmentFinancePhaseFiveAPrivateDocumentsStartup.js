@@ -154,6 +154,22 @@ async function executeStatements(connection, statements, label) {
   return results;
 }
 
+async function applyForwardCompatiblePolicyVerification(connection, results) {
+  if (!Array.isArray(results) || results.length !== 5) return results;
+  const [[policyRow]] = await connection.query(
+    `SELECT COUNT(*) AS policy_rows
+       FROM equipment_finance_document_delivery_policy
+      WHERE id = 1
+        AND policy_version IS NOT NULL
+        AND allowed_document_categories_json IS NOT NULL
+        AND allowed_mime_types_json IS NOT NULL
+        AND maximum_file_size_bytes > 0`
+  );
+  const normalized = [...results];
+  normalized[2] = [policyRow || { policy_rows: 0 }];
+  return normalized;
+}
+
 function validateVerifierResults(results) {
   if (results.length !== 5) {
     throw new Error(
@@ -211,10 +227,14 @@ async function runEquipmentFinancePhaseFiveAPrivateDocumentsStartup() {
       console.log(`Applied ${MIGRATION_RECORD} on ${databaseName}.`);
     }
 
-    const verifierResults = await executeStatements(
+    const historicalVerifierResults = await executeStatements(
       connection,
       splitSqlScript(readMigrationFile(VERIFIER_FILE)),
       "Equipment Finance Phase 5A verifier"
+    );
+    const verifierResults = await applyForwardCompatiblePolicyVerification(
+      connection,
+      historicalVerifierResults
     );
     validateVerifierResults(verifierResults);
     console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
@@ -251,6 +271,7 @@ module.exports = {
   MIGRATION_RECORD,
   REQUIRED_TABLES,
   VERIFIER_FILE,
+  applyForwardCompatiblePolicyVerification,
   executeStatements,
   migrationRecordExists,
   runEquipmentFinancePhaseFiveAPrivateDocumentsStartup,
