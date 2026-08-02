@@ -4,7 +4,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
-const API = "/equipment-catalogue/sales";
+const API = "/equipment-catalogue/sales/phase6";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -39,19 +39,38 @@ function dateLabel(value) {
       });
 }
 
+function dateTimeLabel(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+}
+
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
+}
+
+function StatusPill({ value }) {
+  return <span className="finance-simple__pill">{label(value || "not sent")}</span>;
 }
 
 export default function EquipmentSalesReportsPage() {
   const { effectivePermissions = [] } = useAuth();
   const canManage = effectivePermissions.includes("fleet.assets.manage");
   const [filters, setFilters] = useState({ date_from: yearStart(), date_to: today() });
-  const [report, setReport] = useState(null);
-  const [agreements, setAgreements] = useState([]);
-  const [retirement, setRetirement] = useState(null);
-  const [selectedId, setSelectedId] = useState("");
-  const [details, setDetails] = useState(null);
+  const [portfolio, setPortfolio] = useState(null);
+  const [arrears, setArrears] = useState(null);
+  const [cashFlow, setCashFlow] = useState(null);
+  const [messages, setMessages] = useState(null);
+  const [selectedAgreementId, setSelectedAgreementId] = useState("");
+  const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -61,16 +80,19 @@ export default function EquipmentSalesReportsPage() {
     setLoading(true);
     setProblem("");
     try {
-      const [reportResponse, agreementResponse, retirementResponse] = await Promise.all([
-        axiosClient.get(`${API}/reports/management`, { params: filters }),
-        axiosClient.get(`${API}/agreements`),
-        axiosClient.get(`${API}/retirement-status`),
-      ]);
-      setReport(reportResponse.data || null);
-      setAgreements(agreementResponse.data?.agreements || []);
-      setRetirement(retirementResponse.data || null);
+      const [portfolioResponse, arrearsResponse, cashFlowResponse, messageResponse] =
+        await Promise.all([
+          axiosClient.get(`${API}/portfolio`, { params: filters }),
+          axiosClient.get(`${API}/arrears`, { params: { as_of: filters.date_to } }),
+          axiosClient.get(`${API}/cash-flow`, { params: filters }),
+          axiosClient.get(`${API}/messages`, { params: { limit: 80 } }),
+        ]);
+      setPortfolio(portfolioResponse.data || null);
+      setArrears(arrearsResponse.data || null);
+      setCashFlow(cashFlowResponse.data || null);
+      setMessages(messageResponse.data?.history || null);
     } catch (error) {
-      setProblem(errorMessage(error, "Could not load Finance documents and reports."));
+      setProblem(errorMessage(error, "Could not load Equipment Finance Phase 6."));
     } finally {
       setLoading(false);
     }
@@ -79,22 +101,6 @@ export default function EquipmentSalesReportsPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function openAgreement(value) {
-    setSelectedId(value);
-    setDetails(null);
-    if (!value) return;
-    setBusy(true);
-    setProblem("");
-    try {
-      const response = await axiosClient.get(`${API}/agreements/${value}`);
-      setDetails(response.data || null);
-    } catch (error) {
-      setProblem(errorMessage(error, "Could not open the agreement file."));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function download(url, filename) {
     setBusy(true);
@@ -117,18 +123,50 @@ export default function EquipmentSalesReportsPage() {
     }
   }
 
-  async function runReminders() {
+  async function openStatement(agreementId) {
+    setSelectedAgreementId(agreementId);
+    setStatement(null);
+    if (!agreementId) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const response = await axiosClient.get(`${API}/accounts/${agreementId}/statement`);
+      setStatement(response.data?.statement || null);
+    } catch (error) {
+      setProblem(errorMessage(error, "Could not open the customer statement."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncPaymentSms() {
     if (!canManage) return;
     setBusy(true);
     setProblem("");
     try {
-      const response = await axiosClient.post(`${API}/reminders/run`);
-      const result = response.data?.result || {};
-      setNotice(
-        result.disabled
-          ? "SMS is disabled; no reminders were sent."
-          : `Reminder check completed: ${result.sent || 0} sent, ${result.failed || 0} failed, ${result.skipped || 0} skipped.`
-      );
+      const response = await axiosClient.post(`${API}/messages/sync`, { limit: 100 });
+      setNotice(response.data?.message || "Payment receipt SMS synchronization completed.");
+      await load();
+    } catch (error) {
+      setProblem(errorMessage(error, "Could not synchronize payment receipt SMS alerts."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runReminders() {
+    if (!canManage) return;
+    const confirmed = window.confirm(
+      "Send eligible upcoming-payment and overdue reminders now? Duplicate and frequency controls remain active."
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const response = await axiosClient.post(`${API}/reminders/run`, {
+        confirmation: "RUN INSTALLMENT REMINDERS",
+      });
+      setNotice(response.data?.message || "Reminder run completed.");
       await load();
     } catch (error) {
       setProblem(errorMessage(error, "Could not run Finance reminders."));
@@ -137,147 +175,386 @@ export default function EquipmentSalesReportsPage() {
     }
   }
 
-  const summary = report?.summary || {};
-  const selected = useMemo(
-    () => agreements.find((agreement) => String(agreement.id) === String(selectedId)),
-    [agreements, selectedId]
+  async function resendReceipt(paymentId) {
+    if (!canManage) return;
+    setBusy(true);
+    setProblem("");
+    try {
+      const response = await axiosClient.post(`${API}/payments/${paymentId}/send-receipt`);
+      setNotice(response.data?.message || "Customer receipt SMS submitted.");
+      await load();
+      if (selectedAgreementId) await openStatement(selectedAgreementId);
+    } catch (error) {
+      setProblem(errorMessage(error, "Could not send the customer payment receipt SMS."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const summary = portfolio?.summary || {};
+  const accounts = portfolio?.accounts || [];
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => String(account.id) === String(selectedAgreementId)),
+    [accounts, selectedAgreementId]
   );
-  const agingTotal = (report?.aging || []).reduce(
-    (sum, row) => sum + Number(row.outstanding_amount || 0),
-    0
-  );
+  const messageRows = useMemo(() => {
+    if (!messages) return [];
+    return [
+      ...(messages.customer_payment_receipts || []),
+      ...(messages.boss_payment_alerts || []),
+      ...(messages.reminders || []),
+    ]
+      .sort(
+        (left, right) =>
+          new Date(right.created_at || 0).getTime() -
+          new Date(left.created_at || 0).getTime()
+      )
+      .slice(0, 50);
+  }, [messages]);
 
   return (
-    <main className="finance-simple">
+    <main className="finance-simple" data-testid="phase6-finance-reports">
       <header className="finance-simple__hero">
         <div>
-          <p>Company-wide Finance evidence</p>
-          <h1>Documents &amp; Reports</h1>
+          <p>Equipment Finance Phase 6</p>
+          <h1>Portfolio, SMS, Reports &amp; Accounting</h1>
           <span>
-            Agreements, receipts, statements, aging and management totals for the whole
-            Installment Finance portfolio. No Hire-location selection is required.
+            Payment alerts, upcoming and overdue reminders, statements, portfolio health,
+            arrears, cash flow, accounting exports and 80 mm thermal receipts.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
-          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Help</Link>
-          <button type="button" onClick={() => download(`${API}/reports/export.csv`, `equipment-finance-${today()}.csv`)} disabled={busy}>Export CSV</button>
-          {canManage ? <button type="button" onClick={runReminders} disabled={busy}>Run SMS Reminders</button> : null}
+          <Link
+            className="finance-simple__button"
+            to="/equipment-installment-finance/applications?stage=settings"
+          >
+            SMS Settings
+          </Link>
+          <button type="button" onClick={load} disabled={loading || busy}>Refresh</button>
+          {canManage ? (
+            <button type="button" onClick={syncPaymentSms} disabled={busy}>Sync Payment SMS</button>
+          ) : null}
+          {canManage ? (
+            <button type="button" onClick={runReminders} disabled={busy}>Run Reminders</button>
+          ) : null}
         </div>
       </header>
 
-      {problem ? <div className="finance-simple__notice is-error">{problem}</div> : null}
-      {notice ? <div className="finance-simple__notice">{notice}</div> : null}
-      {retirement ? <div className="finance-simple__notice is-info">{retirement.retired ? "Spare Parts installment creation is retired; historical records remain protected for audit." : "Historical installment retirement verification is pending."}</div> : null}
+      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
       <section className="finance-simple__section">
         <div className="finance-simple__toolbar">
-          <div><p className="finance-simple__eyebrow">Report period</p><h2>Management summary</h2></div>
+          <div>
+            <p className="finance-simple__eyebrow">Controlled reporting period</p>
+            <h2>Filters and Accounting Export</h2>
+          </div>
           <div className="finance-simple__actions">
-            <label className="finance-simple__field"><span>From</span><input type="date" value={filters.date_from} onChange={(event) => setFilters((current) => ({ ...current, date_from: event.target.value }))} /></label>
-            <label className="finance-simple__field"><span>To</span><input type="date" value={filters.date_to} onChange={(event) => setFilters((current) => ({ ...current, date_to: event.target.value }))} /></label>
-            <button type="button" onClick={load} disabled={loading}>Refresh</button>
+            <label className="finance-simple__field">
+              <span>From</span>
+              <input
+                type="date"
+                value={filters.date_from}
+                onChange={(event) =>
+                  setFilters((current) => ({ ...current, date_from: event.target.value }))
+                }
+              />
+            </label>
+            <label className="finance-simple__field">
+              <span>To</span>
+              <input
+                type="date"
+                value={filters.date_to}
+                onChange={(event) =>
+                  setFilters((current) => ({ ...current, date_to: event.target.value }))
+                }
+              />
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                download(
+                  `${API}/accounting-export.csv?date_from=${filters.date_from}&date_to=${filters.date_to}`,
+                  `equipment-finance-accounting-${filters.date_from}-${filters.date_to}.csv`
+                )
+              }
+            >
+              Accounting CSV
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                download(
+                  `${API}/accounting-export.xlsx?date_from=${filters.date_from}&date_to=${filters.date_to}`,
+                  `equipment-finance-accounting-${filters.date_from}-${filters.date_to}.xlsx`
+                )
+              }
+            >
+              Accounting Excel
+            </button>
           </div>
         </div>
       </section>
 
-      {loading ? <div className="finance-simple__empty">Loading company-wide Finance reports…</div> : null}
+      {loading ? <div className="finance-simple__empty">Loading Finance controls…</div> : null}
 
       {!loading ? (
         <>
-          <section className="finance-simple__metrics">
-            <article className="finance-simple__metric"><span>Sales value</span><strong>{money(summary.total_sales_value)}</strong></article>
-            <article className="finance-simple__metric"><span>Collected</span><strong>{money(summary.collected_amount)}</strong></article>
-            <article className="finance-simple__metric"><span>Outstanding</span><strong>{money(summary.outstanding_amount)}</strong></article>
-            <article className="finance-simple__metric"><span>Overdue</span><strong>{money(summary.overdue_amount)}</strong></article>
-            <article className="finance-simple__metric"><span>Estimated gross profit</span><strong>{money(summary.estimated_gross_profit)}</strong></article>
-            <article className="finance-simple__metric"><span>Agreements</span><strong>{Number(summary.agreements || 0)}</strong></article>
+          <section className="finance-simple__metrics" data-testid="phase6-portfolio-summary">
+            <article className="finance-simple__metric"><span>Portfolio value</span><strong>{money(summary.portfolio_value)}</strong></article>
+            <article className="finance-simple__metric"><span>Lifetime collected</span><strong>{money(summary.lifetime_collections)}</strong></article>
+            <article className="finance-simple__metric"><span>Period collected</span><strong>{money(summary.period_collections)}</strong></article>
+            <article className="finance-simple__metric"><span>Outstanding</span><strong>{money(summary.outstanding_balance)}</strong></article>
+            <article className="finance-simple__metric"><span>Overdue</span><strong>{money(summary.overdue_balance)}</strong></article>
+            <article className="finance-simple__metric"><span>Active accounts</span><strong>{Number(summary.active_count || 0)}</strong></article>
           </section>
 
           <section className="finance-simple__guide-grid">
             <article className="finance-simple__guide-card">
-              <p className="finance-simple__eyebrow">Installment aging</p>
-              <h3>{money(agingTotal)} outstanding</h3>
+              <p className="finance-simple__eyebrow">Account status</p>
+              <h3>{Number(summary.agreement_count || 0)} agreements</h3>
               <ul className="finance-simple__guide-list">
-                {(report?.aging || []).map((row) => (
-                  <li key={row.aging_bucket}>{label(row.aging_bucket)}: {row.agreements} agreement(s) · {money(row.outstanding_amount)}</li>
+                {(portfolio?.statuses || []).map((row) => (
+                  <li key={row.agreement_status}>
+                    {label(row.agreement_status)}: {row.agreements} · {money(row.outstanding_amount)}
+                  </li>
                 ))}
-                {!(report?.aging || []).length ? <li>No outstanding installment balances.</li> : null}
+                {!(portfolio?.statuses || []).length ? <li>No agreements.</li> : null}
+              </ul>
+            </article>
+            <article className="finance-simple__guide-card">
+              <p className="finance-simple__eyebrow">Arrears aging</p>
+              <h3>{money(arrears?.summary?.arrears)} in arrears</h3>
+              <ul className="finance-simple__guide-list">
+                {(portfolio?.aging || []).map((row) => (
+                  <li key={row.aging_bucket}>
+                    {label(row.aging_bucket)}: {row.agreements} · {money(row.overdue_amount)}
+                  </li>
+                ))}
+                {!(portfolio?.aging || []).length ? <li>No overdue aging balances.</li> : null}
               </ul>
             </article>
             <article className="finance-simple__guide-card">
               <p className="finance-simple__eyebrow">Next 30 days</p>
               <h3>Expected collections</h3>
               <ul className="finance-simple__guide-list">
-                {(report?.expected_collections || []).map((row) => (
-                  <li key={row.due_date}>{dateLabel(row.due_date)}: {row.agreements} agreement(s) · {money(row.expected_amount)}</li>
+                {(portfolio?.upcoming || []).slice(0, 8).map((row) => (
+                  <li key={String(row.due_date)}>
+                    {dateLabel(row.due_date)}: {row.agreements} · {money(row.expected_amount)}
+                  </li>
                 ))}
-                {!(report?.expected_collections || []).length ? <li>No scheduled collections.</li> : null}
+                {!(portfolio?.upcoming || []).length ? <li>No upcoming balances.</li> : null}
               </ul>
             </article>
             <article className="finance-simple__guide-card">
-              <p className="finance-simple__eyebrow">Monthly cash flow</p>
-              <h3>Collections</h3>
+              <p className="finance-simple__eyebrow">Payment channels</p>
+              <h3>Actual cash flow</h3>
               <ul className="finance-simple__guide-list">
-                {(report?.monthly_collections || []).map((row) => (
-                  <li key={row.month_key}>{row.month_label}: {row.payments} payment(s) · {money(row.collected_amount)}</li>
+                {(cashFlow?.payment_methods || []).map((row) => (
+                  <li key={row.payment_method}>
+                    {label(row.payment_method)}: {row.payments} · {money(row.collected_amount)}
+                  </li>
                 ))}
-                {!(report?.monthly_collections || []).length ? <li>No payments in this period.</li> : null}
-              </ul>
-            </article>
-            <article className="finance-simple__guide-card">
-              <p className="finance-simple__eyebrow">Staff performance</p>
-              <h3>Sales value</h3>
-              <ul className="finance-simple__guide-list">
-                {(report?.staff_performance || []).map((row) => (
-                  <li key={`${row.staff_name}-${row.agreements}`}>{row.staff_name}: {row.agreements} agreement(s) · {money(row.sales_value)}</li>
-                ))}
-                {!(report?.staff_performance || []).length ? <li>No staff sales records in this period.</li> : null}
+                {!(cashFlow?.payment_methods || []).length ? <li>No collections in period.</li> : null}
               </ul>
             </article>
           </section>
 
-          <section className="finance-simple__section">
+          <section className="finance-simple__section" data-testid="phase6-arrears-report">
             <div className="finance-simple__section-header">
-              <div><p className="finance-simple__eyebrow">Customer account files</p><h2>Professional Documents</h2><span className="finance-simple__muted">Choose one agreement to download its documents and receipts.</span></div>
-              <select value={selectedId} onChange={(event) => openAgreement(event.target.value)}>
+              <div>
+                <p className="finance-simple__eyebrow">Server-calculated schedule balances</p>
+                <h2>Arrears Report</h2>
+                <span className="finance-simple__muted">
+                  {Number(arrears?.summary?.accounts || 0)} overdue accounts as of {dateLabel(arrears?.as_of)}.
+                </span>
+              </div>
+            </div>
+            <div className="finance-simple__table-wrap">
+              <table className="finance-simple__table">
+                <thead>
+                  <tr>
+                    <th>Agreement / Customer</th>
+                    <th>Machine</th>
+                    <th>Oldest Due</th>
+                    <th>Days</th>
+                    <th>Arrears</th>
+                    <th>Outstanding</th>
+                    <th>Reminder Evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(arrears?.arrears || []).map((row) => (
+                    <tr key={row.agreement_id}>
+                      <td><strong>{row.agreement_number}</strong><br />{row.customer_name} · {row.customer_phone || "No phone"}</td>
+                      <td>{row.asset_code} — {row.asset_name}</td>
+                      <td>{dateLabel(row.oldest_due_date)}</td>
+                      <td>{row.days_overdue}</td>
+                      <td>{money(row.calculated_arrears)}</td>
+                      <td>{money(row.outstanding_balance)}</td>
+                      <td>{row.successful_reminders} sent<br />{row.last_reminder_at ? dateTimeLabel(row.last_reminder_at) : "No reminder"}</td>
+                    </tr>
+                  ))}
+                  {!(arrears?.arrears || []).length ? (
+                    <tr><td colSpan="7">No overdue installment schedule lines.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="finance-simple__section" data-testid="phase6-cash-flow-report">
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Actual versus scheduled</p>
+                <h2>Cash-flow Report</h2>
+              </div>
+            </div>
+            <div className="finance-simple__guide-grid">
+              <article className="finance-simple__guide-card">
+                <h3>Actual collections</h3>
+                <ul className="finance-simple__guide-list">
+                  {(cashFlow?.actual || []).map((row) => (
+                    <li key={row.month_key}>{row.month_label}: {row.payments} · {money(row.collected_amount)}</li>
+                  ))}
+                  {!(cashFlow?.actual || []).length ? <li>No actual collections.</li> : null}
+                </ul>
+              </article>
+              <article className="finance-simple__guide-card">
+                <h3>Expected schedule</h3>
+                <ul className="finance-simple__guide-list">
+                  {(cashFlow?.expected || []).map((row) => (
+                    <li key={row.month_key}>{row.month_label}: {row.schedule_lines} · {money(row.expected_amount)}</li>
+                  ))}
+                  {!(cashFlow?.expected || []).length ? <li>No expected schedule balances.</li> : null}
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <section className="finance-simple__section" data-testid="phase6-customer-statement">
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Official customer ledger</p>
+                <h2>Customer Statement &amp; Thermal Receipts</h2>
+                <span className="finance-simple__muted">
+                  Statements and receipts use official agreement, schedule, payment and allocation records.
+                </span>
+              </div>
+              <select
+                aria-label="Finance agreement"
+                value={selectedAgreementId}
+                onChange={(event) => openStatement(event.target.value)}
+              >
                 <option value="">Choose agreement</option>
-                {agreements.map((agreement) => <option key={agreement.id} value={agreement.id}>{agreement.agreement_number} — {agreement.customer_name} — {agreement.asset_code}</option>)}
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.agreement_number} — {account.customer_name} — {account.asset_code}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {busy && selectedId && !details ? <div className="finance-simple__empty">Loading account documents…</div> : null}
-            {!selectedId ? <div className="finance-simple__empty">Choose an agreement to open its documents.</div> : null}
+            {!selectedAgreementId ? <div className="finance-simple__empty">Choose a Finance agreement.</div> : null}
+            {busy && selectedAgreementId && !statement ? <div className="finance-simple__empty">Loading official statement…</div> : null}
 
-            {selected && details ? (
+            {statement && selectedAccount ? (
               <>
                 <article className="finance-simple__machine">
-                  <div className="finance-simple__machine-image">{selected.main_image_url ? <img src={selected.main_image_url} alt={selected.asset_name} /> : <span>🚜</span>}</div>
-                  <div className="finance-simple__machine-body"><span className="finance-simple__pill">{selected.agreement_number}</span><h3>{selected.asset_code} — {selected.asset_name}</h3><p>{selected.customer_name} · {selected.customer_phone}</p><div className="finance-simple__facts"><div><span>Agreement</span><strong>{label(selected.agreement_status)}</strong></div><div><span>Balance</span><strong>{money(selected.outstanding_balance)}</strong></div></div></div>
-                </article>
-
-                <div className="finance-simple__actions">
-                  {selected.quotation_id ? <button type="button" onClick={() => download(`${API}/quotations/${selected.quotation_id}/quotation.pdf`, `${selected.agreement_number}-installment-offer.pdf`)} disabled={busy}>Installment Offer</button> : null}
-                  <button type="button" onClick={() => download(`${API}/agreements/${selected.id}/documents/agreement.pdf`, `${selected.agreement_number}-agreement.pdf`)} disabled={busy}>Agreement</button>
-                  <button type="button" onClick={() => download(`${API}/agreements/${selected.id}/documents/statement.pdf`, `${selected.agreement_number}-statement.pdf`)} disabled={busy}>Statement</button>
-                  {Number(selected.outstanding_balance || 0) > 0 ? <button type="button" onClick={() => download(`${API}/agreements/${selected.id}/documents/overdue.pdf`, `${selected.agreement_number}-overdue-notice.pdf`)} disabled={busy}>Overdue Notice</button> : null}
-                  {details.delivery ? <button type="button" onClick={() => download(`${API}/agreements/${selected.id}/documents/delivery.pdf`, `${selected.agreement_number}-delivery-note.pdf`)} disabled={busy}>Delivery Note</button> : null}
-                  {(details.ownership_transfers || []).length ? <button type="button" onClick={() => download(`${API}/agreements/${selected.id}/documents/ownership.pdf`, `${selected.agreement_number}-ownership.pdf`)} disabled={busy}>Ownership Certificate</button> : null}
-                </div>
-
-                {(details.payments || []).length ? (
-                  <section className="finance-simple__section">
-                    <p className="finance-simple__eyebrow">Payment receipts</p>
-                    <div className="finance-simple__cards">
-                      {details.payments.map((payment) => (
-                        <article className="finance-simple__card" key={payment.id}>
-                          <div className="finance-simple__card-body"><h3>{payment.receipt_number}</h3><p>{dateLabel(payment.payment_date)} · {label(payment.payment_method)}</p><strong className="finance-simple__money">{money(payment.amount)}</strong><button type="button" onClick={() => download(`${API}/payments/${payment.id}/receipt.pdf`, `${payment.receipt_number}.pdf`)} disabled={busy}>Download Receipt</button></div>
-                        </article>
-                      ))}
+                  <div className="finance-simple__machine-image"><span>🏦</span></div>
+                  <div className="finance-simple__machine-body">
+                    <span className="finance-simple__pill">{selectedAccount.agreement_number}</span>
+                    <h3>{selectedAccount.asset_code} — {selectedAccount.asset_name}</h3>
+                    <p>{selectedAccount.customer_name} · {selectedAccount.customer_phone || "No phone"}</p>
+                    <div className="finance-simple__facts">
+                      <div><span>Paid</span><strong>{money(selectedAccount.amount_paid)}</strong></div>
+                      <div><span>Outstanding</span><strong>{money(selectedAccount.outstanding_balance)}</strong></div>
+                      <div><span>Arrears</span><strong>{money(selectedAccount.overdue_amount)}</strong></div>
                     </div>
-                  </section>
-                ) : null}
+                  </div>
+                </article>
+                <div className="finance-simple__actions">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      download(
+                        `${API}/accounts/${selectedAgreementId}/statement.pdf`,
+                        `${selectedAccount.agreement_number}-statement.pdf`
+                      )
+                    }
+                  >
+                    Customer Statement PDF
+                  </button>
+                </div>
+                <div className="finance-simple__cards">
+                  {(statement.payments || []).map((payment) => (
+                    <article className="finance-simple__card" key={payment.id}>
+                      <div className="finance-simple__card-body">
+                        <h3>{payment.receipt_number}</h3>
+                        <p>{dateTimeLabel(payment.payment_date)} · {label(payment.payment_method)}</p>
+                        <strong className="finance-simple__money">{money(payment.amount)}</strong>
+                        <p>Customer SMS <StatusPill value={payment.customer_sms_status} /> Boss SMS <StatusPill value={payment.boss_sms_status} /></p>
+                        <div className="finance-simple__actions">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              download(
+                                `${API}/payments/${payment.id}/thermal-receipt.pdf`,
+                                `${payment.receipt_number}-thermal.pdf`
+                              )
+                            }
+                          >
+                            Thermal Receipt
+                          </button>
+                          {canManage ? (
+                            <button type="button" disabled={busy} onClick={() => resendReceipt(payment.id)}>
+                              Send Receipt SMS
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                  {!(statement.payments || []).length ? <div className="finance-simple__empty">No payments recorded.</div> : null}
+                </div>
               </>
             ) : null}
+          </section>
+
+          <section className="finance-simple__section" data-testid="phase6-message-history">
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Notification evidence</p>
+                <h2>SMS History</h2>
+                <span className="finance-simple__muted">
+                  Customer payment receipts, boss alerts, upcoming-payment reminders and overdue reminders.
+                </span>
+              </div>
+            </div>
+            <div className="finance-simple__table-wrap">
+              <table className="finance-simple__table">
+                <thead>
+                  <tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Evidence</th></tr>
+                </thead>
+                <tbody>
+                  {messageRows.map((row) => (
+                    <tr key={`${row.message_type}-${row.id}-${row.recipient_type}`}>
+                      <td>{dateTimeLabel(row.created_at)}</td>
+                      <td>{label(row.message_type)}</td>
+                      <td>{row.agreement_number}<br />{row.receipt_number || row.customer_name}</td>
+                      <td>{label(row.recipient_type)} · {row.recipient_phone || "No phone"}</td>
+                      <td><StatusPill value={row.delivery_status} /></td>
+                      <td>{row.last_error || row.message_preview}</td>
+                    </tr>
+                  ))}
+                  {!messageRows.length ? <tr><td colSpan="6">No Finance SMS evidence yet.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       ) : null}
