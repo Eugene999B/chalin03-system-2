@@ -2,6 +2,7 @@ import { useLocation } from "react-router";
 import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
 import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
+import EquipmentFinanceCaseWorkspacePage from "./EquipmentFinanceCaseWorkspacePage";
 import EquipmentFinanceCollectionsMinimalPage from "./EquipmentFinanceCollectionsMinimalPage";
 import EquipmentFinanceCorrectionsPage from "./EquipmentFinanceCorrectionsPage";
 import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage";
@@ -39,6 +40,10 @@ export default function EquipmentSalesWorkspacePage() {
 
   if (stage === "guide") {
     return <EquipmentFinanceGuidePage />;
+  }
+
+  if (stage === "case-workspace") {
+    return <EquipmentFinanceCaseWorkspacePage />;
   }
 
   if (PROFESSIONAL_STAGES.has(stage)) {
