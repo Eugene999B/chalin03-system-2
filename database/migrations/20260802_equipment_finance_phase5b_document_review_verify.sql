@@ -23,11 +23,10 @@ LEFT JOIN information_schema.COLUMNS actual
  AND actual.COLUMN_NAME = required.column_name
 WHERE actual.COLUMN_NAME IS NULL;
 
-SELECT COUNT(*) AS missing_history_table
+SELECT CASE WHEN COUNT(*) = 1 THEN 0 ELSE 1 END AS missing_history_table
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = DATABASE()
-  AND TABLE_NAME = 'equipment_finance_document_review_history'
-HAVING COUNT(*) <> 1;
+  AND TABLE_NAME = 'equipment_finance_document_review_history';
 
 SELECT COUNT(*) AS invalid_review_policy
 FROM equipment_finance_document_delivery_policy
