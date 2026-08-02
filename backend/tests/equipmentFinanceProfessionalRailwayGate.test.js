@@ -17,7 +17,7 @@ const runnerSource = fs.readFileSync(
 );
 
 const EXPECTED_START =
-  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("completed professional Finance migration is not rerun during Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -32,6 +32,10 @@ test("completed professional Finance migration is not rerun during Railway start
   assert.match(
     packageJson.scripts.start,
     /runEquipmentFinancePhaseFiveAPrivateDocumentsStartup\.js/
+  );
+  assert.match(
+    packageJson.scripts.start,
+    /runEquipmentFinancePhaseFiveBDocumentReviewStartup\.js/
   );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:professional:production"],
