@@ -93,7 +93,7 @@ const navigationSections = [
     ],
   },
   {
-    title: "Documents & Management",
+    title: "Documents & Reports",
     items: [
       {
         title: "Portfolio, SMS & Reports",
