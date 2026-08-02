@@ -55,6 +55,15 @@ function connectionOptions() {
   };
 }
 
+function bufferHasExecutableSql(buffer) {
+  return String(buffer || "")
+    .split("\n")
+    .some((line) => {
+      const trimmed = line.trim();
+      return trimmed && !trimmed.startsWith("--") && !trimmed.startsWith("#");
+    });
+}
+
 function splitSqlScript(sqlText) {
   const statements = [];
   let delimiter = ";";
@@ -64,11 +73,12 @@ function splitSqlScript(sqlText) {
     .split("\n")) {
     const delimiterMatch = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
     if (delimiterMatch) {
-      if (buffer.trim()) {
+      if (bufferHasExecutableSql(buffer)) {
         throw new Error(
           "SQL DELIMITER appeared before the previous statement was complete."
         );
       }
+      buffer = "";
       delimiter = delimiterMatch[1];
       continue;
     }
@@ -79,7 +89,7 @@ function splitSqlScript(sqlText) {
     if (statement) statements.push(statement);
     buffer = "";
   }
-  if (buffer.trim()) {
+  if (bufferHasExecutableSql(buffer)) {
     throw new Error("SQL script ended with an incomplete statement.");
   }
   return statements;
@@ -239,6 +249,7 @@ module.exports = {
   MIGRATION_LOCK,
   MIGRATION_RECORD,
   VERIFIER_FILE,
+  bufferHasExecutableSql,
   executeStatements,
   migrationRecordExists,
   runEquipmentFinancePhaseFiveBDocumentReviewStartup,
