@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "start": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
@@ -12,6 +12,7 @@
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
     "migrate:equipment-finance:phase1-schema:production": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js",
+    "migrate:equipment-finance:phase1-repair:production": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js",
     "migrate:equipment-finance:phase4:production": "node scripts/runEquipmentFinancePhaseFourStartup.js",
     "migrate:equipment-finance:phase5a:production": "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
     "migrate:equipment-finance:phase5b:production": "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",

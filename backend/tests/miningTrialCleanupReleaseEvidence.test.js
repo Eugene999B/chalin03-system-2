@@ -8,6 +8,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "backend", "packa
 const releaseEvidence = fs.readFileSync(path.join(root, "docs", "MINING_TRIAL_DATA_CLEANUP_RELEASE.md"), "utf8");
 const NORMAL = "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 const PROFESSIONAL = "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && ";
+const P1_REPAIR = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && ";
 const P1 = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && ";
 const P3 = "node scripts/runEquipmentFinanceOperationalPolishStartup.js && ";
 const P4 = "node scripts/runEquipmentFinancePhaseFourStartup.js && ";
@@ -32,6 +33,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${NORMAL}`,
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${STOCK_COUNT}${NORMAL}`,
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
