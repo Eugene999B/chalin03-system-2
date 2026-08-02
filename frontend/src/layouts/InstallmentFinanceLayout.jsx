@@ -96,8 +96,8 @@ const navigationSections = [
     title: "Documents & Management",
     items: [
       {
-        title: "Documents & Reports",
-        description: "Agreements, receipts, statements, payment evidence and management reports",
+        title: "Portfolio, SMS & Reports",
+        description: "Payment alerts, statements, arrears, cash flow, accounting exports and thermal receipts",
         path: "/equipment-installment-finance/reports",
         icon: "📊",
         permissions: ["fleet.assets.view"],
@@ -111,7 +111,7 @@ const navigationSections = [
       },
       {
         title: "Finance Settings",
-        description: "Payment rules, reminders, boss alerts, delivery and legal agreement terms",
+        description: "Payment rules, reminders, boss alerts, customer receipts, delivery and legal terms",
         path: "/equipment-installment-finance/applications?stage=settings",
         icon: "⚙️",
         matchSearch: true,
