@@ -32,7 +32,8 @@ const reviewDecisionLimiter = rateLimit({
   message: {
     status: "error",
     code: "FINANCE_DOCUMENT_REVIEW_RATE_LIMITED",
-    message: "Too many document review decisions were attempted. Wait briefly before trying again.",
+    message:
+      "Too many document review decisions were attempted. Wait briefly before trying again.",
   },
 });
 const approvalDecisionLimiter = rateLimit({
@@ -43,7 +44,8 @@ const approvalDecisionLimiter = rateLimit({
   message: {
     status: "error",
     code: "FINANCE_DOCUMENT_APPROVAL_RATE_LIMITED",
-    message: "Too many document approval decisions were attempted. Wait briefly before trying again.",
+    message:
+      "Too many document approval decisions were attempted. Wait briefly before trying again.",
   },
 });
 
@@ -116,6 +118,7 @@ router.get(
 
 router.get(
   "/review-capabilities",
+  reviewReadLimiter,
   requirePermission("fleet.assets.view"),
   asyncHandler(async (req, res) => {
     const role = workspaceRoleFor(req.user);
@@ -242,3 +245,4 @@ module.exports.DOCUMENT_REVIEW_ROLES = DOCUMENT_REVIEW_ROLES;
 module.exports.REVIEW_VIEW_ROLES = REVIEW_VIEW_ROLES;
 module.exports.approvalDecisionLimiter = approvalDecisionLimiter;
 module.exports.reviewDecisionLimiter = reviewDecisionLimiter;
+module.exports.reviewReadLimiter = reviewReadLimiter;
