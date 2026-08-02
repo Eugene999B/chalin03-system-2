@@ -20,6 +20,9 @@ const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocument
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
 const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
 const equipmentFinancePhaseSixRoutes = require("./equipmentFinancePhaseSixRoutes");
+const {
+  router: equipmentFinanceExportPeriodRoutes,
+} = require("./equipmentFinanceExportPeriodRoutes");
 
 const router = express.Router();
 
@@ -143,6 +146,7 @@ router.use(equipmentFinanceScheduleRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
+router.use(equipmentFinanceExportPeriodRoutes);
 router.use(equipmentFinancePhaseSixRoutes);
 
 // The protected Phase 5D route must execute before the legacy lifecycle router.
