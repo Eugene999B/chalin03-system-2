@@ -15,7 +15,10 @@ ORDER BY TABLE_NAME;
 SELECT COUNT(*) AS policy_rows
 FROM equipment_finance_document_delivery_policy
 WHERE id = 1
-  AND policy_version = 'FIN-PRIVATE-DOC-1';
+  AND policy_version IS NOT NULL
+  AND allowed_document_categories_json IS NOT NULL
+  AND allowed_mime_types_json IS NOT NULL
+  AND maximum_file_size_bytes > 0;
 
 SELECT COLUMN_NAME, DATA_TYPE
 FROM information_schema.COLUMNS
