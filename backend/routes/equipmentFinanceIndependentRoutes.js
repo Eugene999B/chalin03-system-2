@@ -18,6 +18,7 @@ const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRo
 const equipmentFinancePrivateDocumentsRoutes = require("./equipmentFinancePrivateDocumentsRoutes");
 const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocumentReviewRoutes");
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
+const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
 
 const router = express.Router();
 
@@ -116,8 +117,9 @@ function financePolicy() {
     separate_document_approval_enabled: true,
     delivery_authorization_enabled: true,
     independent_delivery_authorization_enabled: true,
-    controlled_delivery_enabled: false,
-    delivery_confirmation_enabled: false,
+    controlled_delivery_enabled: true,
+    delivery_confirmation_enabled: true,
+    independent_delivery_confirmation_enabled: true,
     server_draft_autosave: true,
     controlled_amendments: true,
     correction_ledger_enabled: true,
@@ -136,9 +138,9 @@ router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 
-// The final lifecycle query now returns professional agreement/document fields.
-// Check the professional migration before handing the URL to that router so a
-// missing additive migration becomes a controlled 503 rather than a raw SQL 500.
+// The protected Phase 5D route must execute before the legacy lifecycle router.
+router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);
+
 router.use("/finance-lifecycle", async (_req, res, next) => {
   try {
     await assertProfessionalSchema();
@@ -189,27 +191,23 @@ router.get(
   async (_req, res, next) => {
     try {
       const [rows] = await pool.query(
-        `SELECT
-           application.*,
-           kyc.customer_name_snapshot,
-           kyc.customer_phone_snapshot,
-           quotation.quotation_number,
-           quotation.status AS quotation_status,
-           quotation.proposed_first_due_date,
-           item.asset_code_snapshot,
-           item.asset_name_snapshot
-         FROM equipment_credit_applications application
-         INNER JOIN equipment_credit_application_kyc kyc
-           ON kyc.application_id = application.id
-         INNER JOIN equipment_sales_quotations quotation
-           ON quotation.id = application.quotation_id
-         INNER JOIN equipment_sales_quotation_items item
-           ON item.quotation_id = quotation.id
-          AND item.asset_id = application.asset_id
-         WHERE application.application_status = 'approved'
-           AND application.kyc_status = 'verified'
-           AND application.affordability_status IN ('eligible','manual_review')
-         ORDER BY application.reviewed_at DESC, application.id DESC`
+        `SELECT application.*, kyc.customer_name_snapshot,
+                kyc.customer_phone_snapshot, quotation.quotation_number,
+                quotation.status AS quotation_status,
+                quotation.proposed_first_due_date,
+                item.asset_code_snapshot, item.asset_name_snapshot
+           FROM equipment_credit_applications application
+           INNER JOIN equipment_credit_application_kyc kyc
+             ON kyc.application_id = application.id
+           INNER JOIN equipment_sales_quotations quotation
+             ON quotation.id = application.quotation_id
+           INNER JOIN equipment_sales_quotation_items item
+             ON item.quotation_id = quotation.id
+            AND item.asset_id = application.asset_id
+          WHERE application.application_status = 'approved'
+            AND application.kyc_status = 'verified'
+            AND application.affordability_status IN ('eligible','manual_review')
+          ORDER BY application.reviewed_at DESC, application.id DESC`
       );
       return res.json({
         status: "success",
@@ -228,43 +226,34 @@ router.get(
   async (_req, res, next) => {
     try {
       const [rows] = await pool.query(
-        `SELECT
-           agreement.*,
-           application.application_number,
-           application.application_status,
-           application.kyc_status,
-           application.affordability_status,
-           customer.customer_name,
-           customer.phone AS customer_phone,
-           asset.asset_code,
-           asset.asset_name,
-           asset.main_image_url,
-           asset.operational_purpose,
-           asset.sale_status,
-           asset.is_active AS asset_is_active,
-           location.name AS equipment_origin_name,
-           sale_lock.lock_status AS active_lock_status,
-           sale_lock.released_at AS active_lock_released_at,
-           (SELECT COUNT(*)
-              FROM hire_contract_assets hire_asset
-             WHERE hire_asset.asset_id = agreement.asset_id
-               AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count
-         FROM equipment_sale_agreements agreement
-         INNER JOIN equipment_credit_applications application
-           ON application.id = agreement.credit_application_id
-         INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
-         INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-         LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
-         LEFT JOIN equipment_asset_sale_locks sale_lock
-           ON sale_lock.agreement_id = agreement.id
-          AND sale_lock.released_at IS NULL
-         WHERE agreement.sale_type = 'installment'
-           AND agreement.activation_source = 'approved_credit_application'
-           AND agreement.agreement_status IN ('approved','active')
-         ORDER BY
-           CASE WHEN agreement.equipment_commitment_status = 'reserved' THEN 1 ELSE 0 END,
-           agreement.approved_at,
-           agreement.id`
+        `SELECT agreement.*, application.application_number,
+                application.application_status, application.kyc_status,
+                application.affordability_status, customer.customer_name,
+                customer.phone AS customer_phone, asset.asset_code,
+                asset.asset_name, asset.main_image_url,
+                asset.operational_purpose, asset.sale_status,
+                asset.is_active AS asset_is_active,
+                location.name AS equipment_origin_name,
+                sale_lock.lock_status AS active_lock_status,
+                sale_lock.released_at AS active_lock_released_at,
+                (SELECT COUNT(*) FROM hire_contract_assets hire_asset
+                  WHERE hire_asset.asset_id = agreement.asset_id
+                    AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count
+           FROM equipment_sale_agreements agreement
+           INNER JOIN equipment_credit_applications application
+             ON application.id = agreement.credit_application_id
+           INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
+           INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
+           LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
+           LEFT JOIN equipment_asset_sale_locks sale_lock
+             ON sale_lock.agreement_id = agreement.id
+            AND sale_lock.released_at IS NULL
+          WHERE agreement.sale_type = 'installment'
+            AND agreement.activation_source = 'approved_credit_application'
+            AND agreement.agreement_status IN ('approved','active')
+          ORDER BY
+            CASE WHEN agreement.equipment_commitment_status = 'reserved' THEN 1 ELSE 0 END,
+            agreement.approved_at, agreement.id`
       );
       return res.json({
         status: "success",
@@ -282,10 +271,6 @@ router.get(
     }
   }
 );
-
-// The authoritative final lifecycle router owns /finance-lifecycle/*.
-// Keeping a second accounts implementation here caused production requests to
-// bypass the lifecycle readiness gate and surface raw SQL errors as HTTP 500.
 
 module.exports = router;
 module.exports.financePolicy = financePolicy;
