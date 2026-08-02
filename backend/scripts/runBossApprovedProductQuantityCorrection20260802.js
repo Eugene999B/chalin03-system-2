@@ -173,6 +173,7 @@ function normalizeProductName(value) {
     .toLowerCase();
 
   text = text
+    .replace(/\bg\s*[._ -]*\s*t\s*[._ -]*\s*t\b/g, "gtt")
     .replace(/\b(ff|lf)\s*[-_. ]*\s*(\d+)\b/g, "$1$2")
     .replace(/\b(\d+)\s*(litres?|liters?|ltr|l)\b/g, "$1l")
     .replace(/\btorch\s*light\b/g, "torchlight")
