@@ -197,7 +197,7 @@ test("Phase 5B verifier and Railway gate fail closed on invalid independent deci
   assert.match(runner, /process\.exit\(1\)/);
 });
 
-test("Phase 5B mounts after the encrypted vault and before the API server, without delivery", () => {
+test("Phase 5B review layer mounts after the encrypted vault and contains no delivery logic", () => {
   assert.match(
     independentRoutes,
     /router\.use\("\/private-documents", equipmentFinancePrivateDocumentsRoutes\);[\s\S]*router\.use\("\/private-documents", equipmentFinanceDocumentReviewRoutes\);/
@@ -207,8 +207,13 @@ test("Phase 5B mounts after the encrypted vault and before the API server, witho
     independentRoutes,
     /separate_document_approval_enabled:\s*true/
   );
-  assert.match(independentRoutes, /controlled_delivery_enabled:\s*false/);
-  assert.doesNotMatch(independentRoutes, /PhaseFiveDeliveryRoutes/);
+  assert.doesNotMatch(routes, /delivery-authorizations/);
+  assert.doesNotMatch(routes, /delivery-confirmations/);
+  assert.doesNotMatch(serviceSource, /INSERT INTO equipment_deliveries/);
+  assert.doesNotMatch(
+    serviceSource,
+    /equipment_finance_delivery_confirmations/
+  );
 
   const start = packageJson.scripts.start;
   const phaseFiveA = start.indexOf(

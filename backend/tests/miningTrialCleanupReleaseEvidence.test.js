@@ -4,61 +4,37 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..", "..");
-const packageJson = JSON.parse(
-  fs.readFileSync(path.join(root, "backend", "package.json"), "utf8")
-);
-const releaseEvidence = fs.readFileSync(
-  path.join(root, "docs", "MINING_TRIAL_DATA_CLEANUP_RELEASE.md"),
-  "utf8"
-);
-
-const NORMAL_BACKEND_START =
-  "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
-const APPROVED_PROFESSIONAL_FINANCE_GATE =
-  "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && ";
-const APPROVED_PHASE1_FINANCE_GATE =
-  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && ";
-const APPROVED_PHASE3_FINANCE_GATE =
-  "node scripts/runEquipmentFinanceOperationalPolishStartup.js && ";
-const APPROVED_PHASE4_FINANCE_GATE =
-  "node scripts/runEquipmentFinancePhaseFourStartup.js && ";
-const APPROVED_PHASE5A_FINANCE_GATE =
-  "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && ";
-const APPROVED_PHASE5B_FINANCE_GATE =
-  "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && ";
-const APPROVED_PHASE5C_FINANCE_GATE =
-  "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && ";
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, "backend", "package.json"), "utf8"));
+const releaseEvidence = fs.readFileSync(path.join(root, "docs", "MINING_TRIAL_DATA_CLEANUP_RELEASE.md"), "utf8");
+const NORMAL = "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const PROFESSIONAL = "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js && ";
+const P1 = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && ";
+const P3 = "node scripts/runEquipmentFinanceOperationalPolishStartup.js && ";
+const P4 = "node scripts/runEquipmentFinancePhaseFourStartup.js && ";
+const P5A = "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && ";
+const P5B = "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && ";
+const P5C = "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && ";
+const P5D = "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
   assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
   const approvedStarts = new Set([
-    NORMAL_BACKEND_START,
-    `${APPROVED_PROFESSIONAL_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${APPROVED_PHASE5A_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${APPROVED_PHASE5A_FINANCE_GATE}${APPROVED_PHASE5B_FINANCE_GATE}${NORMAL_BACKEND_START}`,
-    `${APPROVED_PHASE1_FINANCE_GATE}${APPROVED_PHASE3_FINANCE_GATE}${APPROVED_PHASE4_FINANCE_GATE}${APPROVED_PHASE5A_FINANCE_GATE}${APPROVED_PHASE5B_FINANCE_GATE}${APPROVED_PHASE5C_FINANCE_GATE}${NORMAL_BACKEND_START}`,
+    NORMAL,
+    `${PROFESSIONAL}${NORMAL}`,
+    `${P3}${NORMAL}`,
+    `${P1}${P3}${NORMAL}`,
+    `${P1}${P3}${P4}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${P5B}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${NORMAL}`,
   ]);
-  assert.equal(
-    approvedStarts.has(packageJson.scripts.start),
-    true,
-    "Startup may be normal or use only reviewed Equipment Finance startup gates."
-  );
-  assert.equal(
-    fs.existsSync(
-      path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")
-    ),
-    false
-  );
+  assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed Equipment Finance startup gates.");
+  assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
 });
 
 test("Mining cleanup release evidence retains production commit and durable marker", () => {
-  assert.match(
-    releaseEvidence,
-    /1165c031f62850f1de86b44ae3848217c9b99632/
-  );
+  assert.match(releaseEvidence, /1165c031f62850f1de86b44ae3848217c9b99632/);
   assert.match(releaseEvidence, /20260726_mining_trial_data_cleanup/);
   assert.match(releaseEvidence, /Spare Parts/);
   assert.match(releaseEvidence, /Equipment Hire/);

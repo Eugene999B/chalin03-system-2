@@ -4,30 +4,12 @@ const path = require("node:path");
 const test = require("node:test");
 
 const backendDir = path.resolve(__dirname, "..");
-const packageJson = JSON.parse(
-  fs.readFileSync(path.join(backendDir, "package.json"), "utf8")
-);
-const startupSource = fs.readFileSync(
-  path.join(
-    backendDir,
-    "scripts",
-    "runEquipmentFinanceOperationalPolishStartup.js"
-  ),
-  "utf8"
-);
-const migrationSource = fs.readFileSync(
-  path.join(
-    backendDir,
-    "scripts",
-    "runEquipmentFinanceOperationalPolishMigration.js"
-  ),
-  "utf8"
-);
+const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
+const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
+const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
-const EXPECTED_START =
-  "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
-
-test("Railway runs Phase 1 through Phase 5C before API traffic", () => {
+test("Railway runs Phase 1 through Phase 5D before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
   const phases = [
     "runEquipmentFinancePhaseOneSchemaStartup.js",
@@ -36,6 +18,7 @@ test("Railway runs Phase 1 through Phase 5C before API traffic", () => {
     "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
     "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
     "runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js",
+    "runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js",
     "server.js",
   ];
   let previous = -1;
@@ -50,10 +33,7 @@ test("first Phase 3 startup uses the controlled migration runner", () => {
   assert.match(startupSource, /migrationRecordExists/);
   assert.match(startupSource, /runEquipmentFinanceOperationalPolishMigration/);
   assert.match(startupSource, /CHALIN03_EXPECTED_DATABASE/);
-  assert.match(
-    migrationSource,
-    /20260731_EQUIPMENT_FINANCE_OPERATIONAL_POLISH/
-  );
+  assert.match(migrationSource, /20260731_EQUIPMENT_FINANCE_OPERATIONAL_POLISH/);
   assert.match(migrationSource, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
   assert.match(migrationSource, /CHALIN03_SQL_BACKUP_CONFIRMED/);
   assert.match(migrationSource, /GET_LOCK/);
@@ -74,13 +54,7 @@ test("completed Phase 3 startup is read-only verification", () => {
 
 test("Phase 3 startup fails closed before the server on wrong database identity", () => {
   assert.match(startupSource, /SELECT DATABASE\(\) AS database_name/);
-  assert.match(
-    startupSource,
-    /does not match CHALIN03_EXPECTED_DATABASE/
-  );
-  assert.match(
-    startupSource,
-    /Equipment Finance Phase 3 Railway startup gate failed/
-  );
+  assert.match(startupSource, /does not match CHALIN03_EXPECTED_DATABASE/);
+  assert.match(startupSource, /Equipment Finance Phase 3 Railway startup gate failed/);
   assert.match(startupSource, /process\.exit\(1\)/);
 });
