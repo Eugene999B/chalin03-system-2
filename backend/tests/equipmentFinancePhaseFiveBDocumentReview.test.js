@@ -13,8 +13,8 @@ const migration = read(
 const verifier = read(
   "database/migrations/20260802_equipment_finance_phase5b_document_review_verify.sql"
 );
-const phaseFiveAVerifier = read(
-  "database/migrations/20260802_equipment_finance_phase5a_private_documents_verify.sql"
+const phaseFiveARunner = read(
+  "backend/scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js"
 );
 const runner = read(
   "backend/scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js"
@@ -116,7 +116,10 @@ test("uploader, reviewer and approver are enforced as independent actors", () =>
     serviceSource,
     /FINANCE_DOCUMENT_INDEPENDENT_APPROVAL_REQUIRED/
   );
-  assert.match(serviceSource, /Only an independently verified document can be approved/);
+  assert.match(
+    serviceSource,
+    /Only an independently verified document can be approved/
+  );
   assert.match(serviceSource, /FINANCE_DOCUMENT_REVIEW_REQUIRED/);
   assert.match(serviceSource, /LIMIT 1 FOR UPDATE/);
 });
@@ -163,15 +166,19 @@ test("review, approval and archive routes have explicit role, permission and rat
   assert.doesNotMatch(routes, /delivery-confirmations/);
 });
 
-test("Phase 5A vault verification accepts later reviewed policy versions without weakening vault invariants", () => {
-  assert.match(phaseFiveAVerifier, /policy_version IS NOT NULL/);
-  assert.match(phaseFiveAVerifier, /allowed_document_categories_json IS NOT NULL/);
-  assert.match(phaseFiveAVerifier, /allowed_mime_types_json IS NOT NULL/);
-  assert.match(phaseFiveAVerifier, /maximum_file_size_bytes > 0/);
-  assert.doesNotMatch(
-    phaseFiveAVerifier,
-    /policy_version = 'FIN-PRIVATE-DOC-1'/
+test("Phase 5A startup verifies vault invariants across later policy upgrades without editing released SQL", () => {
+  assert.match(
+    phaseFiveARunner,
+    /applyForwardCompatiblePolicyVerification/
   );
+  assert.match(phaseFiveARunner, /policy_version IS NOT NULL/);
+  assert.match(
+    phaseFiveARunner,
+    /allowed_document_categories_json IS NOT NULL/
+  );
+  assert.match(phaseFiveARunner, /allowed_mime_types_json IS NOT NULL/);
+  assert.match(phaseFiveARunner, /maximum_file_size_bytes > 0/);
+  assert.match(phaseFiveARunner, /normalized\[2\] = \[policyRow/);
 });
 
 test("Phase 5B verifier and Railway gate fail closed on invalid independent decisions", () => {
