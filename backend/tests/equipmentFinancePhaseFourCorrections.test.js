@@ -147,11 +147,18 @@ test("the balance guard protects existing payment flows from stale simple balanc
   assert.match(balanceGuardSource, /SET NEW\.outstanding_balance = v_balance/);
 });
 
-test("Railway startup applies and verifies both Phase 4 releases", () => {
+test("Railway startup applies and verifies every Phase 4 release", () => {
   assert.match(startupSource, /equipment_finance_phase4_corrections_settlements/);
   assert.match(startupSource, /equipment_finance_phase4_balance_guard/);
+  assert.match(
+    startupSource,
+    /20260803_equipment_finance_phase4_deposit_reservation_integrity/
+  );
   assert.match(startupSource, /information_schema\.TABLES/);
   assert.match(startupSource, /SELECT GET_LOCK/);
   assert.match(startupSource, /validateCorrectionSchema/);
   assert.match(startupSource, /validateBalanceGuard/);
+  assert.match(startupSource, /validateDepositReservationIntegrity/);
+  assert.match(startupSource, /hasExecutableSql/);
 });
+
