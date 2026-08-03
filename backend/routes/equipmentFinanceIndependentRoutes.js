@@ -13,6 +13,7 @@ const {
 const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
+const equipmentFinanceRuntimeHotfixRoutes = require("./equipmentFinanceRuntimeHotfixRoutes");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
@@ -112,6 +113,9 @@ function financePolicy() {
   };
 }
 
+// These lightweight GET routes must execute before legacy handlers that depend
+// on unrelated Professional Finance settings/document tables.
+router.use(equipmentFinanceRuntimeHotfixRoutes);
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 // Own the company-wide deposit transaction before every legacy location-bound handler.
 router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
@@ -212,7 +216,5 @@ router.get(
   }
 );
 
-
 module.exports = router;
 module.exports.financePolicy = financePolicy;
-
