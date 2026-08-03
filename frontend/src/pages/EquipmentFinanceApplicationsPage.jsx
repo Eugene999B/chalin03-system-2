@@ -183,6 +183,15 @@ export default function EquipmentFinanceApplicationsPage() {
     setLoading(true);
     setProblem("");
     try {
+      const readinessResponse = await axiosClient.get(`${API}/readiness`, {
+        signal: controller.signal,
+      });
+      const nextReadiness = readinessResponse.data?.readiness || { ready: true };
+      setReadiness(nextReadiness);
+      if (!nextReadiness.ready) {
+        setApplications([]);
+        return;
+      }
       const params = {
         page,
         page_size: PAGE_SIZE,
