@@ -298,7 +298,7 @@ async function financeMachine(connection, assetId) {
              WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count,
             (SELECT COUNT(*) FROM equipment_credit_applications application
              WHERE application.asset_id = asset.id
-               AND application.application_status NOT IN ('declined','withdrawn')) AS active_application_count
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')) AS active_application_count
      FROM fleet_assets asset
      WHERE asset.id = ? AND asset.is_active = TRUE
      LIMIT 1 FOR UPDATE`,
@@ -319,10 +319,18 @@ function assertMachineAvailable(machine) {
     throw new PhaseOneError(409, "The selected excavator is active on Hire and cannot enter an installment.");
   }
   if (Number(machine.active_sale_lock_count || 0) > 0) {
-    throw new PhaseOneError(409, "The selected excavator is already reserved by another Finance agreement.");
+    throw new PhaseOneError(
+      409,
+      `The selected excavator is reserved by Finance agreement ${machine.blocking_agreement_number || "on record"}.`,
+      "FINANCE_ASSET_HELD_BY_AGREEMENT"
+    );
   }
   if (Number(machine.active_application_count || 0) > 0) {
-    throw new PhaseOneError(409, "The selected excavator already has an active credit application.");
+    throw new PhaseOneError(
+      409,
+      `The selected excavator is held by application ${machine.blocking_application_number || "on record"}.`,
+      "FINANCE_ASSET_HELD_BY_APPLICATION"
+    );
   }
 }
 
@@ -560,7 +568,7 @@ async function machinesWithEditability() {
     `SELECT asset.id,
             (SELECT COUNT(*) FROM equipment_credit_applications application
              WHERE application.asset_id = asset.id
-               AND application.application_status NOT IN ('declined','withdrawn')) AS active_application_count,
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')) AS active_application_count,
             (SELECT COUNT(*) FROM equipment_asset_sale_locks sale_lock
              WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count
      FROM fleet_assets asset WHERE asset.id IN (${placeholders})`,
@@ -579,11 +587,19 @@ async function machinesWithEditability() {
       ...machine,
       active_application_count: activeApplications,
       active_sale_lock_count: activeLocks,
+      blocking_application_id: row.blocking_application_id || null,
+      blocking_application_number: row.blocking_application_number || null,
+      blocking_agreement_id: row.blocking_agreement_id || null,
+      blocking_agreement_number: row.blocking_agreement_number || null,
       editability: {
         editable,
         reason: editable
           ? "This excavator has not entered an installment workflow."
-          : "This excavator is linked to an active application, reservation, agreement or final sale status.",
+          : row.blocking_application_number
+            ? `Held by Finance application ${row.blocking_application_number}.`
+            : row.blocking_agreement_number
+              ? `Reserved by Finance agreement ${row.blocking_agreement_number}.`
+              : "This excavator is linked to an active reservation, agreement or final sale status.",
       },
     };
   });
