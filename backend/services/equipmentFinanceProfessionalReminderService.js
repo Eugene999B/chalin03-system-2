@@ -121,7 +121,7 @@ async function reminderCandidates({ today = ghanaDate(), limit = 500 } = {}) {
        AND agreement.activation_source = 'approved_credit_application'
        AND agreement.agreement_status IN ('active','due_soon','payment_due','overdue')
        AND agreement.outstanding_balance > 0.01
-       AND schedule.schedule_status NOT IN ('paid','cancelled','waived')
+       AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
        AND schedule.due_date <= DATE_ADD(?, INTERVAL 365 DAY)
      ORDER BY schedule.due_date, agreement.id, schedule.sequence_number
      LIMIT ?`,

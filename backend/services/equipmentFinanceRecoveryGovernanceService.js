@@ -6,6 +6,10 @@ const {
   getFinanceArrearsAccount,
   listFinanceArrears,
 } = require("./equipmentFinanceArrearsService");
+const {
+  assertFinanceMutationSafe,
+  refreshFinanceAgreementFromEvidence,
+} = require("./equipmentFinanceReconciliationService");
 
 const FINANCE_WORKSPACE = "equipment_installment_finance";
 const MINIMUM_DEFAULT_DAYS = 30;
@@ -783,6 +787,11 @@ function assertIndependentApprover(request, approverUserId) {
 }
 
 async function approveReschedule(connection, request, agreement, userId, req, decisionReason) {
+  const reconciliation = await assertFinanceMutationSafe(agreement.id, {
+    connection,
+    lock: false,
+  });
+  agreement = { ...agreement, ...reconciliation.calculated };
   assertGovernableAgreement(agreement);
   const schedule = await loadSchedule(connection, agreement.id, { lock: true });
   const currentSnapshot = financialSnapshot(agreement, schedule);
@@ -854,6 +863,8 @@ async function approveReschedule(connection, request, agreement, userId, req, de
     [frequency, count, firstDueDate, firstDueDate, finalDueDate, agreement.id]
   );
 
+  const refreshed = await refreshFinanceAgreementFromEvidence(connection, agreement.id);
+
   await writeAuditEvent({
     connection,
     req,
@@ -879,9 +890,9 @@ async function approveReschedule(connection, request, agreement, userId, req, de
       })),
       previous_agreement_status: agreement.agreement_status,
       new_agreement_status:
-        Number(agreement.outstanding_balance || 0) <= 0.01 ? "completed" : "active",
-      outstanding_balance_preserved: Number(agreement.outstanding_balance || 0),
-      amount_paid_preserved: Number(agreement.amount_paid || 0),
+        refreshed.calculated.agreement_status,
+      outstanding_balance_preserved: refreshed.calculated.outstanding_balance,
+      amount_paid_preserved: refreshed.calculated.amount_paid,
       paid_schedule_lines_preserved: true,
       payment_records_changed: false,
       balance_changed: false,
@@ -893,6 +904,11 @@ async function approveReschedule(connection, request, agreement, userId, req, de
 }
 
 async function approveDefault(connection, request, agreement, userId, req, decisionReason) {
+  const reconciliation = await assertFinanceMutationSafe(agreement.id, {
+    connection,
+    lock: false,
+  });
+  agreement = { ...agreement, ...reconciliation.calculated };
   assertGovernableAgreement(agreement);
   if (agreement.agreement_status === "defaulted") {
     throw appError("This agreement is already classified as defaulted.", 409);
@@ -921,6 +937,7 @@ async function approveDefault(connection, request, agreement, userId, req, decis
      WHERE id = ?`,
     [agreement.id]
   );
+  await refreshFinanceAgreementFromEvidence(connection, agreement.id);
   await writeAuditEvent({
     connection,
     req,

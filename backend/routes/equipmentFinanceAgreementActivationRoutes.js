@@ -860,7 +860,7 @@ router.post(
           actionType: "equipment.finance.agreement.activate",
           entityType: "equipment_sale_agreement",
           entityId: insert.insertId,
-          workspaceCode: "installment_finance",
+          workspaceCode: "equipment_installment_finance",
           hireLocationId: null,
           severity: "notice",
           outcome: "success",

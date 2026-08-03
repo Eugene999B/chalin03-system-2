@@ -81,13 +81,7 @@ function csvReportHeader(title, period) {
     .join("\r\n");
 }
 
-function locationCondition(alias, scope) {
-  const locationId = Number(scope?.locationId || 0);
-  if (!Number.isInteger(locationId) || locationId <= 0) {
-    return { sql: "1 = 1", params: [] };
-  }
-  return { sql: `${alias}.hire_location_id = ?`, params: [locationId] };
-}
+
 
 function userId(req) {
   const id = Number(req.user?.id || 0);
@@ -100,7 +94,7 @@ async function auditExport(req, action, details, metadata) {
       req,
       action,
       actionType: action,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_export",
       entityId: null,
       outcome: "success",
@@ -127,7 +121,6 @@ router.get(
   async (req, res) => {
     try {
       const period = dateRange(req);
-      const location = locationCondition("esa", req.hireLocationScope);
       const [rows] = await pool.query(
         `SELECT
            esa.agreement_number,
@@ -149,12 +142,13 @@ router.get(
            u.full_name AS created_by,
            esa.created_at
          FROM equipment_sale_agreements esa
-         INNER JOIN business_locations bl ON bl.id = esa.hire_location_id
+         LEFT JOIN business_locations bl ON bl.id = esa.hire_location_id
          LEFT JOIN users u ON u.id = esa.created_by
-         WHERE ${location.sql}
+         WHERE esa.sale_type = 'installment'
+           AND esa.activation_source = 'approved_credit_application'
            AND DATE(esa.created_at) BETWEEN ? AND ?
          ORDER BY esa.created_at DESC`,
-        [...location.params, period.date_from, period.date_to]
+        [period.date_from, period.date_to]
       );
 
       const columns = [

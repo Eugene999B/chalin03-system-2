@@ -9,7 +9,6 @@ const FINANCE_WORKSPACE = "equipment_installment_finance";
 const LEGACY_FOLLOW_UP_ACTION = "EQUIPMENT_INSTALLMENT_FOLLOW_UP_RECORDED";
 const FOLLOW_UP_ACTION = "EQUIPMENT_FINANCE_COLLECTION_FOLLOW_UP_RECORDED";
 const CORRECTION_ACTION = "EQUIPMENT_FINANCE_COLLECTION_FOLLOW_UP_CORRECTED";
-const MAX_ACCOUNTS = 500;
 const MAX_EVENTS = 3000;
 
 const FOLLOW_UP_TYPES = new Set([
@@ -128,7 +127,7 @@ function financePolicy() {
 }
 
 async function loadFinanceAccounts() {
-  const result = await listInstallmentCollections({ limit: MAX_ACCOUNTS });
+  const result = await listInstallmentCollections();
   return (result.accounts || []).filter(
     (account) =>
       account.sale_type === "installment" &&
@@ -198,7 +197,7 @@ async function loadActivityEvents(connection, agreementIds) {
      WHERE activity.entity_type = 'equipment_sale_agreement'
        AND activity.entity_id IN (${placeholders})
        AND activity.action IN (?, ?, ?)
-       AND activity.workspace_code IN (?, 'equipment_hire')
+       AND activity.workspace_code = ?
      ORDER BY activity.created_at ASC, activity.id ASC
      LIMIT ${MAX_EVENTS}`,
     [
@@ -274,7 +273,32 @@ function effectiveFollowUps(events) {
   });
 }
 
-function promiseProfile(account, followUps, today = ghanaToday()) {
+async function loadPaymentEvidence(connection, agreementIds) {
+  const ids = [...new Set((agreementIds || []).map(Number).filter(Number.isInteger))];
+  if (!ids.length) return new Map();
+  const placeholders = ids.map(() => "?").join(",");
+  const [rows] = await connection.query(
+    `SELECT payment.agreement_id, payment.id, payment.amount,
+            payment.payment_date, payment.created_at
+       FROM equipment_sale_payments payment
+       INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+      WHERE payment.agreement_id IN (${placeholders})
+        AND payment.is_voided = FALSE
+        AND agreement.sale_type = 'installment'
+        AND agreement.activation_source = 'approved_credit_application'
+      ORDER BY payment.payment_date, payment.id`,
+    ids
+  );
+  const byAgreement = new Map();
+  for (const row of rows) {
+    const agreementId = Number(row.agreement_id);
+    if (!byAgreement.has(agreementId)) byAgreement.set(agreementId, []);
+    byAgreement.get(agreementId).push(row);
+  }
+  return byAgreement;
+}
+
+function promiseProfile(account, followUps, payments = [], today = ghanaToday()) {
   const promise = followUps.find(
     (entry) => dateText(entry.metadata.promise_date) && Number(entry.metadata.promise_amount || 0) > 0
   );
@@ -296,17 +320,20 @@ function promiseProfile(account, followUps, today = ghanaToday()) {
       0
   );
   const outstanding = Number(account.outstanding_balance || 0);
-  const targetOutstanding = Math.max(snapshot - promiseAmount, 0);
-  const newerSettlement = followUps.some(
-    (entry) =>
-      new Date(entry.corrected_at || entry.created_at).getTime() >
-        new Date(promise.corrected_at || promise.created_at).getTime() &&
-      entry.metadata.outcome === "paid_or_settled"
+  const promiseRecordedAt = new Date(promise.corrected_at || promise.created_at).getTime();
+  const paymentBackedAmount = Number(
+    payments
+      .filter((payment) => {
+        const paidAt = new Date(payment.created_at || payment.payment_date).getTime();
+        return Number.isFinite(paidAt) && paidAt > promiseRecordedAt;
+      })
+      .reduce((total, payment) => total + Number(payment.amount || 0), 0)
+      .toFixed(2)
   );
 
   let status = "pending";
   if (outstanding <= 0.01) status = "settled";
-  else if (newerSettlement || outstanding <= targetOutstanding + 0.01) status = "kept";
+  else if (paymentBackedAmount + 0.01 >= promiseAmount) status = "kept";
   else {
     const difference = dateCompare(promiseDate, today);
     if (difference === 0) status = "due_today";
@@ -319,6 +346,8 @@ function promiseProfile(account, followUps, today = ghanaToday()) {
     promise_amount: promiseAmount,
     promise_recorded_at: promise.created_at,
     promise_activity_id: promise.id,
+    promise_payment_backed_amount: paymentBackedAmount,
+    promise_balance_snapshot: snapshot,
   };
 }
 
@@ -343,7 +372,7 @@ function nextActionProfile(followUps, today = ghanaToday()) {
   };
 }
 
-function enrichAccount(account, followUps = []) {
+function enrichAccount(account, followUps = [], payments = []) {
   const latest = followUps[0] || null;
   return {
     ...account,
@@ -352,7 +381,7 @@ function enrichAccount(account, followUps = []) {
     last_follow_up_at: latest?.corrected_at || latest?.created_at || null,
     last_follow_up_type: latest?.metadata?.follow_up_type || null,
     last_follow_up_outcome: latest?.metadata?.outcome || latest?.outcome || null,
-    ...promiseProfile(account, followUps),
+    ...promiseProfile(account, followUps, payments),
     ...nextActionProfile(followUps),
     statement_url: `/equipment-catalogue/sales/agreements/${account.id}/documents/statement.pdf`,
     overdue_notice_url: `/equipment-catalogue/sales/agreements/${account.id}/documents/overdue.pdf`,
@@ -420,12 +449,11 @@ async function listFinanceArrears({
   }
 
   const accounts = await loadFinanceAccounts();
-  const events = effectiveFollowUps(
-    await loadActivityEvents(
-      pool,
-      accounts.map((account) => account.id)
-    )
-  );
+  const agreementIds = accounts.map((account) => account.id);
+  const [events, paymentsByAgreement] = await Promise.all([
+    loadActivityEvents(pool, agreementIds).then(effectiveFollowUps),
+    loadPaymentEvidence(pool, agreementIds),
+  ]);
   const eventsByAgreement = new Map();
   for (const event of events) {
     const list = eventsByAgreement.get(event.agreement_id) || [];
@@ -438,7 +466,11 @@ async function listFinanceArrears({
   const cleanRisk = cleanText(risk, 20).toLowerCase();
   const cleanAging = cleanText(aging, 30).toLowerCase();
   const enriched = accounts.map((account) =>
-    enrichAccount(account, eventsByAgreement.get(Number(account.id)) || [])
+    enrichAccount(
+      account,
+      eventsByAgreement.get(Number(account.id)) || [],
+      paymentsByAgreement.get(Number(account.id)) || []
+    )
   );
 
   const filtered = enriched.filter((account) => {
@@ -475,7 +507,7 @@ async function listFinanceArrears({
     return Number(right.risk_score || 0) - Number(left.risk_score || 0);
   });
 
-  const safeLimit = Math.max(1, Math.min(Number(limit) || 300, MAX_ACCOUNTS));
+  const safeLimit = Number(limit) > 0 ? Number(limit) : filtered.length;
   return {
     generated_at: new Date().toISOString(),
     count: filtered.length,
@@ -497,6 +529,7 @@ async function getFinanceArrearsAccount(agreementId) {
   const accounts = await loadFinanceAccounts();
   const derived = accounts.find((account) => Number(account.id) === id) || agreement;
   const followUps = effectiveFollowUps(await loadActivityEvents(pool, [id]));
+  const paymentEvidence = await loadPaymentEvidence(pool, [id]);
 
   const [[schedule], [payments], [deliveries], [ownership]] = await Promise.all([
     pool.query(
@@ -531,7 +564,7 @@ async function getFinanceArrearsAccount(agreementId) {
   ]);
 
   return {
-    account: enrichAccount({ ...agreement, ...derived }, followUps),
+    account: enrichAccount({ ...agreement, ...derived }, followUps, paymentEvidence.get(id) || []),
     schedule,
     payments,
     deliveries,

@@ -10,6 +10,12 @@ const {
 } = require("../services/equipmentFinanceProfessionalService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
+const {
+  assertFinanceMutationSafe,
+  reconcileFinanceAgreement,
+  reconcileFinancePortfolio,
+  refreshFinanceAgreementFromEvidence,
+} = require("../services/equipmentFinanceReconciliationService");
 
 const router = express.Router();
 
@@ -157,6 +163,7 @@ function sendError(res, error, fallback) {
     message: error.message || fallback,
   };
   if (error.readiness) payload.readiness = error.readiness;
+  if (error.details) payload.details = error.details;
   return res.status(statusCode).json(payload);
 }
 
@@ -212,7 +219,7 @@ async function assertSchemaReady(connection = pool) {
   return readiness;
 }
 
-function accountSql({ one = false, lock = false } = {}) {
+function accountSql({ lock = false } = {}) {
   return `SELECT
       agreement.*,
       application.application_number,
@@ -265,13 +272,66 @@ function accountSql({ one = false, lock = false } = {}) {
     LEFT JOIN equipment_ownership_transfers ownership ON ownership.agreement_id = agreement.id
     WHERE agreement.sale_type = 'installment'
       AND agreement.activation_source = 'approved_credit_application'
-      ${one ? "AND agreement.id = ?" : ""}
-    ${one ? "LIMIT 1" : "ORDER BY agreement.created_at DESC LIMIT 500"}
+      AND agreement.id = ?
+    LIMIT 1
     ${lock ? "FOR UPDATE" : ""}`;
 }
 
+function accountListSql() {
+  return `SELECT
+      agreement.id, agreement.agreement_number, agreement.agreement_status,
+      agreement.credit_application_id, agreement.customer_id, agreement.asset_id,
+      agreement.hire_location_id, agreement.customer_name_snapshot,
+      agreement.customer_phone_snapshot, agreement.customer_location_snapshot,
+      agreement.asset_code_snapshot, agreement.asset_name_snapshot,
+      agreement.asset_type_snapshot, agreement.make_snapshot,
+      agreement.model_snapshot, agreement.model_year_snapshot,
+      agreement.serial_number_snapshot, agreement.total_amount,
+      agreement.deposit_required, agreement.deposit_received,
+      agreement.financed_amount, agreement.amount_paid,
+      agreement.outstanding_balance, agreement.overdue_amount,
+      agreement.payment_frequency, agreement.installment_count,
+      agreement.next_due_date, agreement.final_due_date,
+      agreement.delivery_policy, agreement.delivery_threshold_percent,
+      agreement.equipment_commitment_status, agreement.delivery_status,
+      agreement.ownership_status, agreement.agreement_document_number,
+      agreement.agreement_issued_at, agreement.agreement_signed_at,
+      application.application_number, application.application_status,
+      customer.customer_name, customer.phone AS customer_phone,
+      customer.address AS customer_address,
+      asset.asset_code, asset.asset_name, asset.asset_type, asset.make,
+      asset.model, asset.model_year, asset.serial_number,
+      asset.chassis_number, asset.engine_number,
+      location.name AS equipment_origin_name,
+      delivery.id AS delivery_id, delivery.delivery_number,
+      delivery.delivery_datetime, delivery.status AS delivery_status_record,
+      delivery.handover_stage,
+      ownership.id AS ownership_id, ownership.transfer_number,
+      ownership.transfer_date, ownership.status AS ownership_status_record,
+      ownership.transfer_stage,
+      (SELECT COUNT(*)
+         FROM hire_contract_assets hire_asset
+        WHERE hire_asset.asset_id = agreement.asset_id
+          AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
+      (SELECT MAX(payment.payment_date)
+         FROM equipment_sale_payments payment
+        WHERE payment.agreement_id = agreement.id
+          AND payment.is_voided = FALSE) AS last_payment_at
+    FROM equipment_sale_agreements agreement
+    INNER JOIN equipment_credit_applications application
+      ON application.id = agreement.credit_application_id
+    INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
+    INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
+    LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
+    LEFT JOIN equipment_deliveries delivery ON delivery.agreement_id = agreement.id
+    LEFT JOIN equipment_ownership_transfers ownership ON ownership.agreement_id = agreement.id
+    WHERE agreement.sale_type = 'installment'
+      AND agreement.activation_source = 'approved_credit_application'
+    ORDER BY agreement.created_at DESC, agreement.id DESC`;
+}
+
 async function getAccount(connection, agreementId, { lock = false } = {}) {
-  const [rows] = await connection.query(accountSql({ one: true, lock }), [agreementId]);
+  const [rows] = await connection.query(accountSql({ lock }), [agreementId]);
   return rows[0] || null;
 }
 
@@ -366,7 +426,7 @@ async function allocateCollection(connection, paymentId, agreementId, amount) {
             late_charge_amount, waived_charge_amount, schedule_status
      FROM equipment_installment_schedule
      WHERE agreement_id = ?
-       AND schedule_status NOT IN ('paid','cancelled','waived')
+       AND schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
      ORDER BY due_date, sequence_number
      FOR UPDATE`,
     [agreementId]
@@ -421,58 +481,15 @@ async function allocateCollection(connection, paymentId, agreementId, amount) {
 }
 
 async function refreshAgreement(connection, agreementId) {
-  const [paymentRows] = await connection.query(
-    `SELECT COALESCE(SUM(amount), 0) AS paid
-     FROM equipment_sale_payments
-     WHERE agreement_id = ? AND is_voided = FALSE`,
-    [agreementId]
-  );
-  const [agreementRows] = await connection.query(
-    `SELECT total_amount FROM equipment_sale_agreements WHERE id = ? LIMIT 1 FOR UPDATE`,
-    [agreementId]
-  );
-  const total = Number(agreementRows[0]?.total_amount || 0);
-  const paid = Number(paymentRows[0]?.paid || 0);
-  const balance = Number(Math.max(total - paid, 0).toFixed(2));
-  const [nextRows] = await connection.query(
-    `SELECT due_date
-     FROM equipment_installment_schedule
-     WHERE agreement_id = ?
-       AND schedule_status NOT IN ('paid','cancelled','waived')
-     ORDER BY due_date, sequence_number
-     LIMIT 1`,
-    [agreementId]
-  );
-  const [overdueRows] = await connection.query(
-    `SELECT COALESCE(SUM(GREATEST(
-       scheduled_amount + late_charge_amount - waived_charge_amount - amount_paid,
-       0
-     )), 0) AS overdue
-     FROM equipment_installment_schedule
-     WHERE agreement_id = ?
-       AND due_date < CURDATE()
-       AND schedule_status NOT IN ('paid','cancelled','waived')`,
-    [agreementId]
-  );
-  const overdue = Number(overdueRows[0]?.overdue || 0);
-  const status =
-    balance <= 0.01
-      ? "completed"
-      : overdue > 0.01
-        ? "overdue"
-        : nextRows[0]?.due_date
-          ? "active"
-          : "payment_due";
-  await connection.query(
-    `UPDATE equipment_sale_agreements
-     SET amount_paid = ?, outstanding_balance = ?, overdue_amount = ?,
-         next_due_date = ?, agreement_status = ?,
-         completed_at = CASE WHEN ? = 'completed' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
-         updated_at = NOW()
-     WHERE id = ?`,
-    [paid, balance, overdue, nextRows[0]?.due_date || null, status, status, agreementId]
-  );
-  return { paid, balance, overdue, status, next_due_date: nextRows[0]?.due_date || null };
+  const reconciliation = await refreshFinanceAgreementFromEvidence(connection, agreementId);
+  return {
+    paid: reconciliation.calculated.amount_paid,
+    balance: reconciliation.calculated.outstanding_balance,
+    overdue: reconciliation.calculated.overdue_amount,
+    status: reconciliation.calculated.agreement_status,
+    next_due_date: reconciliation.calculated.next_due_date,
+    reconciliation,
+  };
 }
 
 router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, res) => {
@@ -491,8 +508,21 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
 router.get("/accounts", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     await assertSchemaReady();
-    const [rows] = await pool.query(accountSql());
-    const accounts = rows.map(publicAccount);
+    const [[rows], portfolio] = await Promise.all([
+      pool.query(accountListSql()),
+      reconcileFinancePortfolio(),
+    ]);
+    const reconciliationByAgreement = new Map(
+      portfolio.map((result) => [Number(result.agreement_id), result])
+    );
+    const accounts = rows.map((row) => {
+      const reconciliation = reconciliationByAgreement.get(Number(row.id));
+      return {
+        ...publicAccount({ ...row, ...(reconciliation?.calculated || {}) }),
+        reconciliation_consistent: reconciliation?.consistent !== false,
+        reconciliation_mismatches: reconciliation?.mismatches || [],
+      };
+    });
     return res.json({
       status: "success",
       count: accounts.length,
@@ -517,6 +547,7 @@ router.get("/accounts/:agreementId", requirePermission("fleet.assets.view"), asy
     const agreementId = positiveId(req.params.agreementId, "Agreement ID");
     const account = await getAccount(pool, agreementId);
     if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+    const reconciliation = await reconcileFinanceAgreement(agreementId);
     const [[schedule], [payments], [allocations], [deliveries], [ownershipTransfers]] =
       await Promise.all([
         pool.query(
@@ -553,7 +584,12 @@ router.get("/accounts/:agreementId", requirePermission("fleet.assets.view"), asy
       ]);
     return res.json({
       status: "success",
-      account: publicAccount(account),
+      account: publicAccount({ ...account, ...reconciliation.calculated }),
+      reconciliation: {
+        consistent: reconciliation.consistent,
+        mismatches: reconciliation.mismatches,
+        calculated: reconciliation.calculated,
+      },
       schedule,
       payments,
       payment_allocations: allocations,
@@ -618,8 +654,13 @@ router.post(
         });
       }
 
-      const account = await getAccount(connection, agreementId, { lock: true });
+      let account = await getAccount(connection, agreementId, { lock: true });
       if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const currentReconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...currentReconciliation.calculated };
       if (account.equipment_commitment_status !== "reserved") {
         throw new FinanceLifecycleError(409, "Complete the opening deposit and machine reservation before collections.");
       }
@@ -633,7 +674,7 @@ router.post(
           "EQUIPMENT_ACTIVE_ON_HIRE"
         );
       }
-      const outstanding = Number(account.outstanding_balance || 0);
+      const outstanding = Number(currentReconciliation.calculated.outstanding_balance || 0);
       if (amount > outstanding + 0.01) {
         throw new FinanceLifecycleError(
           400,
@@ -677,7 +718,7 @@ router.post(
         req,
         action: "EQUIPMENT_FINANCE_COLLECTION_RECORDED",
         details: `Recorded ${paymentStage} of GHS ${amount.toFixed(2)} for ${account.agreement_number}.`,
-        workspaceCode: "equipment_hire",
+        workspaceCode: "equipment_installment_finance",
         hireLocationId: account.hire_location_id,
         entityType: "equipment_sale_payment",
         entityId: result.insertId,
@@ -761,8 +802,13 @@ router.post(
         await connection.commit();
         return res.json({ status: "success", replayed: true, delivery: replayRows[0] });
       }
-      const account = await getAccount(connection, agreementId, { lock: true });
+      let account = await getAccount(connection, agreementId, { lock: true });
       if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const reconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...reconciliation.calculated };
       if (Number(account.active_hire_count || 0) > 0) {
         throw new FinanceLifecycleError(409, "The financed machine is active on Hire and cannot be handed over.", "EQUIPMENT_ACTIVE_ON_HIRE");
       }
@@ -832,7 +878,7 @@ router.post(
         req,
         action: "EQUIPMENT_FINANCE_DELIVERY_COMPLETED",
         details: `Completed controlled Finance delivery ${deliveryNumber}.`,
-        workspaceCode: "equipment_hire",
+        workspaceCode: "equipment_installment_finance",
         hireLocationId: account.hire_location_id,
         entityType: "equipment_delivery",
         entityId: result.insertId,
@@ -882,8 +928,13 @@ router.post(
         await connection.commit();
         return res.json({ status: "success", replayed: true, ownership_transfer: replayRows[0] });
       }
-      const account = await getAccount(connection, agreementId, { lock: true });
+      let account = await getAccount(connection, agreementId, { lock: true });
       if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const reconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...reconciliation.calculated };
       if (Number(account.active_hire_count || 0) > 0) {
         throw new FinanceLifecycleError(409, "The financed machine is active on Hire and ownership cannot transfer.", "EQUIPMENT_ACTIVE_ON_HIRE");
       }
@@ -951,7 +1002,7 @@ router.post(
         req,
         action: "EQUIPMENT_FINANCE_OWNERSHIP_TRANSFERRED",
         details: `Completed controlled ownership transfer ${transferNumber}.`,
-        workspaceCode: "equipment_hire",
+        workspaceCode: "equipment_installment_finance",
         hireLocationId: account.hire_location_id,
         entityType: "equipment_ownership_transfer",
         entityId: result.insertId,

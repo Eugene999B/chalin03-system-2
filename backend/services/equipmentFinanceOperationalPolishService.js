@@ -9,6 +9,9 @@ const {
   getProfessionalSettings,
   sendBossPaymentAlert,
 } = require("./equipmentFinanceProfessionalService");
+const {
+  reconcileFinanceAgreement,
+} = require("./equipmentFinanceReconciliationService");
 
 const REQUIRED_TABLES = Object.freeze([
   "equipment_finance_case_drafts",
@@ -1241,7 +1244,7 @@ async function createTask({ userId, body = {}, req = null }) {
       req,
       action: "EQUIPMENT_FINANCE_TASK_CREATED",
       details: `Created Finance task ${title}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_task",
       entityId: result.insertId,
       metadata: {
@@ -1330,7 +1333,7 @@ async function updateTask({ taskId, userId, body = {}, req = null }) {
       req,
       action: "EQUIPMENT_FINANCE_TASK_UPDATED",
       details: `Updated Finance task ${task.title} to ${taskStatus}/${approvalStatus}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_task",
       entityId: id,
       metadata: { task_status: taskStatus, approval_status: approvalStatus },
@@ -1431,7 +1434,7 @@ async function uploadCaseDocument({ caseType, caseId, userId, body = {}, req = n
       req,
       action: "EQUIPMENT_FINANCE_CASE_DOCUMENT_UPLOADED",
       details: `Uploaded protected Finance evidence ${label}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_document",
       entityId: result.insertId,
       metadata: {
@@ -1563,7 +1566,7 @@ async function reviewCaseDocument({ documentId, userId, body = {}, req = null })
           ? "EQUIPMENT_FINANCE_CASE_DOCUMENT_VERIFIED"
           : "EQUIPMENT_FINANCE_CASE_DOCUMENT_REJECTED",
       details: `${status === "verified" ? "Verified" : "Rejected"} ${document.document_label}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_document",
       entityId: id,
       metadata: { reason: cleanText(body.reason, 500) || null },
@@ -2233,7 +2236,7 @@ async function createAmendment({ caseType, caseId, userId, body = {}, req = null
       req,
       action: "EQUIPMENT_FINANCE_AMENDMENT_REQUESTED",
       details: `Requested controlled Finance amendment ${number}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_amendment",
       entityId: result.insertId,
       metadata: {
@@ -2342,7 +2345,7 @@ async function decideAmendment({ amendmentId, userId, body = {}, req = null }) {
           ? "EQUIPMENT_FINANCE_AMENDMENT_APPROVED"
           : "EQUIPMENT_FINANCE_AMENDMENT_REJECTED",
       details: `${humanize(decision)} Finance amendment ${amendment.amendment_number}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_amendment",
       entityId: id,
       metadata: { decision_reason: reason },
@@ -2487,7 +2490,7 @@ async function applyAmendment({ amendmentId, userId, req = null }) {
       req,
       action: "EQUIPMENT_FINANCE_AMENDMENT_APPLIED",
       details: `Applied Finance amendment ${amendment.amendment_number} as ${applyMode}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_case_amendment",
       entityId: id,
       metadata: appliedResult,
@@ -2538,6 +2541,8 @@ async function getPaymentReceipt(paymentId) {
      LEFT JOIN users user ON user.id = payment.received_by
      LEFT JOIN equipment_finance_payment_alerts alert ON alert.payment_id = payment.id
      WHERE payment.id = ? AND payment.is_voided = FALSE
+       AND agreement.sale_type = 'installment'
+       AND agreement.activation_source = 'approved_credit_application'
      LIMIT 1`,
     [id]
   );
@@ -2775,7 +2780,7 @@ async function createPaymentShare({ paymentId, userId, body = {}, req = null }) 
     req,
     action: "EQUIPMENT_FINANCE_RECEIPT_SHARED",
     details: `Prepared or sent receipt ${receipt.thermal_receipt.receipt_number} by ${channel}.`,
-    workspaceCode: "equipment_hire",
+    workspaceCode: "equipment_installment_finance",
     entityType: "equipment_finance_document_share",
     entityId: insert.insertId,
     metadata: {
@@ -2854,7 +2859,7 @@ async function createIssuedDocumentShare({ documentId, userId, body = {}, req = 
     req,
     action: "EQUIPMENT_FINANCE_DOCUMENT_SHARED",
     details: `Prepared or sent Finance document ${document.document_number} by ${channel}.`,
-    workspaceCode: "equipment_hire",
+    workspaceCode: "equipment_installment_finance",
     entityType: "equipment_finance_document_share",
     entityId: insert.insertId,
     metadata: { issued_document_id: positiveId(documentId), channel, share_status: outcome.status },
@@ -2872,11 +2877,14 @@ async function createIssuedDocumentShare({ documentId, userId, body = {}, req = 
 async function getCaseOperations(caseType, caseId, knownIdentity = null) {
   await assertOperationalPolishSchema();
   const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
-  const [timeline, amendments, simulations, alerts] = await Promise.all([
+  const [timeline, amendments, simulations, alerts, reconciliation] = await Promise.all([
     getCaseTimeline(caseType, caseId, identity),
     listAmendments(caseType, caseId, identity),
     listScheduleSimulations(caseType, caseId, identity),
     getDataQualityAlerts({ cases: [identity], schemaReady: true }),
+    identity.agreement_id
+      ? reconcileFinanceAgreement(identity.agreement_id)
+      : Promise.resolve(null),
   ]);
   return {
     ...timeline,
@@ -2885,6 +2893,13 @@ async function getCaseOperations(caseType, caseId, knownIdentity = null) {
     amendments,
     simulations,
     alerts,
+    reconciliation: reconciliation
+      ? {
+          consistent: reconciliation.consistent,
+          mismatches: reconciliation.mismatches,
+          calculated: reconciliation.calculated,
+        }
+      : null,
   };
 }
 

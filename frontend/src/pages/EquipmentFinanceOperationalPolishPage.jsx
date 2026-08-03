@@ -803,6 +803,12 @@ export default function EquipmentFinanceOperationalPolishPage() {
         </section>
       ) : null}
 
+      {caseData?.reconciliation?.consistent === false ? (
+        <div className="finance-ops__notice is-warning" data-testid="operations-reconciliation-warning">
+          This agreement does not reconcile with its active receipts, allocations, schedule and ledger. Financial and completion actions must remain blocked until the evidence is corrected.
+        </div>
+      ) : null}
+
       <nav className="finance-ops__tabs" aria-label="Finance operational sections">
         {tabs.map(([code, title]) => (
           <button

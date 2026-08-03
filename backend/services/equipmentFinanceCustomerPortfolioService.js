@@ -3,6 +3,9 @@ const {
   agingBucket,
   listInstallmentCollections,
 } = require("./equipmentInstallmentReadModelService");
+const {
+  reconcileFinanceAgreement,
+} = require("./equipmentFinanceReconciliationService");
 
 const REQUIRED_TABLES = Object.freeze([
   "hire_customers",
@@ -325,7 +328,7 @@ function finaliseCustomer(customer) {
 async function buildCustomerPortfolio(connection = pool) {
   await assertPortfolioReady(connection);
   const [{ accounts, readiness }, applications] = await Promise.all([
-    listInstallmentCollections({ limit: 500 }),
+    listInstallmentCollections(),
     loadApplications(connection),
   ]);
 
@@ -493,8 +496,12 @@ async function getFinanceCustomerPortfolio(customerId) {
   let deliveries = [];
   let ownershipTransfers = [];
   let decisions = [];
+  let reconciliations = [];
 
   if (agreementIds.length) {
+    reconciliations = await Promise.all(
+      agreementIds.map((agreementId) => reconcileFinanceAgreement(agreementId))
+    );
     const agreementPlaceholders = agreementIds.map(() => "?").join(",");
     const [scheduleRows, paymentRows, deliveryRows, ownershipRows] = await Promise.all([
       pool.query(
@@ -564,6 +571,13 @@ async function getFinanceCustomerPortfolio(customerId) {
     deliveries,
     ownership_transfers: ownershipTransfers,
     decisions,
+    reconciliations: reconciliations.map((entry) => ({
+      agreement_id: entry.agreement_id,
+      agreement_number: entry.agreement_number,
+      consistent: entry.consistent,
+      mismatches: entry.mismatches,
+      calculated: entry.calculated,
+    })),
     policy: {
       division: "installment_finance",
       scope: "company_wide",

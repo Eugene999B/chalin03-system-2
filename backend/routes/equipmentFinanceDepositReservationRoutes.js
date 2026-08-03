@@ -6,6 +6,10 @@ const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const {
+  assertFinanceMutationSafe,
+  refreshFinanceAgreementFromEvidence,
+} = require("../services/equipmentFinanceReconciliationService");
 
 const router = express.Router();
 
@@ -238,6 +242,15 @@ function sendError(res, error, fallbackMessage) {
       code: error.code,
       message: error.message,
       readiness: error.readiness,
+    });
+  }
+  if (Number(error?.statusCode || 0) >= 400) {
+    return res.status(Number(error.statusCode)).json({
+      status: "error",
+      code: error.code || "EQUIPMENT_FINANCE_DEPOSIT_ERROR",
+      message: error.message || fallbackMessage,
+      ...(error.details ? { details: error.details } : {}),
+      ...(error.readiness ? { readiness: error.readiness } : {}),
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
@@ -624,6 +637,11 @@ router.post(
         }
 
         assertControlledAgreement(agreement);
+        const currentReconciliation = await assertFinanceMutationSafe(agreement.id, {
+          connection,
+          lock: false,
+        });
+        agreement = { ...agreement, ...currentReconciliation.calculated };
 
         const [assetRows] = await connection.query(
           `SELECT id, is_active, operational_purpose, sale_status
@@ -830,7 +848,11 @@ router.post(
           );
         }
 
-        const refreshed = await loadAgreement(connection, agreement.id);
+        const reconciliation = await refreshFinanceAgreementFromEvidence(
+          connection,
+          agreement.id
+        );
+        const refreshed = reconciliation.agreement;
         await writeAuditEvent({
           connection,
           req,
@@ -842,7 +864,7 @@ router.post(
             : "equipment.finance.deposit.partial",
           entityType: "equipment_sale_agreement",
           entityId: agreement.id,
-          workspaceCode: "installment_finance",
+          workspaceCode: "equipment_installment_finance",
           hireLocationId: null,
           severity: "notice",
           outcome: "success",
