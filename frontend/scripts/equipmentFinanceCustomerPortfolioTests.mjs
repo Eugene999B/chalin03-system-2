@@ -15,10 +15,11 @@ const page = read("src/pages/EquipmentFinanceCustomerCentrePage.jsx");
 const css = read("src/styles/equipmentFinancePhaseOne.css");
 
 assert(
-  dispatcher.includes('import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage"') &&
+  dispatcher.includes("const EquipmentFinanceCustomerCentrePage = lazy(() =>") &&
+    dispatcher.includes('import("./EquipmentFinanceCustomerCentrePage")') &&
     dispatcher.includes('stage === "customers"') &&
     dispatcher.includes("<EquipmentFinanceCustomerCentrePage />"),
-  "The Finance stage dispatcher must open the standalone Customer Centre."
+  "The Finance stage dispatcher must lazy-load the standalone Customer Centre."
 );
 assert(
   layout.includes('title: "Customers"') &&
