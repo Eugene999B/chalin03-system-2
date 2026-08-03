@@ -2,6 +2,7 @@ const { pool } = require("../config/db");
 const {
   FinancePrivateDocumentError,
   assertSchemaReady,
+  getApplicationCaseFile,
   getCaseFile,
   recordActivity,
 } = require("./equipmentFinancePrivateDocumentsService");
@@ -99,9 +100,13 @@ function publicReviewDocument(row) {
   return {
     id: Number(row.id),
     document_number: row.document_number,
-    agreement_id: Number(row.agreement_id),
+    agreement_id: row.agreement_id ? Number(row.agreement_id) : null,
     application_id: row.application_id,
     customer_id: row.customer_id,
+    asset_id: row.asset_id,
+    document_stage: row.document_stage,
+    version_number: Number(row.version_number || 1),
+    legacy_case_document_id: row.legacy_case_document_id,
     replacement_of_document_id: row.replacement_of_document_id,
     document_category: row.document_category,
     document_type: row.document_type,
@@ -137,10 +142,37 @@ async function listReviewDocuments(connection, agreementId, { lock = false } = {
        LEFT JOIN users uploader ON uploader.id = document.uploaded_by
        LEFT JOIN users reviewer ON reviewer.id = document.reviewed_by
        LEFT JOIN users approver ON approver.id = document.approved_by
-      WHERE document.agreement_id = ?
+      WHERE document.application_id = (
+              SELECT agreement.credit_application_id
+              FROM equipment_sale_agreements agreement
+              WHERE agreement.id = ?
+              LIMIT 1
+            )
       ORDER BY document.uploaded_at DESC, document.id DESC
       ${lock ? "FOR UPDATE" : ""}`,
     [positiveId(agreementId, "Agreement ID")]
+  );
+  return rows.map(publicReviewDocument);
+}
+
+async function listApplicationReviewDocuments(
+  connection,
+  applicationId,
+  { lock = false } = {}
+) {
+  const [rows] = await connection.query(
+    `SELECT document.*,
+            uploader.full_name AS uploaded_by_name,
+            reviewer.full_name AS reviewed_by_name,
+            approver.full_name AS approved_by_name
+       FROM equipment_finance_private_documents document
+       LEFT JOIN users uploader ON uploader.id = document.uploaded_by
+       LEFT JOIN users reviewer ON reviewer.id = document.reviewed_by
+       LEFT JOIN users approver ON approver.id = document.approved_by
+      WHERE document.application_id = ?
+      ORDER BY document.uploaded_at DESC, document.id DESC
+      ${lock ? "FOR UPDATE" : ""}`,
+    [positiveId(applicationId, "Application ID")]
   );
   return rows.map(publicReviewDocument);
 }
@@ -182,6 +214,27 @@ async function getReviewCaseFile(agreementId) {
     review_documents: documents,
     document_readiness: requiredDocumentStatus(policy, documents),
   };
+}
+
+async function getApplicationReviewCaseFile(applicationId) {
+  await assertReviewSchema();
+  const financeCase = await getApplicationCaseFile(applicationId);
+  const [policy, documents] = await Promise.all([
+    getReviewPolicy(pool),
+    listApplicationReviewDocuments(pool, applicationId),
+  ]);
+  return {
+    ...financeCase,
+    review_policy: policy,
+    review_documents: documents,
+    document_readiness: requiredDocumentStatus(policy, documents),
+  };
+}
+
+async function refreshDocumentCase(document) {
+  return document.agreement_id
+    ? getReviewCaseFile(document.agreement_id)
+    : getApplicationReviewCaseFile(document.application_id);
 }
 
 async function writeDecisionHistory({
@@ -290,7 +343,7 @@ async function reviewDocument({ documentId, decision, notes, actor, req }) {
       metadata: { decision: status, notes: reason },
     });
     await connection.commit();
-    return getReviewCaseFile(document.agreement_id);
+    return refreshDocumentCase(document);
   } catch (error) {
     try {
       await connection.rollback();
@@ -391,7 +444,7 @@ async function approveDocument({ documentId, decision, notes, actor, req }) {
       metadata: { decision: status, notes: reason },
     });
     await connection.commit();
-    return getReviewCaseFile(document.agreement_id);
+    return refreshDocumentCase(document);
   } catch (error) {
     try {
       await connection.rollback();
@@ -461,7 +514,7 @@ async function archiveDocument({ documentId, reason, actor, req }) {
       metadata: { reason: text },
     });
     await connection.commit();
-    return getReviewCaseFile(document.agreement_id);
+    return refreshDocumentCase(document);
   } catch (error) {
     try {
       await connection.rollback();
@@ -481,8 +534,11 @@ module.exports = {
   archiveDocument,
   assertReviewSchema,
   getReviewCaseFile,
+  getApplicationReviewCaseFile,
   getReviewPolicy,
   listReviewDocuments,
+  listApplicationReviewDocuments,
   requiredDocumentStatus,
   reviewDocument,
 };
+

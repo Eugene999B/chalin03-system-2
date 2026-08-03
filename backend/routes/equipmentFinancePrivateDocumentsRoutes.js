@@ -7,10 +7,12 @@ const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
 const {
   DOCUMENT_CATEGORIES,
   FinancePrivateDocumentError,
+  getApplicationCaseFile,
   getCaseFile,
   getDocumentContent,
   getPolicy,
   listActivity,
+  listApplicationCases,
   listCases,
   schemaStatus,
   uploadDocument,
@@ -171,6 +173,63 @@ router.get(
 );
 
 router.get(
+  "/applications",
+  privateDocumentReadLimiter,
+  requirePermission("fleet.assets.view"),
+  asyncHandler(async (req, res) => {
+    assertRole(
+      req,
+      PRIVATE_DOCUMENT_VIEW_ROLES,
+      "This staff account cannot view private Finance application files."
+    );
+    const cases = await listApplicationCases();
+    return res.json({ status: "success", count: cases.length, cases });
+  })
+);
+
+router.get(
+  "/applications/:applicationId",
+  privateDocumentReadLimiter,
+  requirePermission("fleet.assets.view"),
+  asyncHandler(async (req, res) => {
+    assertRole(
+      req,
+      PRIVATE_DOCUMENT_VIEW_ROLES,
+      "This staff account cannot view private Finance application files."
+    );
+    return res.json({
+      status: "success",
+      ...(await getApplicationCaseFile(req.params.applicationId)),
+    });
+  })
+);
+
+router.post(
+  "/applications/:applicationId/documents",
+  privateDocumentUploadLimiter,
+  requirePermission("fleet.assets.manage"),
+  asyncHandler(async (req, res) => {
+    assertRole(
+      req,
+      DOCUMENT_UPLOAD_ROLES,
+      "Only authorised Finance case staff can upload private documents."
+    );
+    const document = await uploadDocument({
+      applicationId: req.params.applicationId,
+      input: req.body || {},
+      actor: actor(req),
+      req,
+    });
+    return res.status(201).json({
+      status: "success",
+      message:
+        "Application document encrypted and stored with an audit record.",
+      document,
+    });
+  })
+);
+
+router.get(
   "/cases",
   privateDocumentReadLimiter,
   requirePermission("fleet.assets.view"),
@@ -268,6 +327,7 @@ router.get(
     );
     const activity = await listActivity({
       agreementId: req.query?.agreement_id || null,
+      applicationId: req.query?.application_id || null,
       limit: req.query?.limit,
     });
     return res.json({ status: "success", count: activity.length, activity });
@@ -281,3 +341,4 @@ module.exports.capabilitiesFor = capabilitiesFor;
 module.exports.privateDocumentDownloadLimiter = privateDocumentDownloadLimiter;
 module.exports.privateDocumentReadLimiter = privateDocumentReadLimiter;
 module.exports.privateDocumentUploadLimiter = privateDocumentUploadLimiter;
+
