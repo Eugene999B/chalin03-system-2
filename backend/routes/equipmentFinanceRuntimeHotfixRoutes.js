@@ -309,11 +309,15 @@ async function listMachines({ search = "", status = "", limit = 200 } = {}) {
       ["notes", "NULL"],
       ["is_active", "1"],
       ["updated_at", "NULL"],
-      ["main_image_url", "NULL"],
     ];
 
     const select = desiredColumns.map(([column, fallback]) =>
       columnExpression(columns, "asset", column, fallback)
+    );
+    select.push(
+      columns.has("main_image_url")
+        ? "CASE WHEN asset.main_image_url IS NULL OR asset.main_image_url = '' THEN 0 ELSE 1 END AS has_legacy_image"
+        : "0 AS has_legacy_image"
     );
 
     const locationReady =
@@ -394,7 +398,7 @@ async function listMachines({ search = "", status = "", limit = 200 } = {}) {
         blocking_agreement_number: lock.blocking_agreement_number || null,
         photo_count: Number(photo.count || 0),
         has_image:
-          Boolean(cleanText(asset.main_image_url, 8)) ||
+          Boolean(Number(asset.has_legacy_image || 0)) ||
           Number(photo.count || 0) > 0,
         main_image_url: null,
         media: [],
