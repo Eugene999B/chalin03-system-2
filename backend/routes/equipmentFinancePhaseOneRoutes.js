@@ -583,7 +583,25 @@ async function machinesWithEditability() {
              WHERE application.asset_id = asset.id
                AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')) AS active_application_count,
             (SELECT COUNT(*) FROM equipment_asset_sale_locks sale_lock
-             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count,
+            (SELECT application.id FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_id,
+            (SELECT application.application_number FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_number,
+            (SELECT agreement.id
+             FROM equipment_asset_sale_locks sale_lock
+             INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
+             ORDER BY sale_lock.created_at DESC, sale_lock.id DESC LIMIT 1) AS blocking_agreement_id,
+            (SELECT agreement.agreement_number
+             FROM equipment_asset_sale_locks sale_lock
+             INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
+             ORDER BY sale_lock.created_at DESC, sale_lock.id DESC LIMIT 1) AS blocking_agreement_number
      FROM fleet_assets asset WHERE asset.id IN (${placeholders})`,
     ids
   );
