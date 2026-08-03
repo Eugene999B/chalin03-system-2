@@ -86,9 +86,16 @@ test("administrator completes the minimal installment workflow and sees the back
         approved_deposit: 200,
         financed_amount: 800,
         payment_frequency: "monthly",
+        payment_interval_days: null,
+        non_working_day_rule: "exact",
         installment_count: 4,
         proposed_first_due_date: "2026-09-01",
+        periodic_amount: 200,
+        final_payment_amount: 200,
+        final_due_date: "2026-12-01",
         agreement_id: state.activated ? 601 : null,
+        activation_ready: !state.activated,
+        activation_blockers: [],
       },
     ];
   }
@@ -261,8 +268,12 @@ test("administrator completes the minimal installment workflow and sees the back
       state.outstanding = 1000;
       return json(route, {
         status: "success",
-        message: "Agreement activated with its authoritative schedule.",
+        message: "Finance agreement and exact installment schedule created.",
         agreement: { id: 601, agreement_number: "ESA-PHASE3-001" },
+        next_action: {
+          code: "collect_deposit",
+          label: "Record the required deposit to reserve the exact machine.",
+        },
       }, 201);
     }
 
@@ -455,11 +466,12 @@ test("administrator completes the minimal installment workflow and sees the back
 
   await expect(page).toHaveURL(/stage=activation/);
   await expect(page.getByText("ECAPP-PHASE3-001")).toBeVisible();
-  await page.getByRole("button", { name: "Activate Agreement" }).first().click();
+  await page.getByRole("button", { name: "Create Agreement" }).first().click();
   const activationDialog = page.getByRole("dialog", { name: "Activate Finance agreement" });
   await activationDialog.getByLabel(/Approved terms confirmed/).check();
-  await activationDialog.getByRole("button", { name: "Activate Agreement" }).click();
-  await expect(page.getByText(/Agreement activated with its authoritative schedule/)).toBeVisible();
+  await activationDialog.getByRole("button", { name: "Create Agreement" }).click();
+  await expect(page.getByText(/Finance agreement and exact installment schedule created/)).toBeVisible();
+  await expect(page.getByText(/Record the required deposit to reserve the exact machine/)).toBeVisible();
 
   await page.goto("/equipment-installment-finance/applications?stage=deposit");
   await expect(page.getByText("ESA-PHASE3-001")).toBeVisible();
