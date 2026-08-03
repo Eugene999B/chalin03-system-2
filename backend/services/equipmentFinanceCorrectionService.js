@@ -3,6 +3,9 @@ const crypto = require("node:crypto");
 const { pool } = require("../config/db");
 const { writeAuditEvent } = require("./auditTrailService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
+const {
+  refreshFinanceAgreementFromEvidence,
+} = require("./equipmentFinanceReconciliationService");
 
 const FINANCE_WORKSPACE = "equipment_installment_finance";
 const POLICY_ID = 1;
@@ -412,7 +415,7 @@ async function loadRequests(connection, agreementId = null, status = null) {
      LEFT JOIN users decider ON decider.id = request.decided_by
      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
      ORDER BY request.created_at DESC, request.id DESC
-     LIMIT 500`,
+     `,
     params
   );
   return rows.map((row) => ({
@@ -483,61 +486,25 @@ async function balanceComponents(connection, agreementId) {
 }
 
 async function refreshFinanceAgreement(connection, agreementId) {
-  const agreement = await loadAgreement(connection, agreementId, { lock: true });
-  const components = await balanceComponents(connection, agreementId);
-  const total = Number(agreement.total_amount || 0);
-  const balance = Number(
-    Math.max(
-      total + components.schedule_charges + components.ledger_debits -
-        components.paid - components.ledger_credits,
-      0
-    ).toFixed(2)
-  );
-  const [nextRows] = await connection.query(
-    `SELECT due_date FROM equipment_installment_schedule
-     WHERE agreement_id = ?
-       AND schedule_status IN ('upcoming','due','partial','overdue')
-     ORDER BY due_date, sequence_number LIMIT 1`,
-    [agreementId]
-  );
-  const [overdueRows] = await connection.query(
-    `SELECT COALESCE(SUM(GREATEST(
-       scheduled_amount + late_charge_amount - waived_charge_amount - amount_paid, 0
-     )), 0) AS overdue
-     FROM equipment_installment_schedule
-     WHERE agreement_id = ?
-       AND due_date < CURDATE()
-       AND schedule_status IN ('due','partial','overdue','upcoming')`,
-    [agreementId]
-  );
-  const overdue = Number(Math.min(Number(overdueRows[0]?.overdue || 0), balance).toFixed(2));
-  let status;
-  if (agreement.agreement_status === "cancelled") status = "cancelled";
-  else if (agreement.agreement_status === "defaulted" && balance > 0.01) status = "defaulted";
-  else if (balance <= 0.01) status = "completed";
-  else if (overdue > 0.01) status = "overdue";
-  else if (nextRows[0]?.due_date) status = "active";
-  else status = "payment_due";
-
-  await connection.query(
-    `UPDATE equipment_sale_agreements
-     SET amount_paid = ?, deposit_received = ?, outstanding_balance = ?,
-         overdue_amount = ?, next_due_date = ?, agreement_status = ?,
-         completed_at = CASE WHEN ? = 'completed' THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
-         updated_at = NOW()
-     WHERE id = ?`,
-    [
-      components.paid,
-      components.deposits,
-      balance,
-      overdue,
-      nextRows[0]?.due_date || null,
-      status,
-      status,
-      agreementId,
-    ]
-  );
-  return { ...components, total, balance, overdue, status, next_due_date: nextRows[0]?.due_date || null };
+  const reconciliation = await refreshFinanceAgreementFromEvidence(connection, agreementId);
+  const calculated = reconciliation.calculated;
+  return {
+    paid: calculated.amount_paid,
+    deposits: calculated.deposit_received,
+    schedule_charges: Number(
+      (calculated.late_charges_total - calculated.waived_charges_total).toFixed(2)
+    ),
+    late_charges: calculated.late_charges_total,
+    waived_charges: calculated.waived_charges_total,
+    ledger_debits: calculated.ledger_debits,
+    ledger_credits: calculated.ledger_credits,
+    total: Number(reconciliation.agreement.total_amount || 0),
+    balance: calculated.outstanding_balance,
+    overdue: calculated.overdue_amount,
+    status: calculated.agreement_status,
+    next_due_date: calculated.next_due_date,
+    reconciliation,
+  };
 }
 
 async function financialSnapshot(connection, agreementId, { lock = false } = {}) {
@@ -1380,7 +1347,7 @@ async function listCorrectionAccounts({ search = "", status = "all" } = {}) {
      INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
      INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
      WHERE ${where.join(" AND ")}
-     ORDER BY agreement.updated_at DESC, agreement.id DESC LIMIT 500`,
+     ORDER BY agreement.updated_at DESC, agreement.id DESC`,
     params
   );
   return rows.map((row) => ({

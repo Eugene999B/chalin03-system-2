@@ -327,6 +327,11 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
           {detailLoading ? <div className="finance-simple__empty">Loading account details…</div> : null}
           {!detailLoading ? (
             <>
+              {detail?.reconciliation?.consistent === false ? (
+                <div className="finance-simple__alert is-warning" data-testid="finance-reconciliation-warning">
+                  This account is temporarily locked because its receipts, allocations, schedule and ledger do not reconcile. No payment can be recorded until Finance corrects the evidence.
+                </div>
+              ) : null}
               <div className="finance-simple__summary">
                 <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
                 <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
@@ -412,7 +417,7 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
                 </div>
                 <div className="finance-simple__sticky-actions">
                   <span>Maximum: {money(selected.outstanding_balance)}</span>
-                  <button className="is-primary" type="submit" disabled={!canCollect || saving}>
+                  <button className="is-primary" type="submit" disabled={!canCollect || saving || detail?.reconciliation?.consistent === false}>
                     {saving ? "Recording payment…" : "Record Payment"}
                   </button>
                 </div>

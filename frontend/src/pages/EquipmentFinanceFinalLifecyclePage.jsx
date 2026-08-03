@@ -393,9 +393,10 @@ export default function EquipmentFinanceFinalLifecyclePage() {
     setProblem("");
     try {
       const response = await axiosClient.get(`${API}/accounts/${account.agreement_id}`);
-      setSelected(account);
+      const serverAccount = response.data?.account || account;
+      setSelected(serverAccount);
       setDetail(response.data || null);
-      setForm(initialForm(stage, account, response.data || null));
+      setForm(initialForm(stage, serverAccount, response.data || null));
     } catch (error) {
       setProblem(errorMessage(error, "Could not open the Finance lifecycle action."));
     }
@@ -535,8 +536,9 @@ export default function EquipmentFinanceFinalLifecyclePage() {
                       <div><span>Serial / chassis</span><strong>{account.serial_number || account.chassis_number || "—"}</strong></div>
                       <div><span>Machine state</span><strong>{label(account.equipment_commitment_status)}</strong></div>
                     </div>
+                    {account.reconciliation_consistent === false ? <div className="finance-lifecycle__note is-warning">Receipt, allocation, schedule or ledger evidence needs reconciliation before this action can continue.</div> : null}
                     {stage === "delivery" && !account.delivery_eligible ? <div className="finance-lifecycle__note is-warning">Payment threshold not reached; delivery remains blocked.</div> : null}
-                    <div className="finance-lifecycle__card-actions"><button type="button" className="is-primary" onClick={() => openAction(account)} disabled={!canAct || (stage === "delivery" && !account.delivery_eligible)}>{copy.action}</button></div>
+                    <div className="finance-lifecycle__card-actions"><button type="button" className="is-primary" onClick={() => openAction(account)} disabled={!canAct || account.reconciliation_consistent === false || (stage === "delivery" && !account.delivery_eligible)}>{copy.action}</button></div>
                   </article>
                 ))}
               </div>
@@ -548,6 +550,11 @@ export default function EquipmentFinanceFinalLifecyclePage() {
       {selected && form ? (
         <Drawer title={`${copy.action}: ${selected.agreement_number}`} subtitle={`${selected.customer_name} · ${selected.asset_code} · ${selected.asset_name}`} onClose={closeAction}>
           {selected.main_image_url ? <img className="finance-lifecycle__drawer-machine" src={selected.main_image_url} alt={selected.asset_name} /> : null}
+          {detail?.reconciliation?.consistent === false ? (
+            <div className="finance-lifecycle__note is-warning" data-testid="final-lifecycle-reconciliation-warning">
+              This account is locked because its active receipts, allocations, schedule and ledger do not reconcile. Correct the evidence before completing this action.
+            </div>
+          ) : null}
           <section className="finance-lifecycle__account-summary">
             <div><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></div>
             <div><span>Paid</span><strong>{money(selected.amount_paid)}</strong></div>
@@ -561,7 +568,7 @@ export default function EquipmentFinanceFinalLifecyclePage() {
             {stage === "collections" ? <CollectionForm form={form} setForm={setForm} account={selected} detail={detail} /> : null}
             {stage === "delivery" ? <DeliveryForm form={form} setForm={setForm} /> : null}
             {stage === "ownership" ? <OwnershipForm form={form} setForm={setForm} /> : null}
-            <div className="finance-lifecycle__drawer-actions"><button type="button" onClick={closeAction} disabled={saving}>Cancel</button><button type="submit" className="is-primary" disabled={saving}>{saving ? "Saving controlled evidence…" : copy.action}</button></div>
+            <div className="finance-lifecycle__drawer-actions"><button type="button" onClick={closeAction} disabled={saving}>Cancel</button><button type="submit" className="is-primary" disabled={saving || detail?.reconciliation?.consistent === false}>{saving ? "Saving controlled evidence…" : copy.action}</button></div>
           </form>
         </Drawer>
       ) : null}

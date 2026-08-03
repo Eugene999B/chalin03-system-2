@@ -339,6 +339,11 @@ export default function EquipmentSalesReportsPage() {
             <article className="finance-simple__metric"><span>Overdue</span><strong>{money(summary.overdue_balance)}</strong></article>
             <article className="finance-simple__metric"><span>Active accounts</span><strong>{Number(summary.active_count || 0)}</strong></article>
           </section>
+          {Number(summary.reconciliation_attention_count || 0) > 0 ? (
+            <div className="finance-simple__alert is-warning" data-testid="portfolio-reconciliation-warning">
+              {Number(summary.reconciliation_attention_count || 0)} Finance account(s) have receipt, allocation, schedule or ledger evidence requiring review. Dashboard totals use the evidence-based values and controlled financial actions remain blocked for critical conflicts.
+            </div>
+          ) : null}
 
           {legacyManagement ? (
             <section className="finance-simple__section">
@@ -499,6 +504,12 @@ export default function EquipmentSalesReportsPage() {
 
             {!selectedAgreementId ? <div className="finance-simple__empty">Choose a Finance agreement.</div> : null}
             {busy && selectedAgreementId && !statement ? <div className="finance-simple__empty">Loading official statement…</div> : null}
+
+            {statement?.reconciliation?.consistent === false ? (
+              <div className="finance-simple__alert is-warning" data-testid="statement-reconciliation-warning">
+                This statement uses the receipt-and-ledger calculation, but the stored account must be reconciled before another official document is issued.
+              </div>
+            ) : null}
 
             {statement && selectedAccount ? (
               <>
