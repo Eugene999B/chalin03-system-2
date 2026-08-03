@@ -25,7 +25,7 @@ const FILTER_STATUSES = new Set([
   "withdrawn",
 ]);
 const PAYMENT_FREQUENCIES = new Set(["weekly", "fortnightly", "monthly", "custom"]);
-const NON_WORKING_DAY_RULES = new Set(["exact", "next_working_day", "previous_working_day"]);
+const NON_WORKING_DAY_RULES = new Set(["exact", "next_weekday", "previous_weekday"]);
 const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
 const WITHDRAWABLE_STATUSES = new Set(["draft", "changes_requested", "submitted"]);
 const KYC_TEXT_FIELDS = Object.freeze([
