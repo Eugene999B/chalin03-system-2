@@ -598,6 +598,8 @@ async function machinesWithEditability() {
       activeLocks === 0;
     return {
       ...machine,
+      has_image: Boolean(machine.main_image_url),
+      main_image_url: null,
       active_application_count: activeApplications,
       active_sale_lock_count: activeLocks,
       blocking_application_id: row.blocking_application_id || null,
@@ -641,6 +643,7 @@ router.get(
           installment_offer_created_automatically: true,
           exact_schedule_preview_enabled: true,
           optional_draft_kyc_and_affordability: true,
+          list_contains_image_bytes: false,
         },
       });
     } catch (error) {
