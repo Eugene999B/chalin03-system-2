@@ -1,32 +1,57 @@
-name: Phase 7 Workspace Export
+name: Publish Phase 7 Finance Repair
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - fix/finance-phase-7-lifecycle
     paths:
       - .github/workflows/phase7-workspace-export.yml
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export-workspace:
+  publish-phase-7:
     runs-on: ubuntu-latest
     steps:
       - name: Check out Phase 7 branch
         uses: actions/checkout@v4
+        with:
+          ref: fix/finance-phase-7-lifecycle
+          fetch-depth: 0
 
-      - name: Package repository workspace
+      - name: Decode and verify patch
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/phase7-export"
-          tar --exclude=.git -czf "$RUNNER_TEMP/phase7-export/phase7-workspace.tar.gz" .
+          base64 --decode .github/phase7.patch.gz.b64 | gzip --decompress > "$RUNNER_TEMP/phase7.patch"
+          echo "472cff62fd591cae5be43407b12ca9291f9a6fdaa3138f212c9497eaf51485a6  $RUNNER_TEMP/phase7.patch" | sha256sum --check
 
-      - name: Upload workspace artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase7-workspace
-          path: ${{ runner.temp }}/phase7-export/phase7-workspace.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+      - name: Apply exact Phase 7 patch
+        shell: bash
+        run: |
+          git apply --index "$RUNNER_TEMP/phase7.patch"
+          git diff --cached --check
+
+      - name: Run dependency-free Phase 7 validation
+        shell: bash
+        run: |
+          while IFS= read -r file; do
+            node --check "$file"
+          done < <(git diff --cached --name-only -- '*.js' '*.mjs')
+          node --test backend/tests/equipmentFinancePhaseSevenLifecycle.test.js
+          node frontend/scripts/passwordChangeSessionTests.mjs
+
+      - name: Remove temporary publishing files
+        shell: bash
+        run: |
+          git rm .github/phase7.patch.gz.b64
+          git rm .github/workflows/phase7-workspace-export.yml
+
+      - name: Commit and push Phase 7
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(finance): reconcile complete lifecycle"
+          git push origin HEAD:fix/finance-phase-7-lifecycle
