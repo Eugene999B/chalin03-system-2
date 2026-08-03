@@ -1,3 +1,4 @@
+
 const express = require("express");
 
 const { pool } = require("../config/db");
@@ -15,6 +16,7 @@ const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes
 const equipmentCreditOptionalDecisionRoutes = require("./equipmentCreditOptionalDecisionRoutes");
 const equipmentFinanceDraftRecoveryRoutes = require("./equipmentFinanceDraftRecoveryRoutes");
 const equipmentFinanceAgreementActivationRoutes = require("./equipmentFinanceAgreementActivationRoutes");
+const equipmentFinanceDepositReservationRoutes = require("./equipmentFinanceDepositReservationRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
@@ -68,41 +70,6 @@ function activationCandidate(application) {
   };
 }
 
-function depositCandidate(agreement) {
-  const required = Number(agreement.deposit_required || 0);
-  const received = Number(agreement.deposit_received || 0);
-  return {
-    agreement_id: agreement.id,
-    agreement_number: agreement.agreement_number,
-    agreement_status: agreement.agreement_status,
-    equipment_commitment_status: agreement.equipment_commitment_status,
-    application_id: agreement.credit_application_id,
-    application_number: agreement.application_number,
-    customer_id: agreement.customer_id,
-    customer_name: agreement.customer_name,
-    customer_phone: agreement.customer_phone,
-    asset_id: agreement.asset_id,
-    asset_code: agreement.asset_code,
-    asset_name: agreement.asset_name,
-    main_image_url: agreement.main_image_url,
-    asset_sale_status: agreement.sale_status,
-    active_hire_count: Number(agreement.active_hire_count || 0),
-    total_amount: Number(agreement.total_amount || 0),
-    deposit_required: required,
-    deposit_received: received,
-    deposit_remaining: Number(Math.max(required - received, 0).toFixed(2)),
-    financed_amount: Number(agreement.financed_amount || 0),
-    outstanding_balance: Number(agreement.outstanding_balance || 0),
-    payment_frequency: agreement.payment_frequency,
-    installment_count: agreement.installment_count,
-    first_due_date: agreement.first_due_date,
-    deposit_completed_at: agreement.deposit_completed_at,
-    reservation_activated_at: agreement.reservation_activated_at,
-    reserved: agreement.equipment_commitment_status === "reserved",
-    equipment_origin_name: agreement.equipment_origin_name || null,
-  };
-}
-
 function financePolicy() {
   return {
     division: "installment_finance",
@@ -141,6 +108,8 @@ function financePolicy() {
 }
 
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
+// Own the company-wide deposit transaction before every legacy location-bound handler.
+router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
 router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
 router.use("/private-documents", equipmentFinancePrivateDocumentsRoutes);
 router.use("/private-documents", equipmentFinanceDocumentReviewRoutes);
@@ -238,57 +207,7 @@ router.get(
   }
 );
 
-router.get(
-  "/deposit-reservations/candidates",
-  requirePermission("fleet.assets.view"),
-  async (_req, res, next) => {
-    try {
-      const [rows] = await pool.query(
-        `SELECT agreement.*, application.application_number,
-                application.application_status, application.kyc_status,
-                application.affordability_status, customer.customer_name,
-                customer.phone AS customer_phone, asset.asset_code,
-                asset.asset_name, asset.main_image_url,
-                asset.operational_purpose, asset.sale_status,
-                asset.is_active AS asset_is_active,
-                location.name AS equipment_origin_name,
-                sale_lock.lock_status AS active_lock_status,
-                sale_lock.released_at AS active_lock_released_at,
-                (SELECT COUNT(*) FROM hire_contract_assets hire_asset
-                  WHERE hire_asset.asset_id = agreement.asset_id
-                    AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count
-           FROM equipment_sale_agreements agreement
-           INNER JOIN equipment_credit_applications application
-             ON application.id = agreement.credit_application_id
-           INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
-           INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-           LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
-           LEFT JOIN equipment_asset_sale_locks sale_lock
-             ON sale_lock.agreement_id = agreement.id
-            AND sale_lock.released_at IS NULL
-          WHERE agreement.sale_type = 'installment'
-            AND agreement.activation_source = 'approved_credit_application'
-            AND agreement.agreement_status IN ('approved','active')
-          ORDER BY
-            CASE WHEN agreement.equipment_commitment_status = 'reserved' THEN 1 ELSE 0 END,
-            agreement.approved_at, agreement.id`
-      );
-      return res.json({
-        status: "success",
-        candidates: rows.map(depositCandidate),
-        policy: financePolicy(),
-        safeguards: {
-          hire_work_created: false,
-          delivery_created: false,
-          ownership_transferred: false,
-          sms_sent: false,
-        },
-      });
-    } catch (error) {
-      return next(error);
-    }
-  }
-);
 
 module.exports = router;
 module.exports.financePolicy = financePolicy;
+
