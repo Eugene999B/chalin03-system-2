@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
-const FINAL_STATUSES = new Set(["approved", "declined", "withdrawn"]);
 const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
 const REVIEW_ROLES = new Set([
   "admin",
@@ -277,6 +276,7 @@ export default function EquipmentFinanceApplicationsPage() {
   }, [openDetail, requestedApplicationId]);
 
   function closeDetail() {
+    editRef.current = null;
     setDetail(null);
     setEdit(null);
     const next = new URLSearchParams(location.search);
@@ -403,16 +403,24 @@ export default function EquipmentFinanceApplicationsPage() {
       const nextVersion = Number(
         response.data?.application?.decision_version ?? current.known_version + 1
       );
-      const next = {
-        ...current,
-        known_version: nextVersion,
-        dirty: false,
-      };
-      editRef.current = next;
-      setEdit(next);
-      setDetail(response.data || null);
-      setAutosaveState("saved");
-      if (manual) setNotice(response.data?.message || "Draft saved.");
+      const latest = editRef.current;
+      const stillEditing =
+        latest?.application_id === current.application_id;
+      if (stillEditing) {
+        const changedDuringSave = latest !== current;
+        const next = {
+          ...(changedDuringSave ? latest : current),
+          known_version: nextVersion,
+          dirty: changedDuringSave,
+        };
+        editRef.current = next;
+        setEdit(next);
+        setDetail(response.data || null);
+        setAutosaveState(changedDuringSave ? "pending" : "saved");
+        if (manual && !changedDuringSave) {
+          setNotice(response.data?.message || "Draft saved.");
+        }
+      }
       await loadList();
     } catch (error) {
       if (error?.response?.data?.code === "FINANCE_APPLICATION_VERSION_CONFLICT") {
