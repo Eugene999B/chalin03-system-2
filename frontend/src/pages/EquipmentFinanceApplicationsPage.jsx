@@ -10,6 +10,7 @@ const REVIEW_ROLES = new Set([
   "admin",
   "administrator",
   "manager",
+  "system_admin",
   "system_administrator",
   "super_admin",
   "finance_manager",
@@ -139,11 +140,19 @@ export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const role = String(user?.workspace_role || user?.access_role || user?.role || "").toLowerCase();
+  const assignedRoles = [
+    user?.workspace_role,
+    user?.access_role,
+    user?.role,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .filter(Boolean);
   const canManage =
     effectivePermissions.includes("fleet.assets.manage") ||
-    ["admin", "administrator", "system_administrator", "super_admin"].includes(role);
-  const canReview = REVIEW_ROLES.has(role);
+    assignedRoles.some((role) =>
+      ["admin", "administrator", "system_admin", "system_administrator", "super_admin"].includes(role)
+    );
+  const canReview = assignedRoles.some((role) => REVIEW_ROLES.has(role));
 
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const requestedApplicationId = query.get("application");
