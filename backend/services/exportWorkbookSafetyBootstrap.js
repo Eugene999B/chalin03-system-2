@@ -1,3 +1,5 @@
+require("./equipmentCreditOptionalApprovalBootstrap");
+
 const ExcelJS = require("./excelJsCompat");
 
 const INVALID_WORKSHEET_CHARACTERS = /[*?:\\/\[\]]/g;

@@ -26,7 +26,10 @@ test("credit application migration is additive, idempotent and auditable", () =>
   assert.match(migration, /customer_consent_confirmed BOOLEAN/);
   assert.match(migration, /UNIQUE KEY uq_equipment_credit_decision_version/);
   assert.match(migration, /20260729_equipment_credit_application_foundation/);
-  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE TABLE|DELETE FROM|UPDATE equipment_sale_agreements|UPDATE fleet_assets/i);
+  assert.doesNotMatch(
+    migration,
+    /DROP TABLE|TRUNCATE TABLE|DELETE FROM|UPDATE equipment_sale_agreements|UPDATE fleet_assets/i
+  );
 
   assert.match(verifier, /missing_credit_tables/);
   assert.match(verifier, /missing_credit_columns/);
@@ -65,24 +68,70 @@ test("credit application API is mounted under the protected equipment sales rout
   assert.match(route, /EQUIPMENT_CREDIT_REVIEW_PERMISSION_REQUIRED/);
 });
 
-test("credit application review is decision-only and cannot activate agreements", () => {
-  const route = read(
+test("active installment decisions never force optional customer information", () => {
+  const optionalRoute = read(
+    "backend",
+    "routes",
+    "equipmentCreditOptionalDecisionRoutes.js"
+  );
+  const bootstrap = read(
+    "backend",
+    "services",
+    "equipmentCreditOptionalApprovalBootstrap.js"
+  );
+  const serverBootstrap = read(
+    "backend",
+    "services",
+    "exportWorkbookSafetyBootstrap.js"
+  );
+
+  assert.match(optionalRoute, /"\/:id\/submit"/);
+  assert.match(optionalRoute, /"\/:id\/kyc\/verify"/);
+  assert.match(optionalRoute, /"\/:id\/review"/);
+  assert.match(optionalRoute, /optional_information_never_blocks_decision: true/);
+  assert.match(
+    optionalRoute,
+    /Optional customer, KYC, guarantor and affordability fields were not required/
+  );
+  assert.doesNotMatch(
+    optionalRoute,
+    /Verify the required KYC evidence before approving/
+  );
+  assert.doesNotMatch(
+    optionalRoute,
+    /An affordability-ineligible application cannot be approved/
+  );
+  assert.doesNotMatch(
+    optionalRoute,
+    /Complete the required customer, consent and guarantor KYC information before submission/
+  );
+
+  assert.match(bootstrap, /equipmentSalesRoutes\.use\(/);
+  assert.match(bootstrap, /"\/credit-applications"/);
+  assert.match(serverBootstrap, /equipmentCreditOptionalApprovalBootstrap/);
+});
+
+test("credit application review remains decision-only and cannot activate agreements", () => {
+  const legacyRoute = read(
     "backend",
     "routes",
     "equipmentCreditApplicationRoutes.js"
   );
+  const optionalRoute = read(
+    "backend",
+    "routes",
+    "equipmentCreditOptionalDecisionRoutes.js"
+  );
+  const combined = `${legacyRoute}\n${optionalRoute}`;
 
-  assert.match(route, /application_status = \?/);
-  assert.match(route, /Verify the required KYC evidence before approving/);
-  assert.match(route, /An affordability-ineligible application cannot be approved/);
-  assert.match(route, /equipment_credit_application_decisions/);
-  assert.match(route, /writeAuditEvent/);
-  assert.doesNotMatch(route, /INSERT INTO equipment_sale_agreements/);
-  assert.doesNotMatch(route, /UPDATE equipment_sale_agreements/);
-  assert.doesNotMatch(route, /INSERT INTO equipment_asset_sale_locks/);
-  assert.doesNotMatch(route, /UPDATE fleet_assets/);
-  assert.doesNotMatch(route, /equipment_installment_schedule/);
-  assert.doesNotMatch(route, /equipment_sale_payments/);
+  assert.match(optionalRoute, /equipment_credit_application_decisions/);
+  assert.match(optionalRoute, /writeAuditEvent/);
+  assert.doesNotMatch(combined, /INSERT INTO equipment_sale_agreements/);
+  assert.doesNotMatch(combined, /UPDATE equipment_sale_agreements/);
+  assert.doesNotMatch(combined, /INSERT INTO equipment_asset_sale_locks/);
+  assert.doesNotMatch(combined, /UPDATE fleet_assets/);
+  assert.doesNotMatch(optionalRoute, /equipment_installment_schedule/);
+  assert.doesNotMatch(optionalRoute, /equipment_sale_payments/);
 });
 
 test("affordability policy records explicit internal controls", () => {

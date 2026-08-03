@@ -5,13 +5,33 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const page = fs.readFileSync(
+const enhancedPage = fs.readFileSync(
   path.join(
     __dirname,
     "..",
     "src",
     "pages",
     "EquipmentFinanceStartWizardEnhancedPage.jsx"
+  ),
+  "utf8"
+);
+const optionalStartPage = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "src",
+    "pages",
+    "EquipmentFinanceStartWizardOptionalPage.jsx"
+  ),
+  "utf8"
+);
+const optionalApplicationsPage = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "src",
+    "pages",
+    "EquipmentFinanceApplicationsOptionalPage.jsx"
   ),
   "utf8"
 );
@@ -22,15 +42,17 @@ const config = fs.readFileSync(
 
 testProfileIsLoadedInTheOperationalWizard();
 testFullCustomerAndKycFieldsRemainVisible();
-testDraftCreationStaysLightweight();
+testOptionalDetailsNeverBlockWorkflow();
 testSensitiveDocumentsUsePrivateVault();
 testDraftAutosaveCompatibility();
 
 function testProfileIsLoadedInTheOperationalWizard() {
   assert.match(config, /restore-complete-finance-customer-profile/);
   assert.match(config, /EquipmentFinanceOperationalStartPage\.jsx/);
-  assert.match(config, /EquipmentFinanceStartWizardEnhancedPage\.jsx/);
-  assert.match(page, /<EquipmentFinanceStartWizardPage key=\{wizardVersion\}/);
+  assert.match(config, /EquipmentFinanceStartWizardOptionalPage\.jsx/);
+  assert.match(config, /EquipmentSalesWorkspacePage\.jsx/);
+  assert.match(config, /EquipmentFinanceApplicationsOptionalPage\.jsx/);
+  assert.match(optionalStartPage, /EquipmentFinanceStartWizardEnhancedPage/);
 }
 
 function testFullCustomerAndKycFieldsRemainVisible() {
@@ -47,7 +69,10 @@ function testFullCustomerAndKycFieldsRemainVisible() {
     "Years at current residence",
     "Work / business address",
   ]) {
-    assert.match(page, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(
+      enhancedPage,
+      new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    );
   }
 
   for (const payloadKey of [
@@ -75,30 +100,50 @@ function testFullCustomerAndKycFieldsRemainVisible() {
     "credit_assessment_consent_confirmed",
     "verification_notes",
   ]) {
-    assert.match(page, new RegExp(payloadKey));
+    assert.match(enhancedPage, new RegExp(payloadKey));
   }
 }
 
-function testDraftCreationStaysLightweight() {
-  assert.match(page, /Only the customer legal name and primary phone/);
-  assert.match(page, /missing optional information does not stop draft\s+creation/);
-  assert.doesNotMatch(page, /required\s+value=\{profile\.kyc/);
-  assert.match(page, /Required to create a new-customer draft/);
+function testOptionalDetailsNeverBlockWorkflow() {
+  assert.match(
+    optionalStartPage,
+    /Leaving any other field blank does not block draft creation, submission, review or approval/
+  );
+  assert.match(
+    optionalStartPage,
+    /Missing KYC, affordability, guarantor, consent or supporting-document details never prevent submission or approval/
+  );
+  assert.match(optionalStartPage, /optional sections recorded/);
+  assert.doesNotMatch(optionalStartPage, /must be completed and independently verified/);
+
+  assert.match(optionalApplicationsPage, /Optional-information rule/);
+  assert.match(
+    optionalApplicationsPage,
+    /do not stop submission or\s+approval by an authorised manager/
+  );
+  assert.match(
+    optionalApplicationsPage,
+    /This does not block submission or approval/
+  );
+
+  assert.doesNotMatch(enhancedPage, /required\s+value=\{profile\.kyc/);
+  assert.match(enhancedPage, /Required to create a new-customer draft/);
 }
 
 function testSensitiveDocumentsUsePrivateVault() {
-  assert.match(page, /private case-document vault/);
-  assert.match(page, /not in a\s+public file link/);
-  assert.doesNotMatch(page, /Identity document URL/);
-  assert.doesNotMatch(page, /Bank statement URL/);
+  assert.match(enhancedPage, /private case-document vault/);
+  assert.match(enhancedPage, /not in a\s+public file link/);
+  assert.match(optionalStartPage, /private vault when available/);
+  assert.doesNotMatch(enhancedPage, /Identity document URL/);
+  assert.doesNotMatch(enhancedPage, /Bank statement URL/);
 }
 
 function testDraftAutosaveCompatibility() {
-  assert.match(page, /chalin03\.finance\.start-installment\.v2/);
-  assert.match(page, /chalin03\.finance\.start-installment\.v1/);
-  assert.match(page, /window\.setInterval\(synchronize, 700\)/);
-  assert.match(page, /customerMode: existing\.customerMode \|\| "new"/);
-  assert.match(page, /GhanaPost GPS:/);
+  assert.match(enhancedPage, /chalin03\.finance\.start-installment\.v2/);
+  assert.match(enhancedPage, /chalin03\.finance\.start-installment\.v1/);
+  assert.match(enhancedPage, /window\.setInterval\(synchronize, 700\)/);
+  assert.match(enhancedPage, /customerMode: existing\.customerMode \|\| "new"/);
+  assert.match(enhancedPage, /GhanaPost GPS:/);
 }
 
-console.log("Equipment Finance complete customer profile contracts passed.");
+console.log("Equipment Finance complete optional customer profile contracts passed.");
