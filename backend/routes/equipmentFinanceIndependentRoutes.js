@@ -12,6 +12,7 @@ const {
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
+const equipmentFinanceDraftRecoveryRoutes = require("./equipmentFinanceDraftRecoveryRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
@@ -143,6 +144,8 @@ router.use("/private-documents", equipmentFinancePrivateDocumentsRoutes);
 router.use("/private-documents", equipmentFinanceDocumentReviewRoutes);
 router.use("/delivery-authorizations", equipmentFinanceDeliveryAuthorizationRoutes);
 router.use(equipmentFinanceScheduleRoutes);
+// Own company-wide application list/detail/edit routes before legacy location-bound handlers.
+router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
