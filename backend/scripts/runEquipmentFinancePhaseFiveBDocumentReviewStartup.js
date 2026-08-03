@@ -9,6 +9,11 @@ const MIGRATION_FILE =
   "20260802_equipment_finance_phase5b_document_review.sql";
 const VERIFIER_FILE =
   "20260802_equipment_finance_phase5b_document_review_verify.sql";
+const REQUIRED_REVIEW_CATEGORIES = Object.freeze([
+  "kyc_identity",
+  "guarantor_identity",
+  "agreement_attachment",
+]);
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -157,6 +162,47 @@ async function executeStatements(connection, statements, label) {
   return results;
 }
 
+function policyRowHasReviewControls(policyRow) {
+  if (
+    !policyRow ||
+    !String(policyRow.policy_version || "").trim() ||
+    Number(policyRow.independent_document_review_required) !== 1 ||
+    Number(policyRow.separate_document_approval_required) !== 1
+  ) {
+    return false;
+  }
+
+  let categories;
+  try {
+    categories = JSON.parse(
+      String(policyRow.required_document_categories_json || "")
+    );
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(categories)) return false;
+  const configured = new Set(categories.map((category) => String(category)));
+  return REQUIRED_REVIEW_CATEGORIES.every((category) => configured.has(category));
+}
+
+async function applyForwardCompatiblePolicyVerification(connection, results) {
+  if (!Array.isArray(results) || results.length !== 5) return results;
+  const [policyRows] = await connection.query(
+    `SELECT policy_version, required_document_categories_json,
+            independent_document_review_required,
+            separate_document_approval_required
+       FROM equipment_finance_document_delivery_policy
+      WHERE id = 1`
+  );
+  const validPolicy =
+    Array.isArray(policyRows) &&
+    policyRows.length === 1 &&
+    policyRowHasReviewControls(policyRows[0]);
+  const normalized = [...results];
+  normalized[3] = [{ invalid_review_policy: validPolicy ? 0 : 1 }];
+  return normalized;
+}
+
 function validateVerifierResults(results) {
   if (results.length !== 5) {
     throw new Error(
@@ -190,6 +236,7 @@ function validateVerifierResults(results) {
 async function runEquipmentFinancePhaseFiveBDocumentReviewStartup() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
+  let applied = false;
   try {
     const databaseName = await verifyDatabaseIdentity(connection);
     const [[lockRow]] = await connection.query(
@@ -207,18 +254,23 @@ async function runEquipmentFinancePhaseFiveBDocumentReviewStartup() {
         splitSqlScript(readSqlFile(MIGRATION_FILE)),
         "Equipment Finance Phase 5B migration"
       );
+      applied = true;
       console.log(`Applied ${MIGRATION_RECORD} on ${databaseName}.`);
     }
 
-    const verifierResults = await executeStatements(
+    const historicalVerifierResults = await executeStatements(
       connection,
       splitSqlScript(readSqlFile(VERIFIER_FILE)),
       "Equipment Finance Phase 5B verifier"
     );
+    const verifierResults = await applyForwardCompatiblePolicyVerification(
+      connection,
+      historicalVerifierResults
+    );
     validateVerifierResults(verifierResults);
     console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
     return {
-      applied: true,
+      applied,
       database_name: databaseName,
       migration: MIGRATION_RECORD,
     };
@@ -249,9 +301,12 @@ module.exports = {
   MIGRATION_LOCK,
   MIGRATION_RECORD,
   VERIFIER_FILE,
+  REQUIRED_REVIEW_CATEGORIES,
+  applyForwardCompatiblePolicyVerification,
   bufferHasExecutableSql,
   executeStatements,
   migrationRecordExists,
+  policyRowHasReviewControls,
   runEquipmentFinancePhaseFiveBDocumentReviewStartup,
   splitSqlScript,
   validateVerifierResults,
