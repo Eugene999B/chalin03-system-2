@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - .github/workflows/phase7-workspace-export.yml
-      - .github/phase7.patch.gz.b64
+      - .github/phase7-patch/**
 
 permissions:
   contents: write
@@ -25,7 +25,8 @@ jobs:
       - name: Decode and verify patch
         shell: bash
         run: |
-          base64 --decode .github/phase7.patch.gz.b64 | gzip --decompress > "$RUNNER_TEMP/phase7.patch"
+          cat .github/phase7-patch/chunk-*.txt > "$RUNNER_TEMP/phase7.patch.gz.b64"
+          base64 --decode "$RUNNER_TEMP/phase7.patch.gz.b64" | gzip --decompress > "$RUNNER_TEMP/phase7.patch"
           echo "472cff62fd591cae5be43407b12ca9291f9a6fdaa3138f212c9497eaf51485a6  $RUNNER_TEMP/phase7.patch" | sha256sum --check
 
       - name: Apply exact Phase 7 patch
@@ -47,6 +48,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/phase7.patch.gz.b64
+          git rm -r .github/phase7-patch
           git rm .github/workflows/phase7-workspace-export.yml
 
       - name: Commit and push Phase 7
