@@ -4,7 +4,6 @@ const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const {
-  splitSqlScript,
   verifyDatabaseIdentity,
 } = require("./runEquipmentFinancePhaseOneSchemaStartup");
 
@@ -28,6 +27,48 @@ const truthy = (value) =>
   ["1", "true", "yes", "on"].includes(
     String(value || "").trim().toLowerCase()
   );
+
+function hasExecutableSql(sqlText) {
+  return String(sqlText || "")
+    .split("\n")
+    .some((line) => {
+      const trimmed = line.trim();
+      return trimmed && !trimmed.startsWith("--");
+    });
+}
+
+function splitSqlScript(sqlText) {
+  const statements = [];
+  let delimiter = ";";
+  let buffer = "";
+
+  for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
+    const delimiterMatch = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
+    if (delimiterMatch) {
+      if (hasExecutableSql(buffer)) {
+        throw new Error(
+          "SQL DELIMITER appeared before the previous statement ended."
+        );
+      }
+      buffer = "";
+      delimiter = delimiterMatch[1];
+      continue;
+    }
+
+    buffer += `${line}\n`;
+    const trimmed = buffer.trimEnd();
+    if (!trimmed.endsWith(delimiter)) continue;
+
+    const statement = trimmed.slice(0, -delimiter.length).trim();
+    if (hasExecutableSql(statement)) statements.push(statement);
+    buffer = "";
+  }
+
+  if (hasExecutableSql(buffer)) {
+    throw new Error("SQL script ended with an incomplete statement.");
+  }
+  return statements;
+}
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -245,6 +286,7 @@ module.exports = {
   assertReleaseSafety,
   migrationRecordExists,
   runEquipmentFinanceAgreementCreationStartup,
+  splitSqlScript,
   validateVerifierResults,
 };
 
