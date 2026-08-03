@@ -105,6 +105,37 @@ function Field({ title, children, wide = false }) {
   );
 }
 
+function LazyApplicationImage({ application }) {
+  const [source, setSource] = useState("");
+  useEffect(() => {
+    if (!application?.has_image) return undefined;
+    const controller = new AbortController();
+    let objectUrl = "";
+    axiosClient
+      .get(`${API}/${application.id}/image`, {
+        responseType: "blob",
+        signal: controller.signal,
+      })
+      .then((response) => {
+        objectUrl = URL.createObjectURL(response.data);
+        setSource(objectUrl);
+      })
+      .catch((error) => {
+        if (error?.code !== "ERR_CANCELED") setSource("");
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [application?.has_image, application?.id]);
+
+  return source ? (
+    <div className="finance-simple__machine-image">
+      <img src={source} alt={application.asset_name || "Excavator"} />
+    </div>
+  ) : null;
+}
+
 export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
@@ -186,7 +217,10 @@ export default function EquipmentFinanceApplicationsPage() {
     };
   }, [loadList, search]);
 
-  const openDetail = useCallback(async (applicationOrId, { keepUrl = false } = {}) => {
+  const openDetail = useCallback(async (
+    applicationOrId,
+    { keepUrl = false, editAfterOpen = false } = {}
+  ) => {
     const applicationId =
       typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId;
     if (!applicationId) return;
@@ -199,7 +233,19 @@ export default function EquipmentFinanceApplicationsPage() {
       const response = await axiosClient.get(`${API}/${applicationId}`, {
         signal: controller.signal,
       });
-      setDetail(response.data || null);
+      const nextDetail = response.data || null;
+      setDetail(nextDetail);
+      if (editAfterOpen && nextDetail?.editable) {
+        const nextEdit = {
+          application_id: nextDetail.application.id,
+          known_version: Number(nextDetail.application.decision_version || 0),
+          payload: editPayload(nextDetail),
+          dirty: false,
+        };
+        editRef.current = nextEdit;
+        setEdit(nextEdit);
+        setAutosaveState("ready");
+      }
       if (!keepUrl) {
         const next = new URLSearchParams(location.search);
         next.set("application", String(applicationId));
@@ -499,7 +545,7 @@ export default function EquipmentFinanceApplicationsPage() {
                 <div className="finance-simple__card-actions">
                   <button type="button" onClick={() => openDetail(application)}>View file</button>
                   {canManage && EDITABLE_STATUSES.has(application.application_status) ? (
-                    <button className="is-primary" type="button" onClick={async () => { await openDetail(application); }}>
+                    <button className="is-primary" type="button" onClick={() => openDetail(application, { editAfterOpen: true })}>
                       {application.application_status === "draft" ? "Resume Draft" : "Edit Draft"}
                     </button>
                   ) : null}
@@ -540,11 +586,7 @@ export default function EquipmentFinanceApplicationsPage() {
               <button type="button" onClick={closeDetail}>Close</button>
             </div>
 
-            {detail.application?.main_image_url ? (
-              <div className="finance-simple__machine-image">
-                <img src={`${API}/${detail.application.id}/image`} alt={detail.application.asset_name || "Excavator"} loading="lazy" />
-              </div>
-            ) : null}
+            <LazyApplicationImage application={detail.application} />
 
             {!edit ? (
               <>
