@@ -11,6 +11,9 @@ const {
   splitSqlScript,
   validateVerifierResults,
 } = require("./runEquipmentFinanceOperationalPolishMigration");
+const {
+  runEquipmentFinanceAgreementCreationStartup,
+} = require("./runEquipmentFinanceAgreementCreationStartup");
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -141,12 +144,15 @@ async function inspectAndVerifyAppliedRelease() {
 
 async function runEquipmentFinanceOperationalPolishStartup() {
   const state = await inspectAndVerifyAppliedRelease();
-  if (state.applied) return state;
 
-  console.log(
-    `Phase 3 Finance migration record is absent on ${state.database_name}; running controlled release ${RELEASE_CONFIRMATION}.`
-  );
-  await runEquipmentFinanceOperationalPolishMigration();
+  if (!state.applied) {
+    console.log(
+      `Phase 3 Finance migration record is absent on ${state.database_name}; running controlled release ${RELEASE_CONFIRMATION}.`
+    );
+    await runEquipmentFinanceOperationalPolishMigration();
+  }
+
+  await runEquipmentFinanceAgreementCreationStartup();
   return { applied: true, database_name: state.database_name };
 }
 
