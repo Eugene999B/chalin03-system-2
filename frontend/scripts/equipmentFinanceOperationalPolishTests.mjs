@@ -51,6 +51,7 @@ for (const endpoint of [
   "/bootstrap",
   "/tasks",
   "/documents",
+  "/approval",
   "/schedule/simulate",
   "/schedule/simulations",
   "/amendments",
@@ -65,6 +66,13 @@ assert.match(operations, /FileReader/);
 assert.match(operations, /8 \* 1024 \* 1024/);
 assert.match(operations, /application\/pdf,image\/jpeg,image\/png,image\/webp/);
 assert.match(operations, /responseType: "blob"/);
+assert.match(operations, /AbortController/);
+assert.match(operations, /CASE_PAGE_SIZE/);
+assert.match(operations, /INBOX_PAGE_SIZE/);
+assert.match(operations, /has_next_page/);
+assert.match(operations, /kyc_identity/);
+assert.match(operations, /agreement_attachment/);
+assert.doesNotMatch(operations, /buyer_id_front/);
 assert.match(operations, /navigator\.clipboard/);
 assert.match(operations, /window\.print/);
 assert.match(operations, /Financial fields will remain original records/);

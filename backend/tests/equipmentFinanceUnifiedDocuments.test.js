@@ -86,6 +86,11 @@ test("legacy plaintext bytes are encrypted with an integrity checksum", () => {
   assert.equal(encrypted.tag.length, 16);
   assert.equal(encrypted.checksum.length, 64);
   assert.equal(normalizeLegacyCategory("KYC Identity"), "kyc_identity");
+  assert.equal(normalizeLegacyCategory("buyer_id_front"), "kyc_identity");
+  assert.equal(normalizeLegacyCategory("proof_of_address"), "kyc_address");
+  assert.equal(normalizeLegacyCategory("income_evidence"), "kyc_income");
+  assert.equal(normalizeLegacyCategory("guarantor_id"), "guarantor_identity");
+  assert.equal(normalizeLegacyCategory("signed_agreement"), "agreement_attachment");
   assert.equal(normalizeLegacyCategory("unknown legacy category"), "other");
   assert.match(startupSource, /original_record_preserved:\s*true/);
   assert.match(startupSource, /LEFT JOIN equipment_finance_private_documents/);

@@ -42,6 +42,9 @@ const AMENDMENT_STATUSES = new Set([
 const SHARE_CHANNELS = new Set(["sms", "whatsapp", "email", "copy", "download", "print"]);
 const CASE_TYPES = new Set(["application", "agreement"]);
 const SCHEDULE_FREQUENCIES = new Set(["weekly", "fortnightly", "monthly", "custom"]);
+const DEFAULT_CASE_PAGE_SIZE = 25;
+const DEFAULT_INBOX_PAGE_SIZE = 25;
+const MAX_OPERATIONAL_PAGE_SIZE = 100;
 const DIRECT_SAFE_AMENDMENT_FIELDS = new Set([
   "customer_name",
   "customer_phone",
@@ -78,6 +81,20 @@ function cleanText(value, maxLength = 1000) {
 function positiveId(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function normalizePagination({ page = 1, pageSize, page_size, limit } = {}, fallback) {
+  const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+  const requestedSize = Number.parseInt(pageSize ?? page_size ?? limit, 10);
+  const normalizedPageSize = Math.min(
+    MAX_OPERATIONAL_PAGE_SIZE,
+    Math.max(1, requestedSize || fallback)
+  );
+  return {
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    offset: (normalizedPage - 1) * normalizedPageSize,
+  };
 }
 
 function booleanValue(value, fallback = false) {
@@ -557,52 +574,28 @@ async function resolveCaseIdentity(caseTypeValue, caseIdValue, connection = pool
   };
 }
 
-async function listCases({ limit = 300 } = {}) {
-  await assertOperationalPolishSchema();
-  const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 500);
-  const [rows] = await pool.query(
-    `SELECT
-       application.id AS application_id,
-       application.application_number,
-       application.application_status,
-       application.kyc_status,
-       application.affordability_status,
-       application.risk_band,
-       application.risk_score,
-       application.created_at,
-       application.reviewed_at,
-       application.customer_id,
-       application.asset_id,
-       application.financed_amount AS application_financed_amount,
-       kyc.customer_name_snapshot,
-       kyc.customer_phone_snapshot,
-       customer.customer_name,
-       customer.phone AS customer_phone,
-       asset.asset_code,
-       asset.asset_name,
-       asset.make,
-       asset.model,
-       agreement.id AS agreement_id,
-       agreement.agreement_number,
-       agreement.agreement_status,
-       agreement.outstanding_balance,
-       agreement.overdue_amount,
-       agreement.next_due_date,
-       agreement.amount_paid,
-       agreement.agreement_issued_at,
-       agreement.agreement_signed_at
-     FROM equipment_credit_applications application
-     LEFT JOIN equipment_credit_application_kyc kyc ON kyc.application_id = application.id
-     LEFT JOIN hire_customers customer ON customer.id = application.customer_id
-     LEFT JOIN fleet_assets asset ON asset.id = application.asset_id
-     LEFT JOIN equipment_sale_agreements agreement
-       ON agreement.credit_application_id = application.id
-      AND agreement.sale_type = 'installment'
-     ORDER BY COALESCE(agreement.updated_at, application.updated_at, application.created_at) DESC
-     LIMIT ?`,
-    [safeLimit]
-  );
-  return rows.map((row) => ({
+function caseListFilter(searchValue) {
+  const search = cleanText(searchValue, 120);
+  if (!search) return { sql: "", params: [] };
+  const term = `%${search}%`;
+  return {
+    sql: `WHERE (
+      application.application_number LIKE ?
+      OR agreement.agreement_number LIKE ?
+      OR customer.customer_name LIKE ?
+      OR customer.phone LIKE ?
+      OR kyc.customer_name_snapshot LIKE ?
+      OR kyc.customer_phone_snapshot LIKE ?
+      OR asset.asset_code LIKE ?
+      OR asset.asset_name LIKE ?
+      OR asset.serial_number LIKE ?
+    )`,
+    params: [term, term, term, term, term, term, term, term, term],
+  };
+}
+
+function publicCaseSummary(row) {
+  return {
     ...row,
     case_type: row.agreement_id ? "agreement" : "application",
     case_id: row.agreement_id || row.application_id,
@@ -614,7 +607,101 @@ async function listCases({ limit = 300 } = {}) {
     outstanding_balance: Number(row.outstanding_balance || 0),
     overdue_amount: Number(row.overdue_amount || 0),
     amount_paid: Number(row.amount_paid || 0),
-  }));
+  };
+}
+
+async function listCasesPage(options = {}) {
+  if (!options.schemaReady) await assertOperationalPolishSchema();
+  const { page, pageSize, offset } = normalizePagination(
+    options,
+    DEFAULT_CASE_PAGE_SIZE
+  );
+  const filter = caseListFilter(options.search);
+  const joins = `
+    LEFT JOIN equipment_credit_application_kyc kyc ON kyc.application_id = application.id
+    LEFT JOIN hire_customers customer ON customer.id = application.customer_id
+    LEFT JOIN fleet_assets asset ON asset.id = application.asset_id
+    LEFT JOIN equipment_sale_agreements agreement
+      ON agreement.credit_application_id = application.id
+     AND agreement.sale_type = 'installment'`;
+  const [countResult, rowsResult] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(DISTINCT application.id) AS total
+       FROM equipment_credit_applications application
+       ${joins}
+       ${filter.sql}`,
+      filter.params
+    ),
+    pool.query(
+      `SELECT
+         application.id AS application_id,
+         application.application_number,
+         application.application_status,
+         application.kyc_status,
+         application.affordability_status,
+         application.risk_band,
+         application.risk_score,
+         application.created_at,
+         application.updated_at,
+         application.reviewed_at,
+         application.customer_id,
+         application.asset_id,
+         application.financed_amount AS application_financed_amount,
+         kyc.customer_name_snapshot,
+         kyc.customer_phone_snapshot,
+         customer.customer_name,
+         customer.phone AS customer_phone,
+         asset.asset_code,
+         asset.asset_name,
+         asset.make,
+         asset.model,
+         agreement.id AS agreement_id,
+         agreement.agreement_number,
+         agreement.agreement_status,
+         agreement.outstanding_balance,
+         agreement.overdue_amount,
+         agreement.next_due_date,
+         agreement.amount_paid,
+         agreement.agreement_issued_at,
+         agreement.agreement_signed_at
+       FROM equipment_credit_applications application
+       ${joins}
+       ${filter.sql}
+       ORDER BY COALESCE(agreement.updated_at, application.updated_at, application.created_at) DESC,
+                application.id DESC
+       LIMIT ? OFFSET ?`,
+      [...filter.params, pageSize, offset]
+    ),
+  ]);
+  const total = Number(countResult[0][0]?.total || 0);
+  const cases = rowsResult[0].map(publicCaseSummary);
+  return {
+    cases,
+    pagination: {
+      page,
+      page_size: pageSize,
+      total,
+      total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      has_next_page: offset + cases.length < total,
+      has_previous_page: page > 1,
+    },
+    policy: {
+      list_contains_image_bytes: false,
+      detail_loaded_separately: true,
+      maximum_page_size: MAX_OPERATIONAL_PAGE_SIZE,
+    },
+  };
+}
+
+async function listCases({ limit = 300, search = "", schemaReady = false } = {}) {
+  const requested = Math.min(Math.max(Number(limit) || 300, 1), MAX_OPERATIONAL_PAGE_SIZE);
+  const page = await listCasesPage({
+    page: 1,
+    pageSize: requested,
+    search,
+    schemaReady,
+  });
+  return page.cases;
 }
 
 function alertItem({ severity = "warning", code, title, message, identity, action }) {
@@ -634,55 +721,108 @@ function alertItem({ severity = "warning", code, title, message, identity, actio
   };
 }
 
-async function getDataQualityAlerts({ cases = null } = {}) {
-  await assertOperationalPolishSchema();
-  const caseRows = cases || (await listCases({ limit: 500 }));
+async function loadAlertCaseFacts(caseRows) {
+  const applicationIds = [
+    ...new Set(caseRows.map((item) => positiveId(item.application_id)).filter(Boolean)),
+  ];
+  if (!applicationIds.length) return [];
+  const placeholders = applicationIds.map(() => "?").join(",");
+  const [rows] = await pool.query(
+    `SELECT
+       application.id AS application_id,
+       application.application_number,
+       application.application_status,
+       application.customer_id,
+       application.asset_id,
+       application.total_monthly_income,
+       application.financed_amount AS application_financed_amount,
+       kyc.customer_name_snapshot,
+       kyc.customer_phone_snapshot,
+       kyc.customer_email_snapshot,
+       kyc.customer_address_snapshot,
+       kyc.residential_address,
+       kyc.id_number,
+       kyc.guarantor_name,
+       kyc.customer_consent_confirmed,
+       kyc.credit_assessment_consent_confirmed,
+       agreement.id AS agreement_id,
+       agreement.agreement_number,
+       agreement.financed_amount,
+       agreement.outstanding_balance,
+       agreement.agreement_issued_at,
+       agreement.agreement_signed_at,
+       agreement.controlled_ownership_completed_at,
+       customer.customer_name,
+       customer.phone AS customer_phone,
+       customer.email AS customer_email,
+       customer.address AS customer_address,
+       asset.asset_code,
+       asset.asset_name,
+       asset.serial_number,
+       asset.chassis_number,
+       CASE WHEN COALESCE(asset.main_image_url, '') <> '' THEN 1 ELSE 0 END AS has_main_image
+     FROM equipment_credit_applications application
+     LEFT JOIN equipment_credit_application_kyc kyc ON kyc.application_id = application.id
+     LEFT JOIN equipment_sale_agreements agreement
+       ON agreement.credit_application_id = application.id
+      AND agreement.sale_type = 'installment'
+     LEFT JOIN hire_customers customer ON customer.id = application.customer_id
+     LEFT JOIN fleet_assets asset ON asset.id = application.asset_id
+     WHERE application.id IN (${placeholders})
+     ORDER BY application.id, agreement.id DESC`,
+    applicationIds
+  );
+  const byApplication = new Map();
+  for (const row of rows) {
+    if (byApplication.has(Number(row.application_id))) continue;
+    byApplication.set(Number(row.application_id), {
+      ...row,
+      case_type: row.agreement_id ? "agreement" : "application",
+      case_id: row.agreement_id || row.application_id,
+      case_number: row.agreement_number || row.application_number,
+      customer_name: row.customer_name_snapshot || row.customer_name || "Customer",
+      customer_phone: row.customer_phone_snapshot || row.customer_phone || null,
+      customer_email: row.customer_email_snapshot || row.customer_email || null,
+      customer_address:
+        row.residential_address || row.customer_address_snapshot || row.customer_address || null,
+    });
+  }
+  return applicationIds.map((id) => byApplication.get(id)).filter(Boolean);
+}
+
+async function getDataQualityAlerts({ cases = null, schemaReady = false } = {}) {
+  if (!schemaReady) await assertOperationalPolishSchema();
+  const caseRows =
+    cases ||
+    (await listCases({ limit: DEFAULT_CASE_PAGE_SIZE, schemaReady: true }));
   if (!caseRows.length) return [];
-  const applicationIds = caseRows.map((item) => item.application_id).filter(Boolean);
-  const agreementIds = caseRows.map((item) => item.agreement_id).filter(Boolean);
+  const identities = await loadAlertCaseFacts(caseRows);
+  const applicationIds = identities.map((item) => item.application_id).filter(Boolean);
   const documentsByApplication = new Map();
-  const documentsByAgreement = new Map();
-  if (applicationIds.length || agreementIds.length) {
-    const applicationPlaceholders = applicationIds.length
-      ? applicationIds.map(() => "?").join(",")
-      : "NULL";
-    const agreementPlaceholders = agreementIds.length
-      ? agreementIds.map(() => "?").join(",")
-      : "NULL";
+  if (applicationIds.length) {
+    const applicationPlaceholders = applicationIds.map(() => "?").join(",");
     const [documents] = await pool.query(
-      `SELECT application_id, agreement_id, document_category, document_status
-       FROM equipment_finance_case_documents
-       WHERE document_status IN ('uploaded','verified')
-         AND (
-           application_id IN (${applicationPlaceholders})
-           OR agreement_id IN (${agreementPlaceholders})
-         )`,
-      [...applicationIds, ...agreementIds]
+      `SELECT application_id, document_category
+       FROM equipment_finance_private_documents
+       WHERE document_status = 'active'
+         AND application_id IN (${applicationPlaceholders})`,
+      applicationIds
     );
     for (const document of documents) {
       if (document.application_id) {
-        if (!documentsByApplication.has(document.application_id)) {
-          documentsByApplication.set(document.application_id, new Set());
+        const applicationId = Number(document.application_id);
+        if (!documentsByApplication.has(applicationId)) {
+          documentsByApplication.set(applicationId, new Set());
         }
-        documentsByApplication.get(document.application_id).add(document.document_category);
-      }
-      if (document.agreement_id) {
-        if (!documentsByAgreement.has(document.agreement_id)) {
-          documentsByAgreement.set(document.agreement_id, new Set());
-        }
-        documentsByAgreement.get(document.agreement_id).add(document.document_category);
+        documentsByApplication.get(applicationId).add(document.document_category);
       }
     }
   }
 
   const alerts = [];
-  for (const summary of caseRows) {
-    const identity = await resolveCaseIdentity(
-      summary.agreement_id ? "agreement" : "application",
-      summary.agreement_id || summary.application_id
-    );
-    const applicationDocuments = documentsByApplication.get(identity.application_id) || new Set();
-    const agreementDocuments = documentsByAgreement.get(identity.agreement_id) || new Set();
+  for (const identity of identities) {
+    const applicationDocuments =
+      documentsByApplication.get(Number(identity.application_id)) || new Set();
     if (!cleanText(identity.id_number)) {
       alerts.push(
         alertItem({
@@ -753,7 +893,7 @@ async function getDataQualityAlerts({ cases = null } = {}) {
         })
       );
     }
-    if (!cleanText(identity.main_image_url)) {
+    if (!Boolean(Number(identity.has_main_image || 0))) {
       alerts.push(
         alertItem({
           code: "machine_photo_missing",
@@ -767,13 +907,12 @@ async function getDataQualityAlerts({ cases = null } = {}) {
 
     const financed = Number(identity.financed_amount || identity.application_financed_amount || 0);
     const requiredApplicationDocuments = [
-      ["buyer_id_front", "Buyer ID front"],
-      ["buyer_id_back", "Buyer ID back"],
-      ["proof_of_address", "Proof of address"],
-      ["income_evidence", "Income evidence"],
+      ["kyc_identity", "Buyer identity evidence"],
+      ["kyc_address", "Proof of address"],
+      ["kyc_income", "Income evidence"],
     ];
     if (financed >= 100000 || cleanText(identity.guarantor_name)) {
-      requiredApplicationDocuments.push(["guarantor_id", "Guarantor ID"]);
+      requiredApplicationDocuments.push(["guarantor_identity", "Guarantor ID"]);
     }
     for (const [category, label] of requiredApplicationDocuments) {
       if (!applicationDocuments.has(category)) {
@@ -790,7 +929,7 @@ async function getDataQualityAlerts({ cases = null } = {}) {
     }
 
     if (identity.agreement_id) {
-      if (!identity.agreement_issued_at && !agreementDocuments.has("signed_agreement")) {
+      if (!identity.agreement_issued_at && !applicationDocuments.has("agreement_attachment")) {
         alerts.push(
           alertItem({
             severity: "critical",
@@ -830,8 +969,24 @@ async function getDataQualityAlerts({ cases = null } = {}) {
   return alerts;
 }
 
-async function listInbox({ userId = null, workspaceRole = null, cases = null } = {}) {
-  await assertOperationalPolishSchema();
+async function listInbox({
+  userId = null,
+  workspaceRole = null,
+  cases = null,
+  page = 1,
+  pageSize,
+  page_size,
+  schemaReady = false,
+} = {}) {
+  if (!schemaReady) await assertOperationalPolishSchema();
+  const pagination = normalizePagination(
+    { page, pageSize, page_size },
+    DEFAULT_INBOX_PAGE_SIZE
+  );
+  const candidateLimit = Math.min(
+    200,
+    Math.max(pagination.pageSize * 2, pagination.offset + pagination.pageSize + 1)
+  );
   const [storedTasks, pendingAmendments, pendingDocuments, failedAlerts] = await Promise.all([
     pool.query(
       `SELECT task.*, assignee.full_name AS assigned_to_name, creator.full_name AS created_by_name
@@ -840,21 +995,32 @@ async function listInbox({ userId = null, workspaceRole = null, cases = null } =
        LEFT JOIN users creator ON creator.id = task.created_by
        WHERE task.task_status IN ('open','in_progress')
          AND (task.assigned_to IS NULL OR task.assigned_to = ? OR task.assigned_role = ?)
-       ORDER BY FIELD(task.priority, 'critical','high','normal','low'), task.due_at, task.id`,
-      [positiveId(userId), cleanText(workspaceRole, 80) || null]
+       ORDER BY FIELD(task.priority, 'critical','high','normal','low'), task.due_at, task.id
+       LIMIT ?`,
+      [positiveId(userId), cleanText(workspaceRole, 80) || null, candidateLimit]
     ),
     pool.query(
       `SELECT amendment.*
        FROM equipment_finance_case_amendments amendment
        WHERE amendment.amendment_status = 'pending_approval'
-       ORDER BY FIELD(amendment.risk_level, 'critical','high','medium','low'), amendment.requested_at`
+       ORDER BY FIELD(amendment.risk_level, 'critical','high','medium','low'), amendment.requested_at
+       LIMIT ?`,
+      [candidateLimit]
     ),
     pool.query(
       `SELECT document.id, document.application_id, document.agreement_id,
-              document.document_category, document.document_label, document.created_at
-       FROM equipment_finance_case_documents document
-       WHERE document.document_status = 'uploaded'
-       ORDER BY document.created_at`
+              document.document_number, document.document_category,
+              document.document_type, document.uploaded_at,
+              document.review_status, document.approval_status
+       FROM equipment_finance_private_documents document
+       WHERE document.document_status = 'active'
+         AND (
+           document.review_status = 'pending'
+           OR (document.review_status = 'verified' AND document.approval_status = 'pending')
+         )
+       ORDER BY document.uploaded_at, document.id
+       LIMIT ?`,
+      [candidateLimit]
     ),
     pool.query(
       `SELECT alert.id, alert.payment_id, alert.agreement_id, alert.alert_status,
@@ -862,7 +1028,9 @@ async function listInbox({ userId = null, workspaceRole = null, cases = null } =
        FROM equipment_finance_payment_alerts alert
        INNER JOIN equipment_sale_agreements agreement ON agreement.id = alert.agreement_id
        WHERE alert.alert_status = 'failed'
-       ORDER BY alert.updated_at`
+       ORDER BY alert.updated_at
+       LIMIT ?`,
+      [candidateLimit]
     ),
   ]);
   const items = storedTasks[0].map((task) => ({
@@ -895,15 +1063,16 @@ async function listInbox({ userId = null, workspaceRole = null, cases = null } =
     });
   }
   for (const document of pendingDocuments[0]) {
+    const awaitingApproval = document.review_status === "verified";
     items.push({
       id: `document:${document.id}`,
       source: "document",
-      priority: "normal",
-      title: `Verify ${document.document_label}`,
-      description: `${humanize(document.document_category)} was uploaded and awaits review.`,
+      priority: awaitingApproval ? "high" : "normal",
+      title: `${awaitingApproval ? "Approve" : "Verify"} ${document.document_type}`,
+      description: `${humanize(document.document_category)} ${document.document_number} awaits independent ${awaitingApproval ? "approval" : "review"}.`,
       application_id: document.application_id,
       agreement_id: document.agreement_id,
-      due_at: document.created_at,
+      due_at: document.uploaded_at,
       action_tab: "documents",
       requires_manage_permission: true,
     });
@@ -923,7 +1092,13 @@ async function listInbox({ userId = null, workspaceRole = null, cases = null } =
     });
   }
 
-  const dataQuality = await getDataQualityAlerts({ cases: cases || (await listCases({ limit: 500 })) });
+  const qualityCases =
+    cases ||
+    (await listCases({ limit: MAX_OPERATIONAL_PAGE_SIZE, schemaReady: true }));
+  const dataQuality = await getDataQualityAlerts({
+    cases: qualityCases,
+    schemaReady: true,
+  });
   for (const alert of dataQuality.filter((item) => ["critical", "high"].includes(item.severity))) {
     items.push({
       id: `quality:${alert.id}`,
@@ -943,14 +1118,36 @@ async function listInbox({ userId = null, workspaceRole = null, cases = null } =
     if (priority !== 0) return priority;
     return String(a.due_at || "9999").localeCompare(String(b.due_at || "9999"));
   });
+  const sourceWasTruncated = [
+    storedTasks[0],
+    pendingAmendments[0],
+    pendingDocuments[0],
+    failedAlerts[0],
+  ].some((rows) => rows.length === candidateLimit);
+  const qualityWasTruncated = !cases && qualityCases.length === MAX_OPERATIONAL_PAGE_SIZE;
+  const hasMoreCandidates = sourceWasTruncated || qualityWasTruncated;
+  const visibleItems = items.slice(
+    pagination.offset,
+    pagination.offset + pagination.pageSize
+  );
   return {
-    items,
+    items: visibleItems,
     summary: {
       total: items.length,
       critical: items.filter((item) => item.priority === "critical").length,
       approvals: items.filter((item) => ["amendment", "document"].includes(item.source)).length,
       failed_alerts: items.filter((item) => item.source === "boss_alert").length,
       data_quality: items.filter((item) => item.source === "data_quality").length,
+      total_is_lower_bound: hasMoreCandidates,
+    },
+    pagination: {
+      page: pagination.page,
+      page_size: pagination.pageSize,
+      returned: visibleItems.length,
+      has_previous_page: pagination.page > 1,
+      has_next_page:
+        visibleItems.length > 0 &&
+        (pagination.offset + visibleItems.length < items.length || hasMoreCandidates),
     },
   };
 }
@@ -1268,9 +1465,9 @@ async function uploadCaseDocument({ caseType, caseId, userId, body = {}, req = n
   }
 }
 
-async function listCaseDocuments(caseType, caseId) {
-  await assertOperationalPolishSchema();
-  const identity = await resolveCaseIdentity(caseType, caseId);
+async function listCaseDocuments(caseType, caseId, knownIdentity = null) {
+  if (!knownIdentity) await assertOperationalPolishSchema();
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
   const [rows] = await pool.query(
     `SELECT document.id, document.application_id, document.agreement_id,
             document.document_category, document.document_label,
@@ -1400,9 +1597,9 @@ function pushTimeline(events, input) {
   });
 }
 
-async function getCaseTimeline(caseType, caseId) {
-  await assertOperationalPolishSchema();
-  const identity = await resolveCaseIdentity(caseType, caseId);
+async function getCaseTimeline(caseType, caseId, knownIdentity = null) {
+  if (!knownIdentity) await assertOperationalPolishSchema();
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
   const agreementId = identity.agreement_id || -1;
   const applicationId = identity.application_id;
   const [paymentsResult, scheduleResult, deliveriesResult, ownershipResult, signaturesResult,
@@ -1413,7 +1610,7 @@ async function getCaseTimeline(caseType, caseId) {
        FROM equipment_sale_payments payment
        LEFT JOIN users user ON user.id = payment.received_by
        WHERE payment.agreement_id = ? AND payment.is_voided = FALSE
-       ORDER BY payment.payment_date, payment.id`,
+       ORDER BY payment.payment_date DESC, payment.id DESC`,
       [agreementId]
     ),
     pool.query(
@@ -1435,10 +1632,11 @@ async function getCaseTimeline(caseType, caseId) {
       [agreementId]
     ),
     pool.query(
-      `SELECT id, document_number, document_type, document_format, template_version,
+       `SELECT id, document_number, document_type, document_format, template_version,
               snapshot_checksum, issued_at, archived_at
        FROM equipment_finance_issued_documents
-       WHERE agreement_id = ? ORDER BY issued_at, id`,
+       WHERE agreement_id = ?
+       ORDER BY issued_at DESC, id DESC`,
       [agreementId]
     ),
     pool.query(
@@ -1447,12 +1645,18 @@ async function getCaseTimeline(caseType, caseId) {
       [agreementId]
     ),
     pool.query(
-      `SELECT id, document_label, document_category, document_status,
-              created_at, verified_at, rejected_reason
-       FROM equipment_finance_case_documents
-       WHERE application_id = ? OR agreement_id = ?
-       ORDER BY created_at, id`,
-      [applicationId, agreementId]
+      `SELECT id, document_type AS document_label, document_category,
+              CASE
+                WHEN review_status = 'rejected' OR approval_status = 'rejected' THEN 'rejected'
+                WHEN review_status = 'verified' AND approval_status = 'approved' THEN 'verified'
+                ELSE 'uploaded'
+              END AS document_status,
+              uploaded_at AS created_at, reviewed_at AS verified_at,
+              COALESCE(review_notes, approval_notes) AS rejected_reason
+       FROM equipment_finance_private_documents
+       WHERE application_id = ? AND document_status = 'active'
+       ORDER BY uploaded_at, id`,
+      [applicationId]
     ),
     pool.query(
       `SELECT * FROM equipment_finance_case_tasks
@@ -1716,6 +1920,15 @@ async function getCaseTimeline(caseType, caseId) {
   return {
     case: identity,
     events,
+    payments: paymentsResult[0].map((payment) => ({
+      id: payment.id,
+      receipt_number: payment.receipt_number,
+      payment_date: payment.payment_date,
+      amount: Number(payment.amount || 0),
+      payment_method: payment.payment_method,
+      payment_stage: payment.payment_stage,
+    })),
+    issued_documents: issuedResult[0].filter((document) => !document.archived_at),
     summary: {
       total_events: events.length,
       payments: paymentsResult[0].length,
@@ -1866,9 +2079,9 @@ async function saveScheduleSimulation({ userId, body = {} }) {
   return { id: insert.insertId, simulation_name: simulationName, result };
 }
 
-async function listScheduleSimulations(caseType, caseId) {
-  await assertOperationalPolishSchema();
-  const identity = await resolveCaseIdentity(caseType, caseId);
+async function listScheduleSimulations(caseType, caseId, knownIdentity = null) {
+  if (!knownIdentity) await assertOperationalPolishSchema();
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
   const [rows] = await pool.query(
     `SELECT simulation.*, user.full_name AS created_by_name
      FROM equipment_finance_schedule_simulations simulation
@@ -2050,9 +2263,9 @@ async function createAmendment({ caseType, caseId, userId, body = {}, req = null
   }
 }
 
-async function listAmendments(caseType, caseId) {
-  await assertOperationalPolishSchema();
-  const identity = await resolveCaseIdentity(caseType, caseId);
+async function listAmendments(caseType, caseId, knownIdentity = null) {
+  if (!knownIdentity) await assertOperationalPolishSchema();
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
   const [rows] = await pool.query(
     `SELECT amendment.*, requester.full_name AS requested_by_name,
             approver.full_name AS approved_by_name, applier.full_name AS applied_by_name
@@ -2656,63 +2869,59 @@ async function createIssuedDocumentShare({ documentId, userId, body = {}, req = 
   };
 }
 
-async function getCaseOperations(caseType, caseId) {
-  const [timeline, documents, amendments, simulations] = await Promise.all([
-    getCaseTimeline(caseType, caseId),
-    listCaseDocuments(caseType, caseId),
-    listAmendments(caseType, caseId),
-    listScheduleSimulations(caseType, caseId),
-  ]);
-  const alerts = (await getDataQualityAlerts()).filter(
-    (item) =>
-      Number(item.application_id) === Number(timeline.case.application_id) ||
-      (timeline.case.agreement_id && Number(item.agreement_id) === Number(timeline.case.agreement_id))
-  );
-  const [payments, issuedDocuments] = await Promise.all([
-    timeline.case.agreement_id
-      ? pool.query(
-          `SELECT id, receipt_number, payment_date, amount, payment_method, payment_stage
-           FROM equipment_sale_payments
-           WHERE agreement_id = ? AND is_voided = FALSE
-           ORDER BY payment_date DESC, id DESC`,
-          [timeline.case.agreement_id]
-        )
-      : Promise.resolve([[]]),
-    timeline.case.agreement_id
-      ? pool.query(
-          `SELECT id, document_number, document_type, document_format,
-                  template_version, snapshot_checksum, issued_at
-           FROM equipment_finance_issued_documents
-           WHERE agreement_id = ? AND archived_at IS NULL
-           ORDER BY issued_at DESC, id DESC`,
-          [timeline.case.agreement_id]
-        )
-      : Promise.resolve([[]]),
+async function getCaseOperations(caseType, caseId, knownIdentity = null) {
+  await assertOperationalPolishSchema();
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
+  const [timeline, amendments, simulations, alerts] = await Promise.all([
+    getCaseTimeline(caseType, caseId, identity),
+    listAmendments(caseType, caseId, identity),
+    listScheduleSimulations(caseType, caseId, identity),
+    getDataQualityAlerts({ cases: [identity], schemaReady: true }),
   ]);
   return {
     ...timeline,
-    documents,
+    // The route replaces this with the authoritative encrypted Phase 5 document list.
+    documents: [],
     amendments,
     simulations,
     alerts,
-    payments: payments[0].map((payment) => ({ ...payment, amount: Number(payment.amount || 0) })),
-    issued_documents: issuedDocuments[0],
   };
 }
 
-async function getOperationalBootstrap({ userId = null, workspaceRole = null } = {}) {
+async function getOperationalBootstrap({
+  userId = null,
+  workspaceRole = null,
+  page = 1,
+  pageSize,
+  page_size,
+  search = "",
+  inboxPage = 1,
+  inboxPageSize,
+} = {}) {
   await assertOperationalPolishSchema();
-  const cases = await listCases({ limit: 500 });
-  const [inbox, alerts, draft, settings] = await Promise.all([
-    listInbox({ userId, workspaceRole, cases }),
-    getDataQualityAlerts({ cases }),
+  const casePage = await listCasesPage({
+    page,
+    pageSize,
+    page_size,
+    search,
+    schemaReady: true,
+  });
+  const [inbox, draft, settings] = await Promise.all([
+    listInbox({
+      userId,
+      workspaceRole,
+      page: inboxPage,
+      pageSize: inboxPageSize,
+      schemaReady: true,
+    }),
     userId ? getDraft({ userId, draftKey: "start-installment" }) : null,
     getProfessionalSettings().catch(() => null),
   ]);
   return {
-    cases,
+    cases: casePage.cases,
+    pagination: casePage.pagination,
     inbox,
-    alerts,
+    alerts: inbox.items.filter((item) => item.source === "data_quality"),
     draft,
     settings: settings
       ? {
@@ -2732,6 +2941,10 @@ async function getOperationalBootstrap({ userId = null, workspaceRole = null } =
       financial_amendments_use_numbered_variations: true,
       boss_alert_failure_never_rolls_back_payment: true,
       receipt_template: "FIN-THERMAL-1",
+      paginated_case_register: true,
+      paginated_operational_inbox: true,
+      list_contains_image_bytes: false,
+      selected_case_loaded_separately: true,
     },
   };
 }
@@ -2760,9 +2973,11 @@ module.exports = {
   listAmendments,
   listCaseDocuments,
   listCases,
+  listCasesPage,
   listInbox,
   listScheduleSimulations,
   operationalPolishSchemaStatus,
+  normalizePagination,
   parseProtectedDocument,
   resolveCaseIdentity,
   reviewCaseDocument,

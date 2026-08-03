@@ -4,6 +4,9 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
+  equipmentFinancePerformanceLogger,
+} = require("../middleware/equipmentFinancePerformanceMiddleware");
+const {
   getFinanceCustomerPortfolio,
   listFinanceCustomers,
 } = require("../services/equipmentFinanceCustomerPortfolioService");
@@ -30,6 +33,8 @@ const {
 } = require("./equipmentFinanceExportPeriodRoutes");
 
 const router = express.Router();
+
+router.use(equipmentFinancePerformanceLogger);
 
 function activationCandidate(application) {
   return {

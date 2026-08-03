@@ -19,7 +19,7 @@ const {
   getPaymentReceipt,
   issuePaymentReceipt,
   listAmendments,
-  listCases,
+  listCasesPage,
   listInbox,
   listScheduleSimulations,
   operationalPolishSchemaStatus,
@@ -37,6 +37,7 @@ const {
   uploadDocument,
 } = require("../services/equipmentFinancePrivateDocumentsService");
 const {
+  approveDocument,
   reviewDocument,
 } = require("../services/equipmentFinanceDocumentReviewService");
 
@@ -89,8 +90,8 @@ function assertFinanceDocumentRole(req, roles, message) {
   }
 }
 
-async function loadAuthoritativeDocuments(caseType, caseId) {
-  const identity = await resolveCaseIdentity(caseType, caseId);
+async function loadAuthoritativeDocuments(caseType, caseId, knownIdentity = null) {
+  const identity = knownIdentity || (await resolveCaseIdentity(caseType, caseId));
   const result =
     caseType === "agreement"
       ? await getCaseFile(identity.agreement_id)
@@ -107,7 +108,13 @@ async function loadAuthoritativeDocuments(caseType, caseId) {
     byte_size: document.file_size_bytes,
     checksum_sha256: document.content_checksum,
     document_status:
-      document.review_status === "verified" ? "verified" : "uploaded",
+      document.review_status === "rejected" || document.approval_status === "rejected"
+        ? "rejected"
+        : document.approval_status === "approved"
+          ? "approved"
+          : document.review_status === "verified"
+            ? "verified"
+            : "uploaded",
     review_status: document.review_status,
     approval_status: document.approval_status,
     source_store: "equipment_finance_private_documents",
@@ -140,6 +147,11 @@ router.get(
       const result = await getOperationalBootstrap({
         userId: userId(req),
         workspaceRole: workspaceRoleFor(req.user),
+        page: req.query.page,
+        page_size: req.query.page_size,
+        search: req.query.search,
+        inboxPage: req.query.inbox_page,
+        inboxPageSize: req.query.inbox_page_size,
       });
       return res.json({ status: "success", ...result });
     } catch (error) {
@@ -212,8 +224,12 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
-      const cases = await listCases({ limit: req.query.limit });
-      return res.json({ status: "success", count: cases.length, cases });
+      const result = await listCasesPage({
+        page: req.query.page,
+        page_size: req.query.page_size || req.query.limit,
+        search: req.query.search,
+      });
+      return res.json({ status: "success", count: result.cases.length, ...result });
     } catch (error) {
       return sendError(res, error, "Could not load Finance cases.");
     }
@@ -228,10 +244,14 @@ router.get(
       const canViewPrivateDocuments =
         isOriginalSystemAdministrator(req.user) ||
         DOCUMENT_VIEW_ROLES.has(workspaceRoleFor(req.user));
+      const identity = await resolveCaseIdentity(
+        req.params.caseType,
+        req.params.caseId
+      );
       const [result, documents] = await Promise.all([
-        getCaseOperations(req.params.caseType, req.params.caseId),
+        getCaseOperations(req.params.caseType, req.params.caseId, identity),
         canViewPrivateDocuments
-          ? loadAuthoritativeDocuments(req.params.caseType, req.params.caseId)
+          ? loadAuthoritativeDocuments(req.params.caseType, req.params.caseId, identity)
           : Promise.resolve([]),
       ]);
       result.documents = documents;
@@ -381,6 +401,46 @@ router.patch(
   }
 );
 
+router.patch(
+  `${PREFIX}/documents/:documentId/approval`,
+  requirePermission("fleet.assets.manage"),
+  async (req, res) => {
+    try {
+      assertFinanceDocumentRole(
+        req,
+        DOCUMENT_REVIEW_ROLES,
+        "Only an authorised independent Finance approver can decide document approval."
+      );
+      const status = String(req.body?.approval_status || "").toLowerCase();
+      if (!["approved", "rejected"].includes(status)) {
+        const error = new Error("Choose Approve or Reject for a verified document.");
+        error.statusCode = 400;
+        throw error;
+      }
+      const updated = await approveDocument({
+        documentId: req.params.documentId,
+        decision: status === "approved" ? "approve" : "reject",
+        notes: req.body?.reason,
+        actor: userId(req),
+        req,
+      });
+      const document = updated.documents.find(
+        (item) => Number(item.id) === Number(req.params.documentId)
+      ) || {
+        id: Number(req.params.documentId),
+        approval_status: status,
+      };
+      return res.json({
+        status: "success",
+        message: `Document ${document.approval_status}.`,
+        document,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not approve the Finance document.");
+    }
+  }
+);
+
 router.get(
   `${PREFIX}/inbox`,
   requirePermission("fleet.assets.view"),
@@ -389,6 +449,8 @@ router.get(
       const inbox = await listInbox({
         userId: userId(req),
         workspaceRole: workspaceRoleFor(req.user),
+        page: req.query.page,
+        page_size: req.query.page_size,
       });
       return res.json({ status: "success", ...inbox });
     } catch (error) {
@@ -443,10 +505,20 @@ router.patch(
 router.get(
   `${PREFIX}/alerts`,
   requirePermission("fleet.assets.view"),
-  async (_req, res) => {
+  async (req, res) => {
     try {
-      const alerts = await getDataQualityAlerts();
-      return res.json({ status: "success", count: alerts.length, alerts });
+      const casePage = await listCasesPage({
+        page: req.query.page,
+        page_size: req.query.page_size,
+        search: req.query.search,
+      });
+      const alerts = await getDataQualityAlerts({ cases: casePage.cases });
+      return res.json({
+        status: "success",
+        count: alerts.length,
+        alerts,
+        pagination: casePage.pagination,
+      });
     } catch (error) {
       return sendError(res, error, "Could not load Finance data-quality alerts.");
     }
