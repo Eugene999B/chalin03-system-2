@@ -228,8 +228,21 @@ export default function EquipmentFinanceOperationalStartPage() {
     const scheduleSave = (event) => {
       const payload = event?.detail?.payload || parseLocalDraft();
       setProgress(localProgress(payload || {}));
-      if (!canServerSave || !payload) return;
       window.clearTimeout(timer);
+      if (!canServerSave) return;
+      if (!payload) {
+        timer = window.setTimeout(() => {
+          axiosClient
+            .delete(`${API}/drafts/start-installment`)
+            .then(() => {
+              versionRef.current = null;
+              setLastSavedAt(null);
+              setSaveState("ready");
+            })
+            .catch(() => setSaveState("offline"));
+        }, 300);
+        return;
+      }
       timer = window.setTimeout(() => {
         if (savingRef.current) {
           queuedRef.current = true;
