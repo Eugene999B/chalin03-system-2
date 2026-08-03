@@ -409,8 +409,15 @@ async function applicationDetail(connection, applicationId) {
       [application.asset_id]
     ),
   ]);
+  const hasImage = Boolean(application.main_image_url);
   return {
-    application: { ...application, hire_location_id: null },
+    application: {
+      ...application,
+      hire_location_id: null,
+      has_image: hasImage,
+      main_image_url: null,
+      image_path: hasImage ? `/equipment-catalogue/sales/credit-applications/${application.id}/image` : null,
+    },
     kyc: kycRows[0][0] || null,
     decisions: decisionRows[0],
     active_asset_locks: lockRows[0],
