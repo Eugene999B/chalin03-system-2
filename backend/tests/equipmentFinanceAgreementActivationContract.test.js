@@ -31,6 +31,13 @@ const operationalStartup = read(
   "backend/scripts/runEquipmentFinanceOperationalPolishStartup.js"
 );
 const packageJson = read("backend/package.json");
+const systemRoutes = read("backend/routes/systemRoutes.js");
+const productionSmoke = read(
+  ".github/workflows/version-3-production-smoke.yml"
+);
+const {
+  splitSqlScript: splitAgreementSql,
+} = require("../scripts/runEquipmentFinanceAgreementCreationStartup");
 
 const combinedRuntime = `${route}\n${independentRouter}\n${schemaService}`;
 
@@ -181,6 +188,38 @@ test("forward migration replaces stale optional and Hire gates with approval-onl
   assert.doesNotMatch(
     verification,
     /\b(?:INSERT\s+INTO|UPDATE\s+[`A-Za-z]|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+(?:TABLE|TRIGGER|PROCEDURE|INDEX)|CREATE\s+(?:TABLE|TRIGGER|PROCEDURE|INDEX))\b/i
+  );
+});
+
+test("Phase 3 SQL splitter accepts reviewed headers before DELIMITER blocks", () => {
+  const migrationSql = read(
+    "database/migrations/20260803_equipment_finance_phase3_agreement_creation.sql"
+  );
+  const verifierSql = read(
+    "database/migrations/20260803_equipment_finance_phase3_agreement_creation_verify.sql"
+  );
+  const migrationStatements = splitAgreementSql(migrationSql);
+  const verifierStatements = splitAgreementSql(verifierSql);
+
+  assert.ok(migrationStatements.length >= 5);
+  assert.equal(verifierStatements.length, 5);
+  assert.match(
+    migrationStatements.join("\n"),
+    /CREATE TRIGGER trg_equipment_installment_credit_gate_before_insert/
+  );
+  assert.match(
+    migrationStatements.join("\n"),
+    /20260803_equipment_finance_phase3_agreement_creation/
+  );
+});
+
+test("production smoke proves the live Railway commit instead of accepting an old healthy deployment", () => {
+  assert.match(systemRoutes, /RAILWAY_GIT_COMMIT_SHA/);
+  assert.match(systemRoutes, /deployment: deploymentStatus\(\)/);
+  assert.match(productionSmoke, /deployment\.provider == "railway"/);
+  assert.match(
+    productionSmoke,
+    /deployment\.commit_sha == env\.GITHUB_SHA/
   );
 });
 
