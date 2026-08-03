@@ -16,7 +16,7 @@ import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage
 import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
-const PROFESSIONAL_STAGES = new Set(["settings", "documents", "staff"]);
+const PROFESSIONAL_STAGES = new Set(["settings", "generated-documents", "staff"]);
 
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
@@ -42,12 +42,16 @@ export default function EquipmentSalesWorkspacePage() {
     return <EquipmentFinanceGuidePage />;
   }
 
-  if (stage === "case-workspace") {
+  if (stage === "documents" || stage === "case-workspace") {
     return <EquipmentFinanceCaseWorkspacePage />;
   }
 
   if (PROFESSIONAL_STAGES.has(stage)) {
-    return <EquipmentFinanceProfessionalPage mode={stage} />;
+    return (
+      <EquipmentFinanceProfessionalPage
+        mode={stage === "generated-documents" ? "documents" : stage}
+      />
+    );
   }
 
   if (stage === "arrears") {
@@ -80,3 +84,4 @@ export default function EquipmentSalesWorkspacePage() {
 
   return <EquipmentFinanceApplicationsPage />;
 }
+

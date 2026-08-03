@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import "../styles/equipmentFinanceCaseWorkspace.css";
 
@@ -34,7 +35,7 @@ function money(value) {
 }
 
 function dateTime(value) {
-  if (!value) return "—";
+  if (!value) return "â€”";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
     ? String(value)
@@ -42,7 +43,7 @@ function dateTime(value) {
 }
 
 function label(value) {
-  return String(value || "—").replaceAll("_", " ");
+  return String(value || "â€”").replaceAll("_", " ");
 }
 
 function errorMessage(error, fallback) {
@@ -89,7 +90,7 @@ function permissionRows(documentCapabilities, reviewCapabilities, authorizationC
 
 export default function EquipmentFinanceCaseWorkspacePage() {
   const [cases, setCases] = useState([]);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedKey, setSelectedKey] = useState("");
   const [caseFile, setCaseFile] = useState(null);
   const [documentCapabilities, setDocumentCapabilities] = useState({});
   const [reviewCapabilities, setReviewCapabilities] = useState({});
@@ -104,6 +105,7 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     document_category: "kyc_identity",
     document_type: "",
     file: null,
+    replacement_of_document_id: null,
   });
   const [authorizationReason, setAuthorizationReason] = useState("");
   const [authorizationDecisionReason, setAuthorizationDecisionReason] = useState("");
@@ -124,18 +126,28 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     documentCapabilities.role ||
     "unknown";
 
-  const loadCase = useCallback(async (agreementId) => {
-    if (!agreementId) {
+  const [selectedType, selectedId] = selectedKey.includes(":")
+    ? selectedKey.split(":", 2)
+    : ["", ""];
+
+  const loadCase = useCallback(async (caseType, caseId) => {
+    if (!caseType || !caseId) {
       setCaseFile(null);
       return;
     }
     setLoading(true);
     setError("");
     try {
+      const reviewPath =
+        caseType === "agreement"
+          ? `${PRIVATE_API}/review-cases/${caseId}`
+          : `${PRIVATE_API}/application-review-cases/${caseId}`;
       const [reviewResponse, authorizationResponse, documentCapsResponse, reviewCapsResponse, authorizationCapsResponse] =
         await Promise.all([
-          axiosClient.get(`${PRIVATE_API}/review-cases/${agreementId}`),
-          axiosClient.get(`${AUTH_API}/cases/${agreementId}`),
+          axiosClient.get(reviewPath),
+          caseType === "agreement"
+            ? axiosClient.get(`${AUTH_API}/cases/${caseId}`)
+            : Promise.resolve({ data: {} }),
           axiosClient.get(`${PRIVATE_API}/capabilities`),
           axiosClient.get(`${PRIVATE_API}/review-capabilities`),
           axiosClient.get(`${AUTH_API}/capabilities`),
@@ -167,18 +179,48 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     setLoading(true);
     setError("");
     try {
-      const response = await axiosClient.get(`${PRIVATE_API}/cases`);
-      const rows = response.data?.cases || [];
+      const [applicationResult, agreementResult] = await Promise.allSettled([
+        axiosClient.get(`${PRIVATE_API}/applications`),
+        axiosClient.get(`${PRIVATE_API}/cases`),
+      ]);
+      if (
+        applicationResult.status === "rejected" &&
+        agreementResult.status === "rejected"
+      ) {
+        throw agreementResult.reason || applicationResult.reason;
+      }
+      const applicationResponse =
+        applicationResult.status === "fulfilled"
+          ? applicationResult.value
+          : { data: { cases: [] } };
+      const agreementResponse =
+        agreementResult.status === "fulfilled"
+          ? agreementResult.value
+          : { data: { cases: [] } };
+      const applicationRows = (applicationResponse.data?.cases || []).map((item) => ({
+        ...item,
+        case_type: "application",
+        case_id: item.application_id,
+      }));
+      const agreementRows = (agreementResponse.data?.cases || []).map((item) => ({
+        ...item,
+        case_type: "agreement",
+        case_id: item.agreement_id,
+      }));
+      const rows = [...applicationRows, ...agreementRows];
       setCases(rows);
-      const nextId = String(selectedId || rows[0]?.agreement_id || "");
-      setSelectedId(nextId);
-      if (nextId) await loadCase(nextId);
+      const nextKey = selectedKey || (rows[0] ? `${rows[0].case_type}:${rows[0].case_id}` : "");
+      setSelectedKey(nextKey);
+      if (nextKey) {
+        const [caseType, caseId] = nextKey.split(":", 2);
+        await loadCase(caseType, caseId);
+      }
       else setLoading(false);
     } catch (loadError) {
       setError(errorMessage(loadError, "Private Finance cases could not be loaded."));
       setLoading(false);
     }
-  }, [loadCase, selectedId]);
+  }, [loadCase, selectedKey]);
 
   useEffect(() => {
     loadCases();
@@ -187,8 +229,8 @@ export default function EquipmentFinanceCaseWorkspacePage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (selectedId) await loadCase(selectedId);
-  }, [loadCase, selectedId]);
+    if (selectedType && selectedId) await loadCase(selectedType, selectedId);
+  }, [loadCase, selectedId, selectedType]);
 
   const filteredCases = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -249,20 +291,27 @@ export default function EquipmentFinanceCaseWorkspacePage() {
       return;
     }
     const content = await fileToBase64(upload.file);
+    const caseCollection = selectedType === "agreement" ? "cases" : "applications";
     const response = await perform(
       "upload",
       () =>
-        axiosClient.post(`${PRIVATE_API}/cases/${selectedId}/documents`, {
+        axiosClient.post(`${PRIVATE_API}/${caseCollection}/${selectedId}/documents`, {
           document_category: upload.document_category,
           document_type: upload.document_type,
           file_name: upload.file.name,
           mime_type: upload.file.type,
           content_base64: content,
+          replacement_of_document_id: upload.replacement_of_document_id,
         }),
       "Private document encrypted and stored."
     );
     if (response) {
-      setUpload({ document_category: "kyc_identity", document_type: "", file: null });
+      setUpload({
+        document_category: "kyc_identity",
+        document_type: "",
+        file: null,
+        replacement_of_document_id: null,
+      });
       const input = document.getElementById("phase5e-private-file");
       if (input) input.value = "";
     }
@@ -294,13 +343,14 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     }
   }
 
-  function documentAction(documentId, action, decision, fallback) {
+  async function documentAction(documentRow, action, decision, fallback) {
+    const documentId = documentRow.id;
     const text = String(notes[documentId] || "").trim();
     if (!text) {
       setError("Enter independent notes before recording this decision.");
       return;
     }
-    perform(
+    const response = await perform(
       `${action}-${documentId}`,
       () =>
         axiosClient.post(`${PRIVATE_API}/documents/${documentId}/${action}`, {
@@ -308,9 +358,21 @@ export default function EquipmentFinanceCaseWorkspacePage() {
         }),
       fallback
     );
+    if (response && action === "archive") {
+      setUpload({
+        document_category: documentRow.document_category,
+        document_type: documentRow.document_type || "",
+        file: null,
+        replacement_of_document_id: documentId,
+      });
+      setMessage(
+        `${documentRow.document_number} was archived. Choose its replacement file below; the new version will preserve this evidence chain.`
+      );
+    }
   }
 
   function requestAuthorization() {
+    if (selectedType !== "agreement") return;
     if (!authorizationReason.trim()) {
       setError("Enter why this approved customer and exact machine are ready for delivery.");
       return;
@@ -362,6 +424,7 @@ export default function EquipmentFinanceCaseWorkspacePage() {
 
   function confirmDelivery(event) {
     event.preventDefault();
+    if (selectedType !== "agreement") return;
     perform(
       "confirm-delivery",
       () =>
@@ -391,14 +454,20 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     <main className="phase5e-workspace" data-testid="phase5e-case-workspace">
       <header className="phase5e-hero">
         <div>
-          <p className="phase5e-eyebrow">Equipment Installment Finance · Phase 5E</p>
+          <p className="phase5e-eyebrow">Equipment Installment Finance Â· Phase 5E</p>
           <h1>Private documents, approvals and controlled delivery</h1>
           <p>
             One server-backed case file for KYC, guarantor evidence, agreement attachments,
             independent decisions, delivery authorization, physical handover and activity.
           </p>
+          <nav className="phase5e-actions" aria-label="Finance document areas">
+            <Link to="?stage=documents">Customer evidence</Link>
+            <Link to="?stage=generated-documents">Generated agreements</Link>
+            <Link to="?stage=collections">Receipts</Link>
+            <Link to="?stage=operations">Statements and reports</Link>
+          </nav>
         </div>
-        <button type="button" className="phase5e-secondary" onClick={refresh} disabled={!selectedId || loading}>
+        <button type="button" className="phase5e-secondary" onClick={refresh} disabled={!selectedKey || loading}>
           Refresh case
         </button>
       </header>
@@ -416,18 +485,19 @@ export default function EquipmentFinanceCaseWorkspacePage() {
             {filteredCases.map((item) => (
               <button
                 type="button"
-                key={item.agreement_id}
-                className={String(item.agreement_id) === String(selectedId) ? "is-active" : ""}
+                key={`${item.case_type}:${item.case_id}`}
+                className={`${item.case_type}:${item.case_id}` === selectedKey ? "is-active" : ""}
                 onClick={() => {
-                  const id = String(item.agreement_id);
-                  setSelectedId(id);
-                  loadCase(id);
+                  const id = String(item.case_id);
+                  setSelectedKey(`${item.case_type}:${id}`);
+                  loadCase(item.case_type, id);
                 }}
                 data-testid="phase5e-case-option"
               >
-                <strong>{item.agreement_number}</strong>
+                <strong>{item.agreement_number || item.application_number}</strong>
                 <span>{item.customer_name}</span>
-                <small>{item.asset_code} · {item.asset_name}</small>
+                <small>{item.case_type === "agreement" ? "Activated agreement" : "Application evidence"}</small>
+                <small>{item.asset_code} Â· {item.asset_name}</small>
                 <em>{item.document_count || 0} private files</em>
               </button>
             ))}
@@ -435,17 +505,17 @@ export default function EquipmentFinanceCaseWorkspacePage() {
         </aside>
 
         <div className="phase5e-content">
-          {loading ? <div className="phase5e-empty">Loading the protected Finance case…</div> : null}
-          {!loading && !financeCase ? <div className="phase5e-empty">Choose a Finance agreement to open its controlled case file.</div> : null}
+          {loading ? <div className="phase5e-empty">Loading the protected Finance caseâ€¦</div> : null}
+          {!loading && !financeCase ? <div className="phase5e-empty">Choose a Finance application or agreement to open its controlled case file.</div> : null}
           {!loading && financeCase ? (
             <>
               <section className="phase5e-summary" data-testid="phase5e-case-summary">
-                <div><span>Agreement</span><strong>{financeCase.agreement_number}</strong></div>
+                <div><span>{selectedType === "agreement" ? "Agreement" : "Application"}</span><strong>{financeCase.agreement_number || financeCase.application_number}</strong></div>
                 <div><span>Customer</span><strong>{financeCase.customer_name}</strong></div>
-                <div><span>Exact machine</span><strong>{financeCase.asset_code} · {financeCase.asset_name}</strong></div>
-                <div><span>Official balance</span><strong>{money(financeCase.outstanding_balance)}</strong></div>
+                <div><span>Exact machine</span><strong>{financeCase.asset_code} Â· {financeCase.asset_name}</strong></div>
+                <div><span>{selectedType === "agreement" ? "Official balance" : "Case stage"}</span><strong>{selectedType === "agreement" ? money(financeCase.outstanding_balance) : "Application evidence"}</strong></div>
                 <div><span>Documents</span><strong className={`phase5e-pill ${caseFile.readiness?.complete ? "is-success" : "is-pending"}`}>{caseFile.readiness?.complete ? "Complete" : "Incomplete"}</strong></div>
-                <div><span>Delivery</span><strong className={`phase5e-pill ${delivered ? "is-success" : "is-pending"}`}>{delivered ? "Delivered" : "Not delivered"}</strong></div>
+                <div><span>Delivery</span><strong className={`phase5e-pill ${delivered ? "is-success" : "is-pending"}`}>{selectedType === "agreement" ? (delivered ? "Delivered" : "Not delivered") : "After activation"}</strong></div>
               </section>
 
               <section className="phase5e-card" data-testid="phase5e-permissions">
@@ -470,13 +540,13 @@ export default function EquipmentFinanceCaseWorkspacePage() {
 
               {documentCapabilities.private_documents_upload ? (
                 <form className="phase5e-card phase5e-form" onSubmit={uploadDocument} data-testid="phase5e-upload-form">
-                  <div className="phase5e-section-heading"><div><h2>Upload encrypted private evidence</h2><p>PDF, JPEG and PNG files are encrypted on the server. No public file URL is created.</p></div></div>
+                  <div className="phase5e-section-heading"><div><h2>{upload.replacement_of_document_id ? "Upload the replacement version" : "Upload encrypted private evidence"}</h2><p>PDF, JPEG, PNG and WebP files are encrypted on the server. No public file URL is created.</p></div></div>
                   <div className="phase5e-form-grid">
                     <label>Category<select value={upload.document_category} onChange={(event) => setUpload((current) => ({ ...current, document_category: event.target.value }))}>{CATEGORY_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
                     <label>Document type<input value={upload.document_type} onChange={(event) => setUpload((current) => ({ ...current, document_type: event.target.value }))} placeholder="Example: Ghana Card" /></label>
-                    <label>Private file<input id="phase5e-private-file" type="file" accept="application/pdf,image/jpeg,image/png" onChange={(event) => setUpload((current) => ({ ...current, file: event.target.files?.[0] || null }))} /></label>
+                    <label>Private file<input id="phase5e-private-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setUpload((current) => ({ ...current, file: event.target.files?.[0] || null }))} /></label>
                   </div>
-                  <button type="submit" disabled={working === "upload"} data-testid="phase5e-upload-document">{working === "upload" ? "Encrypting…" : "Encrypt and store"}</button>
+                  <button type="submit" disabled={working === "upload"} data-testid="phase5e-upload-document">{working === "upload" ? "Encryptingâ€¦" : "Encrypt and store"}</button>
                 </form>
               ) : null}
 
@@ -488,16 +558,16 @@ export default function EquipmentFinanceCaseWorkspacePage() {
                     <tbody>
                       {documents.map((item) => (
                         <tr key={item.id} data-testid="phase5e-document-row">
-                          <td><strong>{label(item.document_category)}</strong><span>{item.document_number}</span><small>{item.original_file_name}</small><small>{item.document_status === "archived" ? "Archived evidence" : "Encrypted · private access"}</small></td>
-                          <td><span>{item.uploaded_by_name || `Staff ${item.uploaded_by || "—"}`}</span><small>{dateTime(item.uploaded_at)}</small></td>
+                          <td><strong>{label(item.document_category)}</strong><span>{item.document_number}</span><small>{item.original_file_name}</small><small>{item.document_status === "archived" ? "Archived evidence" : "Encrypted Â· private access"}</small></td>
+                          <td><span>{item.uploaded_by_name || `Staff ${item.uploaded_by || "â€”"}`}</span><small>{dateTime(item.uploaded_at)}</small></td>
                           <td><strong className={`phase5e-pill ${statusClass(item.review_status)}`}>{label(item.review_status)}</strong><small>{item.reviewed_by_name || "Not reviewed"}</small></td>
                           <td><strong className={`phase5e-pill ${statusClass(item.approval_status)}`}>{label(item.approval_status)}</strong><small>{item.approved_by_name || "Not approved"}</small></td>
                           <td className="phase5e-actions">
                             <button type="button" className="phase5e-secondary" onClick={() => downloadDocument(item)} disabled={working === `download-${item.id}`}>Download</button>
                             {item.document_status === "active" ? <textarea value={notes[item.id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Independent review or approval notes" /> : null}
-                            {reviewCapabilities.independent_document_review && item.review_status === "pending" ? <div><button type="button" onClick={() => documentAction(item.id, "review", "verify", "Document independently verified.")} disabled={working === `review-${item.id}`}>Verify</button><button type="button" className="phase5e-danger" onClick={() => documentAction(item.id, "review", "reject", "Document review rejected.")}>Reject review</button></div> : null}
-                            {reviewCapabilities.document_approval && item.review_status === "verified" && item.approval_status === "pending" ? <div><button type="button" onClick={() => documentAction(item.id, "approval", "approve", "Document approved.")}>Approve</button><button type="button" className="phase5e-danger" onClick={() => documentAction(item.id, "approval", "reject", "Document approval rejected.")}>Reject approval</button></div> : null}
-                            {reviewCapabilities.document_archive && item.document_status === "active" ? <button type="button" className="phase5e-secondary" onClick={() => documentAction(item.id, "archive", "archive", "Document archived for replacement.")}>Archive/replace</button> : null}
+                            {reviewCapabilities.independent_document_review && item.review_status === "pending" ? <div><button type="button" onClick={() => documentAction(item, "review", "verify", "Document independently verified.")} disabled={working === `review-${item.id}`}>Verify</button><button type="button" className="phase5e-danger" onClick={() => documentAction(item, "review", "reject", "Document review rejected.")}>Reject review</button></div> : null}
+                            {reviewCapabilities.document_approval && item.review_status === "verified" && item.approval_status === "pending" ? <div><button type="button" onClick={() => documentAction(item, "approval", "approve", "Document approved.")}>Approve</button><button type="button" className="phase5e-danger" onClick={() => documentAction(item, "approval", "reject", "Document approval rejected.")}>Reject approval</button></div> : null}
+                            {reviewCapabilities.document_archive && item.document_status === "active" ? <button type="button" className="phase5e-secondary" onClick={() => documentAction(item, "archive", "archive", "Document archived for replacement.")}>Archive/replace</button> : null}
                           </td>
                         </tr>
                       ))}
@@ -507,6 +577,7 @@ export default function EquipmentFinanceCaseWorkspacePage() {
                 </div>
               </section>
 
+              {selectedType === "agreement" ? (
               <section className="phase5e-card" data-testid="phase5e-authorization-panel">
                 <div className="phase5e-section-heading"><div><h2>Delivery authorization</h2><p>Backend checks: approved documents, exact asset reservation, payment threshold, no active Hire contract, no prior delivery and unchanged financial snapshot.</p></div></div>
                 <div className="phase5e-thresholds">
@@ -519,8 +590,9 @@ export default function EquipmentFinanceCaseWorkspacePage() {
                 {liveAuthorization ? <div className="phase5e-action-box is-authorized"><strong>{liveAuthorization.authorization_number}</strong><p>Authorized by {liveAuthorization.decided_by_name || liveAuthorization.decided_by}; expires {dateTime(liveAuthorization.expires_at)}.</p>{authorizationCapabilities.delivery_authorization_revoke ? <><textarea value={authorizationDecisionReason} onChange={(event) => setAuthorizationDecisionReason(event.target.value)} placeholder="Revocation reason" /><button type="button" className="phase5e-danger" onClick={() => revokeAuthorization(liveAuthorization.id)}>Revoke authorization</button></> : null}</div> : null}
                 <div className="phase5e-history-grid">{authorizations.map((item) => <div key={item.id}><strong>{item.authorization_number}</strong><span className={`phase5e-pill ${statusClass(item.effective_status)}`}>{label(item.effective_status)}</span><small>Requested {dateTime(item.requested_at)}</small></div>)}</div>
               </section>
+              ) : null}
 
-              {liveAuthorization && CONFIRMATION_ROLES.has(role) && !delivered ? (
+              {selectedType === "agreement" && liveAuthorization && CONFIRMATION_ROLES.has(role) && !delivered ? (
                 <form className="phase5e-card phase5e-form" onSubmit={confirmDelivery} data-testid="phase5e-delivery-confirmation-panel">
                   <div className="phase5e-section-heading"><div><h2>Confirm physical handover</h2><p>The confirmer must differ from the authorizing manager. Delivery, authorization consumption and confirmation commit together.</p></div></div>
                   <div className="phase5e-form-grid">
@@ -533,13 +605,13 @@ export default function EquipmentFinanceCaseWorkspacePage() {
                     <label className="phase5e-wide">Attachments and tools<textarea value={delivery.attachments_tools} onChange={(event) => setDelivery((current) => ({ ...current, attachments_tools: event.target.value }))} /></label>
                     <label className="phase5e-wide">Confirmation notes<textarea value={delivery.notes} onChange={(event) => setDelivery((current) => ({ ...current, notes: event.target.value }))} /></label>
                   </div>
-                  <button type="submit" disabled={working === "confirm-delivery"} data-testid="phase5e-confirm-delivery">{working === "confirm-delivery" ? "Confirming…" : "Confirm authorized delivery"}</button>
+                  <button type="submit" disabled={working === "confirm-delivery"} data-testid="phase5e-confirm-delivery">{working === "confirm-delivery" ? "Confirmingâ€¦" : "Confirm authorized delivery"}</button>
                 </form>
               ) : null}
 
               <section className="phase5e-card" data-testid="phase5e-activity-log">
                 <div className="phase5e-section-heading"><div><h2>Finance case activity</h2><p>Append-only evidence across upload, download, review, approval, authorization, revocation and handover.</p></div></div>
-                <div className="phase5e-activity-list">{activity.map((item) => <article key={item.id} data-testid="phase5e-activity-row"><div><strong>{label(item.action_type)}</strong><span>{item.description}</span></div><small>{item.actor_name || item.actor_role || "System"} · {dateTime(item.created_at)}</small></article>)}{!activity.length ? <p>No protected activity has been recorded.</p> : null}</div>
+                <div className="phase5e-activity-list">{activity.map((item) => <article key={item.id} data-testid="phase5e-activity-row"><div><strong>{label(item.action_type)}</strong><span>{item.description}</span></div><small>{item.actor_name || item.actor_role || "System"} Â· {dateTime(item.created_at)}</small></article>)}{!activity.length ? <p>No protected activity has been recorded.</p> : null}</div>
               </section>
             </>
           ) : null}
@@ -548,3 +620,4 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     </main>
   );
 }
+

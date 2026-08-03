@@ -11,6 +11,7 @@ const {
   approveDocument,
   archiveDocument,
   assertReviewSchema,
+  getApplicationReviewCaseFile,
   getReviewCaseFile,
   getReviewPolicy,
   reviewDocument,
@@ -142,6 +143,23 @@ router.get(
 );
 
 router.get(
+  "/application-review-cases/:applicationId",
+  reviewReadLimiter,
+  requirePermission("fleet.assets.view"),
+  asyncHandler(async (req, res) => {
+    assertRole(
+      req,
+      REVIEW_VIEW_ROLES,
+      "This staff account cannot view independent Finance document decisions."
+    );
+    return res.json({
+      status: "success",
+      ...(await getApplicationReviewCaseFile(req.params.applicationId)),
+    });
+  })
+);
+
+router.get(
   "/review-cases/:agreementId",
   reviewReadLimiter,
   requirePermission("fleet.assets.view"),
@@ -246,3 +264,4 @@ module.exports.REVIEW_VIEW_ROLES = REVIEW_VIEW_ROLES;
 module.exports.approvalDecisionLimiter = approvalDecisionLimiter;
 module.exports.reviewDecisionLimiter = reviewDecisionLimiter;
 module.exports.reviewReadLimiter = reviewReadLimiter;
+

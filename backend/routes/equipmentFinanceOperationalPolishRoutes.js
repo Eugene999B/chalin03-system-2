@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
 const {
   OperationalPolishError,
@@ -11,7 +12,6 @@ const {
   createPaymentShare,
   createTask,
   decideAmendment,
-  getCaseDocument,
   getCaseOperations,
   getDataQualityAlerts,
   getDraft,
@@ -19,22 +19,48 @@ const {
   getPaymentReceipt,
   issuePaymentReceipt,
   listAmendments,
-  listCaseDocuments,
   listCases,
   listInbox,
   listScheduleSimulations,
   operationalPolishSchemaStatus,
-  reviewCaseDocument,
+  resolveCaseIdentity,
   retryBossPaymentAlert,
   saveDraft,
   saveScheduleSimulation,
   simulateSchedule,
   updateTask,
-  uploadCaseDocument,
 } = require("../services/equipmentFinanceOperationalPolishService");
+const {
+  getApplicationCaseFile,
+  getCaseFile,
+  getDocumentContent,
+  uploadDocument,
+} = require("../services/equipmentFinancePrivateDocumentsService");
+const {
+  reviewDocument,
+} = require("../services/equipmentFinanceDocumentReviewService");
 
 const router = express.Router();
 const PREFIX = "/operational-polish";
+const DOCUMENT_UPLOAD_ROLES = new Set([
+  "finance_manager",
+  "credit_officer",
+  "finance_accountant",
+  "equipment_business_manager",
+  "equipment_business_accountant",
+]);
+const DOCUMENT_VIEW_ROLES = new Set([
+  ...DOCUMENT_UPLOAD_ROLES,
+  "collections_officer",
+  "finance_auditor",
+  "equipment_business_auditor",
+]);
+const DOCUMENT_REVIEW_ROLES = new Set([
+  "finance_auditor",
+  "equipment_business_auditor",
+  "finance_manager",
+  "equipment_business_manager",
+]);
 
 function userId(req) {
   const id = Number(req.user?.id || 0);
@@ -51,6 +77,43 @@ function sendError(res, error, fallback) {
   if (error.readiness) payload.readiness = error.readiness;
   if (error.current_draft) payload.current_draft = error.current_draft;
   return res.status(statusCode).json(payload);
+}
+
+function assertFinanceDocumentRole(req, roles, message) {
+  if (isOriginalSystemAdministrator(req.user)) return;
+  if (!roles.has(workspaceRoleFor(req.user))) {
+    const error = new Error(message);
+    error.statusCode = 403;
+    error.code = "EQUIPMENT_FINANCE_DOCUMENT_ROLE_REQUIRED";
+    throw error;
+  }
+}
+
+async function loadAuthoritativeDocuments(caseType, caseId) {
+  const identity = await resolveCaseIdentity(caseType, caseId);
+  const result =
+    caseType === "agreement"
+      ? await getCaseFile(identity.agreement_id)
+      : await getApplicationCaseFile(identity.application_id);
+  return (result.documents || []).map((document) => ({
+    id: document.id,
+    application_id: document.application_id,
+    agreement_id: document.agreement_id,
+    asset_id: document.asset_id,
+    document_category: document.document_category,
+    document_label: document.document_type,
+    original_file_name: document.original_file_name,
+    stored_mime_type: document.mime_type,
+    byte_size: document.file_size_bytes,
+    checksum_sha256: document.content_checksum,
+    document_status:
+      document.review_status === "verified" ? "verified" : "uploaded",
+    review_status: document.review_status,
+    approval_status: document.approval_status,
+    source_store: "equipment_finance_private_documents",
+    download_path:
+      `/equipment-catalogue/sales/operational-polish/documents/${document.id}/download`,
+  }));
 }
 
 router.get(
@@ -162,7 +225,16 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
-      const result = await getCaseOperations(req.params.caseType, req.params.caseId);
+      const canViewPrivateDocuments =
+        isOriginalSystemAdministrator(req.user) ||
+        DOCUMENT_VIEW_ROLES.has(workspaceRoleFor(req.user));
+      const [result, documents] = await Promise.all([
+        getCaseOperations(req.params.caseType, req.params.caseId),
+        canViewPrivateDocuments
+          ? loadAuthoritativeDocuments(req.params.caseType, req.params.caseId)
+          : Promise.resolve([]),
+      ]);
+      result.documents = documents;
       return res.json({ status: "success", ...result });
     } catch (error) {
       return sendError(res, error, "Could not load the complete Finance case.");
@@ -175,7 +247,15 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
-      const documents = await listCaseDocuments(req.params.caseType, req.params.caseId);
+      assertFinanceDocumentRole(
+        req,
+        DOCUMENT_VIEW_ROLES,
+        "This staff account cannot view private Finance documents."
+      );
+      const documents = await loadAuthoritativeDocuments(
+        req.params.caseType,
+        req.params.caseId
+      );
       return res.json({ status: "success", count: documents.length, documents });
     } catch (error) {
       return sendError(res, error, "Could not load protected case documents.");
@@ -188,11 +268,35 @@ router.post(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
-      const document = await uploadCaseDocument({
-        caseType: req.params.caseType,
-        caseId: req.params.caseId,
-        userId: userId(req),
-        body: req.body || {},
+      assertFinanceDocumentRole(
+        req,
+        DOCUMENT_UPLOAD_ROLES,
+        "Only authorised Finance case staff can upload private documents."
+      );
+      const identity = await resolveCaseIdentity(
+        req.params.caseType,
+        req.params.caseId
+      );
+      const dataUrl = String(req.body?.data_url || "");
+      const mimeType = dataUrl.match(/^data:([^;,]+);base64,/i)?.[1] || "";
+      const document = await uploadDocument({
+        agreementId:
+          req.params.caseType === "agreement" ? identity.agreement_id : null,
+        applicationId:
+          req.params.caseType === "application"
+            ? identity.application_id
+            : null,
+        input: {
+          document_category: req.body?.document_category,
+          document_type:
+            req.body?.document_label || req.body?.document_category,
+          file_name: req.body?.file_name,
+          mime_type: mimeType,
+          content_base64: dataUrl,
+          replacement_of_document_id:
+            req.body?.replacement_of_document_id || null,
+        },
+        actor: userId(req),
         req,
       });
       return res.status(201).json({
@@ -211,17 +315,26 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
-      const document = await getCaseDocument(req.params.documentId);
-      const safeName = String(document.original_file_name || "finance-evidence")
+      assertFinanceDocumentRole(
+        req,
+        DOCUMENT_VIEW_ROLES,
+        "This staff account cannot download private Finance documents."
+      );
+      const content = await getDocumentContent({
+        documentId: req.params.documentId,
+        actor: userId(req),
+        req,
+      });
+      const safeName = String(content.fileName || "finance-evidence")
         .replace(/[\r\n"\\/]/g, "-")
         .slice(0, 180);
-      res.setHeader("Content-Type", document.stored_mime_type);
+      res.setHeader("Content-Type", content.mimeType);
       res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
       res.setHeader("Cache-Control", "private, no-store, max-age=0");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("X-Document-Checksum", document.checksum_sha256);
-      return res.send(document.file_content);
+      res.setHeader("X-Document-Checksum", content.checksum);
+      return res.send(content.buffer);
     } catch (error) {
       return sendError(res, error, "Could not download the protected Finance document.");
     }
@@ -233,12 +346,30 @@ router.patch(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
-      const document = await reviewCaseDocument({
+      assertFinanceDocumentRole(
+        req,
+        DOCUMENT_REVIEW_ROLES,
+        "Only an authorised independent Finance reviewer can decide document review."
+      );
+      const status = String(req.body?.document_status || "").toLowerCase();
+      if (!["verified", "rejected"].includes(status)) {
+        const error = new Error("Choose Verify or Reject for a valid document.");
+        error.statusCode = 400;
+        throw error;
+      }
+      await reviewDocument({
         documentId: req.params.documentId,
-        userId: userId(req),
-        body: req.body || {},
+        decision: status === "verified" ? "verify" : "reject",
+        notes:
+          String(req.body?.reason || "").trim() ||
+          "Reviewed through the authoritative Finance document workflow.",
+        actor: userId(req),
         req,
       });
+      const document = {
+        id: Number(req.params.documentId),
+        document_status: status,
+      };
       return res.json({
         status: "success",
         message: `Document ${document.document_status}.`,
@@ -568,3 +699,4 @@ router.use((error, _req, res, next) => {
 });
 
 module.exports = router;
+
