@@ -37,7 +37,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run Phase 6 portfolio and reporting journey
+      - name: Run Phase 6 portfolio, reporting and performance journeys
         run: npx playwright test e2e/equipmentFinancePhaseSix.spec.js
 
       - name: Upload browser evidence
