@@ -456,7 +456,7 @@ export default function EquipmentFinanceApplicationsPage() {
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
       <div className="finance-simple__notice is-info">
-        Finance is company-wide. List responses contain metadata only; the selected file
+        Finance is company-wide. No Hire-location selection is required. List responses contain metadata only; the selected file
         and protected excavator image load separately.
       </div>
 
