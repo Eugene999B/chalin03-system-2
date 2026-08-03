@@ -5,9 +5,8 @@ import EquipmentFinanceStartWizardPage from "./EquipmentFinanceStartWizardPage";
 import "../styles/equipmentFinanceOperationalPolish.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
-const DRAFT_KEY = "chalin03.finance.start-installment.v1";
+const DRAFT_KEY = "chalin03.finance.start-installment.v2";
 const DRAFT_CONFLICT_CODE = "FINANCE_DRAFT_VERSION_CONFLICT";
-const POLL_MS = 900;
 
 function parseLocalDraft() {
   try {
@@ -118,7 +117,6 @@ export default function EquipmentFinanceOperationalStartPage() {
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [conflict, setConflict] = useState(null);
   const [problem, setProblem] = useState("");
-  const lastDraftTextRef = useRef(window.localStorage.getItem(DRAFT_KEY));
   const versionRef = useRef(null);
   const conflictRef = useRef(null);
   const savingRef = useRef(false);
@@ -127,7 +125,6 @@ export default function EquipmentFinanceOperationalStartPage() {
   const restoreServerDraft = useCallback((draft) => {
     if (!draft?.payload) return;
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft.payload));
-    lastDraftTextRef.current = JSON.stringify(draft.payload);
     versionRef.current = Number(draft.version || 1);
     setProgress(draft.progress || localProgress(draft.payload));
     setLastSavedAt(draft.last_saved_at || null);
@@ -226,35 +223,27 @@ export default function EquipmentFinanceOperationalStartPage() {
 
   useEffect(() => {
     if (!ready) return undefined;
-    const timer = window.setInterval(() => {
-      const currentText = window.localStorage.getItem(DRAFT_KEY);
-      const changed = currentText !== lastDraftTextRef.current;
-      if (!changed && !queuedRef.current) return;
-      lastDraftTextRef.current = currentText;
-      const payload = parseLocalDraft();
+    let timer = null;
+
+    const scheduleSave = (event) => {
+      const payload = event?.detail?.payload || parseLocalDraft();
       setProgress(localProgress(payload || {}));
-      if (!canServerSave) return;
-      if (!payload) {
-        queuedRef.current = false;
-        axiosClient
-          .delete(`${API}/drafts/start-installment`)
-          .then(() => {
-            versionRef.current = null;
-            conflictRef.current = null;
-            setConflict(null);
-            setLastSavedAt(null);
-            setSaveState("ready");
-          })
-          .catch(() => setSaveState("offline"));
-        return;
-      }
-      if (savingRef.current) {
-        queuedRef.current = true;
-        return;
-      }
-      saveCurrentDraft();
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
+      if (!canServerSave || !payload) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (savingRef.current) {
+          queuedRef.current = true;
+          return;
+        }
+        saveCurrentDraft();
+      }, 800);
+    };
+
+    window.addEventListener("chalin03:finance-draft-change", scheduleSave);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("chalin03:finance-draft-change", scheduleSave);
+    };
   }, [canServerSave, ready, saveCurrentDraft]);
 
   function useServerVersion() {
