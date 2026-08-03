@@ -34,7 +34,8 @@ assert.match(page, /A different Finance Manager must decide it/);
 assert.match(page, /The requester cannot decide the same request/);
 assert.match(page, /stage=governance/);
 
-assert.match(workspace, /import EquipmentFinanceCorrectionsPage/);
+assert.match(workspace, /const EquipmentFinanceCorrectionsPage = lazy/);
+assert.match(workspace, /import\("\.\/EquipmentFinanceCorrectionsPage"\)/);
 assert.match(workspace, /stage === "corrections"/);
 assert.match(workspace, /return <EquipmentFinanceCorrectionsPage/);
 

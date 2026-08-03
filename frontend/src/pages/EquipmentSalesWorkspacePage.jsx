@@ -1,27 +1,66 @@
+import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
-import EquipmentFinanceAgreementActivationPage from "./EquipmentFinanceAgreementActivationPage";
-import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
-import EquipmentFinanceArrearsPage from "./EquipmentFinanceArrearsPage";
-import EquipmentFinanceCaseWorkspacePage from "./EquipmentFinanceCaseWorkspacePage";
-import EquipmentFinanceCollectionsMinimalPage from "./EquipmentFinanceCollectionsMinimalPage";
-import EquipmentFinanceCorrectionsPage from "./EquipmentFinanceCorrectionsPage";
-import EquipmentFinanceCustomerCentrePage from "./EquipmentFinanceCustomerCentrePage";
-import EquipmentFinanceDepositReservationPage from "./EquipmentFinanceDepositReservationPage";
-import EquipmentFinanceExcavatorsPage from "./EquipmentFinanceExcavatorsPage";
-import EquipmentFinanceFinalLifecyclePage from "./EquipmentFinanceFinalLifecyclePage";
-import EquipmentFinanceGuidePage from "./EquipmentFinanceGuidePage";
-import EquipmentFinanceOperationalPolishPage from "./EquipmentFinanceOperationalPolishPage";
-import EquipmentFinanceOperationalStartPage from "./EquipmentFinanceOperationalStartPage";
-import EquipmentFinanceProfessionalPage from "./EquipmentFinanceProfessionalPage";
-import EquipmentFinanceRecoveryGovernancePage from "./EquipmentFinanceRecoveryGovernancePage";
+
+const EquipmentFinanceAgreementActivationPage = lazy(() =>
+  import("./EquipmentFinanceAgreementActivationPage")
+);
+const EquipmentFinanceApplicationsPage = lazy(() =>
+  import("./EquipmentFinanceApplicationsPage")
+);
+const EquipmentFinanceArrearsPage = lazy(() =>
+  import("./EquipmentFinanceArrearsPage")
+);
+const EquipmentFinanceCaseWorkspacePage = lazy(() =>
+  import("./EquipmentFinanceCaseWorkspacePage")
+);
+const EquipmentFinanceCollectionsMinimalPage = lazy(() =>
+  import("./EquipmentFinanceCollectionsMinimalPage")
+);
+const EquipmentFinanceCorrectionsPage = lazy(() =>
+  import("./EquipmentFinanceCorrectionsPage")
+);
+const EquipmentFinanceCustomerCentrePage = lazy(() =>
+  import("./EquipmentFinanceCustomerCentrePage")
+);
+const EquipmentFinanceDepositReservationPage = lazy(() =>
+  import("./EquipmentFinanceDepositReservationPage")
+);
+const EquipmentFinanceExcavatorsPage = lazy(() =>
+  import("./EquipmentFinanceExcavatorsPage")
+);
+const EquipmentFinanceFinalLifecyclePage = lazy(() =>
+  import("./EquipmentFinanceFinalLifecyclePage")
+);
+const EquipmentFinanceGuidePage = lazy(() =>
+  import("./EquipmentFinanceGuidePage")
+);
+const EquipmentFinanceOperationalPolishPage = lazy(() =>
+  import("./EquipmentFinanceOperationalPolishPage")
+);
+const EquipmentFinanceOperationalStartPage = lazy(() =>
+  import("./EquipmentFinanceOperationalStartPage")
+);
+const EquipmentFinanceProfessionalPage = lazy(() =>
+  import("./EquipmentFinanceProfessionalPage")
+);
+const EquipmentFinanceRecoveryGovernancePage = lazy(() =>
+  import("./EquipmentFinanceRecoveryGovernancePage")
+);
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "generated-documents", "staff"]);
 
-export default function EquipmentSalesWorkspacePage() {
-  const location = useLocation();
-  const stage = new URLSearchParams(location.search).get("stage");
+function FinanceStageFallback() {
+  return (
+    <main className="finance-simple">
+      <div className="finance-simple__empty" role="status" aria-live="polite">
+        Opening the selected Finance workspace…
+      </div>
+    </main>
+  );
+}
 
+function stagePage(stage) {
   if (stage === "start") {
     return <EquipmentFinanceOperationalStartPage />;
   }
@@ -85,3 +124,13 @@ export default function EquipmentSalesWorkspacePage() {
   return <EquipmentFinanceApplicationsPage />;
 }
 
+export default function EquipmentSalesWorkspacePage() {
+  const location = useLocation();
+  const stage = new URLSearchParams(location.search).get("stage");
+
+  return (
+    <Suspense fallback={<FinanceStageFallback />}>
+      {stagePage(stage)}
+    </Suspense>
+  );
+}
