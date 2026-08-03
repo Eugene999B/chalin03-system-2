@@ -25,6 +25,26 @@ const optionalStartPage = fs.readFileSync(
   ),
   "utf8"
 );
+const operationalStartPage = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "src",
+    "pages",
+    "EquipmentFinanceOperationalStartPage.jsx"
+  ),
+  "utf8"
+);
+const applicationsPage = fs.readFileSync(
+  path.join(
+    __dirname,
+    "..",
+    "src",
+    "pages",
+    "EquipmentFinanceApplicationsPage.jsx"
+  ),
+  "utf8"
+);
 const optionalApplicationsPage = fs.readFileSync(
   path.join(
     __dirname,
@@ -141,7 +161,12 @@ function testSensitiveDocumentsUsePrivateVault() {
 function testDraftAutosaveCompatibility() {
   assert.match(enhancedPage, /chalin03\.finance\.start-installment\.v2/);
   assert.match(enhancedPage, /chalin03\.finance\.start-installment\.v1/);
-  assert.match(enhancedPage, /window\.setInterval\(synchronize, 700\)/);
+  assert.doesNotMatch(enhancedPage, /window\.setInterval\(synchronize, 700\)/);
+  assert.match(operationalStartPage, /chalin03\.finance\.start-installment\.v2/);
+  assert.match(operationalStartPage, /chalin03:finance-draft-change/);
+  assert.doesNotMatch(operationalStartPage, /window\.setInterval/);
+  assert.match(applicationsPage, /Changes autosave after 900 ms/);
+  assert.match(applicationsPage, /known_version/);
   assert.match(enhancedPage, /customerMode: existing\.customerMode \|\| "new"/);
   assert.match(enhancedPage, /GhanaPost GPS:/);
 }

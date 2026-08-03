@@ -31,8 +31,8 @@ test("Finance applications route through the protected credit foundation", () =>
   assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
   assert.match(operationalStart, /drafts\/start-installment/);
   assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
-  assert.match(applications, /axiosClient\.get\(`\$\{API\}\/readiness`\)/);
-  assert.match(applications, /axiosClient\.get\(API\)/);
+  assert.match(applications, /axiosClient\.get\(\`\$\{API\}\/readiness\`/);
+  assert.match(applications, /axiosClient\.get\(API,/);
   assert.match(applications, /kyc\/verify/);
   assert.match(applications, /\/review/);
   assert.match(applications, /\/assess/);

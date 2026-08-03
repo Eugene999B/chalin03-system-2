@@ -251,6 +251,11 @@ export default function EquipmentFinanceStartWizardPage() {
             setNotice("Your unfinished installment draft was restored on this device.");
           } catch {
             window.localStorage.removeItem(DRAFT_KEY);
+      window.dispatchEvent(
+        new CustomEvent("chalin03:finance-draft-change", {
+          detail: { payload: null },
+        })
+      );
           }
         }
         if (preselectedCustomer || preselectedAsset) {
@@ -277,6 +282,11 @@ export default function EquipmentFinanceStartWizardPage() {
   useEffect(() => {
     if (loading) return;
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+    window.dispatchEvent(
+      new CustomEvent("chalin03:finance-draft-change", {
+        detail: { payload: data },
+      })
+    );
   }, [data, loading]);
 
   const selectedCustomer = customers.find(
@@ -468,6 +478,11 @@ export default function EquipmentFinanceStartWizardPage() {
       };
       const response = await axiosClient.post(`${API}/start-installment`, payload);
       window.localStorage.removeItem(DRAFT_KEY);
+      window.dispatchEvent(
+        new CustomEvent("chalin03:finance-draft-change", {
+          detail: { payload: null },
+        })
+      );
       const applicationNumber = response.data?.application?.application_number || "The draft";
       setNotice(`${applicationNumber} was created with its exact payment dates.`);
       window.setTimeout(
@@ -486,6 +501,11 @@ export default function EquipmentFinanceStartWizardPage() {
 
   function clearDraft() {
     window.localStorage.removeItem(DRAFT_KEY);
+      window.dispatchEvent(
+        new CustomEvent("chalin03:finance-draft-change", {
+          detail: { payload: null },
+        })
+      );
     setData(blankState());
     setSchedulePreview(null);
     setStep(0);
