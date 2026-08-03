@@ -1,3 +1,4 @@
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -25,6 +26,9 @@ const verification = read(
 );
 const startup = read(
   "backend/scripts/runEquipmentFinanceAgreementCreationStartup.js"
+);
+const operationalStartup = read(
+  "backend/scripts/runEquipmentFinanceOperationalPolishStartup.js"
 );
 const packageJson = read("backend/package.json");
 
@@ -182,8 +186,16 @@ test("forward migration replaces stale optional and Hire gates with approval-onl
 
 test("Railway startup applies and verifies the exact Phase 3 migration before API boot", () => {
   assert.match(
+    operationalStartup,
+    /require\("\.\/runEquipmentFinanceAgreementCreationStartup"\)/
+  );
+  assert.match(
+    operationalStartup,
+    /await runEquipmentFinanceAgreementCreationStartup\(\)/
+  );
+  assert.match(
     packageJson,
-    /runEquipmentFinanceAgreementCreationStartup\.js.*runEquipmentFinanceOperationalPolishStartup\.js/
+    /migrate:equipment-finance:phase3-agreement:production/
   );
   assert.match(startup, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
   assert.match(startup, /verifyDatabaseIdentity/);
