@@ -18,6 +18,7 @@ const P5_UNIFIED = "node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsSta
 const P5C = "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && ";
 const P5D = "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && ";
 const P6 = "node scripts/runEquipmentFinancePhaseSixStartup.js && ";
+const P6_PERFORMANCE = "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && ";
 const STOCK_COUNT = "node scripts/runBossApprovedProductQuantityCorrection20260802.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
@@ -36,6 +37,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);

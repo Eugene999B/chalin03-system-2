@@ -107,8 +107,30 @@ function Field({ title, children, wide = false }) {
 
 function LazyApplicationImage({ application }) {
   const [source, setSource] = useState("");
+  const [visible, setVisible] = useState(false);
+  const containerRef = useRef(null);
+
   useEffect(() => {
     if (!application?.has_image) return undefined;
+    if (!("IntersectionObserver" in window)) {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "160px" }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [application?.has_image, application?.id]);
+
+  useEffect(() => {
+    if (!application?.has_image || !visible) return undefined;
     const controller = new AbortController();
     let objectUrl = "";
     axiosClient
@@ -127,11 +149,18 @@ function LazyApplicationImage({ application }) {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [application?.has_image, application?.id]);
+  }, [application?.has_image, application?.id, visible]);
 
-  return source ? (
-    <div className="finance-simple__machine-image">
-      <img src={source} alt={application.asset_name || "Excavator"} />
+  return application?.has_image ? (
+    <div ref={containerRef} className="finance-simple__machine-image">
+      {source ? (
+        <img
+          src={source}
+          alt={application.asset_name || "Excavator"}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : null}
     </div>
   ) : null;
 }
@@ -191,15 +220,6 @@ export default function EquipmentFinanceApplicationsPage() {
     setLoading(true);
     setProblem("");
     try {
-      const readinessResponse = await axiosClient.get(`${API}/readiness`, {
-        signal: controller.signal,
-      });
-      const nextReadiness = readinessResponse.data?.readiness || { ready: true };
-      setReadiness(nextReadiness);
-      if (!nextReadiness.ready) {
-        setApplications([]);
-        return;
-      }
       const params = {
         page,
         page_size: PAGE_SIZE,
@@ -208,10 +228,16 @@ export default function EquipmentFinanceApplicationsPage() {
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       };
-      const response = await axiosClient.get(API, {
-        params,
-        signal: controller.signal,
-      });
+      const [readinessResponse, response] = await Promise.all([
+        axiosClient.get(`${API}/readiness`, { signal: controller.signal }),
+        axiosClient.get(API, { params, signal: controller.signal }),
+      ]);
+      const nextReadiness = readinessResponse.data?.readiness || { ready: true };
+      setReadiness(nextReadiness);
+      if (!nextReadiness.ready) {
+        setApplications([]);
+        return;
+      }
       setApplications(response.data?.applications || []);
       setPagination(response.data?.pagination || {});
       setSummary(response.data?.summary || {});

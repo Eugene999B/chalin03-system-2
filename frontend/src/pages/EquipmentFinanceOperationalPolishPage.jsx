@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -6,17 +6,16 @@ import "../styles/equipmentFinanceOperationalPolish.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
 const TABS = new Set(["inbox", "case", "documents", "alerts", "schedule", "amendments", "receipts"]);
+const CASE_TABS = new Set(["case", "documents", "alerts", "schedule", "amendments", "receipts"]);
+const CASE_PAGE_SIZE = 25;
+const INBOX_PAGE_SIZE = 25;
 const DOCUMENT_CATEGORIES = [
-  ["buyer_id_front", "Buyer ID front"],
-  ["buyer_id_back", "Buyer ID back"],
-  ["proof_of_address", "Proof of address"],
-  ["income_evidence", "Income evidence"],
-  ["buyer_photo", "Buyer photograph"],
-  ["guarantor_id", "Guarantor ID"],
-  ["guarantor_address", "Guarantor proof of address"],
-  ["signed_agreement", "Signed agreement"],
-  ["delivery_evidence", "Delivery evidence"],
-  ["ownership_evidence", "Ownership evidence"],
+  ["kyc_identity", "Buyer identity evidence"],
+  ["kyc_address", "Proof of address"],
+  ["kyc_income", "Income evidence"],
+  ["guarantor_identity", "Guarantor identity evidence"],
+  ["guarantor_undertaking", "Guarantor undertaking"],
+  ["agreement_attachment", "Agreement attachment"],
   ["other", "Other controlled evidence"],
 ];
 
@@ -29,8 +28,8 @@ const EMPTY_TASK = {
   approval_required: false,
 };
 const EMPTY_UPLOAD = {
-  document_category: "buyer_id_front",
-  document_label: "Buyer ID front",
+  document_category: "kyc_identity",
+  document_label: "Buyer identity evidence",
   file: null,
   notes: "",
   is_sensitive: true,
@@ -137,23 +136,17 @@ function Metric({ title, value, note, tone = "" }) {
   );
 }
 
-function CasePicker({ cases, selectedKey, onChange, search, setSearch }) {
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return cases;
-    return cases.filter((item) =>
-      [
-        item.case_number,
-        item.customer_name,
-        item.customer_phone,
-        item.asset_label,
-        item.status,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term))
-    );
-  }, [cases, search]);
-
+function CasePicker({
+  cases,
+  selectedKey,
+  onChange,
+  search,
+  setSearch,
+  pagination,
+  onPrevious,
+  onNext,
+  loading,
+}) {
   return (
     <div className="finance-ops__case-picker">
       <label>
@@ -168,13 +161,32 @@ function CasePicker({ cases, selectedKey, onChange, search, setSearch }) {
         <span>Selected case</span>
         <select value={selectedKey} onChange={(event) => onChange(event.target.value)}>
           <option value="">Choose application or active installment</option>
-          {visible.map((item) => (
+          {cases.map((item) => (
             <option key={caseKey(item)} value={caseKey(item)}>
               {item.case_number} — {item.customer_name} — {item.asset_label}
             </option>
           ))}
         </select>
       </label>
+      <div className="finance-ops__pagination" aria-label="Finance case pages">
+        <button
+          type="button"
+          disabled={loading || !pagination?.has_previous_page}
+          onClick={onPrevious}
+        >
+          Previous
+        </button>
+        <span>
+          Page {pagination?.page || 1} of {pagination?.total_pages || 1}{" \u00b7 "}{pagination?.total || 0} cases
+        </span>
+        <button
+          type="button"
+          disabled={loading || !pagination?.has_next_page}
+          onClick={onNext}
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
@@ -190,16 +202,27 @@ export default function EquipmentFinanceOperationalPolishPage() {
   const canManage = effectivePermissions.includes("fleet.assets.manage");
   const requestedTab = new URLSearchParams(location.search).get("tab") || "inbox";
   const tab = TABS.has(requestedTab) ? requestedTab : "inbox";
+  const requestedCaseKey = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const caseType = params.get("case_type");
+    const caseId = Number(params.get("case_id"));
+    return ["application", "agreement"].includes(caseType) && Number.isInteger(caseId) && caseId > 0
+      ? `${caseType}:${caseId}`
+      : "";
+  }, [location.search]);
 
   const [bootstrap, setBootstrap] = useState({
     cases: [],
     inbox: { items: [], summary: {} },
     alerts: [],
     policy: {},
+    pagination: { page: 1, total_pages: 1, total: 0 },
   });
   const [caseData, setCaseData] = useState(null);
   const [selectedKey, setSelectedKey] = useState("");
   const [caseSearch, setCaseSearch] = useState("");
+  const [casePage, setCasePage] = useState(1);
+  const [inboxPage, setInboxPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [caseLoading, setCaseLoading] = useState(false);
   const [busy, setBusy] = useState("");
@@ -214,8 +237,10 @@ export default function EquipmentFinanceOperationalPolishPage() {
   const [receipt, setReceipt] = useState(null);
   const [shareChannel, setShareChannel] = useState("sms");
   const [shareRecipient, setShareRecipient] = useState("");
+  const bootstrapAbortRef = useRef(null);
+  const caseAbortRef = useRef(null);
 
-  const selectedIdentity = parseCaseKey(selectedKey);
+  const selectedIdentity = useMemo(() => parseCaseKey(selectedKey), [selectedKey]);
 
   const openTab = useCallback(
     (nextTab, identity = selectedIdentity) => {
@@ -232,10 +257,22 @@ export default function EquipmentFinanceOperationalPolishPage() {
   );
 
   const loadBootstrap = useCallback(async () => {
+    bootstrapAbortRef.current?.abort();
+    const controller = new AbortController();
+    bootstrapAbortRef.current = controller;
     setLoading(true);
     setProblem("");
     try {
-      const response = await axiosClient.get(`${API}/bootstrap`);
+      const response = await axiosClient.get(`${API}/bootstrap`, {
+        params: {
+          page: casePage,
+          page_size: CASE_PAGE_SIZE,
+          search: caseSearch.trim() || undefined,
+          inbox_page: inboxPage,
+          inbox_page_size: INBOX_PAGE_SIZE,
+        },
+        signal: controller.signal,
+      });
       const next = response.data || {};
       setBootstrap({
         cases: next.cases || [],
@@ -243,35 +280,37 @@ export default function EquipmentFinanceOperationalPolishPage() {
         alerts: next.alerts || [],
         policy: next.policy || {},
         settings: next.settings || null,
+        pagination: next.pagination || { page: 1, total_pages: 1, total: 0 },
       });
-      const params = new URLSearchParams(location.search);
-      const requestedType = params.get("case_type");
-      const requestedId = params.get("case_id");
-      const requestedKey = requestedType && requestedId ? `${requestedType}:${requestedId}` : "";
       setSelectedKey((current) => {
-        if (requestedKey && next.cases?.some((item) => caseKey(item) === requestedKey)) {
-          return requestedKey;
-        }
+        if (requestedCaseKey) return requestedCaseKey;
         if (current && next.cases?.some((item) => caseKey(item) === current)) return current;
         return next.cases?.[0] ? caseKey(next.cases[0]) : "";
       });
     } catch (error) {
-      setProblem(message(error, "Could not load Phase 3 Finance operations."));
+      if (error?.code !== "ERR_CANCELED") {
+        setProblem(message(error, "Could not load Finance operations."));
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, [location.search]);
+  }, [casePage, caseSearch, inboxPage, requestedCaseKey]);
 
   const loadCase = useCallback(async (identity = selectedIdentity) => {
+    caseAbortRef.current?.abort();
     if (!identity) {
       setCaseData(null);
+      setCaseLoading(false);
       return;
     }
+    const controller = new AbortController();
+    caseAbortRef.current = controller;
     setCaseLoading(true);
     setProblem("");
     try {
       const response = await axiosClient.get(
-        `${API}/cases/${identity.caseType}/${identity.caseId}`
+        `${API}/cases/${identity.caseType}/${identity.caseId}`,
+        { signal: controller.signal }
       );
       const data = response.data || {};
       setCaseData(data);
@@ -284,25 +323,41 @@ export default function EquipmentFinanceOperationalPolishPage() {
         payment_frequency: record.payment_frequency || record.proposed_frequency || current.payment_frequency,
         first_due_date: record.first_due_date ? String(record.first_due_date).slice(0, 10) : current.first_due_date,
       }));
-      if (!selectedPaymentId && data.payments?.[0]?.id) {
-        setSelectedPaymentId(String(data.payments[0].id));
-      }
+      setSelectedPaymentId((current) =>
+        data.payments?.some((payment) => String(payment.id) === String(current))
+          ? current
+          : data.payments?.[0]?.id
+            ? String(data.payments[0].id)
+            : ""
+      );
     } catch (error) {
-      setProblem(message(error, "Could not load the selected Finance case."));
+      if (error?.code !== "ERR_CANCELED") {
+        setProblem(message(error, "Could not load the selected Finance case."));
+      }
     } finally {
-      setCaseLoading(false);
+      if (!controller.signal.aborted) setCaseLoading(false);
     }
-  }, [selectedIdentity, selectedPaymentId]);
+  }, [selectedIdentity]);
 
   useEffect(() => {
-    loadBootstrap();
-  }, [loadBootstrap]);
+    const timer = window.setTimeout(loadBootstrap, caseSearch ? 300 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      bootstrapAbortRef.current?.abort();
+    };
+  }, [caseSearch, loadBootstrap]);
 
   useEffect(() => {
+    if (!CASE_TABS.has(tab)) {
+      caseAbortRef.current?.abort();
+      setCaseLoading(false);
+      return undefined;
+    }
     if (selectedIdentity) loadCase(selectedIdentity);
-    // selectedIdentity is derived from selectedKey; reload only when the key changes.
+    return () => caseAbortRef.current?.abort();
+    // selectedIdentity is derived from selectedKey; reload only when the key or tab changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedKey]);
+  }, [selectedKey, tab]);
 
   useEffect(() => {
     setReceipt(null);
@@ -421,6 +476,26 @@ export default function EquipmentFinanceOperationalPolishPage() {
       () =>
         axiosClient.patch(`${API}/documents/${document.id}/review`, {
           document_status: status,
+          reason,
+        }),
+      `Document ${status}.`
+    );
+  }
+
+  async function approveCaseDocument(document, status) {
+    const reason =
+      status === "rejected"
+        ? window.prompt(
+            "Record the independent approval rejection reason:",
+            "The verified evidence does not satisfy the approval policy."
+          )
+        : "Approved after independent review of the Finance evidence.";
+    if (!reason) return;
+    await runAction(
+      `document:${document.id}:approval:${status}`,
+      () =>
+        axiosClient.patch(`${API}/documents/${document.id}/approval`, {
+          approval_status: status,
           reason,
         }),
       `Document ${status}.`
@@ -670,7 +745,11 @@ export default function EquipmentFinanceOperationalPolishPage() {
       ) : null}
 
       <section className="finance-ops__metrics">
-        <Metric title="Finance cases" value={bootstrap.cases.length} note="Applications and agreements" />
+        <Metric
+          title="Finance cases"
+          value={bootstrap.pagination?.total || 0}
+          note="Paginated applications and agreements"
+        />
         <Metric
           title="Inbox items"
           value={bootstrap.inbox?.summary?.total || 0}
@@ -685,9 +764,9 @@ export default function EquipmentFinanceOperationalPolishPage() {
         />
         <Metric
           title="Quality alerts"
-          value={bootstrap.alerts.length}
+          value={bootstrap.inbox?.summary?.data_quality || 0}
           note="Missing documents or incomplete data"
-          tone={bootstrap.alerts.length ? "warning" : ""}
+          tone={(bootstrap.inbox?.summary?.data_quality || 0) > 0 ? "warning" : ""}
         />
       </section>
 
@@ -696,7 +775,14 @@ export default function EquipmentFinanceOperationalPolishPage() {
         selectedKey={selectedKey}
         onChange={chooseCase}
         search={caseSearch}
-        setSearch={setCaseSearch}
+        setSearch={(value) => {
+          setCaseSearch(value);
+          setCasePage(1);
+        }}
+        pagination={bootstrap.pagination}
+        onPrevious={() => setCasePage((current) => Math.max(1, current - 1))}
+        onNext={() => setCasePage((current) => current + 1)}
+        loading={loading}
       />
 
       {selectedCaseSummary ? (
@@ -771,6 +857,26 @@ export default function EquipmentFinanceOperationalPolishPage() {
               ))}
             </div>
           )}
+          <div className="finance-ops__pagination" aria-label="Finance inbox pages">
+            <button
+              type="button"
+              disabled={loading || !bootstrap.inbox?.pagination?.has_previous_page}
+              onClick={() => setInboxPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </button>
+            <span>
+              Page {bootstrap.inbox?.pagination?.page || 1}{" \u00b7 "}{bootstrap.inbox?.summary?.total || 0}
+              {bootstrap.inbox?.summary?.total_is_lower_bound ? "+" : ""} queued
+            </span>
+            <button
+              type="button"
+              disabled={loading || !bootstrap.inbox?.pagination?.has_next_page}
+              onClick={() => setInboxPage((current) => current + 1)}
+            >
+              Next
+            </button>
+          </div>
         </section>
       ) : null}
 
@@ -880,7 +986,8 @@ export default function EquipmentFinanceOperationalPolishPage() {
                     <span className={`finance-ops__status is-${document.document_status}`}>{label(document.document_status)}</span>
                     <div className="finance-ops__card-actions">
                       <button type="button" onClick={() => downloadProtected(document.download_path, document.original_file_name)}>Download</button>
-                      {canManage && document.document_status === "uploaded" ? <><button type="button" onClick={() => reviewDocument(document, "verified")}>Verify</button><button type="button" onClick={() => reviewDocument(document, "rejected")}>Reject</button></> : null}
+                      {canManage && document.review_status === "pending" ? <><button type="button" onClick={() => reviewDocument(document, "verified")}>Verify</button><button type="button" onClick={() => reviewDocument(document, "rejected")}>Reject review</button></> : null}
+                      {canManage && document.review_status === "verified" && document.approval_status === "pending" ? <><button type="button" onClick={() => approveCaseDocument(document, "approved")}>Approve</button><button type="button" onClick={() => approveCaseDocument(document, "rejected")}>Reject approval</button></> : null}
                     </div>
                   </article>
                 ))}

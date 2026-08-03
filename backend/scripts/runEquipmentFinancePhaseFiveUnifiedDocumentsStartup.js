@@ -200,6 +200,16 @@ function normalizeLegacyCategory(value) {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
+  const mapped = {
+    buyer_id_front: "kyc_identity",
+    buyer_id_back: "kyc_identity",
+    buyer_photo: "kyc_identity",
+    proof_of_address: "kyc_address",
+    income_evidence: "kyc_income",
+    guarantor_id: "guarantor_identity",
+    signed_agreement: "agreement_attachment",
+  }[category];
+  if (mapped) return mapped;
   return DOCUMENT_CATEGORIES.has(category) ? category : "other";
 }
 

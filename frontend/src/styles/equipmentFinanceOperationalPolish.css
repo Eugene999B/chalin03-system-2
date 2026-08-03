@@ -187,6 +187,33 @@
   background: #fff;
 }
 
+.finance-ops__pagination {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  color: #52675c;
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.finance-ops__pagination button {
+  border: 1px solid #b9c9c0;
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.85rem;
+  background: #fff;
+  color: #1f5f45;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.finance-ops__pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .finance-ops label {
   display: grid;
   gap: 0.35rem;
@@ -872,6 +899,11 @@
 
   .finance-ops__inbox-list article,
   .finance-ops__amendment-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-ops__pagination {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
