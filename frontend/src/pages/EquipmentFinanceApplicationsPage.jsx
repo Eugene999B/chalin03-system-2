@@ -10,6 +10,7 @@ const REVIEW_ROLES = new Set([
   "admin",
   "administrator",
   "manager",
+  "system_admin",
   "system_administrator",
   "super_admin",
   "finance_manager",
@@ -139,11 +140,19 @@ export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const role = String(user?.workspace_role || user?.access_role || user?.role || "").toLowerCase();
+  const assignedRoles = [
+    user?.workspace_role,
+    user?.access_role,
+    user?.role,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .filter(Boolean);
   const canManage =
     effectivePermissions.includes("fleet.assets.manage") ||
-    ["admin", "administrator", "system_administrator", "super_admin"].includes(role);
-  const canReview = REVIEW_ROLES.has(role);
+    assignedRoles.some((role) =>
+      ["admin", "administrator", "system_admin", "system_administrator", "super_admin"].includes(role)
+    );
+  const canReview = assignedRoles.some((role) => REVIEW_ROLES.has(role));
 
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const requestedApplicationId = query.get("application");
@@ -327,11 +336,13 @@ export default function EquipmentFinanceApplicationsPage() {
       } else if (kind === "submit") {
         response = await axiosClient.post(`${API}/${application.id}/submit`, {
           notes: reason,
+          known_version: Number(application.decision_version || 0),
         });
       } else if (["verify", "reject_kyc"].includes(kind)) {
         response = await axiosClient.post(`${API}/${application.id}/kyc/verify`, {
           verification_status: kind === "verify" ? "verified" : "rejected",
           reason,
+          known_version: Number(application.decision_version || 0),
         });
       } else if (["withdraw", "cancel"].includes(kind)) {
         response = await axiosClient.post(`${API}/${application.id}/${kind}`, {
@@ -341,11 +352,17 @@ export default function EquipmentFinanceApplicationsPage() {
         response = await axiosClient.post(`${API}/${application.id}/review`, {
           action: kind,
           reason,
+          known_version: Number(application.decision_version || 0),
         });
       }
       setDecision(null);
       setEdit(null);
-      setNotice(response.data?.message || "Application action completed.");
+      const nextActionLabel = response.data?.next_action?.label;
+      setNotice(
+        `${response.data?.message || "Application action completed."}${
+          nextActionLabel ? ` Next action: ${nextActionLabel}` : ""
+        }`
+      );
       await loadList();
       if (!["withdraw", "cancel"].includes(kind)) await openDetail(application.id);
       else closeDetail();

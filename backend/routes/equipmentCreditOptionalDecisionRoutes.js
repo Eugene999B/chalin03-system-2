@@ -19,9 +19,34 @@ const REVIEWER_ROLES = new Set([
   "admin",
   "administrator",
   "manager",
+  "system_admin",
   "system_administrator",
   "super_admin",
+  "finance_manager",
+  "equipment_business_manager",
 ]);
+const REVIEW_TRANSITIONS = Object.freeze({
+  start_review: {
+    from: new Set(["submitted"]),
+    to: "under_review",
+    action_type: "review_started",
+  },
+  request_changes: {
+    from: new Set(["submitted", "under_review"]),
+    to: "changes_requested",
+    action_type: "changes_requested",
+  },
+  approve: {
+    from: new Set(["submitted", "under_review"]),
+    to: "approved",
+    action_type: "approved",
+  },
+  decline: {
+    from: new Set(["submitted", "under_review"]),
+    to: "declined",
+    action_type: "declined",
+  },
+});
 const FINAL_STATUSES = new Set(["approved", "declined", "withdrawn"]);
 
 class OptionalDecisionError extends Error {
@@ -54,7 +79,11 @@ function boolValue(value) {
 }
 
 function isReviewer(req) {
-  return REVIEWER_ROLES.has(cleanText(req.user?.role, 80).toLowerCase());
+  return [
+    req.user?.workspace_role,
+    req.user?.access_role,
+    req.user?.role,
+  ].some((value) => REVIEWER_ROLES.has(cleanText(value, 80).toLowerCase()));
 }
 
 function assertReviewer(req) {
@@ -70,6 +99,80 @@ function assertReviewer(req) {
 function normalizeAction(value) {
   const action = cleanText(value, 80).toLowerCase().replace(/[\s-]+/g, "_");
   return REVIEW_ACTIONS.has(action) ? action : null;
+}
+
+function nextAction(status) {
+  const actions = {
+    draft: {
+      code: "complete_and_submit",
+      label: "Complete the draft or submit it for manager review.",
+      allowed_actions: ["edit", "submit", "cancel", "withdraw"],
+    },
+    changes_requested: {
+      code: "apply_requested_changes",
+      label: "Apply the manager's requested changes and resubmit.",
+      allowed_actions: ["edit", "submit", "cancel", "withdraw"],
+    },
+    submitted: {
+      code: "manager_review",
+      label: "An authorised Finance manager should start or complete review.",
+      allowed_actions: ["start_review", "request_changes", "approve", "decline"],
+    },
+    under_review: {
+      code: "manager_decision",
+      label: "Record approval, decline, or the exact changes required.",
+      allowed_actions: ["request_changes", "approve", "decline"],
+    },
+    approved: {
+      code: "activate_agreement",
+      label: "Create the installment agreement from this approved application.",
+      allowed_actions: ["activate_agreement"],
+    },
+    declined: {
+      code: "closed",
+      label: "This application is closed with a recorded decline reason.",
+      allowed_actions: [],
+    },
+    withdrawn: {
+      code: "closed",
+      label: "This application is closed and no longer holds the excavator.",
+      allowed_actions: [],
+    },
+  };
+  return actions[status] || {
+    code: "inspect",
+    label: "Open the application file to confirm its current state.",
+    allowed_actions: [],
+  };
+}
+
+function assertKnownVersion(req, application) {
+  if (
+    req.body?.known_version === undefined ||
+    req.body?.known_version === null ||
+    req.body?.known_version === ""
+  ) {
+    return;
+  }
+  const knownVersion = Number(req.body.known_version);
+  if (
+    !Number.isInteger(knownVersion) ||
+    knownVersion < 0 ||
+    knownVersion !== Number(application.decision_version || 0)
+  ) {
+    const error = new OptionalDecisionError(
+      409,
+      "This application changed after it was opened. Reload it before recording a decision.",
+      "EQUIPMENT_CREDIT_DECISION_VERSION_CONFLICT"
+    );
+    error.current_application = {
+      id: application.id,
+      application_status: application.application_status,
+      decision_version: Number(application.decision_version || 0),
+      next_action: nextAction(application.application_status),
+    };
+    throw error;
+  }
 }
 
 function hasAffordabilityInformation(application = {}) {
@@ -140,21 +243,13 @@ async function withTransaction(work) {
   }
 }
 
-function locationScope(req, alias = "") {
-  const locationId = positiveId(req.hireLocationScope?.locationId);
-  if (!locationId) return { sql: "", params: [] };
-  const prefix = alias ? `${alias}.` : "";
-  return { sql: ` AND ${prefix}hire_location_id = ?`, params: [locationId] };
-}
-
-async function loadApplication(connection, applicationId, req, lock = false) {
-  const scope = locationScope(req);
+async function loadApplication(connection, applicationId, lock = false) {
   const [rows] = await connection.query(
     `SELECT *
      FROM equipment_credit_applications
-     WHERE id = ?${scope.sql}
+     WHERE id = ?
      LIMIT 1 ${lock ? "FOR UPDATE" : ""}`,
-    [applicationId, ...scope.params]
+    [applicationId]
   );
   return rows[0] || null;
 }
@@ -262,7 +357,7 @@ async function audit(req, connection, action, application, details, metadata = {
     entityType: "equipment_credit_application",
     entityId: application.id,
     workspaceCode: "equipment_installment_finance",
-    hireLocationId: application.hire_location_id || null,
+    hireLocationId: null,
     severity: "notice",
     outcome: "success",
     details,
@@ -280,6 +375,16 @@ function sendError(res, error, fallbackMessage) {
       status: "error",
       code: error.code,
       message: error.message,
+      ...(error.current_application
+        ? { current_application: error.current_application }
+        : {}),
+    });
+  }
+  if (["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error?.code)) {
+    return res.status(503).json({
+      status: "error",
+      code: "EQUIPMENT_FINANCE_SCHEMA_NOT_READY",
+      message: "The Finance approval foundation is not ready yet.",
     });
   }
   console.error(fallbackMessage, error);
@@ -297,14 +402,19 @@ router.post(
       }
 
       const submitted = await withTransaction(async (connection) => {
-        const application = await loadApplication(connection, applicationId, req, true);
+        const application = await loadApplication(connection, applicationId, true);
         if (!application) {
           throw new OptionalDecisionError(404, "Installment application was not found.");
         }
+        if (application.application_status === "submitted") {
+          return { application, replayed: true };
+        }
+        assertKnownVersion(req, application);
         if (!["draft", "changes_requested"].includes(application.application_status)) {
           throw new OptionalDecisionError(
             409,
-            "Only a draft or changes-requested application can be submitted."
+            "Only a draft or changes-requested application can be submitted.",
+            "EQUIPMENT_CREDIT_INVALID_SUBMIT_TRANSITION"
           );
         }
 
@@ -341,18 +451,22 @@ router.post(
           application,
           `Submitted installment application ${application.application_number} for review without forcing optional customer information.`,
           {
+            finance_scope: "company_wide",
             affordability_status: assessment.affordability_status,
             kyc_status: assessment.kyc_status,
           }
         );
-        return application;
+        return { application, replayed: false };
       });
 
       return res.json({
         status: "success",
-        message:
-          "Installment application submitted. Blank optional customer, KYC, guarantor or affordability fields did not block submission.",
-        application: submitted,
+        message: submitted.replayed
+          ? "This installment application was already submitted; no duplicate decision was created."
+          : "Installment application submitted. Blank optional customer, KYC, guarantor or affordability fields did not block submission.",
+        application: submitted.application,
+        next_action: nextAction(submitted.application.application_status),
+        idempotent_replay: submitted.replayed,
       });
     } catch (error) {
       return sendError(res, error, "Could not submit the installment application.");
@@ -377,18 +491,49 @@ router.post(
       }
 
       const result = await withTransaction(async (connection) => {
-        const application = await loadApplication(connection, applicationId, req, true);
+        const application = await loadApplication(connection, applicationId, true);
         if (!application) {
           throw new OptionalDecisionError(404, "Installment application was not found.");
         }
+        const currentKyc = await loadKyc(connection, application.id, true);
+
+        if (
+          verificationStatus === "verified" &&
+          currentKyc?.verified_at &&
+          application.kyc_status === "verified"
+        ) {
+          return {
+            application,
+            replayed: true,
+            message:
+              "The available KYC information was already reviewed; no duplicate decision was created.",
+          };
+        }
+        if (
+          verificationStatus === "rejected" &&
+          application.kyc_status === "rejected" &&
+          application.application_status === "changes_requested"
+        ) {
+          return {
+            application,
+            replayed: true,
+            message:
+              "This KYC issue was already recorded and changes are already requested.",
+          };
+        }
+        assertKnownVersion(req, application);
         if (FINAL_STATUSES.has(application.application_status)) {
-          throw new OptionalDecisionError(409, "This application already has a final decision.");
+          throw new OptionalDecisionError(
+            409,
+            "This application already has a final decision.",
+            "EQUIPMENT_CREDIT_FINAL_DECISION_RECORDED"
+          );
         }
 
-        const currentKyc = await loadKyc(connection, application.id, true);
         if (!currentKyc) {
           return {
             application,
+            replayed: true,
             message:
               "No optional KYC information was recorded. This does not block submission or approval.",
           };
@@ -448,10 +593,12 @@ router.post(
             connection,
             "EQUIPMENT_CREDIT_KYC_REVIEWED",
             application,
-            `Reviewed the available KYC information for ${application.application_number}.`
+            `Reviewed the available KYC information for ${application.application_number}.`,
+            { finance_scope: "company_wide" }
           );
           return {
             application,
+            replayed: false,
             message:
               "Available KYC information reviewed. Missing optional fields do not block approval.",
           };
@@ -484,10 +631,11 @@ router.post(
           "EQUIPMENT_CREDIT_KYC_ISSUE_RECORDED",
           application,
           `Recorded a manager-identified KYC issue for ${application.application_number}.`,
-          { reason }
+          { finance_scope: "company_wide", reason }
         );
         return {
           application,
+          replayed: false,
           message: "KYC issue recorded and changes requested by the manager.",
         };
       });
@@ -496,6 +644,8 @@ router.post(
         status: "success",
         message: result.message,
         application: result.application,
+        next_action: nextAction(result.application.application_status),
+        idempotent_replay: result.replayed,
       });
     } catch (error) {
       return sendError(res, error, "Could not record the optional KYC review.");
@@ -520,17 +670,27 @@ router.post(
       }
 
       const reviewed = await withTransaction(async (connection) => {
-        const application = await loadApplication(connection, applicationId, req, true);
+        const application = await loadApplication(connection, applicationId, true);
         if (!application) {
           throw new OptionalDecisionError(404, "Installment application was not found.");
         }
-        if (FINAL_STATUSES.has(application.application_status)) {
-          throw new OptionalDecisionError(409, "This application already has a final decision.");
+        const transition = REVIEW_TRANSITIONS[action];
+        if (application.application_status === transition.to) {
+          return { application, replayed: true };
         }
-        if (!["submitted", "under_review"].includes(application.application_status)) {
+        assertKnownVersion(req, application);
+        if (FINAL_STATUSES.has(application.application_status)) {
           throw new OptionalDecisionError(
             409,
-            "Submit the installment application before recording a manager decision."
+            "This application already has a different final decision.",
+            "EQUIPMENT_CREDIT_FINAL_DECISION_RECORDED"
+          );
+        }
+        if (!transition.from.has(application.application_status)) {
+          throw new OptionalDecisionError(
+            409,
+            `The ${action.replaceAll("_", " ")} action is not valid from ${application.application_status.replaceAll("_", " ")}.`,
+            "EQUIPMENT_CREDIT_INVALID_REVIEW_TRANSITION"
           );
         }
 
@@ -538,23 +698,9 @@ router.post(
         const assessment = advisoryAssessment(application, kyc || {});
         await persistAssessment(connection, application, assessment, userId(req));
 
-        let nextStatus = application.application_status;
-        let actionType = "review_started";
-        if (action === "start_review") nextStatus = "under_review";
-        if (action === "request_changes") {
-          nextStatus = "changes_requested";
-          actionType = "changes_requested";
-        }
-        if (action === "decline") {
-          nextStatus = "declined";
-          actionType = "declined";
-        }
-        if (action === "approve") {
-          nextStatus = "approved";
-          actionType = "approved";
-        }
-
         const fromStatus = application.application_status;
+        const nextStatus = transition.to;
+        const actionType = transition.action_type;
         await connection.query(
           `UPDATE equipment_credit_applications
            SET application_status = ?, reviewed_by = ?, reviewed_at = NOW(),
@@ -576,7 +722,7 @@ router.post(
               ? "Approved by an authorised manager. Optional customer information was not forced."
               : "Manager review started."),
           userId(req),
-          { review_action: action }
+          { review_action: action, finance_scope: "company_wide" }
         );
         await audit(
           req,
@@ -585,21 +731,25 @@ router.post(
           application,
           `Installment application ${application.application_number} changed from ${fromStatus} to ${nextStatus}.`,
           {
+            finance_scope: "company_wide",
             reason,
             affordability_status: assessment.affordability_status,
             kyc_status: assessment.kyc_status,
           }
         );
-        return application;
+        return { application, replayed: false };
       });
 
       return res.json({
         status: "success",
-        message:
-          reviewed.application_status === "approved"
+        message: reviewed.replayed
+          ? `This application is already ${reviewed.application.application_status.replaceAll("_", " ")}; no duplicate decision was created.`
+          : reviewed.application.application_status === "approved"
             ? "Installment application approved. Optional customer, KYC, guarantor and affordability fields were not required."
-            : `Installment application review recorded as ${reviewed.application_status.replaceAll("_", " ")}.`,
-        application: reviewed,
+            : `Installment application review recorded as ${reviewed.application.application_status.replaceAll("_", " ")}.`,
+        application: reviewed.application,
+        next_action: nextAction(reviewed.application.application_status),
+        idempotent_replay: reviewed.replayed,
       });
     } catch (error) {
       return sendError(res, error, "Could not review the installment application.");
@@ -611,3 +761,6 @@ module.exports = router;
 module.exports.REVIEWER_ROLES = REVIEWER_ROLES;
 module.exports.advisoryAssessment = advisoryAssessment;
 module.exports.hasAffordabilityInformation = hasAffordabilityInformation;
+
+module.exports.nextAction = nextAction;
+module.exports.REVIEW_TRANSITIONS = REVIEW_TRANSITIONS;
