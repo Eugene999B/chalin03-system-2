@@ -327,11 +327,13 @@ export default function EquipmentFinanceApplicationsPage() {
       } else if (kind === "submit") {
         response = await axiosClient.post(`${API}/${application.id}/submit`, {
           notes: reason,
+          known_version: Number(application.decision_version || 0),
         });
       } else if (["verify", "reject_kyc"].includes(kind)) {
         response = await axiosClient.post(`${API}/${application.id}/kyc/verify`, {
           verification_status: kind === "verify" ? "verified" : "rejected",
           reason,
+          known_version: Number(application.decision_version || 0),
         });
       } else if (["withdraw", "cancel"].includes(kind)) {
         response = await axiosClient.post(`${API}/${application.id}/${kind}`, {
@@ -341,11 +343,17 @@ export default function EquipmentFinanceApplicationsPage() {
         response = await axiosClient.post(`${API}/${application.id}/review`, {
           action: kind,
           reason,
+          known_version: Number(application.decision_version || 0),
         });
       }
       setDecision(null);
       setEdit(null);
-      setNotice(response.data?.message || "Application action completed.");
+      const nextActionLabel = response.data?.next_action?.label;
+      setNotice(
+        `${response.data?.message || "Application action completed."}${
+          nextActionLabel ? ` Next action: ${nextActionLabel}` : ""
+        }`
+      );
       await loadList();
       if (!["withdraw", "cancel"].includes(kind)) await openDetail(application.id);
       else closeDetail();
