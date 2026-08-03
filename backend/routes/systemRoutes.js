@@ -192,8 +192,14 @@ function deploymentStatus() {
   ).trim();
 
   return {
-    provider: process.env.RAILWAY_ENVIRONMENT ? "railway" : "local_or_other",
-    railway_environment: process.env.RAILWAY_ENVIRONMENT || null,
+    provider:
+      process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME
+        ? "railway"
+        : "local_or_other",
+    railway_environment:
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_ENVIRONMENT_NAME ||
+      null,
     railway_service: process.env.RAILWAY_SERVICE_NAME || null,
     commit_sha: commit || null,
     commit_short: commit ? commit.slice(0, 12) : null,
@@ -206,6 +212,7 @@ router.get("/health", (req, res) => {
     status: "success",
     service: "Chalin 03 Group Operations Platform",
     version: appVersion(),
+    deployment: deploymentStatus(),
     uptime_seconds: Math.floor(process.uptime()),
     time: new Date().toISOString(),
     request_id: req.requestId || null,
@@ -224,6 +231,7 @@ router.get("/readiness", async (req, res) => {
       status: ready ? "success" : "degraded",
       ready,
       version: appVersion(),
+      deployment: deploymentStatus(),
       checks: {
         database: db.reachable ? "ready" : "degraded",
         schema: db.missing_tables.length === 0 ? "ready" : "degraded",
