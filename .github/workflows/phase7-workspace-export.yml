@@ -20,12 +20,13 @@ jobs:
       - name: Package repository workspace
         shell: bash
         run: |
-          tar --exclude=.git -czf phase7-workspace.tar.gz .
+          mkdir -p "$RUNNER_TEMP/phase7-export"
+          tar --exclude=.git -czf "$RUNNER_TEMP/phase7-export/phase7-workspace.tar.gz" .
 
       - name: Upload workspace artifact
         uses: actions/upload-artifact@v4
         with:
           name: phase7-workspace
-          path: phase7-workspace.tar.gz
+          path: ${{ runner.temp }}/phase7-export/phase7-workspace.tar.gz
           if-no-files-found: error
           retention-days: 1
