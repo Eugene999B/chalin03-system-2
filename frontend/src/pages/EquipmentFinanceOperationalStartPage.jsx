@@ -6,14 +6,29 @@ import "../styles/equipmentFinanceOperationalPolish.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
 const DRAFT_KEY = "chalin03.finance.start-installment.v2";
+const LEGACY_DRAFT_KEY = "chalin03.finance.start-installment.v1";
 const DRAFT_CONFLICT_CODE = "FINANCE_DRAFT_VERSION_CONFLICT";
 
 function parseLocalDraft() {
+  const current = window.localStorage.getItem(DRAFT_KEY);
+  if (current) {
+    try {
+      return JSON.parse(current);
+    } catch {
+      window.localStorage.removeItem(DRAFT_KEY);
+    }
+  }
+
+  const legacy = window.localStorage.getItem(LEGACY_DRAFT_KEY);
+  if (!legacy) return null;
+
   try {
-    const value = window.localStorage.getItem(DRAFT_KEY);
-    return value ? JSON.parse(value) : null;
+    const migrated = JSON.parse(legacy);
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(migrated));
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    return migrated;
   } catch {
-    window.localStorage.removeItem(DRAFT_KEY);
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
     return null;
   }
 }
