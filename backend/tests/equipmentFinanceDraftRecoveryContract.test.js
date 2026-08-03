@@ -105,10 +105,9 @@ test("withdraw and cancel release application-level excavator blocking", () => {
 
 test("Finance autosave uses one state-driven key without polling", () => {
   assert.match(operationalStart, /chalin03\.finance\.start-installment\.v2/);
-  assert.doesNotMatch(
-    operationalStart,
-    /chalin03\.finance\.start-installment\.v1/
-  );
+  assert.match(operationalStart, /chalin03\.finance\.start-installment\.v1/);
+  assert.match(operationalStart, /LEGACY_DRAFT_KEY/);
+  assert.match(operationalStart, /localStorage\.setItem\(DRAFT_KEY/);
   assert.match(operationalStart, /chalin03:finance-draft-change/);
   assert.doesNotMatch(operationalStart, /window\.setInterval/);
   assert.match(wizard, /chalin03:finance-draft-change/);
