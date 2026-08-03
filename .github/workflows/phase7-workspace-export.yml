@@ -1,18 +1,19 @@
 name: Publish Phase 7 Finance Repair
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/finance-phase-7-lifecycle
+      - main
     paths:
       - .github/workflows/phase7-workspace-export.yml
-  workflow_dispatch:
+      - .github/phase7.patch.gz.b64
 
 permissions:
   contents: write
 
 jobs:
   publish-phase-7:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Check out Phase 7 branch
