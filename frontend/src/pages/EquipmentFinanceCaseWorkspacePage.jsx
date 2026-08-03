@@ -179,10 +179,24 @@ export default function EquipmentFinanceCaseWorkspacePage() {
     setLoading(true);
     setError("");
     try {
-      const [applicationResponse, agreementResponse] = await Promise.all([
+      const [applicationResult, agreementResult] = await Promise.allSettled([
         axiosClient.get(`${PRIVATE_API}/applications`),
         axiosClient.get(`${PRIVATE_API}/cases`),
       ]);
+      if (
+        applicationResult.status === "rejected" &&
+        agreementResult.status === "rejected"
+      ) {
+        throw agreementResult.reason || applicationResult.reason;
+      }
+      const applicationResponse =
+        applicationResult.status === "fulfilled"
+          ? applicationResult.value
+          : { data: { cases: [] } };
+      const agreementResponse =
+        agreementResult.status === "fulfilled"
+          ? agreementResult.value
+          : { data: { cases: [] } };
       const applicationRows = (applicationResponse.data?.cases || []).map((item) => ({
         ...item,
         case_type: "application",
