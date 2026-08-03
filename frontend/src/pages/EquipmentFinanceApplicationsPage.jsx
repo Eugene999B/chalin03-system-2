@@ -1,11 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
 const FINAL_STATUSES = new Set(["approved", "declined", "withdrawn"]);
+const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
+const REVIEW_ROLES = new Set([
+  "admin",
+  "administrator",
+  "manager",
+  "system_administrator",
+  "super_admin",
+  "finance_manager",
+  "equipment_business_manager",
+]);
+const PAGE_SIZE = 25;
 
 function money(value) {
   return `GHS ${Number(value || 0).toLocaleString("en-GH", {
@@ -20,12 +31,17 @@ function label(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function dateValue(value) {
+  return value ? String(value).slice(0, 10) : "";
+}
+
 function errorMessage(error, fallback) {
+  if (error?.code === "ERR_CANCELED") return "";
   return error?.response?.data?.message || error?.message || fallback;
 }
 
 function Pill({ value }) {
-  const dangerous = ["declined", "rejected", "ineligible", "critical", "overdue"].includes(value);
+  const dangerous = ["declined", "rejected", "ineligible", "critical", "overdue", "withdrawn"].includes(value);
   const warning = ["submitted", "under_review", "manual_review", "high", "changes_requested", "incomplete"].includes(value);
   return (
     <span className={`finance-simple__pill ${dangerous ? "is-danger" : warning ? "is-warning" : "is-good"}`}>
@@ -34,87 +50,186 @@ function Pill({ value }) {
   );
 }
 
+function editPayload(detail) {
+  const application = detail?.application || {};
+  const kyc = detail?.kyc || {};
+  return {
+    offer: {
+      selling_price: String(application.quoted_total ?? ""),
+      deposit: String(application.proposed_deposit ?? ""),
+      payment_frequency: application.proposed_frequency || "monthly",
+      custom_interval_days: String(
+        application.proposed_interval_days || application.quotation_interval_days || 30
+      ),
+      installment_count: String(application.proposed_installment_count || 12),
+      first_due_date: dateValue(application.proposed_first_due_date),
+      non_working_day_rule: application.proposed_non_working_day_rule || "exact",
+      terms: application.quotation_terms || "",
+      notes: application.quotation_notes || "",
+    },
+    kyc: {
+      id_type: kyc.id_type || "",
+      id_number: kyc.id_number || "",
+      date_of_birth: dateValue(kyc.date_of_birth),
+      nationality: kyc.nationality || "",
+      employment_type: kyc.employment_type || "",
+      occupation: kyc.occupation || "",
+      residential_address: kyc.residential_address || "",
+      work_address: kyc.work_address || "",
+      guarantor_name: kyc.guarantor_name || "",
+      guarantor_phone: kyc.guarantor_phone || "",
+      guarantor_id_number: kyc.guarantor_id_number || "",
+      customer_consent_confirmed: Boolean(kyc.customer_consent_confirmed),
+      credit_assessment_consent_confirmed: Boolean(
+        kyc.credit_assessment_consent_confirmed
+      ),
+      verification_notes: kyc.verification_notes || "",
+    },
+    affordability: {
+      monthly_salary_income: String(application.monthly_salary_income ?? ""),
+      monthly_business_income: String(application.monthly_business_income ?? ""),
+      monthly_other_income: String(application.monthly_other_income ?? ""),
+      monthly_business_costs: String(application.monthly_business_costs ?? ""),
+      monthly_household_expenses: String(application.monthly_household_expenses ?? ""),
+      existing_monthly_debt: String(application.existing_monthly_debt ?? ""),
+    },
+  };
+}
+
+function Field({ title, children, wide = false }) {
+  return (
+    <label className={`finance-simple__field ${wide ? "is-wide" : ""}`}>
+      <span>{title}</span>
+      {children}
+    </label>
+  );
+}
+
 export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
-  const role = String(user?.role || "").toLowerCase();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const role = String(user?.workspace_role || user?.access_role || user?.role || "").toLowerCase();
   const canManage =
     effectivePermissions.includes("fleet.assets.manage") ||
-    ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(role);
-  const canReview = ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(role);
+    ["admin", "administrator", "system_administrator", "super_admin"].includes(role);
+  const canReview = REVIEW_ROLES.has(role);
+
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const requestedApplicationId = query.get("application");
+
   const [applications, setApplications] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    page_size: PAGE_SIZE,
+    total: 0,
+    total_pages: 1,
+  });
+  const [summary, setSummary] = useState({});
   const [readiness, setReadiness] = useState({ ready: null, missing_tables: [] });
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autosaveState, setAutosaveState] = useState("idle");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
   const [detail, setDetail] = useState(null);
   const [decision, setDecision] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const listAbortRef = useRef(null);
+  const detailAbortRef = useRef(null);
+  const editRef = useRef(null);
 
-  const load = useCallback(async () => {
+  const loadList = useCallback(async () => {
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
     setLoading(true);
     setProblem("");
     try {
-      const readinessResponse = await axiosClient.get(`${API}/readiness`);
-      const nextReadiness = readinessResponse.data?.readiness || { ready: true };
-      setReadiness(nextReadiness);
-      if (!nextReadiness.ready) return;
-      const response = await axiosClient.get(API);
+      const params = {
+        page,
+        page_size: PAGE_SIZE,
+        status,
+        search: search.trim() || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      };
+      const response = await axiosClient.get(API, {
+        params,
+        signal: controller.signal,
+      });
       setApplications(response.data?.applications || []);
+      setPagination(response.data?.pagination || {});
+      setSummary(response.data?.summary || {});
+      setReadiness({ ready: true, missing_tables: [] });
     } catch (error) {
+      if (error?.code === "ERR_CANCELED") return;
       const responseReadiness = error?.response?.data?.readiness;
-      if (responseReadiness?.ready === false) {
-        setReadiness(responseReadiness);
-      } else {
-        setProblem(errorMessage(error, "Could not load Finance applications."));
-      }
+      if (responseReadiness?.ready === false) setReadiness(responseReadiness);
+      else setProblem(errorMessage(error, "Could not load Finance applications."));
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, []);
+  }, [dateFrom, dateTo, page, search, status]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    const timer = window.setTimeout(loadList, search ? 300 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      listAbortRef.current?.abort();
+    };
+  }, [loadList, search]);
 
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return applications.filter((application) => {
-      if (status !== "all" && application.application_status !== status) return false;
-      if (!term) return true;
-      return [
-        application.application_number,
-        application.customer_name,
-        application.customer_phone,
-        application.quotation_number,
-        application.asset_code,
-        application.asset_name,
-        application.make,
-        application.model,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term));
-    });
-  }, [applications, search, status]);
-
-  const metrics = {
-    drafts: applications.filter((item) => ["draft", "changes_requested"].includes(item.application_status)).length,
-    review: applications.filter((item) => ["submitted", "under_review"].includes(item.application_status)).length,
-    approved: applications.filter((item) => item.application_status === "approved").length,
-    exposure: applications
-      .filter((item) => !["declined", "withdrawn"].includes(item.application_status))
-      .reduce((sum, item) => sum + Number(item.financed_amount || 0), 0),
-  };
-
-  async function openDetail(application) {
+  const openDetail = useCallback(async (applicationOrId, { keepUrl = false } = {}) => {
+    const applicationId =
+      typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId;
+    if (!applicationId) return;
+    detailAbortRef.current?.abort();
+    const controller = new AbortController();
+    detailAbortRef.current = controller;
+    setDetailLoading(true);
     setProblem("");
     try {
-      const response = await axiosClient.get(`${API}/${application.id}`);
+      const response = await axiosClient.get(`${API}/${applicationId}`, {
+        signal: controller.signal,
+      });
       setDetail(response.data || null);
+      if (!keepUrl) {
+        const next = new URLSearchParams(location.search);
+        next.set("application", String(applicationId));
+        navigate(`${location.pathname}?${next.toString()}`, { replace: true });
+      }
     } catch (error) {
-      setProblem(errorMessage(error, "Could not open the application file."));
+      if (error?.code !== "ERR_CANCELED") {
+        setProblem(errorMessage(error, "Could not open the application file."));
+      }
+    } finally {
+      if (!controller.signal.aborted) setDetailLoading(false);
     }
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (requestedApplicationId) {
+      openDetail(requestedApplicationId, { keepUrl: true });
+    }
+    return () => detailAbortRef.current?.abort();
+  }, [openDetail, requestedApplicationId]);
+
+  function closeDetail() {
+    setDetail(null);
+    setEdit(null);
+    const next = new URLSearchParams(location.search);
+    next.delete("application");
+    navigate(
+      `${location.pathname}${next.toString() ? `?${next.toString()}` : ""}`,
+      { replace: true }
+    );
   }
 
   function requestDecision(application, kind) {
@@ -122,11 +237,13 @@ export default function EquipmentFinanceApplicationsPage() {
       assess: "Recalculate affordability",
       submit: "Submit for manager review",
       start_review: "Start manager review",
-      verify: "Verify KYC evidence",
-      reject_kyc: "Reject KYC evidence",
+      verify: "Verify optional KYC evidence",
+      reject_kyc: "Record a KYC issue",
       request_changes: "Request changes",
       approve: "Approve credit application",
       decline: "Decline credit application",
+      withdraw: "Withdraw application",
+      cancel: "Cancel draft",
     };
     setDecision({ application, kind, title: titles[kind], reason: "" });
   }
@@ -134,7 +251,13 @@ export default function EquipmentFinanceApplicationsPage() {
   async function confirmDecision(event) {
     event.preventDefault();
     if (!decision) return;
-    const reasonRequired = ["reject_kyc", "request_changes", "decline"].includes(decision.kind);
+    const reasonRequired = [
+      "reject_kyc",
+      "request_changes",
+      "decline",
+      "withdraw",
+      "cancel",
+    ].includes(decision.kind);
     if (reasonRequired && !decision.reason.trim()) {
       setProblem("Enter the exact reason before completing this action.");
       return;
@@ -147,10 +270,16 @@ export default function EquipmentFinanceApplicationsPage() {
       if (kind === "assess") {
         response = await axiosClient.post(`${API}/${application.id}/assess`, {});
       } else if (kind === "submit") {
-        response = await axiosClient.post(`${API}/${application.id}/submit`, { notes: reason });
+        response = await axiosClient.post(`${API}/${application.id}/submit`, {
+          notes: reason,
+        });
       } else if (["verify", "reject_kyc"].includes(kind)) {
         response = await axiosClient.post(`${API}/${application.id}/kyc/verify`, {
           verification_status: kind === "verify" ? "verified" : "rejected",
+          reason,
+        });
+      } else if (["withdraw", "cancel"].includes(kind)) {
+        response = await axiosClient.post(`${API}/${application.id}/${kind}`, {
           reason,
         });
       } else {
@@ -160,15 +289,100 @@ export default function EquipmentFinanceApplicationsPage() {
         });
       }
       setDecision(null);
-      setDetail(null);
+      setEdit(null);
       setNotice(response.data?.message || "Application action completed.");
-      await load();
+      await loadList();
+      if (!["withdraw", "cancel"].includes(kind)) await openDetail(application.id);
+      else closeDetail();
     } catch (error) {
       setProblem(errorMessage(error, "Could not complete the application action."));
     } finally {
       setSaving(false);
     }
   }
+
+  function beginEdit() {
+    if (!detail?.application) return;
+    const next = {
+      application_id: detail.application.id,
+      known_version: Number(detail.application.decision_version || 0),
+      payload: editPayload(detail),
+      dirty: false,
+    };
+    editRef.current = next;
+    setEdit(next);
+    setAutosaveState("ready");
+  }
+
+  function updateEdit(section, field, value) {
+    setEdit((current) => {
+      const next = {
+        ...current,
+        payload: {
+          ...current.payload,
+          [section]: { ...current.payload[section], [field]: value },
+        },
+        dirty: true,
+      };
+      editRef.current = next;
+      return next;
+    });
+    setAutosaveState("pending");
+  }
+
+  const saveEdit = useCallback(async ({ manual = false } = {}) => {
+    const current = editRef.current;
+    if (!current?.dirty || saving) return;
+    setSaving(true);
+    setAutosaveState("saving");
+    setProblem("");
+    try {
+      const response = await axiosClient.put(
+        `${API}/${current.application_id}`,
+        {
+          ...current.payload,
+          known_version: current.known_version,
+          notes: manual ? "Draft saved explicitly by staff." : "Draft autosaved after editing.",
+        }
+      );
+      const nextVersion = Number(
+        response.data?.application?.decision_version ?? current.known_version + 1
+      );
+      const next = {
+        ...current,
+        known_version: nextVersion,
+        dirty: false,
+      };
+      editRef.current = next;
+      setEdit(next);
+      setDetail(response.data || null);
+      setAutosaveState("saved");
+      if (manual) setNotice(response.data?.message || "Draft saved.");
+      await loadList();
+    } catch (error) {
+      if (error?.response?.data?.code === "FINANCE_APPLICATION_VERSION_CONFLICT") {
+        setAutosaveState("conflict");
+      } else {
+        setAutosaveState("failed");
+      }
+      setProblem(errorMessage(error, "Could not save the Finance draft."));
+    } finally {
+      setSaving(false);
+    }
+  }, [loadList, saving]);
+
+  useEffect(() => {
+    if (!edit?.dirty) return undefined;
+    const timer = window.setTimeout(() => saveEdit({ manual: false }), 900);
+    return () => window.clearTimeout(timer);
+  }, [edit, saveEdit]);
+
+  const metrics = {
+    drafts: Number(summary.drafts || 0),
+    review: Number(summary.awaiting_review || 0),
+    approved: Number(summary.approved || 0),
+    exposure: Number(summary.proposed_exposure || 0),
+  };
 
   return (
     <main className="finance-simple">
@@ -177,20 +391,27 @@ export default function EquipmentFinanceApplicationsPage() {
           <p>Applications and approvals</p>
           <h1>Credit Applications</h1>
           <span>
-            Start every case through the guided workflow. This page is now for draft completion,
-            KYC verification and independent manager decisions—not for finding a separate quotation.
+            Every company-wide draft stays visible and resumable without selecting an
+            Equipment Hire location.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
-          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Help with approvals</Link>
-          {canManage ? <Link className="finance-simple__button is-primary" to="/equipment-installment-finance/applications?stage=start">+ Start New Installment</Link> : null}
+          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">
+            Help with approvals
+          </Link>
+          {canManage ? (
+            <Link className="finance-simple__button is-primary" to="/equipment-installment-finance/applications?stage=start">
+              + Start New Installment
+            </Link>
+          ) : null}
         </div>
       </header>
 
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
       <div className="finance-simple__notice is-info">
-        Finance is company-wide. No Hire-location selection is needed to create, edit, submit or review an application.
+        Finance is company-wide. List responses contain metadata only; the selected file
+        and protected excavator image load separately.
       </div>
 
       {readiness.ready === false ? (
@@ -200,92 +421,206 @@ export default function EquipmentFinanceApplicationsPage() {
         </section>
       ) : null}
 
-      {readiness.ready === true ? (
-        <>
-          <section className="finance-simple__metrics">
-            <article className="finance-simple__metric"><span>Drafts / changes</span><strong>{metrics.drafts}</strong></article>
-            <article className="finance-simple__metric"><span>Awaiting review</span><strong>{metrics.review}</strong></article>
-            <article className="finance-simple__metric"><span>Approved</span><strong>{metrics.approved}</strong></article>
-            <article className="finance-simple__metric"><span>Proposed exposure</span><strong>{money(metrics.exposure)}</strong></article>
-          </section>
+      <section className="finance-simple__metrics">
+        <article className="finance-simple__metric"><span>Drafts / changes</span><strong>{metrics.drafts}</strong></article>
+        <article className="finance-simple__metric"><span>Awaiting review</span><strong>{metrics.review}</strong></article>
+        <article className="finance-simple__metric"><span>Approved</span><strong>{metrics.approved}</strong></article>
+        <article className="finance-simple__metric"><span>Proposed exposure</span><strong>{money(metrics.exposure)}</strong></article>
+      </section>
 
-          <section className="finance-simple__section">
-            <div className="finance-simple__toolbar">
-              <div><p className="finance-simple__eyebrow">Application register</p><h2>{visible.length} record(s)</h2></div>
-              <div className="finance-simple__actions">
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer, application, offer or excavator" />
-                <select value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="all">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="submitted">Submitted</option>
-                  <option value="under_review">Under review</option>
-                  <option value="changes_requested">Changes requested</option>
-                  <option value="approved">Approved</option>
-                  <option value="declined">Declined</option>
-                </select>
-                <button type="button" onClick={load} disabled={loading}>Refresh</button>
+      <section className="finance-simple__section">
+        <div className="finance-simple__toolbar">
+          <div>
+            <p className="finance-simple__eyebrow">Application register</p>
+            <h2>{pagination.total || 0} record(s)</h2>
+          </div>
+          <div className="finance-simple__actions">
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search customer, application, offer or excavator"
+            />
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="all">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="under_review">Under review</option>
+              <option value="changes_requested">Changes requested</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
+              <option value="withdrawn">Withdrawn / cancelled</option>
+            </select>
+            <input type="date" aria-label="From date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+            <input type="date" aria-label="To date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+            <button type="button" onClick={loadList} disabled={loading}>Refresh</button>
+          </div>
+        </div>
+
+        {loading ? <div className="finance-simple__empty">Loading credit applications…</div> : null}
+        {!loading && !applications.length ? (
+          <div className="finance-simple__empty">
+            <h3>No matching applications</h3>
+            <p>Use Start New Installment to create a recoverable company-wide draft.</p>
+          </div>
+        ) : null}
+
+        <div className="finance-simple__cards">
+          {applications.map((application) => (
+            <article className="finance-simple__card" key={application.id}>
+              <div className="finance-simple__machine-image"><span>🚜</span></div>
+              <div className="finance-simple__card-body">
+                <div className="finance-simple__card-head">
+                  <div>
+                    <small>{application.application_number}</small>
+                    <h3>{application.customer_name}</h3>
+                    <p>{application.asset_code} — {application.asset_name}</p>
+                  </div>
+                  <Pill value={application.application_status} />
+                </div>
+                <div className="finance-simple__facts">
+                  <div><span>Installment Offer</span><strong>{application.quotation_number || "Automatic offer"}</strong></div>
+                  <div><span>Quoted total</span><strong>{money(application.quoted_total)}</strong></div>
+                  <div><span>Deposit</span><strong>{money(application.proposed_deposit)}</strong></div>
+                  <div><span>Financed</span><strong>{money(application.financed_amount)}</strong></div>
+                  <div><span>KYC</span><strong><Pill value={application.kyc_status} /></strong></div>
+                  <div><span>Affordability</span><strong><Pill value={application.affordability_status} /></strong></div>
+                  <div><span>Risk</span><strong><Pill value={application.risk_band} /></strong></div>
+                  <div><span>Origin metadata</span><strong>{application.equipment_origin_name || "Not recorded"}</strong></div>
+                </div>
+                <div className="finance-simple__card-actions">
+                  <button type="button" onClick={() => openDetail(application)}>View file</button>
+                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? (
+                    <button className="is-primary" type="button" onClick={async () => { await openDetail(application); }}>
+                      {application.application_status === "draft" ? "Resume Draft" : "Edit Draft"}
+                    </button>
+                  ) : null}
+                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? (
+                    <button type="button" onClick={() => requestDecision(application, "submit")}>Submit</button>
+                  ) : null}
+                  {canReview && application.application_status === "submitted" ? (
+                    <button className="is-primary" type="button" onClick={() => requestDecision(application, "start_review")}>Start review</button>
+                  ) : null}
+                </div>
               </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="finance-simple__sticky-actions">
+          <span>Page {pagination.page || page} of {pagination.total_pages || 1}</span>
+          <div>
+            <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+            <button type="button" disabled={loading || page >= Number(pagination.total_pages || 1)} onClick={() => setPage((value) => value + 1)}>Next</button>
+          </div>
+        </div>
+      </section>
+
+      {detailLoading ? <div className="finance-simple__notice is-info">Opening selected application…</div> : null}
+
+      {detail ? (
+        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={closeDetail}>
+          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Credit application file" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Application file</p>
+                <h2>{detail.application?.application_number}</h2>
+                <span className="finance-simple__muted">
+                  {detail.application?.customer_name} · {detail.application?.asset_code} {detail.application?.asset_name}
+                </span>
+              </div>
+              <button type="button" onClick={closeDetail}>Close</button>
             </div>
 
-            {loading ? <div className="finance-simple__empty">Loading credit applications…</div> : null}
-            {!loading && !visible.length ? (
-              <div className="finance-simple__empty">
-                <h3>No matching applications</h3>
-                <p>Use Start New Installment to create the customer, automatic Installment Offer and draft application together.</p>
+            {detail.application?.main_image_url ? (
+              <div className="finance-simple__machine-image">
+                <img src={`${API}/${detail.application.id}/image`} alt={detail.application.asset_name || "Excavator"} loading="lazy" />
               </div>
             ) : null}
 
-            <div className="finance-simple__cards">
-              {visible.map((application) => (
-                <article className="finance-simple__card" key={application.id}>
-                  <div className="finance-simple__machine-image">
-                    {application.main_image_url ? <img src={application.main_image_url} alt={application.asset_name || "Excavator"} /> : <span>🚜</span>}
-                  </div>
-                  <div className="finance-simple__card-body">
-                    <div className="finance-simple__card-head">
-                      <div><small>{application.application_number}</small><h3>{application.customer_name}</h3><p>{application.asset_code} — {application.asset_name}</p></div>
-                      <Pill value={application.application_status} />
-                    </div>
-                    <div className="finance-simple__facts">
-                      <div><span>Installment Offer</span><strong>{application.quotation_number || "Automatic offer"}</strong></div>
-                      <div><span>Quoted total</span><strong>{money(application.quoted_total)}</strong></div>
-                      <div><span>Deposit</span><strong>{money(application.proposed_deposit)}</strong></div>
-                      <div><span>Financed</span><strong>{money(application.financed_amount)}</strong></div>
-                      <div><span>KYC</span><strong><Pill value={application.kyc_status} /></strong></div>
-                      <div><span>Affordability</span><strong><Pill value={application.affordability_status} /></strong></div>
-                      <div><span>Risk</span><strong><Pill value={application.risk_band} /></strong></div>
-                      <div><span>Monthly surplus</span><strong>{money(application.net_monthly_surplus)}</strong></div>
-                    </div>
-                    <div className="finance-simple__card-actions">
-                      <button type="button" onClick={() => openDetail(application)}>View file</button>
-                      {canManage && !FINAL_STATUSES.has(application.application_status) ? <button type="button" onClick={() => requestDecision(application, "assess")}>Recalculate</button> : null}
-                      {canManage && ["draft", "changes_requested"].includes(application.application_status) ? <button className="is-primary" type="button" onClick={() => requestDecision(application, "submit")}>Submit</button> : null}
-                      {canReview && application.application_status === "submitted" ? <button className="is-primary" type="button" onClick={() => requestDecision(application, "start_review")}>Start review</button> : null}
-                      {canReview && ["submitted", "under_review"].includes(application.application_status) && application.kyc_status !== "verified" ? <button type="button" onClick={() => requestDecision(application, "verify")}>Verify KYC</button> : null}
-                      {canReview && ["submitted", "under_review"].includes(application.application_status) ? <button type="button" onClick={() => requestDecision(application, "reject_kyc")}>Reject KYC</button> : null}
-                      {canReview && application.application_status === "under_review" ? <><button type="button" onClick={() => requestDecision(application, "request_changes")}>Request changes</button><button className="is-danger" type="button" onClick={() => requestDecision(application, "decline")}>Decline</button><button className="is-primary" type="button" onClick={() => requestDecision(application, "approve")}>Approve</button></> : null}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        </>
-      ) : null}
+            {!edit ? (
+              <>
+                <div className="finance-simple__summary">
+                  <article><span>Status</span><strong>{label(detail.application?.application_status)}</strong></article>
+                  <article><span>Automatic Installment Offer</span><strong>{detail.application?.quotation_number}</strong></article>
+                  <article><span>Customer ID</span><strong>{detail.kyc?.id_type || "Not recorded"}: {detail.kyc?.id_number || "Not recorded"}</strong></article>
+                  <article><span>Employment</span><strong>{label(detail.kyc?.employment_type)} · {detail.kyc?.occupation || "Not recorded"}</strong></article>
+                  <article><span>Guarantor</span><strong>{detail.kyc?.guarantor_name || "Not recorded"}</strong><small>{detail.kyc?.guarantor_phone}</small></article>
+                  <article><span>Asset holder</span><strong>{detail.active_asset_locks?.[0]?.agreement_number || detail.application?.application_number}</strong></article>
+                </div>
 
-      {detail ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setDetail(null)}>
-          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Credit application file" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Application file</p><h2>{detail.application?.application_number}</h2><span className="finance-simple__muted">{detail.application?.customer_name} · {detail.application?.asset_code} {detail.application?.asset_name}</span></div><button type="button" onClick={() => setDetail(null)}>Close</button></div>
-            <div className="finance-simple__summary">
-              <article><span>Status</span><strong>{label(detail.application?.application_status)}</strong></article>
-              <article><span>Automatic Installment Offer</span><strong>{detail.application?.quotation_number}</strong></article>
-              <article><span>Customer ID</span><strong>{detail.kyc?.id_type}: {detail.kyc?.id_number || "Missing"}</strong></article>
-              <article><span>Employment</span><strong>{label(detail.kyc?.employment_type)} · {detail.kyc?.occupation || "Missing"}</strong></article>
-              <article><span>Guarantor</span><strong>{detail.kyc?.guarantor_name || "Not recorded"}</strong><small>{detail.kyc?.guarantor_phone}</small></article>
-              <article><span>Assessment</span><strong>{detail.application?.assessment_recommendation || "Not calculated"}</strong></article>
-            </div>
-            <section className="finance-simple__section"><p className="finance-simple__eyebrow">Decision history</p>{detail.decisions?.length ? detail.decisions.map((item) => <article key={item.id} className="finance-simple__notice is-info"><strong>{label(item.action_type)} → {label(item.to_status)}</strong><p>{item.notes || "No note"}</p><small>{item.decided_by_name || "System"}</small></article>) : <p>No decisions recorded.</p>}</section>
+                <div className="finance-simple__card-actions">
+                  {canManage && detail.editable ? <button className="is-primary" type="button" onClick={beginEdit}>Resume / Edit Draft</button> : null}
+                  {canManage && detail.editable ? <button type="button" onClick={() => requestDecision(detail.application, "submit")}>Submit for Review</button> : null}
+                  {canManage && detail.application?.application_status === "draft" ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "cancel")}>Cancel Draft</button> : null}
+                  {canManage && detail.withdrawable ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "withdraw")}>Withdraw</button> : null}
+                  {canReview && detail.application?.application_status === "submitted" ? <button type="button" onClick={() => requestDecision(detail.application, "start_review")}>Start Review</button> : null}
+                  {canReview && ["submitted", "under_review"].includes(detail.application?.application_status) && detail.application?.kyc_status !== "verified" ? <button type="button" onClick={() => requestDecision(detail.application, "verify")}>Review KYC</button> : null}
+                  {canReview && detail.application?.application_status === "under_review" ? (
+                    <>
+                      <button type="button" onClick={() => requestDecision(detail.application, "request_changes")}>Request Changes</button>
+                      <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "decline")}>Decline</button>
+                      <button className="is-primary" type="button" onClick={() => requestDecision(detail.application, "approve")}>Approve</button>
+                    </>
+                  ) : null}
+                </div>
+
+                <section className="finance-simple__section">
+                  <p className="finance-simple__eyebrow">Decision history</p>
+                  {detail.decisions?.length ? detail.decisions.map((item) => (
+                    <article key={item.id} className="finance-simple__notice is-info">
+                      <strong>{label(item.action_type)} → {label(item.to_status)}</strong>
+                      <p>{item.notes || "No note"}</p>
+                      <small>{item.decided_by_name || "System"}</small>
+                    </article>
+                  )) : <p>No decisions recorded.</p>}
+                </section>
+              </>
+            ) : (
+              <form onSubmit={(event) => { event.preventDefault(); saveEdit({ manual: true }); }}>
+                <div className="finance-simple__notice is-info" role="status">
+                  <strong>Draft recovery:</strong> this is application {detail.application?.application_number}, not a new application. Changes autosave after 900 ms.
+                  <br />
+                  Save status: {label(autosaveState)}.
+                </div>
+                <div className="finance-simple__form-grid">
+                  <Field title="Selling price"><input inputMode="decimal" value={edit.payload.offer.selling_price} onChange={(event) => updateEdit("offer", "selling_price", event.target.value)} /></Field>
+                  <Field title="Deposit"><input inputMode="decimal" value={edit.payload.offer.deposit} onChange={(event) => updateEdit("offer", "deposit", event.target.value)} /></Field>
+                  <Field title="Frequency"><select value={edit.payload.offer.payment_frequency} onChange={(event) => updateEdit("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option><option value="custom">Custom days</option></select></Field>
+                  <Field title="Interval days"><input type="number" min="1" max="365" value={edit.payload.offer.custom_interval_days} onChange={(event) => updateEdit("offer", "custom_interval_days", event.target.value)} /></Field>
+                  <Field title="Installment count"><input type="number" min="1" max="520" value={edit.payload.offer.installment_count} onChange={(event) => updateEdit("offer", "installment_count", event.target.value)} /></Field>
+                  <Field title="First due date"><input type="date" value={edit.payload.offer.first_due_date} onChange={(event) => updateEdit("offer", "first_due_date", event.target.value)} /></Field>
+                  <Field title="ID type"><input value={edit.payload.kyc.id_type} onChange={(event) => updateEdit("kyc", "id_type", event.target.value)} /></Field>
+                  <Field title="ID number"><input value={edit.payload.kyc.id_number} onChange={(event) => updateEdit("kyc", "id_number", event.target.value)} /></Field>
+                  <Field title="Employment / business type"><input value={edit.payload.kyc.employment_type} onChange={(event) => updateEdit("kyc", "employment_type", event.target.value)} /></Field>
+                  <Field title="Occupation"><input value={edit.payload.kyc.occupation} onChange={(event) => updateEdit("kyc", "occupation", event.target.value)} /></Field>
+                  <Field title="Residential address" wide><textarea value={edit.payload.kyc.residential_address} onChange={(event) => updateEdit("kyc", "residential_address", event.target.value)} /></Field>
+                  <Field title="Guarantor name"><input value={edit.payload.kyc.guarantor_name} onChange={(event) => updateEdit("kyc", "guarantor_name", event.target.value)} /></Field>
+                  <Field title="Guarantor phone"><input value={edit.payload.kyc.guarantor_phone} onChange={(event) => updateEdit("kyc", "guarantor_phone", event.target.value)} /></Field>
+                  <Field title="Monthly salary income"><input inputMode="decimal" value={edit.payload.affordability.monthly_salary_income} onChange={(event) => updateEdit("affordability", "monthly_salary_income", event.target.value)} /></Field>
+                  <Field title="Monthly business income"><input inputMode="decimal" value={edit.payload.affordability.monthly_business_income} onChange={(event) => updateEdit("affordability", "monthly_business_income", event.target.value)} /></Field>
+                  <Field title="Monthly other income"><input inputMode="decimal" value={edit.payload.affordability.monthly_other_income} onChange={(event) => updateEdit("affordability", "monthly_other_income", event.target.value)} /></Field>
+                  <Field title="Monthly business costs"><input inputMode="decimal" value={edit.payload.affordability.monthly_business_costs} onChange={(event) => updateEdit("affordability", "monthly_business_costs", event.target.value)} /></Field>
+                  <Field title="Monthly household expenses"><input inputMode="decimal" value={edit.payload.affordability.monthly_household_expenses} onChange={(event) => updateEdit("affordability", "monthly_household_expenses", event.target.value)} /></Field>
+                  <Field title="Existing monthly debt"><input inputMode="decimal" value={edit.payload.affordability.existing_monthly_debt} onChange={(event) => updateEdit("affordability", "existing_monthly_debt", event.target.value)} /></Field>
+                </div>
+                <div className="finance-simple__sticky-actions">
+                  <span>Optional fields may remain blank and never block submission or approval.</span>
+                  <div>
+                    <button type="button" onClick={() => { editRef.current = null; setEdit(null); }}>Close editor</button>
+                    <button className="is-primary" type="submit" disabled={saving || !edit.dirty}>{saving ? "Saving…" : "Save Draft"}</button>
+                  </div>
+                </div>
+              </form>
+            )}
           </section>
         </div>
       ) : null}
@@ -293,10 +628,25 @@ export default function EquipmentFinanceApplicationsPage() {
       {decision ? (
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setDecision(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={decision.title} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Controlled decision</p><h2>{decision.title}</h2><span className="finance-simple__muted">{decision.application.application_number} · {decision.application.customer_name}</span></div><button type="button" onClick={() => setDecision(null)}>Close</button></div>
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Controlled decision</p>
+                <h2>{decision.title}</h2>
+                <span className="finance-simple__muted">{decision.application.application_number} · {decision.application.customer_name}</span>
+              </div>
+              <button type="button" onClick={() => setDecision(null)}>Close</button>
+            </div>
             <form onSubmit={confirmDecision}>
-              <label className="finance-simple__field"><span>Reason / note</span><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} placeholder="Enter a clear reason, especially for rejection, decline or requested changes." /></label>
-              <div className="finance-simple__sticky-actions"><span>No payment, delivery or ownership transfer happens here.</span><div><button type="button" onClick={() => setDecision(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Confirm Action"}</button></div></div>
+              <Field title="Reason / note" wide>
+                <textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} placeholder="Enter a clear reason for cancellation, withdrawal, rejection, decline or requested changes." />
+              </Field>
+              <div className="finance-simple__sticky-actions">
+                <span>No payment, delivery or ownership transfer happens here.</span>
+                <div>
+                  <button type="button" onClick={() => setDecision(null)}>Close</button>
+                  <button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Confirm Action"}</button>
+                </div>
+              </div>
             </form>
           </section>
         </div>
