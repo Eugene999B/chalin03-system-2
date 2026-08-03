@@ -9,6 +9,10 @@ const {
 const {
   startProfessionalReminderScheduler,
 } = require("./equipmentFinanceProfessionalReminderService");
+const {
+  reconcileFinanceAgreement,
+  reconcileFinancePortfolio,
+} = require("./equipmentFinanceReconciliationService");
 
 const REQUIRED_TABLES = Object.freeze([
   "equipment_finance_phase6_message_log",
@@ -163,6 +167,8 @@ async function loadPaymentSnapshot(paymentId, connection = pool) {
        INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
        LEFT JOIN users user ON user.id = payment.received_by
       WHERE payment.id = ?
+        AND agreement.sale_type = 'installment'
+        AND agreement.activation_source = 'approved_credit_application'
       LIMIT 1`,
     [id]
   );
@@ -376,153 +382,181 @@ async function getPortfolioDashboard({ dateFrom, dateTo } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const from = dateInput(dateFrom, `${today.slice(0, 4)}-01-01`);
   const to = dateInput(dateTo, today);
-  const [[summaryRows], [collectionRows], [statuses], [aging], [upcoming], [accounts], [recentPayments]] =
-    await Promise.all([
-      pool.query(
-        `SELECT COUNT(*) AS agreement_count,
-                SUM(agreement_status IN ('approved','active','due_soon','payment_due','overdue')) AS active_count,
-                SUM(agreement_status = 'completed') AS completed_count,
-                SUM(agreement_status = 'overdue' OR overdue_amount > 0.01) AS overdue_count,
-                COALESCE(SUM(total_amount), 0) AS portfolio_value,
-                COALESCE(SUM(deposit_received), 0) AS deposits_received,
-                COALESCE(SUM(amount_paid), 0) AS lifetime_collections,
-                COALESCE(SUM(outstanding_balance), 0) AS outstanding_balance,
-                COALESCE(SUM(overdue_amount), 0) AS overdue_balance,
-                COALESCE(AVG(CASE WHEN total_amount > 0 THEN amount_paid / total_amount * 100 END), 0) AS average_paid_percent
-           FROM equipment_sale_agreements
-          WHERE sale_type = 'installment'
-            AND activation_source = 'approved_credit_application'`
-      ),
-      pool.query(
-        `SELECT COUNT(*) AS payment_count, COALESCE(SUM(amount), 0) AS collected_amount
-           FROM equipment_sale_payments
-          WHERE is_voided = FALSE AND DATE(payment_date) BETWEEN ? AND ?`,
-        [from, to]
-      ),
-      pool.query(
-        `SELECT agreement_status, COUNT(*) AS agreements,
-                COALESCE(SUM(outstanding_balance), 0) AS outstanding_amount
-           FROM equipment_sale_agreements
-          WHERE sale_type = 'installment'
-            AND activation_source = 'approved_credit_application'
-          GROUP BY agreement_status
-          ORDER BY agreements DESC, agreement_status`
-      ),
-      pool.query(
-        `SELECT aging_bucket, COUNT(*) AS agreements,
-                COALESCE(SUM(overdue_balance), 0) AS overdue_amount
-           FROM (
-             SELECT agreement.id,
-                    COALESCE(SUM(GREATEST(schedule.scheduled_amount + schedule.late_charge_amount -
-                      schedule.waived_charge_amount - schedule.amount_paid, 0)), 0) AS overdue_balance,
-                    CASE
-                      WHEN MAX(DATEDIFF(CURDATE(), schedule.due_date)) IS NULL THEN 'current'
-                      WHEN MAX(DATEDIFF(CURDATE(), schedule.due_date)) BETWEEN 1 AND 30 THEN '1_30'
-                      WHEN MAX(DATEDIFF(CURDATE(), schedule.due_date)) BETWEEN 31 AND 60 THEN '31_60'
-                      WHEN MAX(DATEDIFF(CURDATE(), schedule.due_date)) BETWEEN 61 AND 90 THEN '61_90'
-                      ELSE 'over_90'
-                    END AS aging_bucket
-               FROM equipment_sale_agreements agreement
-               LEFT JOIN equipment_installment_schedule schedule
-                 ON schedule.agreement_id = agreement.id
-                AND schedule.due_date < CURDATE()
-                AND schedule.schedule_status NOT IN ('paid','cancelled','waived')
-              WHERE agreement.sale_type = 'installment'
-                AND agreement.activation_source = 'approved_credit_application'
-                AND agreement.outstanding_balance > 0.01
-              GROUP BY agreement.id
-           ) portfolio_aging
-          GROUP BY aging_bucket
-          ORDER BY FIELD(aging_bucket, 'current','1_30','31_60','61_90','over_90')`
-      ),
-      pool.query(
-        `SELECT schedule.due_date, COUNT(DISTINCT schedule.agreement_id) AS agreements,
-                COALESCE(SUM(GREATEST(schedule.scheduled_amount + schedule.late_charge_amount -
-                  schedule.waived_charge_amount - schedule.amount_paid, 0)), 0) AS expected_amount
-           FROM equipment_installment_schedule schedule
-           INNER JOIN equipment_sale_agreements agreement ON agreement.id = schedule.agreement_id
-          WHERE schedule.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            AND schedule.schedule_status NOT IN ('paid','cancelled','waived')
-            AND agreement.sale_type = 'installment'
-            AND agreement.activation_source = 'approved_credit_application'
-          GROUP BY schedule.due_date
-          ORDER BY schedule.due_date`
-      ),
-      pool.query(
-        `SELECT agreement.id, agreement.agreement_number, agreement.agreement_status,
-                agreement.customer_name_snapshot AS customer_name,
-                agreement.customer_phone_snapshot AS customer_phone,
-                agreement.asset_code_snapshot AS asset_code,
-                agreement.asset_name_snapshot AS asset_name,
-                agreement.total_amount, agreement.amount_paid,
-                agreement.outstanding_balance, agreement.overdue_amount,
-                agreement.next_due_date, agreement.final_due_date
-           FROM equipment_sale_agreements agreement
-          WHERE agreement.sale_type = 'installment'
-            AND agreement.activation_source = 'approved_credit_application'
-          ORDER BY CASE WHEN agreement.overdue_amount > 0.01 THEN 0 ELSE 1 END,
-                   agreement.next_due_date, agreement.id DESC
-          LIMIT 500`
-      ),
-      pool.query(
-        `SELECT payment.id, payment.receipt_number, payment.payment_date,
-                payment.amount, payment.payment_method, payment.payment_stage,
-                agreement.id AS agreement_id, agreement.agreement_number,
-                agreement.customer_name_snapshot AS customer_name,
-                message.delivery_status AS customer_sms_status,
-                boss.alert_status AS boss_sms_status
-           FROM equipment_sale_payments payment
-           INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
-           LEFT JOIN equipment_finance_phase6_message_log message
-             ON message.message_key = CONCAT('finance-payment-receipt:', payment.id)
-           LEFT JOIN equipment_finance_payment_alerts boss ON boss.payment_id = payment.id
-          WHERE payment.is_voided = FALSE
-          ORDER BY payment.payment_date DESC, payment.id DESC
-          LIMIT 20`
-      ),
-    ]);
+  const [portfolio, [collectionRows], [upcoming], [recentPayments]] = await Promise.all([
+    reconcileFinancePortfolio(),
+    pool.query(
+      `SELECT COUNT(*) AS payment_count, COALESCE(SUM(payment.amount), 0) AS collected_amount
+         FROM equipment_sale_payments payment
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+        WHERE payment.is_voided = FALSE AND DATE(payment.payment_date) BETWEEN ? AND ?
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'`,
+      [from, to]
+    ),
+    pool.query(
+      `SELECT schedule.due_date, COUNT(DISTINCT schedule.agreement_id) AS agreements,
+              COALESCE(SUM(GREATEST(schedule.scheduled_amount + schedule.late_charge_amount -
+                schedule.waived_charge_amount - schedule.amount_paid, 0)), 0) AS expected_amount
+         FROM equipment_installment_schedule schedule
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = schedule.agreement_id
+        WHERE schedule.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+          AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
+        GROUP BY schedule.due_date
+        ORDER BY schedule.due_date`
+    ),
+    pool.query(
+      `SELECT payment.id, payment.receipt_number, payment.payment_date,
+              payment.amount, payment.payment_method, payment.payment_stage,
+              agreement.id AS agreement_id, agreement.agreement_number,
+              agreement.customer_name_snapshot AS customer_name,
+              message.delivery_status AS customer_sms_status,
+              boss.alert_status AS boss_sms_status
+         FROM equipment_sale_payments payment
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+         LEFT JOIN equipment_finance_phase6_message_log message
+           ON message.message_key = CONCAT('finance-payment-receipt:', payment.id)
+         LEFT JOIN equipment_finance_payment_alerts boss ON boss.payment_id = payment.id
+        WHERE payment.is_voided = FALSE
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
+        ORDER BY payment.payment_date DESC, payment.id DESC
+        LIMIT 20`
+    ),
+  ]);
 
-  const summary = summaryRows[0] || {};
   const collection = collectionRows[0] || {};
+  const statusMap = new Map();
+  const agingMap = new Map();
+  let portfolioValue = 0;
+  let depositsReceived = 0;
+  let lifetimeCollections = 0;
+  let outstandingBalance = 0;
+  let overdueBalance = 0;
+  let paidPercentTotal = 0;
+  let paidPercentCount = 0;
+  let activeCount = 0;
+  let completedCount = 0;
+  let overdueCount = 0;
+  let reconciliationAttentionCount = 0;
+
+  const accounts = portfolio.map((result) => {
+    const agreement = result.agreement;
+    const calculated = result.calculated;
+    const total = numberValue(agreement.total_amount);
+    const paid = calculated.amount_paid;
+    const status = calculated.agreement_status;
+    const outstanding = calculated.outstanding_balance;
+    const overdue = calculated.overdue_amount;
+
+    portfolioValue += total;
+    depositsReceived += calculated.deposit_received;
+    lifetimeCollections += paid;
+    outstandingBalance += outstanding;
+    overdueBalance += overdue;
+    if (total > 0) {
+      paidPercentTotal += (paid / total) * 100;
+      paidPercentCount += 1;
+    }
+    if (["approved", "active", "due_soon", "payment_due", "overdue"].includes(status)) {
+      activeCount += 1;
+    }
+    if (status === "completed") completedCount += 1;
+    if (status === "overdue" || overdue > 0.01) overdueCount += 1;
+    if (!result.consistent) reconciliationAttentionCount += 1;
+
+    const statusEntry = statusMap.get(status) || { agreement_status: status, agreements: 0, outstanding_amount: 0 };
+    statusEntry.agreements += 1;
+    statusEntry.outstanding_amount += outstanding;
+    statusMap.set(status, statusEntry);
+
+    if (outstanding > 0.01) {
+      let bucket = "current";
+      const oldest = result.evidence.oldest_overdue_date;
+      if (oldest) {
+        const days = Math.max(
+          1,
+          Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${String(oldest).slice(0, 10)}T00:00:00Z`)) / 86400000)
+        );
+        if (days <= 30) bucket = "1_30";
+        else if (days <= 60) bucket = "31_60";
+        else if (days <= 90) bucket = "61_90";
+        else bucket = "over_90";
+      }
+      const agingEntry = agingMap.get(bucket) || { aging_bucket: bucket, agreements: 0, overdue_amount: 0 };
+      agingEntry.agreements += 1;
+      agingEntry.overdue_amount += overdue;
+      agingMap.set(bucket, agingEntry);
+    }
+
+    return {
+      id: Number(agreement.id),
+      agreement_number: agreement.agreement_number,
+      agreement_status: status,
+      customer_name: agreement.customer_name_snapshot,
+      customer_phone: agreement.customer_phone_snapshot,
+      asset_code: agreement.asset_code_snapshot,
+      asset_name: agreement.asset_name_snapshot,
+      total_amount: total,
+      deposit_received: calculated.deposit_received,
+      amount_paid: paid,
+      outstanding_balance: outstanding,
+      overdue_amount: overdue,
+      next_due_date: calculated.next_due_date,
+      final_due_date: agreement.final_due_date,
+      reconciliation_consistent: result.consistent,
+      reconciliation_mismatches: result.mismatches,
+    };
+  });
+
+  const agingOrder = new Map(["current", "1_30", "31_60", "61_90", "over_90"].map((key, index) => [key, index]));
+  const statuses = [...statusMap.values()]
+    .map((row) => ({
+      ...row,
+      outstanding_amount: numberValue(row.outstanding_amount),
+    }))
+    .sort((left, right) => right.agreements - left.agreements || left.agreement_status.localeCompare(right.agreement_status));
+  const aging = [...agingMap.values()]
+    .map((row) => ({
+      ...row,
+      overdue_amount: numberValue(row.overdue_amount),
+    }))
+    .sort((left, right) => (agingOrder.get(left.aging_bucket) || 0) - (agingOrder.get(right.aging_bucket) || 0));
+
+  accounts.sort((left, right) => {
+    const overdueDifference = Number(right.overdue_amount > 0.01) - Number(left.overdue_amount > 0.01);
+    if (overdueDifference) return overdueDifference;
+    const leftDue = left.next_due_date ? String(left.next_due_date).slice(0, 10) : "9999-12-31";
+    const rightDue = right.next_due_date ? String(right.next_due_date).slice(0, 10) : "9999-12-31";
+    return leftDue.localeCompare(rightDue) || right.id - left.id;
+  });
 
   return {
     period: { date_from: from, date_to: to },
     summary: {
-      agreement_count: Number(summary.agreement_count || 0),
-      active_count: Number(summary.active_count || 0),
-      completed_count: Number(summary.completed_count || 0),
-      overdue_count: Number(summary.overdue_count || 0),
-      portfolio_value: numberValue(summary.portfolio_value),
-      deposits_received: numberValue(summary.deposits_received),
-      lifetime_collections: numberValue(summary.lifetime_collections),
-      outstanding_balance: numberValue(summary.outstanding_balance),
-      overdue_balance: numberValue(summary.overdue_balance),
-      average_paid_percent: numberValue(summary.average_paid_percent),
+      agreement_count: portfolio.length,
+      active_count: activeCount,
+      completed_count: completedCount,
+      overdue_count: overdueCount,
+      portfolio_value: numberValue(portfolioValue),
+      deposits_received: numberValue(depositsReceived),
+      lifetime_collections: numberValue(lifetimeCollections),
+      outstanding_balance: numberValue(outstandingBalance),
+      overdue_balance: numberValue(overdueBalance),
+      average_paid_percent: numberValue(paidPercentCount ? paidPercentTotal / paidPercentCount : 0),
       period_payment_count: Number(collection.payment_count || 0),
       period_collections: numberValue(collection.collected_amount),
+      reconciliation_attention_count: reconciliationAttentionCount,
     },
-    statuses: statuses.map((row) => ({
-      ...row,
-      agreements: Number(row.agreements || 0),
-      outstanding_amount: numberValue(row.outstanding_amount),
-    })),
-    aging: aging.map((row) => ({
-      ...row,
-      agreements: Number(row.agreements || 0),
-      overdue_amount: numberValue(row.overdue_amount),
-    })),
+    statuses,
+    aging,
     upcoming: upcoming.map((row) => ({
       ...row,
       agreements: Number(row.agreements || 0),
       expected_amount: numberValue(row.expected_amount),
     })),
-    accounts: accounts.map((row) => ({
-      ...row,
-      total_amount: numberValue(row.total_amount),
-      amount_paid: numberValue(row.amount_paid),
-      outstanding_balance: numberValue(row.outstanding_balance),
-      overdue_amount: numberValue(row.overdue_amount),
-    })),
+    accounts,
     recent_payments: recentPayments.map((row) => ({
       ...row,
       amount: numberValue(row.amount),
@@ -561,7 +595,7 @@ async function getArrearsReport({ dateTo } = {}) {
         AND agreement.activation_source = 'approved_credit_application'
         AND agreement.outstanding_balance > 0.01
         AND schedule.due_date < ?
-        AND schedule.schedule_status NOT IN ('paid','cancelled','waived')
+        AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
       GROUP BY agreement.id
       HAVING calculated_arrears > 0.01
       ORDER BY days_overdue DESC, calculated_arrears DESC, agreement.id`,
@@ -610,11 +644,14 @@ async function getCashFlowReport({ dateFrom, dateTo } = {}) {
   const to = dateInput(dateTo, today);
   const [[actual], [expected], [methods], [daily]] = await Promise.all([
     pool.query(
-      `SELECT DATE_FORMAT(payment_date, '%Y-%m') AS month_key,
-              DATE_FORMAT(payment_date, '%b %Y') AS month_label,
-              COUNT(*) AS payments, COALESCE(SUM(amount), 0) AS collected_amount
-         FROM equipment_sale_payments
-        WHERE is_voided = FALSE AND DATE(payment_date) BETWEEN ? AND ?
+      `SELECT DATE_FORMAT(payment.payment_date, '%Y-%m') AS month_key,
+              DATE_FORMAT(payment.payment_date, '%b %Y') AS month_label,
+              COUNT(*) AS payments, COALESCE(SUM(payment.amount), 0) AS collected_amount
+         FROM equipment_sale_payments payment
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+        WHERE payment.is_voided = FALSE AND DATE(payment.payment_date) BETWEEN ? AND ?
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
         GROUP BY month_key, month_label ORDER BY month_key`,
       [from, to]
     ),
@@ -627,24 +664,30 @@ async function getCashFlowReport({ dateFrom, dateTo } = {}) {
          FROM equipment_installment_schedule schedule
          INNER JOIN equipment_sale_agreements agreement ON agreement.id = schedule.agreement_id
         WHERE schedule.due_date BETWEEN ? AND ?
-          AND schedule.schedule_status NOT IN ('paid','cancelled','waived')
+          AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
           AND agreement.sale_type = 'installment'
           AND agreement.activation_source = 'approved_credit_application'
         GROUP BY month_key, month_label ORDER BY month_key`,
       [from, to]
     ),
     pool.query(
-      `SELECT payment_method, COUNT(*) AS payments, COALESCE(SUM(amount), 0) AS collected_amount
-         FROM equipment_sale_payments
-        WHERE is_voided = FALSE AND DATE(payment_date) BETWEEN ? AND ?
-        GROUP BY payment_method ORDER BY collected_amount DESC`,
+      `SELECT payment.payment_method, COUNT(*) AS payments, COALESCE(SUM(payment.amount), 0) AS collected_amount
+         FROM equipment_sale_payments payment
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+        WHERE payment.is_voided = FALSE AND DATE(payment.payment_date) BETWEEN ? AND ?
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
+        GROUP BY payment.payment_method ORDER BY collected_amount DESC`,
       [from, to]
     ),
     pool.query(
-      `SELECT DATE(payment_date) AS payment_day, COUNT(*) AS payments,
-              COALESCE(SUM(amount), 0) AS collected_amount
-         FROM equipment_sale_payments
-        WHERE is_voided = FALSE AND DATE(payment_date) BETWEEN ? AND ?
+      `SELECT DATE(payment.payment_date) AS payment_day, COUNT(*) AS payments,
+              COALESCE(SUM(payment.amount), 0) AS collected_amount
+         FROM equipment_sale_payments payment
+         INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+        WHERE payment.is_voided = FALSE AND DATE(payment.payment_date) BETWEEN ? AND ?
+          AND agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
         GROUP BY payment_day ORDER BY payment_day`,
       [from, to]
     ),
@@ -696,6 +739,7 @@ async function getCustomerStatement(agreementId) {
   if (!agreement) {
     throw new EquipmentFinancePhaseSixError(404, "Finance agreement was not found.");
   }
+  const reconciliation = await reconcileFinanceAgreement(id);
   const [[schedule], [payments], [allocations]] = await Promise.all([
     pool.query(
       `SELECT id, sequence_number, due_date, scheduled_amount, amount_paid,
@@ -731,6 +775,11 @@ async function getCustomerStatement(agreementId) {
   ]);
   return {
     generated_at: new Date().toISOString(),
+    reconciliation: {
+      consistent: reconciliation.consistent,
+      mismatches: reconciliation.mismatches,
+      calculated: reconciliation.calculated,
+    },
     agreement: {
       ...agreement,
       customer_name: agreement.customer_name_snapshot || agreement.customer_name,
@@ -740,11 +789,15 @@ async function getCustomerStatement(agreementId) {
       asset_name: agreement.asset_name_snapshot || agreement.asset_name,
       total_amount: numberValue(agreement.total_amount),
       deposit_required: numberValue(agreement.deposit_required),
-      deposit_received: numberValue(agreement.deposit_received),
+      deposit_received: reconciliation.calculated.deposit_received,
       financed_amount: numberValue(agreement.financed_amount),
-      amount_paid: numberValue(agreement.amount_paid),
-      outstanding_balance: numberValue(agreement.outstanding_balance),
-      overdue_amount: numberValue(agreement.overdue_amount),
+      amount_paid: reconciliation.calculated.amount_paid,
+      late_charges_total: reconciliation.calculated.late_charges_total,
+      waived_charges_total: reconciliation.calculated.waived_charges_total,
+      outstanding_balance: reconciliation.calculated.outstanding_balance,
+      overdue_amount: reconciliation.calculated.overdue_amount,
+      next_due_date: reconciliation.calculated.next_due_date,
+      agreement_status: reconciliation.calculated.agreement_status,
     },
     schedule: schedule.map((row) => ({
       ...row,

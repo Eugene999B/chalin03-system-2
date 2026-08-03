@@ -60,7 +60,7 @@ test("company-wide agreement activation owns the route before legacy handlers", 
   assert.doesNotMatch(route, /locationId\(req\)|hireLocationScope/);
   assert.doesNotMatch(route, /application\.hire_location_id\s*=\s*\?/);
   assert.match(route, /hire_location_id: null/);
-  assert.match(route, /workspaceCode: "installment_finance"/);
+  assert.match(route, /workspaceCode: "equipment_installment_finance"/);
   assert.match(route, /hireLocationId: null/);
 });
 
@@ -247,4 +247,3 @@ test("Railway startup applies and verifies the exact Phase 3 migration before AP
   assert.match(route, /router\.get\(\s*"\/readiness"/);
   assert.doesNotMatch(combinedRuntime, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });
-

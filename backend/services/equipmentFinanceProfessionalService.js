@@ -2,6 +2,9 @@ const crypto = require("crypto");
 const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
+const {
+  reconcileFinanceAgreement,
+} = require("./equipmentFinanceReconciliationService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 
@@ -689,11 +692,15 @@ async function loadAgreementSnapshot(agreementId, connection = pool) {
      LEFT JOIN users creator ON creator.id = agreement.created_by
      LEFT JOIN users approver ON approver.id = agreement.approved_by
      WHERE agreement.id = ?
+       AND agreement.sale_type = 'installment'
+       AND agreement.activation_source = 'approved_credit_application'
      LIMIT 1`,
     [id]
   );
   const agreement = agreementRows[0];
   if (!agreement) throw new ProfessionalFinanceError(404, "Finance agreement was not found.");
+  const reconciliation = await reconcileFinanceAgreement(id, { connection });
+  Object.assign(agreement, reconciliation.calculated);
 
   const [[schedule], [payments], [media], [signatures]] = await Promise.all([
     connection.query(
@@ -760,6 +767,11 @@ async function loadAgreementSnapshot(agreementId, connection = pool) {
         settings.default_review_missed_installments || 0
       ),
     },
+    reconciliation: {
+      consistent: reconciliation.consistent,
+      mismatches: reconciliation.mismatches,
+      calculated: reconciliation.calculated,
+    },
     agreement,
     schedule: schedule.map((row) => ({
       ...row,
@@ -814,6 +826,13 @@ async function issueDocument({ agreementId, documentType, format, userId }) {
     throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON format.");
   }
   const snapshot = await loadAgreementSnapshot(agreementId);
+  if (!snapshot.reconciliation.consistent) {
+    throw new ProfessionalFinanceError(
+      409,
+      "The Finance account does not reconcile with its receipts, schedule and ledger. Correct the account before issuing an official document.",
+      "EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED"
+    );
+  }
   if (snapshot.policy.legal_review_status !== "approved") {
     throw new ProfessionalFinanceError(
       409,
@@ -1380,6 +1399,8 @@ async function sendBossPaymentAlert({ paymentId, agreementId, userId = null }) {
        INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
        LEFT JOIN users staff ON staff.id = payment.received_by
        WHERE payment.id = ? AND agreement.id = ? AND payment.is_voided = FALSE
+         AND agreement.sale_type = 'installment'
+         AND agreement.activation_source = 'approved_credit_application'
        LIMIT 1`,
       [payment, agreement]
     );

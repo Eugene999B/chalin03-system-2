@@ -52,7 +52,7 @@ async function auditExport(req, details, rowCount, checksum) {
       req,
       action: "EQUIPMENT_FINANCE_ACCOUNTING_EXPORT_GENERATED",
       actionType: "EQUIPMENT_FINANCE_ACCOUNTING_EXPORT_GENERATED",
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       entityType: "equipment_finance_export",
       entityId: null,
       outcome: "success",

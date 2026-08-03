@@ -51,6 +51,7 @@ function asyncHandler(handler) {
           status: "error",
           code: error.code || "FINANCE_GOVERNANCE_ERROR",
           message: error.message,
+          ...(error.details ? { details: error.details } : {}),
           policy: governancePolicy(),
         });
       }

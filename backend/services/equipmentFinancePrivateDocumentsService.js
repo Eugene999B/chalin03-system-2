@@ -583,7 +583,7 @@ async function recordActivity({
     req,
     action: `EQUIPMENT_FINANCE_PHASE5A_${cleanText(actionType, 80).toUpperCase()}`,
     details: cleanText(description, 1500),
-    workspaceCode: "installment_finance",
+    workspaceCode: "equipment_installment_finance",
     hireLocationId: null,
     entityType: agreementId
       ? "equipment_finance_case"

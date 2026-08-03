@@ -4,6 +4,10 @@ const { pool } = require("../config/db");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { writeAuditEvent } = require("./auditTrailService");
 const {
+  assertFinanceMutationSafe,
+  refreshFinanceAgreementFromEvidence,
+} = require("./equipmentFinanceReconciliationService");
+const {
   FinancePrivateDocumentError,
   recordActivity,
 } = require("./equipmentFinancePrivateDocumentsService");
@@ -329,6 +333,10 @@ async function confirmAuthorizedDelivery({ agreementId, input, actor, req }) {
     const financeCase = await loadAuthorizationCase(connection, agreementId, {
       lock: true,
     });
+    await assertFinanceMutationSafe(financeCase.agreement_id, {
+      connection,
+      lock: false,
+    });
     const [existing] = await connection.query(
       `SELECT id FROM equipment_deliveries
         WHERE agreement_id = ? LIMIT 1 FOR UPDATE`,
@@ -472,6 +480,7 @@ async function confirmAuthorizedDelivery({ agreementId, input, actor, req }) {
         WHERE id = ?`,
       [confirmer, financeCase.agreement_id]
     );
+    await refreshFinanceAgreementFromEvidence(connection, financeCase.agreement_id);
     if (details.meter_reading > Number(financeCase.current_meter || 0)) {
       await connection.query(
         `UPDATE fleet_assets SET current_meter = ?, updated_by = ? WHERE id = ?`,
@@ -502,7 +511,7 @@ async function confirmAuthorizedDelivery({ agreementId, input, actor, req }) {
       req,
       action: "EQUIPMENT_FINANCE_DELIVERY_COMPLETED",
       details: `Completed authorized Finance delivery ${deliveryNumber}.`,
-      workspaceCode: "equipment_hire",
+      workspaceCode: "equipment_installment_finance",
       hireLocationId: financeCase.hire_location_id || null,
       entityType: "equipment_delivery",
       entityId: deliveryResult.insertId,

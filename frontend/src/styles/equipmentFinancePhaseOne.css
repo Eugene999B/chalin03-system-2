@@ -122,6 +122,19 @@
   color: #234f72;
 }
 
+.finance-simple__alert {
+  margin: 0.85rem 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d8bf82;
+  border-radius: 0.8rem;
+  line-height: 1.5;
+}
+
+.finance-simple__alert.is-warning {
+  background: #fff8e8;
+  color: #684c0f;
+}
+
 .finance-simple__steps {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
