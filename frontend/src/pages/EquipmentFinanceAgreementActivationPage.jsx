@@ -153,7 +153,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
           <h1>Activate Agreement</h1>
           <span>
             Create the installment agreement and exact dated schedule from the approved
-            application. KYC and affordability remain visible advisories, and Finance stays company-wide.
+            application. KYC and affordability remain visible advisories. Finance is company-wide; no Hire location is selected here.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
