@@ -13,7 +13,19 @@ function restoreCompleteFinanceCustomerProfile() {
       ) {
         return fileURLToPath(
           new URL(
-            "./src/pages/EquipmentFinanceStartWizardEnhancedPage.jsx",
+            "./src/pages/EquipmentFinanceStartWizardOptionalPage.jsx",
+            import.meta.url
+          )
+        );
+      }
+
+      if (
+        source === "./EquipmentFinanceApplicationsPage" &&
+        importer?.endsWith("/EquipmentSalesWorkspacePage.jsx")
+      ) {
+        return fileURLToPath(
+          new URL(
+            "./src/pages/EquipmentFinanceApplicationsOptionalPage.jsx",
             import.meta.url
           )
         );
