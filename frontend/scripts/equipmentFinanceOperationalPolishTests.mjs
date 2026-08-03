@@ -31,7 +31,8 @@ for (const phrase of [
 }
 assert.match(start, /chalin03\.finance\.start-installment\.v1/);
 assert.match(start, /window\.localStorage/);
-assert.match(start, /setInterval/);
+assert.match(start, /chalin03:finance-draft-change/);
+assert.doesNotMatch(start, /setInterval/);
 assert.match(start, /fleet\.assets\.manage/);
 
 for (const tab of [

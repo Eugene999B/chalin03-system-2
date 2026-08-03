@@ -298,7 +298,20 @@ async function financeMachine(connection, assetId) {
              WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count,
             (SELECT COUNT(*) FROM equipment_credit_applications application
              WHERE application.asset_id = asset.id
-               AND application.application_status NOT IN ('declined','withdrawn')) AS active_application_count
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')) AS active_application_count,
+            (SELECT application.id FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_id,
+            (SELECT application.application_number FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_number,
+            (SELECT agreement.agreement_number
+             FROM equipment_asset_sale_locks sale_lock
+             INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
+             ORDER BY sale_lock.created_at DESC, sale_lock.id DESC LIMIT 1) AS blocking_agreement_number
      FROM fleet_assets asset
      WHERE asset.id = ? AND asset.is_active = TRUE
      LIMIT 1 FOR UPDATE`,
@@ -319,10 +332,18 @@ function assertMachineAvailable(machine) {
     throw new PhaseOneError(409, "The selected excavator is active on Hire and cannot enter an installment.");
   }
   if (Number(machine.active_sale_lock_count || 0) > 0) {
-    throw new PhaseOneError(409, "The selected excavator is already reserved by another Finance agreement.");
+    throw new PhaseOneError(
+      409,
+      `The selected excavator is reserved by Finance agreement ${machine.blocking_agreement_number || "on record"}.`,
+      "FINANCE_ASSET_HELD_BY_AGREEMENT"
+    );
   }
   if (Number(machine.active_application_count || 0) > 0) {
-    throw new PhaseOneError(409, "The selected excavator already has an active credit application.");
+    throw new PhaseOneError(
+      409,
+      `The selected excavator is held by application ${machine.blocking_application_number || "on record"}.`,
+      "FINANCE_ASSET_HELD_BY_APPLICATION"
+    );
   }
 }
 
@@ -560,9 +581,27 @@ async function machinesWithEditability() {
     `SELECT asset.id,
             (SELECT COUNT(*) FROM equipment_credit_applications application
              WHERE application.asset_id = asset.id
-               AND application.application_status NOT IN ('declined','withdrawn')) AS active_application_count,
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')) AS active_application_count,
             (SELECT COUNT(*) FROM equipment_asset_sale_locks sale_lock
-             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count,
+            (SELECT application.id FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_id,
+            (SELECT application.application_number FROM equipment_credit_applications application
+             WHERE application.asset_id = asset.id
+               AND application.application_status IN ('draft','submitted','under_review','changes_requested','approved')
+             ORDER BY application.updated_at DESC, application.id DESC LIMIT 1) AS blocking_application_number,
+            (SELECT agreement.id
+             FROM equipment_asset_sale_locks sale_lock
+             INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
+             ORDER BY sale_lock.created_at DESC, sale_lock.id DESC LIMIT 1) AS blocking_agreement_id,
+            (SELECT agreement.agreement_number
+             FROM equipment_asset_sale_locks sale_lock
+             INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
+             WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
+             ORDER BY sale_lock.created_at DESC, sale_lock.id DESC LIMIT 1) AS blocking_agreement_number
      FROM fleet_assets asset WHERE asset.id IN (${placeholders})`,
     ids
   );
@@ -577,13 +616,23 @@ async function machinesWithEditability() {
       activeLocks === 0;
     return {
       ...machine,
+      has_image: Boolean(machine.main_image_url),
+      main_image_url: null,
       active_application_count: activeApplications,
       active_sale_lock_count: activeLocks,
+      blocking_application_id: row.blocking_application_id || null,
+      blocking_application_number: row.blocking_application_number || null,
+      blocking_agreement_id: row.blocking_agreement_id || null,
+      blocking_agreement_number: row.blocking_agreement_number || null,
       editability: {
         editable,
         reason: editable
           ? "This excavator has not entered an installment workflow."
-          : "This excavator is linked to an active application, reservation, agreement or final sale status.",
+          : row.blocking_application_number
+            ? `Held by Finance application ${row.blocking_application_number}.`
+            : row.blocking_agreement_number
+              ? `Reserved by Finance agreement ${row.blocking_agreement_number}.`
+              : "This excavator is linked to an active reservation, agreement or final sale status.",
       },
     };
   });
@@ -612,6 +661,7 @@ router.get(
           installment_offer_created_automatically: true,
           exact_schedule_preview_enabled: true,
           optional_draft_kyc_and_affordability: true,
+          list_contains_image_bytes: false,
         },
       });
     } catch (error) {

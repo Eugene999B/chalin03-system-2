@@ -199,15 +199,8 @@ export default function EquipmentFinanceStartWizardEnhancedPage() {
   }, []);
 
   useEffect(() => {
-    const synchronize = () => {
-      const current = window.localStorage.getItem(CURRENT_DRAFT_KEY);
-      if (current && current !== window.localStorage.getItem(LEGACY_AUTOSAVE_KEY)) {
-        window.localStorage.setItem(LEGACY_AUTOSAVE_KEY, current);
-      }
-    };
-    synchronize();
-    const timer = window.setInterval(synchronize, 700);
-    return () => window.clearInterval(timer);
+    const current = window.localStorage.getItem(CURRENT_DRAFT_KEY);
+    if (current) window.localStorage.removeItem(LEGACY_AUTOSAVE_KEY);
   }, [wizardVersion]);
 
   const completion = useMemo(() => {
