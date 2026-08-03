@@ -231,6 +231,16 @@ export default function EquipmentFinanceOperationalStartPage() {
         }
       } finally {
         savingRef.current = false;
+        if (queuedRef.current && !conflictRef.current) {
+          queuedRef.current = false;
+          window.setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("chalin03:finance-draft-change", {
+                detail: { payload: parseLocalDraft() },
+              })
+            );
+          }, 0);
+        }
       }
     },
     [canServerSave]
@@ -247,6 +257,10 @@ export default function EquipmentFinanceOperationalStartPage() {
       if (!canServerSave) return;
       if (!payload) {
         timer = window.setTimeout(() => {
+          if (savingRef.current) {
+            queuedRef.current = true;
+            return;
+          }
           axiosClient
             .delete(`${API}/drafts/start-installment`)
             .then(() => {
