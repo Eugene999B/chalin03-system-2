@@ -24,6 +24,12 @@ const RELEASES = Object.freeze([
     verifier: "20260801_equipment_finance_phase4_balance_guard_verify.sql",
     validate: validateBalanceGuard,
   },
+  {
+    record: "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+    migration: "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql",
+    verifier: "20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql",
+    validate: validateDepositReservationIntegrity,
+  },
 ]);
 
 function requiredEnv(primaryName, fallbackName) {
@@ -65,6 +71,15 @@ function connectionOptions() {
   };
 }
 
+function hasExecutableSql(sqlText) {
+  return String(sqlText || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:--|#).*$/, ""))
+    .join("\n")
+    .trim().length > 0;
+}
+
 function splitSqlScript(sqlText) {
   const statements = [];
   let delimiter = ";";
@@ -73,9 +88,10 @@ function splitSqlScript(sqlText) {
   for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
     const delimiterMatch = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
     if (delimiterMatch) {
-      if (buffer.trim()) {
+      if (hasExecutableSql(buffer)) {
         throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
       }
+      buffer = "";
       delimiter = delimiterMatch[1];
       continue;
     }
@@ -87,7 +103,9 @@ function splitSqlScript(sqlText) {
     buffer = "";
   }
 
-  if (buffer.trim()) throw new Error("SQL script ended with an incomplete statement.");
+  if (hasExecutableSql(buffer)) {
+    throw new Error("SQL script ended with an incomplete statement.");
+  }
   return statements;
 }
 
@@ -182,6 +200,67 @@ function validateBalanceGuard(results, record) {
   }
 }
 
+function validateDepositReservationIntegrity(results, record) {
+  if (results.length !== 4) {
+    throw new Error(
+      `Phase 4 deposit-reservation verifier returned ${results.length} result sets instead of 4.`
+    );
+  }
+  const [migrationRows, triggerRows, indexRows, invalidRows] = results;
+  if (migrationRows.length !== 1 || migrationRows[0].migration_name !== record) {
+    throw new Error("Phase 4 deposit-reservation migration record was not verified.");
+  }
+
+  const expectedTriggers = new Map([
+    ["trg_equipment_finance_payment_gate_before_insert", "INSERT"],
+    ["trg_equipment_finance_reservation_gate_before_insert", "INSERT"],
+    ["trg_equipment_finance_commitment_gate_before_update", "UPDATE"],
+  ]);
+  if (triggerRows.length !== expectedTriggers.size) {
+    throw new Error("The three controlled Phase 4 deposit-reservation triggers are not installed.");
+  }
+  for (const row of triggerRows) {
+    const expectedEvent = expectedTriggers.get(row.TRIGGER_NAME);
+    if (
+      !expectedEvent ||
+      row.EVENT_MANIPULATION !== expectedEvent ||
+      row.ACTION_TIMING !== "BEFORE"
+    ) {
+      throw new Error(`Invalid Phase 4 deposit-reservation trigger ${row.TRIGGER_NAME}.`);
+    }
+    const action = String(row.ACTION_STATEMENT || "").toLowerCase();
+    if (action.includes("kyc_status") || action.includes("affordability_status")) {
+      throw new Error("Optional KYC or affordability guidance was made a mandatory deposit gate.");
+    }
+  }
+
+  const combinedActions = triggerRows
+    .map((row) => String(row.ACTION_STATEMENT || "").toLowerCase())
+    .join("\n");
+  for (const evidence of [
+    "application_status",
+    "idempotency_key",
+    "hire_contract_assets",
+    "opening_deposit",
+    "<=>",
+  ]) {
+    if (!combinedActions.includes(evidence)) {
+      throw new Error(`Phase 4 trigger evidence is missing ${evidence}.`);
+    }
+  }
+
+  if (
+    indexRows.length !== 1 ||
+    Number(indexRows[0].NON_UNIQUE) !== 0 ||
+    indexRows[0].indexed_columns !== "idempotency_key"
+  ) {
+    throw new Error("The unique opening-deposit idempotency index is missing.");
+  }
+  if (Number(invalidRows[0]?.invalid_controlled_reservations || 0) !== 0) {
+    throw new Error("The Phase 4 verifier found invalid controlled reservations.");
+  }
+}
+
 async function runEquipmentFinancePhaseFourStartup() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
@@ -236,10 +315,13 @@ module.exports = {
   RELEASES,
   REQUIRED_TABLES,
   executeStatements,
+  hasExecutableSql,
   migrationRecordExists,
   runEquipmentFinancePhaseFourStartup,
   splitSqlScript,
   validateBalanceGuard,
   validateCorrectionSchema,
+  validateDepositReservationIntegrity,
   verifyDatabaseIdentity,
 };
+
