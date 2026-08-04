@@ -8,12 +8,17 @@ const root = path.resolve(path.dirname(currentFile), "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const workspace = read("src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const startRedirect = read(
+  "src",
+  "pages",
+  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 const start = read("src", "pages", "EquipmentFinanceOperationalStartImmediatePage.jsx");
 const operations = read("src", "pages", "EquipmentFinanceOperationalPolishPage.jsx");
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const styles = read("src", "styles", "equipmentFinanceOperationalPolish.css");
 
-assert.match(workspace, /EquipmentFinanceOperationalStartImmediatePage/);
+assert.match(workspace, /EquipmentFinancePhaseThreeStartRedirectPage/);
 assert.match(workspace, /EquipmentFinanceOperationalPolishPage/);
 assert.match(workspace, /stage === "start"/);
 assert.match(workspace, /stage === "operations"/);
@@ -21,6 +26,12 @@ assert.match(
   workspace,
   /if \(!stage \|\| stage === "applications" \|\| stage === "start"\)/
 );
+assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);
+assert.match(startRedirect, /START_INSTALLMENT_PATH/);
+assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
+assert.match(startRedirect, /replace: true/);
+assert.match(startRedirect, /financeCreationCompleted: true/);
 
 for (const phrase of [
   "server draft",
