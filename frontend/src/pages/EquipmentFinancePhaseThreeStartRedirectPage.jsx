@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
 
 const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
 const APPLICATIONS_PATH = "/equipment-installment-finance/applications";
-const CREATION_REDIRECT_FALLBACK_MS = 1250;
+const DRAFT_KEY = "chalin03.finance.start-installment.v2";
+const LEGACY_DRAFT_KEY = "chalin03.finance.start-installment.v1";
 
 function cleanPath(value) {
   return String(value || "")
@@ -37,53 +37,58 @@ function safeNextPath(response) {
   return `${APPLICATIONS_PATH}?application=${applicationId}`;
 }
 
-function stillOnStartScreen() {
-  if (typeof window === "undefined") return false;
-  const query = new URLSearchParams(window.location.search);
-  return (
-    window.location.pathname === APPLICATIONS_PATH && query.get("stage") === "start"
-  );
+function clearCommittedDraft() {
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    window.dispatchEvent(
+      new CustomEvent("chalin03:finance-draft-change", {
+        detail: { payload: null },
+      })
+    );
+  } catch {
+    // The committed application remains authoritative even if local cleanup is unavailable.
+  }
 }
 
 export default function EquipmentFinancePhaseThreeStartRedirectPage() {
-  const navigate = useNavigate();
-
   useEffect(() => {
-    let fallbackTimer = null;
+    let redirecting = false;
     const interceptorId = axiosClient.interceptors.response.use((response) => {
-      if (successfulCreation(response)) {
-        // The wizard owns the normal committed-response redirect. Provide a
-        // guarded fallback only if it is still on ?stage=start after that
-        // handoff window. This prevents a second navigation from aborting the
-        // Applications list, readiness and detail requests.
-        window.clearTimeout(fallbackTimer);
-        fallbackTimer = window.setTimeout(() => {
-          if (!stillOnStartScreen()) return;
-          navigate(safeNextPath(response), {
-            replace: true,
-            state: {
-              financeCreationCompleted: true,
-              applicationNumber:
-                response.data?.application?.application_number || null,
-            },
-          });
-        }, CREATION_REDIRECT_FALLBACK_MS);
+      if (!redirecting && successfulCreation(response)) {
+        redirecting = true;
+        clearCommittedDraft();
+        try {
+          window.sessionStorage.setItem(
+            "chalin03_finance_creation_notice",
+            String(
+              response.data?.application?.application_number ||
+                "Installment application created."
+            )
+          );
+        } catch {
+          // Notice storage is not required for the committed handoff.
+        }
+
+        // A real browser replacement is intentional here. It creates one stable
+        // Applications document with the exact committed application URL, while
+        // cancelling the old wizard's delayed navigation and request controllers.
+        window.location.replace(safeNextPath(response));
       }
       return response;
     });
 
     return () => {
-      window.clearTimeout(fallbackTimer);
       axiosClient.interceptors.response.eject(interceptorId);
     };
-  }, [navigate]);
+  }, []);
 
   return <EquipmentFinanceOperationalStartImmediatePage />;
 }
 
 export {
   cleanPath,
+  clearCommittedDraft,
   safeNextPath,
-  stillOnStartScreen,
   successfulCreation,
 };
