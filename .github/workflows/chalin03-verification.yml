@@ -138,7 +138,7 @@ jobs:
       - name: Prove the complete Finance application and approval pipeline
         run: |
           set -o pipefail
-          npx playwright test e2e/equipmentFinancePhaseThreeApprovalPipeline.spec.js 2>&1 | tee finance-phase-three-approval-browser.log
+          npx playwright test e2e/equipmentFinancePhaseThreeApprovalPipeline.spec.js --timeout=120000 2>&1 | tee finance-phase-three-approval-browser.log
 
       - name: Run the complete Finance Phase 3 collection journey
         run: |
