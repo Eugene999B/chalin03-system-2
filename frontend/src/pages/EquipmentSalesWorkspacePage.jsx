@@ -1,11 +1,9 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
+import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
 
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
   import("./EquipmentFinanceAgreementActivationPage")
-);
-const EquipmentFinanceApplicationsPage = lazy(() =>
-  import("./EquipmentFinanceApplicationsPage")
 );
 const EquipmentFinanceArrearsPage = lazy(() =>
   import("./EquipmentFinanceArrearsPage")
@@ -121,16 +119,19 @@ function stagePage(stage) {
     return <EquipmentFinanceFinalLifecyclePage />;
   }
 
+  // Applications & Approvals is the critical default Finance screen. Keep it
+  // outside React.lazy so a delayed chunk can never leave the page in Suspense.
   return <EquipmentFinanceApplicationsPage />;
 }
 
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
+  const page = stagePage(stage);
 
-  return (
-    <Suspense fallback={<FinanceStageFallback />}>
-      {stagePage(stage)}
-    </Suspense>
-  );
+  if (!stage || stage === "applications") {
+    return page;
+  }
+
+  return <Suspense fallback={<FinanceStageFallback />}>{page}</Suspense>;
 }
