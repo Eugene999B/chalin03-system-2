@@ -19,6 +19,12 @@ const applicationsPage = read(
   "pages",
   "EquipmentFinanceApplicationsPage.jsx"
 );
+const startRedirectPage = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 const immediateStartPage = read(
   "frontend",
   "src",
@@ -63,7 +69,7 @@ test("Applications and Start New Installment load eagerly outside the Finance Su
   );
   assert.match(
     financeWorkspace,
-    /import EquipmentFinanceOperationalStartImmediatePage from "\.\/EquipmentFinanceOperationalStartImmediatePage";/
+    /import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/
   );
   assert.doesNotMatch(
     financeWorkspace,
@@ -71,7 +77,7 @@ test("Applications and Start New Installment load eagerly outside the Finance Su
   );
   assert.doesNotMatch(
     financeWorkspace,
-    /const EquipmentFinanceOperationalStartImmediatePage = lazy/
+    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy/
   );
   assert.match(
     financeWorkspace,
@@ -81,6 +87,9 @@ test("Applications and Start New Installment load eagerly outside the Finance Su
     financeWorkspace,
     /return <Suspense fallback=\{<FinanceStageFallback \/>\}>\{page\}<\/Suspense>;/
   );
+  assert.match(startRedirectPage, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirectPage, /axiosClient\.interceptors\.response\.use/);
+  assert.match(startRedirectPage, /replace: true/);
   assert.match(immediateStartPage, /RECOVERY_TIMEOUT_MS = 8000/);
   assert.match(immediateStartPage, /<EquipmentFinanceStartWizardPage \/>/);
   assert.doesNotMatch(immediateStartPage, /Preparing secure draft recovery/);

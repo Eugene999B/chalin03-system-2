@@ -12,6 +12,9 @@ const {
   validateVerifierResults,
 } = require("./runEquipmentFinanceOperationalPolishMigration");
 const {
+  runEquipmentFinancePhaseThreeApplicationStartup,
+} = require("./runEquipmentFinancePhaseThreeApplicationStartup");
+const {
   runEquipmentFinanceAgreementCreationStartup,
 } = require("./runEquipmentFinanceAgreementCreationStartup");
 
@@ -143,6 +146,10 @@ async function inspectAndVerifyAppliedRelease() {
 }
 
 async function runEquipmentFinanceOperationalPolishStartup() {
+  // This is the existing reviewed Railway Phase 3 gate. Keep the public startup
+  // command stable while verifying the newer application pipeline first.
+  const applicationPipeline =
+    await runEquipmentFinancePhaseThreeApplicationStartup();
   const state = await inspectAndVerifyAppliedRelease();
 
   if (!state.applied) {
@@ -153,7 +160,11 @@ async function runEquipmentFinanceOperationalPolishStartup() {
   }
 
   await runEquipmentFinanceAgreementCreationStartup();
-  return { applied: true, database_name: state.database_name };
+  return {
+    applied: true,
+    database_name: state.database_name,
+    application_pipeline_repaired: Boolean(applicationPipeline?.repaired),
+  };
 }
 
 if (require.main === module) {

@@ -16,6 +16,9 @@ const parentRoute = read(
 const immediateStart = read(
   "frontend/src/pages/EquipmentFinanceOperationalStartImmediatePage.jsx"
 );
+const startRedirect = read(
+  "frontend/src/pages/EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 const workspace = read(
   "frontend/src/pages/EquipmentSalesWorkspacePage.jsx"
 );
@@ -78,16 +81,19 @@ test("start installment renders immediately while server recovery runs in backgr
     immediateStart,
     /Server recovery never blocks this screen/
   );
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);
+  assert.match(startRedirect, /replace: true/);
 });
 
 test("critical start stage is eager and outside Suspense", () => {
   assert.match(
     workspace,
-    /^import EquipmentFinanceOperationalStartImmediatePage from "\.\/EquipmentFinanceOperationalStartImmediatePage";/m
+    /^import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/m
   );
   assert.doesNotMatch(
     workspace,
-    /const EquipmentFinanceOperationalStartPage = lazy/
+    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy/
   );
   assert.match(
     workspace,

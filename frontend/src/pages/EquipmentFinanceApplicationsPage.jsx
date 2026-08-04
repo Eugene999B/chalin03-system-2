@@ -349,8 +349,10 @@ export default function EquipmentFinanceApplicationsPage() {
   useEffect(() => {
     const timer = window.setTimeout(loadList, search ? 300 : 0);
     return () => {
+      // StrictMode replays effect cleanup immediately after the first mount.
+      // Only cancel the pending debounce timer here. A newer real loadList()
+      // call still aborts the older request at the top of loadList.
       window.clearTimeout(timer);
-      listAbortRef.current?.abort();
     };
   }, [loadList, search]);
 
@@ -398,9 +400,10 @@ export default function EquipmentFinanceApplicationsPage() {
 
   useEffect(() => {
     if (requestedApplicationId) {
-      openDetail(requestedApplicationId);
+      void openDetail(requestedApplicationId);
     }
-    return () => detailAbortRef.current?.abort();
+    // Do not abort during effect cleanup: React StrictMode immediately replays
+    // this effect. A newer openDetail() call still cancels the stale request.
   }, [openDetail, requestedApplicationId]);
 
   function closeDetail() {

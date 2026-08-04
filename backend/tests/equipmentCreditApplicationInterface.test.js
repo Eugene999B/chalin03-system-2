@@ -14,6 +14,12 @@ const minimalWorkflow = read(
   "pages",
   "EquipmentFinanceMinimalWorkflowPage.jsx"
 );
+const startRedirect = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 const operationalStart = read(
   "frontend",
   "src",
@@ -27,7 +33,10 @@ const serviceWorker = read("frontend", "public", "sw.js");
 
 test("Finance applications route through the protected credit foundation", () => {
   assert.match(wrapper, /EquipmentFinanceApplicationsPage/);
-  assert.match(wrapper, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(wrapper, /EquipmentFinancePhaseThreeStartRedirectPage/);
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /START_INSTALLMENT_PATH/);
+  assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
   assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
   assert.match(operationalStart, /drafts\/start-installment/);
   assert.match(operationalStart, /Server recovery never blocks this screen/);
