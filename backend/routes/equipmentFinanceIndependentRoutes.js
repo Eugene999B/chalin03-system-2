@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const { pool } = require("../config/db");
@@ -13,6 +12,7 @@ const {
 const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
+const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
 const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
 const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
@@ -117,13 +117,18 @@ function financePolicy() {
   };
 }
 
-// Critical Finance entry points must own bootstrap, Applications & Approvals,
-// signed machine photos and image-safe creation before every legacy handler.
+// Phase 2 owns every Finance machine/application image and the two list
+// responses that advertise image references. It must execute before signed
+// URL and schema-coupled legacy handlers.
+router.use(equipmentFinancePhaseTwoImageRoutes);
+
+// Critical Finance entry points own the remaining bootstrap and application
+// fallbacks before every legacy handler.
 router.use(equipmentFinanceCriticalEntryRoutes);
 router.use(equipmentFinanceImageSafeStartRoutes);
 
-// These company-wide read routes own protected detail and application image
-// requests after the bounded critical register/readiness routes above.
+// These company-wide read routes own protected detail and any legacy
+// application-image fallback after the Phase 2 route above.
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 // These lightweight GET routes execute before legacy handlers that depend on
 // unrelated Professional Finance settings/document tables.
