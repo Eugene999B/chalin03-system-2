@@ -11,7 +11,7 @@ const operationalStart = read(
   "frontend",
   "src",
   "pages",
-  "EquipmentFinanceOperationalStartPage.jsx"
+  "EquipmentFinanceOperationalStartImmediatePage.jsx"
 );
 const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
@@ -27,7 +27,7 @@ test("all simplified Finance routes resolve through the protected Finance layout
 
 test("workspace query stages resolve to explicit Finance pages", () => {
   for (const pageName of [
-    "EquipmentFinanceOperationalStartPage",
+    "EquipmentFinanceOperationalStartImmediatePage",
     "EquipmentFinanceOperationalPolishPage",
     "EquipmentFinanceCustomerCentrePage",
     "EquipmentFinanceExcavatorsPage",
@@ -41,6 +41,8 @@ test("workspace query stages resolve to explicit Finance pages", () => {
     assert.match(workspace, new RegExp(pageName));
   }
   assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
+  assert.match(operationalStart, /recoverInBackground/);
+  assert.match(operationalStart, /Server recovery never blocks this screen/);
 });
 
 test("new applications use the protected automatic Offer path", () => {
