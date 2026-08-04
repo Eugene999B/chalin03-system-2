@@ -3,6 +3,10 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const {
+  classifyFinanceDatabaseError,
+  inspectFinanceApplicationSchema,
+} = require("../services/equipmentFinancePhaseOneDiagnosticsService");
 
 const router = express.Router();
 
@@ -520,49 +524,51 @@ router.get("/phase-one/machine-image/:assetId/:photoId", async (req, res) => {
 });
 
 async function applicationReadiness() {
-  const connection = await acquireConnection();
+  let connection;
   try {
-    await query(
-      connection,
-      `SELECT application.id
-         FROM equipment_credit_applications application
-         INNER JOIN hire_customers customer ON customer.id = application.customer_id
-         INNER JOIN equipment_sales_quotations quotation ON quotation.id = application.quotation_id
-         INNER JOIN fleet_assets asset ON asset.id = application.asset_id
-        WHERE 1 = 0`
-    );
-    return {
-      ready: true,
-      missing_tables: [],
-      missing_columns: [],
-      scope: "company_wide",
-      hire_location_selection_required: false,
-      critical_read_path: true,
-    };
+    connection = await acquireConnection();
+    return await inspectFinanceApplicationSchema(connection, {
+      queryTimeoutMs: QUERY_TIMEOUT_MS,
+    });
   } catch (error) {
+    const failure = classifyFinanceDatabaseError(error);
     return {
       ready: false,
-      missing_tables: [],
-      missing_columns: [],
-      code: error.code || "FINANCE_APPLICATION_READINESS_FAILED",
-      message: error.message,
+      checked_at: new Date().toISOString(),
       scope: "company_wide",
       hire_location_selection_required: false,
       critical_read_path: true,
+      diagnostic_unavailable: true,
+      code: failure.code,
+      operator_message: failure.operator_message,
+      database_error_code: cleanText(error?.code, 80) || null,
+      missing_tables: [],
+      missing_columns: [],
+      invalid_nullability: [],
+      invalid_enums: [],
+      capabilities: {
+        window_functions_supported: null,
+        register_query_compiles: null,
+      },
     };
   } finally {
-    connection.release();
+    connection?.release();
   }
 }
 
 router.get(
   "/credit-applications/readiness",
   requirePermission("fleet.assets.view"),
-  async (_req, res) => {
+  async (req, res) => {
     const readiness = await applicationReadiness();
     return res.status(200).json({
       status: readiness.ready ? "success" : "degraded",
-      readiness,
+      request_id: req.requestId || null,
+      operator_message: readiness.operator_message,
+      readiness: {
+        ...readiness,
+        request_id: req.requestId || null,
+      },
     });
   }
 );
@@ -669,6 +675,7 @@ router.get(
       });
       return res.json({
         status: "success",
+        request_id: req.requestId || null,
         applications,
         pagination: {
           page: requestedPage,
@@ -687,6 +694,7 @@ router.get(
           hire_location_selection_required: false,
           list_contains_image_bytes: false,
           critical_read_path: true,
+          empty_results_are_never_substituted_for_errors: true,
         },
       });
     } catch (error) {
@@ -695,31 +703,35 @@ router.get(
           status: "error",
           code: error.code,
           message: error.message,
+          request_id: req.requestId || null,
         });
       }
-      console.error("Critical Finance application register degraded:", error);
-      return res.status(200).json({
-        status: "degraded",
-        message:
-          "The application register query did not finish, but the page was released instead of remaining stuck.",
-        applications: [],
-        pagination: {
-          page: 1,
-          page_size: APPLICATION_PAGE_SIZE,
-          total: 0,
-          total_pages: 1,
-        },
-        summary: {
-          drafts: 0,
-          awaiting_review: 0,
-          approved: 0,
-          proposed_exposure: 0,
-        },
+
+      if (connection) {
+        connection.release();
+        connection = null;
+      }
+      const readiness = await applicationReadiness();
+      const failure = classifyFinanceDatabaseError(error, readiness);
+      console.error("Critical Finance application register failed:", {
+        request_id: req.requestId || null,
+        code: error?.code || null,
+        errno: error?.errno || null,
+        sql_state: error?.sqlState || null,
+        message: error?.message || null,
+        classified_as: failure.code,
+      });
+      return res.status(503).json({
+        status: "error",
+        code: failure.code,
+        message: "Finance application register unavailable.",
+        operator_message: failure.operator_message,
+        request_id: req.requestId || null,
+        retryable: true,
         readiness: {
-          ready: false,
-          degraded: true,
-          code: error.code || "FINANCE_APPLICATION_REGISTER_TIMEOUT",
-          message: error.message,
+          ...readiness,
+          request_id: req.requestId || null,
+          failure_code: cleanText(error?.code, 80) || null,
         },
       });
     } finally {
@@ -730,6 +742,7 @@ router.get(
 
 module.exports = router;
 module.exports.acquireConnection = acquireConnection;
+module.exports.applicationReadiness = applicationReadiness;
 module.exports.dataImage = dataImage;
 module.exports.imageSignature = imageSignature;
 module.exports.loadCustomers = loadCustomers;
