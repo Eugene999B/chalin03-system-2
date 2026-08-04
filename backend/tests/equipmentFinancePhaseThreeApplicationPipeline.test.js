@@ -14,6 +14,11 @@ const creationGuard = read(
   "equipmentFinancePhaseThreeCreationGuardRoutes.js"
 );
 const creation = read("backend", "routes", "equipmentFinanceImageSafeStartRoutes.js");
+const operationalStartup = read(
+  "backend",
+  "scripts",
+  "runEquipmentFinanceOperationalPolishStartup.js"
+);
 const migration = read(
   "database",
   "migrations",
@@ -85,7 +90,8 @@ test("detail, submit and manager review are one company-wide bounded authority",
   assert.match(workflow, /"\/credit-applications\/:id"/);
   assert.match(workflow, /"\/credit-applications\/:id\/submit"/);
   assert.match(workflow, /"\/credit-applications\/:id\/review"/);
-  assert.match(workflow, /LIMIT 1 FOR UPDATE/);
+  assert.match(workflow, /\$\{lock \? "FOR UPDATE" : ""\}/);
+  assert.ok((workflow.match(/loadApplicationRecord\(connection, applicationId, true\)/g) || []).length >= 2);
   assert.match(workflow, /decision_version = \?/);
   assert.match(workflow, /EQUIPMENT_CREDIT_DECISION_VERSION_CONFLICT/);
   assert.match(workflow, /application_status = 'submitted'/);
@@ -163,7 +169,19 @@ test("Phase 3 migration is additive and startup verified", () => {
   assert.match(verifier, /phase3_migration_record_missing/);
   assert.match(
     packageJson.scripts.start,
+    /runEquipmentFinanceOperationalPolishStartup\.js/
+  );
+  assert.doesNotMatch(
+    packageJson.scripts.start,
     /runEquipmentFinancePhaseThreeApplicationStartup\.js/
+  );
+  assert.match(
+    operationalStartup,
+    /runEquipmentFinancePhaseThreeApplicationStartup/
+  );
+  assert.ok(
+    operationalStartup.indexOf("runEquipmentFinancePhaseThreeApplicationStartup()") <
+      operationalStartup.indexOf("inspectAndVerifyAppliedRelease()")
   );
 });
 
