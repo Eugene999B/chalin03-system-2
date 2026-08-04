@@ -70,6 +70,9 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
           // Notice storage is not required for the committed handoff.
         }
 
+        // Migration note: the retired SPA handoff was
+        // navigate(safeNextPath(response), { replace: true }). It changed the
+        // rendered route without reliably changing the production browser URL.
         // A real browser replacement is intentional here. It creates one stable
         // Applications document with the exact committed application URL, while
         // cancelling the old wizard's delayed navigation and request controllers.
