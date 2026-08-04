@@ -6,6 +6,7 @@ import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOpe
 const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
 const APPLICATIONS_PATH = "/equipment-installment-finance/applications";
+const CREATION_REDIRECT_FALLBACK_MS = 1250;
 
 function cleanPath(value) {
   return String(value || "")
@@ -36,28 +37,43 @@ function safeNextPath(response) {
   return `${APPLICATIONS_PATH}?application=${applicationId}`;
 }
 
+function stillOnStartScreen() {
+  if (typeof window === "undefined") return false;
+  const query = new URLSearchParams(window.location.search);
+  return (
+    window.location.pathname === APPLICATIONS_PATH && query.get("stage") === "start"
+  );
+}
+
 export default function EquipmentFinancePhaseThreeStartRedirectPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let fallbackTimer = null;
     const interceptorId = axiosClient.interceptors.response.use((response) => {
       if (successfulCreation(response)) {
-        // Move to the authoritative application file as soon as the committed
-        // creation response arrives. This avoids the old delayed redirect racing
-        // with server-draft deletion and returning the user to ?stage=start.
-        navigate(safeNextPath(response), {
-          replace: true,
-          state: {
-            financeCreationCompleted: true,
-            applicationNumber:
-              response.data?.application?.application_number || null,
-          },
-        });
+        // The wizard owns the normal committed-response redirect. Provide a
+        // guarded fallback only if it is still on ?stage=start after that
+        // handoff window. This prevents a second navigation from aborting the
+        // Applications list, readiness and detail requests.
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = window.setTimeout(() => {
+          if (!stillOnStartScreen()) return;
+          navigate(safeNextPath(response), {
+            replace: true,
+            state: {
+              financeCreationCompleted: true,
+              applicationNumber:
+                response.data?.application?.application_number || null,
+            },
+          });
+        }, CREATION_REDIRECT_FALLBACK_MS);
       }
       return response;
     });
 
     return () => {
+      window.clearTimeout(fallbackTimer);
       axiosClient.interceptors.response.eject(interceptorId);
     };
   }, [navigate]);
@@ -65,4 +81,9 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
   return <EquipmentFinanceOperationalStartImmediatePage />;
 }
 
-export { cleanPath, safeNextPath, successfulCreation };
+export {
+  cleanPath,
+  safeNextPath,
+  stillOnStartScreen,
+  successfulCreation,
+};
