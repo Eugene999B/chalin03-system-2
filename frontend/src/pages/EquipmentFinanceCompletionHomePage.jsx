@@ -46,7 +46,7 @@ const WORKFLOW = [
   },
 ];
 
-export default function EquipmentFinanceCompletionHomePage({ legacyWorkflow }) {
+export default function EquipmentFinanceCompletionHomePage() {
   return (
     <main className="installment-completion" data-testid="installment-completion-home">
       <header className="installment-completion__hero">
@@ -75,6 +75,9 @@ export default function EquipmentFinanceCompletionHomePage({ legacyWorkflow }) {
             <h2>Complete these six business stages</h2>
             <span>Each page below has one purpose and one obvious next action.</span>
           </div>
+          <Link className="installment-completion__button" to="/equipment-installment-finance?view=advanced">
+            Advanced command centre
+          </Link>
         </div>
         <div className="installment-completion__workflow">
           {WORKFLOW.map((step) => (
@@ -126,11 +129,6 @@ export default function EquipmentFinanceCompletionHomePage({ legacyWorkflow }) {
           <div><span>Active Installments</span><strong>Balances and payments</strong></div>
         </div>
       </section>
-
-      <details className="installment-completion__legacy-details">
-        <summary>Open detailed operational controls</summary>
-        {legacyWorkflow}
-      </details>
     </main>
   );
 }
