@@ -12,6 +12,7 @@ const app = read("src/App.jsx");
 const fleetWrapper = read("src/pages/FleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
 const workspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
+const phaseThreeStart = read("src/pages/EquipmentFinancePhaseThreeStartRedirectPage.jsx");
 const operationalStart = read("src/pages/EquipmentFinanceOperationalStartImmediatePage.jsx");
 const applications = read("src/pages/EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("src/pages/EquipmentFinanceStartWizardPage.jsx");
@@ -72,7 +73,7 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinanceOperationalStartImmediatePage",
+  "EquipmentFinancePhaseThreeStartRedirectPage",
   "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
@@ -86,6 +87,11 @@ for (const pageName of [
 ]) {
   assert.match(workspace, new RegExp(pageName));
 }
+assert.match(phaseThreeStart, /EquipmentFinanceOperationalStartImmediatePage/);
+assert.match(phaseThreeStart, /axiosClient\.interceptors\.response\.use/);
+assert.match(phaseThreeStart, /START_INSTALLMENT_PATH/);
+assert.match(phaseThreeStart, /navigate\(safeNextPath\(response\)/);
+assert.match(phaseThreeStart, /replace: true/);
 assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
 assert.match(operationalStart, /drafts\/start-installment/);
 assert.match(operationalStart, /recoverInBackground/);
