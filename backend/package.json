@@ -13,6 +13,7 @@
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
     "migrate:equipment-finance:phase1-schema:production": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js",
     "migrate:equipment-finance:phase1-repair:production": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js",
+    "migrate:equipment-finance:phase3-application:production": "node scripts/runEquipmentFinancePhaseThreeApplicationStartup.js",
     "migrate:equipment-finance:phase3-agreement:production": "node scripts/runEquipmentFinanceAgreementCreationStartup.js",
     "migrate:equipment-finance:phase4:production": "node scripts/runEquipmentFinancePhaseFourStartup.js",
     "migrate:equipment-finance:phase5a:production": "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",

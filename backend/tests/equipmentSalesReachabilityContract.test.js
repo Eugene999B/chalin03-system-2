@@ -7,6 +7,12 @@ const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const app = read("frontend", "src", "App.jsx");
 const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const startRedirect = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 const operationalStart = read(
   "frontend",
   "src",
@@ -27,7 +33,7 @@ test("all simplified Finance routes resolve through the protected Finance layout
 
 test("workspace query stages resolve to explicit Finance pages", () => {
   for (const pageName of [
-    "EquipmentFinanceOperationalStartImmediatePage",
+    "EquipmentFinancePhaseThreeStartRedirectPage",
     "EquipmentFinanceOperationalPolishPage",
     "EquipmentFinanceCustomerCentrePage",
     "EquipmentFinanceExcavatorsPage",
@@ -40,6 +46,9 @@ test("workspace query stages resolve to explicit Finance pages", () => {
   ]) {
     assert.match(workspace, new RegExp(pageName));
   }
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /START_INSTALLMENT_PATH/);
+  assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
   assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
   assert.match(operationalStart, /recoverInBackground/);
   assert.match(operationalStart, /Server recovery never blocks this screen/);

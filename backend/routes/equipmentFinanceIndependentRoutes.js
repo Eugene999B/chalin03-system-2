@@ -13,6 +13,8 @@ const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
+const equipmentFinancePhaseThreeWorkflowRoutes = require("./equipmentFinancePhaseThreeWorkflowRoutes");
+const equipmentFinancePhaseThreeCreationGuardRoutes = require("./equipmentFinancePhaseThreeCreationGuardRoutes");
 const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
 const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
@@ -117,34 +119,33 @@ function financePolicy() {
   };
 }
 
-// Phase 2 owns every Finance machine/application image and the two list
-// responses that advertise image references. It must execute before signed
-// URL and schema-coupled legacy handlers.
+// Phase 2 owns every protected Finance machine/application image.
 router.use(equipmentFinancePhaseTwoImageRoutes);
 
-// Critical Finance entry points own the remaining bootstrap and application
-// fallbacks before every legacy handler.
+// Phase 3 owns readiness, count/summary/page listing, detail, submission and
+// manager decisions. It executes before old window-query and split handlers.
+router.use(equipmentFinancePhaseThreeWorkflowRoutes);
+
+// The Phase 3 creation guard checks schema, NULL location compatibility,
+// ENUM values and linked customer/asset records before the write transaction.
+router.use(equipmentFinancePhaseThreeCreationGuardRoutes);
+
+// Critical bootstrap and the image-safe write transaction remain bounded and
+// execute only after the Phase 3 preflight has passed.
 router.use(equipmentFinanceCriticalEntryRoutes);
 router.use(equipmentFinanceImageSafeStartRoutes);
 
-// These company-wide read routes own protected detail and any legacy
-// application-image fallback after the Phase 2 route above.
+// Legacy routes remain only as fallbacks for paths not owned above.
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
-// These lightweight GET routes execute before legacy handlers that depend on
-// unrelated Professional Finance settings/document tables.
 router.use(equipmentFinanceRuntimeHotfixRoutes);
-// Draft recovery and autosave are isolated from unrelated Phase 3 tables and
-// use one database connection from transaction through committed reread.
 router.use(equipmentFinanceDraftRuntimeRoutes);
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
-// Own the company-wide deposit transaction before every legacy location-bound handler.
 router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
 router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
 router.use("/private-documents", equipmentFinancePrivateDocumentsRoutes);
 router.use("/private-documents", equipmentFinanceDocumentReviewRoutes);
 router.use("/delivery-authorizations", equipmentFinanceDeliveryAuthorizationRoutes);
 router.use(equipmentFinanceScheduleRoutes);
-// Own company-wide approval, recovery and agreement routes before every legacy location-bound handler.
 router.use("/agreement-activations", equipmentFinanceAgreementActivationRoutes);
 router.use("/credit-applications", equipmentCreditOptionalDecisionRoutes);
 router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
@@ -154,7 +155,6 @@ router.use(equipmentFinanceOperationalPolishRoutes);
 router.use(equipmentFinanceExportPeriodRoutes);
 router.use(equipmentFinancePhaseSixRoutes);
 
-// The protected Phase 5D route must execute before the legacy lifecycle router.
 router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);
 
 router.use("/finance-lifecycle", async (_req, res, next) => {

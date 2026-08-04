@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
-import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
+import EquipmentFinancePhaseThreeStartRedirectPage from "./EquipmentFinancePhaseThreeStartRedirectPage";
 
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
   import("./EquipmentFinanceAgreementActivationPage")
@@ -58,7 +58,7 @@ function FinanceStageFallback() {
 
 function stagePage(stage) {
   if (stage === "start") {
-    return <EquipmentFinanceOperationalStartImmediatePage />;
+    return <EquipmentFinancePhaseThreeStartRedirectPage />;
   }
 
   if (stage === "operations") {

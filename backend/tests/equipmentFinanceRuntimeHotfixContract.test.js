@@ -16,6 +16,9 @@ const parentRoute = read(
 const workspace = read(
   "frontend/src/pages/EquipmentSalesWorkspacePage.jsx"
 );
+const startRedirect = read(
+  "frontend/src/pages/EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
 
 test("runtime hotfix owns the lightweight routes before legacy Finance handlers", () => {
   assert.match(
@@ -78,7 +81,7 @@ test("Finance keeps applications and installment start eager while secondary sta
   );
   assert.match(
     workspace,
-    /^import EquipmentFinanceOperationalStartImmediatePage from "\.\/EquipmentFinanceOperationalStartImmediatePage";/m
+    /^import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/m
   );
   assert.doesNotMatch(
     workspace,
@@ -86,8 +89,11 @@ test("Finance keeps applications and installment start eager while secondary sta
   );
   assert.doesNotMatch(
     workspace,
-    /const EquipmentFinanceOperationalStartImmediatePage = lazy\(\(\) =>/
+    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy\(\(\) =>/
   );
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);
+  assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
   assert.match(
     workspace,
     /const EquipmentFinanceExcavatorsPage = lazy\(\(\) =>/
