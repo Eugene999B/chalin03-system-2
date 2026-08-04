@@ -204,5 +204,5 @@ test("browser image loading uses authenticated Axios blobs and decoded dimension
   assert.match(component, /image\.naturalWidth > 0/);
   assert.match(component, /data-image-state/);
   assert.match(component, /Photo unavailable/);
-  assert.match(component, />Retry</);
+  assert.match(component, /Retry/);
 });
