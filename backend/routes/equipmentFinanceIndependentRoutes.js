@@ -13,6 +13,8 @@ const {
 const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
+const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
+const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
 const equipmentFinanceRuntimeHotfixRoutes = require("./equipmentFinanceRuntimeHotfixRoutes");
 const equipmentFinanceDraftRuntimeRoutes = require("./equipmentFinanceDraftRuntimeRoutes");
@@ -115,14 +117,19 @@ function financePolicy() {
   };
 }
 
-// These company-wide read routes must own readiness, register and protected
-// image requests before any legacy location-bound application handler.
+// Critical Finance entry points must own bootstrap, Applications & Approvals,
+// signed machine photos and image-safe creation before every legacy handler.
+router.use(equipmentFinanceCriticalEntryRoutes);
+router.use(equipmentFinanceImageSafeStartRoutes);
+
+// These company-wide read routes own protected detail and application image
+// requests after the bounded critical register/readiness routes above.
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
-// These lightweight GET routes must execute before legacy handlers that depend
-// on unrelated Professional Finance settings/document tables.
+// These lightweight GET routes execute before legacy handlers that depend on
+// unrelated Professional Finance settings/document tables.
 router.use(equipmentFinanceRuntimeHotfixRoutes);
 // Draft recovery and autosave are isolated from unrelated Phase 3 tables and
-// must use one database connection from transaction through committed reread.
+// use one database connection from transaction through committed reread.
 router.use(equipmentFinanceDraftRuntimeRoutes);
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 // Own the company-wide deposit transaction before every legacy location-bound handler.
