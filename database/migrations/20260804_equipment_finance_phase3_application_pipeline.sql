@@ -54,7 +54,7 @@ BEGIN
           AND COLUMN_NAME = p_column_name
     ) THEN
         SET @phase3_add_column_sql = CONCAT(
-            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            'ALTER', ' TABLE `', REPLACE(p_table_name, '`', '``'),
             '` ADD COLUMN `', REPLACE(p_column_name, '`', '``'),
             '` ', p_definition
         );
@@ -75,7 +75,7 @@ BEGIN
           AND IS_NULLABLE = 'NO'
     ) THEN
         SET @phase3_nullable_sql = CONCAT(
-            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            'ALTER', ' TABLE `', REPLACE(p_table_name, '`', '``'),
             '` MODIFY COLUMN `hire_location_id` INT NULL'
         );
         PREPARE phase3_nullable_stmt FROM @phase3_nullable_sql;
@@ -101,7 +101,7 @@ BEGIN
           AND INDEX_NAME = p_index_name
     ) THEN
         SET @phase3_add_index_sql = CONCAT(
-            'ALTER TABLE `', REPLACE(p_table_name, '`', '``'),
+            'ALTER', ' TABLE `', REPLACE(p_table_name, '`', '``'),
             '` ADD INDEX `', REPLACE(p_index_name, '`', '``'),
             '` ', p_index_definition
         );
