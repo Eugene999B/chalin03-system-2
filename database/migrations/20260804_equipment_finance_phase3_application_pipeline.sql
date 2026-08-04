@@ -1,6 +1,7 @@
 -- CHALIN 03 EQUIPMENT INSTALLMENT FINANCE
 -- PHASE 3: APPLICATION CREATION, REGISTER AND APPROVAL PIPELINE
--- ADDITIVE / COMPATIBILITY MIGRATION ONLY.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verify the Railway database snapshot and the Chalin 03 application backup before deployment.
 -- No Finance, Spare Parts, Mining or Equipment Hire business records are deleted.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -236,9 +237,8 @@ CALL finance_phase3_add_index_if_missing(
     '(`application_id`, `decision_version`)'
 );
 
-DROP PROCEDURE IF EXISTS finance_phase3_add_index_if_missing;
-DROP PROCEDURE IF EXISTS finance_phase3_make_location_nullable;
-DROP PROCEDURE IF EXISTS finance_phase3_add_column_if_missing;
+-- The uniquely named helper procedures intentionally remain available for safe
+-- idempotent re-runs. The next run replaces them before use.
 
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
