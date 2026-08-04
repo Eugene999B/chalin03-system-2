@@ -125,10 +125,6 @@ CALL finance_phase3_add_column_if_missing(
     'DECIMAL(14,2) NOT NULL DEFAULT 0.00 AFTER proposed_installment_amount'
 );
 CALL finance_phase3_add_column_if_missing(
-    'equipment_credit_applications', 'decision_version',
-    'INT UNSIGNED NOT NULL DEFAULT 0 AFTER decision_reason'
-);
-CALL finance_phase3_add_column_if_missing(
     'equipment_credit_applications', 'submitted_by',
     'INT NULL AFTER customer_consent_at'
 );
@@ -147,6 +143,10 @@ CALL finance_phase3_add_column_if_missing(
 CALL finance_phase3_add_column_if_missing(
     'equipment_credit_applications', 'decision_reason',
     'TEXT NULL AFTER reviewed_at'
+);
+CALL finance_phase3_add_column_if_missing(
+    'equipment_credit_applications', 'decision_version',
+    'INT UNSIGNED NOT NULL DEFAULT 0 AFTER decision_reason'
 );
 
 CALL finance_phase3_add_column_if_missing(
