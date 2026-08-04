@@ -9,7 +9,6 @@ const {
 const criticalEntry = require("./equipmentFinanceCriticalEntryRoutes");
 
 const router = express.Router();
-
 const VIEW_PERMISSION = "fleet.assets.view";
 
 function positiveId(value) {
@@ -26,26 +25,23 @@ function machineWithProtectedReferences(machine = {}) {
   const media = Array.isArray(machine.media)
     ? machine.media.map((item) => {
         const photoId = positiveId(item.id);
-        return {
-          ...item,
-          file_url: null,
-          image_path:
-            assetId && photoId ? protectedAssetPath(assetId, photoId) : null,
-        };
+        const imagePath = assetId && photoId
+          ? protectedAssetPath(assetId, photoId)
+          : null;
+        return { ...item, file_url: imagePath, image_path: imagePath };
       })
     : [];
   const primary = media.find((item) => item.is_primary && item.image_path);
   const first = media.find((item) => item.image_path);
-  const legacyPath =
-    assetId && machine.has_legacy_image
-      ? protectedAssetPath(assetId, "legacy")
-      : null;
+  const legacyPath = assetId && machine.has_legacy_image
+    ? protectedAssetPath(assetId, "legacy")
+    : null;
   const mainImagePath = primary?.image_path || first?.image_path || legacyPath;
 
   return {
     ...machine,
     media,
-    main_image_url: null,
+    main_image_url: mainImagePath || null,
     main_image_path: mainImagePath || null,
     has_image: Boolean(mainImagePath),
     photo_count: Number(machine.photo_count || media.length || 0),
@@ -116,10 +112,9 @@ router.get(
       criticalEntry.loadMachines(req),
     ]);
     const customers = customerResult.status === "fulfilled" ? customerResult.value : [];
-    const machines =
-      machineResult.status === "fulfilled"
-        ? machineResult.value.map(machineWithProtectedReferences)
-        : [];
+    const machines = machineResult.status === "fulfilled"
+      ? machineResult.value.map(machineWithProtectedReferences)
+      : [];
     const failures = [
       customerResult.status === "rejected" ? "customers" : null,
       machineResult.status === "rejected" ? "excavators" : null,
@@ -190,12 +185,7 @@ router.get(
         },
       });
     } catch (error) {
-      return sendError(
-        req,
-        res,
-        error,
-        "Could not load the protected Finance Machine Register."
-      );
+      return sendError(req, res, error, "Could not load the protected Finance Machine Register.");
     }
   }
 );
@@ -221,39 +211,21 @@ router.get(
   requirePermission(VIEW_PERMISSION),
   async (req, res) => {
     try {
-      return sendImage(
-        res,
-        await loadApplicationProtectedImage(req.params.applicationId)
-      );
+      return sendImage(res, await loadApplicationProtectedImage(req.params.applicationId));
     } catch (error) {
-      return sendError(
-        req,
-        res,
-        error,
-        "The application excavator picture is temporarily unavailable."
-      );
+      return sendError(req, res, error, "The application excavator picture is temporarily unavailable.");
     }
   }
 );
 
-// Compatibility owner for the application page. This route is deliberately
-// mounted before the older schema-coupled implementation.
 router.get(
   "/credit-applications/:applicationId/image",
   requirePermission(VIEW_PERMISSION),
   async (req, res) => {
     try {
-      return sendImage(
-        res,
-        await loadApplicationProtectedImage(req.params.applicationId)
-      );
+      return sendImage(res, await loadApplicationProtectedImage(req.params.applicationId));
     } catch (error) {
-      return sendError(
-        req,
-        res,
-        error,
-        "The application excavator picture is temporarily unavailable."
-      );
+      return sendError(req, res, error, "The application excavator picture is temporarily unavailable.");
     }
   }
 );
