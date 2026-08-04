@@ -36,22 +36,24 @@ test("stale authenticated requests settle through one controlled retry", () => {
 });
 
 test("Finance application reads have strict deadlines instead of infinite loading", () => {
-  assert.match(axiosClient, /FINANCE_READINESS_TIMEOUT_MS = 5000/);
+  assert.match(axiosClient, /FINANCE_READINESS_TIMEOUT_MS = 8000/);
   assert.match(axiosClient, /FINANCE_APPLICATION_TIMEOUT_MS = 12000/);
   assert.match(axiosClient, /applyFinanceApplicationDeadline/);
   assert.match(axiosClient, /isFinanceApplicationRead/);
   assert.match(axiosClient, /config\.timeout =/);
-  assert.match(axiosClient, /readiness_timeout/);
-  assert.match(axiosClient, /buildFinanceReadinessFallback/);
 });
 
-test("a slow readiness probe cannot block the actual application register", () => {
-  assert.match(applicationsPage, /Promise\.all/);
-  assert.match(applicationsPage, /\$\{API\}\/readiness/);
-  assert.match(axiosClient, /requestPath === FINANCE_READINESS_PATH/);
-  assert.match(axiosClient, /return Promise\.resolve\(buildFinanceReadinessFallback\(error\)\)/);
-  assert.match(axiosClient, /ready: true/);
-  assert.match(axiosClient, /check_skipped: true/);
+test("a slow readiness probe cannot block or falsely approve the actual register", () => {
+  assert.match(applicationsPage, /void axiosClient\s*\.get\(`\$\{API\}\/readiness`/);
+  assert.match(applicationsPage, /const response = await axiosClient\.get\(API/);
+  assert.match(applicationsPage, /FINANCE_READINESS_TIMEOUT/);
+  assert.doesNotMatch(applicationsPage, /Promise\.all\(\[/);
+  assert.doesNotMatch(axiosClient, /buildFinanceReadinessFallback/);
+  assert.doesNotMatch(axiosClient, /reason: "readiness_timeout"/);
+  assert.doesNotMatch(
+    axiosClient,
+    /requestPath === FINANCE_READINESS_PATH[\s\S]*Promise\.resolve/
+  );
 });
 
 test("Applications and Start New Installment load eagerly outside the Finance Suspense boundary", () => {

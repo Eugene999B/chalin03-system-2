@@ -11,7 +11,7 @@ const STALE_SESSION_RETRY_KEY = "__chalin03StaleSessionRetried";
 const FINANCE_APPLICATION_PATH =
   "/equipment-catalogue/sales/credit-applications";
 const FINANCE_READINESS_PATH = `${FINANCE_APPLICATION_PATH}/readiness`;
-const FINANCE_READINESS_TIMEOUT_MS = 5000;
+const FINANCE_READINESS_TIMEOUT_MS = 8000;
 const FINANCE_APPLICATION_TIMEOUT_MS = 12000;
 const PUBLIC_SESSION_PATHS = new Set([
   "/auth/login",
@@ -66,36 +66,6 @@ function applyFinanceApplicationDeadline(config) {
       ? Math.min(configuredTimeout, deadline)
       : deadline;
   return config;
-}
-
-function isTransportTimeout(error) {
-  return (
-    !error?.response &&
-    ["ECONNABORTED", "ETIMEDOUT"].includes(String(error?.code || ""))
-  );
-}
-
-function buildFinanceReadinessFallback(error) {
-  return {
-    data: {
-      status: "degraded",
-      message:
-        "The readiness probe was slow, so the application register continued independently.",
-      readiness: {
-        ready: true,
-        degraded: true,
-        check_skipped: true,
-        reason: "readiness_timeout",
-        scope: "company_wide",
-        hire_location_selection_required: false,
-      },
-    },
-    status: 200,
-    statusText: "OK",
-    headers: error.response?.headers || {},
-    config: error.config,
-    request: error.request,
-  };
 }
 
 function getStoredUser() {
@@ -299,16 +269,6 @@ axiosClient.interceptors.response.use(
       requestToken === activeToken &&
       Boolean(cachedUser) &&
       (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
-
-    if (
-      requestPath === FINANCE_READINESS_PATH &&
-      isTransportTimeout(error) &&
-      Boolean(activeToken)
-    ) {
-      // Readiness is informational. A delayed probe must never hold the real
-      // application register inside Promise.all forever.
-      return Promise.resolve(buildFinanceReadinessFallback(error));
-    }
 
     if (isStaleSessionResponse) {
       const alreadyRetried = Boolean(error.config?.[STALE_SESSION_RETRY_KEY]);

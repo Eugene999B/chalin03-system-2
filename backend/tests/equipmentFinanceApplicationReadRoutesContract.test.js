@@ -84,13 +84,18 @@ test("protected application image loads separately from list metadata", () => {
   assert.match(readRoutes, /protected_image_endpoint/);
 });
 
-test("applications page still requests readiness and list together with all as its default", () => {
+test("applications page requests readiness independently from its truthful list", () => {
   assert.match(applicationsPage, /useState\("all"\)/);
   assert.match(
     applicationsPage,
-    /axiosClient\.get\(`\$\{API\}\/readiness`/
+    /void axiosClient\s*\.get\(`\$\{API\}\/readiness`/
   );
-  assert.match(applicationsPage, /axiosClient\.get\(API, \{ params/);
-  assert.match(applicationsPage, /response\.data\?\.pagination/);
-  assert.match(applicationsPage, /response\.data\?\.summary/);
+  assert.match(
+    applicationsPage,
+    /const response = await axiosClient\.get\(API, \{\s*params,/
+  );
+  assert.doesNotMatch(applicationsPage, /Promise\.all\(\[/);
+  assert.match(applicationsPage, /payload\.pagination/);
+  assert.match(applicationsPage, /payload\.summary/);
+  assert.match(applicationsPage, /payload\.status !== "success"/);
 });

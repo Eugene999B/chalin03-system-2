@@ -44,7 +44,45 @@ function dateValue(value) {
 
 function errorMessage(error, fallback) {
   if (error?.code === "ERR_CANCELED") return "";
-  return error?.response?.data?.message || error?.message || fallback;
+  return (
+    error?.response?.data?.operator_message ||
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  );
+}
+
+function responseRequestId(error) {
+  return (
+    error?.response?.data?.request_id ||
+    error?.response?.headers?.["x-request-id"] ||
+    null
+  );
+}
+
+function readinessProblems(readiness = {}) {
+  return [
+    ...(readiness.missing_tables || []).map((table) => `Missing table: ${table}`),
+    ...(readiness.missing_columns || []).map(
+      (item) => `Missing column: ${item.table}.${item.column}`
+    ),
+    ...(readiness.invalid_nullability || []).map(
+      (item) =>
+        `Location field must allow company-wide records: ${item.table}.${item.column}`
+    ),
+    ...(readiness.invalid_enums || []).map(
+      (item) =>
+        `Workflow values missing from ${item.table}.${item.column}: ${(
+          item.missing_values || []
+        ).join(", ")}`
+    ),
+    ...(readiness.capabilities?.window_functions_supported === false
+      ? ["The production database rejected the current window-function query."]
+      : []),
+    ...(readiness.capabilities?.register_query_compiles === false
+      ? ["The production database could not compile the application-register query."]
+      : []),
+  ];
 }
 
 function Pill({ value }) {
@@ -201,6 +239,8 @@ export default function EquipmentFinanceApplicationsPage() {
   });
   const [summary, setSummary] = useState({});
   const [readiness, setReadiness] = useState({ ready: null, missing_tables: [] });
+  const [listFailure, setListFailure] = useState(null);
+  const [hasLoadedList, setHasLoadedList] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -225,6 +265,37 @@ export default function EquipmentFinanceApplicationsPage() {
     listAbortRef.current = controller;
     setLoading(true);
     setProblem("");
+    setListFailure(null);
+
+    void axiosClient
+      .get(`${API}/readiness`, { signal: controller.signal })
+      .then((readinessResponse) => {
+        if (controller.signal.aborted) return;
+        const nextReadiness = readinessResponse.data?.readiness || {
+          ready: readinessResponse.data?.status === "success",
+        };
+        setReadiness(nextReadiness);
+      })
+      .catch((error) => {
+        if (error?.code === "ERR_CANCELED" || controller.signal.aborted) return;
+        const payload = error?.response?.data || {};
+        setReadiness(
+          payload.readiness || {
+            ready: false,
+            degraded: true,
+            code: payload.code || "FINANCE_READINESS_TIMEOUT",
+            operator_message:
+              payload.operator_message ||
+              "The production Finance schema check did not finish before its deadline.",
+            request_id: responseRequestId(error),
+            missing_tables: [],
+            missing_columns: [],
+            invalid_nullability: [],
+            invalid_enums: [],
+          }
+        );
+      });
+
     try {
       const params = {
         page,
@@ -234,25 +305,42 @@ export default function EquipmentFinanceApplicationsPage() {
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       };
-      const [readinessResponse, response] = await Promise.all([
-        axiosClient.get(`${API}/readiness`, { signal: controller.signal }),
-        axiosClient.get(API, { params, signal: controller.signal }),
-      ]);
-      const nextReadiness = readinessResponse.data?.readiness || { ready: true };
-      setReadiness(nextReadiness);
-      if (!nextReadiness.ready) {
-        setApplications([]);
+      const response = await axiosClient.get(API, {
+        params,
+        signal: controller.signal,
+      });
+      const payload = response.data || {};
+      if (payload.status !== "success") {
+        setListFailure({
+          code: payload.code || "FINANCE_APPLICATION_REGISTER_DEGRADED",
+          message:
+            payload.operator_message ||
+            payload.message ||
+            "The application register returned an unverified response.",
+          request_id:
+            payload.request_id || response.headers?.["x-request-id"] || null,
+          readiness: payload.readiness || null,
+        });
+        if (payload.readiness) setReadiness(payload.readiness);
         return;
       }
-      setApplications(response.data?.applications || []);
-      setPagination(response.data?.pagination || {});
-      setSummary(response.data?.summary || {});
-      setReadiness({ ready: true, missing_tables: [] });
+      setApplications(payload.applications || []);
+      setPagination(payload.pagination || {});
+      setSummary(payload.summary || {});
+      setHasLoadedList(true);
     } catch (error) {
       if (error?.code === "ERR_CANCELED") return;
-      const responseReadiness = error?.response?.data?.readiness;
-      if (responseReadiness?.ready === false) setReadiness(responseReadiness);
-      else setProblem(errorMessage(error, "Could not load Finance applications."));
+      const payload = error?.response?.data || {};
+      if (payload.readiness) setReadiness(payload.readiness);
+      setListFailure({
+        code: payload.code || "FINANCE_APPLICATION_REGISTER_FAILED",
+        message: errorMessage(
+          error,
+          "Could not load the Finance application register."
+        ),
+        request_id: responseRequestId(error),
+        readiness: payload.readiness || null,
+      });
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
@@ -488,6 +576,7 @@ export default function EquipmentFinanceApplicationsPage() {
     approved: Number(summary.approved || 0),
     exposure: Number(summary.proposed_exposure || 0),
   };
+  const schemaProblems = readinessProblems(readiness);
 
   return (
     <main className="finance-simple">
@@ -519,25 +608,69 @@ export default function EquipmentFinanceApplicationsPage() {
         and protected excavator image load separately.
       </div>
 
-      {readiness.ready === false ? (
-        <section className="finance-simple__section">
-          <h2>Credit application foundation is not ready</h2>
-          <p>Missing: {(readiness.missing_tables || []).join(", ") || "approved database foundation"}</p>
+      {listFailure ? (
+        <section className="finance-simple__notice is-error" role="alert">
+          <h2>Application register could not be verified</h2>
+          <p>{listFailure.message}</p>
+          <p><strong>Diagnostic code:</strong> {listFailure.code}</p>
+          {listFailure.request_id ? (
+            <p><strong>Request ID:</strong> {listFailure.request_id}</p>
+          ) : null}
+          {hasLoadedList ? (
+            <p>The last successfully verified register remains visible below; it was not replaced with false zero totals.</p>
+          ) : (
+            <p>No zero totals are being shown because the register has not completed successfully.</p>
+          )}
+          <button type="button" onClick={loadList} disabled={loading}>
+            {loading ? "Retrying…" : "Retry application check"}
+          </button>
         </section>
       ) : null}
 
-      <section className="finance-simple__metrics">
-        <article className="finance-simple__metric"><span>Drafts / changes</span><strong>{metrics.drafts}</strong></article>
-        <article className="finance-simple__metric"><span>Awaiting review</span><strong>{metrics.review}</strong></article>
-        <article className="finance-simple__metric"><span>Approved</span><strong>{metrics.approved}</strong></article>
-        <article className="finance-simple__metric"><span>Proposed exposure</span><strong>{money(metrics.exposure)}</strong></article>
-      </section>
+      {readiness.ready === false ? (
+        <section className="finance-simple__section">
+          <h2>Credit application foundation is not ready</h2>
+          <p>
+            {readiness.operator_message ||
+              "The production application, quotation or approval schema needs attention."}
+          </p>
+          {schemaProblems.length ? (
+            <ul>
+              {schemaProblems.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          ) : null}
+          {readiness.database?.version ? (
+            <p><strong>Database version:</strong> {readiness.database.version}</p>
+          ) : null}
+          {readiness.migration ? (
+            <p>
+              <strong>Phase 1 migration record:</strong>{" "}
+              {readiness.migration.recorded ? "present" : "not recorded"}
+            </p>
+          ) : null}
+          {readiness.request_id ? (
+            <p><strong>Schema-check request ID:</strong> {readiness.request_id}</p>
+          ) : null}
+          <button type="button" onClick={loadList} disabled={loading}>
+            {loading ? "Checking…" : "Retry schema check"}
+          </button>
+        </section>
+      ) : null}
+
+      {hasLoadedList ? (
+        <section className="finance-simple__metrics">
+          <article className="finance-simple__metric"><span>Drafts / changes</span><strong>{metrics.drafts}</strong></article>
+          <article className="finance-simple__metric"><span>Awaiting review</span><strong>{metrics.review}</strong></article>
+          <article className="finance-simple__metric"><span>Approved</span><strong>{metrics.approved}</strong></article>
+          <article className="finance-simple__metric"><span>Proposed exposure</span><strong>{money(metrics.exposure)}</strong></article>
+        </section>
+      ) : null}
 
       <section className="finance-simple__section">
         <div className="finance-simple__toolbar">
           <div>
             <p className="finance-simple__eyebrow">Application register</p>
-            <h2>{pagination.total || 0} record(s)</h2>
+            <h2>{hasLoadedList ? `${pagination.total || 0} record(s)` : "Register not yet verified"}</h2>
           </div>
           <div className="finance-simple__actions">
             <input
@@ -566,12 +699,14 @@ export default function EquipmentFinanceApplicationsPage() {
             </select>
             <input type="date" aria-label="From date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
             <input type="date" aria-label="To date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
-            <button type="button" onClick={loadList} disabled={loading}>Refresh</button>
+            <button type="button" onClick={loadList} disabled={loading}>
+              {listFailure ? "Retry" : "Refresh"}
+            </button>
           </div>
         </div>
 
         {loading ? <div className="finance-simple__empty">Loading credit applications…</div> : null}
-        {!loading && !applications.length ? (
+        {!loading && hasLoadedList && !listFailure && !applications.length ? (
           <div className="finance-simple__empty">
             <h3>No matching applications</h3>
             <p>Use Start New Installment to create a recoverable company-wide draft.</p>
@@ -620,13 +755,15 @@ export default function EquipmentFinanceApplicationsPage() {
           ))}
         </div>
 
-        <div className="finance-simple__sticky-actions">
-          <span>Page {pagination.page || page} of {pagination.total_pages || 1}</span>
-          <div>
-            <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-            <button type="button" disabled={loading || page >= Number(pagination.total_pages || 1)} onClick={() => setPage((value) => value + 1)}>Next</button>
+        {hasLoadedList ? (
+          <div className="finance-simple__sticky-actions">
+            <span>Page {pagination.page || page} of {pagination.total_pages || 1}</span>
+            <div>
+              <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+              <button type="button" disabled={loading || page >= Number(pagination.total_pages || 1)} onClick={() => setPage((value) => value + 1)}>Next</button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       {detailLoading ? <div className="finance-simple__notice is-info">Opening selected application…</div> : null}

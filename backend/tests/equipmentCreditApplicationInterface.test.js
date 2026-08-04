@@ -33,8 +33,9 @@ test("Finance applications route through the protected credit foundation", () =>
   assert.match(operationalStart, /Server recovery never blocks this screen/);
   assert.doesNotMatch(operationalStart, /Preparing secure draft recovery/);
   assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
-  assert.match(applications, /axiosClient\.get\(\`\$\{API\}\/readiness\`/);
-  assert.match(applications, /axiosClient\.get\(API,/);
+  assert.match(applications, /void axiosClient\s*\.get\(`\$\{API\}\/readiness`/);
+  assert.match(applications, /const response = await axiosClient\.get\(API,/);
+  assert.doesNotMatch(applications, /Promise\.all\(\[/);
   assert.match(applications, /kyc\/verify/);
   assert.match(applications, /\/review/);
   assert.match(applications, /\/assess/);
