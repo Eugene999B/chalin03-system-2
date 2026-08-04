@@ -1,5 +1,5 @@
 import { useLocation } from "react-router";
-import EquipmentFinanceMinimalWorkflowPage from "./EquipmentFinanceMinimalWorkflowPage";
+import EquipmentFinanceCompletionHomePage from "./EquipmentFinanceCompletionHomePage";
 import EquipmentInstallmentCommandAdvancedPage from "./EquipmentInstallmentCommandAdvancedPage";
 
 export default function EquipmentInstallmentCommandPage() {
@@ -9,6 +9,6 @@ export default function EquipmentInstallmentCommandPage() {
   return advanced ? (
     <EquipmentInstallmentCommandAdvancedPage />
   ) : (
-    <EquipmentFinanceMinimalWorkflowPage />
+    <EquipmentFinanceCompletionHomePage />
   );
 }
