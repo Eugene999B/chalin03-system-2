@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
-import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
+import EquipmentFinanceApplicationsCompletionPage from "./EquipmentFinanceApplicationsCompletionPage";
 import EquipmentFinancePhaseThreeStartRedirectPage from "./EquipmentFinancePhaseThreeStartRedirectPage";
 
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
@@ -8,6 +8,9 @@ const EquipmentFinanceAgreementActivationPage = lazy(() =>
 );
 const EquipmentFinanceArrearsPage = lazy(() =>
   import("./EquipmentFinanceArrearsPage")
+);
+const EquipmentFinanceCaseOperationsPage = lazy(() =>
+  import("./EquipmentFinanceCaseOperationsPage")
 );
 const EquipmentFinanceCaseWorkspacePage = lazy(() =>
   import("./EquipmentFinanceCaseWorkspacePage")
@@ -42,6 +45,9 @@ const EquipmentFinanceProfessionalPage = lazy(() =>
 const EquipmentFinanceRecoveryGovernancePage = lazy(() =>
   import("./EquipmentFinanceRecoveryGovernancePage")
 );
+const EquipmentFinanceTaskInboxPage = lazy(() =>
+  import("./EquipmentFinanceTaskInboxPage")
+);
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "generated-documents", "staff"]);
@@ -56,12 +62,24 @@ function FinanceStageFallback() {
   );
 }
 
-function stagePage(stage) {
+function stagePage(stage, search) {
+  const tab = new URLSearchParams(search).get("tab");
+
   if (stage === "start") {
     return <EquipmentFinancePhaseThreeStartRedirectPage />;
   }
 
-  if (stage === "operations") {
+  if (stage === "inbox" || (stage === "operations" && tab === "inbox")) {
+    return <EquipmentFinanceTaskInboxPage />;
+  }
+
+  if (stage === "case-operations") {
+    return <EquipmentFinanceCaseOperationsPage />;
+  }
+
+  // Preserve older operational deep links. The completion navigation no longer
+  // presents this multi-tool page as a duplicate daily-work destination.
+  if (stage === "operations" || stage === "operations-advanced") {
     return <EquipmentFinanceOperationalPolishPage />;
   }
 
@@ -117,15 +135,15 @@ function stagePage(stage) {
     return <EquipmentFinanceFinalLifecyclePage />;
   }
 
-  // Applications & Approvals is the critical default Finance screen. Keep it
-  // outside React.lazy so a delayed chunk can never leave the page in Suspense.
-  return <EquipmentFinanceApplicationsPage />;
+  // Applications & Approvals is the critical default Finance screen. Keep the
+  // completion wrapper outside React.lazy so it cannot be stranded by a chunk.
+  return <EquipmentFinanceApplicationsCompletionPage />;
 }
 
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
-  const page = stagePage(stage);
+  const page = stagePage(stage, location.search);
 
   // Applications and Start New Installment are the two critical Finance entry
   // screens. Both render immediately and never wait inside a Suspense fallback.
