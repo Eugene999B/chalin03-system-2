@@ -14,6 +14,7 @@ const {
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
 const equipmentFinancePhaseThreeWorkflowRoutes = require("./equipmentFinancePhaseThreeWorkflowRoutes");
+const equipmentFinancePhaseThreeCreationGuardRoutes = require("./equipmentFinancePhaseThreeCreationGuardRoutes");
 const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
 const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
@@ -118,20 +119,23 @@ function financePolicy() {
   };
 }
 
-// Phase 2 owns every protected Finance machine/application image and the two
-// list responses that advertise image references.
+// Phase 2 owns every protected Finance machine/application image.
 router.use(equipmentFinancePhaseTwoImageRoutes);
 
 // Phase 3 owns readiness, count/summary/page listing, detail, submission and
-// manager decisions. It must execute before the old window-query and split
-// approval handlers so one bounded authority controls the lifecycle.
+// manager decisions. It executes before old window-query and split handlers.
 router.use(equipmentFinancePhaseThreeWorkflowRoutes);
 
-// Critical Finance entry points own bootstrap and image-safe draft creation.
+// The Phase 3 creation guard checks schema, NULL location compatibility,
+// ENUM values and linked customer/asset records before the write transaction.
+router.use(equipmentFinancePhaseThreeCreationGuardRoutes);
+
+// Critical bootstrap and the image-safe write transaction remain bounded and
+// execute only after the Phase 3 preflight has passed.
 router.use(equipmentFinanceCriticalEntryRoutes);
 router.use(equipmentFinanceImageSafeStartRoutes);
 
-// Legacy reads remain only as fallbacks for paths not owned above.
+// Legacy routes remain only as fallbacks for paths not owned above.
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 router.use(equipmentFinanceRuntimeHotfixRoutes);
 router.use(equipmentFinanceDraftRuntimeRoutes);
