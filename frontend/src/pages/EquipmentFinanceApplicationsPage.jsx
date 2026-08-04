@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
-const APPLICATIONS_ROUTE = "/equipment-installment-finance/applications";
 const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
 const REVIEW_ROLES = new Set([
   "admin",
@@ -176,7 +175,6 @@ function LazyApplicationImage({ application }) {
 export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const assignedRoles = [
     user?.workspace_role,
     user?.access_role,
@@ -301,10 +299,6 @@ export default function EquipmentFinanceApplicationsPage() {
         setEdit(nextEdit);
         setAutosaveState("ready");
       }
-      // The selected record stays in component state. Normalize any incoming
-      // deep link to the one trusted Finance route and never place record data
-      // into a client-side redirect target.
-      navigate(APPLICATIONS_ROUTE, { replace: true });
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
         setProblem(errorMessage(error, "Could not open the application file."));
@@ -312,7 +306,7 @@ export default function EquipmentFinanceApplicationsPage() {
     } finally {
       if (!controller.signal.aborted) setDetailLoading(false);
     }
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (requestedApplicationId) {
@@ -325,7 +319,6 @@ export default function EquipmentFinanceApplicationsPage() {
     editRef.current = null;
     setDetail(null);
     setEdit(null);
-    navigate(APPLICATIONS_ROUTE, { replace: true });
   }
 
   function requestDecision(application, kind) {
