@@ -17,6 +17,7 @@ const inbox = source("src/pages/EquipmentFinanceTaskInboxPage.jsx");
 const caseOperations = source("src/pages/EquipmentFinanceCaseOperationsPage.jsx");
 const applications = source("src/pages/EquipmentFinanceApplicationsCompletionPage.jsx");
 const commandPage = source("src/pages/EquipmentInstallmentCommandPage.jsx");
+const protectedImages = source("src/utils/equipmentMediaCaptureBridge.js");
 
 assert.match(commandPage, /EquipmentFinanceCompletionHomePage/);
 assert.match(home, /Complete these six business stages/);
@@ -53,8 +54,10 @@ assert.match(caseOperations, /Account and payment history/);
 assert.doesNotMatch(caseOperations, /Tasks, approvals and exceptions/);
 
 assert.match(applications, /protectedApplicationImagePath/);
-assert.match(applications, /responseType/);
 assert.match(applications, /Case Operations/);
 assert.match(applications, /EquipmentFinanceApplicationsOptionalPage/);
+assert.match(protectedImages, /responseType: "blob"/);
+assert.match(protectedImages, /naturalWidth > 0/);
+assert.match(protectedImages, /credit-applications\/\\d\+\\\/image/);
 
 console.log("Installment Completion Phase 1 source contracts passed.");
