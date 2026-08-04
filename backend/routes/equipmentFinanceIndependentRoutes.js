@@ -13,6 +13,7 @@ const {
 const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
+const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
 const equipmentFinanceRuntimeHotfixRoutes = require("./equipmentFinanceRuntimeHotfixRoutes");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
@@ -113,6 +114,9 @@ function financePolicy() {
   };
 }
 
+// These company-wide read routes must own readiness, register and protected
+// image requests before any legacy location-bound application handler.
+router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 // These lightweight GET routes must execute before legacy handlers that depend
 // on unrelated Professional Finance settings/document tables.
 router.use(equipmentFinanceRuntimeHotfixRoutes);
