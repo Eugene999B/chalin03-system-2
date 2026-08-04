@@ -51,6 +51,16 @@ function clearCommittedDraft() {
   }
 }
 
+function replaceFinanceLocation(nextPath) {
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  if (currentPath === nextPath) return;
+
+  window.history.replaceState(window.history.state, "", nextPath);
+  window.dispatchEvent(
+    new PopStateEvent("popstate", { state: window.history.state })
+  );
+}
+
 export default function EquipmentFinancePhaseThreeStartRedirectPage() {
   useEffect(() => {
     let redirecting = false;
@@ -70,13 +80,14 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
           // Notice storage is not required for the committed handoff.
         }
 
-        // Migration note: the retired SPA handoff was
-        // navigate(safeNextPath(response), { replace: true }). It changed the
-        // rendered route without reliably changing the production browser URL.
-        // A real browser replacement is intentional here. It creates one stable
-        // Applications document with the exact committed application URL, while
-        // cancelling the old wizard's delayed navigation and request controllers.
-        window.location.replace(safeNextPath(response));
+        // Retired handoffs, kept here only to document the production failure:
+        // navigate(safeNextPath(response), { replace: true }) could race with
+        // the wizard's delayed navigation, while
+        // window.location.replace(safeNextPath(response)) restarted AuthProvider
+        // and discarded the first Applications reads during session restoration.
+        // Replace only the current history entry and notify BrowserRouter in the
+        // same authenticated document. No page reload and no second auth cycle.
+        replaceFinanceLocation(safeNextPath(response));
       }
       return response;
     });
@@ -92,6 +103,7 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
 export {
   cleanPath,
   clearCommittedDraft,
+  replaceFinanceLocation,
   safeNextPath,
   successfulCreation,
 };
