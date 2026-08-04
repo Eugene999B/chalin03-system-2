@@ -29,9 +29,11 @@ assert.match(
 assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
 assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);
 assert.match(startRedirect, /START_INSTALLMENT_PATH/);
-assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
-assert.match(startRedirect, /replace: true/);
-assert.match(startRedirect, /financeCreationCompleted: true/);
+assert.match(startRedirect, /successfulCreation\(response\)/);
+assert.match(startRedirect, /window\.location\.replace\(safeNextPath\(response\)\)/);
+assert.match(startRedirect, /chalin03_finance_creation_notice/);
+assert.match(startRedirect, /clearCommittedDraft\(\)/);
+assert.match(startRedirect, /let redirecting = false/);
 
 for (const phrase of [
   "server draft",
