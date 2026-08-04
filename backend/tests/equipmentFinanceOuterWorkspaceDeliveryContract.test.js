@@ -10,6 +10,9 @@ const read = (relativePath) =>
 const main = read("frontend/src/main.jsx");
 const preload = read("frontend/src/utils/criticalFinanceWorkspacePreload.js");
 const app = read("frontend/src/App.jsx");
+const applications = read(
+  "frontend/src/pages/EquipmentFinanceApplicationsPage.jsx"
+);
 const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
@@ -72,4 +75,21 @@ test("Cloudflare does not cache Finance navigation or the worker script", () => 
     headers,
     /\/index\.html\s+Cache-Control: no-store, max-age=0, must-revalidate/
   );
+});
+
+test("application selection uses a fixed trusted route and numeric IDs", () => {
+  assert.match(
+    applications,
+    /const APPLICATIONS_ROUTE = "\/equipment-installment-finance\/applications"/
+  );
+  assert.match(applications, /function positiveApplicationId\(value\)/);
+  assert.match(applications, /if \(!\/\^\[1-9\]\\d\*\$\/\.test\(normalized\)\) return null/);
+  assert.match(
+    applications,
+    /const requestedApplicationId = positiveApplicationId\(query\.get\("application"\)\)/
+  );
+  assert.match(applications, /pathname: APPLICATIONS_ROUTE/);
+  assert.match(applications, /navigate\(APPLICATIONS_ROUTE, \{ replace: true \}\)/);
+  assert.doesNotMatch(applications, /navigate\(`\$\{location\.pathname\}/);
+  assert.doesNotMatch(applications, /pathname: location\.pathname/);
 });
