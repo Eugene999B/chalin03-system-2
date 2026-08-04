@@ -58,7 +58,7 @@ WHERE TABLE_SCHEMA = DATABASE()
 
 SELECT COUNT(*) AS invalid_phase3_workflow_enums
 FROM (
-    SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE
+    SELECT TABLE_NAME, COLUMN_NAME, LOWER(COLUMN_TYPE) AS column_type
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE()
       AND (
@@ -74,52 +74,52 @@ FROM (
 ) actual
 WHERE
     (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'application_status' AND NOT (
-        COLUMN_TYPE LIKE "%''draft''%" AND COLUMN_TYPE LIKE "%''submitted''%" AND
-        COLUMN_TYPE LIKE "%''under_review''%" AND COLUMN_TYPE LIKE "%''changes_requested''%" AND
-        COLUMN_TYPE LIKE "%''approved''%" AND COLUMN_TYPE LIKE "%''declined''%" AND
-        COLUMN_TYPE LIKE "%''withdrawn''%"
+        column_type LIKE '%draft%' AND column_type LIKE '%submitted%' AND
+        column_type LIKE '%under_review%' AND column_type LIKE '%changes_requested%' AND
+        column_type LIKE '%approved%' AND column_type LIKE '%declined%' AND
+        column_type LIKE '%withdrawn%'
     ))
  OR (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'kyc_status' AND NOT (
-        COLUMN_TYPE LIKE "%''not_started''%" AND COLUMN_TYPE LIKE "%''incomplete''%" AND
-        COLUMN_TYPE LIKE "%''complete''%" AND COLUMN_TYPE LIKE "%''verified''%" AND
-        COLUMN_TYPE LIKE "%''rejected''%"
+        column_type LIKE '%not_started%' AND column_type LIKE '%incomplete%' AND
+        column_type LIKE '%complete%' AND column_type LIKE '%verified%' AND
+        column_type LIKE '%rejected%'
     ))
  OR (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'affordability_status' AND NOT (
-        COLUMN_TYPE LIKE "%''not_assessed''%" AND COLUMN_TYPE LIKE "%''eligible''%" AND
-        COLUMN_TYPE LIKE "%''manual_review''%" AND COLUMN_TYPE LIKE "%''ineligible''%"
+        column_type LIKE '%not_assessed%' AND column_type LIKE '%eligible%' AND
+        column_type LIKE '%manual_review%' AND column_type LIKE '%ineligible%'
     ))
  OR (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'risk_band' AND NOT (
-        COLUMN_TYPE LIKE "%''low''%" AND COLUMN_TYPE LIKE "%''medium''%" AND
-        COLUMN_TYPE LIKE "%''high''%" AND COLUMN_TYPE LIKE "%''critical''%"
+        column_type LIKE '%low%' AND column_type LIKE '%medium%' AND
+        column_type LIKE '%high%' AND column_type LIKE '%critical%'
     ))
  OR (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'proposed_frequency' AND NOT (
-        COLUMN_TYPE LIKE "%''weekly''%" AND COLUMN_TYPE LIKE "%''fortnightly''%" AND
-        COLUMN_TYPE LIKE "%''monthly''%" AND COLUMN_TYPE LIKE "%''custom''%"
+        column_type LIKE '%weekly%' AND column_type LIKE '%fortnightly%' AND
+        column_type LIKE '%monthly%' AND column_type LIKE '%custom%'
     ))
  OR (TABLE_NAME = 'equipment_credit_applications' AND COLUMN_NAME = 'proposed_non_working_day_rule' AND NOT (
-        COLUMN_TYPE LIKE "%''exact''%" AND COLUMN_TYPE LIKE "%''next_weekday''%" AND
-        COLUMN_TYPE LIKE "%''previous_weekday''%"
+        column_type LIKE '%exact%' AND column_type LIKE '%next_weekday%' AND
+        column_type LIKE '%previous_weekday%'
     ))
  OR (TABLE_NAME = 'equipment_sales_quotations' AND COLUMN_NAME = 'status' AND NOT (
-        COLUMN_TYPE LIKE "%''draft''%" AND COLUMN_TYPE LIKE "%''pending_approval''%" AND
-        COLUMN_TYPE LIKE "%''approved''%" AND COLUMN_TYPE LIKE "%''accepted''%" AND
-        COLUMN_TYPE LIKE "%''rejected''%" AND COLUMN_TYPE LIKE "%''expired''%" AND
-        COLUMN_TYPE LIKE "%''converted''%" AND COLUMN_TYPE LIKE "%''cancelled''%"
+        column_type LIKE '%draft%' AND column_type LIKE '%pending_approval%' AND
+        column_type LIKE '%approved%' AND column_type LIKE '%accepted%' AND
+        column_type LIKE '%rejected%' AND column_type LIKE '%expired%' AND
+        column_type LIKE '%converted%' AND column_type LIKE '%cancelled%'
     ))
  OR (TABLE_NAME = 'equipment_sales_quotations' AND COLUMN_NAME = 'proposed_frequency' AND NOT (
-        COLUMN_TYPE LIKE "%''weekly''%" AND COLUMN_TYPE LIKE "%''fortnightly''%" AND
-        COLUMN_TYPE LIKE "%''monthly''%" AND COLUMN_TYPE LIKE "%''custom''%"
+        column_type LIKE '%weekly%' AND column_type LIKE '%fortnightly%' AND
+        column_type LIKE '%monthly%' AND column_type LIKE '%custom%'
     ))
  OR (TABLE_NAME = 'equipment_sales_quotations' AND COLUMN_NAME = 'proposed_non_working_day_rule' AND NOT (
-        COLUMN_TYPE LIKE "%''exact''%" AND COLUMN_TYPE LIKE "%''next_weekday''%" AND
-        COLUMN_TYPE LIKE "%''previous_weekday''%"
+        column_type LIKE '%exact%' AND column_type LIKE '%next_weekday%' AND
+        column_type LIKE '%previous_weekday%'
     ))
  OR (TABLE_NAME = 'equipment_credit_application_decisions' AND COLUMN_NAME = 'action_type' AND NOT (
-        COLUMN_TYPE LIKE "%''created''%" AND COLUMN_TYPE LIKE "%''updated''%" AND
-        COLUMN_TYPE LIKE "%''assessed''%" AND COLUMN_TYPE LIKE "%''submitted''%" AND
-        COLUMN_TYPE LIKE "%''review_started''%" AND COLUMN_TYPE LIKE "%''changes_requested''%" AND
-        COLUMN_TYPE LIKE "%''approved''%" AND COLUMN_TYPE LIKE "%''declined''%" AND
-        COLUMN_TYPE LIKE "%''withdrawn''%" AND COLUMN_TYPE LIKE "%''kyc_verified''%"
+        column_type LIKE '%created%' AND column_type LIKE '%updated%' AND
+        column_type LIKE '%assessed%' AND column_type LIKE '%submitted%' AND
+        column_type LIKE '%review_started%' AND column_type LIKE '%changes_requested%' AND
+        column_type LIKE '%approved%' AND column_type LIKE '%declined%' AND
+        column_type LIKE '%withdrawn%' AND column_type LIKE '%kyc_verified%'
     ));
 
 SELECT COUNT(*) AS missing_phase3_indexes
