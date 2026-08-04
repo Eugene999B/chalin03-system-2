@@ -236,7 +236,7 @@ function buildFinanceImageHeaders() {
   try {
     user = JSON.parse(localStorage.getItem("chalin03_user") || "null");
   } catch {
-    user = null;
+    // A damaged cached profile must not stop the protected image request.
   }
   const token = String(localStorage.getItem("chalin03_token") || "");
   const workspaceCode =
