@@ -98,7 +98,8 @@ test("detail, submit and manager review are one company-wide bounded authority",
   assert.match(workflow, /transition\.to/);
   assert.match(workflow, /hire_location_selection_required: false/);
   assert.match(workflow, /detail_contains_image_bytes: false/);
-  assert.doesNotMatch(workflow, /main_image_url\s*,/);
+  assert.match(workflow, /main_image_url: null/);
+  assert.doesNotMatch(workflow, /asset\.main_image_url\s+AS\s+main_image_url/i);
 });
 
 test("audit is outside committed submission and review transactions", () => {
@@ -180,8 +181,8 @@ test("Phase 3 migration is additive and startup verified", () => {
     /runEquipmentFinancePhaseThreeApplicationStartup/
   );
   assert.ok(
-    operationalStartup.indexOf("runEquipmentFinancePhaseThreeApplicationStartup()") <
-      operationalStartup.indexOf("inspectAndVerifyAppliedRelease()")
+    operationalStartup.indexOf("await runEquipmentFinancePhaseThreeApplicationStartup();") <
+      operationalStartup.indexOf("const state = await inspectAndVerifyAppliedRelease();")
   );
 });
 
