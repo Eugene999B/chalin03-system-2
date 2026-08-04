@@ -270,7 +270,7 @@ export default function EquipmentFinanceApplicationsPage() {
 
   const openDetail = useCallback(async (
     applicationOrId,
-    { keepUrl = false, editAfterOpen = false } = {}
+    { editAfterOpen = false } = {}
   ) => {
     const applicationId = positiveApplicationId(
       typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId
@@ -301,15 +301,10 @@ export default function EquipmentFinanceApplicationsPage() {
         setEdit(nextEdit);
         setAutosaveState("ready");
       }
-      if (!keepUrl) {
-        navigate(
-          {
-            pathname: APPLICATIONS_ROUTE,
-            search: `?application=${String(applicationId)}`,
-          },
-          { replace: true }
-        );
-      }
+      // The selected record stays in component state. Normalize any incoming
+      // deep link to the one trusted Finance route and never place record data
+      // into a client-side redirect target.
+      navigate(APPLICATIONS_ROUTE, { replace: true });
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
         setProblem(errorMessage(error, "Could not open the application file."));
@@ -321,7 +316,7 @@ export default function EquipmentFinanceApplicationsPage() {
 
   useEffect(() => {
     if (requestedApplicationId) {
-      openDetail(requestedApplicationId, { keepUrl: true });
+      openDetail(requestedApplicationId);
     }
     return () => detailAbortRef.current?.abort();
   }, [openDetail, requestedApplicationId]);
