@@ -77,20 +77,19 @@ test("Cloudflare does not cache Finance navigation or the worker script", () => 
   );
 });
 
-test("application selection uses only a fixed route and numeric IDs", () => {
+test("application selection accepts only numeric IDs and has no redirect sink", () => {
+  assert.match(applications, /function positiveApplicationId\(value\)/);
   assert.match(
     applications,
-    /const APPLICATIONS_ROUTE = "\/equipment-installment-finance\/applications"/
+    /if \(!\/\^\[1-9\]\\d\*\$\/\.test\(normalized\)\) return null/
   );
-  assert.match(applications, /function positiveApplicationId\(value\)/);
-  assert.match(applications, /if \(!\/\^\[1-9\]\\d\*\$\/\.test\(normalized\)\) return null/);
   assert.match(
     applications,
     /const requestedApplicationId = positiveApplicationId\(query\.get\("application"\)\)/
   );
-  assert.match(applications, /navigate\(APPLICATIONS_ROUTE, \{ replace: true \}\)/);
+  assert.doesNotMatch(applications, /useNavigate/);
+  assert.doesNotMatch(applications, /\bnavigate\s*\(/);
+  assert.doesNotMatch(applications, /APPLICATIONS_ROUTE/);
   assert.doesNotMatch(applications, /search: `\?application=/);
-  assert.doesNotMatch(applications, /pathname: APPLICATIONS_ROUTE/);
-  assert.doesNotMatch(applications, /navigate\(`\$\{location\.pathname\}/);
   assert.doesNotMatch(applications, /pathname: location\.pathname/);
 });
