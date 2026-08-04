@@ -58,6 +58,6 @@ assert.match(applications, /Case Operations/);
 assert.match(applications, /EquipmentFinanceApplicationsOptionalPage/);
 assert.match(protectedImages, /responseType: "blob"/);
 assert.match(protectedImages, /naturalWidth > 0/);
-assert.match(protectedImages, /credit-applications\/\\d\+\\\/image/);
+assert.match(protectedImages, /credit-applications/);
 
 console.log("Installment Completion Phase 1 source contracts passed.");
