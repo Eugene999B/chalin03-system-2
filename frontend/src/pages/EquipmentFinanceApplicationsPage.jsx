@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
+const APPLICATIONS_ROUTE = "/equipment-installment-finance/applications";
 const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
 const REVIEW_ROLES = new Set([
   "admin",
@@ -17,6 +18,13 @@ const REVIEW_ROLES = new Set([
   "equipment_business_manager",
 ]);
 const PAGE_SIZE = 25;
+
+function positiveApplicationId(value) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[1-9]\d*$/.test(normalized)) return null;
+  const applicationId = Number(normalized);
+  return Number.isSafeInteger(applicationId) ? applicationId : null;
+}
 
 function money(value) {
   return `GHS ${Number(value || 0).toLocaleString("en-GH", {
@@ -184,7 +192,7 @@ export default function EquipmentFinanceApplicationsPage() {
   const canReview = assignedRoles.some((role) => REVIEW_ROLES.has(role));
 
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const requestedApplicationId = query.get("application");
+  const requestedApplicationId = positiveApplicationId(query.get("application"));
 
   const [applications, setApplications] = useState([]);
   const [pagination, setPagination] = useState({
@@ -264,9 +272,13 @@ export default function EquipmentFinanceApplicationsPage() {
     applicationOrId,
     { keepUrl = false, editAfterOpen = false } = {}
   ) => {
-    const applicationId =
-      typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId;
-    if (!applicationId) return;
+    const applicationId = positiveApplicationId(
+      typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId
+    );
+    if (!applicationId) {
+      setProblem("The selected Finance application reference is invalid.");
+      return;
+    }
     detailAbortRef.current?.abort();
     const controller = new AbortController();
     detailAbortRef.current = controller;
@@ -290,9 +302,13 @@ export default function EquipmentFinanceApplicationsPage() {
         setAutosaveState("ready");
       }
       if (!keepUrl) {
-        const next = new URLSearchParams(location.search);
-        next.set("application", String(applicationId));
-        navigate(`${location.pathname}?${next.toString()}`, { replace: true });
+        navigate(
+          {
+            pathname: APPLICATIONS_ROUTE,
+            search: `?application=${String(applicationId)}`,
+          },
+          { replace: true }
+        );
       }
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
@@ -301,7 +317,7 @@ export default function EquipmentFinanceApplicationsPage() {
     } finally {
       if (!controller.signal.aborted) setDetailLoading(false);
     }
-  }, [location.pathname, location.search, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     if (requestedApplicationId) {
@@ -314,12 +330,7 @@ export default function EquipmentFinanceApplicationsPage() {
     editRef.current = null;
     setDetail(null);
     setEdit(null);
-    const next = new URLSearchParams(location.search);
-    next.delete("application");
-    navigate(
-      `${location.pathname}${next.toString() ? `?${next.toString()}` : ""}`,
-      { replace: true }
-    );
+    navigate(APPLICATIONS_ROUTE, { replace: true });
   }
 
   function requestDecision(application, kind) {
