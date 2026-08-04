@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
@@ -17,6 +17,13 @@ const REVIEW_ROLES = new Set([
   "equipment_business_manager",
 ]);
 const PAGE_SIZE = 25;
+
+function positiveApplicationId(value) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[1-9]\d*$/.test(normalized)) return null;
+  const applicationId = Number(normalized);
+  return Number.isSafeInteger(applicationId) ? applicationId : null;
+}
 
 function money(value) {
   return `GHS ${Number(value || 0).toLocaleString("en-GH", {
@@ -168,7 +175,6 @@ function LazyApplicationImage({ application }) {
 export default function EquipmentFinanceApplicationsPage() {
   const { effectivePermissions = [], user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const assignedRoles = [
     user?.workspace_role,
     user?.access_role,
@@ -184,7 +190,7 @@ export default function EquipmentFinanceApplicationsPage() {
   const canReview = assignedRoles.some((role) => REVIEW_ROLES.has(role));
 
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const requestedApplicationId = query.get("application");
+  const requestedApplicationId = positiveApplicationId(query.get("application"));
 
   const [applications, setApplications] = useState([]);
   const [pagination, setPagination] = useState({
@@ -262,11 +268,15 @@ export default function EquipmentFinanceApplicationsPage() {
 
   const openDetail = useCallback(async (
     applicationOrId,
-    { keepUrl = false, editAfterOpen = false } = {}
+    { editAfterOpen = false } = {}
   ) => {
-    const applicationId =
-      typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId;
-    if (!applicationId) return;
+    const applicationId = positiveApplicationId(
+      typeof applicationOrId === "object" ? applicationOrId?.id : applicationOrId
+    );
+    if (!applicationId) {
+      setProblem("The selected Finance application reference is invalid.");
+      return;
+    }
     detailAbortRef.current?.abort();
     const controller = new AbortController();
     detailAbortRef.current = controller;
@@ -289,11 +299,6 @@ export default function EquipmentFinanceApplicationsPage() {
         setEdit(nextEdit);
         setAutosaveState("ready");
       }
-      if (!keepUrl) {
-        const next = new URLSearchParams(location.search);
-        next.set("application", String(applicationId));
-        navigate(`${location.pathname}?${next.toString()}`, { replace: true });
-      }
     } catch (error) {
       if (error?.code !== "ERR_CANCELED") {
         setProblem(errorMessage(error, "Could not open the application file."));
@@ -301,11 +306,11 @@ export default function EquipmentFinanceApplicationsPage() {
     } finally {
       if (!controller.signal.aborted) setDetailLoading(false);
     }
-  }, [location.pathname, location.search, navigate]);
+  }, []);
 
   useEffect(() => {
     if (requestedApplicationId) {
-      openDetail(requestedApplicationId, { keepUrl: true });
+      openDetail(requestedApplicationId);
     }
     return () => detailAbortRef.current?.abort();
   }, [openDetail, requestedApplicationId]);
@@ -314,12 +319,6 @@ export default function EquipmentFinanceApplicationsPage() {
     editRef.current = null;
     setDetail(null);
     setEdit(null);
-    const next = new URLSearchParams(location.search);
-    next.delete("application");
-    navigate(
-      `${location.pathname}${next.toString() ? `?${next.toString()}` : ""}`,
-      { replace: true }
-    );
   }
 
   function requestDecision(application, kind) {

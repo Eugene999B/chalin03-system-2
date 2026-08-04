@@ -1,5 +1,6 @@
-const CACHE_NAME = "chalin03-credit-return-debt-reconciliation-v32";
+const CACHE_NAME = "chalin03-finance-outer-workspace-unlock-v33";
 // Previous verified cache markers:
+// chalin03-credit-return-debt-reconciliation-v32
 // chalin03-spare-parts-debt-desk-live-hotfix-v31
 // chalin03-spare-parts-debt-desk-v30
 // chalin03-finance-recovery-governance-v29
@@ -67,19 +68,24 @@ async function cachedResponseOrOffline(request, fallbackRequest = null) {
 async function cacheCoreAssets() {
   const cache = await caches.open(CACHE_NAME);
 
-  // Cache the React app shell first. Optional icons must never invalidate the
-  // service-worker installation or direct authenticated route navigation.
-  await cache.add(new Request("/", { cache: "reload" }));
+  // Always seed this release from the network. Reusing an older cached HTML
+  // shell can keep React pointing at a retired lazy chunk indefinitely.
+  const shellResponse = await fetch(new Request("/", { cache: "no-store" }));
+  if (!shellResponse?.ok) {
+    throw new Error("Could not download the current Chalin 03 app shell.");
+  }
+  await cache.put("/", shellResponse.clone());
 
   await Promise.allSettled(
-    CORE_ASSETS.filter((asset) => asset !== "/").map((asset) =>
-      cache.add(new Request(asset, { cache: "reload" }))
-    )
+    CORE_ASSETS.filter((asset) => asset !== "/").map(async (asset) => {
+      const response = await fetch(new Request(asset, { cache: "reload" }));
+      if (response?.ok) await cache.put(asset, response.clone());
+    })
   );
 }
 
 function networkNavigation(request) {
-  return fetch(request)
+  return fetch(request, { cache: "no-store" })
     .then(async (response) => {
       if (response?.ok) {
         const cache = await caches.open(CACHE_NAME);
@@ -100,16 +106,17 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
-          .map((cacheName) => caches.delete(cacheName))
-      )
-    )
+    Promise.all([
+      caches.keys().then((cacheNames) =>
+        Promise.all(
+          cacheNames
+            .filter((cacheName) => cacheName !== CACHE_NAME)
+            .map((cacheName) => caches.delete(cacheName))
+        )
+      ),
+      self.clients.claim(),
+    ])
   );
-
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
