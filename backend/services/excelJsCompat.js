@@ -58,7 +58,7 @@ function worksheetContainsText(worksheet, expectedText, maxRows = 12) {
   return false;
 }
 
-function findHeaderColumn(worksheet, expectedHeader, maxRows = 20) {
+function findHeaderCell(worksheet, expectedHeader, maxRows = 20) {
   const rowLimit = Math.min(
     Math.max(worksheet?.actualRowCount || worksheet?.rowCount || 1, 1),
     maxRows
@@ -74,7 +74,9 @@ function findHeaderColumn(worksheet, expectedHeader, maxRows = 20) {
       }
     });
 
-    if (matchedColumn) return matchedColumn;
+    if (matchedColumn) {
+      return { rowNumber, columnNumber: matchedColumn };
+    }
   }
 
   return null;
@@ -104,15 +106,20 @@ function clearRowsByFirstCell(worksheet, labels) {
   }
 }
 
-function clearAndHideColumn(worksheet, columnNumber) {
-  if (!worksheet || !columnNumber) return;
+function clearAndHideDataColumn(worksheet, headerCell) {
+  if (!worksheet || !headerCell) return;
+
+  const { rowNumber: headerRowNumber, columnNumber } = headerCell;
+  const rowLimit = Math.max(
+    worksheet.actualRowCount || worksheet.rowCount || headerRowNumber,
+    headerRowNumber
+  );
+
+  for (let rowNumber = headerRowNumber; rowNumber <= rowLimit; rowNumber += 1) {
+    worksheet.getCell(rowNumber, columnNumber).value = null;
+  }
 
   const column = worksheet.getColumn(columnNumber);
-
-  column.eachCell({ includeEmpty: true }, (cell) => {
-    cell.value = null;
-  });
-
   column.hidden = true;
   column.width = 0.1;
 }
@@ -129,8 +136,8 @@ function sanitiseProductsWorkbook(workbook) {
     return;
   }
 
-  const createdAtColumn = findHeaderColumn(productsWorksheet, "Created At");
-  clearAndHideColumn(productsWorksheet, createdAtColumn);
+  const createdAtHeader = findHeaderCell(productsWorksheet, "Created At");
+  clearAndHideDataColumn(productsWorksheet, createdAtHeader);
   clearRowsByFirstCell(productsWorksheet, ["Generated:"]);
 
   const summaryWorksheet = workbook.getWorksheet?.(SUMMARY_SHEET_NAME);
