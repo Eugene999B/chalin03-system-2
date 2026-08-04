@@ -119,9 +119,7 @@ function normalizeCustomer(body = {}) {
       "Enter the customer name and choose a valid customer type."
     );
   }
-  if (!phone) {
-    throw new PhaseOneError(400, "Enter the customer phone number.");
-  }
+  if (!phone) throw new PhaseOneError(400, "Enter the customer phone number.");
   return {
     customer_name: customerName,
     customer_type: customerType,
@@ -134,7 +132,13 @@ function normalizeCustomer(body = {}) {
   };
 }
 
-async function createCustomer(connection, body, actorId, confirmDuplicate) {
+async function createCustomer(
+  connection,
+  body,
+  actorId,
+  confirmDuplicate,
+  customerCode
+) {
   const customer = normalizeCustomer(body);
   const [duplicates] = await query(
     connection,
@@ -158,11 +162,6 @@ async function createCustomer(connection, body, actorId, confirmDuplicate) {
     error.duplicates = duplicates;
     throw error;
   }
-  const customerCode = await documentNumber(
-    "EQUIPMENT_FINANCE_CUSTOMER",
-    "FCUS",
-    actorId
-  );
   const [result] = await query(
     connection,
     "INSERT INTO hire_customers SET ?",
@@ -213,9 +212,7 @@ async function financeMachine(connection, assetId) {
 }
 
 function assertMachineAvailable(machine) {
-  if (!machine) {
-    throw new PhaseOneError(404, "The selected excavator was not found.");
-  }
+  if (!machine) throw new PhaseOneError(404, "The selected excavator was not found.");
   if (!["sale_only", "sale_or_hire"].includes(machine.operational_purpose)) {
     throw new PhaseOneError(409, "The selected excavator is not approved for sale.");
   }
@@ -295,15 +292,17 @@ async function insertKyc(connection, applicationId, kyc, actorId) {
 }
 
 function assessmentResult(offer, affordability, kyc) {
-  const input = {
-    quoted_total: offer.selling_price,
-    proposed_deposit: offer.deposit,
-    proposed_frequency: offer.payment_frequency,
-    proposed_interval_days: offer.custom_interval_days,
-    proposed_installment_count: offer.installment_count,
-    ...affordability,
-  };
-  const calculated = evaluateCreditApplication(input, kyc);
+  const calculated = evaluateCreditApplication(
+    {
+      quoted_total: offer.selling_price,
+      proposed_deposit: offer.deposit,
+      proposed_frequency: offer.payment_frequency,
+      proposed_interval_days: offer.custom_interval_days,
+      proposed_installment_count: offer.installment_count,
+      ...affordability,
+    },
+    kyc
+  );
   if (affordability.provided) return calculated;
   return {
     ...calculated,
@@ -341,7 +340,6 @@ async function writeCreationAudit(req, result, offer, assessment) {
           quoted_total: assessment.quoted_total,
           financed_amount: assessment.financed_amount,
           payment_frequency: offer.payment_frequency,
-          payment_interval_days: offer.custom_interval_days,
           first_due_date: offer.first_due_date,
           final_due_date: offer.final_due_date,
           image_bytes_loaded: false,
@@ -362,6 +360,7 @@ router.post(
   async (req, res) => {
     const actorId = positiveId(req.user?.id);
     const assetId = positiveId(req.body?.asset_id);
+    const requestedCustomerId = positiveId(req.body?.customer_id);
     if (!actorId) {
       return res.status(401).json({
         status: "error",
@@ -386,9 +385,12 @@ router.post(
         { settings: { minimum_deposit_percent: 0, delivery_policy: "after_deposit" } }
       );
       const settings = settingsResult?.settings || settingsResult || {};
-      const [applicationNumber, offerNumber] = await Promise.all([
+      const [applicationNumber, offerNumber, customerNumber] = await Promise.all([
         documentNumber("EQUIPMENT_CREDIT_APPLICATION", "ECAPP", actorId),
         documentNumber("EQUIPMENT_SALES_QUOTATION", "EIO", actorId),
+        requestedCustomerId
+          ? Promise.resolve(null)
+          : documentNumber("EQUIPMENT_FINANCE_CUSTOMER", "FCUS", actorId),
       ]);
 
       connection = await acquireConnection(7000);
@@ -399,7 +401,6 @@ router.post(
       assertMachineAvailable(machine);
 
       let customer;
-      const requestedCustomerId = positiveId(req.body?.customer_id);
       if (requestedCustomerId) {
         customer = await customerRecord(connection, requestedCustomerId, true);
         if (!customer) {
@@ -413,7 +414,8 @@ router.post(
           connection,
           req.body?.customer || {},
           actorId,
-          booleanValue(req.body?.confirm_duplicate_customer, false)
+          booleanValue(req.body?.confirm_duplicate_customer, false),
+          customerNumber
         );
       }
 
