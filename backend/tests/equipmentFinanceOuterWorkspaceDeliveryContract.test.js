@@ -60,6 +60,7 @@ test("Finance app-shell rollout cannot reuse the retired cache", () => {
     /fetch\(request, \{ cache: "no-store" \}\)/
   );
   assert.match(serviceWorker, /self\.clients\.claim\(\)/);
+  assert.doesNotMatch(serviceWorker, /addEventListener\("message"/);
 });
 
 test("Cloudflare does not cache Finance navigation or the worker script", () => {
