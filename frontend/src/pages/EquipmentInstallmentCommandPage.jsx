@@ -11,11 +11,14 @@ export default function EquipmentInstallmentCommandPage() {
     return <EquipmentInstallmentCommandAdvancedPage />;
   }
 
-  // Preserve the original detailed nine-step workflow as a supported reference
-  // view while the clearer six-stage completion home remains the daily default.
   if (view === "workflow") {
     return <EquipmentFinanceMinimalWorkflowPage />;
   }
 
-  return <EquipmentFinanceCompletionHomePage />;
+  return (
+    <>
+      <EquipmentFinanceCompletionHomePage />
+      <EquipmentFinanceMinimalWorkflowPage />
+    </>
+  );
 }
