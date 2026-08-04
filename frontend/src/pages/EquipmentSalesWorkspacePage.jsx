@@ -63,14 +63,12 @@ function FinanceStageFallback() {
   );
 }
 
-function stagePage(stage, search) {
-  const tab = new URLSearchParams(search).get("tab");
-
+function stagePage(stage) {
   if (stage === "start") {
     return <EquipmentFinancePhaseThreeStartRedirectPage />;
   }
 
-  if (stage === "inbox" || (stage === "operations" && tab === "inbox")) {
+  if (stage === "inbox") {
     return <EquipmentFinanceTaskInboxPage />;
   }
 
@@ -84,8 +82,8 @@ function stagePage(stage, search) {
     return <EquipmentFinanceApplicationsPage />;
   }
 
-  // Preserve older operational deep links. The completion navigation no longer
-  // presents this multi-tool page as a duplicate daily-work destination.
+  // Preserve every old stage=operations deep link. The new sidebar opens the
+  // focused stage=inbox and stage=case-operations pages instead.
   if (stage === "operations" || stage === "operations-advanced") {
     return <EquipmentFinanceOperationalPolishPage />;
   }
@@ -150,7 +148,7 @@ function stagePage(stage, search) {
 export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
-  const page = stagePage(stage, location.search);
+  const page = stagePage(stage);
 
   // Applications and Start New Installment are the two critical Finance entry
   // screens. Both render immediately and never wait inside a Suspense fallback.
