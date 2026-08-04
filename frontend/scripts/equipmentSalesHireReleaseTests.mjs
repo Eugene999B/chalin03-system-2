@@ -12,7 +12,7 @@ const app = read("src/App.jsx");
 const fleetWrapper = read("src/pages/FleetAssetsPage.jsx");
 const catalogue = read("src/pages/EquipmentCataloguePage.jsx");
 const workspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
-const operationalStart = read("src/pages/EquipmentFinanceOperationalStartPage.jsx");
+const operationalStart = read("src/pages/EquipmentFinanceOperationalStartImmediatePage.jsx");
 const applications = read("src/pages/EquipmentFinanceApplicationsPage.jsx");
 const wizard = read("src/pages/EquipmentFinanceStartWizardPage.jsx");
 const minimalWorkflow = read("src/pages/EquipmentFinanceMinimalWorkflowPage.jsx");
@@ -72,7 +72,7 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinanceOperationalStartPage",
+  "EquipmentFinanceOperationalStartImmediatePage",
   "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
@@ -88,6 +88,9 @@ for (const pageName of [
 }
 assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
 assert.match(operationalStart, /drafts\/start-installment/);
+assert.match(operationalStart, /recoverInBackground/);
+assert.match(operationalStart, /Server recovery never blocks this screen/);
+assert.doesNotMatch(operationalStart, /Preparing secure draft recovery/);
 assert.match(workspace, /stage === "start"/);
 assert.match(workspace, /stage === "operations"/);
 assert.match(workspace, /stage === "customers"/);
@@ -96,6 +99,10 @@ assert.match(workspace, /stage === "activation"/);
 assert.match(workspace, /stage === "deposit"/);
 assert.match(workspace, /stage === "collections"/);
 assert.match(workspace, /FINAL_LIFECYCLE_STAGES/);
+assert.match(
+  workspace,
+  /if \(!stage \|\| stage === "applications" \|\| stage === "start"\)/
+);
 
 assert.match(wizard, /Start New Installment/);
 assert.match(wizard, /create a draft/i);

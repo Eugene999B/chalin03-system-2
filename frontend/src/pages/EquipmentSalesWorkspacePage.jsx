@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
+import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
 
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
   import("./EquipmentFinanceAgreementActivationPage")
@@ -35,9 +36,6 @@ const EquipmentFinanceGuidePage = lazy(() =>
 const EquipmentFinanceOperationalPolishPage = lazy(() =>
   import("./EquipmentFinanceOperationalPolishPage")
 );
-const EquipmentFinanceOperationalStartPage = lazy(() =>
-  import("./EquipmentFinanceOperationalStartPage")
-);
 const EquipmentFinanceProfessionalPage = lazy(() =>
   import("./EquipmentFinanceProfessionalPage")
 );
@@ -60,7 +58,7 @@ function FinanceStageFallback() {
 
 function stagePage(stage) {
   if (stage === "start") {
-    return <EquipmentFinanceOperationalStartPage />;
+    return <EquipmentFinanceOperationalStartImmediatePage />;
   }
 
   if (stage === "operations") {
@@ -129,7 +127,9 @@ export default function EquipmentSalesWorkspacePage() {
   const stage = new URLSearchParams(location.search).get("stage");
   const page = stagePage(stage);
 
-  if (!stage || stage === "applications") {
+  // Applications and Start New Installment are the two critical Finance entry
+  // screens. Both render immediately and never wait inside a Suspense fallback.
+  if (!stage || stage === "applications" || stage === "start") {
     return page;
   }
 

@@ -70,15 +70,23 @@ test("machine register reads schema-compatible metadata without returning photo 
   );
 });
 
-test("Finance keeps critical applications eager while secondary stages remain split", () => {
+test("Finance keeps applications and installment start eager while secondary stages remain split", () => {
   assert.match(workspace, /import \{ lazy, Suspense \} from "react"/);
   assert.match(
     workspace,
     /^import EquipmentFinanceApplicationsPage from "\.\/EquipmentFinanceApplicationsPage";/m
   );
+  assert.match(
+    workspace,
+    /^import EquipmentFinanceOperationalStartImmediatePage from "\.\/EquipmentFinanceOperationalStartImmediatePage";/m
+  );
   assert.doesNotMatch(
     workspace,
     /const EquipmentFinanceApplicationsPage = lazy\(\(\) =>/
+  );
+  assert.doesNotMatch(
+    workspace,
+    /const EquipmentFinanceOperationalStartImmediatePage = lazy\(\(\) =>/
   );
   assert.match(
     workspace,
@@ -86,7 +94,7 @@ test("Finance keeps critical applications eager while secondary stages remain sp
   );
   assert.match(
     workspace,
-    /if \(!stage \|\| stage === "applications"\) \{\s*return page;\s*\}/
+    /if \(!stage \|\| stage === "applications" \|\| stage === "start"\) \{\s*return page;\s*\}/
   );
   assert.match(workspace, /<Suspense fallback=\{<FinanceStageFallback \/>}/);
   assert.doesNotMatch(

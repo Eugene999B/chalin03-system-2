@@ -29,7 +29,7 @@ const operationalStart = readProject(
   "frontend",
   "src",
   "pages",
-  "EquipmentFinanceOperationalStartPage.jsx"
+  "EquipmentFinanceOperationalStartImmediatePage.jsx"
 );
 const wizard = readProject(
   "frontend",
@@ -103,12 +103,15 @@ test("withdraw and cancel release application-level excavator blocking", () => {
   assert.match(phaseOneRoute, /blocking_agreement_number/);
 });
 
-test("Finance autosave uses one state-driven key without polling", () => {
+test("Finance autosave uses one state-driven key without polling or opening lock", () => {
   assert.match(operationalStart, /chalin03\.finance\.start-installment\.v2/);
   assert.match(operationalStart, /chalin03\.finance\.start-installment\.v1/);
   assert.match(operationalStart, /LEGACY_DRAFT_KEY/);
   assert.match(operationalStart, /localStorage\.setItem\(DRAFT_KEY/);
   assert.match(operationalStart, /chalin03:finance-draft-change/);
+  assert.match(operationalStart, /recoverInBackground/);
+  assert.match(operationalStart, /<EquipmentFinanceStartWizardPage \/>/);
+  assert.doesNotMatch(operationalStart, /Preparing secure draft recovery/);
   assert.doesNotMatch(operationalStart, /window\.setInterval/);
   assert.match(wizard, /chalin03:finance-draft-change/);
   assert.match(applicationsPage, /window\.setTimeout\(\(\) => saveEdit/);
