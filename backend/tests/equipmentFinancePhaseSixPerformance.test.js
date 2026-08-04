@@ -115,7 +115,15 @@ test("case detail is lazy, cancellable and does not carry list image bytes", () 
   assert.match(applicationsFrontendSource, /IntersectionObserver/);
   assert.match(applicationsFrontendSource, /loading="lazy"/);
   assert.match(applicationsFrontendSource, /decoding="async"/);
-  assert.match(applicationsFrontendSource, /Promise\.all\(\[/);
+  assert.match(
+    applicationsFrontendSource,
+    /void axiosClient\s*\.get\(`\$\{API\}\/readiness`/
+  );
+  assert.match(
+    applicationsFrontendSource,
+    /const response = await axiosClient\.get\(API/
+  );
+  assert.doesNotMatch(applicationsFrontendSource, /Promise\.all\(\[/);
   const listBody = functionBody(serviceSource, "listCasesPage", "listCases");
   assert.doesNotMatch(listBody, /asset\.main_image_url[,\s]/);
 });
