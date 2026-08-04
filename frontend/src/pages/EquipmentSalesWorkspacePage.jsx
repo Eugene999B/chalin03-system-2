@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
 import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
+import EquipmentFinanceApplicationsCompletionPage from "./EquipmentFinanceApplicationsCompletionPage";
 import EquipmentFinancePhaseThreeStartRedirectPage from "./EquipmentFinancePhaseThreeStartRedirectPage";
 
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
@@ -8,6 +9,9 @@ const EquipmentFinanceAgreementActivationPage = lazy(() =>
 );
 const EquipmentFinanceArrearsPage = lazy(() =>
   import("./EquipmentFinanceArrearsPage")
+);
+const EquipmentFinanceCaseOperationsPage = lazy(() =>
+  import("./EquipmentFinanceCaseOperationsPage")
 );
 const EquipmentFinanceCaseWorkspacePage = lazy(() =>
   import("./EquipmentFinanceCaseWorkspacePage")
@@ -42,6 +46,9 @@ const EquipmentFinanceProfessionalPage = lazy(() =>
 const EquipmentFinanceRecoveryGovernancePage = lazy(() =>
   import("./EquipmentFinanceRecoveryGovernancePage")
 );
+const EquipmentFinanceTaskInboxPage = lazy(() =>
+  import("./EquipmentFinanceTaskInboxPage")
+);
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "generated-documents", "staff"]);
@@ -61,7 +68,23 @@ function stagePage(stage) {
     return <EquipmentFinancePhaseThreeStartRedirectPage />;
   }
 
-  if (stage === "operations") {
+  if (stage === "inbox") {
+    return <EquipmentFinanceTaskInboxPage />;
+  }
+
+  if (stage === "case-operations") {
+    return <EquipmentFinanceCaseOperationsPage />;
+  }
+
+  // Keep the original eager applications component reachable as an explicit
+  // diagnostic fallback while the completion layer remains the daily register.
+  if (stage === "applications-core") {
+    return <EquipmentFinanceApplicationsPage />;
+  }
+
+  // Preserve every old stage=operations deep link. The new sidebar opens the
+  // focused stage=inbox and stage=case-operations pages instead.
+  if (stage === "operations" || stage === "operations-advanced") {
     return <EquipmentFinanceOperationalPolishPage />;
   }
 
@@ -117,9 +140,9 @@ function stagePage(stage) {
     return <EquipmentFinanceFinalLifecyclePage />;
   }
 
-  // Applications & Approvals is the critical default Finance screen. Keep it
-  // outside React.lazy so a delayed chunk can never leave the page in Suspense.
-  return <EquipmentFinanceApplicationsPage />;
+  // Applications & Approvals is the critical default Finance screen. Keep the
+  // completion wrapper outside React.lazy so it cannot be stranded by a chunk.
+  return <EquipmentFinanceApplicationsCompletionPage />;
 }
 
 export default function EquipmentSalesWorkspacePage() {
