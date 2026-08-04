@@ -114,7 +114,7 @@ const navigationSections = [
     ],
   },
   {
-    title: "Documents & Management",
+    title: "Documents & Reports",
     items: [
       {
         title: "Secure Case Documents",
