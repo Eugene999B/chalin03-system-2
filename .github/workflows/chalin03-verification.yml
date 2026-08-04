@@ -104,7 +104,7 @@ jobs:
           retention-days: 7
 
   finance-phase-three-browser:
-    name: Finance Phase 3 and 4 Chromium journeys
+    name: Finance Phase 2, 3 and 4 Chromium journeys
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -130,6 +130,11 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Prove authenticated Finance excavator pictures
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseTwoImages.spec.js 2>&1 | tee finance-phase-two-images-browser.log
+
       - name: Run the complete Finance Phase 3 journey
         run: |
           set -o pipefail
@@ -144,8 +149,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finance-phase-three-four-browser-evidence
+          name: finance-phase-two-three-four-browser-evidence
           path: |
+            frontend/finance-phase-two-images-browser.log
             frontend/finance-phase-three-browser.log
             frontend/finance-phase-four-browser.log
             frontend/playwright-report
