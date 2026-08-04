@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useLocation } from "react-router";
+import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage";
 import EquipmentFinanceApplicationsCompletionPage from "./EquipmentFinanceApplicationsCompletionPage";
 import EquipmentFinancePhaseThreeStartRedirectPage from "./EquipmentFinancePhaseThreeStartRedirectPage";
 
@@ -75,6 +76,12 @@ function stagePage(stage, search) {
 
   if (stage === "case-operations") {
     return <EquipmentFinanceCaseOperationsPage />;
+  }
+
+  // Keep the original eager applications component reachable as an explicit
+  // diagnostic fallback while the completion layer remains the daily register.
+  if (stage === "applications-core") {
+    return <EquipmentFinanceApplicationsPage />;
   }
 
   // Preserve older operational deep links. The completion navigation no longer
