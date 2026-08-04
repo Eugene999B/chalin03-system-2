@@ -19,7 +19,8 @@ const P5C = "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStar
 const P5D = "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && ";
 const P6 = "node scripts/runEquipmentFinancePhaseSixStartup.js && ";
 const P6_PERFORMANCE = "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && ";
-const STOCK_COUNT = "node scripts/runBossApprovedProductQuantityCorrection20260802.js && ";
+const STOCK_COUNT_20260802 = "node scripts/runBossApprovedProductQuantityCorrection20260802.js && ";
+const STOCK_COUNT_20260804 = "node scripts/runBossApprovedProductQuantityCorrection20260804.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
   assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
@@ -33,11 +34,12 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1}${P3}${P4}${P5A}${P5B}${NORMAL}`,
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${NORMAL}`,
     `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${NORMAL}`,
-    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${STOCK_COUNT}${NORMAL}`,
-    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
-    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
-    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${STOCK_COUNT}${NORMAL}`,
-    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${STOCK_COUNT_20260802}${NORMAL}`,
+    `${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT_20260802}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5C}${P5D}${P6}${STOCK_COUNT_20260802}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${STOCK_COUNT_20260802}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
