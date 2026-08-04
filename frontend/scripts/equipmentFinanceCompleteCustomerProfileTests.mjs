@@ -31,7 +31,7 @@ const operationalStartPage = fs.readFileSync(
     "..",
     "src",
     "pages",
-    "EquipmentFinanceOperationalStartPage.jsx"
+    "EquipmentFinanceOperationalStartImmediatePage.jsx"
   ),
   "utf8"
 );
@@ -73,6 +73,8 @@ function testProfileIsLoadedInTheOperationalWizard() {
   assert.match(config, /EquipmentSalesWorkspacePage\.jsx/);
   assert.match(config, /EquipmentFinanceApplicationsOptionalPage\.jsx/);
   assert.match(optionalStartPage, /EquipmentFinanceStartWizardEnhancedPage/);
+  assert.match(operationalStartPage, /EquipmentFinanceStartWizardPage/);
+  assert.match(operationalStartPage, /Server recovery never blocks this screen/);
 }
 
 function testFullCustomerAndKycFieldsRemainVisible() {
@@ -164,6 +166,9 @@ function testDraftAutosaveCompatibility() {
   assert.doesNotMatch(enhancedPage, /window\.setInterval\(synchronize, 700\)/);
   assert.match(operationalStartPage, /chalin03\.finance\.start-installment\.v2/);
   assert.match(operationalStartPage, /chalin03:finance-draft-change/);
+  assert.match(operationalStartPage, /RECOVERY_TIMEOUT_MS = 8000/);
+  assert.match(operationalStartPage, /SAVE_TIMEOUT_MS = 12000/);
+  assert.doesNotMatch(operationalStartPage, /Preparing secure draft recovery/);
   assert.doesNotMatch(operationalStartPage, /window\.setInterval/);
   assert.match(applicationsPage, /Changes autosave after 900 ms/);
   assert.match(applicationsPage, /known_version/);

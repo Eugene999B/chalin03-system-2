@@ -8,15 +8,19 @@ const root = path.resolve(path.dirname(currentFile), "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const workspace = read("src", "pages", "EquipmentSalesWorkspacePage.jsx");
-const start = read("src", "pages", "EquipmentFinanceOperationalStartPage.jsx");
+const start = read("src", "pages", "EquipmentFinanceOperationalStartImmediatePage.jsx");
 const operations = read("src", "pages", "EquipmentFinanceOperationalPolishPage.jsx");
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const styles = read("src", "styles", "equipmentFinanceOperationalPolish.css");
 
-assert.match(workspace, /EquipmentFinanceOperationalStartPage/);
+assert.match(workspace, /EquipmentFinanceOperationalStartImmediatePage/);
 assert.match(workspace, /EquipmentFinanceOperationalPolishPage/);
 assert.match(workspace, /stage === "start"/);
 assert.match(workspace, /stage === "operations"/);
+assert.match(
+  workspace,
+  /if \(!stage \|\| stage === "applications" \|\| stage === "start"\)/
+);
 
 for (const phrase of [
   "server draft",
@@ -24,7 +28,7 @@ for (const phrase of [
   "known_version",
   "Use latest server draft",
   "Keep this device draft",
-  "checklist items complete",
+  "Server recovery never blocks this screen",
   "EquipmentFinanceStartWizardPage",
 ]) {
   assert.match(start, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
@@ -32,6 +36,9 @@ for (const phrase of [
 assert.match(start, /chalin03\.finance\.start-installment\.v1/);
 assert.match(start, /window\.localStorage/);
 assert.match(start, /chalin03:finance-draft-change/);
+assert.match(start, /RECOVERY_TIMEOUT_MS = 8000/);
+assert.match(start, /SAVE_TIMEOUT_MS = 12000/);
+assert.doesNotMatch(start, /Preparing secure draft recovery/);
 assert.doesNotMatch(start, /setInterval/);
 assert.match(start, /fleet\.assets\.manage/);
 

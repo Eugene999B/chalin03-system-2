@@ -15,6 +15,7 @@ const {
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
 const equipmentFinanceRuntimeHotfixRoutes = require("./equipmentFinanceRuntimeHotfixRoutes");
+const equipmentFinanceDraftRuntimeRoutes = require("./equipmentFinanceDraftRuntimeRoutes");
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
@@ -120,6 +121,9 @@ router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 // These lightweight GET routes must execute before legacy handlers that depend
 // on unrelated Professional Finance settings/document tables.
 router.use(equipmentFinanceRuntimeHotfixRoutes);
+// Draft recovery and autosave are isolated from unrelated Phase 3 tables and
+// must use one database connection from transaction through committed reread.
+router.use(equipmentFinanceDraftRuntimeRoutes);
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 // Own the company-wide deposit transaction before every legacy location-bound handler.
 router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
