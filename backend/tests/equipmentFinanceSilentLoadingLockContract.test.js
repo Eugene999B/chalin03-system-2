@@ -19,6 +19,12 @@ const applicationsPage = read(
   "pages",
   "EquipmentFinanceApplicationsPage.jsx"
 );
+const immediateStartPage = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceOperationalStartImmediatePage.jsx"
+);
 
 test("stale authenticated requests settle through one controlled retry", () => {
   assert.match(axiosClient, /STALE_SESSION_RETRY_KEY/);
@@ -48,21 +54,32 @@ test("a slow readiness probe cannot block the actual application register", () =
   assert.match(axiosClient, /check_skipped: true/);
 });
 
-test("Applications and Approvals loads eagerly outside the Finance Suspense boundary", () => {
+test("Applications and Start New Installment load eagerly outside the Finance Suspense boundary", () => {
   assert.match(
     financeWorkspace,
     /import EquipmentFinanceApplicationsPage from "\.\/EquipmentFinanceApplicationsPage";/
+  );
+  assert.match(
+    financeWorkspace,
+    /import EquipmentFinanceOperationalStartImmediatePage from "\.\/EquipmentFinanceOperationalStartImmediatePage";/
   );
   assert.doesNotMatch(
     financeWorkspace,
     /const EquipmentFinanceApplicationsPage = lazy/
   );
+  assert.doesNotMatch(
+    financeWorkspace,
+    /const EquipmentFinanceOperationalStartImmediatePage = lazy/
+  );
   assert.match(
     financeWorkspace,
-    /if \(!stage \|\| stage === "applications"\) \{\s*return page;\s*\}/
+    /if \(!stage \|\| stage === "applications" \|\| stage === "start"\) \{\s*return page;\s*\}/
   );
   assert.match(
     financeWorkspace,
     /return <Suspense fallback=\{<FinanceStageFallback \/>\}>\{page\}<\/Suspense>;/
   );
+  assert.match(immediateStartPage, /RECOVERY_TIMEOUT_MS = 8000/);
+  assert.match(immediateStartPage, /<EquipmentFinanceStartWizardPage \/>/);
+  assert.doesNotMatch(immediateStartPage, /Preparing secure draft recovery/);
 });
