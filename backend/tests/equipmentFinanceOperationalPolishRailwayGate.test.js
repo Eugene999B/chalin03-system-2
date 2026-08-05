@@ -7,7 +7,7 @@ const backendDir = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
 const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("Railway runs every reviewed startup gate before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -15,6 +15,7 @@ test("Railway runs every reviewed startup gate before API traffic", () => {
     "runEquipmentFinancePhaseOneEmergencyRepair.js",
     "runEquipmentFinancePhaseOneSchemaStartup.js",
     "runEquipmentFinanceOperationalPolishStartup.js",
+    "runEquipmentFinanceOpeningDepositFoundationRepair.js",
     "runEquipmentFinancePhaseFourStartup.js",
     "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
     "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
@@ -64,4 +65,3 @@ test("Phase 3 startup fails closed before the server on wrong database identity"
   assert.match(startupSource, /Equipment Finance Phase 3 Railway startup gate failed/);
   assert.match(startupSource, /process\.exit\(1\)/);
 });
-
