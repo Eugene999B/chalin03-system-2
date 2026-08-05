@@ -22,6 +22,7 @@ const P6 = "node scripts/runEquipmentFinancePhaseSixStartup.js && ";
 const P6_PERFORMANCE = "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && ";
 const INSTALLMENT_RESTART_RESET = "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && ";
 const INSTALLMENT_EXCAVATOR_CLEANUP = "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js && ";
+const INSTALLMENT_EXCAVATOR_SAFE_RECOVERY = "node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && ";
 const STOCK_COUNT_20260802 = "node scripts/runBossApprovedProductQuantityCorrection20260802.js && ";
 const STOCK_COUNT_20260804 = "node scripts/runBossApprovedProductQuantityCorrection20260804.js && ";
 
@@ -46,6 +47,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_CLEANUP}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
