@@ -94,7 +94,7 @@ test("production startup runs the reset after Finance schemas and before the ser
     "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js"
   );
   const reset = start.indexOf(
-    "node scripts/runUserAuthorizedInstallmentRestartReset20260805.js"
+    "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js"
   );
   const server = start.indexOf(
     "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
