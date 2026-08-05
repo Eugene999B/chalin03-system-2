@@ -61,6 +61,9 @@ const EquipmentFinanceRecoveryGovernancePage = lazy(() =>
 const EquipmentFinanceTaskInboxPage = lazy(() =>
   import("./EquipmentFinanceTaskInboxPage")
 );
+const InstallmentCompletionPhaseFourPage = lazy(() =>
+  import("./InstallmentCompletionPhaseFourPage")
+);
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
 const PROFESSIONAL_STAGES = new Set(["settings", "staff"]);
@@ -86,6 +89,10 @@ function stagePage(stage) {
 
   if (stage === "case-operations") {
     return <EquipmentFinanceCaseOperationsPage />;
+  }
+
+  if (stage === "finalization") {
+    return <InstallmentCompletionPhaseFourPage />;
   }
 
   // Keep the original eager applications component reachable as an explicit
