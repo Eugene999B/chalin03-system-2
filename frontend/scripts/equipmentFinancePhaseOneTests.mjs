@@ -21,6 +21,7 @@ const collections = read("src", "pages", "EquipmentFinanceCollectionsMinimalPage
 const reports = read("src", "pages", "EquipmentSalesReportsPage.jsx");
 const guide = read("src", "pages", "EquipmentFinanceGuidePage.jsx");
 const css = read("src", "styles", "equipmentFinancePhaseOne.css");
+const guideCss = read("src", "styles", "equipmentFinanceGuide.css");
 
 for (const stage of ["start", "customers", "machines", "guide", "activation", "deposit", "collections"]) {
   assert.match(workspace, new RegExp(`stage === "${stage}"`));
@@ -110,10 +111,16 @@ assert.match(collections, /payment-history/);
 assert.match(collections, /backend after committed payments/i);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
-assert.match(guide, /What should I do first/);
-assert.match(guide, /What is an Installment Offer/);
-assert.match(guide, /Common problems/);
+assert.match(guide, /Complete lifecycle/);
+assert.match(guide, /Installment Offer is created automatically/);
+assert.match(guide, /Task & Approval Inbox/);
+assert.match(guide, /Opening Deposit & Machine Reservation/);
+assert.match(guide, /Troubleshooting/);
+assert.match(guide, /production Finance reset is permanently blocked/);
 assert.doesNotMatch(guide, /workspace="equipment_hire"/);
+assert.match(guideCss, /@media \(max-width: 760px\)/);
+assert.match(guideCss, /@media \(max-width: 420px\)/);
+assert.match(guideCss, /grid-template-columns:\s*1fr/);
 
 assert.match(css, /@media \(max-width: 720px\)/);
 assert.match(css, /@media \(max-width: 390px\)/);
