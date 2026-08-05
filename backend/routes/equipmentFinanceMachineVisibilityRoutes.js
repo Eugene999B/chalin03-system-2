@@ -7,8 +7,8 @@ const router = express.Router();
 
 const REGISTER_ACTION = "EQUIPMENT_FINANCE_MACHINE_REGISTERED";
 const REGISTER_ACTION_TYPE = "equipment.finance.machine.register";
-const HIDDEN_ACTION = "EQUIPMENT_FINANCE_MACHINE_RESET_HIDDEN";
-const HIDDEN_ACTION_TYPE = "equipment.finance.machine.reset_hidden";
+const CLEANUP_RECORD =
+  "20260805_user_authorized_installment_finance_excavator_cleanup";
 
 function numericId(value) {
   const number = Number(value);
@@ -21,8 +21,11 @@ async function loadVisibleFinanceAssetIds(connection = pool) {
        FROM activity_log registration
        INNER JOIN fleet_assets asset
          ON asset.id = CAST(registration.entity_id AS UNSIGNED)
+       LEFT JOIN schema_migrations cleanup
+         ON cleanup.migration_name = ?
       WHERE registration.entity_type = 'fleet_asset'
         AND registration.entity_id REGEXP '^[0-9]+$'
+        AND asset.is_active = TRUE
         AND (
           registration.action_type = ?
           OR registration.action = ?
@@ -31,22 +34,11 @@ async function loadVisibleFinanceAssetIds(connection = pool) {
           registration.workspace_code = 'equipment_installment_finance'
           OR registration.workspace_code IS NULL
         )
-        AND NOT EXISTS (
-          SELECT 1
-            FROM activity_log hidden
-           WHERE hidden.entity_type = 'fleet_asset'
-             AND hidden.entity_id = registration.entity_id
-             AND (
-               hidden.action_type = ?
-               OR hidden.action = ?
-             )
+        AND (
+          cleanup.id IS NULL
+          OR registration.created_at >= cleanup.applied_at
         )`,
-    [
-      REGISTER_ACTION_TYPE,
-      REGISTER_ACTION,
-      HIDDEN_ACTION_TYPE,
-      HIDDEN_ACTION,
-    ]
+    [CLEANUP_RECORD, REGISTER_ACTION_TYPE, REGISTER_ACTION]
   );
 
   return new Set(rows.map((row) => numericId(row.asset_id)).filter(Boolean));
@@ -82,6 +74,7 @@ router.get(
         policy: {
           ...(payload.policy || {}),
           finance_registered_excavators_only: true,
+          finance_cleanup_cutoff_enabled: true,
           finance_visibility_ready: visibilityReady,
           non_finance_excavators_hidden: Math.max(0, sourceCount - machines.length),
         },
@@ -93,8 +86,7 @@ router.get(
 );
 
 module.exports = router;
+module.exports.CLEANUP_RECORD = CLEANUP_RECORD;
 module.exports.loadVisibleFinanceAssetIds = loadVisibleFinanceAssetIds;
 module.exports.REGISTER_ACTION = REGISTER_ACTION;
 module.exports.REGISTER_ACTION_TYPE = REGISTER_ACTION_TYPE;
-module.exports.HIDDEN_ACTION = HIDDEN_ACTION;
-module.exports.HIDDEN_ACTION_TYPE = HIDDEN_ACTION_TYPE;

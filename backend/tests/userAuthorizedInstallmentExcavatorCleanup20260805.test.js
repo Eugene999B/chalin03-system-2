@@ -6,7 +6,6 @@ const test = require("node:test");
 const {
   CLEANUP_LOCK,
   CLEANUP_RECORD,
-  HIDDEN_ACTION_TYPE,
   PREVIOUS_RESET_RECORD,
   REGISTER_ACTION_TYPE,
   retainedPurpose,
@@ -52,6 +51,7 @@ test("excavator cleanup is one-time, production-only and lock-safe", () => {
   assert.match(cleanupSource, /migrationApplied\(db, PREVIOUS_RESET_RECORD\)/);
   assert.match(cleanupSource, /SELECT GET_LOCK\(\?, 60\) AS acquired/);
   assert.match(cleanupSource, /INSERT INTO schema_migrations/);
+  assert.match(cleanupSource, /visible_finance_excavators: visibleCount/);
 });
 
 test("only excavators registered through Installment Finance are selected", () => {
@@ -66,11 +66,16 @@ test("only excavators registered through Installment Finance are selected", () =
   );
 });
 
-test("unshared Finance test machines are deleted without touching other businesses", () => {
-  assert.match(cleanupSource, /DELETE FROM equipment_media WHERE asset_id = \?/);
+test("unshared Finance test machines are retired without deleting shared asset rows", () => {
+  assert.match(cleanupSource, /is_active = FALSE/);
+  assert.match(cleanupSource, /sale_status = 'cancelled'/);
+  assert.match(cleanupSource, /main_image_url = NULL/);
+  assert.match(cleanupSource, /UPDATE equipment_media/);
+  assert.match(cleanupSource, /file_url.*\?/s);
   assert.match(cleanupSource, /DELETE FROM fleet_meter_readings/);
   assert.match(cleanupSource, /source_type = 'finance_machine_register'/);
-  assert.match(cleanupSource, /DELETE FROM fleet_assets WHERE id = \?/);
+  assert.doesNotMatch(cleanupSource, /DELETE FROM fleet_assets/i);
+  assert.doesNotMatch(cleanupSource, /DELETE FROM equipment_media/i);
   assert.match(cleanupSource, /beginTransaction\(\)/);
   assert.match(cleanupSource, /await db\.commit\(\)/);
   assert.match(cleanupSource, /await db\.rollback\(\)/);
@@ -80,7 +85,7 @@ test("unshared Finance test machines are deleted without touching other business
   assert.doesNotMatch(cleanupSource, /\bTRUNCATE\b|\bDROP\s+TABLE\b|FOREIGN_KEY_CHECKS/i);
 });
 
-test("shared machines remain in their real business but disappear from Finance", () => {
+test("shared machines remain in their real business but leave Finance sale visibility", () => {
   assert.equal(
     retainedPurpose([{ table: "mining_equipment_assignments" }]),
     "company_operations"
@@ -89,21 +94,22 @@ test("shared machines remain in their real business but disappear from Finance",
     retainedPurpose([{ table: "hire_contract_assets" }]),
     "hire_only"
   );
-  assert.equal(HIDDEN_ACTION_TYPE, "equipment.finance.machine.reset_hidden");
   assert.match(cleanupSource, /sharedReferences\.length === 0/);
   assert.match(cleanupSource, /operational_purpose = \?/);
   assert.match(cleanupSource, /THEN 'not_for_sale'/);
-  assert.match(cleanupSource, /EQUIPMENT_FINANCE_MACHINE_RESET_HIDDEN/);
+  assert.match(cleanupSource, /preserveSharedAssetOutsideFinance/);
 });
 
-test("Finance bootstrap exposes only registered and non-hidden machines", () => {
-  assert.match(visibilitySource, /FROM activity_log registration/);
-  assert.match(visibilitySource, /registration\.action_type = \?/);
-  assert.match(visibilitySource, /NOT EXISTS/);
-  assert.match(visibilitySource, /equipment\.finance\.machine\.reset_hidden/);
+test("Finance bootstrap uses the cleanup cutoff and remains safe after a prior commit", () => {
+  assert.match(visibilitySource, /LEFT JOIN schema_migrations cleanup/);
+  assert.match(visibilitySource, /cleanup\.migration_name = \?/);
+  assert.match(visibilitySource, /registration\.created_at >= cleanup\.applied_at/);
+  assert.match(visibilitySource, /asset\.is_active = TRUE/);
   assert.match(visibilitySource, /payload\.machines\.filter/);
   assert.match(visibilitySource, /finance_registered_excavators_only: true/);
+  assert.match(visibilitySource, /finance_cleanup_cutoff_enabled: true/);
   assert.match(visibilitySource, /visibility filter failed closed/);
+  assert.doesNotMatch(visibilitySource, /reset_hidden/);
 
   const visibilityIndex = independentRoutes.indexOf(
     "router.use(equipmentFinanceMachineVisibilityRoutes)"
@@ -118,18 +124,13 @@ test("Finance bootstrap exposes only registered and non-hidden machines", () => 
   );
 });
 
-test("Railway runs excavator cleanup after the reset and before API traffic", () => {
+test("excavator cleanup remains available as an explicit controlled command", () => {
   const start = packageJson.scripts.start;
-  const reset = start.indexOf(
-    "runUserAuthorizedInstallmentRestartResetLockFix20260805.js"
+  assert.doesNotMatch(
+    start,
+    /runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
+    "A one-time destructive cleanup must not block every normal Railway startup"
   );
-  const cleanup = start.indexOf(
-    "runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
-  );
-  const server = start.indexOf("exportWorkbookSafetyBootstrap.js server.js");
-  assert.ok(reset >= 0);
-  assert.ok(cleanup > reset);
-  assert.ok(server > cleanup);
   assert.equal(
     packageJson.scripts["reset:equipment-finance:excavators:production"],
     "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
