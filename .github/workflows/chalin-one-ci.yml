@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -38,6 +40,9 @@ jobs:
 
       - name: Install backend dependencies
         run: npm ci
+
+      - name: Enforce additive migration safety
+        run: npm run migration-safety -- --base origin/main --head HEAD
 
       - name: Run backend syntax checks
         run: npm run syntax-check
@@ -55,6 +60,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
