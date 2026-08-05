@@ -20,6 +20,14 @@ const cleanupSource = fs.readFileSync(
   ),
   "utf8"
 );
+const cleanupStartupSource = fs.readFileSync(
+  path.join(
+    backendRoot,
+    "scripts",
+    "runInstallmentExcavatorCleanupBestEffortStartup20260805.js"
+  ),
+  "utf8"
+);
 const visibilitySource = fs.readFileSync(
   path.join(
     backendRoot,
@@ -100,16 +108,25 @@ test("shared machines remain in their real business but leave Finance sale visib
   assert.match(cleanupSource, /preserveSharedAssetOutsideFinance/);
 });
 
-test("Finance bootstrap uses the cleanup cutoff and remains safe after a prior commit", () => {
+test("Finance bootstrap falls back to the completed operational reset cutoff", () => {
   assert.match(visibilitySource, /LEFT JOIN schema_migrations cleanup/);
+  assert.match(visibilitySource, /LEFT JOIN schema_migrations operational_reset/);
   assert.match(visibilitySource, /cleanup\.migration_name = \?/);
+  assert.match(visibilitySource, /operational_reset\.migration_name = \?/);
   assert.match(visibilitySource, /registration\.created_at >= cleanup\.applied_at/);
+  assert.match(
+    visibilitySource,
+    /registration\.created_at >= operational_reset\.applied_at/
+  );
   assert.match(visibilitySource, /asset\.is_active = TRUE/);
   assert.match(visibilitySource, /payload\.machines\.filter/);
   assert.match(visibilitySource, /finance_registered_excavators_only: true/);
   assert.match(visibilitySource, /finance_cleanup_cutoff_enabled: true/);
+  assert.match(
+    visibilitySource,
+    /finance_operational_reset_fallback_enabled: true/
+  );
   assert.match(visibilitySource, /visibility filter failed closed/);
-  assert.doesNotMatch(visibilitySource, /reset_hidden/);
 
   const visibilityIndex = independentRoutes.indexOf(
     "router.use(equipmentFinanceMachineVisibilityRoutes)"
@@ -124,15 +141,30 @@ test("Finance bootstrap uses the cleanup cutoff and remains safe after a prior c
   );
 });
 
-test("excavator cleanup remains available as an explicit controlled command", () => {
+test("cleanup is attempted without ever blocking normal Railway startup", () => {
   const start = packageJson.scripts.start;
   assert.doesNotMatch(
     start,
-    /runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
-    "A one-time destructive cleanup must not block every normal Railway startup"
+    /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
+    "The fail-closed one-time command must not directly block Railway startup"
+  );
+  assert.match(
+    start,
+    /node scripts\/runInstallmentExcavatorCleanupBestEffortStartup20260805\.js/
+  );
+  assert.match(cleanupStartupSource, /try \{/);
+  assert.match(cleanupStartupSource, /catch \(error\)/);
+  assert.match(cleanupStartupSource, /process\.exitCode = 0/);
+  assert.match(
+    cleanupStartupSource,
+    /operational-reset visibility cutoff/
   );
   assert.equal(
     packageJson.scripts["reset:equipment-finance:excavators:production"],
     "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
+  );
+  assert.equal(
+    packageJson.scripts["reset:equipment-finance:excavators:startup-safe"],
+    "node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js"
   );
 });
