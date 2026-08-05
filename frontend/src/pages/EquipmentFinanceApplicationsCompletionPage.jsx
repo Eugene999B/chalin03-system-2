@@ -55,40 +55,50 @@ function addCaseLink(container, application) {
   container.append(anchor);
 }
 
-function relabelAdministratorActions(container, administrator) {
-  if (!administrator || !container) return;
-  container.querySelectorAll("button").forEach((button) => {
-    const currentLabel = clean(button.textContent).toLowerCase();
-    if (!["submit", "submit for review"].includes(currentLabel)) return;
-    button.textContent = "Approve Now";
-    button.dataset.adminApprovalAction = "true";
-    button.title =
-      "Administrators approve directly. A separate manager review is not required.";
-  });
+function addAdministratorApprovalNote(container) {
+  if (!container || container.querySelector('[data-admin-direct-approval-note="true"]')) {
+    return;
+  }
+  const note = document.createElement("span");
+  note.className = "finance-simple__admin-approval-note";
+  note.dataset.adminDirectApprovalNote = "true";
+  note.textContent =
+    "Administrator approval is immediate: confirming Submit for Review approves this installment directly. No separate manager review is required.";
+  container.prepend(note);
 }
 
-function relabelAdministratorDecisionDialogs(root, administrator) {
+function markAdministratorActions(container, administrator) {
+  if (!administrator || !container) return;
+  const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+    ["submit", "submit for review"].includes(clean(button.textContent).toLowerCase())
+  );
+  if (!submitButton) return;
+  submitButton.dataset.adminApprovalAction = "true";
+  submitButton.title =
+    "Administrator approval is immediate. Confirming this action approves the installment directly.";
+  addAdministratorApprovalNote(container);
+}
+
+function markAdministratorDecisionDialogs(root, administrator) {
   if (!administrator || !root) return;
   root.querySelectorAll('.finance-simple__dialog[role="dialog"]').forEach((dialog) => {
     const heading = dialog.querySelector(".finance-simple__section-header h2");
     if (clean(heading?.textContent).toLowerCase() !== "submit for manager review") return;
 
-    heading.textContent = "Approve installment now";
-    dialog.setAttribute("aria-label", "Approve installment now");
-
-    const eyebrow = dialog.querySelector(".finance-simple__section-header .finance-simple__eyebrow");
-    if (eyebrow) eyebrow.textContent = "Administrator approval";
-
-    const explanation = dialog.querySelector(".finance-simple__sticky-actions > span");
-    if (explanation) {
-      explanation.textContent =
-        "This administrator approval is recorded immediately. No separate manager review is required.";
+    const form = dialog.querySelector("form");
+    if (form && !dialog.querySelector('[data-admin-direct-approval-note="true"]')) {
+      const notice = document.createElement("div");
+      notice.className = "finance-simple__notice is-info finance-simple__admin-dialog-note";
+      notice.dataset.adminDirectApprovalNote = "true";
+      notice.textContent =
+        "Administrator approval is immediate. Confirming this action approves the installment now; no separate manager review is required.";
+      dialog.insertBefore(notice, form);
     }
 
     const confirmButton = dialog.querySelector('button[type="submit"]');
-    if (confirmButton && clean(confirmButton.textContent).toLowerCase() === "confirm action") {
-      confirmButton.textContent = "Approve Now";
+    if (confirmButton) {
       confirmButton.dataset.adminApprovalAction = "true";
+      confirmButton.title = "Approve this installment immediately as administrator.";
     }
   });
 }
@@ -156,7 +166,7 @@ function hydrateCard(card, application, { administrator = false } = {}) {
 
   const actions = card.querySelector(".finance-simple__card-actions");
   addCaseLink(actions, application);
-  relabelAdministratorActions(actions, administrator);
+  markAdministratorActions(actions, administrator);
 }
 
 function hydrateDialog(dialog, application, { administrator = false } = {}) {
@@ -164,7 +174,7 @@ function hydrateDialog(dialog, application, { administrator = false } = {}) {
   dialog.dataset.completionPhaseOneDialog = "true";
   const actions = dialog.querySelector(".finance-simple__card-actions");
   addCaseLink(actions, application);
-  relabelAdministratorActions(actions, administrator);
+  markAdministratorActions(actions, administrator);
 }
 
 function releaseHydratedImages(root) {
@@ -234,7 +244,7 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
           if (application) hydrateDialog(dialog, application, { administrator });
         });
 
-      relabelAdministratorDecisionDialogs(root, administrator);
+      markAdministratorDecisionDialogs(root, administrator);
     };
 
     const scheduleHydration = () => {
@@ -308,13 +318,14 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
 }
 
 export {
+  addAdministratorApprovalNote,
   addCaseLink,
   applicationNumberFromCard,
   caseOperationsPath,
   hydrateApplicationImage,
   hydrateCard,
   isAdministrator,
+  markAdministratorActions,
+  markAdministratorDecisionDialogs,
   protectedApplicationImagePath,
-  relabelAdministratorActions,
-  relabelAdministratorDecisionDialogs,
 };
