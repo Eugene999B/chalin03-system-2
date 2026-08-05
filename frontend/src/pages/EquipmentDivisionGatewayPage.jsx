@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router";
+import { Link, Navigate } from "react-router";
 import EquipmentDivisionStaffManager from "../components/EquipmentDivisionStaffManager";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -86,7 +86,6 @@ function DivisionCard({
 export default function EquipmentDivisionGatewayPage() {
   const auth = useAuth();
   const { isLoggedIn, workspaceCode, user, logout } = auth;
-  const navigate = useNavigate();
   const [leaving, setLeaving] = useState(false);
   const [navigationError, setNavigationError] = useState("");
 
@@ -115,7 +114,7 @@ export default function EquipmentDivisionGatewayPage() {
 
     try {
       await logout();
-      navigate("/login?workspace=equipment_hire", { replace: true });
+      window.location.replace("/login?workspace=equipment_hire");
     } catch {
       setNavigationError("The session could not be closed cleanly. Please try again.");
       setLeaving(false);
@@ -125,13 +124,13 @@ export default function EquipmentDivisionGatewayPage() {
   return (
     <main className="equipment-command">
       <header className="equipment-command__topbar">
-        <a className="equipment-command__brand" href="/company/">
+        <div className="equipment-command__brand">
           <img src="/chalin03-logo.png" alt="Chalin 03 Company Limited" />
           <span>
             <small>Chalin 03 Company Limited</small>
             <strong>Equipment Business</strong>
           </span>
-        </a>
+        </div>
 
         <div className="equipment-command__top-actions">
           <div className="equipment-command__identity">
@@ -207,7 +206,6 @@ export default function EquipmentDivisionGatewayPage() {
       </section>
 
       <section className="equipment-command__footer-actions">
-        <a href="/company/">Company Overview</a>
         <button type="button" onClick={backToLogin} disabled={leaving}>
           Back to Equipment Login
         </button>
