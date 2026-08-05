@@ -6,7 +6,7 @@ const test = require("node:test");
 const backendDir = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
 const runnerSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceProfessionalRebuildMigration.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartReset20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("completed professional Finance migration is not rerun during Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -22,7 +22,7 @@ test("completed professional Finance migration is not rerun during Railway start
     /runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup\.js/,
     /runEquipmentFinancePhaseSixStartup\.js/,
     /runEquipmentFinancePhaseSixPerformanceStartup\.js/,
-    /runUserAuthorizedInstallmentRestartReset20260805\.js/,
+    /runUserAuthorizedInstallmentRestartResetLockFix20260805\.js/,
     /runBossApprovedProductQuantityCorrection20260802\.js/,
     /runBossApprovedProductQuantityCorrection20260804\.js/,
   ]) assert.match(packageJson.scripts.start, gate);
