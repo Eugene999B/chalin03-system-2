@@ -223,6 +223,23 @@ async function networkCoreAsset(request) {
   );
 }
 
+function isTrustedClientMessage(event) {
+  if (event.origin !== self.location.origin) {
+    return false;
+  }
+
+  const sourceUrl = event.source?.url;
+  if (!sourceUrl) {
+    return false;
+  }
+
+  try {
+    return new URL(sourceUrl).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     Promise.allSettled([cacheCurrentShell(), cacheCoreAssets()])
@@ -248,6 +265,10 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (!isTrustedClientMessage(event)) {
+    return;
+  }
+
   if (event.data?.type === "CHALIN03_SKIP_WAITING") {
     self.skipWaiting();
   }
