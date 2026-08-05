@@ -14,19 +14,14 @@ const PREVIOUS_RESET_RECORD =
   "20260805_user_authorized_equipment_installment_restart_reset";
 const CLEANUP_LOCK = "chalin03:eq-fin:excavator-clean:20260805";
 const CLEANUP_DESCRIPTION =
-  "One-time removal of excavators registered through Installment Finance so the complete Finance process can restart with a clean machine register.";
+  "One-time retirement of pre-reset Installment Finance excavators and Finance-only media so the machine register restarts cleanly without deleting shared fleet history.";
 
 const REGISTER_ACTION = "EQUIPMENT_FINANCE_MACHINE_REGISTERED";
 const REGISTER_ACTION_TYPE = "equipment.finance.machine.register";
 const HIDDEN_ACTION = "EQUIPMENT_FINANCE_MACHINE_RESET_HIDDEN";
 const HIDDEN_ACTION_TYPE = "equipment.finance.machine.reset_hidden";
-const DELETED_ACTION = "EQUIPMENT_FINANCE_MACHINE_RESET_DELETED";
-const DELETED_ACTION_TYPE = "equipment.finance.machine.reset_deleted";
-
-const SAFE_DIRECT_CHILDREN = new Set([
-  "equipment_media",
-  "fleet_meter_readings",
-]);
+const DELETED_ACTION = "EQUIPMENT_FINANCE_MACHINE_RESET_RETIRED";
+const DELETED_ACTION_TYPE = "equipment.finance.machine.reset_retired";
 
 function positiveId(value) {
   const number = Number(value);
@@ -79,15 +74,16 @@ async function migrationApplied(connection, migrationName) {
 }
 
 async function financeRegisteredAssets(connection) {
-  const columns = await tableColumns(connection, "activity_log");
+  const activityColumns = await tableColumns(connection, "activity_log");
   for (const required of [
     "action",
     "action_type",
     "workspace_code",
     "entity_type",
     "entity_id",
+    "created_at",
   ]) {
-    if (!columns.has(required)) {
+    if (!activityColumns.has(required)) {
       throw new Error(
         `Installment excavator cleanup requires activity_log.${required}.`
       );
@@ -96,7 +92,8 @@ async function financeRegisteredAssets(connection) {
 
   const [rows] = await connection.query(
     `SELECT DISTINCT asset.id, asset.asset_code, asset.asset_name,
-            asset.operational_purpose, asset.sale_status
+            asset.operational_purpose, asset.sale_status, asset.is_active,
+            MIN(registration.created_at) AS finance_registered_at
        FROM activity_log registration
        INNER JOIN fleet_assets asset
          ON asset.id = CAST(registration.entity_id AS UNSIGNED)
@@ -110,6 +107,8 @@ async function financeRegisteredAssets(connection) {
           registration.workspace_code = 'equipment_installment_finance'
           OR registration.workspace_code IS NULL
         )
+      GROUP BY asset.id, asset.asset_code, asset.asset_name,
+               asset.operational_purpose, asset.sale_status, asset.is_active
       ORDER BY asset.id`,
     [REGISTER_ACTION_TYPE, REGISTER_ACTION]
   );
@@ -143,25 +142,37 @@ async function countByReference(connection, tableName, columnName, assetId) {
   return Number(row?.row_count || 0);
 }
 
-async function nonFinanceMeterCount(connection, assetId) {
-  if (!(await tableExists(connection, "fleet_meter_readings"))) return 0;
+async function meterUsage(connection, assetId) {
+  if (!(await tableExists(connection, "fleet_meter_readings"))) {
+    return { financeRows: 0, nonFinanceRows: 0 };
+  }
+
   const columns = await tableColumns(connection, "fleet_meter_readings");
   if (!columns.has("source_type")) {
-    return countByReference(
+    const total = await countByReference(
       connection,
       "fleet_meter_readings",
       "asset_id",
       assetId
     );
+    return { financeRows: 0, nonFinanceRows: total };
   }
+
   const [[row]] = await connection.query(
-    `SELECT COUNT(*) AS row_count
+    `SELECT
+       SUM(CASE WHEN source_type = 'finance_machine_register' THEN 1 ELSE 0 END)
+         AS finance_rows,
+       SUM(CASE WHEN COALESCE(source_type, '') <> 'finance_machine_register'
+                THEN 1 ELSE 0 END) AS non_finance_rows
        FROM fleet_meter_readings
-      WHERE asset_id = ?
-        AND COALESCE(source_type, '') <> 'finance_machine_register'`,
+      WHERE asset_id = ?`,
     [assetId]
   );
-  return Number(row?.row_count || 0);
+
+  return {
+    financeRows: Number(row?.finance_rows || 0),
+    nonFinanceRows: Number(row?.non_finance_rows || 0),
+  };
 }
 
 async function classifyAssetUsage(connection, assetId, foreignKeys) {
@@ -171,38 +182,48 @@ async function classifyAssetUsage(connection, assetId, foreignKeys) {
   for (const foreignKey of foreignKeys) {
     const tableName = foreignKey.child_table;
     const columnName = foreignKey.child_column;
-    const count = await countByReference(
+
+    if (tableName === "equipment_media") {
+      const rows = await countByReference(
+        connection,
+        tableName,
+        columnName,
+        assetId
+      );
+      if (rows) financeEvidence.push({ table: tableName, rows });
+      continue;
+    }
+
+    if (tableName === "fleet_meter_readings") {
+      const usage = await meterUsage(connection, assetId);
+      if (usage.financeRows) {
+        financeEvidence.push({
+          table: tableName,
+          rows: usage.financeRows,
+          reason: "finance_opening_meter",
+        });
+      }
+      if (usage.nonFinanceRows) {
+        sharedReferences.push({
+          table: tableName,
+          rows: usage.nonFinanceRows,
+          reason: "non_finance_meter_history",
+        });
+      }
+      continue;
+    }
+
+    const rows = await countByReference(
       connection,
       tableName,
       columnName,
       assetId
     );
-    if (!count) continue;
-
-    if (tableName === "equipment_media") {
-      financeEvidence.push({ table: tableName, rows: count });
-      continue;
-    }
-
-    if (tableName === "fleet_meter_readings") {
-      const nonFinanceCount = await nonFinanceMeterCount(connection, assetId);
-      if (nonFinanceCount > 0) {
-        sharedReferences.push({
-          table: tableName,
-          rows: nonFinanceCount,
-          reason: "non_finance_meter_history",
-        });
-      } else {
-        financeEvidence.push({ table: tableName, rows: count });
-      }
-      continue;
-    }
-
-    if (!SAFE_DIRECT_CHILDREN.has(tableName)) {
+    if (rows) {
       sharedReferences.push({
         table: tableName,
-        rows: count,
-        reason: "non_finance_or_unclassified_business_history",
+        rows,
+        reason: "linked_business_or_control_history",
       });
     }
   }
@@ -214,108 +235,141 @@ async function classifyAssetUsage(connection, assetId, foreignKeys) {
   };
 }
 
-async function deleteFinanceAssetEvidence(connection, assetId) {
-  const deleted = {};
-
-  if (await tableExists(connection, "equipment_media")) {
-    const [result] = await connection.query(
-      "DELETE FROM equipment_media WHERE asset_id = ?",
-      [assetId]
-    );
-    deleted.equipment_media = Number(result.affectedRows || 0);
-  }
-
-  if (await tableExists(connection, "fleet_meter_readings")) {
-    const columns = await tableColumns(connection, "fleet_meter_readings");
-    if (columns.has("source_type")) {
-      const [result] = await connection.query(
-        `DELETE FROM fleet_meter_readings
-          WHERE asset_id = ?
-            AND source_type = 'finance_machine_register'`,
-        [assetId]
-      );
-      deleted.fleet_meter_readings = Number(result.affectedRows || 0);
-    }
-  }
-
-  const [assetResult] = await connection.query(
-    "DELETE FROM fleet_assets WHERE id = ?",
-    [assetId]
-  );
-  if (Number(assetResult.affectedRows || 0) !== 1) {
-    throw new Error(`Finance excavator ${assetId} could not be deleted exactly once.`);
-  }
-  deleted.fleet_assets = 1;
-  return deleted;
-}
-
 function retainedPurpose(sharedReferences) {
-  const names = sharedReferences.map((entry) => entry.table.toLowerCase());
+  const names = sharedReferences.map((entry) =>
+    String(entry.table || "").toLowerCase()
+  );
   return names.some((name) => name.startsWith("mining_"))
     ? "company_operations"
     : "hire_only";
 }
 
-async function hideSharedAssetFromFinance(
+async function scrubFinanceMedia(connection, assetId) {
+  if (!(await tableExists(connection, "equipment_media"))) return 0;
+  const columns = await tableColumns(connection, "equipment_media");
+  const assignments = [];
+  const params = [];
+
+  function set(column, expression, valueProvided = false, value = null) {
+    if (!columns.has(column)) return;
+    assignments.push(`${safeIdentifier(column)} = ${expression}`);
+    if (valueProvided) params.push(value);
+  }
+
+  set("file_url", "?", true, "");
+  set("storage_key", "NULL");
+  set("thumbnail_url", "NULL");
+  set("file_name", "NULL");
+  set("mime_type", "NULL");
+  set("file_size_bytes", "NULL");
+  set("caption", "?", true, "Retired during authorized Installment Finance restart.");
+  set("is_primary", "FALSE");
+  set("archived_at", "COALESCE(archived_at, NOW())");
+  set("archive_reason", "?", true, "Authorized Installment Finance restart cleanup");
+
+  if (!assignments.length) return 0;
+  params.push(assetId);
+  const [result] = await connection.query(
+    `UPDATE equipment_media
+        SET ${assignments.join(", ")}
+      WHERE asset_id = ?`,
+    params
+  );
+  return Number(result.affectedRows || 0);
+}
+
+async function removeFinanceOpeningMeters(connection, assetId) {
+  if (!(await tableExists(connection, "fleet_meter_readings"))) return 0;
+  const columns = await tableColumns(connection, "fleet_meter_readings");
+  if (!columns.has("source_type")) return 0;
+  const [result] = await connection.query(
+    `DELETE FROM fleet_meter_readings
+      WHERE asset_id = ?
+        AND source_type = 'finance_machine_register'`,
+    [assetId]
+  );
+  return Number(result.affectedRows || 0);
+}
+
+async function retireUnsharedFinanceAsset(connection, asset) {
+  const columns = await tableColumns(connection, "fleet_assets");
+  const assignments = [];
+
+  if (columns.has("is_active")) assignments.push("is_active = FALSE");
+  if (columns.has("sale_status")) assignments.push("sale_status = 'cancelled'");
+  if (columns.has("sale_reserved_until")) {
+    assignments.push("sale_reserved_until = NULL");
+  }
+  if (columns.has("main_image_url")) assignments.push("main_image_url = NULL");
+  if (columns.has("current_status")) {
+    assignments.push(
+      "current_status = CASE WHEN current_status IN ('sold','reserved') THEN 'available' ELSE current_status END"
+    );
+  }
+  if (columns.has("notes")) {
+    assignments.push(
+      "notes = CONCAT_WS(' | ', NULLIF(notes, ''), 'Retired by authorized Installment Finance restart cleanup.')"
+    );
+  }
+
+  if (!assignments.length) {
+    throw new Error("fleet_assets has no safe retirement columns.");
+  }
+
+  const [result] = await connection.query(
+    `UPDATE fleet_assets
+        SET ${assignments.join(", ")}
+      WHERE id = ?`,
+    [asset.id]
+  );
+  if (Number(result.affectedRows || 0) !== 1) {
+    throw new Error(`Finance excavator ${asset.id} could not be retired exactly once.`);
+  }
+
+  return {
+    media_rows_scrubbed: await scrubFinanceMedia(connection, asset.id),
+    finance_meter_rows_removed: await removeFinanceOpeningMeters(
+      connection,
+      asset.id
+    ),
+    fleet_asset_rows_retired: 1,
+  };
+}
+
+async function preserveSharedAssetOutsideFinance(
   connection,
   asset,
   sharedReferences
 ) {
+  const columns = await tableColumns(connection, "fleet_assets");
+  const assignments = [];
+  const params = [];
   const purpose = retainedPurpose(sharedReferences);
-  await connection.query(
-    `UPDATE fleet_assets
-        SET operational_purpose = ?,
-            sale_status = CASE
-              WHEN sale_status IN ('available','reserved','installment_active','cancelled')
-                THEN 'not_for_sale'
-              ELSE sale_status
-            END,
-            sale_reserved_until = NULL
-      WHERE id = ?`,
-    [purpose, asset.id]
-  );
 
-  await insertAuditEvent(connection, {
-    action: HIDDEN_ACTION,
-    action_type: HIDDEN_ACTION_TYPE,
-    entity_type: "fleet_asset",
-    entity_id: String(asset.id),
-    workspace_code: "equipment_installment_finance",
-    severity: "notice",
-    details: `Removed ${asset.asset_code || asset.id} - ${
-      asset.asset_name || "excavator"
-    } from Installment Finance visibility while preserving linked business history.`,
-    metadata_json: JSON.stringify({
-      retained_purpose: purpose,
-      shared_references: sharedReferences,
-    }),
-  });
+  if (columns.has("operational_purpose")) {
+    assignments.push("operational_purpose = ?");
+    params.push(purpose);
+  }
+  if (columns.has("sale_status")) {
+    assignments.push(
+      "sale_status = CASE WHEN sale_status IN ('available','reserved','installment_active','cancelled') THEN 'not_for_sale' ELSE sale_status END"
+    );
+  }
+  if (columns.has("sale_reserved_until")) {
+    assignments.push("sale_reserved_until = NULL");
+  }
+
+  if (assignments.length) {
+    params.push(asset.id);
+    await connection.query(
+      `UPDATE fleet_assets
+          SET ${assignments.join(", ")}
+        WHERE id = ?`,
+      params
+    );
+  }
 
   return purpose;
-}
-
-async function insertAuditEvent(connection, values) {
-  const columns = await tableColumns(connection, "activity_log");
-  const row = {
-    action: values.action,
-    details: values.details,
-    workspace_code: values.workspace_code,
-    entity_type: values.entity_type,
-    entity_id: values.entity_id,
-    action_type: values.action_type,
-    outcome: "success",
-    severity: values.severity || "info",
-    metadata_json: values.metadata_json || null,
-  };
-  const entries = Object.entries(row).filter(([column]) => columns.has(column));
-  if (!entries.length) return null;
-  const [result] = await connection.query(
-    `INSERT INTO activity_log (
-       ${entries.map(([column]) => safeIdentifier(column)).join(", ")}
-     ) VALUES (${entries.map(() => "?").join(", ")})`,
-    entries.map(([, value]) => value)
-  );
-  return Number(result.insertId || 0) || null;
 }
 
 async function visibleRegisteredAssetCount(connection) {
@@ -324,28 +378,21 @@ async function visibleRegisteredAssetCount(connection) {
        FROM activity_log registration
        INNER JOIN fleet_assets asset
          ON asset.id = CAST(registration.entity_id AS UNSIGNED)
+       INNER JOIN schema_migrations cleanup
+         ON cleanup.migration_name = ?
       WHERE registration.entity_type = 'fleet_asset'
         AND registration.entity_id REGEXP '^[0-9]+$'
+        AND asset.is_active = TRUE
         AND (
           registration.action_type = ?
           OR registration.action = ?
         )
-        AND NOT EXISTS (
-          SELECT 1
-            FROM activity_log hidden
-           WHERE hidden.entity_type = 'fleet_asset'
-             AND hidden.entity_id = registration.entity_id
-             AND (
-               hidden.action_type = ?
-               OR hidden.action = ?
-             )
-        )`,
-    [
-      REGISTER_ACTION_TYPE,
-      REGISTER_ACTION,
-      HIDDEN_ACTION_TYPE,
-      HIDDEN_ACTION,
-    ]
+        AND (
+          registration.workspace_code = 'equipment_installment_finance'
+          OR registration.workspace_code IS NULL
+        )
+        AND registration.created_at >= cleanup.applied_at`,
+    [CLEANUP_RECORD, REGISTER_ACTION_TYPE, REGISTER_ACTION]
   );
   return Number(row?.visible_count || 0);
 }
@@ -379,16 +426,18 @@ async function runUserAuthorizedInstallmentExcavatorCleanup20260805({
     lockAcquired = true;
 
     if (await migrationApplied(db, CLEANUP_RECORD)) {
+      const visibleCount = await visibleRegisteredAssetCount(db);
       return {
         status: "skipped",
         reason: "Installment Finance excavator cleanup was already completed.",
         cleanup_record: CLEANUP_RECORD,
+        visible_finance_excavators: visibleCount,
       };
     }
 
     if (!(await migrationApplied(db, PREVIOUS_RESET_RECORD))) {
       throw new Error(
-        "The Installment Finance operational reset must complete before excavators are removed."
+        "The Installment Finance operational reset must complete before excavators are retired."
       );
     }
 
@@ -397,33 +446,21 @@ async function runUserAuthorizedInstallmentExcavatorCleanup20260805({
 
     const candidates = await financeRegisteredAssets(db);
     const foreignKeys = await referencingForeignKeys(db);
-    const deletedAssets = [];
+    const retiredAssets = [];
     const retainedSharedAssets = [];
 
     for (const asset of candidates) {
       const usage = await classifyAssetUsage(db, asset.id, foreignKeys);
       if (usage.removable) {
-        const deleted = await deleteFinanceAssetEvidence(db, asset.id);
-        await insertAuditEvent(db, {
-          action: DELETED_ACTION,
-          action_type: DELETED_ACTION_TYPE,
-          entity_type: "fleet_asset",
-          entity_id: String(asset.id),
-          workspace_code: "equipment_installment_finance",
-          severity: "notice",
-          details: `Deleted ${asset.asset_code || asset.id} - ${
-            asset.asset_name || "excavator"
-          } from the user-authorized Installment Finance restart data.`,
-          metadata_json: JSON.stringify({ deleted }),
-        });
-        deletedAssets.push({
+        const evidence = await retireUnsharedFinanceAsset(db, asset);
+        retiredAssets.push({
           id: asset.id,
           asset_code: asset.asset_code,
           asset_name: asset.asset_name,
-          deleted,
+          evidence,
         });
       } else {
-        const purpose = await hideSharedAssetFromFinance(
+        const purpose = await preserveSharedAssetOutsideFinance(
           db,
           asset,
           usage.sharedReferences
@@ -438,50 +475,37 @@ async function runUserAuthorizedInstallmentExcavatorCleanup20260805({
       }
     }
 
-    const visibleCount = await visibleRegisteredAssetCount(db);
-    if (visibleCount !== 0) {
-      throw new Error(
-        `${visibleCount} Finance-registered excavator(s) would still be visible after cleanup.`
-      );
-    }
-
+    const markerDescription = `${CLEANUP_DESCRIPTION} Retired ${retiredAssets.length}; preserved outside Finance ${retainedSharedAssets.length}.`;
     await db.query(
       `INSERT INTO schema_migrations (migration_name, description)
        VALUES (?, ?)`,
-      [CLEANUP_RECORD, CLEANUP_DESCRIPTION]
+      [CLEANUP_RECORD, markerDescription]
     );
 
-    await insertAuditEvent(db, {
-      action: "EQUIPMENT_FINANCE_EXCAVATOR_RESTART_CLEANUP_COMPLETED",
-      action_type: "equipment.finance.excavator.restart_cleanup.completed",
-      entity_type: "system",
-      entity_id: CLEANUP_RECORD,
-      workspace_code: "equipment_installment_finance",
-      severity: "notice",
-      details: `Completed the user-authorized Installment Finance excavator cleanup: ${deletedAssets.length} deleted and ${retainedSharedAssets.length} preserved outside Finance.`,
-      metadata_json: JSON.stringify({
-        deleted_assets: deletedAssets,
-        retained_shared_assets: retainedSharedAssets,
-        visible_finance_excavators: visibleCount,
-      }),
-    });
+    const visibleCount = await visibleRegisteredAssetCount(db);
+    if (visibleCount !== 0) {
+      throw new Error(
+        `${visibleCount} pre-reset Finance excavator(s) would still be visible after cleanup.`
+      );
+    }
 
     await db.commit();
     transactionStarted = false;
 
     const result = {
       status: "success",
-      mode: "production_one_time_installment_excavator_cleanup",
+      mode: "production_one_time_installment_excavator_retirement",
       database: databaseName,
       cleanup_record: CLEANUP_RECORD,
       candidates: candidates.length,
-      deleted_assets: deletedAssets,
+      retired_assets: retiredAssets,
       retained_shared_assets: retainedSharedAssets,
       visible_finance_excavators: visibleCount,
       preserved: [
         "Spare Parts",
         "Mining Operations history",
         "Equipment Hire history",
+        "shared Fleet foreign-key history",
         "users, permissions and settings",
         "system audit history",
       ],
