@@ -14,7 +14,7 @@ import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 
-const APP_SHELL_RELEASE = "finance-outer-workspace-unlock-v34";
+const APP_SHELL_RELEASE = "finance-outer-workspace-unlock-v33";
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
