@@ -227,6 +227,7 @@ async function loadCandidates(connection) {
      WHERE d.balance > 0.005
        AND d.amount_paid <= 0.005
        AND COALESCE(s.amount_paid, 0) <= 0.005
+       AND LOWER(COALESCE(d.status, '')) NOT IN ('paid', 'partial')
        AND COALESCE(s.customer_id, d.customer_id) IS NOT NULL
        AND COALESCE(NULLIF(TRIM(s.customer_name), ''), NULLIF(TRIM(d.customer_name), '')) IS NOT NULL
        AND NULLIF(TRIM(c.name), '') IS NOT NULL
@@ -245,6 +246,10 @@ async function loadCandidates(connection) {
 function validateCandidate(candidate) {
   if (!candidate.sale_id || !candidate.receipt_number) {
     throw new Error("A candidate debt has no exact linked sale receipt.");
+  }
+  const normalizedStatus = cleanText(candidate.status, 20).toLowerCase();
+  if (["paid", "partial"].includes(normalizedStatus)) {
+    throw new Error(`Candidate ${candidate.receipt_number} has a protected paid or partial status.`);
   }
   if (money(candidate.amount_paid) > 0.005 || money(candidate.balance) <= 0.005) {
     throw new Error(`Candidate ${candidate.receipt_number} is not an unpaid open debt.`);

@@ -38,6 +38,7 @@ test("candidate must be one exact unpaid open receipt with a conflicting profile
       profile_customer_name: "PT G2",
       amount_paid: 0,
       balance: 1900,
+      status: "unpaid",
     })
   );
   assert.throws(
@@ -49,6 +50,7 @@ test("candidate must be one exact unpaid open receipt with a conflicting profile
         profile_customer_name: "PT G2",
         amount_paid: 0,
         balance: 100,
+        status: "unpaid",
       }),
     /proven name conflict/
   );
@@ -61,8 +63,31 @@ test("candidate must be one exact unpaid open receipt with a conflicting profile
         profile_customer_name: "PT G2",
         amount_paid: 1,
         balance: 99,
+        status: "unpaid",
       }),
     /not an unpaid open debt/
+  );
+});
+
+test("paid and partial statuses can never become isolation candidates", () => {
+  for (const status of ["paid", "partial", "PAID", " Partial "]) {
+    assert.throws(
+      () =>
+        validateCandidate({
+          sale_id: 20,
+          receipt_number: `R-${status}`,
+          receipt_customer_name: "MASTER MICKEY",
+          profile_customer_name: "PT G2",
+          amount_paid: 0,
+          balance: 100,
+          status,
+        }),
+      /protected paid or partial status/
+    );
+  }
+  assert.match(
+    source,
+    /LOWER\(COALESCE\(d\.status, ''\)\) NOT IN \('paid', 'partial'\)/
   );
 });
 
