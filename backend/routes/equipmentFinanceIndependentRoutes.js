@@ -13,6 +13,7 @@ const {
   assertProfessionalSchema,
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
+const equipmentFinanceAdministratorOverrideRoutes = require("./equipmentFinanceAdministratorOverrideRoutes");
 const equipmentFinancePhaseThreeWorkflowRoutes = require("./equipmentFinancePhaseThreeWorkflowRoutes");
 const equipmentFinancePhaseThreeCreationGuardRoutes = require("./equipmentFinancePhaseThreeCreationGuardRoutes");
 const equipmentFinanceMachineVisibilityRoutes = require("./equipmentFinanceMachineVisibilityRoutes");
@@ -127,6 +128,10 @@ function financePolicy() {
 
 // Phase 2 owns every protected Finance machine/application image.
 router.use(equipmentFinancePhaseTwoImageRoutes);
+
+// Administrators may approve their own draft immediately. This route runs
+// before the standard submit/review pipeline and calls next() for non-admins.
+router.use(equipmentFinanceAdministratorOverrideRoutes);
 
 // Phase 3 owns readiness, count/summary/page listing, detail, submission and
 // manager decisions. It executes before old window-query and split handlers.

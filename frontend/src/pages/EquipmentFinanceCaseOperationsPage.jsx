@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import "../styles/installmentCompletionPhaseOne.css";
+import "../styles/equipmentFinanceProductionHotfix.css";
 
 const API = "/equipment-catalogue/sales/operational-polish";
 const PAGE_SIZE = 25;
