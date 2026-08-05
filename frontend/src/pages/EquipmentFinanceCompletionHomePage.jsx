@@ -40,8 +40,8 @@ const WORKFLOW = [
   {
     number: 6,
     title: "Account & Payments",
-    description: "Open the active customer account, payment history, balance and next due date.",
-    to: "/equipment-installment-finance/applications?stage=collections",
+    description: "Monitor the active account, then record receipts from the dedicated Payments Centre.",
+    to: "/equipment-installment-finance/applications?stage=accounts",
     action: "Open active accounts",
   },
 ];
@@ -63,7 +63,10 @@ export default function EquipmentFinanceCompletionHomePage() {
             Start New Installment
           </Link>
           <Link to="/equipment-installment-finance/applications?stage=collections">
-            Record / View Payments
+            Record Payment
+          </Link>
+          <Link to="/equipment-installment-finance/applications?stage=customer-portfolios">
+            Customer Profiles
           </Link>
         </div>
       </header>
@@ -97,19 +100,22 @@ export default function EquipmentFinanceCompletionHomePage() {
             <p className="installment-completion__eyebrow">Payment guidance</p>
             <h2>Where do I record a payment?</h2>
             <span>
-              Use Opening Deposits before activation. After the account is active, open Active
-              Installments to see the customer balance, schedule and complete payment history.
+              Use Opening Deposits before activation. After activation, use Active Installments
+              for read-only account monitoring and Payments & Collections for every normal receipt.
             </span>
           </div>
           <div className="installment-completion__quick-links">
             <Link to="/equipment-installment-finance/applications?stage=deposit">
               Opening Deposit
             </Link>
-            <Link to="/equipment-installment-finance/applications?stage=collections">
-              Active Installments & Payments
+            <Link to="/equipment-installment-finance/applications?stage=accounts">
+              Active Installments
             </Link>
-            <Link to="/equipment-installment-finance/applications?stage=case-operations">
-              Customer Case History
+            <Link to="/equipment-installment-finance/applications?stage=collections">
+              Payments & Collections
+            </Link>
+            <Link to="/equipment-installment-finance/applications?stage=customer-portfolios">
+              Customer Installment Profile
             </Link>
           </div>
         </div>
@@ -126,7 +132,9 @@ export default function EquipmentFinanceCompletionHomePage() {
           <div><span>Applications & Approvals</span><strong>Full register and decisions</strong></div>
           <div><span>Task & Approval Inbox</span><strong>Work requiring action</strong></div>
           <div><span>Case Operations</span><strong>One case timeline and evidence</strong></div>
-          <div><span>Active Installments</span><strong>Balances and payments</strong></div>
+          <div><span>Active Installments</span><strong>Read-only balances and schedules</strong></div>
+          <div><span>Payments & Collections</span><strong>Record receipts and allocations</strong></div>
+          <div><span>Customer Profiles</span><strong>Complete customer installment history</strong></div>
         </div>
       </section>
     </main>

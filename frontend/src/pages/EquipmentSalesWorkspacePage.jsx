@@ -4,6 +4,9 @@ import EquipmentFinanceApplicationsPage from "./EquipmentFinanceApplicationsPage
 import EquipmentFinanceApplicationsCompletionPage from "./EquipmentFinanceApplicationsCompletionPage";
 import EquipmentFinancePhaseThreeStartRedirectPage from "./EquipmentFinancePhaseThreeStartRedirectPage";
 
+const EquipmentFinanceActiveInstallmentsPage = lazy(() =>
+  import("./EquipmentFinanceActiveInstallmentsPage")
+);
 const EquipmentFinanceAgreementActivationPage = lazy(() =>
   import("./EquipmentFinanceAgreementActivationPage")
 );
@@ -25,6 +28,9 @@ const EquipmentFinanceCorrectionsPage = lazy(() =>
 const EquipmentFinanceCustomerCentrePage = lazy(() =>
   import("./EquipmentFinanceCustomerCentrePage")
 );
+const EquipmentFinanceCustomerPortfolioPage = lazy(() =>
+  import("./EquipmentFinanceCustomerPortfolioPage")
+);
 const EquipmentFinanceDepositReservationPage = lazy(() =>
   import("./EquipmentFinanceDepositReservationPage")
 );
@@ -39,6 +45,9 @@ const EquipmentFinanceGuidePage = lazy(() =>
 );
 const EquipmentFinanceOperationalPolishPage = lazy(() =>
   import("./EquipmentFinanceOperationalPolishPage")
+);
+const EquipmentFinancePaymentsCentrePage = lazy(() =>
+  import("./EquipmentFinancePaymentsCentrePage")
 );
 const EquipmentFinanceProfessionalPage = lazy(() =>
   import("./EquipmentFinanceProfessionalPage")
@@ -92,6 +101,10 @@ function stagePage(stage) {
     return <EquipmentFinanceCustomerCentrePage />;
   }
 
+  if (stage === "customer-portfolios") {
+    return <EquipmentFinanceCustomerPortfolioPage />;
+  }
+
   if (stage === "machines") {
     return <EquipmentFinanceExcavatorsPage />;
   }
@@ -132,8 +145,16 @@ function stagePage(stage) {
     return <EquipmentFinanceDepositReservationPage />;
   }
 
-  if (stage === "collections") {
+  if (stage === "accounts") {
+    return <EquipmentFinanceActiveInstallmentsPage />;
+  }
+
+  if (stage === "collections-core") {
     return <EquipmentFinanceCollectionsMinimalPage />;
+  }
+
+  if (stage === "collections") {
+    return <EquipmentFinancePaymentsCentrePage />;
   }
 
   if (FINAL_LIFECYCLE_STAGES.has(stage)) {
