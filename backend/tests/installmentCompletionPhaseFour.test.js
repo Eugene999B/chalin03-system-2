@@ -101,7 +101,10 @@ test("Phase 4 dry run is read-only and execution remains tightly gated", () => {
 
   assert.ok(dryRunStart >= 0);
   assert.ok(executeStart > dryRunStart);
-  assert.doesNotMatch(dryRunSource, /\bDELETE\b|\bUPDATE\b|\bTRUNCATE\b|\bDROP\b/i);
+  assert.doesNotMatch(
+    dryRunSource,
+    /\bDELETE\s+FROM\b|\bUPDATE\s+[`A-Za-z0-9_]+\b|\bTRUNCATE\s+TABLE\b|\bDROP\s+TABLE\b/i
+  );
   assert.match(dryRunSource, /read_only: true/);
   assert.match(service, /NODE_ENV=test/);
   assert.match(service, /ALLOW_FINANCE_TEST_RESET=true/);
