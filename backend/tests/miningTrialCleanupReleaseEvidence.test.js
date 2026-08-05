@@ -20,7 +20,7 @@ const P5C = "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStar
 const P5D = "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && ";
 const P6 = "node scripts/runEquipmentFinancePhaseSixStartup.js && ";
 const P6_PERFORMANCE = "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && ";
-const INSTALLMENT_RESTART_RESET = "node scripts/runUserAuthorizedInstallmentRestartReset20260805.js && ";
+const INSTALLMENT_RESTART_RESET = "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && ";
 const STOCK_COUNT_20260802 = "node scripts/runBossApprovedProductQuantityCorrection20260802.js && ";
 const STOCK_COUNT_20260804 = "node scripts/runBossApprovedProductQuantityCorrection20260804.js && ";
 
