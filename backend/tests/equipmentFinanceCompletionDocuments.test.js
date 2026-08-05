@@ -1,0 +1,237 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const {
+  DOCUMENT_DEFINITIONS,
+} = require("../services/equipmentFinanceDocumentCompletionService");
+const {
+  renderCompletionPdf,
+  renderCompletionWord,
+} = require("../services/equipmentFinanceCompletionRendererService");
+
+function source(relativePath) {
+  return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
+}
+
+function snapshot() {
+  return {
+    generated_at: "2026-08-05T00:00:00.000Z",
+    template_version: "v1-approved",
+    company: {
+      name: "CHALIN 03 COMPANY LIMITED",
+      phone: "0249469080",
+      email: "agyapongcharles3@gmail.com",
+      postal_address: "P. O. Box 187, Dunkwa-on-Offin",
+      authorised_seller_name: "Finance Manager",
+    },
+    policy: {
+      legal_review_status: "approved",
+      agreement_terms:
+        "Ownership remains with Chalin 03 Company Limited until the reconciled account is fully settled.",
+      notice_cure_days: 14,
+    },
+    agreement: {
+      id: 601,
+      agreement_number: "ESA-DOC-001",
+      kyc_customer_name: "Ama Document Customer",
+      kyc_customer_phone: "0240000021",
+      residential_address: "Dunkwa-on-Offin",
+      id_type: "Ghana Card",
+      id_number: "GHA-123456789-0",
+      asset_code: "EXC-301",
+      asset_name: "LiuGong 922E",
+      make: "LiuGong",
+      model: "922E",
+      serial_number: "LG922E-DOC",
+      chassis_number: "LG922E-CHASSIS",
+      total_amount: 2500000,
+      deposit_required: 1000000,
+      deposit_received: 1000000,
+      financed_amount: 1500000,
+      amount_paid: 1150000,
+      outstanding_balance: 1350000,
+      payment_frequency: "fortnightly",
+      installment_count: 10,
+      first_due_date: "2026-06-23",
+      final_due_date: "2026-10-31",
+      guarantor_name: "Kojo Guarantor",
+      guarantor_phone: "0241000000",
+      guarantor_id_number: "GHA-999999999-9",
+      guarantor_relationship: "Business partner",
+      kyc_status: "verified",
+      affordability_status: "eligible",
+      risk_band: "medium",
+    },
+    schedule: [
+      {
+        id: 801,
+        sequence_number: 1,
+        due_date: "2026-06-23",
+        scheduled_amount: 150000,
+        amount_paid: 150000,
+        balance: 0,
+        schedule_status: "paid",
+      },
+      {
+        id: 802,
+        sequence_number: 2,
+        due_date: "2026-07-07",
+        scheduled_amount: 150000,
+        amount_paid: 0,
+        balance: 150000,
+        schedule_status: "overdue",
+      },
+    ],
+    payments: [
+      {
+        id: 701,
+        payment_number: "ESP-DOC-001",
+        receipt_number: "ESR-DOC-001",
+        payment_date: "2026-06-23T10:30:00.000Z",
+        amount: 150000,
+        payment_method: "cash",
+        reference_number: "CASH-001",
+        received_by_name: "Finance Cashier",
+      },
+    ],
+    media: [],
+    signatures: [],
+    reconciliation: { consistent: true, mismatches: [] },
+    document_context: {
+      payment: {
+        id: 701,
+        payment_number: "ESP-DOC-001",
+        receipt_number: "ESR-DOC-001",
+        payment_date: "2026-06-23T10:30:00.000Z",
+        amount: 150000,
+        payment_method: "cash",
+        reference_number: "CASH-001",
+        received_by_name: "Finance Cashier",
+      },
+      payment_allocations: [
+        {
+          schedule_id: 801,
+          sequence_number: 1,
+          due_date: "2026-06-23",
+          allocated_amount: 150000,
+        },
+      ],
+      overdue: {
+        amount: 150000,
+        count: 1,
+        oldest_due_date: "2026-07-07",
+        rows: [
+          {
+            sequence_number: 2,
+            due_date: "2026-07-07",
+            scheduled_amount: 150000,
+            amount_paid: 0,
+            balance: 150000,
+            schedule_status: "overdue",
+          },
+        ],
+      },
+      delivery: null,
+      ownership_transfer: null,
+      amendment: null,
+    },
+  };
+}
+
+function documentRecord(type, number = "EFD-DOC-001") {
+  return {
+    id: 901,
+    document_number: number,
+    document_type: type,
+    document_format: "pdf",
+    snapshot_checksum: "a".repeat(64),
+    snapshot: snapshot(),
+    issued_at: "2026-08-05T00:00:00.000Z",
+  };
+}
+
+test("completion pack exposes every required professional document", () => {
+  const required = [
+    "installment_agreement",
+    "customer_agreement_copy",
+    "company_agreement_copy",
+    "boss_approval_pack",
+    "payment_schedule",
+    "machine_annexure",
+    "guarantor_undertaking",
+    "payment_receipt",
+    "customer_statement",
+    "delivery_handover_note",
+    "arrears_notice",
+    "amendment_agreement",
+    "settlement_confirmation",
+    "ownership_transfer",
+  ];
+  assert.deepEqual(Object.keys(DOCUMENT_DEFINITIONS), required);
+  assert.deepEqual(DOCUMENT_DEFINITIONS.payment_receipt.formats, ["pdf", "thermal", "print"]);
+  assert.match(DOCUMENT_DEFINITIONS.customer_agreement_copy.short_title, /Customer Copy/);
+  assert.match(DOCUMENT_DEFINITIONS.boss_approval_pack.short_title, /Boss Approval Pack/);
+});
+
+test("renderer creates branded A4 agreement PDF and exact-payment thermal PDF", async () => {
+  const agreementPdf = await renderCompletionPdf(
+    documentRecord("customer_agreement_copy", "EFAC-DOC-001")
+  );
+  assert.equal(agreementPdf.subarray(0, 4).toString(), "%PDF");
+  assert.ok(agreementPdf.length > 1800);
+
+  const receiptPdf = await renderCompletionPdf(
+    documentRecord("payment_receipt", "EFR-DOC-001"),
+    { layout: "thermal" }
+  );
+  assert.equal(receiptPdf.subarray(0, 4).toString(), "%PDF");
+  assert.ok(receiptPdf.length > 900);
+});
+
+test("renderer creates editable Word-compatible branded output", () => {
+  const buffer = renderCompletionWord(
+    documentRecord("customer_statement", "EFST-DOC-001")
+  );
+  const html = buffer.toString("utf8");
+  assert.match(html, /CHALIN 03 COMPANY LIMITED/);
+  assert.match(html, /Customer Installment Statement/);
+  assert.match(html, /EFST-DOC-001/);
+  assert.match(html, /ESR-DOC-001/);
+  assert.match(html, /Immutable snapshot/);
+});
+
+test("completion service preserves reconciliation, legal, payment and lifecycle controls", () => {
+  const service = source("services/equipmentFinanceDocumentCompletionService.js");
+  assert.match(service, /EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED/);
+  assert.match(service, /EQUIPMENT_FINANCE_TERMS_APPROVAL_REQUIRED/);
+  assert.match(service, /Choose the exact committed payment/);
+  assert.match(service, /No approved or applied amendment/);
+  assert.match(service, /Full settlement is required/);
+  assert.match(service, /controlled ownership transfer/);
+  assert.match(service, /equipment_sale_payment_allocations/);
+  assert.match(service, /equipment_deliveries/);
+  assert.match(service, /equipment_ownership_transfers/);
+  assert.match(service, /equipment_finance_case_amendments/);
+  assert.match(service, /createHash\("sha256"\)/);
+  assert.match(service, /equipment_finance_issued_documents/);
+});
+
+test("completion routes own authenticated issue and format-specific download paths", () => {
+  const routes = source("routes/equipmentFinanceDocumentCompletionRoutes.js");
+  const independent = source("routes/equipmentFinanceIndependentRoutes.js");
+  assert.match(routes, /completion-documents\/options/);
+  assert.match(routes, /completion-documents`/);
+  assert.match(routes, /requirePermission\("fleet.assets.manage"\)/);
+  assert.match(routes, /requirePermission\("fleet.assets.view"\)/);
+  assert.match(routes, /application\/msword/);
+  assert.match(routes, /application\/pdf/);
+  assert.match(routes, /layout: thermal \? "thermal" : "a4"/);
+  assert.match(routes, /X-Chalin03-Snapshot-Checksum/);
+  assert.match(routes, /equipmentFinanceCompletionRendererService/);
+  assert.ok(
+    independent.indexOf("router.use(equipmentFinanceDocumentCompletionRoutes)") <
+      independent.indexOf("router.use(equipmentFinanceProfessionalRoutes)")
+  );
+});
