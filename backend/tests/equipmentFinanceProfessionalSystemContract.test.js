@@ -68,5 +68,7 @@ test("dedicated guide teaches the complete installment journey", () => {
   assert.match(guide, /Corrections|Reversals/);
   assert.match(guide, /delivery/i);
   assert.match(guide, /ownership/i);
-  assert.match(guide, /production Finance reset is permanently blocked/);
+  assert.match(guide, /dated owner-authorized restart release/);
+  assert.match(guide, /self-disabling after its schema_migrations marker/);
+  assert.match(guide, /general production reset endpoint.*remain blocked/);
 });
