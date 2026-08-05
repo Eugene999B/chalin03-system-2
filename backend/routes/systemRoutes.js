@@ -12,7 +12,9 @@ const {
 const {
   getFeatureSnapshot,
   getPublicFeatureSnapshot,
+  requireFeature,
 } = require("../services/featureFlagService");
+const publicContentRoutes = require("./publicContentRoutes");
 
 const router = express.Router();
 const startedAt = Date.now();
@@ -253,6 +255,15 @@ router.get("/features/staff", requireAuth, (req, res) => {
     request_id: req.requestId || null,
   });
 });
+
+// The public website API is anonymous but completely disabled unless the
+// publicWebsite feature flag is effective. The feature gate runs before any
+// database query or route-specific rate limiter.
+router.use(
+  "/public/content",
+  requireFeature("publicWebsite"),
+  publicContentRoutes
+);
 
 router.get("/readiness", async (req, res) => {
   try {
