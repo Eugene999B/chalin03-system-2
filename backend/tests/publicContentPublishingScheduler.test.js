@@ -24,6 +24,14 @@ const schedulerSource = fs.readFileSync(
   path.join(repoRoot, "backend/services/publicContentPublishingScheduler.js"),
   "utf8"
 );
+const serverSource = fs.readFileSync(
+  path.join(repoRoot, "backend/server.js"),
+  "utf8"
+);
+const envExample = fs.readFileSync(
+  path.join(repoRoot, "backend/.env.example"),
+  "utf8"
+);
 
 const EXPECTED_SIMPLE_TABLES = Object.freeze([
   "public_navigation_items",
@@ -88,6 +96,7 @@ test("scheduler interval cannot run more often than once per minute", () => {
     120000
   );
   assert.equal(MAX_BATCH_SIZE, 100);
+  assert.match(envExample, /PUBLIC_CONTENT_SCHEDULER_INTERVAL_MS=60000/);
 });
 
 test("scheduler table registry exactly matches all simple publishable tables", () => {
@@ -107,7 +116,10 @@ test("dynamic SQL identifiers are allowlisted by format", () => {
     assertSafeIdentifier("public_news_articles"),
     "public_news_articles"
   );
-  assert.throws(() => assertSafeIdentifier("public_news; DROP TABLE users"), /Unsafe/);
+  assert.throws(
+    () => assertSafeIdentifier("public_news; DROP TABLE users"),
+    /Unsafe/
+  );
   assert.throws(() => assertSafeIdentifier("public-news"), /Unsafe/);
 });
 
@@ -124,6 +136,21 @@ test("scheduler uses advisory locking, UTC dates, transactions and immutable aud
   assert.match(schedulerSource, /scheduled_content_published/);
   assert.match(schedulerSource, /page_expired/);
   assert.match(schedulerSource, /content_expired/);
+});
+
+test("backend starts the scheduler only after normal startup checks complete", () => {
+  assert.match(
+    serverSource,
+    /require\("\.\/services\/publicContentPublishingScheduler"\)/
+  );
+  assert.match(
+    serverSource,
+    /app\.listen\([\s\S]*?startPublicContentScheduler\(\)/
+  );
+  assert.match(
+    serverSource,
+    /if \(publicContentScheduler\.started\)[\s\S]*?public-content scheduler started/
+  );
 });
 
 test("missing Phase 2 schema is handled as a safe scheduler skip", () => {
