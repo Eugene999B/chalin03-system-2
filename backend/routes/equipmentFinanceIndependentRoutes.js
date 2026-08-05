@@ -36,6 +36,7 @@ const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocument
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
 const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
 const equipmentFinancePhaseSixRoutes = require("./equipmentFinancePhaseSixRoutes");
+const installmentCompletionPhaseFourRoutes = require("./installmentCompletionPhaseFourRoutes");
 const {
   router: equipmentFinanceExportPeriodRoutes,
 } = require("./equipmentFinanceExportPeriodRoutes");
@@ -117,6 +118,8 @@ function financePolicy() {
     phase6_portfolio_reporting: true,
     phase6_accounting_export: true,
     phase6_thermal_receipt: true,
+    completion_phase_four_enabled: true,
+    production_finance_reset_blocked: true,
   };
 }
 
@@ -159,6 +162,7 @@ router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 router.use(equipmentFinanceExportPeriodRoutes);
 router.use(equipmentFinancePhaseSixRoutes);
+router.use(installmentCompletionPhaseFourRoutes);
 
 router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);
 
