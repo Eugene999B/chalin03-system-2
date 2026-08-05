@@ -84,7 +84,14 @@ assert.match(hotfixCss, /debt-desk__resolve-duplicates/);
 assert.match(hotfixCss, /customer-debt-merge-panel/);
 assert.match(hotfixCss, /@media \(max-width: 700px\)/);
 assert.match(hotfixCss, /@media \(max-width: 420px\)/);
-assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-live-hotfix-v31/);
-assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-v30/);
+assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 
 console.log("Spare Parts customer-first Debt Desk live hotfix contract passed.");

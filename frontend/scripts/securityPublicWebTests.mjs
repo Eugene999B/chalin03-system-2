@@ -69,13 +69,23 @@ assert.equal(
   false
 );
 
-assert.match(serviceWorker, /const CACHE_NAME = "chalin03-[^"]+"/);
+assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
+assert.match(
+  serviceWorker,
+  /const CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
+);
 assert.match(serviceWorker, /\/site\.webmanifest/);
 assert.match(serviceWorker, /\/favicon-192x192\.png/);
 assert.match(serviceWorker, /\/favicon-512x512\.png/);
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
-assert.match(serviceWorker, /cacheName !== CACHE_NAME/);
+assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
@@ -110,5 +120,5 @@ assert.match(publicMeta, /noindex, nofollow, noarchive/);
 assert.match(publicMeta, /link\[rel="canonical"\]/);
 
 console.log(
-  "Version Three public web, service worker, favicon, indexing and Cloudflare security checks passed."
+  "Version Three public web, deployment-specific service worker, favicon, indexing and Cloudflare security checks passed."
 );

@@ -85,7 +85,7 @@ test("credit decision remains separate from agreement activation and reservation
   assert.doesNotMatch(applications, /ownership-transfer|equipment reserved|terms_accepted/);
 });
 
-test("credit interface is phone-first and discoverable only in Finance", () => {
+test("credit interface is phone-first, Finance-only and protected from stale assets", () => {
   assert.match(layout, /Applications & Approvals/);
   assert.match(layout, /Start New Installment/);
   assert.match(layout, /No access to Hire jobs or contracts/);
@@ -96,5 +96,11 @@ test("credit interface is phone-first and discoverable only in Finance", () => {
   assert.match(css, /grid-template-columns:\s*1fr/);
   assert.match(css, /\.finance-simple__sticky-actions/);
   assert.match(css, /bottom:\s*0/);
-  assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
+  assert.match(
+    serviceWorker,
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+  assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 });

@@ -241,5 +241,10 @@ test("server and consolidated customer UI expose reconciled debt reminders", () 
   assert.match(settingsPanel, /Run Reminders Now/);
   assert.match(settingsPanel, /approved Meta WhatsApp Business API/);
   assert.match(css, /@media \(max-width: 760px\)/);
-  assert.match(sw, /chalin03-installment-finance-separation-v17/);
+  assert.match(
+    sw,
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(sw, /isBuildAssetRequest\(request, url\)/);
+  assert.match(sw, /CHALIN03_ASSET_MISMATCH/);
 });

@@ -85,7 +85,14 @@ assert.match(css, /finance-governance__metrics/);
 assert.match(css, /finance-governance__timeline/);
 assert.match(css, /finance-governance__form-grid/);
 assert.match(css, /finance-governance__table-wrap/);
-assert.match(serviceWorker, /chalin03-finance-recovery-governance-v29/);
-assert.match(serviceWorker, /chalin03-finance-arrears-control-v28/);
+assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 
 console.log("Finance rescheduling, default and recovery governance contract passed.");
