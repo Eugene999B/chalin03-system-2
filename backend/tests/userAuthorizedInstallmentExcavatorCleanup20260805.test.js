@@ -124,18 +124,13 @@ test("Finance bootstrap uses the cleanup cutoff and remains safe after a prior c
   );
 });
 
-test("Railway runs excavator cleanup after the reset and before API traffic", () => {
+test("excavator cleanup remains available as an explicit controlled command", () => {
   const start = packageJson.scripts.start;
-  const reset = start.indexOf(
-    "runUserAuthorizedInstallmentRestartResetLockFix20260805.js"
+  assert.doesNotMatch(
+    start,
+    /runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
+    "A one-time destructive cleanup must not block every normal Railway startup"
   );
-  const cleanup = start.indexOf(
-    "runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
-  );
-  const server = start.indexOf("exportWorkbookSafetyBootstrap.js server.js");
-  assert.ok(reset >= 0);
-  assert.ok(cleanup > reset);
-  assert.ok(server > cleanup);
   assert.equal(
     packageJson.scripts["reset:equipment-finance:excavators:production"],
     "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
