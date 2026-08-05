@@ -7,6 +7,9 @@ const {
   permissionsForWorkspace,
 } = require("../security/permissionCatalog");
 const {
+  CONTENT_STUDIO_PROTECTED_GRANTS,
+} = require("../security/contentStudioPermissionCatalog");
+const {
   equipmentRoleDefaultPermissions,
 } = require("../security/equipmentBusinessRoleTemplates");
 const {
@@ -31,6 +34,7 @@ const ADMIN_ONLY_GRANTS = Object.freeze([
   "security.admin",
   "system.diagnostics",
   "backup.restore",
+  ...CONTENT_STUDIO_PROTECTED_GRANTS,
 ]);
 
 let warnedMissingTable = false;
@@ -175,7 +179,12 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
   return applyPermissionOverrides(basePermissions, overrides);
 }
 
-function validateOverridePolicy({ targetUser, permissionCode, effect, workspaceCode }) {
+function validateOverridePolicy({
+  targetUser,
+  permissionCode,
+  effect,
+  workspaceCode,
+}) {
   if (!isKnownPermission(permissionCode)) {
     return {
       ok: false,
@@ -257,6 +266,12 @@ function permissionCategory(permissionCode) {
     operations: "Operational Documents",
     sms: "SMS",
     exports: "Exports",
+    public_content: "Content Studio — Content",
+    public_media: "Content Studio — Media",
+    public_navigation: "Content Studio — Navigation",
+    public_settings: "Content Studio — Website Settings",
+    public_forms: "Content Studio — Forms",
+    public_submissions: "Content Studio — Enquiries",
   };
 
   return labels[prefix] || "Other";
