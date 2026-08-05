@@ -61,6 +61,8 @@ assert.match(applications, /Case Operations/);
 assert.match(applications, /EquipmentFinanceApplicationsOptionalPage/);
 assert.match(applications, /responseType: "blob"/);
 assert.match(applications, /Approve Now/);
+assert.match(applications, /Approve installment now/);
+assert.match(applications, /characterData: true/);
 assert.match(applications, /useAuth/);
 assert.match(applications, /completionObjectUrl/);
 assert.match(applications, /equipmentFinanceProductionHotfix\.css/);
