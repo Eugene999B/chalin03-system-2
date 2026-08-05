@@ -48,8 +48,9 @@ for (const type of [
   assert.match(page, new RegExp(type));
 }
 
-assert.match(page, /completion-documents\/options/);
-assert.match(page, /completion-documents\/issue/);
+assert.match(page, /const COMPLETION_API = `\$\{PROFESSIONAL_API\}\/completion-documents`/);
+assert.match(page, /\$\{COMPLETION_API\}\/options/);
+assert.match(page, /\$\{COMPLETION_API\}\/issue/);
 assert.match(page, /responseType: "blob"/);
 assert.match(page, /format === "print"/);
 assert.match(page, /documentType === "payment_receipt"/);
