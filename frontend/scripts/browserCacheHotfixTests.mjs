@@ -1,0 +1,109 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const currentFile = fileURLToPath(import.meta.url);
+const frontendRoot = path.resolve(path.dirname(currentFile), "..");
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(frontendRoot, relativePath), "utf8");
+}
+
+const serviceWorker = read("public/sw.js");
+const recovery = read("public/browser-cache-recovery.js");
+const mainEntry = read("src/main.jsx");
+const viteConfig = read("vite.config.js");
+const indexHtml = read("index.html");
+const headers = read("public/_headers");
+const redirects = read("public/_redirects");
+const notFound = read("public/404.html");
+
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
+assert.match(serviceWorker, /const BUILD_ASSET_PREFIX = "\/assets\/"/);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+assert.match(serviceWorker, /isHtml\(response\)/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
+assert.match(serviceWorker, /cache: "no-store"/);
+assert.match(serviceWorker, /client\.navigate\(url\.toString\(\)\)/);
+assert.match(serviceWorker, /function isTrustedClientMessage\(event\)/);
+assert.match(
+  serviceWorker,
+  /event\.origin !== self\.location\.origin/
+);
+assert.match(serviceWorker, /event\.source\?\.url/);
+assert.match(
+  serviceWorker,
+  /new URL\(sourceUrl\)\.origin === self\.location\.origin/
+);
+assert.match(serviceWorker, /if \(!isTrustedClientMessage\(event\)\)/);
+assert.doesNotMatch(
+  serviceWorker,
+  /cache\.put\(request,\s*responseClone\)/
+);
+
+assert.match(recovery, /vite:preloadError/);
+assert.match(recovery, /__chalin03RecoverFromAssetMismatch/);
+assert.match(recovery, /__chalin03MarkBootHealthy/);
+assert.match(recovery, /navigator\.serviceWorker/);
+assert.match(recovery, /registration\.unregister\(\)/);
+assert.match(recovery, /caches\.delete\(name\)/);
+assert.match(recovery, /__chalin03_recovery/);
+assert.match(recovery, /Updating Chalin 03/);
+
+assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
+assert.match(mainEntry, /browser-cache-integrity-v34/);
+assert.match(mainEntry, /updateViaCache: "none"/);
+assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
+assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
+assert.match(mainEntry, /encodeURIComponent\(APP_SHELL_RELEASE\)/);
+
+assert.match(viteConfig, /RAILWAY_GIT_COMMIT_SHA/);
+assert.match(viteConfig, /CF_PAGES_COMMIT_SHA/);
+assert.match(viteConfig, /GITHUB_SHA/);
+assert.match(viteConfig, /Date\.now\(\)\.toString\(36\)/);
+assert.match(
+  viteConfig,
+  /"import\.meta\.env\.VITE_CHALIN03_BUILD_ID"/
+);
+
+assert.match(
+  indexHtml,
+  /<script src="\/browser-cache-recovery\.js"><\/script>/
+);
+
+const redirectRules = redirects
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter(Boolean);
+
+assert.equal(redirectRules[0], "/assets/* /404.html 404");
+assert.equal(redirectRules.at(-1), "/* /index.html 200");
+
+assert.match(
+  headers,
+  /\/sw\.js\s+Cache-Control: no-store, max-age=0, must-revalidate/
+);
+assert.match(
+  headers,
+  /\/browser-cache-recovery\.js\s+Cache-Control: no-store, max-age=0, must-revalidate/
+);
+assert.match(
+  headers,
+  /\/index\.html\s+Cache-Control: no-store, max-age=0, must-revalidate/
+);
+assert.match(
+  headers,
+  /\/assets\/\*\s+Cache-Control: public, max-age=31536000, immutable/
+);
+assert.match(headers, /\/404\.html/);
+assert.match(notFound, /data-chalin03-static-404="true"/);
+
+console.log(
+  "✅ Browser cache hotfix source contracts passed: retired build assets cannot be cached as HTML, app-shell releases are build-specific, worker messages are same-origin, and failed chunks self-recover."
+);

@@ -23,23 +23,35 @@ const logoutCall = auth.indexOf("await logout({ expectedToken: refreshToken })",
 assert.ok(responseGuard >= 0, "newer-session guard must exist");
 assert.ok(logoutCall > responseGuard, "newer-session guard must run before logout");
 
-assert.match(main, /APP_SHELL_RELEASE = "finance-outer-workspace-unlock-v33"/);
+assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
 assert.match(
   main,
-  /register\(`\/sw\.js\?release=\$\{APP_SHELL_RELEASE\}`,[\s\S]*updateViaCache: "none"/
+  /APP_SHELL_RELEASE = `browser-cache-integrity-v34-\$\{APP_BUILD_ID\}`/
+);
+assert.match(
+  main,
+  /register\([\s\S]*`\/sw\.js\?release=\$\{encodeURIComponent\(APP_SHELL_RELEASE\)\}`[\s\S]*updateViaCache: "none"/
 );
 assert.match(main, /registration\.update\(\)/);
-assert.match(worker, /const CACHE_NAME = "chalin03-[^"]+"/);
-assert.match(worker, /async function cachedResponseOrOffline\(/);
-assert.match(worker, /cacheName !== CACHE_NAME/);
+assert.match(main, /CHALIN03_ASSET_MISMATCH/);
+assert.match(worker, /const CACHE_PREFIX = "chalin03-"/);
 assert.match(
   worker,
-  /fetch\(request, \{ cache: "no-store" \}\)[\s\S]*catch\(\(\) => cachedResponseOrOffline\("\/"\)\)/
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
 );
 assert.match(
   worker,
-  /fetch\(request\)[\s\S]*catch\(\(\) => cachedResponseOrOffline\(request\)\)/
+  /const CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
 );
-assert.match(worker, /return buildOfflineResponse\(\)/);
+assert.match(worker, /async function cachedShell\(\)/);
+assert.match(worker, /name !== CACHE_NAME/);
+assert.match(worker, /url\.origin !== self\.location\.origin/);
+assert.match(worker, /url\.pathname\.startsWith\("\/api"\)/);
+assert.match(worker, /isBuildAssetRequest\(request, url\)/);
+assert.match(worker, /networkBuildAsset\(request\)/);
+assert.match(worker, /isHtml\(response\)/);
+assert.match(worker, /X-Chalin03-Asset-Mismatch/);
+assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
+assert.match(worker, /return \(await cachedShell\(\)\) \|\| offlineShell\(\)/);
 
-console.log("Desktop AuthContext race and cache refresh contract passed.");
+console.log("Desktop AuthContext race and deployment-specific cache refresh contract passed.");
