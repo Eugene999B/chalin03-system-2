@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   FEATURE_DEFINITIONS,
@@ -83,6 +85,20 @@ test("public snapshot exposes only public-safe flags", () => {
   assert.equal("aiEnabled" in snapshot, false);
 });
 
+test("staff snapshot contains effective booleans but no environment metadata", () => {
+  const snapshot = getFeatureSnapshot({
+    env: {
+      FEATURE_AI_ENABLED: "true",
+      FEATURE_CHALIN_COPILOT: "true",
+    },
+  });
+
+  assert.equal(snapshot.aiEnabled, true);
+  assert.equal(snapshot.chalinCopilot, true);
+  assert.ok(Object.values(snapshot).every((value) => typeof value === "boolean"));
+  assert.equal("FEATURE_AI_ENABLED" in snapshot, false);
+});
+
 test("requireFeature blocks disabled routes with a controlled response", () => {
   const previous = process.env.FEATURE_CONTENT_STUDIO;
   delete process.env.FEATURE_CONTENT_STUDIO;
@@ -140,4 +156,21 @@ test("unknown feature keys fail immediately", () => {
     () => requireFeature("notARealFeature"),
     (error) => error?.code === "UNKNOWN_FEATURE_FLAG"
   );
+});
+
+test("system feature endpoints preserve public and staff security boundaries", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../routes/systemRoutes.js"),
+    "utf8"
+  );
+
+  assert.match(source, /router\.get\("\/features\/public"/);
+  assert.match(source, /flags:\s*getPublicFeatureSnapshot\(\)/);
+  assert.match(
+    source,
+    /router\.get\("\/features\/staff",\s*requireAuth,/
+  );
+  assert.match(source, /flags:\s*getFeatureSnapshot\(\)/);
+  assert.match(source, /Cache-Control/);
+  assert.match(source, /no-store/);
 });
