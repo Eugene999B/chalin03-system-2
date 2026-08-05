@@ -120,8 +120,8 @@ export default function InstallmentCompletionPhaseFourPage() {
           <strong>Production reset is permanently blocked</strong>
           <p>
             This release does not delete Railway production Finance data. The execution route
-            works only with <code>NODE_ENV=test</code>, an explicit test-reset flag and a database
-            name containing <code>_test</code>.
+            works only with <code>NODE_ENV=test</code>, <code>ALLOW_FINANCE_TEST_RESET=true</code>
+            and a database name containing <code>_test</code>.
           </p>
         </div>
       </section>
