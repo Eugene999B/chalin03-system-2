@@ -7,15 +7,21 @@ const backendDir = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
 const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const cleanupStartupSource = fs.readFileSync(path.join(backendDir, "scripts", "runInstallmentExcavatorCleanupBestEffortStartup20260805.js"), "utf8");
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("Railway runs every reviewed recurring startup gate before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
   assert.doesNotMatch(
     packageJson.scripts.start,
-    /runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
-    "one-time destructive cleanup must not be a recurring Railway startup gate"
+    /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
+    "the fail-closed one-time cleanup must not block recurring Railway startup"
   );
+  assert.match(
+    cleanupStartupSource,
+    /API startup will continue with the operational-reset visibility cutoff/
+  );
+  assert.match(cleanupStartupSource, /process\.exitCode = 0/);
   const phases = [
     "runEquipmentFinancePhaseOneEmergencyRepair.js",
     "runEquipmentFinancePhaseOneSchemaStartup.js",
@@ -30,6 +36,7 @@ test("Railway runs every reviewed recurring startup gate before API traffic", ()
     "runEquipmentFinancePhaseSixStartup.js",
     "runEquipmentFinancePhaseSixPerformanceStartup.js",
     "runUserAuthorizedInstallmentRestartResetLockFix20260805.js",
+    "runInstallmentExcavatorCleanupBestEffortStartup20260805.js",
     "runBossApprovedProductQuantityCorrection20260802.js",
     "runBossApprovedProductQuantityCorrection20260804.js",
     "server.js",
