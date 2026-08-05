@@ -27,6 +27,7 @@ const equipmentCreditOptionalDecisionRoutes = require("./equipmentCreditOptional
 const equipmentFinanceDraftRecoveryRoutes = require("./equipmentFinanceDraftRecoveryRoutes");
 const equipmentFinanceAgreementActivationRoutes = require("./equipmentFinanceAgreementActivationRoutes");
 const equipmentFinanceDepositReservationRoutes = require("./equipmentFinanceDepositReservationRoutes");
+const equipmentFinanceDocumentCompletionRoutes = require("./equipmentFinanceDocumentCompletionRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
@@ -150,6 +151,10 @@ router.use("/agreement-activations", equipmentFinanceAgreementActivationRoutes);
 router.use("/credit-applications", equipmentCreditOptionalDecisionRoutes);
 router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
+
+// Completion documents own their dedicated issue/download paths before the
+// original professional routes. Legacy agreement-document paths remain intact.
+router.use(equipmentFinanceDocumentCompletionRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 router.use(equipmentFinanceExportPeriodRoutes);

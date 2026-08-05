@@ -106,7 +106,7 @@ jobs:
   finance-phase-three-browser:
     name: Finance Phase 2, 3 and 4 Chromium journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: frontend
@@ -140,6 +140,11 @@ jobs:
           set -o pipefail
           npx playwright test e2e/equipmentFinanceCompletionPhaseTwo.spec.js --timeout=120000 2>&1 | tee finance-completion-phase-two-browser.log
 
+      - name: Prove Completion Phase 3 professional documents and printing
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinanceCompletionPhaseThreeDocuments.spec.js --timeout=120000 2>&1 | tee finance-completion-phase-three-documents-browser.log
+
       - name: Prove the complete Finance application and approval pipeline
         run: |
           set -o pipefail
@@ -163,6 +168,7 @@ jobs:
           path: |
             frontend/finance-phase-two-images-browser.log
             frontend/finance-completion-phase-two-browser.log
+            frontend/finance-completion-phase-three-documents-browser.log
             frontend/finance-phase-three-approval-browser.log
             frontend/finance-phase-three-browser.log
             frontend/finance-phase-four-browser.log
