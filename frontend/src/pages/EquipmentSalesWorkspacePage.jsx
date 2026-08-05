@@ -34,6 +34,9 @@ const EquipmentFinanceCustomerPortfolioPage = lazy(() =>
 const EquipmentFinanceDepositReservationPage = lazy(() =>
   import("./EquipmentFinanceDepositReservationPage")
 );
+const EquipmentFinanceDocumentCentrePage = lazy(() =>
+  import("./EquipmentFinanceDocumentCentrePage")
+);
 const EquipmentFinanceExcavatorsPage = lazy(() =>
   import("./EquipmentFinanceExcavatorsPage")
 );
@@ -60,7 +63,7 @@ const EquipmentFinanceTaskInboxPage = lazy(() =>
 );
 
 const FINAL_LIFECYCLE_STAGES = new Set(["delivery", "ownership"]);
-const PROFESSIONAL_STAGES = new Set(["settings", "generated-documents", "staff"]);
+const PROFESSIONAL_STAGES = new Set(["settings", "staff"]);
 
 function FinanceStageFallback() {
   return (
@@ -117,12 +120,18 @@ function stagePage(stage) {
     return <EquipmentFinanceCaseWorkspacePage />;
   }
 
+  if (stage === "generated-documents") {
+    return <EquipmentFinanceDocumentCentrePage />;
+  }
+
+  // The original Document Studio remains available for diagnostic comparison
+  // and old internal references without becoming the normal staff destination.
+  if (stage === "generated-documents-core") {
+    return <EquipmentFinanceProfessionalPage mode="documents" />;
+  }
+
   if (PROFESSIONAL_STAGES.has(stage)) {
-    return (
-      <EquipmentFinanceProfessionalPage
-        mode={stage === "generated-documents" ? "documents" : stage}
-      />
-    );
+    return <EquipmentFinanceProfessionalPage mode={stage} />;
   }
 
   if (stage === "arrears") {
