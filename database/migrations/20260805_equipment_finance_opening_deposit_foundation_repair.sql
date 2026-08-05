@@ -1,6 +1,7 @@
 -- CHALIN 03 EQUIPMENT INSTALLMENT FINANCE
 -- OPENING DEPOSIT FOUNDATION STARTUP REPAIR
--- ADDITIVE AND IDEMPOTENT ONLY.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verified Professional Backup and separate verified SQL backup before production deployment.
 -- Existing agreements, payments, deposits, balances, reservations, Hire records,
 -- delivery records and ownership evidence are preserved.
 
