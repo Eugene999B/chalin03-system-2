@@ -19,6 +19,9 @@ const EquipmentFinanceCaseOperationsPage = lazy(() =>
 const EquipmentFinanceCaseWorkspacePage = lazy(() =>
   import("./EquipmentFinanceCaseWorkspacePage")
 );
+const EquipmentFinanceCollectionsMinimalPage = lazy(() =>
+  import("./EquipmentFinanceCollectionsMinimalPage")
+);
 const EquipmentFinanceCorrectionsPage = lazy(() =>
   import("./EquipmentFinanceCorrectionsPage")
 );
@@ -144,6 +147,10 @@ function stagePage(stage) {
 
   if (stage === "accounts") {
     return <EquipmentFinanceActiveInstallmentsPage />;
+  }
+
+  if (stage === "collections-core") {
+    return <EquipmentFinanceCollectionsMinimalPage />;
   }
 
   if (stage === "collections") {
