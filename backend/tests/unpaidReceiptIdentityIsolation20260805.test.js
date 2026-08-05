@@ -75,10 +75,15 @@ test("SQL excludes every receipt with real payment evidence", () => {
 });
 
 test("repair detaches only customer IDs and never rewrites financial fields", () => {
-  assert.match(source, /UPDATE sales\s+SET customer_id = NULL/s);
-  assert.match(source, /UPDATE debts\s+SET customer_id = NULL/s);
-  assert.doesNotMatch(source, /UPDATE debts[\s\S]*SET[\s\S]*(amount_owed|amount_paid|balance|status|due_date)\s*=/i);
-  assert.doesNotMatch(source, /UPDATE sales[\s\S]*SET[\s\S]*(total|amount_paid|balance)\s*=/i);
+  const updateStatements = [...source.matchAll(/UPDATE\s+(sales|debts)\s+SET\s+([\s\S]*?)\s+WHERE/gi)];
+  assert.equal(updateStatements.length, 2);
+  assert.deepEqual(
+    updateStatements.map((match) => [match[1].toLowerCase(), match[2].replace(/\s+/g, " ").trim()]),
+    [
+      ["sales", "customer_id = NULL"],
+      ["debts", "customer_id = NULL"],
+    ]
+  );
   assert.doesNotMatch(source, /DELETE\s+FROM|TRUNCATE\s+TABLE|DROP\s+TABLE/i);
 });
 
