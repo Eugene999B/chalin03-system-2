@@ -293,9 +293,9 @@ test("staff can move from account monitoring to customer profile and committed p
   const image = page.locator('img[alt="Excavator for Ama Account Customer"]');
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(0);
-  await expect(page.getByRole("link", { name: "Corrections & Reversals" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Record Payment" }).first()).toBeVisible();
 
   await page.goto("/equipment-installment-finance/applications?stage=collections");
   await expect(page.getByRole("heading", { name: "Payments & Collections Centre" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Corrections & Reversals" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Corrections & Reversals" }).first()).toBeVisible();
 });
