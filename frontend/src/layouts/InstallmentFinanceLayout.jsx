@@ -187,6 +187,14 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "Final Operations & Reset",
+        description: "Verify completion, prepare the read-only reset impact and prove a fresh journey",
+        path: "/equipment-installment-finance/applications?stage=finalization",
+        icon: "✅",
+        matchSearch: true,
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Help & Guide",
         description: "Beginner guide for creating, approving and operating an installment account",
         path: "/equipment-installment-finance/applications?stage=guide",
