@@ -1,4 +1,7 @@
 const { isOriginalSystemAdministrator } = require("./systemAdminIdentity");
+const {
+  CONTENT_STUDIO_PERMISSIONS,
+} = require("./contentStudioPermissionCatalog");
 
 const WORKSPACES = Object.freeze({
   SPARE_PARTS: "spare_parts",
@@ -128,6 +131,7 @@ const ALL_PERMISSIONS = Object.freeze([
   ...MINING_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   ...HIRE_PERMISSIONS,
+  ...CONTENT_STUDIO_PERMISSIONS,
   "operations.documents.view",
   "operations.documents.manage",
   "sms.manage",
@@ -157,6 +161,7 @@ const CATEGORY_SHARED_PERMISSIONS = Object.freeze([
   "shared.reports.export",
   "shared.audit.view",
   "exports.download",
+  ...CONTENT_STUDIO_PERMISSIONS,
 ]);
 
 const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
@@ -762,6 +767,7 @@ function getPublicPermissionCatalog() {
   return {
     workspaces: WORKSPACES,
     permissions: ALL_PERMISSIONS,
+    content_studio_permissions: CONTENT_STUDIO_PERMISSIONS,
     spare_parts_roles: SPARE_PARTS_GRANTS,
     mining_roles: MINING_ROLE_GRANTS,
     equipment_hire_roles: HIRE_ROLE_GRANTS,
@@ -775,6 +781,7 @@ module.exports = {
   MINING_PERMISSIONS,
   FLEET_PERMISSIONS,
   HIRE_PERMISSIONS,
+  CONTENT_STUDIO_PERMISSIONS,
   CATEGORY_SHARED_PERMISSIONS,
   SPARE_PARTS_CATEGORY_PERMISSIONS,
   MINING_CATEGORY_PERMISSIONS,
