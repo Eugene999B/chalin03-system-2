@@ -15,6 +15,7 @@ const {
 const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
 const equipmentFinancePhaseThreeWorkflowRoutes = require("./equipmentFinancePhaseThreeWorkflowRoutes");
 const equipmentFinancePhaseThreeCreationGuardRoutes = require("./equipmentFinancePhaseThreeCreationGuardRoutes");
+const equipmentFinanceMachineVisibilityRoutes = require("./equipmentFinanceMachineVisibilityRoutes");
 const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
 const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
@@ -134,6 +135,10 @@ router.use(equipmentFinancePhaseThreeWorkflowRoutes);
 // The Phase 3 creation guard checks schema, NULL location compatibility,
 // ENUM values and linked customer/asset records before the write transaction.
 router.use(equipmentFinancePhaseThreeCreationGuardRoutes);
+
+// Finance sees only machines explicitly registered in its own machine register.
+// Shared Hire and Mining fleet assets remain outside the Finance bootstrap.
+router.use(equipmentFinanceMachineVisibilityRoutes);
 
 // Critical bootstrap and the image-safe write transaction remain bounded and
 // execute only after the Phase 3 preflight has passed.
