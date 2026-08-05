@@ -14,6 +14,7 @@ const {
   getPublicFeatureSnapshot,
   requireFeature,
 } = require("../services/featureFlagService");
+const contentStudioRoutes = require("./contentStudioRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
 
 const router = express.Router();
@@ -263,6 +264,15 @@ router.use(
   "/public/content",
   requireFeature("publicWebsite"),
   publicContentRoutes
+);
+
+// Content Studio is hidden while disabled, then requires an authenticated
+// staff session. Individual routes apply their own capability permissions.
+router.use(
+  "/content-studio",
+  requireFeature("contentStudio"),
+  requireAuth,
+  contentStudioRoutes
 );
 
 router.get("/readiness", async (req, res) => {
