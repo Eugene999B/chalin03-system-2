@@ -110,6 +110,9 @@ const {
 const {
   startNotificationSyncScheduler,
 } = require("./services/notificationSchedulerService");
+const {
+  startPublicContentScheduler,
+} = require("./services/publicContentPublishingScheduler");
 
 const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
 const miningBoundary = requireWorkspaceCategory("mining");
@@ -237,6 +240,8 @@ app.get("/api", (req, res) => {
       "/api/release2-final/standalone-hr",
       "/api/release2-final/document-signature",
       "/api/workspace-admin",
+      "/api/public/content",
+      "/api/content-studio",
     ],
   });
 });
@@ -460,6 +465,13 @@ async function startServer() {
       startInstallmentReminderScheduler();
       startDebtReminderScheduler();
       startNotificationSyncScheduler();
+
+      const publicContentScheduler = startPublicContentScheduler();
+      if (publicContentScheduler.started) {
+        console.log(
+          `CHALIN ONE public-content scheduler started (${publicContentScheduler.interval_ms}ms).`
+        );
+      }
     });
   } catch (error) {
     console.error("Failed to start server:", error);
