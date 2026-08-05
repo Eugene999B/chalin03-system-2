@@ -21,6 +21,13 @@ const {
   submitPageVersion,
   updateDraftVersion,
 } = require("../services/contentStudioPageService");
+const {
+  addSubmissionReview,
+  assignSubmission,
+  changeSubmissionStatus,
+  getSubmissionDetails,
+  listSubmissions,
+} = require("../services/contentStudioSubmissionService");
 
 const router = express.Router();
 
@@ -248,6 +255,93 @@ router.post(
       req,
       await archivePage({
         pageId: req.params.pageId,
+        reason: req.body?.reason,
+        user: req.user,
+        req,
+      })
+    );
+  })
+);
+
+router.get(
+  "/submissions",
+  requirePermission("public_submissions.view"),
+  asyncHandler(async (req, res) => {
+    return success(
+      res,
+      req,
+      await listSubmissions({
+        status: req.query.status,
+        formId: req.query.form_id,
+        assignedTo:
+          String(req.query.mine || "").toLowerCase() === "true"
+            ? req.user?.id
+            : req.query.assigned_to,
+        search: req.query.search,
+        limit: req.query.limit,
+        offset: req.query.offset,
+      })
+    );
+  })
+);
+
+router.get(
+  "/submissions/:submissionId",
+  requirePermission("public_submissions.view"),
+  asyncHandler(async (req, res) => {
+    return success(
+      res,
+      req,
+      await getSubmissionDetails(req.params.submissionId)
+    );
+  })
+);
+
+router.post(
+  "/submissions/:submissionId/assign",
+  requirePermission("public_submissions.manage"),
+  asyncHandler(async (req, res) => {
+    return success(
+      res,
+      req,
+      await assignSubmission({
+        submissionId: req.params.submissionId,
+        assignedTo: req.body?.assigned_to,
+        user: req.user,
+        req,
+      })
+    );
+  })
+);
+
+router.post(
+  "/submissions/:submissionId/review",
+  requirePermission("public_submissions.respond"),
+  asyncHandler(async (req, res) => {
+    return success(
+      res,
+      req,
+      await addSubmissionReview({
+        submissionId: req.params.submissionId,
+        note: req.body?.note,
+        nextStatus: req.body?.status || "in_review",
+        user: req.user,
+        req,
+      })
+    );
+  })
+);
+
+router.post(
+  "/submissions/:submissionId/status",
+  requirePermission("public_submissions.manage"),
+  asyncHandler(async (req, res) => {
+    return success(
+      res,
+      req,
+      await changeSubmissionStatus({
+        submissionId: req.params.submissionId,
+        status: req.body?.status,
         reason: req.body?.reason,
         user: req.user,
         req,
