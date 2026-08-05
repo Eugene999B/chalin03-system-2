@@ -15,36 +15,38 @@ function assert(condition, message) {
 }
 
 const portal = read("src/pages/EquipmentHirePortalPage.jsx");
-const landing = read("src/pages/EquipmentBusinessLandingPage.jsx");
 const gateway = read("src/pages/EquipmentDivisionGatewayPage.jsx");
+const workspaces = read("src/data/businessWorkspaces.js");
 const manager = read("src/components/EquipmentDivisionStaffManager.jsx");
 const managerCss = read("src/styles/equipmentDivisionStaffManager.css");
 const experienceCss = read("src/styles/equipmentBusinessExperience.css");
 
 assert(
-  portal.includes("<EquipmentBusinessLandingPage />"),
-  "The public Equipment route must use the dedicated Equipment Business landing page."
+  portal.includes('Navigate to="/login?workspace=equipment_hire"') &&
+    portal.includes("<EquipmentDivisionGatewayPage />"),
+  "The Equipment entry must require login before opening the protected division gateway."
 );
 assert(
-  landing.includes('to="/login"') &&
-    landing.includes("to={loginRoute}") &&
-    landing.includes("Back to Main Login"),
-  "The public Equipment opening must provide obvious Equipment and main login actions."
+  !portal.includes("EquipmentBusinessLandingPage"),
+  "The public Equipment marketing landing page must not remain in the staff flow."
 );
 assert(
-  landing.includes("Equipment Hire Operations") &&
-    landing.includes("Equipment Installment Finance"),
-  "The public opening must present both independent divisions."
+  workspaces.includes('route: "/login?workspace=equipment_hire"'),
+  "The Equipment workspace card must open its login context directly."
 );
 assert(
   gateway.includes("await logout()") &&
-    gateway.includes('navigate("/login?workspace=equipment_hire"'),
-  "The protected gateway must close the session before returning to login."
+    gateway.includes('window.location.replace("/login?workspace=equipment_hire")'),
+  "The protected gateway must close the session before replacing history with Login."
 );
 assert(
   gateway.includes("Back to Login") &&
     gateway.includes("Back to Equipment Login"),
   "The protected gateway must expose persistent login navigation."
+);
+assert(
+  !gateway.includes('/company/') && !gateway.includes("Company Overview"),
+  "The protected gateway must not send staff into the retired company marketing page."
 );
 assert(
   manager.includes('import { createPortal } from "react-dom"') &&
@@ -64,7 +66,7 @@ assert(
 assert(
   experienceCss.includes("@media (max-width: 680px)") &&
     experienceCss.includes(".equipment-command__logout"),
-  "The new Equipment experience must include compact mobile navigation."
+  "The Equipment gateway must retain compact mobile navigation."
 );
 
-console.log("Equipment Business experience contracts passed.");
+console.log("Equipment Business protected login-first experience contracts passed.");
