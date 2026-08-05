@@ -31,6 +31,17 @@ assert.match(serviceWorker, /isHtml\(response\)/);
 assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.match(serviceWorker, /cache: "no-store"/);
 assert.match(serviceWorker, /client\.navigate\(url\.toString\(\)\)/);
+assert.match(serviceWorker, /function isTrustedClientMessage\(event\)/);
+assert.match(
+  serviceWorker,
+  /event\.origin !== self\.location\.origin/
+);
+assert.match(serviceWorker, /event\.source\?\.url/);
+assert.match(
+  serviceWorker,
+  /new URL\(sourceUrl\)\.origin === self\.location\.origin/
+);
+assert.match(serviceWorker, /if \(!isTrustedClientMessage\(event\)\)/);
 assert.doesNotMatch(
   serviceWorker,
   /cache\.put\(request,\s*responseClone\)/
@@ -94,5 +105,5 @@ assert.match(headers, /\/404\.html/);
 assert.match(notFound, /data-chalin03-static-404="true"/);
 
 console.log(
-  "✅ Browser cache hotfix source contracts passed: retired build assets cannot be cached as HTML, app-shell releases are build-specific, and failed chunks self-recover."
+  "✅ Browser cache hotfix source contracts passed: retired build assets cannot be cached as HTML, app-shell releases are build-specific, worker messages are same-origin, and failed chunks self-recover."
 );
