@@ -34,7 +34,9 @@ assert.match(financeGuide, /Active Installments and Customer Installment Profile
 assert.match(financeGuide, /Secure Case Documents and evidence review/);
 assert.match(financeGuide, /immutable issued-document snapshots with a SHA-256 fingerprint/);
 assert.match(financeGuide, /Corrections, reversals, returns and settlements/);
-assert.match(financeGuide, /production Finance reset is permanently blocked/);
+assert.match(financeGuide, /dated owner-authorized restart release/);
+assert.match(financeGuide, /self-disabling after its schema_migrations marker/);
+assert.match(financeGuide, /general production reset endpoint.*remain blocked/);
 assert.match(financeGuide, /stage=deposit/);
 assert.match(financeGuide, /stage=corrections/);
 assert.match(financeGuide, /stage=generated-documents/);
