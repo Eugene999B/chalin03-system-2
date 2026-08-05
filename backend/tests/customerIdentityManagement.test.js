@@ -93,7 +93,7 @@ test("merge preview and transaction-safe merge protect linked records", () => {
   assert.match(route, /MERGE_CUSTOMER_IDENTITIES/);
 });
 
-test("customer statement page mounts the identity centre and refreshes after merge", () => {
+test("customer statements keep merging compact, optional and mobile safe", () => {
   const page = read("frontend/src/pages/CustomerStatementPage.jsx");
   const panel = read("frontend/src/components/CustomerIdentityManagementPanel.jsx");
   const css = read("frontend/src/styles/customerIdentityManagement.css");
@@ -101,14 +101,21 @@ test("customer statement page mounts the identity centre and refreshes after mer
   assert.match(page, /CustomerIdentityManagementPanel/);
   assert.match(page, /CustomerStatementWorkspacePage/);
   assert.match(page, /statementRefreshKey/);
+  assert.match(panel, /Merge duplicate customers/);
+  assert.match(panel, /Open merge tool/);
   assert.match(panel, /Customer Identity Centre/);
   assert.match(panel, /Complete customer directory/);
   assert.match(panel, /Duplicate suggestions/);
+  assert.match(panel, /useState\(false\)/);
+  assert.match(panel, /cim-workspace-backdrop/);
+  assert.match(panel, /setWorkspaceOpen\(false\)/);
   assert.match(panel, /\/debt-customers\/directory/);
   assert.match(panel, /\/debt-customers\/duplicate-suggestions/);
   assert.match(panel, /\/debt-customers\/merge-preview/);
   assert.match(panel, /\/debt-customers\/merge/);
   assert.match(panel, /type MERGE/i);
+  assert.match(css, /\.cim-launcher/);
+  assert.match(css, /\.cim-workspace-backdrop/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /@media \(max-width: 430px\)/);
   assert.match(css, /\.cim-table td::before/);

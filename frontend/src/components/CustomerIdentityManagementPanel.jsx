@@ -26,6 +26,7 @@ function canMergeCustomers(role) {
 function matchesCustomer(customer, search) {
   const term = String(search || "").trim().toLowerCase();
   if (!term) return true;
+
   return [
     customer.customer_id,
     customer.customer_name,
@@ -40,6 +41,17 @@ function confidenceLabel(value) {
   if (value === "very_likely") return "Very likely";
   if (value === "likely") return "Likely";
   return "Needs review";
+}
+
+function MergeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 7h8M8 17h8" />
+      <path d="m13 4 3 3-3 3M11 14l-3 3 3 3" />
+      <circle cx="5" cy="7" r="2" />
+      <circle cx="19" cy="17" r="2" />
+    </svg>
+  );
 }
 
 function CustomerCard({ customer }) {
@@ -67,7 +79,8 @@ function Metric({ label, value, note }) {
 export default function CustomerIdentityManagementPanel({ onMerged }) {
   const { user, branchId, branchCode, branchName } = useAuth();
   const allowedToMerge = canMergeCustomers(user?.role);
-  const [expanded, setExpanded] = useState(true);
+
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("suggestions");
   const [customers, setCustomers] = useState([]);
   const [directorySummary, setDirectorySummary] = useState({});
@@ -75,13 +88,17 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const [masterId, setMasterId] = useState("");
   const [sourceIds, setSourceIds] = useState([]);
-  const [masterProfile, setMasterProfile] = useState({ name: "", phone: "", location: "" });
+  const [masterProfile, setMasterProfile] = useState({
+    name: "",
+    phone: "",
+    location: "",
+  });
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [preview, setPreview] = useState(null);
@@ -90,18 +107,24 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!workspaceOpen) return undefined;
+
     let cancelled = false;
 
     async function loadIdentityCentre() {
       setLoading(true);
       setError("");
+
       try {
         const [directoryResponse, suggestionResponse] = await Promise.all([
-          axiosClient.get("/debt-customers/directory", { params: { limit: 5000 } }),
+          axiosClient.get("/debt-customers/directory", {
+            params: { limit: 5000 },
+          }),
           axiosClient.get("/debt-customers/duplicate-suggestions", {
             params: { minimum_score: 58, limit: 150 },
           }),
         ]);
+
         if (cancelled) return;
         setCustomers(directoryResponse.data.customers || []);
         setDirectorySummary(directoryResponse.data.summary || {});
@@ -110,7 +133,7 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
         if (!cancelled) {
           setError(
             requestError.response?.data?.message ||
-              "Could not load the customer identity centre."
+              "Could not load the customer merge tool."
           );
         }
       } finally {
@@ -122,21 +145,29 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
     return () => {
       cancelled = true;
     };
-  }, [branchId, refreshKey]);
+  }, [branchId, refreshKey, workspaceOpen]);
 
   useEffect(() => {
-    if (!modalOpen) return undefined;
+    if (!workspaceOpen && !modalOpen) return undefined;
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
     const closeOnEscape = (event) => {
-      if (event.key === "Escape" && !merging) setModalOpen(false);
+      if (event.key !== "Escape" || merging) return;
+      if (modalOpen) {
+        setModalOpen(false);
+      } else {
+        setWorkspaceOpen(false);
+      }
     };
+
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [modalOpen, merging]);
+  }, [modalOpen, merging, workspaceOpen]);
 
   const filteredCustomers = useMemo(
     () => customers.filter((customer) => matchesCustomer(customer, search)),
@@ -148,10 +179,20 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
     const start = (safePage - 1) * PAGE_SIZE;
     return filteredCustomers.slice(start, start + PAGE_SIZE);
   }, [filteredCustomers, safePage]);
-  const master = customers.find((customer) => String(customer.customer_id) === masterId) || null;
+  const master =
+    customers.find((customer) => String(customer.customer_id) === masterId) || null;
   const duplicates = sourceIds
-    .map((id) => customers.find((customer) => String(customer.customer_id) === id))
+    .map((id) =>
+      customers.find((customer) => String(customer.customer_id) === id)
+    )
     .filter(Boolean);
+
+  const suggestionSummary = suggestions.summary || {};
+  const previewReferences = preview?.impact?.references || [];
+  const duplicateGroupCount = Number(
+    suggestionSummary.possible_duplicate_groups || 0
+  );
+  const selectionReady = Boolean(masterId && sourceIds.length > 0);
 
   function resetSelection() {
     setMasterId("");
@@ -160,6 +201,22 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
     setReason("");
     setConfirmation("");
     setPreview(null);
+  }
+
+  function openWorkspace() {
+    setError("");
+    setWorkspaceOpen(true);
+  }
+
+  function closeWorkspace() {
+    if (merging) return;
+    setWorkspaceOpen(false);
+    setModalOpen(false);
+    setError("");
+    setSearch("");
+    setPage(1);
+    setActiveTab("suggestions");
+    resetSelection();
   }
 
   function chooseMaster(customer) {
@@ -177,8 +234,11 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
   function toggleDuplicate(customer) {
     const id = String(customer.customer_id);
     if (id === masterId) return;
+
     setSourceIds((current) => {
-      if (current.includes(id)) return current.filter((sourceId) => sourceId !== id);
+      if (current.includes(id)) {
+        return current.filter((sourceId) => sourceId !== id);
+      }
       if (current.length >= 25) {
         setError("Merge no more than 25 duplicate customer profiles at a time.");
         return current;
@@ -193,6 +253,7 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
     const selectedMaster = group.customers.find(
       (customer) => String(customer.customer_id) === recommendedId
     );
+
     setMasterId(recommendedId);
     setSourceIds(
       group.customers
@@ -205,7 +266,9 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
       phone: selectedMaster?.customer_phone || "",
       location: selectedMaster?.customer_location || "",
     });
-    setReason("Consolidating duplicate customer identities identified during customer data cleanup.");
+    setReason(
+      "Consolidating duplicate customer identities identified during customer data cleanup."
+    );
     setConfirmation("");
     setPreview(null);
     setActiveTab("directory");
@@ -214,12 +277,14 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
   }
 
   async function openPreview() {
-    if (!masterId || sourceIds.length === 0) {
+    if (!selectionReady) {
       setError("Choose one master customer and at least one duplicate customer.");
       return;
     }
+
     setPreviewing(true);
     setError("");
+
     try {
       const response = await axiosClient.post("/debt-customers/merge-preview", {
         target_customer_id: Number(masterId),
@@ -229,7 +294,8 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
       setModalOpen(true);
     } catch (requestError) {
       setError(
-        requestError.response?.data?.message || "Could not prepare the merge preview."
+        requestError.response?.data?.message ||
+          "Could not prepare the merge preview."
       );
     } finally {
       setPreviewing(false);
@@ -239,6 +305,7 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
   async function mergeCustomers() {
     setMerging(true);
     setError("");
+
     try {
       const response = await axiosClient.post("/debt-customers/merge", {
         target_customer_id: Number(masterId),
@@ -247,10 +314,14 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
         reason: reason.trim(),
         confirmation: confirmation.trim(),
       });
+
       setModalOpen(false);
       resetSelection();
-      setMessage(response.data.message || "Customer records were merged successfully.");
+      setMessage(
+        response.data.message || "Customer records were merged successfully."
+      );
       setRefreshKey((current) => current + 1);
+      setWorkspaceOpen(false);
       onMerged?.(response.data.result);
     } catch (requestError) {
       setError(
@@ -262,330 +333,472 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
     }
   }
 
-  const suggestionSummary = suggestions.summary || {};
-  const previewReferences = preview?.impact?.references || [];
-
   return (
-    <section className="cim-shell" aria-labelledby="customer-identity-title">
-      <header className="cim-header">
-        <div>
-          <span className="cim-eyebrow">Customer data quality</span>
-          <h2 id="customer-identity-title">Customer Identity Centre</h2>
+    <section className="cim-shell" aria-labelledby="customer-merge-launcher-title">
+      <div className="cim-launcher">
+        <div className="cim-launcher-icon">
+          <MergeIcon />
+        </div>
+        <div className="cim-launcher-copy">
+          <span className="cim-eyebrow">Optional customer tool</span>
+          <h2 id="customer-merge-launcher-title">Merge duplicate customers</h2>
           <p>
-            Keep one reliable customer profile across statements, sales, receipts, debts,
-            payments and every linked record.
+            Open only when you need to combine duplicate customer profiles. Your normal
+            statement work stays clear and unchanged.
           </p>
         </div>
-        <div className="cim-header-actions">
-          <span className="cim-store-pill">
-            {branchCode || "STORE"} · {branchName || "Selected Store"}
-          </span>
+        <div className="cim-launcher-actions">
+          {message ? (
+            <span className="cim-launcher-status is-success">✓ Merge completed</span>
+          ) : duplicateGroupCount > 0 ? (
+            <span className="cim-launcher-status">
+              {duplicateGroupCount} possible duplicate
+              {duplicateGroupCount === 1 ? "" : "s"}
+            </span>
+          ) : (
+            <span className="cim-launcher-status">Safe, on-demand tool</span>
+          )}
           <button
             type="button"
-            className="cim-button cim-button-secondary"
-            onClick={() => setExpanded((current) => !current)}
+            className="cim-button cim-button-primary cim-launcher-button"
+            onClick={openWorkspace}
           >
-            {expanded ? "Hide centre" : "Open centre"}
+            Open merge tool
           </button>
         </div>
-      </header>
+      </div>
 
-      {expanded && (
-        <div className="cim-body">
-          {error && <div className="cim-alert cim-alert-error">{error}</div>}
-          {message && <div className="cim-alert cim-alert-success">{message}</div>}
+      {message && !workspaceOpen && (
+        <div className="cim-inline-success" role="status">
+          <span>✓</span>
+          <p>{message}</p>
+          <button type="button" onClick={() => setMessage("")}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
-          <div className="cim-metrics">
-            <Metric
-              label="All customer profiles"
-              value={Number(directorySummary.database_customer_count || 0)}
-              note="Includes customers with and without debt"
-            />
-            <Metric
-              label="Possible duplicate groups"
-              value={Number(suggestionSummary.possible_duplicate_groups || 0)}
-              note="Suggestions always require human review"
-            />
-            <Metric
-              label="Customers with sales"
-              value={Number(directorySummary.customers_with_sales || 0)}
-              note="Profiles linked to sale history"
-            />
-            <Metric
-              label="Profiles without activity"
-              value={Number(directorySummary.customers_without_activity || 0)}
-              note="Useful for cleanup and verification"
-            />
-          </div>
-
-          <div className="cim-toolbar">
-            <div className="cim-tabs" role="tablist" aria-label="Customer identity views">
+      {workspaceOpen && (
+        <div
+          className="cim-workspace-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeWorkspace();
+          }}
+        >
+          <section
+            className="cim-workspace"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-identity-title"
+          >
+            <header className="cim-workspace-header">
+              <div className="cim-workspace-title">
+                <span className="cim-workspace-icon">
+                  <MergeIcon />
+                </span>
+                <div>
+                  <span className="cim-eyebrow">Customer cleanup workspace</span>
+                  <h2 id="customer-identity-title">Customer Identity Centre</h2>
+                  <p>
+                    {branchCode || "STORE"} · {branchName || "Selected Store"}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                className={activeTab === "suggestions" ? "is-active" : ""}
-                onClick={() => setActiveTab("suggestions")}
+                className="cim-workspace-close"
+                onClick={closeWorkspace}
+                disabled={merging}
+                aria-label="Close customer merge tool"
               >
-                Duplicate suggestions
+                <span aria-hidden="true">×</span>
+                Close
               </button>
-              <button
-                type="button"
-                className={activeTab === "directory" ? "is-active" : ""}
-                onClick={() => setActiveTab("directory")}
-              >
-                Complete customer directory
-              </button>
-            </div>
-            <button
-              type="button"
-              className="cim-button cim-button-secondary"
-              disabled={loading}
-              onClick={() => setRefreshKey((current) => current + 1)}
-            >
-              {loading ? "Checking customers…" : "Run fresh duplicate scan"}
-            </button>
-          </div>
+            </header>
 
-          {loading ? (
-            <div className="cim-loading">Loading customer identities…</div>
-          ) : activeTab === "suggestions" ? (
-            <div className="cim-suggestions">
-              <div className="cim-explainer">
-                <strong>How suggestions are produced</strong>
-                <p>
-                  The algorithm compares Ghana-normalized phone numbers, exact and
-                  reordered names, spelling closeness, phonetic similarity, shared name
-                  words and locations. Different valid phone numbers reduce confidence.
-                  Nothing is merged automatically.
-                </p>
+            <div className="cim-workspace-body">
+              {error && <div className="cim-alert cim-alert-error">{error}</div>}
+              {message && <div className="cim-alert cim-alert-success">{message}</div>}
+
+              <div className="cim-stepbar" aria-label="Customer merge steps">
+                <div className="cim-step is-active">
+                  <span>1</span>
+                  <div>
+                    <strong>Find duplicates</strong>
+                    <small>Use suggestions or search manually.</small>
+                  </div>
+                </div>
+                <div className={`cim-step ${selectionReady ? "is-active" : ""}`}>
+                  <span>2</span>
+                  <div>
+                    <strong>Review and merge</strong>
+                    <small>Confirm the master profile before saving.</small>
+                  </div>
+                </div>
               </div>
 
-              {(suggestions.groups || []).length === 0 ? (
-                <div className="cim-empty">
-                  <span>✓</span>
-                  <h3>No strong duplicate suggestion was found</h3>
-                  <p>Known duplicates can still be selected manually in the directory.</p>
+              <div className="cim-metrics">
+                <Metric
+                  label="Customer profiles"
+                  value={Number(directorySummary.database_customer_count || 0)}
+                  note="Every customer in this store"
+                />
+                <Metric
+                  label="Possible duplicates"
+                  value={duplicateGroupCount}
+                  note="Suggestions requiring your review"
+                />
+                <Metric
+                  label="Selected now"
+                  value={sourceIds.length + (masterId ? 1 : 0)}
+                  note={selectionReady ? "Ready for final review" : "Choose a master and duplicate"}
+                />
+              </div>
+
+              <div className="cim-toolbar">
+                <div
+                  className="cim-tabs"
+                  role="tablist"
+                  aria-label="Customer identity views"
+                >
+                  <button
+                    type="button"
+                    className={activeTab === "suggestions" ? "is-active" : ""}
+                    onClick={() => setActiveTab("suggestions")}
+                  >
+                    Duplicate suggestions
+                  </button>
+                  <button
+                    type="button"
+                    className={activeTab === "directory" ? "is-active" : ""}
+                    onClick={() => setActiveTab("directory")}
+                  >
+                    Find customers manually
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="cim-button cim-button-secondary"
+                  disabled={loading}
+                  onClick={() => setRefreshKey((current) => current + 1)}
+                >
+                  {loading ? "Checking customers…" : "Refresh suggestions"}
+                </button>
+              </div>
+
+              {loading ? (
+                <div className="cim-loading">Checking customer records…</div>
+              ) : activeTab === "suggestions" ? (
+                <div className="cim-suggestions">
+                  <div className="cim-simple-note">
+                    <strong>Suggested matches</strong>
+                    <span>
+                      Review each suggestion carefully. Nothing is merged automatically.
+                    </span>
+                  </div>
+
+                  {(suggestions.groups || []).length === 0 ? (
+                    <div className="cim-empty">
+                      <span>✓</span>
+                      <h3>No strong duplicate suggestion was found</h3>
+                      <p>
+                        Use “Find customers manually” when you already know which records
+                        are duplicates.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="cim-suggestion-grid">
+                      {suggestions.groups.map((group) => (
+                        <article className="cim-suggestion-card" key={group.group_id}>
+                          <div className="cim-suggestion-heading">
+                            <div>
+                              <span
+                                className={`cim-confidence cim-confidence-${group.confidence}`}
+                              >
+                                {confidenceLabel(group.confidence)}
+                              </span>
+                              <strong>{group.highest_score}% match confidence</strong>
+                            </div>
+                            {allowedToMerge && (
+                              <button
+                                type="button"
+                                className="cim-button cim-button-primary"
+                                onClick={() => applySuggestion(group)}
+                              >
+                                Review this match
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="cim-suggestion-customers">
+                            {group.customers.map((customer) => (
+                              <CustomerCard
+                                key={customer.customer_id}
+                                customer={customer}
+                              />
+                            ))}
+                          </div>
+
+                          <div className="cim-reasons">
+                            {[
+                              ...new Set(
+                                group.matches.flatMap((match) => match.reasons || [])
+                              ),
+                            ]
+                              .slice(0, 4)
+                              .map((item) => (
+                                <span key={item}>✓ {item}</span>
+                              ))}
+                            {[
+                              ...new Set(
+                                group.matches.flatMap((match) => match.warnings || [])
+                              ),
+                            ]
+                              .slice(0, 1)
+                              .map((item) => (
+                                <span className="is-warning" key={item}>
+                                  Review: {item}
+                                </span>
+                              ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="cim-suggestion-grid">
-                  {suggestions.groups.map((group) => (
-                    <article className="cim-suggestion-card" key={group.group_id}>
-                      <div className="cim-suggestion-heading">
-                        <div>
-                          <span className={`cim-confidence cim-confidence-${group.confidence}`}>
-                            {confidenceLabel(group.confidence)}
-                          </span>
-                          <strong>{group.highest_score}% confidence signal</strong>
-                        </div>
-                        {allowedToMerge && (
-                          <button
-                            type="button"
-                            className="cim-button cim-button-primary"
-                            onClick={() => applySuggestion(group)}
-                          >
-                            Review and merge
-                          </button>
-                        )}
+                <div className="cim-directory-layout">
+                  <div className="cim-directory-panel">
+                    <div className="cim-directory-heading">
+                      <div>
+                        <h3>Complete customer directory</h3>
+                        <p>
+                          Select one profile to keep and one or more duplicates to merge.
+                        </p>
                       </div>
-                      <div className="cim-suggestion-customers">
-                        {group.customers.map((customer) => (
-                          <CustomerCard key={customer.customer_id} customer={customer} />
+                      <input
+                        type="search"
+                        value={search}
+                        onChange={(event) => {
+                          setSearch(event.target.value);
+                          setPage(1);
+                        }}
+                        placeholder="Search name, phone, location or ID"
+                        aria-label="Search customer directory"
+                      />
+                    </div>
+
+                    <div className="cim-table-wrap">
+                      <table className="cim-table">
+                        <thead>
+                          <tr>
+                            <th>Keep</th>
+                            <th>Merge</th>
+                            <th>Customer</th>
+                            <th>History</th>
+                            <th>Balance</th>
+                            <th>Last activity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleCustomers.map((customer) => {
+                            const id = String(customer.customer_id);
+                            const isMaster = id === masterId;
+                            const isDuplicate = sourceIds.includes(id);
+
+                            return (
+                              <tr
+                                key={customer.customer_id}
+                                className={
+                                  isMaster ? "is-master" : isDuplicate ? "is-source" : ""
+                                }
+                              >
+                                <td data-label="Keep">
+                                  <input
+                                    type="radio"
+                                    name="customer-master"
+                                    checked={isMaster}
+                                    disabled={!allowedToMerge}
+                                    onChange={() => chooseMaster(customer)}
+                                    aria-label={`Keep ${customer.customer_name} as master`}
+                                  />
+                                </td>
+                                <td data-label="Merge">
+                                  <input
+                                    type="checkbox"
+                                    checked={isDuplicate}
+                                    disabled={!allowedToMerge || isMaster}
+                                    onChange={() => toggleDuplicate(customer)}
+                                    aria-label={`Merge ${customer.customer_name} as duplicate`}
+                                  />
+                                </td>
+                                <td data-label="Customer">
+                                  <strong>
+                                    #{customer.customer_id} · {customer.customer_name}
+                                  </strong>
+                                  <span>{customer.customer_phone || "No phone"}</span>
+                                  <small>
+                                    {customer.customer_location || "No location"}
+                                  </small>
+                                </td>
+                                <td data-label="History">
+                                  <strong>{customer.transaction_count} record(s)</strong>
+                                  <span>
+                                    {customer.sale_count} sales · {customer.debt_count} debts
+                                  </span>
+                                  <small>
+                                    {formatMoney(customer.total_sales_value)} sales
+                                  </small>
+                                </td>
+                                <td data-label="Balance">
+                                  <strong>
+                                    {formatMoney(customer.outstanding_balance)}
+                                  </strong>
+                                  <span>
+                                    {customer.active_debt_count} active debt(s)
+                                  </span>
+                                </td>
+                                <td data-label="Last activity">
+                                  {formatDate(customer.last_activity_at)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="cim-directory-pagination">
+                      <span>
+                        Showing{" "}
+                        {filteredCustomers.length === 0
+                          ? 0
+                          : (safePage - 1) * PAGE_SIZE + 1}
+                        –{Math.min(filteredCustomers.length, safePage * PAGE_SIZE)} of{" "}
+                        {filteredCustomers.length}
+                      </span>
+                      <div>
+                        <button
+                          type="button"
+                          className="cim-button cim-button-secondary"
+                          disabled={safePage <= 1}
+                          onClick={() =>
+                            setPage((current) => Math.max(1, current - 1))
+                          }
+                        >
+                          Previous
+                        </button>
+                        <strong>
+                          Page {safePage} of {pageCount}
+                        </strong>
+                        <button
+                          type="button"
+                          className="cim-button cim-button-secondary"
+                          disabled={safePage >= pageCount}
+                          onClick={() =>
+                            setPage((current) => Math.min(pageCount, current + 1))
+                          }
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <aside className="cim-selection-panel">
+                    <span className="cim-eyebrow">Step 2</span>
+                    <h3>Review your selection</h3>
+
+                    {!allowedToMerge && (
+                      <div className="cim-alert cim-alert-info">
+                        Only an administrator or manager can merge customers.
+                      </div>
+                    )}
+
+                    <div className="cim-selection-group">
+                      <label>Customer profile to keep</label>
+                      {master ? (
+                        <CustomerCard customer={master} />
+                      ) : (
+                        <p className="cim-muted">Select “Keep” beside one customer.</p>
+                      )}
+                    </div>
+
+                    <div className="cim-selection-group">
+                      <label>Duplicate profile(s) to merge</label>
+                      {duplicates.length > 0 ? (
+                        duplicates.map((customer) => (
+                          <CustomerCard
+                            key={customer.customer_id}
+                            customer={customer}
+                          />
+                        ))
+                      ) : (
+                        <p className="cim-muted">
+                          Select “Merge” beside at least one duplicate.
+                        </p>
+                      )}
+                    </div>
+
+                    {master && (
+                      <div className="cim-profile-fields">
+                        {[
+                          ["name", "Final customer name"],
+                          ["phone", "Final phone number"],
+                          ["location", "Final location"],
+                        ].map(([field, label]) => (
+                          <label key={field}>
+                            {label}
+                            <input
+                              value={masterProfile[field]}
+                              disabled={!allowedToMerge}
+                              onChange={(event) =>
+                                setMasterProfile((current) => ({
+                                  ...current,
+                                  [field]: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
                         ))}
                       </div>
-                      <div className="cim-reasons">
-                        {[...new Set(group.matches.flatMap((match) => match.reasons || []))]
-                          .slice(0, 5)
-                          .map((item) => <span key={item}>✓ {item}</span>)}
-                        {[...new Set(group.matches.flatMap((match) => match.warnings || []))]
-                          .slice(0, 2)
-                          .map((item) => <span className="is-warning" key={item}>Review: {item}</span>)}
-                      </div>
-                      <small>
-                        Recommended master: customer #{group.recommended_master_id}. Review
-                        all details before approving the merge.
-                      </small>
-                    </article>
-                  ))}
+                    )}
+
+                    <div className="cim-selection-actions">
+                      <button
+                        type="button"
+                        className="cim-button cim-button-primary"
+                        disabled={!allowedToMerge || !selectionReady || previewing}
+                        onClick={openPreview}
+                      >
+                        {previewing ? "Preparing review…" : "Review before merging"}
+                      </button>
+                      <button
+                        type="button"
+                        className="cim-button cim-button-ghost"
+                        onClick={resetSelection}
+                        disabled={!masterId && sourceIds.length === 0}
+                      >
+                        Clear selection
+                      </button>
+                    </div>
+                  </aside>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="cim-directory-layout">
-              <div className="cim-directory-panel">
-                <div className="cim-directory-heading">
-                  <div>
-                    <h3>All customers in this store</h3>
-                    <p>Customers without debt are included for complete cleanup.</p>
-                  </div>
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(event) => {
-                      setSearch(event.target.value);
-                      setPage(1);
-                    }}
-                    placeholder="Search name, phone, location or ID"
-                    aria-label="Search customer directory"
-                  />
-                </div>
-
-                <div className="cim-table-wrap">
-                  <table className="cim-table">
-                    <thead>
-                      <tr>
-                        <th>Master</th>
-                        <th>Duplicate</th>
-                        <th>Customer</th>
-                        <th>Activity</th>
-                        <th>Debt balance</th>
-                        <th>Last activity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleCustomers.map((customer) => {
-                        const id = String(customer.customer_id);
-                        const isMaster = id === masterId;
-                        const isDuplicate = sourceIds.includes(id);
-                        return (
-                          <tr
-                            key={customer.customer_id}
-                            className={isMaster ? "is-master" : isDuplicate ? "is-source" : ""}
-                          >
-                            <td data-label="Master">
-                              <input
-                                type="radio"
-                                name="customer-master"
-                                checked={isMaster}
-                                disabled={!allowedToMerge}
-                                onChange={() => chooseMaster(customer)}
-                                aria-label={`Use ${customer.customer_name} as master`}
-                              />
-                            </td>
-                            <td data-label="Duplicate">
-                              <input
-                                type="checkbox"
-                                checked={isDuplicate}
-                                disabled={!allowedToMerge || isMaster}
-                                onChange={() => toggleDuplicate(customer)}
-                                aria-label={`Merge ${customer.customer_name} as duplicate`}
-                              />
-                            </td>
-                            <td data-label="Customer">
-                              <strong>#{customer.customer_id} · {customer.customer_name}</strong>
-                              <span>{customer.customer_phone || "No phone"}</span>
-                              <small>{customer.customer_location || "No location"}</small>
-                            </td>
-                            <td data-label="Activity">
-                              <strong>{customer.transaction_count} record(s)</strong>
-                              <span>{customer.sale_count} sales · {customer.debt_count} debts</span>
-                              <small>{formatMoney(customer.total_sales_value)} sales</small>
-                            </td>
-                            <td data-label="Debt balance">
-                              <strong>{formatMoney(customer.outstanding_balance)}</strong>
-                              <span>{customer.active_debt_count} active debt(s)</span>
-                            </td>
-                            <td data-label="Last activity">{formatDate(customer.last_activity_at)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="cim-directory-pagination">
-                  <span>
-                    Showing {filteredCustomers.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}
-                    –{Math.min(filteredCustomers.length, safePage * PAGE_SIZE)} of {filteredCustomers.length}
-                  </span>
-                  <div>
-                    <button
-                      type="button"
-                      className="cim-button cim-button-secondary"
-                      disabled={safePage <= 1}
-                      onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </button>
-                    <strong>Page {safePage} of {pageCount}</strong>
-                    <button
-                      type="button"
-                      className="cim-button cim-button-secondary"
-                      disabled={safePage >= pageCount}
-                      onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <aside className="cim-selection-panel">
-                <span className="cim-eyebrow">Merge preparation</span>
-                <h3>Selected identities</h3>
-                {!allowedToMerge && (
-                  <div className="cim-alert cim-alert-info">
-                    Only an administrator or manager can merge customers.
-                  </div>
-                )}
-                <div className="cim-selection-group">
-                  <label>Master customer to keep</label>
-                  {master ? <CustomerCard customer={master} /> : <p className="cim-muted">Choose one master.</p>}
-                </div>
-                <div className="cim-selection-group">
-                  <label>Duplicate customer(s) to remove</label>
-                  {duplicates.length > 0
-                    ? duplicates.map((customer) => <CustomerCard key={customer.customer_id} customer={customer} />)
-                    : <p className="cim-muted">Choose at least one duplicate.</p>}
-                </div>
-                {master && (
-                  <div className="cim-profile-fields">
-                    {[
-                      ["name", "Final customer name"],
-                      ["phone", "Final phone number"],
-                      ["location", "Final location"],
-                    ].map(([field, label]) => (
-                      <label key={field}>
-                        {label}
-                        <input
-                          value={masterProfile[field]}
-                          disabled={!allowedToMerge}
-                          onChange={(event) =>
-                            setMasterProfile((current) => ({
-                              ...current,
-                              [field]: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    ))}
-                  </div>
-                )}
-                <div className="cim-selection-actions">
-                  <button
-                    type="button"
-                    className="cim-button cim-button-primary"
-                    disabled={!allowedToMerge || !masterId || sourceIds.length === 0 || previewing}
-                    onClick={openPreview}
-                  >
-                    {previewing ? "Preparing preview…" : "Preview safe merge"}
-                  </button>
-                  <button
-                    type="button"
-                    className="cim-button cim-button-ghost"
-                    onClick={resetSelection}
-                    disabled={!masterId && sourceIds.length === 0}
-                  >
-                    Clear selection
-                  </button>
-                </div>
-              </aside>
-            </div>
-          )}
+          </section>
         </div>
       )}
 
       {modalOpen && (
         <div className="cim-modal-backdrop" role="presentation">
-          <section className="cim-modal" role="dialog" aria-modal="true" aria-labelledby="cim-merge-title">
+          <section
+            className="cim-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cim-merge-title"
+          >
             <header>
               <div>
                 <span className="cim-eyebrow">Final safety review</span>
@@ -601,22 +814,31 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
                 ×
               </button>
             </header>
+
             <div className="cim-modal-content">
               <div className="cim-merge-direction">
-                <div><span>Keep as master</span>{master && <CustomerCard customer={master} />}</div>
-                <strong>← receives all links from ←</strong>
                 <div>
-                  <span>Remove duplicate profile(s)</span>
-                  {duplicates.map((customer) => <CustomerCard key={customer.customer_id} customer={customer} />)}
+                  <span>Keep this profile</span>
+                  {master && <CustomerCard customer={master} />}
+                </div>
+                <strong>Receives all linked records</strong>
+                <div>
+                  <span>Merge and remove duplicate profile(s)</span>
+                  {duplicates.map((customer) => (
+                    <CustomerCard key={customer.customer_id} customer={customer} />
+                  ))}
                 </div>
               </div>
+
               <div className="cim-preview-grid">
                 <div>
                   <h4>Records that will be relinked</h4>
                   <div className="cim-impact-list">
                     {previewReferences.map((row) => (
                       <div key={`${row.table}-${row.column}`}>
-                        <span>{row.table}.{row.column}</span>
+                        <span>
+                          {row.table}.{row.column}
+                        </span>
                         <strong>{Number(row.affected_rows || 0)} record(s)</strong>
                       </div>
                     ))}
@@ -627,15 +849,30 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
                 </div>
                 <div>
                   <h4>Protection applied</h4>
-                  <ul>{(preview?.safeguards || []).map((item) => <li key={item}>{item}</li>)}</ul>
+                  <ul>
+                    {(preview?.safeguards || []).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
               </div>
+
               <div className="cim-profile-preview">
-                <h4>Final master profile</h4>
-                <div><span>Name</span><strong>{masterProfile.name || "-"}</strong></div>
-                <div><span>Phone</span><strong>{masterProfile.phone || "-"}</strong></div>
-                <div><span>Location</span><strong>{masterProfile.location || "-"}</strong></div>
+                <h4>Final customer profile</h4>
+                <div>
+                  <span>Name</span>
+                  <strong>{masterProfile.name || "-"}</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong>{masterProfile.phone || "-"}</strong>
+                </div>
+                <div>
+                  <span>Location</span>
+                  <strong>{masterProfile.location || "-"}</strong>
+                </div>
               </div>
+
               <label className="cim-modal-field">
                 Reason for merge
                 <textarea
@@ -645,6 +882,7 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
                   placeholder="Explain why these records belong to the same customer."
                 />
               </label>
+
               <label className="cim-modal-field">
                 Type MERGE to confirm
                 <input
@@ -654,11 +892,13 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
                   autoComplete="off"
                 />
               </label>
+
               <div className="cim-warning-box">
-                Duplicate rows are removed only after every linked record is reassigned. Any
-                failure rolls back the complete operation.
+                The duplicate profiles are removed only after every linked record is
+                reassigned. Any failure cancels the complete operation.
               </div>
             </div>
+
             <footer>
               <button
                 type="button"
@@ -666,7 +906,7 @@ export default function CustomerIdentityManagementPanel({ onMerged }) {
                 disabled={merging}
                 onClick={() => setModalOpen(false)}
               >
-                Cancel
+                Go back
               </button>
               <button
                 type="button"
