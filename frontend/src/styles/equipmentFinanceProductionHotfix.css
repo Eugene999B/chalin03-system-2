@@ -1,4 +1,4 @@
-/* Production repairs for administrator approval, case readability and protected images. */
+/* Production repairs for administrator approval, clear notices, case readability and protected images. */
 
 .installment-completion__case-grid {
   grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
