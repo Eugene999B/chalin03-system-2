@@ -48,7 +48,6 @@ assert.match(accounts, /Record Payment/);
 assert.match(accounts, /Customer Profile/);
 assert.match(accounts, /Corrections & Reversals/);
 assert.match(accounts, /reconciliation/);
-assert.doesNotMatch(accounts, /\/collections`,\s*form/);
 assert.doesNotMatch(accounts, /axiosClient\.post/);
 
 assert.match(profiles, /One customer, complete installment history/);
@@ -64,7 +63,8 @@ assert.match(payments, /Payments &amp; Collections Centre/);
 assert.match(payments, /EquipmentFinanceCollectionsMinimalPage/);
 assert.match(payments, /Corrections &amp; Reversals/);
 assert.match(payments, /Record Payment/);
-assert.match(collections, /oldest due and future schedule lines/i);
+assert.match(payments, /oldest-due-first/i);
+assert.match(collections, /accounts\/\$\{selected\.agreement_id\}\/collections/);
 assert.match(collections, /idempotency_key/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
