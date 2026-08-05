@@ -86,6 +86,8 @@ export default function ApprovalCentreLiveAttention() {
 
       const safeCount = Math.max(Number(count || 0), 0);
       const badge = ensureLiveBadge(button);
+      const nextBadgeText = safeCount > 0 ? displayCount(safeCount) : "";
+      const shouldHideBadge = safeCount === 0;
 
       button.classList.toggle("approval-launcher-has-attention", safeCount > 0);
       button.dataset.pendingApprovalCount = String(safeCount);
@@ -96,8 +98,12 @@ export default function ApprovalCentreLiveAttention() {
           : "Open Approval Centre. No requests are waiting."
       );
 
-      badge.hidden = safeCount === 0;
-      badge.textContent = safeCount > 0 ? displayCount(safeCount) : "";
+      if (badge.hidden !== shouldHideBadge) {
+        badge.hidden = shouldHideBadge;
+      }
+      if (badge.textContent !== nextBadgeText) {
+        badge.textContent = nextBadgeText;
+      }
       badge.setAttribute(
         "aria-label",
         safeCount > 0
