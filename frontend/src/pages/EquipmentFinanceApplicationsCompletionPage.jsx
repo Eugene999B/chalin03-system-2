@@ -67,6 +67,32 @@ function relabelAdministratorActions(container, administrator) {
   });
 }
 
+function relabelAdministratorDecisionDialogs(root, administrator) {
+  if (!administrator || !root) return;
+  root.querySelectorAll('.finance-simple__dialog[role="dialog"]').forEach((dialog) => {
+    const heading = dialog.querySelector(".finance-simple__section-header h2");
+    if (clean(heading?.textContent).toLowerCase() !== "submit for manager review") return;
+
+    heading.textContent = "Approve installment now";
+    dialog.setAttribute("aria-label", "Approve installment now");
+
+    const eyebrow = dialog.querySelector(".finance-simple__section-header .finance-simple__eyebrow");
+    if (eyebrow) eyebrow.textContent = "Administrator approval";
+
+    const explanation = dialog.querySelector(".finance-simple__sticky-actions > span");
+    if (explanation) {
+      explanation.textContent =
+        "This administrator approval is recorded immediately. No separate manager review is required.";
+    }
+
+    const confirmButton = dialog.querySelector('button[type="submit"]');
+    if (confirmButton && clean(confirmButton.textContent).toLowerCase() === "confirm action") {
+      confirmButton.textContent = "Approve Now";
+      confirmButton.dataset.adminApprovalAction = "true";
+    }
+  });
+}
+
 function imageFallback(imageContainer, message) {
   const fallback = document.createElement("span");
   fallback.textContent = message;
@@ -207,6 +233,8 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
           const application = applicationsRef.current.get(applicationNumber);
           if (application) hydrateDialog(dialog, application, { administrator });
         });
+
+      relabelAdministratorDecisionDialogs(root, administrator);
     };
 
     const scheduleHydration = () => {
@@ -215,11 +243,16 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
     };
 
     const observer = new MutationObserver((mutations) => {
-      if (mutations.some((mutation) => mutation.addedNodes.length > 0)) {
+      if (
+        mutations.some(
+          (mutation) =>
+            mutation.type === "characterData" || mutation.addedNodes.length > 0
+        )
+      ) {
         scheduleHydration();
       }
     });
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(root, { childList: true, characterData: true, subtree: true });
 
     axiosClient
       .get(API, {
@@ -283,4 +316,5 @@ export {
   isAdministrator,
   protectedApplicationImagePath,
   relabelAdministratorActions,
+  relabelAdministratorDecisionDialogs,
 };
