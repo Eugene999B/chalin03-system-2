@@ -137,7 +137,7 @@ async function hydrateApplicationImage(imageContainer, application) {
     image.src = objectUrl;
     imageContainer.replaceChildren(image);
     imageContainer.dataset.completionImageState = "loaded";
-  } catch (_error) {
+  } catch {
     if (imageContainer.isConnected) {
       imageFallback(imageContainer, "Excavator picture unavailable");
     }
