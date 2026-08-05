@@ -13,6 +13,7 @@ const MAX_RESPONSE_KEYS = 100;
 const MAX_TEXT_LENGTH = 5000;
 const MAX_USER_AGENT_LENGTH = 500;
 const MAX_SOURCE_URL_LENGTH = 700;
+const MIN_PRODUCTION_IP_HASH_SECRET_LENGTH = 64;
 
 class PublicSubmissionValidationError extends Error {
   constructor(message, details = []) {
@@ -49,12 +50,30 @@ function normalizePhone(value) {
   return /^\+?[0-9]{7,15}$/.test(compact) ? compact : null;
 }
 
+function normalizeSourceUrl(value) {
+  const raw = cleanText(value, MAX_SOURCE_URL_LENGTH);
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    if (parsed.username || parsed.password) return null;
+    return parsed.toString().slice(0, MAX_SOURCE_URL_LENGTH);
+  } catch {
+    return null;
+  }
+}
+
 function truthy(value) {
-  return value === true ||
+  return (
+    value === true ||
     value === 1 ||
     ["1", "true", "yes", "on"].includes(
-      String(value || "").trim().toLowerCase()
-    );
+      String(value || "")
+        .trim()
+        .toLowerCase()
+    )
+  );
 }
 
 function normalizeOptionValues(options) {
@@ -74,6 +93,22 @@ function hasMeaningfulValue(value) {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === "boolean") return true;
   return value !== undefined && value !== null && String(value).trim() !== "";
+}
+
+function isRequiredFieldSatisfied(field, value) {
+  const type = String(field?.type || "text")
+    .trim()
+    .toLowerCase();
+
+  if (type === "checkbox" || type === "boolean") {
+    return truthy(value);
+  }
+
+  if (type === "multiselect" || type === "checkbox_group") {
+    return Array.isArray(value) && value.length > 0;
+  }
+
+  return hasMeaningfulValue(value);
 }
 
 function sanitizeFieldValue(field, value) {
@@ -103,13 +138,19 @@ function sanitizeFieldValue(field, value) {
       );
     }
 
-    if (validation?.minimum !== undefined && number < Number(validation.minimum)) {
+    if (
+      validation?.minimum !== undefined &&
+      number < Number(validation.minimum)
+    ) {
       throw new PublicSubmissionValidationError(
         `${field.label || field.key} is below the allowed minimum.`
       );
     }
 
-    if (validation?.maximum !== undefined && number > Number(validation.maximum)) {
+    if (
+      validation?.maximum !== undefined &&
+      number > Number(validation.maximum)
+    ) {
       throw new PublicSubmissionValidationError(
         `${field.label || field.key} is above the allowed maximum.`
       );
@@ -181,7 +222,11 @@ function validateAndSanitizeSubmission(form, payload = {}) {
     );
   }
 
-  if (payload && typeof payload !== "object") {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
     throw new PublicSubmissionValidationError(
       "Submission data must be a JSON object."
     );
@@ -219,20 +264,25 @@ function validateAndSanitizeSubmission(form, payload = {}) {
   }
 
   const responses =
-    payload.responses && typeof payload.responses === "object" &&
+    payload.responses &&
+    typeof payload.responses === "object" &&
     !Array.isArray(payload.responses)
       ? payload.responses
       : {};
   const responseKeys = Object.keys(responses);
 
   if (responseKeys.length > MAX_RESPONSE_KEYS) {
-    errors.push(`A form submission may contain no more than ${MAX_RESPONSE_KEYS} fields.`);
+    errors.push(
+      `A form submission may contain no more than ${MAX_RESPONSE_KEYS} fields.`
+    );
   }
 
   const fieldsByKey = new Map(form.fields.map((field) => [field.key, field]));
   const unknownKeys = responseKeys.filter((key) => !fieldsByKey.has(key));
   if (unknownKeys.length > 0) {
-    errors.push(`Unsupported form fields: ${unknownKeys.slice(0, 10).join(", ")}.`);
+    errors.push(
+      `Unsupported form fields: ${unknownKeys.slice(0, 10).join(", ")}.`
+    );
   }
 
   const sanitizedResponses = {};
@@ -240,7 +290,7 @@ function validateAndSanitizeSubmission(form, payload = {}) {
   for (const field of form.fields) {
     const rawValue = responses[field.key];
 
-    if (field.required && !hasMeaningfulValue(rawValue)) {
+    if (field.required && !isRequiredFieldSatisfied(field, rawValue)) {
       errors.push(`${field.label || field.key} is required.`);
       continue;
     }
@@ -256,6 +306,11 @@ function validateAndSanitizeSubmission(form, payload = {}) {
         throw error;
       }
     }
+  }
+
+  const sourceUrl = normalizeSourceUrl(payload.source_url);
+  if (payload.source_url && !sourceUrl) {
+    errors.push("The source URL is invalid.");
   }
 
   if (errors.length > 0) {
@@ -276,7 +331,7 @@ function validateAndSanitizeSubmission(form, payload = {}) {
     consent_text_version: cleanText(payload.consent_text_version, 80) || null,
     consent_at: consentGiven ? new Date() : null,
     source_page_slug: normalizeSlug(payload.source_page_slug, 180),
-    source_url: cleanText(payload.source_url, MAX_SOURCE_URL_LENGTH) || null,
+    source_url: sourceUrl,
     confirmation_message: form.confirmation_message,
   };
 }
@@ -286,9 +341,12 @@ function getIpHashSecret(env = process.env) {
   const production =
     String(env.NODE_ENV || "").trim().toLowerCase() === "production";
 
-  if (production && secret.length < 32) {
+  if (
+    production &&
+    secret.length < MIN_PRODUCTION_IP_HASH_SECRET_LENGTH
+  ) {
     const error = new Error(
-      "PUBLIC_FORM_IP_HASH_SECRET must be configured with at least 32 characters before public forms are enabled in production."
+      `PUBLIC_FORM_IP_HASH_SECRET must be configured with at least ${MIN_PRODUCTION_IP_HASH_SECRET_LENGTH} characters before public forms are enabled in production.`
     );
     error.code = "PUBLIC_FORM_SECURITY_NOT_CONFIGURED";
     error.statusCode = 503;
@@ -309,7 +367,10 @@ function hashNetworkIdentifier(value, env = process.env) {
     .digest("hex");
 }
 
-function generateReferenceCode(now = new Date(), randomBytes = crypto.randomBytes) {
+function generateReferenceCode(
+  now = new Date(),
+  randomBytes = crypto.randomBytes
+) {
   const date = now.toISOString().slice(0, 10).replaceAll("-", "");
   const token = randomBytes(6).toString("hex").toUpperCase();
   return `WEB-${date}-${token}`;
@@ -390,7 +451,9 @@ async function createPublicFormSubmission({
   payload,
   requestContext = {},
 }) {
-  const form = await getPublicFormBySlug(formSlug, { includeInternalId: true });
+  const form = await getPublicFormBySlug(formSlug, {
+    includeInternalId: true,
+  });
   if (!form) return null;
 
   const sanitized = validateAndSanitizeSubmission(form, payload);
@@ -432,6 +495,7 @@ module.exports = {
   MAX_SOURCE_URL_LENGTH,
   MAX_TEXT_LENGTH,
   MAX_USER_AGENT_LENGTH,
+  MIN_PRODUCTION_IP_HASH_SECRET_LENGTH,
   PublicSubmissionValidationError,
   cleanText,
   createPublicFormSubmission,
@@ -439,9 +503,11 @@ module.exports = {
   getIpHashSecret,
   hashNetworkIdentifier,
   hasMeaningfulValue,
+  isRequiredFieldSatisfied,
   normalizeEmail,
   normalizeOptionValues,
   normalizePhone,
+  normalizeSourceUrl,
   sanitizeFieldValue,
   truthy,
   validateAndSanitizeSubmission,
