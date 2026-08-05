@@ -490,13 +490,6 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
     }
 
     if (request.expires_at && new Date(request.expires_at).getTime() <= Date.now()) {
-      await connection.query(
-        `UPDATE audit_unlock_requests
-         SET status = 'cancelled', execution_status = 'expired',
-             execution_error = 'Request expired before approval.'
-         WHERE id = ?`,
-        [request.id]
-      );
       const error = new Error("This request has expired. The manager must submit it again.");
       error.statusCode = 409;
       throw error;
