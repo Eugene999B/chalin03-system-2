@@ -36,6 +36,30 @@ function restoreCompleteFinanceCustomerProfile() {
   };
 }
 
+function resolveBuildId(environment = process.env) {
+  const supplied =
+    environment.RAILWAY_GIT_COMMIT_SHA ||
+    environment.CF_PAGES_COMMIT_SHA ||
+    environment.GITHUB_SHA ||
+    environment.VITE_CHALIN03_BUILD_ID;
+
+  if (supplied) {
+    return String(supplied)
+      .trim()
+      .replace(/[^A-Za-z0-9._-]/g, "-")
+      .slice(0, 64);
+  }
+
+  return `local-${Date.now().toString(36)}`;
+}
+
+const chalin03BuildId = resolveBuildId();
+
 export default defineConfig({
   plugins: [restoreCompleteFinanceCustomerProfile(), react()],
+  define: {
+    "import.meta.env.VITE_CHALIN03_BUILD_ID": JSON.stringify(
+      chalin03BuildId
+    ),
+  },
 });
