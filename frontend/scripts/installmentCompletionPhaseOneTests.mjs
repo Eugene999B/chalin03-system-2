@@ -16,8 +16,10 @@ const home = source("src/pages/EquipmentFinanceCompletionHomePage.jsx");
 const inbox = source("src/pages/EquipmentFinanceTaskInboxPage.jsx");
 const caseOperations = source("src/pages/EquipmentFinanceCaseOperationsPage.jsx");
 const applications = source("src/pages/EquipmentFinanceApplicationsCompletionPage.jsx");
+const optionalApplications = source("src/pages/EquipmentFinanceApplicationsOptionalPage.jsx");
 const commandPage = source("src/pages/EquipmentInstallmentCommandPage.jsx");
 const protectedImages = source("src/utils/equipmentMediaCaptureBridge.js");
+const productionHotfix = source("src/styles/equipmentFinanceProductionHotfix.css");
 
 assert.match(commandPage, /EquipmentFinanceCompletionHomePage/);
 assert.match(home, /Complete these six business stages/);
@@ -51,11 +53,22 @@ assert.match(caseOperations, /One selected case/);
 assert.match(caseOperations, /Complete chronology/);
 assert.match(caseOperations, /credit-applications\/\$\{applicationId\}\/image/);
 assert.match(caseOperations, /Account and payment history/);
+assert.match(caseOperations, /equipmentFinanceProductionHotfix\.css/);
 assert.doesNotMatch(caseOperations, /Tasks, approvals and exceptions/);
 
 assert.match(applications, /protectedApplicationImagePath/);
 assert.match(applications, /Case Operations/);
 assert.match(applications, /EquipmentFinanceApplicationsOptionalPage/);
+assert.match(applications, /responseType: "blob"/);
+assert.match(applications, /Approve Now/);
+assert.match(applications, /useAuth/);
+assert.match(applications, /completionObjectUrl/);
+assert.match(applications, /equipmentFinanceProductionHotfix\.css/);
+assert.match(optionalApplications, /Administrators may approve\s+directly/);
+assert.match(productionHotfix, /\.installment-completion__case-list button/);
+assert.match(productionHotfix, /display: grid/);
+assert.match(productionHotfix, /data-completion-image-state="loading"/);
+
 assert.match(protectedImages, /responseType: "blob"/);
 assert.match(protectedImages, /naturalWidth > 0/);
 assert.match(protectedImages, /credit-applications/);
