@@ -11,6 +11,7 @@ const PROFESSIONAL = "node scripts/runEquipmentFinanceProfessionalRebuildMigrati
 const P1_REPAIR = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && ";
 const P1 = "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && ";
 const P3 = "node scripts/runEquipmentFinanceOperationalPolishStartup.js && ";
+const OPENING_DEPOSIT_REPAIR = "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && ";
 const P4 = "node scripts/runEquipmentFinancePhaseFourStartup.js && ";
 const P5A = "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && ";
 const P5B = "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && ";
@@ -40,6 +41,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${STOCK_COUNT_20260802}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
@@ -52,4 +54,3 @@ test("Mining cleanup release evidence retains production commit and durable mark
   assert.match(releaseEvidence, /Equipment Hire/);
   assert.match(releaseEvidence, /shared-fleet/);
 });
-
