@@ -289,6 +289,7 @@ test("staff can move from account monitoring to customer profile and committed p
   await expect(page.getByRole("heading", { name: "Customer Installment Profiles" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ama Account Customer" })).toBeVisible();
   await expect(page.getByText("GHA-123456789-0")).toBeVisible();
+  await page.getByText("Show payment history", { exact: true }).click();
   await expect(page.getByText("ESR-0002")).toBeVisible();
   const image = page.locator('img[alt="Excavator for Ama Account Customer"]');
   await expect(image).toBeVisible();
