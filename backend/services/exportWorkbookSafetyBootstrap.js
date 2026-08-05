@@ -1,5 +1,6 @@
 require("./equipmentCreditOptionalApprovalBootstrap");
 require("./operationalApprovalBootstrap");
+require("./stockLedgerSummaryBootstrap");
 
 const ExcelJS = require("./excelJsCompat");
 
