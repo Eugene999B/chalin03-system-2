@@ -10,16 +10,30 @@ function read(relativePath) {
   return fs.readFileSync(path.resolve(projectRoot, relativePath), "utf8");
 }
 
-test("approval centre is loaded before the existing protected business routes", () => {
+test("approval centre uses the already reviewed Railway preload gate", () => {
   const packageJson = JSON.parse(read("backend/package.json"));
-  const bootstrap = read("backend/services/operationalApprovalBootstrap.js");
+  const exportBootstrap = read(
+    "backend/services/exportWorkbookSafetyBootstrap.js"
+  );
+  const approvalBootstrap = read(
+    "backend/services/operationalApprovalBootstrap.js"
+  );
 
-  assert.match(packageJson.scripts.start, /runOperationalApprovalCentreStartup\.js/);
-  assert.match(packageJson.scripts.start, /operationalApprovalBootstrap\.js/);
-  assert.match(bootstrap, /saleRoutes/);
-  assert.match(bootstrap, /returnRoutes/);
-  assert.match(bootstrap, /auditUnlockRequestRoutes/);
-  assert.match(bootstrap, /operationalApprovalExecutionMiddleware/);
+  assert.match(
+    packageJson.scripts.start,
+    /node -r \.\/services\/exportWorkbookSafetyBootstrap\.js server\.js$/
+  );
+  assert.doesNotMatch(
+    packageJson.scripts.start,
+    /runOperationalApprovalCentreStartup|operationalApprovalBootstrap/
+  );
+  assert.match(exportBootstrap, /require\("\.\/operationalApprovalBootstrap"\)/);
+  assert.match(approvalBootstrap, /testDatabaseConnection/);
+  assert.match(approvalBootstrap, /runOperationalApprovalCentreStartup/);
+  assert.match(approvalBootstrap, /saleRoutes/);
+  assert.match(approvalBootstrap, /returnRoutes/);
+  assert.match(approvalBootstrap, /auditUnlockRequestRoutes/);
+  assert.match(approvalBootstrap, /operationalApprovalExecutionMiddleware/);
 });
 
 test("stored requests are tamper checked and cannot contain administrator passwords", () => {
@@ -93,4 +107,5 @@ test("the floating centre supports sale edit, sale void, approve and reject", ()
   assert.match(launcher, /Reject Without Changes/);
   assert.match(launcher, /Your administrator password/);
   assert.match(main, /OperationalApprovalLauncher/);
+  assert.match(main, /finance-outer-workspace-unlock-v33/);
 });
