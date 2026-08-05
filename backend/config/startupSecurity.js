@@ -23,6 +23,10 @@ const PRODUCTION_SECRET_NAMES = [
   "BACKUP_SIGNING_SECRET",
 ];
 
+const CONDITIONAL_PRODUCTION_SECRET_NAMES = Object.freeze({
+  publicWebsite: "PUBLIC_FORM_IP_HASH_SECRET",
+});
+
 class StartupSecurityError extends Error {
   constructor(problems) {
     super(`Startup security check failed: ${problems.join("; ")}`);
@@ -44,6 +48,16 @@ function booleanValue(value, fallback = false) {
 
 function isProductionEnvironment(env = process.env) {
   return cleanValue(env.NODE_ENV).toLowerCase() === "production";
+}
+
+function productionSecretNames(env = process.env) {
+  const names = [...PRODUCTION_SECRET_NAMES];
+
+  if (booleanValue(env.FEATURE_PUBLIC_WEBSITE, false)) {
+    names.push(CONDITIONAL_PRODUCTION_SECRET_NAMES.publicWebsite);
+  }
+
+  return names;
 }
 
 function looksLikePlaceholder(value) {
@@ -114,11 +128,10 @@ function isRailwayPrivateDatabaseHost(value) {
   return normalizeDatabaseHost(value).endsWith(".railway.internal");
 }
 
-function distinctSecretProblems(env) {
-  const values = PRODUCTION_SECRET_NAMES.map((name) => [
-    name,
-    cleanValue(env[name]),
-  ]).filter(([, value]) => value);
+function distinctSecretProblems(env, secretNames = productionSecretNames(env)) {
+  const values = secretNames
+    .map((name) => [name, cleanValue(env[name])])
+    .filter(([, value]) => value);
   const problems = [];
 
   for (let left = 0; left < values.length; left += 1) {
@@ -150,6 +163,7 @@ function auditStartupSecurity({
     ? allowedOrigins.map(cleanValue).filter(Boolean)
     : [];
   const jwtSecret = cleanValue(env.JWT_SECRET);
+  const requiredSecretNames = productionSecretNames(env);
 
   if (!jwtSecret) {
     errors.push("JWT_SECRET is missing");
@@ -160,10 +174,10 @@ function auditStartupSecurity({
   }
 
   if (production) {
-    for (const secretName of PRODUCTION_SECRET_NAMES) {
+    for (const secretName of requiredSecretNames) {
       errors.push(...secretProblems(secretName, env[secretName]));
     }
-    errors.push(...distinctSecretProblems(env));
+    errors.push(...distinctSecretProblems(env, requiredSecretNames));
 
     if (
       cleanValue(env.ENFORCE_PRODUCTION_SECURITY_SECRETS).toLowerCase() ===
@@ -234,12 +248,12 @@ function auditStartupSecurity({
       );
     }
 
-    for (const secretName of PRODUCTION_SECRET_NAMES.filter(
+    for (const secretName of requiredSecretNames.filter(
       (name) => name !== "JWT_SECRET"
     )) {
       if (!cleanValue(env[secretName])) {
         warnings.push(
-          `${secretName} is not configured. Production will refuse to start without it.`
+          `${secretName} is not configured. Production will refuse to start without it when the related feature is enabled.`
         );
       }
     }
@@ -262,6 +276,7 @@ function validateStartupSecurity(options = {}) {
 }
 
 module.exports = {
+  CONDITIONAL_PRODUCTION_SECRET_NAMES,
   MIN_PRODUCTION_SECRET_LENGTH,
   MIN_SECRET_VARIETY,
   PRODUCTION_SECRET_NAMES,
@@ -275,6 +290,7 @@ module.exports = {
   normalizeDatabaseHost,
   normalizeHostEntry,
   normalizedHosts,
+  productionSecretNames,
   secretProblems,
   validateStartupSecurity,
 };
