@@ -30,6 +30,65 @@ const protectedRouteExecutionLimiter = rateLimit({
   },
 });
 
+const approvalReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "APPROVAL_CENTRE_READ_RATE_LIMITED",
+    message: "Too many Approval Centre refreshes were attempted. Wait briefly.",
+  },
+});
+
+const approvalRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "APPROVAL_REQUEST_RATE_LIMITED",
+    message:
+      "Too many protected-action requests were submitted. Wait briefly before trying again.",
+  },
+});
+
+const approvalDecisionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "APPROVAL_DECISION_RATE_LIMITED",
+    message:
+      "Too many administrator approval decisions were attempted. Wait briefly before trying again.",
+  },
+});
+
+function buildOperationalApprovalRateLimitRouter() {
+  const limiterRouter = express.Router();
+
+  limiterRouter.get("/operational", approvalReadLimiter);
+  limiterRouter.post(
+    [
+      "/operational/return-refund",
+      "/operational/sale-edit/:saleId",
+      "/operational/sale-void/:saleId",
+    ],
+    approvalRequestLimiter
+  );
+  limiterRouter.post(
+    ["/operational/:id/approve", "/operational/:id/reject"],
+    approvalDecisionLimiter
+  );
+  limiterRouter.patch("/:id/review", approvalDecisionLimiter);
+
+  return limiterRouter;
+}
+
 function installDatabaseStartupGate() {
   if (dbModule[DATABASE_STARTUP_FLAG]) return false;
 
@@ -96,6 +155,7 @@ function installOperationalApprovalRoutes() {
 
   replaceCachedRouter("../routes/auditUnlockRequestRoutes", (originalRouter) => {
     const wrapper = express.Router();
+    wrapper.use(buildOperationalApprovalRateLimitRouter());
     wrapper.use(operationalApprovalRoutes);
     wrapper.use(originalRouter);
     return wrapper;
@@ -117,6 +177,7 @@ installOperationalApprovalRoutes();
 console.log("Operational Approval Centre route protection loaded.");
 
 module.exports = {
+  buildOperationalApprovalRateLimitRouter,
   installDatabaseStartupGate,
   installOperationalApprovalRoutes,
 };
