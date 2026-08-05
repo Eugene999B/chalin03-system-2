@@ -21,8 +21,10 @@ const {
   generateReferenceCode,
   getIpHashSecret,
   hashNetworkIdentifier,
+  isRequiredFieldSatisfied,
   normalizeEmail,
   normalizePhone,
+  normalizeSourceUrl,
   validateAndSanitizeSubmission,
 } = require("../services/publicFormSubmissionService");
 
@@ -179,6 +181,42 @@ test("public form validation requires contact, consent and declared fields", () 
   );
 });
 
+test("required checkbox fields require an affirmative value", () => {
+  const requiredCheckbox = {
+    key: "accept_terms",
+    type: "checkbox",
+    label: "Accept terms",
+    required: true,
+    options: [],
+    validation: {},
+  };
+
+  assert.equal(isRequiredFieldSatisfied(requiredCheckbox, false), false);
+  assert.equal(isRequiredFieldSatisfied(requiredCheckbox, "false"), false);
+  assert.equal(isRequiredFieldSatisfied(requiredCheckbox, true), true);
+  assert.equal(isRequiredFieldSatisfied(requiredCheckbox, "yes"), true);
+
+  const form = exampleForm({
+    fields: [...exampleForm().fields, requiredCheckbox],
+  });
+
+  assert.throws(
+    () =>
+      validateAndSanitizeSubmission(form, {
+        email: "customer@example.com",
+        consent_given: true,
+        responses: {
+          subject: "Spare Parts",
+          message: "Need a quotation",
+          accept_terms: false,
+        },
+      }),
+    (error) =>
+      error instanceof PublicSubmissionValidationError &&
+      error.details.some((detail) => /Accept terms is required/i.test(detail))
+  );
+});
+
 test("valid public form data is normalized without accepting unsupported options", () => {
   const form = exampleForm();
 
@@ -216,6 +254,33 @@ test("valid public form data is normalized without accepting unsupported options
     sanitized.responses.message,
     "Please contact me about an excavator."
   );
+  assert.equal(sanitized.source_url, "https://www.chalin03.com/contact");
+});
+
+test("source URLs accept only HTTP or HTTPS without embedded credentials", () => {
+  assert.equal(
+    normalizeSourceUrl("https://www.chalin03.com/contact"),
+    "https://www.chalin03.com/contact"
+  );
+  assert.equal(normalizeSourceUrl("javascript:alert(1)"), null);
+  assert.equal(normalizeSourceUrl("https://user:pass@example.com/contact"), null);
+  assert.equal(normalizeSourceUrl("not a url"), null);
+
+  assert.throws(
+    () =>
+      validateAndSanitizeSubmission(exampleForm(), {
+        email: "customer@example.com",
+        consent_given: true,
+        source_url: "javascript:alert(1)",
+        responses: {
+          subject: "Spare Parts",
+          message: "Need a quotation",
+        },
+      }),
+    (error) =>
+      error instanceof PublicSubmissionValidationError &&
+      error.details.some((detail) => /source URL is invalid/i.test(detail))
+  );
 });
 
 test("honeypot submissions are accepted silently without database content", () => {
@@ -248,8 +313,12 @@ test("network identifiers use a dedicated HMAC secret and never plain storage", 
   assert.notEqual(first, different);
   assert.notEqual(first, "192.0.2.10");
   assert.throws(
-    () => getIpHashSecret({ NODE_ENV: "production" }),
-    /PUBLIC_FORM_IP_HASH_SECRET/
+    () =>
+      getIpHashSecret({
+        NODE_ENV: "production",
+        PUBLIC_FORM_IP_HASH_SECRET: "a".repeat(63),
+      }),
+    /at least 64 characters/
   );
 });
 
@@ -273,7 +342,10 @@ test("public route surface is anonymous, rate-limited and no-store for writes", 
   assert.match(routeSource, /router\.get\("\/equipment"/);
   assert.match(routeSource, /router\.get\("\/vacancies"/);
   assert.match(routeSource, /router\.get\("\/tenders"/);
-  assert.match(routeSource, /router\.post\([\s\S]*?\/forms\/:slug\/submissions/);
+  assert.match(
+    routeSource,
+    /router\.post\([\s\S]*?\/forms\/:slug\/submissions/
+  );
 });
 
 test("system router blocks the full public API before any query when disabled", () => {
