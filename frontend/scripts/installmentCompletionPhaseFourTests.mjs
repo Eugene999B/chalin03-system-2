@@ -23,13 +23,13 @@ for (const title of [
   assert.match(page, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
 
-for (const path of [
-  "completion-phase-four/readiness",
-  "completion-phase-four/reset/dry-run",
-  "completion-phase-four/reset/execute",
-]) {
-  assert.match(page, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-}
+assert.match(
+  page,
+  /const API = "\/equipment-catalogue\/sales\/completion-phase-four"/
+);
+assert.match(page, /\$\{API\}\/readiness/);
+assert.match(page, /\$\{API\}\/reset\/dry-run/);
+assert.match(page, /\$\{API\}\/reset\/execute/);
 
 assert.match(page, /Production reset is permanently blocked/);
 assert.match(page, /NODE_ENV=test/);
