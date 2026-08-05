@@ -12,6 +12,7 @@ test("equipment login presents one business with two role-isolated divisions", (
   assert.match(workspaces, /code: "equipment_hire"/);
   assert.match(workspaces, /name: "Equipment Hire & Installment Finance"/);
   assert.match(workspaces, /shortName: "Equipment Business"/);
+  assert.match(workspaces, /route: "\/login\?workspace=equipment_hire"/);
   assert.match(workspaces, /openRoute: "\/equipment-hire"/);
   assert.match(workspaces, /Hire employees open only Equipment Hire Operations/);
   assert.match(workspaces, /Finance employees open only Equipment Installment Finance/);
@@ -19,21 +20,14 @@ test("equipment login presents one business with two role-isolated divisions", (
   assert.equal((workspaces.match(/code: "equipment_hire"/g) || []).length, 1);
 });
 
-test("authenticated equipment portal opens the protected division gateway", () => {
+test("equipment portal requires authentication before the protected division gateway", () => {
   const portal = read("frontend", "src", "pages", "EquipmentHirePortalPage.jsx");
-  const landing = read(
-    "frontend",
-    "src",
-    "pages",
-    "EquipmentBusinessLandingPage.jsx"
-  );
   const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
 
-  assert.match(portal, /isLoggedIn && workspaceCode === "equipment_hire"/);
+  assert.match(portal, /!isLoggedIn \|\| workspaceCode !== "equipment_hire"/);
+  assert.match(portal, /Navigate to="\/login\?workspace=equipment_hire" replace/);
   assert.match(portal, /<EquipmentDivisionGatewayPage \/>/);
-  assert.match(portal, /<EquipmentBusinessLandingPage \/>/);
-  assert.match(landing, /Two divisions\./);
-  assert.match(landing, /Back to Main Login/);
+  assert.doesNotMatch(portal, /EquipmentBusinessLandingPage/);
   assert.match(gateway, /Equipment Hire Operations/);
   assert.match(gateway, /Equipment Installment Finance/);
   assert.match(gateway, /\/equipment-hire-operations\?division=hire/);
@@ -42,7 +36,10 @@ test("authenticated equipment portal opens the protected division gateway", () =
   assert.match(gateway, /Protected division boundary/);
   assert.match(gateway, /Hire jobs never become Finance accounts/);
   assert.match(gateway, /await logout\(\)/);
+  assert.match(gateway, /window\.location\.replace\("\/login\?workspace=equipment_hire"\)/);
   assert.match(gateway, /Back to Login/);
+  assert.doesNotMatch(gateway, /\/company\//);
+  assert.doesNotMatch(gateway, /Company Overview/);
   assert.doesNotMatch(gateway, /HIRE_VIEW_PERMISSIONS/);
   assert.doesNotMatch(gateway, /effectivePermissions\.includes\("fleet\.assets\.view"\)/);
   assert.match(gateway, /workspaceCode !== "equipment_hire"/);
@@ -138,6 +135,7 @@ test("gateway remains responsive, protected and stale-asset safe", () => {
   assert.match(css, /@media \(max-width: 900px\)/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(gateway, /Back to Equipment Login/);
+  assert.doesNotMatch(gateway, /\/company\//);
   assert.match(staffManager, /Manage Division Staff/);
   assert.match(staffManager, /createPortal\(manager, document\.body\)/);
   assert.match(staffManager, /One employee\. One division\./);
