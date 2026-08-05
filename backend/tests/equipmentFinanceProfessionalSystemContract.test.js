@@ -39,7 +39,9 @@ test("professional Finance is exposed through simple daily navigation", () => {
     assert.match(layout, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(workspace, /PROFESSIONAL_STAGES/);
-  assert.match(workspace, /"settings", "generated-documents", "staff"/);
+  assert.match(workspace, /const PROFESSIONAL_STAGES = new Set\(\["settings", "staff"\]\)/);
+  assert.match(workspace, /stage === "generated-documents"/);
+  assert.match(workspace, /EquipmentFinanceDocumentCentrePage/);
   assert.match(workspace, /stage === "documents"/);
 });
 
@@ -64,4 +66,3 @@ test("dedicated guide teaches the complete installment journey", () => {
   assert.match(guide, /delivery/i);
   assert.match(guide, /ownership/i);
 });
-
