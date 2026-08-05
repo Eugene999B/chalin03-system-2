@@ -27,10 +27,14 @@ const STOCK_COUNT_20260802 = "node scripts/runBossApprovedProductQuantityCorrect
 const STOCK_COUNT_20260804 = "node scripts/runBossApprovedProductQuantityCorrection20260804.js && ";
 const CUSTOMER_MERGE_AUDIT_DATE_SANITIZER = "node scripts/runCustomerMergeAuditDateSanitizer20260805.js && ";
 const CUSTOMER_MERGE_ROLLBACK = "node scripts/runAutomaticCustomerMergeRollback20260805.js && ";
-const CUSTOMER_DEBT_ACCOUNT_RECONCILIATION = "node scripts/runPostRollbackDebtAccountReconciliation20260805.js && ";
+const EXACT_NAME_RECEIPT_RECOVERY = "node scripts/runExactNameReceiptOwnerRecovery20260805.js && ";
 
 test("completed Mining cleanup runner cannot execute again from application startup", () => {
   assert.doesNotMatch(packageJson.scripts.start, /runMiningTrialCleanup/i);
+  assert.doesNotMatch(
+    packageJson.scripts.start,
+    /runPostRollbackDebtAccountReconciliation20260805\.js/
+  );
   const approvedStarts = new Set([
     NORMAL,
     `${PROFESSIONAL}${NORMAL}`,
@@ -53,7 +57,7 @@ test("completed Mining cleanup runner cannot execute again from application star
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${CUSTOMER_MERGE_ROLLBACK}${NORMAL}`,
     `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${CUSTOMER_MERGE_AUDIT_DATE_SANITIZER}${CUSTOMER_MERGE_ROLLBACK}${NORMAL}`,
-    `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${CUSTOMER_MERGE_AUDIT_DATE_SANITIZER}${CUSTOMER_MERGE_ROLLBACK}${CUSTOMER_DEBT_ACCOUNT_RECONCILIATION}${NORMAL}`,
+    `${P1_REPAIR}${P1}${P3}${OPENING_DEPOSIT_REPAIR}${P4}${P5A}${P5B}${P5_UNIFIED}${P5C}${P5D}${P6}${P6_PERFORMANCE}${INSTALLMENT_RESTART_RESET}${INSTALLMENT_EXCAVATOR_SAFE_RECOVERY}${STOCK_COUNT_20260802}${STOCK_COUNT_20260804}${CUSTOMER_MERGE_AUDIT_DATE_SANITIZER}${CUSTOMER_MERGE_ROLLBACK}${EXACT_NAME_RECEIPT_RECOVERY}${NORMAL}`,
   ]);
   assert.equal(approvedStarts.has(packageJson.scripts.start), true, "Startup may be normal or use only reviewed startup gates.");
   assert.equal(fs.existsSync(path.join(root, "backend", "scripts", "runMiningTrialCleanup.js")), false);
