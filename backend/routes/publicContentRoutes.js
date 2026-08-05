@@ -27,6 +27,9 @@ const {
   PublicSubmissionValidationError,
   createPublicFormSubmission,
 } = require("../services/publicFormSubmissionService");
+const {
+  listPublicTestimonials,
+} = require("../services/publicTestimonialService");
 
 const router = express.Router();
 
@@ -64,9 +67,20 @@ const publicSubmissionLimiter = rateLimit({
   },
 });
 
+function applyPublicReadLimiter(req, res, next) {
+  if (req.method === "GET" || req.method === "HEAD") {
+    return publicReadLimiter(req, res, next);
+  }
+
+  return next();
+}
+
 function setPublicCache(res, seconds = 60) {
   const safeSeconds = Math.max(0, Math.min(Number(seconds) || 0, 600));
-  res.set("Cache-Control", `public, max-age=${safeSeconds}, stale-while-revalidate=300`);
+  res.set(
+    "Cache-Control",
+    `public, max-age=${safeSeconds}, stale-while-revalidate=300`
+  );
 }
 
 function setPrivateNoStore(res) {
@@ -136,11 +150,13 @@ function sendPublicError(res, req, error) {
   });
 }
 
-router.use(publicReadLimiter);
+router.use(applyPublicReadLimiter);
 
 router.get("/bootstrap", async (req, res) => {
   try {
-    return success(res, req, await getPublicBootstrap(), { cacheSeconds: 60 });
+    return success(res, req, await getPublicBootstrap(), {
+      cacheSeconds: 60,
+    });
   } catch (error) {
     return sendPublicError(res, req, error);
   }
@@ -181,7 +197,9 @@ router.get("/news/:slug", async (req, res) => {
 
 router.get("/divisions", async (req, res) => {
   try {
-    return success(res, req, await listPublicDivisions(), { cacheSeconds: 120 });
+    return success(res, req, await listPublicDivisions(), {
+      cacheSeconds: 120,
+    });
   } catch (error) {
     return sendPublicError(res, req, error);
   }
@@ -199,7 +217,22 @@ router.get("/divisions/:slug", async (req, res) => {
 
 router.get("/leadership", async (req, res) => {
   try {
-    return success(res, req, await listPublicLeadership(), { cacheSeconds: 120 });
+    return success(res, req, await listPublicLeadership(), {
+      cacheSeconds: 120,
+    });
+  } catch (error) {
+    return sendPublicError(res, req, error);
+  }
+});
+
+router.get("/testimonials", async (req, res) => {
+  try {
+    return success(
+      res,
+      req,
+      await listPublicTestimonials({ limit: req.query.limit }),
+      { cacheSeconds: 120 }
+    );
   } catch (error) {
     return sendPublicError(res, req, error);
   }
@@ -359,6 +392,7 @@ router.post(
 
 router.PUBLIC_READ_RATE_LIMIT_MAX = PUBLIC_READ_RATE_LIMIT_MAX;
 router.PUBLIC_SUBMISSION_RATE_LIMIT_MAX = PUBLIC_SUBMISSION_RATE_LIMIT_MAX;
+router.applyPublicReadLimiter = applyPublicReadLimiter;
 router.publicReadLimiter = publicReadLimiter;
 router.publicSubmissionLimiter = publicSubmissionLimiter;
 router.sendPublicError = sendPublicError;
