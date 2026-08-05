@@ -26,6 +26,7 @@ const reviewedBypassFiles = new Set([
   "backend/routes/expenseReversalRoutes.js",
   "backend/routes/returnRoutes.js",
   "backend/routes/saleRoutes.js",
+  "backend/services/operationalApprovalService.js",
 ]);
 
 const counts = new Map();
@@ -141,6 +142,14 @@ const saleRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/saleRoutes.js"),
   "utf8"
 );
+const operationalApprovalServiceSource = fs.readFileSync(
+  path.join(root, "backend/services/operationalApprovalService.js"),
+  "utf8"
+);
+const operationalApprovalBootstrapSource = fs.readFileSync(
+  path.join(root, "backend/services/operationalApprovalBootstrap.js"),
+  "utf8"
+);
 const equipmentCreditApplicationSource = fs.readFileSync(
   path.join(root, "backend/routes/equipmentCreditApplicationRoutes.js"),
   "utf8"
@@ -205,6 +214,40 @@ assert.match(saleRoutesSource, /verifyIndependentApprover\(/);
 assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
+
+// Operational rejection is not an authorization bypass: the administrator has
+// already passed role, branch, self-approval and bcrypt checks. The user-controlled
+// value is only the mandatory explanatory note saved with a rejection decision.
+assert.match(operationalApprovalServiceSource, /SELF_APPROVAL_FORBIDDEN/);
+assert.match(
+  operationalApprovalServiceSource,
+  /bcrypt\.compare\(String\(password\), reviewer\.password_hash\)/
+);
+assert.match(operationalApprovalServiceSource, /userCanAccessBranch\(/);
+assert.match(
+  operationalApprovalServiceSource,
+  /if \(!cleanText\(reviewNote, 5000\)\)[\s\S]*A rejection reason is required/
+);
+assert.match(
+  operationalApprovalServiceSource,
+  /execution_status = 'executing'/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /const approvalRequestLimiter = rateLimit\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /const approvalDecisionLimiter = rateLimit\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /buildOperationalApprovalRateLimitRouter\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /protectedRouteExecutionLimiter[\s\S]*operationalApprovalExecutionMiddleware/
+);
 
 // The legacy credit-application fallback creates a public, human-readable
 // document reference only. It is never a password, token, authorisation

@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import EmergencyCommandOverlay from "./components/EmergencyCommandOverlay.jsx";
 import CommandArrivalBanner from "./components/CommandArrivalBanner.jsx";
 import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccountingExpenseFundingEvidence.jsx";
+import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
@@ -21,6 +22,7 @@ installCriticalFinanceWorkspacePreload();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
+    <OperationalApprovalLauncher />
     <AdvancedAccountingExpenseFundingEvidence />
     <EmergencyCommandOverlay />
     <CommandArrivalBanner />

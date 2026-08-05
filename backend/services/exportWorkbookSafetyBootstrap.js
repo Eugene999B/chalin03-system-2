@@ -1,4 +1,5 @@
 require("./equipmentCreditOptionalApprovalBootstrap");
+require("./operationalApprovalBootstrap");
 
 const ExcelJS = require("./excelJsCompat");
 
