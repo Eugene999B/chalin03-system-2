@@ -88,7 +88,7 @@ test("identifier and id helpers reject unsafe or duplicate input", () => {
   assert.deepEqual(uniqueNumericIds([1, "1", 2, 0, -1, "x", 2]), [1, 2]);
 });
 
-test("production startup runs the reset and excavator cleanup before the server", () => {
+test("production startup runs the completed reset before the server and keeps excavator cleanup explicit", () => {
   const start = packageJson.scripts.start;
   const phaseSix = start.indexOf(
     "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js"
@@ -96,18 +96,16 @@ test("production startup runs the reset and excavator cleanup before the server"
   const reset = start.indexOf(
     "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js"
   );
-  const excavatorCleanup = start.indexOf(
-    "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
-  );
   const server = start.indexOf(
     "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
   );
 
   assert.ok(phaseSix >= 0, "Phase Six schema startup must remain registered");
   assert.ok(reset > phaseSix, "reset must run after all Finance schema startups");
-  assert.ok(
-    excavatorCleanup > reset,
-    "excavator cleanup must run after the operational reset"
+  assert.ok(server > reset, "completed reset gate must finish before the API server starts");
+  assert.doesNotMatch(start, /runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/);
+  assert.equal(
+    packageJson.scripts["reset:equipment-finance:excavators:production"],
+    "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
   );
-  assert.ok(server > excavatorCleanup, "cleanup must complete before the API server starts");
 });
