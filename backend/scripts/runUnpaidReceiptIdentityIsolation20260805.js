@@ -171,33 +171,35 @@ async function coreSnapshot(connection) {
 
 async function protectedSnapshot(connection) {
   const [rows] = await connection.query(
-    `SELECT
-       d.id AS debt_id,
-       d.sale_id,
-       d.branch_id,
-       d.customer_id AS debt_customer_id,
-       s.customer_id AS sale_customer_id,
-       d.amount_owed,
-       d.amount_paid AS debt_amount_paid,
-       d.balance AS debt_balance,
-       d.status AS debt_status,
-       COALESCE(s.amount_paid, 0) AS sale_amount_paid,
-       COALESCE(s.balance, 0) AS sale_balance,
-       COUNT(dp.id) AS payment_count,
-       COALESCE(SUM(dp.amount), 0) AS payment_total
-     FROM debts d
-     LEFT JOIN sales s ON s.id = d.sale_id AND s.branch_id = d.branch_id
-     LEFT JOIN debt_payments dp ON dp.debt_id = d.id AND dp.branch_id = d.branch_id
-     GROUP BY
-       d.id, d.sale_id, d.branch_id, d.customer_id, s.customer_id,
-       d.amount_owed, d.amount_paid, d.balance, d.status,
-       s.amount_paid, s.balance
-     HAVING
-       d.amount_paid > 0.005
-       OR COALESCE(s.amount_paid, 0) > 0.005
-       OR d.status IN ('paid', 'partial')
-       OR COUNT(dp.id) > 0
-     ORDER BY d.id`
+    `SELECT protected.*
+     FROM (
+       SELECT
+         d.id AS debt_id,
+         d.sale_id,
+         d.branch_id,
+         d.customer_id AS debt_customer_id,
+         s.customer_id AS sale_customer_id,
+         d.amount_owed,
+         d.amount_paid AS debt_amount_paid,
+         d.balance AS debt_balance,
+         d.status AS debt_status,
+         COALESCE(s.amount_paid, 0) AS sale_amount_paid,
+         COALESCE(s.balance, 0) AS sale_balance,
+         COUNT(dp.id) AS payment_count,
+         COALESCE(SUM(dp.amount), 0) AS payment_total
+       FROM debts d
+       LEFT JOIN sales s ON s.id = d.sale_id AND s.branch_id = d.branch_id
+       LEFT JOIN debt_payments dp ON dp.debt_id = d.id AND dp.branch_id = d.branch_id
+       GROUP BY
+         d.id, d.sale_id, d.branch_id, d.customer_id, s.customer_id,
+         d.amount_owed, d.amount_paid, d.balance, d.status,
+         s.amount_paid, s.balance
+     ) AS protected
+     WHERE protected.debt_amount_paid > 0.005
+       OR protected.sale_amount_paid > 0.005
+       OR protected.debt_status IN ('paid', 'partial')
+       OR protected.payment_count > 0
+     ORDER BY protected.debt_id`
   );
   return rows.map(normalizeProtectedRow);
 }
