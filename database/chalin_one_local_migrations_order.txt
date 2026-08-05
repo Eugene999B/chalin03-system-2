@@ -1,0 +1,8 @@
+# CHALIN ONE local/staging migration order.
+# Run only against a confirmed isolated _test or staging database.
+# Never run this list automatically during backend startup.
+
+database/migrations/20260805_chalin_one_public_content_foundation.sql
+
+# Read-only verification runs after the migration.
+database/migrations/20260805_chalin_one_public_content_foundation_verify.sql
