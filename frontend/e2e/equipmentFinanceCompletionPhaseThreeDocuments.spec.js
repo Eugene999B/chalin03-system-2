@@ -287,6 +287,6 @@ test("staff issues customer agreement and exact-payment thermal receipt from imm
   });
 
   await expect(page.getByText("Immutable document history")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Thermal" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Thermal", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Print" }).first()).toBeVisible();
 });
