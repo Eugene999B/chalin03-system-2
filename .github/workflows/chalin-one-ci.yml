@@ -1,6 +1,7 @@
 name: CHALIN ONE CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - chalin-one
