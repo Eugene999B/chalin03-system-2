@@ -36,16 +36,21 @@ test("critical Finance workspace is retained in the entry bundle", () => {
   );
 });
 
-test("Finance app-shell rollout cannot reuse the retired cache", () => {
-  assert.match(main, /finance-outer-workspace-unlock-v33/);
+test("Finance app-shell rollout uses a deployment-specific cache and rejects retired assets", () => {
+  assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
+  assert.match(main, /browser-cache-integrity-v34/);
   assert.match(
     main,
-    /register\(`\/sw\.js\?release=\$\{APP_SHELL_RELEASE\}`/
+    /register\([\s\S]*`\/sw\.js\?release=\$\{encodeURIComponent\(APP_SHELL_RELEASE\)\}`/
   );
   assert.match(main, /updateViaCache: "none"/);
   assert.match(
     serviceWorker,
-    /CACHE_NAME = "chalin03-finance-outer-workspace-unlock-v33"/
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(
+    serviceWorker,
+    /CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
   );
   assert.doesNotMatch(
     serviceWorker,
@@ -53,14 +58,16 @@ test("Finance app-shell rollout cannot reuse the retired cache", () => {
   );
   assert.match(
     serviceWorker,
-    /fetch\(new Request\("\/", \{ cache: "no-store" \}\)\)/
+    /fetch\(url\.toString\(\), \{ cache: "no-store" \}\)/
   );
   assert.match(
     serviceWorker,
     /fetch\(request, \{ cache: "no-store" \}\)/
   );
   assert.match(serviceWorker, /self\.clients\.claim\(\)/);
-  assert.doesNotMatch(serviceWorker, /addEventListener\("message"/);
+  assert.match(serviceWorker, /addEventListener\("message"/);
+  assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 });
 
 test("Cloudflare does not cache Finance navigation or the worker script", () => {
@@ -75,6 +82,10 @@ test("Cloudflare does not cache Finance navigation or the worker script", () => 
   assert.match(
     headers,
     /\/index\.html\s+Cache-Control: no-store, max-age=0, must-revalidate/
+  );
+  assert.match(
+    headers,
+    /\/assets\/\*\s+Cache-Control: public, max-age=31536000, immutable/
   );
 });
 

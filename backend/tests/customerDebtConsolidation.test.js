@@ -96,14 +96,19 @@ test("Debt Desk uses the live-safe reader while professional consolidation stays
   assert.match(hotfixCss, /@media \(max-width: 420px\)/);
 });
 
-test("service worker cache retains the verified Debt Desk history", () => {
+test("service worker protects the verified Debt Desk from retired build assets", () => {
   const serviceWorker = read("frontend/public/sw.js");
   const indexHtml = read("frontend/index.html");
 
-  assert.match(serviceWorker, /chalin03-credit-return-debt-reconciliation-v32/);
-  assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-live-hotfix-v31/);
-  assert.match(serviceWorker, /chalin03-spare-parts-debt-desk-v30/);
-  assert.match(serviceWorker, /chalin03-finance-recovery-governance-v29/);
+  assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+  assert.match(
+    serviceWorker,
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+  assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+  assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
   assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
   assert.doesNotMatch(indexHtml, /debt-responsive-hotfix\.css/);

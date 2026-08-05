@@ -146,10 +146,16 @@ assert.match(axiosClient, /installment_finance/);
 assert.match(css, /@media \(max-width: 720px\)/);
 assert.match(css, /finance-simple__machine-grid/);
 assert.match(css, /finance-simple__dialog-backdrop/);
-assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
+assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
 assert.match(serviceWorker, /cacheCoreAssets/);
 assert.match(serviceWorker, /networkNavigation/);
-assert.doesNotMatch(serviceWorker, /status:\s*503/);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 
 // The resilient command backend remains available for advanced lifecycle/reminder work even
 // though the default home now presents the nine-step Phase 3 path.
