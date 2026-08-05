@@ -58,11 +58,15 @@ test("one excavator page provides full evidence and safe editing", () => {
 });
 
 test("dedicated guide teaches the complete installment journey", () => {
-  assert.match(guide, /What should I do first/i);
+  assert.match(guide, /Complete lifecycle/i);
   assert.match(guide, /Installment Offer/);
   assert.match(guide, /KYC|guarantor/);
+  assert.match(guide, /Task & Approval Inbox/);
   assert.match(guide, /deposit|reservation/i);
+  assert.match(guide, /Active Installments/);
   assert.match(guide, /arrears|late payment/i);
+  assert.match(guide, /Corrections|Reversals/);
   assert.match(guide, /delivery/i);
   assert.match(guide, /ownership/i);
+  assert.match(guide, /production Finance reset is permanently blocked/);
 });
