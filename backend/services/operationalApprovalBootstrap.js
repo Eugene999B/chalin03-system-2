@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 
 const dbModule = require("../config/db");
 const {
@@ -15,6 +16,19 @@ const DATABASE_STARTUP_FLAG = Symbol.for(
 const ROUTE_BOOTSTRAP_FLAG = Symbol.for(
   "chalin03.operationalApprovalRouteBootstrapInstalled"
 );
+
+const protectedRouteExecutionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "PROTECTED_ROUTE_RATE_LIMITED",
+    message:
+      "Too many protected business requests were received from this device. Wait briefly before trying again.",
+  },
+});
 
 function installDatabaseStartupGate() {
   if (dbModule[DATABASE_STARTUP_FLAG]) return false;
@@ -62,14 +76,20 @@ function installOperationalApprovalRoutes() {
 
   replaceCachedRouter("../routes/saleRoutes", (originalRouter) => {
     const wrapper = express.Router();
-    wrapper.use(operationalApprovalExecutionMiddleware);
+    wrapper.use(
+      protectedRouteExecutionLimiter,
+      operationalApprovalExecutionMiddleware
+    );
     wrapper.use(originalRouter);
     return wrapper;
   });
 
   replaceCachedRouter("../routes/returnRoutes", (originalRouter) => {
     const wrapper = express.Router();
-    wrapper.use(operationalApprovalExecutionMiddleware);
+    wrapper.use(
+      protectedRouteExecutionLimiter,
+      operationalApprovalExecutionMiddleware
+    );
     wrapper.use(originalRouter);
     return wrapper;
   });
