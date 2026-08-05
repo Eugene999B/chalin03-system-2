@@ -9,7 +9,13 @@ const scriptPath = path.join(
   "scripts",
   "runAutomaticCustomerMergeRollback20260805.js"
 );
+const sanitizerPath = path.join(
+  backendRoot,
+  "scripts",
+  "runCustomerMergeAuditDateSanitizer20260805.js"
+);
 const source = fs.readFileSync(scriptPath, "utf8");
+const sanitizerSource = fs.readFileSync(sanitizerPath, "utf8");
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(backendRoot, "package.json"), "utf8")
 );
@@ -20,6 +26,10 @@ const {
   normalizePhone,
   selectSourceProfile,
 } = require("../scripts/runAutomaticCustomerMergeRollback20260805");
+const {
+  sanitizeMergeMetadata,
+  toMysqlDateTime,
+} = require("../scripts/runCustomerMergeAuditDateSanitizer20260805");
 
 test("automatic rollback is locked, production-only and one-time", () => {
   assert.equal(RECOVERY_DATE, "2026-08-05");
@@ -30,6 +40,22 @@ test("automatic rollback is locked, production-only and one-time", () => {
   assert.match(source, /SELECT GET_LOCK\(\?, 60\) AS acquired/);
   assert.match(source, /schema_migrations/);
   assert.match(source, /recoveryRecordExists/);
+});
+
+test("malformed audit date objects are converted or safely cleared before rollback", () => {
+  assert.equal(toMysqlDateTime({ date: "2026-08-05T10:11:12.000Z" }), "2026-08-05 10:11:12");
+  assert.equal(toMysqlDateTime({ unexpected: true }), null);
+  const result = sanitizeMergeMetadata({
+    source_customers: [
+      { id: 1, created_at: { date: "2026-08-05T10:11:12.000Z" } },
+      { id: 2, created_at: { unexpected: true } },
+    ],
+  });
+  assert.equal(result.changed, true);
+  assert.equal(result.metadata.source_customers[0].created_at, "2026-08-05 10:11:12");
+  assert.equal(result.metadata.source_customers[1].created_at, null);
+  assert.match(sanitizerSource, /UPDATE activity_log SET metadata_json = \?/);
+  assert.doesNotMatch(sanitizerSource, /DELETE\s+FROM/i);
 });
 
 test("Ghana phone snapshots return a receipt to the unique original source", () => {
@@ -82,12 +108,18 @@ test("debt ownership is synchronized to its sale without rewriting money or dele
   assert.doesNotMatch(source, /UPDATE\s+sales[\s\S]{0,120}SET[\s\S]{0,120}(?:total|amount_paid|balance)\s*=/i);
 });
 
-test("Railway runs the authorized rollback before the API server", () => {
+test("Railway sanitizes audit dates, then runs rollback, then starts the API", () => {
   const start = packageJson.scripts.start;
+  const sanitizerIndex = start.indexOf("runCustomerMergeAuditDateSanitizer20260805.js");
   const rollbackIndex = start.indexOf("runAutomaticCustomerMergeRollback20260805.js");
   const serverIndex = start.indexOf("server.js");
-  assert.ok(rollbackIndex >= 0);
+  assert.ok(sanitizerIndex >= 0);
+  assert.ok(rollbackIndex > sanitizerIndex);
   assert.ok(serverIndex > rollbackIndex);
+  assert.equal(
+    packageJson.scripts["repair:customer-merge-audit-dates:20260805:production"],
+    "node scripts/runCustomerMergeAuditDateSanitizer20260805.js"
+  );
   assert.equal(
     packageJson.scripts["repair:customer-merges:20260805:production"],
     "node scripts/runAutomaticCustomerMergeRollback20260805.js"
