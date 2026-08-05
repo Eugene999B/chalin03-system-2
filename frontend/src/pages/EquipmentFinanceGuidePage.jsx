@@ -375,15 +375,15 @@ const GUIDE_SECTIONS = [
     title: "Finance Settings, final operations and production safety",
     audience: "Administrators",
     summary:
-      "Finance Settings controls payment, reminder, receipt, delivery and legal rules. Final Operations & Reset verifies readiness and shows a read-only reset-impact report without changing live records.",
+      "Finance Settings controls payment, reminder, receipt, delivery and legal rules. Final Operations & Reset verifies readiness and shows a read-only reset-impact report. A separately reviewed, dated owner-authorized restart release may execute only once through protected Railway startup.",
     points: [
       "Change policy settings only with business approval and test the effect on a controlled case.",
       "Use Final Operations to review portfolio readiness, preserved records and the reset-impact fingerprint.",
-      "The production Finance reset is permanently blocked and deployment must never run a schema reset against live data.",
-      "Test reset controls require the original System Administrator, a test environment, an approved test database and the exact confirmation phrase.",
+      "The 05 August 2026 Installment Finance restart release is Finance-only, transaction-protected and self-disabling after its schema_migrations marker; it is not a reusable staff reset button.",
+      "The general production reset endpoint and all test-reset controls remain blocked on Railway production. Test resets still require the original System Administrator, a test environment, an approved test database and the exact confirmation phrase.",
     ],
     warning:
-      "Never run database/schema.sql, TRUNCATE commands or a test-reset procedure against Railway production.",
+      "Never run database/schema.sql, TRUNCATE commands, direct deletion scripts or a test-reset procedure against Railway production. Any future restart requires a new explicit owner-authorized reviewed release.",
     path: "/equipment-installment-finance/applications?stage=finalization",
     action: "Open Final Operations & Reset",
   },
@@ -408,7 +408,7 @@ const ROLE_GUIDE = [
   {
     title: "Original System Administrator",
     detail:
-      "Manages protected system access, Finance configuration, production health and finalization controls. Production reset remains permanently blocked; administrator access must not replace normal staff accountability or independent business review.",
+      "Manages protected system access, Finance configuration, production health and finalization controls. A dated owner-authorized restart release may run only once and cannot become a reusable administrator tool; normal production reset remains blocked. Administrator access must not replace normal staff accountability or independent business review.",
   },
 ];
 
@@ -514,7 +514,7 @@ const QUICK_LINKS = [
   ["Generated Documents", "Agreements, receipts, statements and history.", "/equipment-installment-finance/applications?stage=generated-documents"],
   ["Portfolio, SMS & Reports", "Statements, arrears, cash flow and exports.", "/equipment-installment-finance/reports"],
   ["Finance Settings", "Payment, reminder, receipt, delivery and legal rules.", "/equipment-installment-finance/applications?stage=settings"],
-  ["Final Operations & Reset", "Read-only readiness and production-safe reset proof.", "/equipment-installment-finance/applications?stage=finalization"],
+  ["Final Operations & Reset", "Readiness, reset-impact proof and controlled restart status.", "/equipment-installment-finance/applications?stage=finalization"],
 ];
 
 function searchableText(section) {
