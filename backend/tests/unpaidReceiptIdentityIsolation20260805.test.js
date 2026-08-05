@@ -70,7 +70,7 @@ test("SQL excludes every receipt with real payment evidence", () => {
   assert.match(source, /d\.amount_paid <= 0\.005/);
   assert.match(source, /COALESCE\(s\.amount_paid, 0\) <= 0\.005/);
   assert.match(source, /NOT EXISTS\s*\(\s*SELECT 1\s*FROM debt_payments/s);
-  assert.match(source, /d\.status IN \('paid', 'partial'\)/);
+  assert.match(source, /protected\.debt_status IN \('paid', 'partial'\)/);
   assert.match(source, /assertProtectedRowsUnchanged\(protectedBefore, protectedAfter\)/);
 });
 
