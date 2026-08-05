@@ -6,9 +6,11 @@ const {
   getCompletionDocument,
   issueCompletionDocument,
   publicDefinitions,
+} = require("../services/equipmentFinanceDocumentCompletionService");
+const {
   renderCompletionPdf,
   renderCompletionWord,
-} = require("../services/equipmentFinanceDocumentCompletionService");
+} = require("../services/equipmentFinanceCompletionRendererService");
 const {
   ProfessionalFinanceError,
 } = require("../services/equipmentFinanceProfessionalService");
