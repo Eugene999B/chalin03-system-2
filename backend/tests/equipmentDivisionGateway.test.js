@@ -110,7 +110,7 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.doesNotMatch(divisionAccess, /HIRE_ROLE_SET\.has[^\n]*fleet\.assets\.manage/);
 });
 
-test("gateway remains responsive and exposes a protected staff manager", () => {
+test("gateway remains responsive, protected and stale-asset safe", () => {
   const gateway = read("frontend", "src", "pages", "EquipmentDivisionGatewayPage.jsx");
   const css = read(
     "frontend",
@@ -143,7 +143,10 @@ test("gateway remains responsive and exposes a protected staff manager", () => {
   assert.match(staffManager, /One employee\. One division\./);
   assert.match(staffCss, /z-index: 99999/);
   assert.match(staffCss, /isolation: isolate/);
-  assert.match(serviceWorker, /chalin03-equipment-business-experience-v26/);
+  assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+  assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+  assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 
   const changedFeatureSources = `${gateway}\n${css}\n${staffManager}\n${staffCss}`;
   assert.doesNotMatch(
