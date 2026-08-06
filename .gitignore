@@ -6,3 +6,4 @@ build/
 .vscode/PRIVATE_BACKUPS/
 *.sql.bak
 *.json.bak
+backend/.local-public-media/
