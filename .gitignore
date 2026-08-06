@@ -7,3 +7,4 @@ build/
 *.sql.bak
 *.json.bak
 backend/.local-public-media/
+backend/artifacts/
