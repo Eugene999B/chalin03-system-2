@@ -42,6 +42,18 @@ const MEDIA_USAGE_QUERIES = Object.freeze([
           LIMIT 25`,
   }),
   Object.freeze({
+    type: "news_article_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('news:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'news_article'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
     type: "page_version_primary",
     sql: `SELECT pv.id, p.slug AS label
           FROM public_page_versions pv
