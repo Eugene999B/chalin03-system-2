@@ -7,6 +7,7 @@ import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccou
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
+import { FeatureFlagProvider } from "./context/FeatureFlagContext.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
@@ -25,13 +26,15 @@ installCriticalFinanceWorkspacePreload();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
-    <ProductsPageShellRepair />
-    <OperationalApprovalLauncher />
-    <ApprovalCentreLiveAttention />
-    <AdvancedAccountingExpenseFundingEvidence />
-    <EmergencyCommandOverlay />
-    <CommandArrivalBanner />
+    <FeatureFlagProvider>
+      <App />
+      <ProductsPageShellRepair />
+      <OperationalApprovalLauncher />
+      <ApprovalCentreLiveAttention />
+      <AdvancedAccountingExpenseFundingEvidence />
+      <EmergencyCommandOverlay />
+      <CommandArrivalBanner />
+    </FeatureFlagProvider>
   </React.StrictMode>
 );
 
