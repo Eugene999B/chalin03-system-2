@@ -221,7 +221,7 @@ test("staff selects an account and exact payment before issuing immutable docume
   });
 
   await page.getByText("Payments & Customer Account", { exact: true }).click();
-  await page.getByLabel("Choose exact payment receipt").selectOption("701");
+  await page.locator(".finance-docs__receipt-selector select").selectOption("701");
   const paymentReceipt = page.locator(".finance-docs__document-card").filter({ hasText: "Payment Receipt" });
   await paymentReceipt.getByRole("button", { name: "Thermal Receipt" }).click();
   await expect(page.getByText(/Payment Receipt issued from an immutable/)).toBeVisible();
