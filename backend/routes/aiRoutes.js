@@ -2,9 +2,20 @@
 
 const express = require("express");
 
-const { requireAiPermission, requireAiPersona } = require("../middleware/aiPermissionMiddleware");
-const { requireFeature, getFeatureSnapshot } = require("../services/featureFlagService");
-const { getAiPermissionSnapshot } = require("../security/aiPermissionCatalog");
+const {
+  requireAiPermission,
+  requireAiPersona,
+} = require("../middleware/aiPermissionMiddleware");
+const {
+  requireFeature,
+  getFeatureSnapshot,
+} = require("../services/featureFlagService");
+const {
+  getAiPermissionSnapshot,
+  hasAiPermission,
+  hasEveryAiPermission,
+} = require("../security/aiPermissionCatalog");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { cleanProviderKey } = require("../services/aiProviderService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
@@ -13,7 +24,10 @@ const {
   listConversations,
   renameConversation,
 } = require("../services/aiConversationService");
-const { createFeedback, listFeedback } = require("../services/aiFeedbackService");
+const {
+  createFeedback,
+  listFeedback,
+} = require("../services/aiFeedbackService");
 const { runAiConversationTurn } = require("../services/aiOrchestratorService");
 const { listUsageSummary } = require("../services/aiUsageService");
 const { resolveAiScope } = require("../services/aiPermissionService");
@@ -45,6 +59,20 @@ function success(res, req, data, statusCode = 200) {
   });
 }
 
+function canCrossWorkspace(user) {
+  return (
+    isOriginalSystemAdministrator(user) ||
+    hasAiPermission(user, "ai.executive.use")
+  );
+}
+
+function usageWorkspace(req) {
+  if (canCrossWorkspace(req.user)) {
+    return String(req.query.workspace_code || "").trim() || null;
+  }
+  return String(req.user?.workspace_code || "").trim() || null;
+}
+
 function personaRouter(persona, featureKey) {
   const personaRoutes = express.Router();
   personaRoutes.use(requireFeature(featureKey), requireAiPersona(persona));
@@ -54,11 +82,12 @@ function personaRouter(persona, featureKey) {
     requireAiPermission("ai.tools.view"),
     asyncHandler(async (req, res) => {
       const scope = resolveAiScope({ req, persona });
-      return success(
-        res,
-        req,
-        aiToolRegistry.list({ persona, workspace: scope.workspace_code })
-      );
+      const tools = aiToolRegistry
+        .list({ persona, workspace: scope.workspace_code })
+        .filter((tool) =>
+          hasEveryAiPermission(req.user, tool.required_permissions)
+        );
+      return success(res, req, tools);
     })
   );
 
@@ -175,18 +204,23 @@ function personaRouter(persona, featureKey) {
 router.get(
   "/status",
   requireAiPermission("ai.use"),
-  asyncHandler(async (req, res) =>
-    success(res, req, {
-      flags: getFeatureSnapshot(),
+  asyncHandler(async (req, res) => {
+    const flags = getFeatureSnapshot();
+    return success(res, req, {
+      flags,
       provider: {
-        key: cleanProviderKey(process.env.AI_PROVIDER || "disabled") || "disabled",
+        key:
+          cleanProviderKey(process.env.AI_PROVIDER || "disabled") ||
+          "disabled",
         secret_values_exposed: false,
       },
       permissions: getAiPermissionSnapshot(req.user),
-      execution_authority: "read_recommend_prepare_only",
-      ai_actions_enabled: false,
-    })
-  )
+      execution_authority: flags.aiActions
+        ? "approved_low_risk_actions_only"
+        : "read_recommend_prepare_only",
+      ai_actions_enabled: flags.aiActions === true,
+    });
+  })
 );
 
 router.use("/copilot", personaRouter("copilot", "chalinCopilot"));
@@ -238,7 +272,7 @@ router.get(
       res,
       req,
       await listUsageSummary({
-        workspaceCode: req.query.workspace_code || req.user.workspace_code,
+        workspaceCode: usageWorkspace(req),
         userId: req.query.mine === "true" ? req.user.id : null,
         days: req.query.days,
       })
@@ -258,7 +292,9 @@ router.use((error, req, res, next) => {
   return res.status(Number(error.statusCode) || 400).json({
     status: "error",
     code: code || "AI_REQUEST_FAILED",
-    message: error.message || "CHALIN ONE intelligence request failed safely.",
+    message:
+      error.message ||
+      "CHALIN ONE intelligence request failed safely.",
     details: error.details || [],
     request_id: req.requestId || null,
   });
