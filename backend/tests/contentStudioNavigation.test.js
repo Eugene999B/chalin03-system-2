@@ -5,9 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const {
-  ContentStudioError,
-} = require("../services/contentStudioPageService");
+const { ContentStudioError } = require("../services/contentStudioPageService");
 const {
   NAVIGATION_LOCATIONS,
   normalizeNavigationKey,
@@ -33,6 +31,13 @@ const mainRouteSource = fs.readFileSync(
   path.join(repoRoot, "backend/routes/contentStudioRoutes.js"),
   "utf8"
 );
+const migrationSource = fs.readFileSync(
+  path.join(
+    repoRoot,
+    "database/migrations/20260805_chalin_one_public_content_foundation.sql"
+  ),
+  "utf8"
+);
 
 test("navigation identities and locations use controlled values", () => {
   assert.equal(normalizeNavigationKey("About Us"), "about_us");
@@ -53,8 +58,14 @@ test("navigation URL validation blocks script schemes and embedded credentials",
     normalizeNavigationUrl("https://www.chalin03.com/contact"),
     "https://www.chalin03.com/contact"
   );
-  assert.equal(normalizeNavigationUrl("mailto:info@chalin03.com"), "mailto:info@chalin03.com");
-  assert.equal(normalizeNavigationUrl("tel:+233240000000"), "tel:+233240000000");
+  assert.equal(
+    normalizeNavigationUrl("mailto:info@chalin03.com"),
+    "mailto:info@chalin03.com"
+  );
+  assert.equal(
+    normalizeNavigationUrl("tel:+233240000000"),
+    "tel:+233240000000"
+  );
   assert.equal(normalizeNavigationUrl("javascript:alert(1)"), null);
   assert.equal(normalizeNavigationUrl("https://user:pass@example.com"), null);
   assert.equal(normalizeNavigationUrl("//evil.example/path"), null);
@@ -84,6 +95,43 @@ test("navigation snapshots require a page or safe URL target", () => {
   assert.equal(snapshot.navigation_location, "header");
   assert.equal(snapshot.url, "/about");
   assert.equal(snapshot.opens_new_tab, false);
+});
+
+test("navigation approval SQL matches the Phase 2 schema contract", () => {
+  assert.match(migrationSource, /content_version_id BIGINT UNSIGNED NULL/);
+  assert.doesNotMatch(
+    migrationSource.match(
+      /CREATE TABLE IF NOT EXISTS public_content_approvals[\s\S]*?ENGINE=InnoDB/
+    )?.[0] || "",
+    /metadata_json/
+  );
+  assert.match(serviceSource, /content_version_id = \?/);
+  assert.match(serviceSource, /entity_id, content_version_id, request_type/);
+  assert.doesNotMatch(serviceSource, /metadata_json/);
+  assert.doesNotMatch(serviceSource, /JSON_EXTRACT/);
+});
+
+test("generic navigation versions never write nonexistent actor timestamp columns", () => {
+  assert.doesNotMatch(
+    serviceSource,
+    /public_content_versions[\s\S]{0,250}approved_by/
+  );
+  assert.doesNotMatch(
+    serviceSource,
+    /public_content_versions[\s\S]{0,250}approved_at/
+  );
+  assert.doesNotMatch(
+    serviceSource,
+    /public_content_versions[\s\S]{0,250}published_by/
+  );
+  assert.doesNotMatch(
+    serviceSource,
+    /public_content_versions[\s\S]{0,250}published_at/
+  );
+  assert.doesNotMatch(
+    serviceSource,
+    /public_navigation_items[\s\S]{0,300}submitted_by/
+  );
 });
 
 test("published navigation remains unchanged until an approved snapshot is applied", () => {
