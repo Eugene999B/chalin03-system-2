@@ -38,7 +38,7 @@ test("critical Finance workspace is retained in the entry bundle", () => {
 
 test("Finance app-shell rollout uses a deployment-specific cache and rejects retired assets", () => {
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
-  assert.match(main, /browser-cache-integrity-v34/);
+  assert.match(main, /browser-cache-integrity-v35/);
   assert.match(
     main,
     /register\([\s\S]*`\/sw\.js\?release=\$\{encodeURIComponent\(APP_SHELL_RELEASE\)\}`/
@@ -67,7 +67,9 @@ test("Finance app-shell rollout uses a deployment-specific cache and rejects ret
   assert.match(serviceWorker, /self\.clients\.claim\(\)/);
   assert.match(serviceWorker, /addEventListener\("message"/);
   assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+  assert.match(serviceWorker, /recoveryOwner: "page"/);
   assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
+  assert.doesNotMatch(serviceWorker, /client\.navigate\(/);
 });
 
 test("Cloudflare does not cache Finance navigation or the worker script", () => {
