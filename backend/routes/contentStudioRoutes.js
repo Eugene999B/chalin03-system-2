@@ -3,6 +3,7 @@
 const express = require("express");
 
 const { ContentStudioError } = require("../services/contentStudioPageService");
+const contentStudioCompanyInfoRoutes = require("./contentStudioCompanyInfoRoutes");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
 const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
@@ -24,6 +25,7 @@ router.use("/navigation", contentStudioNavigationRoutes);
 router.use("/media", contentStudioMediaRoutes);
 router.use("/forms", contentStudioFormRoutes);
 router.use("/newsroom", contentStudioNewsroomRoutes);
+router.use("/company-info", contentStudioCompanyInfoRoutes);
 router.use("/portfolio", contentStudioPortfolioRoutes);
 router.use("/", contentStudioCoreRoutes);
 
