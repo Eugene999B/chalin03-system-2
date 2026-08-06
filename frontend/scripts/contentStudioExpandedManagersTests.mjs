@@ -108,6 +108,13 @@ check("Company Information fields match backend schema contracts", () => {
   assert.match(company, /structuredForSave/);
 });
 
+check("advanced structured required fields remain saveable without destructive replacement", () => {
+  assert.match(company, /field\.type === "structured" && form\[`__advanced_\$\{field\.key\}`\]/);
+  assert.match(company, /Advanced structured content is preserved while this field stays blank/);
+  assert.match(company, /if \(advanced && text === ""\) return original \|\| \{\}/);
+  assert.doesNotMatch(company, /noValidate/);
+});
+
 check("workspace maps the complete expanded company batch", () => {
   assert.match(workspace, /ContentStudioProjectManager/);
   assert.match(workspace, /ContentStudioEquipmentManager/);
@@ -125,4 +132,4 @@ check("expanded layouts cover desktop, tablet and mobile", () => {
   assert.match(css, /@media \(max-width: 430px\)/);
 });
 
-console.log(`\nExpanded Content Studio managers: ${passed}/10 checks passed.`);
+console.log(`\nExpanded Content Studio managers: ${passed}/11 checks passed.`);
