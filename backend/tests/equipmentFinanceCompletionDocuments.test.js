@@ -9,7 +9,7 @@ const {
 const {
   renderCompletionPdf,
   renderCompletionWord,
-} = require("../services/equipmentFinanceCompletionRendererService");
+} = require("../services/equipmentFinanceDocumentRendererV2Service");
 
 function source(relativePath) {
   return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
@@ -18,7 +18,7 @@ function source(relativePath) {
 function financeSnapshot() {
   return {
     generated_at: "2026-08-05T00:00:00.000Z",
-    template_version: "v1-approved",
+    template_version: "v2-approved",
     company: {
       name: "CHALIN 03 COMPANY LIMITED",
       phone: "0249469080",
@@ -50,8 +50,8 @@ function financeSnapshot() {
       deposit_required: 1000000,
       deposit_received: 1000000,
       financed_amount: 1500000,
-      amount_paid: 1150000,
-      outstanding_balance: 1350000,
+      amount_paid: 150000,
+      outstanding_balance: 2350000,
       payment_frequency: "fortnightly",
       installment_count: 10,
       first_due_date: "2026-06-23",
@@ -122,16 +122,7 @@ function financeSnapshot() {
         amount: 150000,
         count: 1,
         oldest_due_date: "2026-07-07",
-        rows: [
-          {
-            sequence_number: 2,
-            due_date: "2026-07-07",
-            scheduled_amount: 150000,
-            amount_paid: 0,
-            balance: 150000,
-            schedule_status: "overdue",
-          },
-        ],
+        rows: [],
       },
       delivery: null,
       ownership_transfer: null,
@@ -176,12 +167,12 @@ test("completion pack exposes every required professional document", () => {
   ]);
 });
 
-test("renderer creates branded A4 and thermal PDFs", async () => {
-  const agreementPdf = await renderCompletionPdf(
-    issuedDocument("customer_agreement_copy", "EFAC-DOC-001")
+test("V2 renderer creates branded A4 and thermal PDFs", async () => {
+  const schedulePdf = await renderCompletionPdf(
+    issuedDocument("payment_schedule", "EFSC-DOC-001")
   );
-  assert.equal(agreementPdf.subarray(0, 4).toString(), "%PDF");
-  assert.ok(agreementPdf.length > 1800);
+  assert.equal(schedulePdf.subarray(0, 4).toString(), "%PDF");
+  assert.ok(schedulePdf.length > 2500);
 
   const thermalPdf = await renderCompletionPdf(
     issuedDocument("payment_receipt", "EFR-DOC-001"),
@@ -191,15 +182,18 @@ test("renderer creates branded A4 and thermal PDFs", async () => {
   assert.ok(thermalPdf.length > 900);
 });
 
-test("renderer creates editable Word-compatible output", () => {
-  const html = renderCompletionWord(
-    issuedDocument("customer_statement", "EFST-DOC-001")
+test("V2 renderer creates editable Word-compatible output", async () => {
+  const html = (
+    await renderCompletionWord(
+      issuedDocument("customer_statement", "EFST-DOC-001")
+    )
   ).toString("utf8");
   assert.match(html, /CHALIN 03 COMPANY LIMITED/);
-  assert.match(html, /Customer Installment Statement/);
+  assert.match(html, /CUSTOMER INSTALLMENT STATEMENT/);
+  assert.match(html, /CUSTOMER STATEMENT/);
   assert.match(html, /EFST-DOC-001/);
-  assert.match(html, /ESR-DOC-001/);
-  assert.match(html, /Immutable snapshot/);
+  assert.match(html, /data:image\/png;base64/);
+  assert.match(html, /SYSTEM-GENERATED/);
 });
 
 test("service preserves reconciliation, legal, payment and lifecycle controls", () => {
@@ -222,7 +216,7 @@ test("service preserves reconciliation, legal, payment and lifecycle controls", 
   }
 });
 
-test("routes own authenticated options, issue and format-specific downloads", () => {
+test("routes own authenticated options, issue and V2 format-specific downloads", () => {
   const routes = source("routes/equipmentFinanceDocumentCompletionRoutes.js");
   const independent = source("routes/equipmentFinanceIndependentRoutes.js");
   assert.match(routes, /const PREFIX = "\/professional\/completion-documents"/);
@@ -235,7 +229,8 @@ test("routes own authenticated options, issue and format-specific downloads", ()
   assert.match(routes, /application\/pdf/);
   assert.match(routes, /layout: thermal \? "thermal" : "a4"/);
   assert.match(routes, /X-Chalin03-Snapshot-Checksum/);
-  assert.match(routes, /equipmentFinanceCompletionRendererService/);
+  assert.match(routes, /equipmentFinanceDocumentRendererV2Service/);
+  assert.match(routes, /professional-rebuild-v2/);
   assert.ok(
     independent.indexOf("router.use(equipmentFinanceDocumentCompletionRoutes)") <
       independent.indexOf("router.use(equipmentFinanceProfessionalRoutes)")
