@@ -245,7 +245,8 @@ function CategoryManager({
 
   async function submit(event) {
     event.preventDefault();
-    await onSave(mode, selectedId, form);
+    const saved = await onSave(mode, selectedId, form);
+    if (!saved) return;
     setMode("list");
     setSelectedId(null);
     setForm({ ...EMPTY_CATEGORY });
@@ -662,6 +663,7 @@ export default function ContentStudioNewsroomManager() {
   async function saveCategory(categoryMode, categoryId, categoryForm) {
     setSaving(true);
     setError("");
+    setNotice("");
     try {
       const result =
         categoryMode === "create"
@@ -669,8 +671,10 @@ export default function ContentStudioNewsroomManager() {
           : await updateNewsCategory(categoryId, categoryForm);
       setCategories(Array.isArray(result) ? result : []);
       setNotice("The news category was saved safely.");
+      return true;
     } catch (categoryError) {
       setError(contentStudioErrorMessage(categoryError));
+      return false;
     } finally {
       setSaving(false);
     }
