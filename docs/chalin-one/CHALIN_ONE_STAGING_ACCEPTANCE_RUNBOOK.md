@@ -12,8 +12,8 @@ The staging preview is used to verify:
 
 - The additive public-content migration.
 - Content Studio permissions and independent approvals.
-- The public website renderer.
-- Public forms and the Enquiry Desk.
+- The public website renderer and deep routes.
+- Public forms, real staging submissions and the Enquiry Desk.
 - Desktop and mobile behaviour.
 - Regression safety for the existing staff system.
 
@@ -65,6 +65,8 @@ The verifier rejects:
 - AI or portal features enabled during Release B acceptance.
 - Migration gates left enabled during normal runtime or seeding.
 
+The smoke runner also refuses cross-origin and insecure redirects. It follows only bounded same-origin canonical redirects, such as `/website` to `/website/`.
+
 ## Step 1 — Prepare the isolated environment
 
 Create the staging database and staging accounts outside the production database.
@@ -83,11 +85,13 @@ The staging author must not be the reviewer. The reviewer must not be the publis
 
 ## Step 2 — Verify normal staging configuration
 
-Keep migration gates closed:
+Keep migration gates and writing smoke checks closed:
 
 ```text
 CHALIN_ONE_ALLOW_SCHEMA_MIGRATION=false
 CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM=
+CHALIN_ONE_STAGING_REQUIRE_PUBLISHED=false
+CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM=false
 ```
 
 From `backend` run:
@@ -199,7 +203,36 @@ It does not create unverified:
 
 Those records require verified company information and approved media.
 
-## Step 6 — Complete the real governed workflow
+## Step 6 — Run pre-publication smoke checks
+
+Before publishing content, keep both final-acceptance switches disabled:
+
+```text
+CHALIN_ONE_STAGING_REQUIRE_PUBLISHED=false
+CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM=false
+```
+
+Run:
+
+```bash
+npm run smoke:chalin-one:staging
+```
+
+This non-writing smoke pass verifies:
+
+- API health.
+- Public feature boundaries.
+- Anonymous denial for staff feature data and Content Studio APIs.
+- Public bootstrap privacy and cache headers.
+- Unpublished-page fail-closed behaviour.
+- `/website` frontend delivery.
+- `/website/pages/about` deep-route delivery.
+- `/content-studio` deep-route delivery.
+- Safe canonical redirects without cross-origin following.
+
+It does not require published content and does not create a form submission.
+
+## Step 7 — Complete the real governed workflow
 
 Sign in as the staging author and inspect every draft.
 
@@ -223,7 +256,44 @@ Check that:
 
 Before publication, replace placeholder wording with verified facts and upload approved public-ready media.
 
-## Step 7 — Public website acceptance
+## Step 8 — Run final automated staging acceptance
+
+Only after the homepage, contact form and navigation have completed the governed approval and publication flow, enable both final-acceptance switches:
+
+```text
+CHALIN_ONE_STAGING_REQUIRE_PUBLISHED=true
+CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM=true
+```
+
+Run:
+
+```bash
+npm run smoke:chalin-one:staging
+```
+
+This pass verifies everything in the pre-publication smoke plus:
+
+- The published homepage API.
+- The published contact-form schema.
+- Published navigation in the public bootstrap.
+- A real `POST /api/public/content/forms/contact/submissions` request.
+- HTTP `202` acceptance.
+- A valid `WEB-YYYYMMDD-XXXXXXXXXXXX` reference code.
+- Private/no-store submission response headers.
+- No private storage, network hash, token or user-agent fields in the public response.
+
+This command intentionally creates **one traceable enquiry row** in the isolated staging database. Record its reference code in the acceptance evidence and confirm that it appears in the protected Enquiry Desk. Do not run this writing check against production.
+
+After the final smoke pass, restore the switches unless another controlled acceptance run is planned:
+
+```text
+CHALIN_ONE_STAGING_REQUIRE_PUBLISHED=false
+CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM=false
+```
+
+Do not delete the staging enquiry merely to make the database look clean. Its audit trail is part of the acceptance evidence.
+
+## Step 9 — Public website browser acceptance
 
 Test `/website/*` on:
 
@@ -246,8 +316,22 @@ Verify:
 - Expired and archived content is not public.
 - Private media and internal records do not appear.
 - Public website requests carry no staff token or workspace headers.
+- Direct refreshes of `/website/pages/about` and other deep routes remain available.
 
-## Step 8 — Staff application regression
+## Step 10 — Content Studio browser acceptance
+
+Test `/content-studio/*` with the author, reviewer and publisher accounts.
+
+Verify:
+
+- Anonymous users and unauthorized staff cannot open Content Studio.
+- A direct refresh of `/content-studio` loads the staff surface rather than a frontend 404.
+- Each role sees only its permitted actions.
+- Exact version IDs are preserved across submit, approve and publish actions.
+- Mobile layouts remain usable at 360–430px.
+- Archive actions retain versions, approvals and audit history.
+
+## Step 11 — Staff application regression
 
 With both Release B flags enabled only in staging, verify the existing staff system:
 
@@ -264,7 +348,7 @@ With both Release B flags enabled only in staging, verify the existing staff sys
 
 No CHALIN ONE failure may prevent existing operational pages from loading.
 
-## Step 9 — Acceptance evidence
+## Step 12 — Acceptance evidence
 
 Record:
 
@@ -276,10 +360,13 @@ Record:
 - Backend test result
 - Frontend test result
 - Production frontend build result
+- Machine-readable release-evidence artifact
+- Non-writing smoke report
+- Final published-content smoke report
+- Intentional staging enquiry reference code
 - Browser acceptance screenshots
 - Mobile acceptance screenshots
 - Permission test matrix
-- Public form reference codes
 - Known non-blocking issues
 - Reviewer and publisher sign-off
 
@@ -290,7 +377,7 @@ If staging behaves unexpectedly:
 1. Set `FEATURE_PUBLIC_WEBSITE=false`.
 2. Set `FEATURE_CONTENT_STUDIO=false`.
 3. Stop the staging frontend and API.
-4. Preserve logs and the staging database for investigation.
+4. Preserve logs, smoke reports and the staging database for investigation.
 5. Do not apply the same change to production.
 
 Because staging uses separate domains, database credentials and media storage, this shutdown has no production impact.
@@ -302,6 +389,8 @@ Release B is ready for integration only when:
 - GitHub CI is genuinely green.
 - MySQL acceptance passes.
 - Staging migration and second-run idempotency pass.
+- Both staging smoke modes pass.
+- The intentional staging enquiry is visible in Enquiry Desk with an intact audit trail.
 - All critical browser tests pass.
 - Existing business workflows pass regression testing.
 - Content is reviewed and approved.
