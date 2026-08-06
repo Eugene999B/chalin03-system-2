@@ -178,7 +178,15 @@ test("equipment publication validates price, year, currency and internal referen
 test("portfolio approval workflow uses the real generic-version foreign key", () => {
   assert.match(migrationSource, /content_version_id BIGINT UNSIGNED NULL/);
   assert.match(serviceSource, /content_version_id = \?/);
-  assert.match(serviceSource, /entity_id, content_version_id, request_type/);
+  assert.match(serviceSource, /INSERT INTO public_content_approvals/);
+  assert.match(
+    serviceSource,
+    /entity_type,[\s\S]*entity_id,[\s\S]*content_version_id,[\s\S]*request_type/
+  );
+  assert.match(
+    serviceSource,
+    /VALUES \(\?, \?, \?, 'review', 'pending', \?, \?, \?\)/
+  );
   assert.doesNotMatch(serviceSource, /metadata_json/);
   assert.doesNotMatch(serviceSource, /JSON_EXTRACT/);
   assert.doesNotMatch(
