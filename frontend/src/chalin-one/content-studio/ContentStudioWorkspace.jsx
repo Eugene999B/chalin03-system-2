@@ -6,10 +6,15 @@ import {
   getContentStudioDashboard,
   listContentStudioResource,
 } from "./contentStudioApi";
+import ContentStudioCompanyInfoManager from "./ContentStudioCompanyInfoManager";
 import ContentStudioDashboard from "./ContentStudioDashboard";
 import ContentStudioLeadershipManager from "./ContentStudioLeadershipManager";
 import ContentStudioNewsroomManager from "./ContentStudioNewsroomManager";
 import ContentStudioPageManager from "./ContentStudioPageManager";
+import {
+  ContentStudioEquipmentManager,
+  ContentStudioProjectManager,
+} from "./ContentStudioPortfolioManagers";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_SECTIONS,
@@ -71,9 +76,8 @@ function ModuleOverview({ section, data, loading, error, onRefresh }) {
           <span className="cs-status-chip cs-status-neutral">Editor interface next</span>
         </div>
         <p className="cs-module-note">
-          This first visual release verifies protected navigation, permissions and API
-          loading. Create, edit, review and publish forms will be added module by module
-          without weakening the backend approval workflow.
+          This manager is connected through the protected Content Studio API. Its
+          full editor will be delivered in the next expanded workspace batch.
         </p>
         <div className="cs-record-preview">
           {items.slice(0, 5).map((item, index) => (
@@ -181,7 +185,10 @@ export default function ContentStudioWorkspace() {
       activeKey === "dashboard" ||
       activeKey === "pages" ||
       activeKey === "newsroom" ||
-      activeKey === "leadership"
+      activeKey === "leadership" ||
+      activeKey === "projects" ||
+      activeKey === "equipment" ||
+      activeKey === "company-info"
     ) {
       setModuleData(null);
       setModuleError("");
@@ -339,6 +346,12 @@ export default function ContentStudioWorkspace() {
             <ContentStudioNewsroomManager />
           ) : activeKey === "leadership" ? (
             <ContentStudioLeadershipManager />
+          ) : activeKey === "projects" ? (
+            <ContentStudioProjectManager />
+          ) : activeKey === "equipment" ? (
+            <ContentStudioEquipmentManager />
+          ) : activeKey === "company-info" ? (
+            <ContentStudioCompanyInfoManager />
           ) : activeSection ? (
             <ModuleOverview
               section={activeSection}
