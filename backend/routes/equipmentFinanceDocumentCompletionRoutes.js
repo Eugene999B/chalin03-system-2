@@ -7,16 +7,14 @@ const {
   issueCompletionDocument,
   publicDefinitions,
 } = require("../services/equipmentFinanceDocumentCompletionService");
-// Install the targeted PDFKit footer guard before loading any Finance renderer.
-// It prevents a footer drawn inside the bottom margin from creating a trailing
-// blank page in generated, downloaded and print-ready documents.
+// Keep the legacy footer guard loaded before the rebuilt renderer as an extra
+// defence. The V2 renderer also writes every footer through its own no-break
+// absolute-text path and creates all A4 pages manually.
 require("../services/equipmentFinancePdfBlankPageGuardService");
-// The photo-aware service wraps equipmentFinanceCompletionRendererService; the
-// established branded document layouts remain the authoritative base renderer.
 const {
   renderCompletionPdf,
   renderCompletionWord,
-} = require("../services/equipmentFinanceCustomerPhotoRendererService");
+} = require("../services/equipmentFinanceDocumentRendererV2Service");
 const {
   ProfessionalFinanceError,
 } = require("../services/equipmentFinanceProfessionalService");
@@ -68,6 +66,12 @@ router.get(
         thermal_receipt_available: true,
         customer_passport_photo_page: true,
         customer_photo_encrypted_at_rest: true,
+        professional_distinct_templates: true,
+        official_public_logo_asset: "frontend/public/chalin03-logo.png",
+        document_specific_visible_watermarks: true,
+        qr_verification_identity: true,
+        tamper_evident_footer: true,
+        manual_page_flow_no_blank_pages: true,
         supported_downloads: ["pdf", "word", "print", "thermal"],
       },
     });
@@ -152,6 +156,7 @@ router.get(
           `attachment; filename="${fileBase}.doc"`
         );
         res.setHeader("Cache-Control", "private, no-store");
+        res.setHeader("X-Chalin03-Document-Design", "professional-rebuild-v2");
         return res.status(200).send(buffer);
       }
 
@@ -170,6 +175,7 @@ router.get(
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Chalin03-Document-Type", document.document_type);
       res.setHeader("X-Chalin03-Snapshot-Checksum", document.snapshot_checksum);
+      res.setHeader("X-Chalin03-Document-Design", "professional-rebuild-v2");
       return res.status(200).send(buffer);
     } catch (error) {
       return sendError(req, res, error, "Could not download the professional Finance document.");
