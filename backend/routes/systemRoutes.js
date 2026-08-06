@@ -14,6 +14,10 @@ const {
   getPublicFeatureSnapshot,
   requireFeature,
 } = require("../services/featureFlagService");
+const customerMergeRecoveryRoutes = require("./customerMergeRecoveryRoutes");
+const {
+  MERGE_FREEZE_MESSAGE,
+} = require("./customerMergeRecoveryRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
 
@@ -219,6 +223,22 @@ function deploymentStatus() {
     node_environment: process.env.NODE_ENV || "development",
   };
 }
+
+function sendMergeFreeze(_req, res) {
+  return res.status(423).json({
+    status: "error",
+    code: "CUSTOMER_MERGE_EMERGENCY_FREEZE",
+    merge_writes_frozen: true,
+    message: MERGE_FREEZE_MESSAGE,
+  });
+}
+
+// Emergency financial containment. These routes are mounted before the normal
+// customer merge router, so no new merge can be committed while the same-day
+// debt ownership review is active.
+router.post("/debt-customers/merge", requireAuth, sendMergeFreeze);
+router.post("/debt-customers/merge-preview", requireAuth, sendMergeFreeze);
+router.use("/customer-merge-recovery", customerMergeRecoveryRoutes);
 
 router.get("/health", (req, res) => {
   res.json({
