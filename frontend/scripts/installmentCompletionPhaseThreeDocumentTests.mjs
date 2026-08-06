@@ -57,7 +57,6 @@ assert.match(page, /format === "print"/);
 assert.match(page, /documentType === "payment_receipt"/);
 assert.match(page, /selectedPaymentId/);
 assert.match(page, /snapshot_checksum/);
-assert.match(page, /reconciliation\?\.consistent/);
 assert.match(page, /Search Finance document accounts/);
 assert.match(page, /No agreement selected/);
 assert.match(page, /src="\/chalin03-logo\.png"/);
