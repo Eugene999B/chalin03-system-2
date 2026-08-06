@@ -8,7 +8,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.js
 const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
 const cleanupStartupSource = fs.readFileSync(path.join(backendDir, "scripts", "runInstallmentExcavatorCleanupBestEffortStartup20260805.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("Railway runs every reviewed recurring startup gate before API traffic", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -16,6 +16,11 @@ test("Railway runs every reviewed recurring startup gate before API traffic", ()
     packageJson.scripts.start,
     /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
     "the fail-closed one-time cleanup must not block recurring Railway startup"
+  );
+  assert.doesNotMatch(
+    packageJson.scripts.start,
+    /runPostRollbackDebtAccountReconciliation20260805\.js/,
+    "the unsafe broad customer regrouping must never run again"
   );
   assert.match(
     cleanupStartupSource,
@@ -39,6 +44,13 @@ test("Railway runs every reviewed recurring startup gate before API traffic", ()
     "runInstallmentExcavatorCleanupBestEffortStartup20260805.js",
     "runBossApprovedProductQuantityCorrection20260802.js",
     "runBossApprovedProductQuantityCorrection20260804.js",
+    "runCustomerMergeAuditDateSanitizer20260805.js",
+    "runAutomaticCustomerMergeRollback20260805.js",
+    "runExactNameReceiptOwnerRecovery20260805.js",
+    "runMissingCreditDebtBackfill20260805.js",
+    "runZeroPaymentCreditDebtVisibilityRepair20260805.js",
+    "runMasterMickeyJuly31ExactDebtRepair20260805.js",
+    "runUnpaidReceiptIdentityIsolation20260805.js",
     "server.js",
   ];
   let previous = -1;

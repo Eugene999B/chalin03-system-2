@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import CustomerIdentityManagementPanel from "../components/CustomerIdentityManagementPanel";
+import CustomerMergeEmergencyPanel from "../components/CustomerMergeEmergencyPanel";
 import CustomerStatementWorkspacePage from "./CustomerStatementWorkspacePage";
 
 export default function CustomerStatementPage() {
@@ -8,8 +8,8 @@ export default function CustomerStatementPage() {
 
   return (
     <>
-      <CustomerIdentityManagementPanel
-        onMerged={() => setStatementRefreshKey((current) => current + 1)}
+      <CustomerMergeEmergencyPanel
+        onRecovered={() => setStatementRefreshKey((current) => current + 1)}
       />
       <CustomerStatementWorkspacePage key={statementRefreshKey} />
     </>
