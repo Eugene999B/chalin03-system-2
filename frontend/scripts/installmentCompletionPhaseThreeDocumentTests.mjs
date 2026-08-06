@@ -10,6 +10,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 const workspace = read("src/pages/EquipmentSalesWorkspacePage.jsx");
 const page = read("src/pages/EquipmentFinanceDocumentCentrePage.jsx");
 const css = read("src/styles/equipmentFinanceDocumentCompletion.css");
+const simplifiedCss = read("src/styles/equipmentFinanceSimplifiedWorkspace.css");
 const layout = read("src/layouts/InstallmentFinanceLayout.jsx");
 const workflow = read("../.github/workflows/chalin03-verification.yml");
 
@@ -57,7 +58,11 @@ assert.match(page, /documentType === "payment_receipt"/);
 assert.match(page, /selectedPaymentId/);
 assert.match(page, /snapshot_checksum/);
 assert.match(page, /reconciliation\?\.consistent/);
-assert.match(page, /protected/);
+assert.match(page, /Search Finance document accounts/);
+assert.match(page, /No agreement selected/);
+assert.match(page, /src="\/chalin03-logo\.png"/);
+assert.doesNotMatch(page, /nextAccounts\[0\]/);
+assert.doesNotMatch(page, /payments\?\.at\(-1\)/);
 assert.match(page, /Thermal Receipt/);
 assert.match(page, /Issue Word/);
 assert.match(page, /Issue PDF/);
@@ -69,12 +74,13 @@ assert.match(layout, /stage=generated-documents/);
 
 assert.match(css, /--docs-green: #174f35/);
 assert.match(css, /--docs-gold: #d3a72c/);
-assert.match(css, /finance-docs__brand-mark/);
 assert.match(css, /finance-docs__document-grid/);
 assert.match(css, /finance-docs__history-list/);
 assert.match(css, /@media \(max-width: 980px\)/);
 assert.match(css, /@media \(max-width: 700px\)/);
 assert.match(css, /@media \(max-width: 480px\)/);
+assert.match(simplifiedCss, /finance-simplified__picker-controls/);
+assert.match(simplifiedCss, /finance-simplified__brand-logo/);
 
 assert.match(workflow, /equipmentFinanceCompletionPhaseThreeDocuments\.spec\.js/);
 assert.match(workflow, /finance-completion-phase-three-documents-browser\.log/);
