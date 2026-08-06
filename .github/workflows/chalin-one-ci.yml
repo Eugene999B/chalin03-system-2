@@ -76,6 +76,12 @@ jobs:
       - name: Verify Content Studio foundation
         run: node scripts/contentStudioFoundationTests.mjs
 
+      - name: Verify governed Page Manager
+        run: node scripts/contentStudioPageManagerTests.mjs
+
+      - name: Compile isolated Content Studio JSX
+        run: node scripts/contentStudioJsxSyntaxTests.mjs
+
       - name: Run frontend tests
         run: npm test
 
