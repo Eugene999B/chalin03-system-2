@@ -71,11 +71,17 @@ async function listNavigationApprovals(options = {}) {
        LIMIT ? OFFSET ?`,
       [...values, limit, offset]
     );
-    return rows.map((row) => ({
+    const items = rows.map((row) => ({
       ...row,
       snapshot: parseJson(row.snapshot_json, {}),
       snapshot_json: undefined,
     }));
+    return {
+      items,
+      total: items.length,
+      limit,
+      offset,
+    };
   } catch (error) {
     throw schemaNotReadyError(error);
   }
