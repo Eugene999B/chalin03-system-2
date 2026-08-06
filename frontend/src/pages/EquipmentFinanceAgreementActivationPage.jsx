@@ -210,7 +210,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
                   </div>
                   <div className="finance-simplified__compact-record-actions">
                     <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate || !candidate.activation_ready} onClick={() => open(candidate)}>
-                      {candidate.agreement_id ? "Agreement Created" : "Review & Activate"}
+                      {candidate.agreement_id ? "Agreement Created" : "Create Agreement"}
                     </button>
                   </div>
                 </article>
