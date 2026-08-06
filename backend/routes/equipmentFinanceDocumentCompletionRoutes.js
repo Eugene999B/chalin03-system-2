@@ -7,6 +7,8 @@ const {
   issueCompletionDocument,
   publicDefinitions,
 } = require("../services/equipmentFinanceDocumentCompletionService");
+// The photo-aware service wraps equipmentFinanceCompletionRendererService; the
+// established branded document layouts remain the authoritative base renderer.
 const {
   renderCompletionPdf,
   renderCompletionWord,
