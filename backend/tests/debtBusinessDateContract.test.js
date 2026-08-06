@@ -11,9 +11,11 @@ function read(...parts) {
 }
 
 test("Debt Desk separates credit and due dates using Ghana business time", () => {
-  const source = read("frontend", "src", "pages", "DebtsPage.jsx");
+  const source = read("frontend", "src", "pages", "LegacyDebtsPage.jsx");
+  const wrapper = read("frontend", "src", "pages", "DebtsPage.jsx");
   const saleRoutes = read("backend", "routes", "saleRoutes.js");
 
+  assert.match(wrapper, /LegacyDebtsPage/);
   assert.match(source, /formatBusinessDate/);
   assert.match(source, /function dateLabel\(value\)/);
   assert.match(source, /dateLabel\(debt\.sale_date \|\| debt\.created_at\)/);
