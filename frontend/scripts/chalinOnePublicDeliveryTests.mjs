@@ -11,9 +11,12 @@ function read(relativePath) {
 
 const publicApi = read("frontend/src/chalin-one/public-site/publicWebsiteApi.js");
 const publicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
+const homepageApp = read("frontend/src/chalin-one/public-site/PublicWebsiteStandaloneApp.jsx");
 const publicCss = read("frontend/src/chalin-one/public-site/publicWebsite.css");
 const standalone = read("frontend/src/chalin-one/ChalinOneStandaloneEntry.jsx");
 const main = read("frontend/src/main.jsx");
+const publicRoutes = read("backend/routes/publicContentRoutes.js");
+const homepageService = read("backend/services/publicHomepageService.js");
 const workflow = read(".github/workflows/chalin-one-ci.yml");
 const acceptanceFixture = read("backend/scripts/prepareChalinOneAcceptanceDatabase.js");
 const acceptanceTest = read("backend/acceptance/contentStudioDatabaseAcceptance.test.js");
@@ -45,6 +48,7 @@ check("public API supports every published collection, detail and form route", (
     "tenders",
     "testimonials",
   ]) assert.match(publicApi, new RegExp(`"${resource}"`));
+  assert.match(publicApi, /getPublicHomepage/);
   assert.match(publicApi, /getPublicPage/);
   assert.match(publicApi, /getPublicForm/);
   assert.match(publicApi, /submitPublicForm/);
@@ -64,6 +68,30 @@ check("public website routes cover the complete anonymous experience", () => {
   assert.match(publicApp, /PublicHomePage/);
   assert.match(publicApp, /PublicFaqPage/);
   assert.match(publicApp, /PublicNotFound/);
+});
+
+check("governed homepage discovery exposes only a currently published homepage", () => {
+  assert.match(homepageService, /p\.is_homepage = 1/);
+  assert.match(homepageService, /publicationPredicate\("p"\)/);
+  assert.match(homepageService, /ORDER BY p\.published_at DESC, p\.id DESC/);
+  assert.match(homepageService, /LIMIT 1/);
+  assert.match(homepageService, /getPublicPageBySlug\(slug\)/);
+  assert.match(publicRoutes, /router\.get\("\/homepage"/);
+  assert.match(publicRoutes, /getPublicHomepage\(\)/);
+  assert.match(publicRoutes, /notFound\(res, req, "Homepage"\)/);
+});
+
+check("website root hands off safely to the governed page renderer", () => {
+  assert.match(homepageApp, /getPublicHomepage/);
+  assert.match(homepageApp, /controller\.abort\(\)/);
+  assert.match(homepageApp, /<Navigate/);
+  assert.match(homepageApp, /replace/);
+  assert.match(homepageApp, /encodeURIComponent\(state\.page\.slug\)/);
+  assert.match(homepageApp, /return <PublicWebsiteApp \/>/);
+  assert.match(homepageApp, /role="status"/);
+  assert.match(homepageApp, /role="alert"/);
+  assert.match(standalone, /public-site\/PublicWebsiteStandaloneApp/);
+  assert.doesNotMatch(homepageApp, /dangerouslySetInnerHTML|localStorage|sessionStorage|Bearer|Authorization/);
 });
 
 check("published content rendering blocks raw HTML and unsafe embedded video", () => {
@@ -165,4 +193,4 @@ check("CI runs real MySQL migration twice before database acceptance", () => {
   assert.match(backendPackage, /test:chalin-one:db/);
 });
 
-console.log(`\nCHALIN ONE public delivery: ${passed}/13 checks passed.`);
+console.log(`\nCHALIN ONE public delivery: ${passed}/15 checks passed.`);
