@@ -18,7 +18,7 @@ function source(relativePath) {
 function financeSnapshot() {
   return {
     generated_at: "2026-08-05T00:00:00.000Z",
-    template_version: "v2-approved",
+    template_version: "v3-approved",
     company: {
       name: "CHALIN 03 COMPANY LIMITED",
       phone: "0249469080",
@@ -167,22 +167,22 @@ test("completion pack exposes every required professional document", () => {
   ]);
 });
 
-test("V2 renderer creates branded A4 and thermal PDFs", async () => {
+test("logo-led V3 renderer creates branded A4 and thermal PDFs", async () => {
   const schedulePdf = await renderCompletionPdf(
     issuedDocument("payment_schedule", "EFSC-DOC-001")
   );
   assert.equal(schedulePdf.subarray(0, 4).toString(), "%PDF");
-  assert.ok(schedulePdf.length > 2500);
+  assert.ok(schedulePdf.length > 3500);
 
   const thermalPdf = await renderCompletionPdf(
     issuedDocument("payment_receipt", "EFR-DOC-001"),
     { layout: "thermal" }
   );
   assert.equal(thermalPdf.subarray(0, 4).toString(), "%PDF");
-  assert.ok(thermalPdf.length > 900);
+  assert.ok(thermalPdf.length > 1200);
 });
 
-test("V2 renderer creates editable Word-compatible output", async () => {
+test("logo-led V3 renderer creates editable Word-compatible output", async () => {
   const html = (
     await renderCompletionWord(
       issuedDocument("customer_statement", "EFST-DOC-001")
@@ -192,8 +192,9 @@ test("V2 renderer creates editable Word-compatible output", async () => {
   assert.match(html, /CUSTOMER INSTALLMENT STATEMENT/);
   assert.match(html, /CUSTOMER STATEMENT/);
   assert.match(html, /EFST-DOC-001/);
+  assert.match(html, /watermark-logo/);
   assert.match(html, /data:image\/png;base64/);
-  assert.match(html, /SYSTEM-GENERATED/);
+  assert.match(html, /SECURE • VERIFIED • SYSTEM-GENERATED/);
 });
 
 test("service preserves reconciliation, legal, payment and lifecycle controls", () => {
@@ -216,7 +217,7 @@ test("service preserves reconciliation, legal, payment and lifecycle controls", 
   }
 });
 
-test("routes own authenticated options, issue and V2 format-specific downloads", () => {
+test("routes own authenticated options, issue and V3 format-specific downloads", () => {
   const routes = source("routes/equipmentFinanceDocumentCompletionRoutes.js");
   const independent = source("routes/equipmentFinanceIndependentRoutes.js");
   assert.match(routes, /const PREFIX = "\/professional\/completion-documents"/);
@@ -230,7 +231,9 @@ test("routes own authenticated options, issue and V2 format-specific downloads",
   assert.match(routes, /layout: thermal \? "thermal" : "a4"/);
   assert.match(routes, /X-Chalin03-Snapshot-Checksum/);
   assert.match(routes, /equipmentFinanceDocumentRendererV2Service/);
-  assert.match(routes, /professional-rebuild-v2/);
+  assert.match(routes, /professional-logo-led-v3/);
+  assert.match(routes, /official_logo_cached_in_backend/);
+  assert.match(routes, /integrated_logo_and_document_watermark/);
   assert.ok(
     independent.indexOf("router.use(equipmentFinanceDocumentCompletionRoutes)") <
       independent.indexOf("router.use(equipmentFinanceProfessionalRoutes)")

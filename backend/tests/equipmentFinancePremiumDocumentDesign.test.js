@@ -33,13 +33,13 @@ const requiredTypes = [
 
 function documentFixture(type) {
   return {
-    document_number: "C03-DOC-V2-001",
+    document_number: "C03-DOC-V3-001",
     document_type: type,
     snapshot_checksum: "a".repeat(64),
     issued_at: "2026-08-06T18:30:00.000Z",
     snapshot: {
       generated_at: "2026-08-06T18:30:00.000Z",
-      template_version: "FIN-TERMS-V2",
+      template_version: "FIN-TERMS-V3",
       company: {
         name: "CHALIN 03 COMPANY LIMITED",
         phone: "0249469080",
@@ -47,7 +47,8 @@ function documentFixture(type) {
         postal_address: "P. O. Box 187, Dunkwa-On-Offin",
       },
       policy: {
-        agreement_terms: "Ownership remains with Chalin 03 Company Limited until full settlement.",
+        agreement_terms:
+          "Ownership remains with Chalin 03 Company Limited until full settlement.",
       },
       agreement: {
         agreement_number: "ESA-20260806-001",
@@ -63,6 +64,8 @@ function documentFixture(type) {
         installment_count: 12,
         first_due_date: "2026-09-04",
         final_due_date: "2027-08-04",
+        kyc_status: "complete",
+        affordability_status: "manual_review",
       },
       schedule: [
         {
@@ -87,9 +90,10 @@ function pageCount(buffer) {
   return (buffer.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length;
 }
 
-test("every Finance document has an explicit V2 design and a unique watermark", () => {
+test("every Finance document has an explicit logo-led V3 identity", () => {
   assert.deepEqual(Object.keys(DOCUMENT_TEMPLATES), requiredTypes);
   const watermarks = [];
+  const motifs = [];
   for (const type of requiredTypes) {
     const template = templateFor(documentFixture(type));
     assert.ok(template.family);
@@ -98,58 +102,66 @@ test("every Finance document has an explicit V2 design and a unique watermark", 
     assert.ok(template.classification);
     assert.ok(template.watermark);
     assert.ok(template.accent);
+    assert.ok(template.motif);
+    assert.equal(template.design_version, "logo-led-v3");
     watermarks.push(template.watermark);
+    motifs.push(template.motif);
   }
   assert.equal(new Set(watermarks).size, requiredTypes.length);
+  assert.ok(new Set(motifs).size >= 9);
 });
 
-test("agreement copies and operational documents are unmistakably different", () => {
+test("agreement copies and operational documents remain unmistakably different", () => {
   assert.equal(DOCUMENT_TEMPLATES.installment_agreement.classification, "ORIGINAL");
   assert.equal(DOCUMENT_TEMPLATES.customer_agreement_copy.classification, "CUSTOMER COPY");
   assert.equal(DOCUMENT_TEMPLATES.company_agreement_copy.classification, "COMPANY COPY");
-  assert.equal(DOCUMENT_TEMPLATES.payment_receipt.family, "receipt");
-  assert.equal(DOCUMENT_TEMPLATES.boss_approval_pack.family, "executive");
-  assert.equal(DOCUMENT_TEMPLATES.machine_annexure.family, "evidence");
-  assert.equal(DOCUMENT_TEMPLATES.settlement_confirmation.family, "certificate");
+  assert.equal(DOCUMENT_TEMPLATES.payment_receipt.motif, "receipt");
+  assert.equal(DOCUMENT_TEMPLATES.boss_approval_pack.motif, "executive");
+  assert.equal(DOCUMENT_TEMPLATES.machine_annexure.motif, "evidence");
+  assert.equal(DOCUMENT_TEMPLATES.settlement_confirmation.motif, "certificate");
 });
 
-test("V2 verification binds document, type, agreement and immutable checksum", () => {
+test("V3 verification binds document, type, agreement and immutable checksum", () => {
   const payload = verificationPayload(documentFixture("payment_receipt"));
-  assert.match(payload, /CHALIN03-FINANCE-V2/);
-  assert.match(payload, /DOC:C03-DOC-V2-001/);
+  assert.match(payload, /CHALIN03-FINANCE-LOGO-LED-V3/);
+  assert.match(payload, /DOC:C03-DOC-V3-001/);
   assert.match(payload, /TYPE:payment_receipt/);
   assert.match(payload, /AGR:ESA-20260806-001/);
   assert.match(payload, /SHA256:a{64}/);
 });
 
-test("the actual public Chalin 03 logo is resolved for document rendering", () => {
+test("the exact official public logo is copied into backend document assets", () => {
   const logoPath = findOfficialLogoPath();
-  assert.ok(logoPath, "Expected frontend/public/chalin03-logo.png to be available");
-  assert.match(logoPath.replaceAll("\\", "/"), /frontend\/public\/chalin03-logo\.png$/);
+  assert.ok(logoPath, "Expected the official Chalin 03 logo to be available");
+  assert.match(
+    logoPath.replaceAll("\\", "/"),
+    /(?:backend\/assets|frontend\/public)\/chalin03-logo\.png$/
+  );
   assert.ok(fs.statSync(logoPath).size > 1000);
 });
 
-test("V2 schedule is a single protected PDF page without a trailing blank page", async () => {
+test("V3 schedule is a single protected PDF page without a trailing blank page", async () => {
   const buffer = await renderCompletionPdf(documentFixture("payment_schedule"));
   assert.equal(buffer.subarray(0, 4).toString(), "%PDF");
-  assert.ok(buffer.length > 2500);
+  assert.ok(buffer.length > 3500);
   assert.equal(pageCount(buffer), 1);
 });
 
-test("V2 Word output contains the official logo, visible watermark and QR verification", async () => {
+test("V3 Word output contains the official logo, integrated watermark and QR", async () => {
   const html = (
     await renderCompletionWord(documentFixture("payment_schedule"))
   ).toString("utf8");
   assert.match(html, /OFFICIAL INSTALLMENT SCHEDULE/);
   assert.match(html, /PAYMENT SCHEDULE/);
-  assert.match(html, /opacity:\.13/);
+  assert.match(html, /watermark-logo/);
+  assert.match(html, /watermark-text/);
   assert.match(html, /alt="Official Chalin 03 logo"/);
   assert.match(html, /data:image\/png;base64/);
-  assert.match(html, /SYSTEM-GENERATED/);
-  assert.match(html, /C03-DOC-V2-001/);
+  assert.match(html, /SECURE • VERIFIED • SYSTEM-GENERATED/);
+  assert.match(html, /C03-DOC-V3-001/);
 });
 
-test("V2 source enforces the actual logo, strong watermark and controlled pages", () => {
+test("V3 source uses the logo as architecture rather than a pasted badge", () => {
   const design = fs.readFileSync(
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentDesignV2Service.js"),
     "utf8"
@@ -158,15 +170,28 @@ test("V2 source enforces the actual logo, strong watermark and controlled pages"
     path.join(__dirname, "..", "services", "equipmentFinancePdfV2PageService.js"),
     "utf8"
   );
+  const flow = fs.readFileSync(
+    path.join(__dirname, "..", "services", "equipmentFinancePdfV2FlowWidgetService.js"),
+    "utf8"
+  );
+  const accountBodies = fs.readFileSync(
+    path.join(__dirname, "..", "services", "equipmentFinancePdfV2AccountBodies.js"),
+    "utf8"
+  );
   const renderer = fs.readFileSync(
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
   );
-  assert.match(design, /frontend", "public", "chalin03-logo\.png/);
-  assert.doesNotMatch(pages, /"C03"/);
-  assert.match(pages, /fillOpacity\(0\.115\)/);
-  assert.match(pages, /findOfficialLogoPath/);
+  assert.match(design, /backend", "assets", "chalin03-logo\.png/);
+  assert.match(pages, /drawBrandWave/);
+  assert.match(pages, /drawGuilloche/);
+  assert.match(pages, /fillOpacity\(0\.082\)/);
+  assert.match(pages, /drawOfficialLogo/);
+  assert.match(flow, /drawSecuritySeal/);
+  assert.match(accountBodies, /AGREEMENT AT A GLANCE/);
+  assert.match(accountBodies, /AMOUNT PAID/);
   assert.match(renderer, /autoFirstPage: false/);
+  assert.match(renderer, /logo-led-v3/);
   assert.match(renderer, /drawIdentityAnnex/);
   assert.match(renderer, /drawVerificationPanel/);
   assert.match(renderer, /drawFooters/);
