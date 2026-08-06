@@ -15,6 +15,8 @@
     "verify:chalin-one:staging:migration": "node scripts/verifyChalinOneStagingEnvironment.js --mode=migration",
     "seed:chalin-one:staging": "node scripts/seedChalinOneStagingContent.js",
     "seed:chalin-one:staging:dry-run": "node scripts/seedChalinOneStagingContent.js --dry-run",
+    "evidence:chalin-one:release": "node scripts/generateChalinOneReleaseEvidence.js",
+    "smoke:chalin-one:staging": "node scripts/runChalinOneStagingSmokeTests.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
