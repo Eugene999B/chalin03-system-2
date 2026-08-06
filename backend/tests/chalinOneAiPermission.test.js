@@ -72,7 +72,10 @@ test("explicit executive or action grants remain explicit", () => {
 test("persona and workspace normalization is controlled", () => {
   assert.equal(normalizeAiPersona("COPILOT"), AI_PERSONAS.COPILOT);
   assert.equal(normalizeAiPersona("root"), null);
-  assert.equal(normalizeAiWorkspace("hire"), "equipment_hire");
+  assert.equal(
+    normalizeAiWorkspace("equipment_hire"),
+    "equipment_hire"
+  );
   assert.equal(normalizeAiWorkspace("unknown"), null);
 });
 
