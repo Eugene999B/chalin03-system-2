@@ -12,6 +12,7 @@ const {
   browserEvidence,
   evaluateStagingAcceptance,
   normalizeCommitSha,
+  releaseEnvironmentEvidence,
   safeStagingUrl,
   smokeEvidence,
 } = require("../scripts/generateChalinOneStagingAcceptanceEvidence");
@@ -22,7 +23,11 @@ function releaseFixture(overrides = {}) {
   return {
     report: "CHALIN ONE Release Candidate Evidence",
     commit_sha: COMMIT_SHA,
-    environment: "test",
+    environment: {
+      mode: "acceptance",
+      database_name: "chalin_one_acceptance",
+      safe: true,
+    },
     release_ready: true,
     gates: {
       migration_record_present: true,
@@ -106,10 +111,48 @@ test("complete evidence for one commit passes every staging gate", () => {
   assert.equal(result.commit_match, true);
   assert.deepEqual(result.failures, []);
   assert.equal(
+    result.gates.automated_release_evidence.environment.mode,
+    "acceptance"
+  );
+  assert.equal(
     result.gates.final_staging_smoke.reference_code,
     "WEB-20260806-ABCDEF123456"
   );
   assert.equal(result.gates.browser_acceptance.screenshot_count, 4);
+});
+
+test("release environment must be explicitly safe and isolated", () => {
+  assert.deepEqual(
+    releaseEnvironmentEvidence({
+      mode: "staging",
+      database_name: "chalin_one_staging_preview",
+      safe: true,
+    }),
+    {
+      passed: true,
+      safe: true,
+      mode: "staging",
+      database_name: "chalin_one_staging_preview",
+      database_name_safe: true,
+    }
+  );
+  assert.equal(
+    releaseEnvironmentEvidence({
+      mode: "staging",
+      database_name: "chalin03_db",
+      safe: true,
+    }).passed,
+    false
+  );
+  assert.equal(
+    releaseEnvironmentEvidence({
+      mode: "production",
+      database_name: "chalin_one_staging",
+      safe: true,
+    }).passed,
+    false
+  );
+  assert.equal(releaseEnvironmentEvidence("test").passed, false);
 });
 
 test("commit identity mismatch blocks staging readiness", () => {
@@ -215,6 +258,8 @@ test("aggregator is offline, non-destructive and exposed through package scripts
   assert.match(source, /release_ready === true/);
   assert.match(source, /contact_form_submission_enabled === true/);
   assert.match(source, /screenshots\.length >= 4/);
+  assert.match(source, /ACCEPTANCE_DATABASE_PATTERN/);
+  assert.match(source, /STAGING_DATABASE_PATTERN/);
   assert.equal(
     packageJson.scripts["evidence:chalin-one:staging"],
     "node scripts/generateChalinOneStagingAcceptanceEvidence.js"
