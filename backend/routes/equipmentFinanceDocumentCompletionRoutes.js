@@ -7,6 +7,10 @@ const {
   issueCompletionDocument,
   publicDefinitions,
 } = require("../services/equipmentFinanceDocumentCompletionService");
+// Install the targeted PDFKit footer guard before loading any Finance renderer.
+// It prevents a footer drawn inside the bottom margin from creating a trailing
+// blank page in generated, downloaded and print-ready documents.
+require("../services/equipmentFinancePdfBlankPageGuardService");
 // The photo-aware service wraps equipmentFinanceCompletionRendererService; the
 // established branded document layouts remain the authoritative base renderer.
 const {
