@@ -48,6 +48,8 @@ function safeEnvironment(overrides = {}) {
     CHALIN_ONE_STAGING_PUBLISHER_USER_ID: "13",
     CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "false",
     CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: "",
+    CHALIN_ONE_STAGING_REQUIRE_PUBLISHED: "false",
+    CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM: "false",
     ...overrides,
   };
 }
@@ -276,7 +278,7 @@ test("seed implementation uses governed services and contains no destructive SQL
   );
 });
 
-test("staging smoke follows bounded redirects without exposing the body", () => {
+test("staging smoke follows bounded same-origin redirects", () => {
   const source = fs.readFileSync(
     path.resolve(__dirname, "../scripts/runChalinOneStagingSmokeTests.js"),
     "utf8"
@@ -285,8 +287,40 @@ test("staging smoke follows bounded redirects without exposing the body", () => 
   assert.match(source, /SAFE_REDIRECT_STATUSES/);
   assert.match(source, /Math\.min\(Number\(options\.maxRedirects\), 5\)/);
   assert.match(source, /CHALIN_ONE_STAGING_SMOKE_TOO_MANY_REDIRECTS/);
-  assert.match(source, /redirect_count: website\.redirects\.length/);
+  assert.match(source, /redirect_count: result\.redirects\.length/);
   assert.doesNotMatch(source, /redirect:\s*"follow"/);
+});
+
+test("staging smoke proves public and staff deep-route delivery", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/runChalinOneStagingSmokeTests.js"),
+    "utf8"
+  );
+  assert.match(source, /Public website frontend/);
+  assert.match(source, /Public website deep link/);
+  assert.match(source, /Content Studio deep link/);
+  assert.match(source, /\/website\/pages\/about/);
+  assert.match(source, /\/content-studio/);
+  assert.match(source, /assertHtmlRoute/);
+  assert.match(source, /text\\\/html/);
+});
+
+test("staging smoke real contact submission is explicit, private and verifiable", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/runChalinOneStagingSmokeTests.js"),
+    "utf8"
+  );
+  assert.match(source, /CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM/);
+  assert.match(source, /CHALIN_ONE_STAGING_SMOKE_FORM_REQUIRES_PUBLISHED/);
+  assert.match(source, /headers\["Content-Type"\]/);
+  assert.match(source, /JSON\.stringify\(options\.json\)/);
+  assert.match(source, /method: "POST"/);
+  assert.match(source, /\/forms\/contact\/submissions/);
+  assert.match(source, /submission\.status === 202/);
+  assert.match(source, /\^WEB-\\d\{8\}-\[A-F0-9\]\{12\}\$/);
+  assert.match(source, /no-store\|private/);
+  assert.match(source, /scanPrivateKeys\(submission\.body\)/);
+  assert.match(source, /contact_form_submission_enabled: submitContactForm/);
 });
 
 test("staging environment template cannot be mistaken for production", () => {
@@ -300,5 +334,7 @@ test("staging environment template cannot be mistaken for production", () => {
   assert.match(source, /FEATURE_CONTENT_STUDIO=true/);
   assert.match(source, /FEATURE_AI_ENABLED=false/);
   assert.match(source, /CHALIN_ONE_STAGING_PREVIEW_ONLY/);
+  assert.match(source, /CHALIN_ONE_STAGING_REQUIRE_PUBLISHED=false/);
+  assert.match(source, /CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM=false/);
   assert.doesNotMatch(source, /DB_NAME=chalin03_db/);
 });
