@@ -141,6 +141,18 @@ jobs:
       - name: Run database-backed Content Studio acceptance
         run: npm run test:chalin-one:db
 
+      - name: Generate machine-readable release evidence
+        run: npm run evidence:chalin-one:release
+
+      - name: Upload CHALIN ONE release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-release-evidence-${{ github.sha }}
+          path: backend/artifacts/chalin-one-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
   frontend-tests:
     name: Frontend tests and build
     runs-on: ubuntu-latest
