@@ -23,14 +23,20 @@ assert.match(
   serviceWorker,
   /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
 );
+assert.match(serviceWorker, /browser-cache-integrity-v35/);
 assert.match(serviceWorker, /const BUILD_ASSET_PREFIX = "\/assets\/"/);
 assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
 assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /notifyClientsOfAssetMismatch/);
 assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
+assert.match(serviceWorker, /recoveryOwner: "page"/);
+assert.match(serviceWorker, /X-Chalin03-Recovery-Owner/);
 assert.match(serviceWorker, /isHtml\(response\)/);
 assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.match(serviceWorker, /cache: "no-store"/);
-assert.match(serviceWorker, /client\.navigate\(url\.toString\(\)\)/);
+assert.match(serviceWorker, /return await fetchCurrentShell\(\)/);
+assert.doesNotMatch(serviceWorker, /client\.navigate\(/);
+assert.doesNotMatch(serviceWorker, /__chalin03_sw_recovery/);
 assert.match(serviceWorker, /function isTrustedClientMessage\(event\)/);
 assert.match(
   serviceWorker,
@@ -53,11 +59,16 @@ assert.match(recovery, /__chalin03MarkBootHealthy/);
 assert.match(recovery, /navigator\.serviceWorker/);
 assert.match(recovery, /registration\.unregister\(\)/);
 assert.match(recovery, /caches\.delete\(name\)/);
-assert.match(recovery, /__chalin03_recovery/);
+assert.match(recovery, /const RETURN_PARAM = "__chalin03_return"/);
+assert.match(recovery, /new URL\("\/", window\.location\.origin\)/);
+assert.match(recovery, /url\.searchParams\.set\(RETURN_PARAM, requestedReturnTarget\(\)\)/);
+assert.match(recovery, /window\.history\.replaceState/);
+assert.match(recovery, /restoreReturnTarget\(\)/);
+assert.match(recovery, /url\.pathname\.startsWith\("\/assets\/"\)/);
 assert.match(recovery, /Updating Chalin 03/);
 
 assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
-assert.match(mainEntry, /browser-cache-integrity-v34/);
+assert.match(mainEntry, /browser-cache-integrity-v35/);
 assert.match(mainEntry, /updateViaCache: "none"/);
 assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
@@ -103,7 +114,11 @@ assert.match(
 );
 assert.match(headers, /\/404\.html/);
 assert.match(notFound, /data-chalin03-static-404="true"/);
+assert.match(notFound, /new URL\("\/", window\.location\.origin\)/);
+assert.match(notFound, /__chalin03_return/);
+assert.match(notFound, /window\.location\.replace\(recovery\.toString\(\)\)/);
+assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser cache hotfix source contracts passed: retired build assets cannot be cached as HTML, app-shell releases are build-specific, worker messages are same-origin, and failed chunks self-recover."
+  "✅ Browser cache recovery contracts passed: one page-owned recovery flow loads the root shell, restores the staff's deep route without a second network request, and self-heals unexpected navigation 404 responses."
 );
