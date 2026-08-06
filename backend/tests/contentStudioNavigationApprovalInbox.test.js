@@ -32,10 +32,12 @@ test("Navigation approval list uses exact content versions", () => {
   assert.match(serviceSource, /snapshot: parseJson\(row\.snapshot_json, \{\}\)/);
 });
 
-test("Navigation approval list supports assignment and safe pagination", () => {
+test("Navigation approval list supports assignment, safe pagination and a stable list envelope", () => {
   assert.match(serviceSource, /a\.assigned_to = \?/);
   assert.match(serviceSource, /Math\.min\(number, 100\)/);
   assert.match(serviceSource, /LIMIT \? OFFSET \?/);
+  assert.match(serviceSource, /const items = rows\.map/);
+  assert.match(serviceSource, /return \{\s*items,\s*total: items\.length,\s*limit,\s*offset,?\s*\}/s);
 });
 
 test("Navigation approval service does not mutate approval state", () => {
