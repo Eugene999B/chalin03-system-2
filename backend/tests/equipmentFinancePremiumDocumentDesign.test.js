@@ -161,7 +161,7 @@ test("V3 Word output contains the official logo, integrated watermark and QR", a
   assert.match(html, /C03-DOC-V3-001/);
 });
 
-test("V3 source uses the logo as architecture rather than a pasted badge", () => {
+test("V3 source uses the logo as architecture with a subtle background watermark", () => {
   const design = fs.readFileSync(
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentDesignV2Service.js"),
     "utf8"
@@ -185,7 +185,8 @@ test("V3 source uses the logo as architecture rather than a pasted badge", () =>
   assert.match(design, /backend", "assets", "chalin03-logo\.png/);
   assert.match(pages, /drawBrandWave/);
   assert.match(pages, /drawGuilloche/);
-  assert.match(pages, /fillOpacity\(0\.082\)/);
+  assert.match(pages, /fillOpacity\(0\.048\)/);
+  assert.doesNotMatch(pages, /drawVisibleOverlayWatermark/);
   assert.match(pages, /drawOfficialLogo/);
   assert.match(flow, /drawSecuritySeal/);
   assert.match(accountBodies, /AGREEMENT AT A GLANCE/);
