@@ -80,8 +80,9 @@ check("all governed actions use their exact Content Studio permissions", () => {
 check("article editor preserves structured body data until intentionally replaced", () => {
   assert.match(managerSource, /original_body/);
   assert.match(managerSource, /has_structured_body/);
+  assert.match(managerSource, /form\.has_structured_body && form\.body_text === ""/);
   assert.match(managerSource, /return form\.original_body/);
-  assert.match(managerSource, /Advanced structured content/);
+  assert.match(managerSource, /typeof form\.original_body\?\.text === "string"/);
   assert.doesNotMatch(managerSource, /dangerouslySetInnerHTML|contentEditable|eval\(/);
 });
 
