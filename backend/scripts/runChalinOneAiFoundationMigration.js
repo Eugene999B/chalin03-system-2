@@ -53,8 +53,8 @@ function truthy(value) {
   );
 }
 
-function requiredEnv(primaryName, fallbackName) {
-  const value = process.env[primaryName] || process.env[fallbackName];
+function requiredEnv(primaryName, fallbackName, env = process.env) {
+  const value = env[primaryName] || env[fallbackName];
   if (!String(value || "").trim()) {
     throw new Error(
       `Missing required database variable ${primaryName}${
@@ -137,11 +137,11 @@ function assertExecutionGates(env = process.env) {
 
 function connectionOptions(env = process.env) {
   return {
-    host: requiredEnv("DB_HOST", "MYSQLHOST"),
+    host: requiredEnv("DB_HOST", "MYSQLHOST", env),
     port: Number(env.DB_PORT || env.MYSQLPORT || 3306),
-    user: requiredEnv("DB_USER", "MYSQLUSER"),
-    password: requiredEnv("DB_PASSWORD", "MYSQLPASSWORD"),
-    database: requiredEnv("DB_NAME", "MYSQLDATABASE"),
+    user: requiredEnv("DB_USER", "MYSQLUSER", env),
+    password: requiredEnv("DB_PASSWORD", "MYSQLPASSWORD", env),
+    database: requiredEnv("DB_NAME", "MYSQLDATABASE", env),
     ssl: getSslConfig(env),
     connectTimeout: Number(env.DB_CONNECT_TIMEOUT_MS || 15000),
     multipleStatements: false,
@@ -353,6 +353,7 @@ module.exports = {
   connectionOptions,
   getSslConfig,
   readMigrationFile,
+  requiredEnv,
   runChalinOneAiFoundationMigration,
   truthy,
   verifyExpectedTables,
