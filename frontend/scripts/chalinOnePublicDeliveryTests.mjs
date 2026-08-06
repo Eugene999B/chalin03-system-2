@@ -101,6 +101,24 @@ check("published content rendering blocks raw HTML and unsafe embedded video", (
   assert.match(publicApp, /Open published video/);
 });
 
+check("public collection and detail fields match the backend serializers", () => {
+  assert.match(publicApp, /\[item\.address, item\.city, item\.region, item\.country\]/);
+  assert.match(publicApp, /item\.customer_name \|\| item\.name/);
+  assert.match(publicApp, /item\?\.status \|\| item\?\.operational_status/);
+  assert.match(publicApp, /item\?\.availability \|\| item\?\.availability_status/);
+  assert.match(publicApp, /formatPublicMoney\(item\?\.price\)/);
+  assert.match(publicApp, /<PublicDetailContent item=\{item\} \/>/);
+  assert.match(publicApp, /<StructuredContent value=\{item\.specifications\} \/>/);
+  assert.match(publicApp, /<StructuredContent value=\{item\.features\} \/>/);
+  assert.match(publicApp, /item\.hire_available/);
+  assert.match(publicApp, /item\.finance_available/);
+  assert.match(publicApp, /target=\{item\.application_url\}/);
+  assert.doesNotMatch(
+    publicApp,
+    /item\.body \|\| item\.details \|\| item\.description \|\| item\.specifications \|\| item\.features/
+  );
+});
+
 check("dynamic forms implement contact, honeypot, consent and supported field controls", () => {
   for (const marker of [
     "full_name",
@@ -193,4 +211,4 @@ check("CI runs real MySQL migration twice before database acceptance", () => {
   assert.match(backendPackage, /test:chalin-one:db/);
 });
 
-console.log(`\nCHALIN ONE public delivery: ${passed}/15 checks passed.`);
+console.log(`\nCHALIN ONE public delivery: ${passed}/16 checks passed.`);
