@@ -23,6 +23,7 @@ const DEFAULT_OUTPUT = path.join(
 
 const ACCEPTANCE_DATABASE_PATTERN = /^chalin_one_acceptance(?:_[a-z0-9_]+)?$/i;
 const STAGING_DATABASE_PATTERN = /^chalin_one_staging(?:_[a-z0-9_]+)?$/i;
+const STAGING_HOST_PATTERN = /(?:^|[.-])(staging|preview|test)(?:[.-]|$)/i;
 const PRODUCTION_HOSTS = new Set([
   "chalin03.com",
   "www.chalin03.com",
@@ -103,14 +104,23 @@ function readJson(filePath, label) {
 
 function normalizeCommitSha(value, label = "Commit SHA") {
   const sha = clean(value).toLowerCase();
-  if (!/^[a-f0-9]{7,64}$/.test(sha)) {
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sha)) {
     throw new ChalinOneStagingAcceptanceError(
-      `${label} is missing or invalid.`,
+      `${label} must be a full 40- or 64-character hexadecimal commit SHA.`,
       "CHALIN_ONE_STAGING_ACCEPTANCE_COMMIT_INVALID",
       { label, value: clean(value) || null }
     );
   }
   return sha;
+}
+
+function evidenceHostSafe(value) {
+  const hostname = clean(value).toLowerCase();
+  return Boolean(
+    hostname &&
+      !PRODUCTION_HOSTS.has(hostname) &&
+      (hostname === "localhost" || STAGING_HOST_PATTERN.test(hostname))
+  );
 }
 
 function safeStagingUrl(value, label) {
@@ -147,10 +157,7 @@ function safeStagingUrl(value, label) {
       { label, hostname, protocol: parsed.protocol }
     );
   }
-  if (
-    hostname !== "localhost" &&
-    !/(?:^|[.-])(staging|preview|test)(?:[.-]|$)/i.test(hostname)
-  ) {
+  if (!evidenceHostSafe(hostname)) {
     throw new ChalinOneStagingAcceptanceError(
       `${label} must visibly identify an isolated staging or preview host.`,
       "CHALIN_ONE_STAGING_ACCEPTANCE_HOST_NOT_ISOLATED",
@@ -192,6 +199,12 @@ function smokeEvidence(report) {
   const referenceCode = clean(submission?.reference_code);
   const databaseName = clean(report?.staging?.database_name);
   const databaseSafe = STAGING_DATABASE_PATTERN.test(databaseName);
+  const frontendHost = clean(report?.staging?.frontend_host).toLowerCase();
+  const apiHost = clean(report?.staging?.api_host).toLowerCase();
+  const frontendHostSafe = evidenceHostSafe(frontendHost);
+  const apiHostSafe = evidenceHostSafe(apiHost);
+  const hostsSeparate =
+    Boolean(frontendHost && apiHost) && frontendHost !== apiHost;
 
   return {
     passed:
@@ -200,6 +213,9 @@ function smokeEvidence(report) {
       report?.contact_form_submission_enabled === true &&
       report?.staging?.safe === true &&
       databaseSafe &&
+      frontendHostSafe &&
+      apiHostSafe &&
+      hostsSeparate &&
       missing.length === 0 &&
       /^WEB-\d{8}-[A-F0-9]{12}$/.test(referenceCode),
     missing_checks: missing,
@@ -211,6 +227,11 @@ function smokeEvidence(report) {
     staging_safe: report?.staging?.safe === true,
     database_name: databaseName || null,
     database_name_safe: databaseSafe,
+    frontend_host: frontendHost || null,
+    frontend_host_safe: frontendHostSafe,
+    api_host: apiHost || null,
+    api_host_safe: apiHostSafe,
+    hosts_separate: hostsSeparate,
   };
 }
 
@@ -301,10 +322,18 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
     "Browser frontend URL"
   );
   const apiUrl = safeStagingUrl(browser?.api_url, "Browser API URL");
+  const frontendHostname = new URL(frontendUrl).hostname.toLowerCase();
+  const apiHostname = new URL(apiUrl).hostname.toLowerCase();
+  const browserHostsSeparate = frontendHostname !== apiHostname;
+  const endpointMatch =
+    smokeGate.frontend_host === frontendHostname &&
+    smokeGate.api_host === apiHostname;
   const failures = [];
 
   if (!commitMatch) failures.push("commit_identity");
   if (!databaseMatch) failures.push("database_identity");
+  if (!browserHostsSeparate) failures.push("browser_host_separation");
+  if (!endpointMatch) failures.push("endpoint_identity");
   if (!releaseGate.passed) failures.push("automated_release_evidence");
   if (!smokeGate.passed) failures.push("final_staging_smoke");
   if (!browserGate.passed) failures.push("browser_acceptance");
@@ -314,6 +343,8 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
     commit_sha: releaseSha,
     commit_match: commitMatch,
     database_match: databaseMatch,
+    endpoint_match: endpointMatch,
+    browser_hosts_separate: browserHostsSeparate,
     frontend_url: frontendUrl,
     api_url: apiUrl,
     failures,
@@ -410,10 +441,12 @@ module.exports = {
   REQUIRED_BROWSER_GATES,
   REQUIRED_SMOKE_CHECKS,
   STAGING_DATABASE_PATTERN,
+  STAGING_HOST_PATTERN,
   argumentValue,
   browserEvidence,
   commandOptions,
   evaluateStagingAcceptance,
+  evidenceHostSafe,
   generateStagingAcceptanceEvidence,
   normalizeCommitSha,
   readJson,
