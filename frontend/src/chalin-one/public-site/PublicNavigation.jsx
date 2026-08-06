@@ -243,6 +243,7 @@ function NavigationBranch({ node, pathname, openKeys, toggleKey, closeAll, depth
 export function PublicNavigation({ items, menuOpen, onMenuClose }) {
   const location = useLocation();
   const navigationRef = useRef(null);
+  const onMenuCloseRef = useRef(onMenuClose);
   const [openKeys, setOpenKeys] = useState(() => new Set());
   const publishedTree = useMemo(
     () => buildPublicNavigationTree(items, "header"),
@@ -263,10 +264,14 @@ export function PublicNavigation({ items, menuOpen, onMenuClose }) {
     [publishedTree]
   );
 
-  const closeAll = useCallback(() => {
-    setOpenKeys(new Set());
-    onMenuClose?.();
+  useEffect(() => {
+    onMenuCloseRef.current = onMenuClose;
   }, [onMenuClose]);
+
+  const closeAll = useCallback(() => {
+    setOpenKeys((current) => (current.size === 0 ? current : new Set()));
+    onMenuCloseRef.current?.();
+  }, []);
 
   const toggleKey = useCallback((key, forced) => {
     setOpenKeys((current) => {
@@ -274,6 +279,12 @@ export function PublicNavigation({ items, menuOpen, onMenuClose }) {
       const shouldOpen = forced === undefined ? !next.has(key) : forced;
       if (shouldOpen) next.add(key);
       else next.delete(key);
+      if (
+        next.size === current.size &&
+        [...next].every((item) => current.has(item))
+      ) {
+        return current;
+      }
       return next;
     });
   }, []);
