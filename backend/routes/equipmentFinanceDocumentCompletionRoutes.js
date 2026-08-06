@@ -11,12 +11,12 @@ const {
 // It prevents a footer drawn inside the bottom margin from creating a trailing
 // blank page in generated, downloaded and print-ready documents.
 require("../services/equipmentFinancePdfBlankPageGuardService");
-// The photo-aware service wraps equipmentFinanceCompletionRendererService; the
-// established branded document layouts remain the authoritative base renderer.
+// The premium renderer gives every Finance document its own layout family,
+// official Chalin 03 mark, watermark, QR verification and tamper-evident footer.
 const {
   renderCompletionPdf,
   renderCompletionWord,
-} = require("../services/equipmentFinanceCustomerPhotoRendererService");
+} = require("../services/equipmentFinancePremiumDocumentRendererService");
 const {
   ProfessionalFinanceError,
 } = require("../services/equipmentFinanceProfessionalService");
@@ -68,6 +68,11 @@ router.get(
         thermal_receipt_available: true,
         customer_passport_photo_page: true,
         customer_photo_encrypted_at_rest: true,
+        professional_distinct_templates: true,
+        official_chalin03_mark: true,
+        document_specific_watermarks: true,
+        qr_verification_identity: true,
+        tamper_evident_footer: true,
         supported_downloads: ["pdf", "word", "print", "thermal"],
       },
     });
@@ -170,6 +175,7 @@ router.get(
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Chalin03-Document-Type", document.document_type);
       res.setHeader("X-Chalin03-Snapshot-Checksum", document.snapshot_checksum);
+      res.setHeader("X-Chalin03-Document-Design", "premium-distinct-v1");
       return res.status(200).send(buffer);
     } catch (error) {
       return sendError(req, res, error, "Could not download the professional Finance document.");
