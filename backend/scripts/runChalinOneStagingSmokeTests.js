@@ -92,23 +92,33 @@ function scanPrivateKeys(value, trail = [], findings = []) {
 async function request(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 20000);
+  const headers = {
+    Accept: options.accept || "application/json",
+    "User-Agent": "CHALIN-ONE-Staging-Smoke/1.0",
+    ...(options.headers || {}),
+  };
+  let body;
+  if (options.json !== undefined) {
+    headers["Content-Type"] = options.contentType || "application/json";
+    body = JSON.stringify(options.json);
+  } else if (options.body !== undefined) {
+    body = options.body;
+  }
+
   try {
     const response = await fetch(url, {
       method: options.method || "GET",
-      headers: {
-        Accept: options.accept || "application/json",
-        "User-Agent": "CHALIN-ONE-Staging-Smoke/1.0",
-        ...(options.headers || {}),
-      },
+      headers,
+      body,
       redirect: "manual",
       signal: controller.signal,
     });
     const contentType = response.headers.get("content-type") || "";
     const text = await response.text();
-    let body = null;
+    let responseBody = null;
     if (contentType.includes("application/json") && text) {
       try {
-        body = JSON.parse(text);
+        responseBody = JSON.parse(text);
       } catch {
         throw new ChalinOneStagingSmokeError(
           `Invalid JSON returned by ${url}.`,
@@ -123,8 +133,8 @@ async function request(url, options = {}) {
       content_type: contentType,
       cache_control: response.headers.get("cache-control") || "",
       location: response.headers.get("location") || "",
-      body,
-      text: body ? null : text.slice(0, 5000),
+      body: responseBody,
+      text: responseBody ? null : text.slice(0, 5000),
     };
   } catch (error) {
     if (error?.name === "AbortError") {
@@ -222,6 +232,15 @@ function dataOf(result) {
   return result?.body?.data ?? result?.body ?? null;
 }
 
+function assertHtmlRoute(result, label) {
+  assert(
+    result.ok && /text\/html/i.test(result.content_type),
+    `${label} is unavailable from the staging frontend.`,
+    "CHALIN_ONE_STAGING_FRONTEND_ROUTE_FAILED",
+    result
+  );
+}
+
 async function runStagingSmokeTests({
   env = process.env,
   outputPath = DEFAULT_OUTPUT,
@@ -232,6 +251,14 @@ async function runStagingSmokeTests({
   const frontend = normalizeBaseUrl(env.FRONTEND_URL);
   const requirePublished = booleanValue(
     env.CHALIN_ONE_STAGING_REQUIRE_PUBLISHED
+  );
+  const submitContactForm = booleanValue(
+    env.CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM
+  );
+  assert(
+    !submitContactForm || requirePublished,
+    "A staging smoke form submission requires published-content checks to be enabled.",
+    "CHALIN_ONE_STAGING_SMOKE_FORM_REQUIRES_PUBLISHED"
   );
   const checks = [];
 
@@ -379,23 +406,76 @@ async function runStagingSmokeTests({
       "No approved navigation is visible in the public bootstrap.",
       "CHALIN_ONE_STAGING_NAVIGATION_NOT_PUBLISHED"
     );
+
+    if (submitContactForm) {
+      const submission = await request(
+        `${api}/public/content/forms/contact/submissions`,
+        {
+          method: "POST",
+          json: {
+            full_name: "CHALIN ONE Staging Smoke Check",
+            email: `chalin-one-smoke+${Date.now()}@example.com`,
+            company_name: "Automated staging acceptance",
+            consent_given: true,
+            consent_text_version: "privacy-v1",
+            source_page_slug: "contact",
+            source_url: `${frontend}/website/forms/contact`,
+            responses: {
+              service_interest: "General company enquiry",
+              subject: "Automated staging smoke verification",
+              message:
+                "This isolated staging submission verifies the public contact workflow.",
+              preferred_contact_method: "Email",
+            },
+          },
+        }
+      );
+      const submissionData = dataOf(submission) || {};
+      assert(
+        submission.status === 202 &&
+          submission.body?.status === "success" &&
+          submissionData.accepted === true &&
+          /^WEB-\d{8}-[A-F0-9]{12}$/.test(
+            clean(submissionData.reference_code)
+          ),
+        "The published contact form did not create an accepted staging enquiry.",
+        "CHALIN_ONE_STAGING_CONTACT_SUBMISSION_FAILED",
+        submission
+      );
+      assert(
+        /no-store|private/i.test(submission.cache_control),
+        "Public form submission responses must remain private and uncached.",
+        "CHALIN_ONE_STAGING_CONTACT_SUBMISSION_CACHE_UNSAFE",
+        submission
+      );
+      assert(
+        scanPrivateKeys(submission.body).length === 0,
+        "The public form submission response exposed private fields.",
+        "CHALIN_ONE_STAGING_CONTACT_SUBMISSION_PRIVATE_FIELD_EXPOSED"
+      );
+      addCheck(checks, "Published contact form submission", submission, {
+        reference_code: submissionData.reference_code,
+      });
+    }
   }
 
-  const website = await requestWithSafeRedirects(`${frontend}/website`, {
-    accept: "text/html,application/xhtml+xml",
-    maxRedirects: 3,
-  });
-  assert(
-    website.ok && /text\/html/i.test(website.content_type),
-    "The staging public website frontend is unavailable.",
-    "CHALIN_ONE_STAGING_FRONTEND_FAILED",
-    website
-  );
-  addCheck(checks, "Public website frontend", website, {
-    content_type: website.content_type,
-    final_url: website.url,
-    redirect_count: website.redirects.length,
-  });
+  const frontendRoutes = [
+    ["Public website frontend", `${frontend}/website`],
+    ["Public website deep link", `${frontend}/website/pages/about`],
+    ["Content Studio deep link", `${frontend}/content-studio`],
+  ];
+  for (const [label, routeUrl] of frontendRoutes) {
+    const result = await requestWithSafeRedirects(routeUrl, {
+      accept: "text/html,application/xhtml+xml",
+      maxRedirects: 3,
+    });
+    assertHtmlRoute(result, label);
+    addCheck(checks, label, result, {
+      content_type: result.content_type,
+      final_url: result.url,
+      redirect_count: result.redirects.length,
+    });
+  }
 
   const report = Object.freeze({
     report: "CHALIN ONE Staging Smoke Test",
@@ -407,6 +487,7 @@ async function runStagingSmokeTests({
       null,
     staging,
     require_published_content: requirePublished,
+    contact_form_submission_enabled: submitContactForm,
     passed: true,
     checks,
   });
@@ -450,6 +531,7 @@ module.exports = {
   PUBLIC_FLAG_KEYS,
   SAFE_REDIRECT_STATUSES,
   apiRoot,
+  assertHtmlRoute,
   dataOf,
   normalizeBaseUrl,
   outputArgument,
