@@ -1,0 +1,208 @@
+import axiosClient from "../../api/axiosClient";
+
+export const AI_PERSONAS = Object.freeze({
+  copilot: "copilot",
+  executive: "executive",
+});
+
+function unwrap(response) {
+  return response?.data?.data ?? response?.data ?? null;
+}
+
+function personaPath(persona) {
+  if (!Object.values(AI_PERSONAS).includes(persona)) {
+    throw new Error("Unsupported CHALIN ONE intelligence persona.");
+  }
+  return `/ai/${persona}`;
+}
+
+function noCacheConfig(config = {}) {
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  };
+}
+
+export async function getAiStatus({ signal } = {}) {
+  const response = await axiosClient.get(
+    "/ai/status",
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || {};
+}
+
+export async function listAiTools(persona, { signal } = {}) {
+  const response = await axiosClient.get(
+    `${personaPath(persona)}/tools`,
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || [];
+}
+
+export async function listAiConversations(
+  persona,
+  params = {},
+  { signal } = {}
+) {
+  const response = await axiosClient.get(
+    `${personaPath(persona)}/conversations`,
+    noCacheConfig({ params, signal })
+  );
+  return unwrap(response) || [];
+}
+
+export async function getAiConversation(persona, conversationKey, { signal } = {}) {
+  const response = await axiosClient.get(
+    `${personaPath(persona)}/conversations/${encodeURIComponent(
+      conversationKey
+    )}`,
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || null;
+}
+
+export async function sendAiMessage(
+  persona,
+  { conversationKey = null, message },
+  { signal } = {}
+) {
+  const response = await axiosClient.post(
+    `${personaPath(persona)}/chat`,
+    {
+      conversation_key: conversationKey || null,
+      message,
+    },
+    { signal }
+  );
+  return unwrap(response) || null;
+}
+
+export async function renameAiConversation(persona, conversationKey, title) {
+  const response = await axiosClient.patch(
+    `${personaPath(persona)}/conversations/${encodeURIComponent(
+      conversationKey
+    )}`,
+    { title }
+  );
+  return unwrap(response) || null;
+}
+
+export async function archiveAiConversation(persona, conversationKey) {
+  const response = await axiosClient.post(
+    `${personaPath(persona)}/conversations/${encodeURIComponent(
+      conversationKey
+    )}/archive`
+  );
+  return unwrap(response) || null;
+}
+
+export async function createAiFeedback(input) {
+  const response = await axiosClient.post("/ai/feedback", input);
+  return unwrap(response) || null;
+}
+
+export async function listAiUsage(params = {}, { signal } = {}) {
+  const response = await axiosClient.get(
+    "/ai/usage",
+    noCacheConfig({ params, signal })
+  );
+  return unwrap(response) || [];
+}
+
+export async function listAiKnowledge(params = {}, { signal } = {}) {
+  const response = await axiosClient.get(
+    "/ai/knowledge",
+    noCacheConfig({ params, signal })
+  );
+  return unwrap(response) || [];
+}
+
+export async function createAiKnowledgeDraft(input) {
+  const response = await axiosClient.post("/ai/knowledge", input);
+  return unwrap(response) || null;
+}
+
+export async function getAiKnowledgeSource(sourceId, { signal } = {}) {
+  const response = await axiosClient.get(
+    `/ai/knowledge/${encodeURIComponent(sourceId)}`,
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || null;
+}
+
+export async function createAiKnowledgeVersion(sourceId, input) {
+  const response = await axiosClient.post(
+    `/ai/knowledge/${encodeURIComponent(sourceId)}/versions`,
+    input
+  );
+  return unwrap(response) || null;
+}
+
+export async function updateAiKnowledgeDraft(sourceId, versionId, input) {
+  const response = await axiosClient.put(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceId
+    )}/versions/${encodeURIComponent(versionId)}`,
+    input
+  );
+  return unwrap(response) || null;
+}
+
+export async function submitAiKnowledgeVersion(
+  sourceId,
+  versionId,
+  { assignedTo, note }
+) {
+  const response = await axiosClient.post(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceId
+    )}/versions/${encodeURIComponent(versionId)}/submit`,
+    { assigned_to: assignedTo, note }
+  );
+  return unwrap(response) || null;
+}
+
+export async function decideAiKnowledgeApproval(approvalId, decision, note) {
+  const response = await axiosClient.post(
+    `/ai/knowledge/approvals/${encodeURIComponent(approvalId)}/decision`,
+    { decision, note }
+  );
+  return unwrap(response) || null;
+}
+
+export async function publishAiKnowledgeVersion(sourceId, versionId) {
+  const response = await axiosClient.post(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceId
+    )}/versions/${encodeURIComponent(versionId)}/publish`
+  );
+  return unwrap(response) || null;
+}
+
+export function aiErrorMessage(error) {
+  if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+    return "";
+  }
+  const code = error?.response?.data?.code;
+  if (code === "AI_PROVIDER_DISABLED") {
+    return "The intelligence provider is safely disabled in this environment.";
+  }
+  if (code === "AI_SCHEMA_NOT_READY") {
+    return "The intelligence database foundation has not been prepared in this environment.";
+  }
+  if (code === "AI_PROMPT_INJECTION_BLOCKED") {
+    return "This message was blocked because it attempted to override security controls.";
+  }
+  if (code === "AI_SECRET_REQUEST_BLOCKED") {
+    return "CHALIN ONE will not reveal passwords, tokens, provider keys or other restricted secrets.";
+  }
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    "CHALIN ONE intelligence could not complete the request safely."
+  );
+}
