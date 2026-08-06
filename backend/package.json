@@ -17,7 +17,7 @@
     "seed:chalin-one:staging:dry-run": "node scripts/seedChalinOneStagingContent.js --dry-run",
     "evidence:chalin-one:release": "node scripts/generateChalinOneReleaseEvidence.js",
     "evidence:chalin-one:staging": "node scripts/generateChalinOneStagingAcceptanceEvidence.js",
-    "smoke:chalin-one:staging": "node scripts/runChalinOneStagingSmokeTests.js",
+    "smoke:chalin-one:staging": "node scripts/runChalinOneGovernedHomepageStagingSmoke.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
