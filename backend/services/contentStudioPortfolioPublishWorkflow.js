@@ -92,24 +92,23 @@ async function publishEntityVersion({
     validatePublishingWindow(snapshot.publish_at, snapshot.expires_at);
     await assertReferences(connection, kind, snapshot, { publicReady: true });
 
-    const future =
+    if (
       snapshot.publish_at &&
-      new Date(snapshot.publish_at).getTime() > Date.now();
-    if (future && entity.publication_status === "published") {
+      new Date(snapshot.publish_at).getTime() > Date.now()
+    ) {
       throw new ContentStudioError(
-        "A future update cannot replace content that is already live. Publish this approved update immediately or wait for the version-aware scheduler release.",
-        { code: "SCHEDULED_LIVE_UPDATE_BLOCKED", statusCode: 409 }
+        "Scheduled publication for leadership, projects and equipment remains disabled until the version-aware scheduler is completed and accepted.",
+        { code: "PORTFOLIO_SCHEDULING_NOT_READY", statusCode: 409 }
       );
     }
-    if (!snapshot.publish_at) snapshot.publish_at = new Date();
-    const status = future ? "scheduled" : "published";
+    snapshot.publish_at = snapshot.publish_at || new Date();
 
     await applyPublishedSnapshot(
       connection,
       kind,
       id,
       snapshot,
-      status,
+      "published",
       approval,
       user?.id
     );
@@ -123,28 +122,23 @@ async function publishEntityVersion({
       [entityType, id, approvedVersionId]
     );
     await connection.query(
-      "UPDATE public_content_versions SET version_status = ? WHERE id = ?",
-      [status === "published" ? "published" : "approved", approvedVersionId]
+      "UPDATE public_content_versions SET version_status = 'published' WHERE id = ?",
+      [approvedVersionId]
     );
-    if (status === "published") {
-      await connection.query(
-        "UPDATE public_content_approvals SET executed_at = UTC_TIMESTAMP() WHERE id = ?",
-        [approval.id]
-      );
-    }
+    await connection.query(
+      "UPDATE public_content_approvals SET executed_at = UTC_TIMESTAMP() WHERE id = ?",
+      [approval.id]
+    );
     await insertContentAudit(connection, {
       entityType,
       entityId: id,
-      actionKey:
-        status === "scheduled"
-          ? `${entityType}_scheduled`
-          : `${entityType}_published`,
+      actionKey: `${entityType}_published`,
       actorUserId: user?.id,
       approvalId: approval.id,
       requestId: req?.requestId,
       before: { publication_status: entity.publication_status },
       after: {
-        publication_status: status,
+        publication_status: "published",
         version_id: approvedVersionId,
         snapshot,
       },
@@ -153,9 +147,7 @@ async function publishEntityVersion({
       connection,
       req,
       kind,
-      status === "scheduled"
-        ? `PUBLIC_${entityType.toUpperCase()}_SCHEDULED`
-        : `PUBLIC_${entityType.toUpperCase()}_PUBLISHED`,
+      `PUBLIC_${entityType.toUpperCase()}_PUBLISHED`,
       id,
       { version_id: approvedVersionId, approval_id: approval.id }
     );
