@@ -7,6 +7,9 @@ const {
   archiveNavigationItemSafely,
 } = require("../services/contentStudioNavigationArchiveService");
 const {
+  listNavigationApprovals,
+} = require("../services/contentStudioNavigationApprovalService");
+const {
   createNavigationDraft,
   createNavigationVersion,
   decideNavigationApproval,
@@ -33,6 +36,26 @@ function success(res, req, data, statusCode = 200) {
     request_id: req.requestId || null,
   });
 }
+
+router.get(
+  "/approvals",
+  requirePermission("public_content.review"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await listNavigationApprovals({
+        assignedTo:
+          String(req.query.mine || "").toLowerCase() === "true"
+            ? req.user?.id
+            : req.query.assigned_to,
+        search: req.query.search,
+        limit: req.query.limit,
+        offset: req.query.offset,
+      })
+    )
+  )
+);
 
 router.get(
   "/",
