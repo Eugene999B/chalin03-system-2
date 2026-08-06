@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import axiosClient from "../api/axiosClient";
-import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
+import EquipmentFinanceCustomerPhotoStartPage from "./EquipmentFinanceCustomerPhotoStartPage";
 
 const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
@@ -80,11 +80,6 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
           // Notice storage is not required for the committed handoff.
         }
 
-        // Retired handoffs, kept here only to document the production failure:
-        // navigate(safeNextPath(response), { replace: true }) could race with
-        // the wizard's delayed navigation, while
-        // window.location.replace(safeNextPath(response)) restarted AuthProvider
-        // and discarded the first Applications reads during session restoration.
         // Replace only the current history entry and notify BrowserRouter in the
         // same authenticated document. No page reload and no second auth cycle.
         replaceFinanceLocation(safeNextPath(response));
@@ -97,7 +92,7 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
     };
   }, []);
 
-  return <EquipmentFinanceOperationalStartImmediatePage />;
+  return <EquipmentFinanceCustomerPhotoStartPage />;
 }
 
 export {
