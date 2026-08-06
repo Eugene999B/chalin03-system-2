@@ -33,6 +33,7 @@ const PUBLIC_FLAG_KEYS = new Set([
   "supplierPortal",
   "applicantPortal",
 ]);
+const SAFE_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 class ChalinOneStagingSmokeError extends Error {
   constructor(message, code = "CHALIN_ONE_STAGING_SMOKE_FAILED", details = null) {
@@ -136,6 +137,75 @@ async function request(url, options = {}) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function safeRedirectTarget(currentUrl, result) {
+  if (!SAFE_REDIRECT_STATUSES.has(Number(result?.status))) return null;
+  const location = clean(result?.location);
+  if (!location) {
+    throw new ChalinOneStagingSmokeError(
+      `Redirect response from ${currentUrl} did not include a Location header.`,
+      "CHALIN_ONE_STAGING_SMOKE_REDIRECT_LOCATION_MISSING",
+      result
+    );
+  }
+
+  const current = new URL(currentUrl);
+  const next = new URL(location, current);
+  if (next.origin !== current.origin) {
+    throw new ChalinOneStagingSmokeError(
+      `Staging smoke refused a cross-origin redirect from ${current.origin} to ${next.origin}.`,
+      "CHALIN_ONE_STAGING_SMOKE_CROSS_ORIGIN_REDIRECT",
+      { from: current.toString(), to: next.toString(), status: result.status }
+    );
+  }
+  if (next.protocol !== "https:" && next.hostname !== "localhost") {
+    throw new ChalinOneStagingSmokeError(
+      `Staging smoke refused an insecure redirect to ${next.toString()}.`,
+      "CHALIN_ONE_STAGING_SMOKE_INSECURE_REDIRECT",
+      { from: current.toString(), to: next.toString(), status: result.status }
+    );
+  }
+  return next.toString();
+}
+
+async function requestWithSafeRedirects(url, options = {}) {
+  const maximum = Number.isInteger(Number(options.maxRedirects))
+    ? Math.max(0, Math.min(Number(options.maxRedirects), 5))
+    : 3;
+  const redirects = [];
+  let currentUrl = url;
+
+  for (let hop = 0; hop <= maximum; hop += 1) {
+    const result = await request(currentUrl, options);
+    const nextUrl = safeRedirectTarget(currentUrl, result);
+    if (!nextUrl) {
+      return {
+        ...result,
+        requested_url: url,
+        redirects,
+      };
+    }
+    if (hop === maximum) {
+      throw new ChalinOneStagingSmokeError(
+        `Staging smoke exceeded ${maximum} safe redirects for ${url}.`,
+        "CHALIN_ONE_STAGING_SMOKE_TOO_MANY_REDIRECTS",
+        redirects
+      );
+    }
+    redirects.push({
+      from: currentUrl,
+      to: nextUrl,
+      status: result.status,
+    });
+    currentUrl = nextUrl;
+  }
+
+  throw new ChalinOneStagingSmokeError(
+    `Staging smoke could not resolve redirects for ${url}.`,
+    "CHALIN_ONE_STAGING_SMOKE_REDIRECT_FAILED",
+    redirects
+  );
 }
 
 function assert(condition, message, code, details = null) {
@@ -311,8 +381,9 @@ async function runStagingSmokeTests({
     );
   }
 
-  const website = await request(`${frontend}/website`, {
+  const website = await requestWithSafeRedirects(`${frontend}/website`, {
     accept: "text/html,application/xhtml+xml",
+    maxRedirects: 3,
   });
   assert(
     website.ok && /text\/html/i.test(website.content_type),
@@ -322,6 +393,8 @@ async function runStagingSmokeTests({
   );
   addCheck(checks, "Public website frontend", website, {
     content_type: website.content_type,
+    final_url: website.url,
+    redirect_count: website.redirects.length,
   });
 
   const report = Object.freeze({
@@ -375,11 +448,14 @@ module.exports = {
   DEFAULT_OUTPUT,
   PRIVATE_KEYS,
   PUBLIC_FLAG_KEYS,
+  SAFE_REDIRECT_STATUSES,
   apiRoot,
   dataOf,
   normalizeBaseUrl,
   outputArgument,
   request,
+  requestWithSafeRedirects,
   runStagingSmokeTests,
+  safeRedirectTarget,
   scanPrivateKeys,
 };
