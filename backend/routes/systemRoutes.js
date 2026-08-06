@@ -9,10 +9,17 @@ const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");
 const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
+const {
+  getFeatureSnapshot,
+  getPublicFeatureSnapshot,
+  requireFeature,
+} = require("../services/featureFlagService");
 const customerMergeRecoveryRoutes = require("./customerMergeRecoveryRoutes");
 const {
   MERGE_FREEZE_MESSAGE,
 } = require("./customerMergeRecoveryRoutes");
+const contentStudioRoutes = require("./contentStudioRoutes");
+const publicContentRoutes = require("./publicContentRoutes");
 
 const router = express.Router();
 const startedAt = Date.now();
@@ -57,6 +64,12 @@ const EXPECTED_TABLES = Object.freeze([
 
 function appVersion() {
   return process.env.APP_VERSION || APP_VERSION;
+}
+
+function disableFeatureStatusCaching(res) {
+  res.set("Cache-Control", "no-store, max-age=0");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
 }
 
 async function databaseStatus() {
@@ -238,6 +251,49 @@ router.get("/health", (req, res) => {
     request_id: req.requestId || null,
   });
 });
+
+// Anonymous clients receive only flags explicitly classified as public.
+router.get("/features/public", (req, res) => {
+  disableFeatureStatusCaching(res);
+
+  return res.json({
+    status: "success",
+    audience: "public",
+    flags: getPublicFeatureSnapshot(),
+    request_id: req.requestId || null,
+  });
+});
+
+// Authenticated staff may load the complete effective flag snapshot. This
+// reveals no environment-variable values, secrets or configuration metadata.
+router.get("/features/staff", requireAuth, (req, res) => {
+  disableFeatureStatusCaching(res);
+
+  return res.json({
+    status: "success",
+    audience: "staff",
+    flags: getFeatureSnapshot(),
+    request_id: req.requestId || null,
+  });
+});
+
+// The public website API is anonymous but completely disabled unless the
+// publicWebsite feature flag is effective. The feature gate runs before any
+// database query or route-specific rate limiter.
+router.use(
+  "/public/content",
+  requireFeature("publicWebsite"),
+  publicContentRoutes
+);
+
+// Content Studio is hidden while disabled, then requires an authenticated
+// staff session. Individual routes apply their own capability permissions.
+router.use(
+  "/content-studio",
+  requireFeature("contentStudio"),
+  requireAuth,
+  contentStudioRoutes
+);
 
 router.get("/readiness", async (req, res) => {
   try {
