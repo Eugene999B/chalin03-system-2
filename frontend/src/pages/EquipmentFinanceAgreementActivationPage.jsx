@@ -169,7 +169,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
         </section>
       ) : null}
 
-      {readiness.ready === true ? (
+      {readiness.ready === true && !selected ? (
         <section className="finance-simple__section">
           <div className="finance-simple__toolbar">
             <div><p className="finance-simple__eyebrow">Choose approved application</p><h2>{visible.length} result(s)</h2></div>
