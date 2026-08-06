@@ -7,9 +7,9 @@ const {
   issueCompletionDocument,
   publicDefinitions,
 } = require("../services/equipmentFinanceDocumentCompletionService");
-// Keep the legacy footer guard loaded before the rebuilt renderer as an extra
-// defence. The V2 renderer also writes every footer through its own no-break
-// absolute-text path and creates all A4 pages manually.
+// Keep the targeted PDFKit footer guard loaded as a final defensive layer.
+// The logo-led V3 renderer also creates A4 pages manually, reserves protected
+// body space and writes every footer through an absolute no-break path.
 require("../services/equipmentFinancePdfBlankPageGuardService");
 const {
   renderCompletionPdf,
@@ -68,10 +68,13 @@ router.get(
         customer_photo_encrypted_at_rest: true,
         professional_distinct_templates: true,
         official_public_logo_asset: "frontend/public/chalin03-logo.png",
-        document_specific_visible_watermarks: true,
+        official_logo_cached_in_backend: "backend/assets/chalin03-logo.png",
+        logo_led_visual_architecture: true,
+        integrated_logo_and_document_watermark: true,
         qr_verification_identity: true,
         tamper_evident_footer: true,
         manual_page_flow_no_blank_pages: true,
+        design_version: "professional-logo-led-v3",
         supported_downloads: ["pdf", "word", "print", "thermal"],
       },
     });
@@ -156,7 +159,7 @@ router.get(
           `attachment; filename="${fileBase}.doc"`
         );
         res.setHeader("Cache-Control", "private, no-store");
-        res.setHeader("X-Chalin03-Document-Design", "professional-rebuild-v2");
+        res.setHeader("X-Chalin03-Document-Design", "professional-logo-led-v3");
         return res.status(200).send(buffer);
       }
 
@@ -175,7 +178,7 @@ router.get(
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Chalin03-Document-Type", document.document_type);
       res.setHeader("X-Chalin03-Snapshot-Checksum", document.snapshot_checksum);
-      res.setHeader("X-Chalin03-Document-Design", "professional-rebuild-v2");
+      res.setHeader("X-Chalin03-Document-Design", "professional-logo-led-v3");
       return res.status(200).send(buffer);
     } catch (error) {
       return sendError(req, res, error, "Could not download the professional Finance document.");
