@@ -150,7 +150,10 @@ jobs:
       - name: Verify complete operational workspace
         run: node scripts/contentStudioOperationalManagersTests.mjs
 
-      - name: Compile complete Content Studio JSX
+      - name: Verify acceptance and public delivery block
+        run: node scripts/chalinOnePublicDeliveryTests.mjs
+
+      - name: Compile complete CHALIN ONE JSX
         run: node scripts/contentStudioJsxSyntaxTests.mjs
 
       - name: Run frontend tests
