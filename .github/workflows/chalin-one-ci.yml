@@ -19,6 +19,9 @@ concurrency:
   group: chalin-one-ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CHALIN_ONE_STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   ci-status-start:
     name: Publish pending CI status
@@ -41,7 +44,7 @@ jobs:
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             --data "${payload}" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${CHALIN_ONE_STATUS_SHA}"
 
   backend-tests:
     name: Backend tests
@@ -241,23 +244,76 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Publish aggregated CHALIN ONE result
+      - name: Generate aggregate CHALIN ONE summary
+        id: aggregate
         env:
-          GH_TOKEN: ${{ github.token }}
           BACKEND_RESULT: ${{ needs.backend-tests.result }}
           DATABASE_RESULT: ${{ needs.chalin-one-database-acceptance.result }}
           FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
         run: |
           state=success
           description="Backend, MySQL acceptance, frontend tests and build passed"
+          passed=true
           if [[ "${BACKEND_RESULT}" != "success" || "${DATABASE_RESULT}" != "success" || "${FRONTEND_RESULT}" != "success" ]]; then
             state=failure
             description="CHALIN ONE CI failed; inspect the workflow run"
+            passed=false
           fi
-          payload="$(jq -nc \
+
+          mkdir -p backend/artifacts
+          jq -n \
+            --arg report "CHALIN ONE CI Summary" \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg commit_sha "${CHALIN_ONE_STATUS_SHA}" \
+            --arg workflow_run_id "${GITHUB_RUN_ID}" \
+            --arg workflow_run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg event_name "${GITHUB_EVENT_NAME}" \
+            --arg ref_name "${GITHUB_REF_NAME}" \
+            --arg backend "${BACKEND_RESULT}" \
+            --arg database "${DATABASE_RESULT}" \
+            --arg frontend "${FRONTEND_RESULT}" \
             --arg state "${state}" \
+            --argjson passed "${passed}" \
+            '{
+              report: $report,
+              generated_at: $generated_at,
+              commit_sha: $commit_sha,
+              workflow_run_id: $workflow_run_id,
+              workflow_run_url: $workflow_run_url,
+              event_name: $event_name,
+              ref_name: $ref_name,
+              state: $state,
+              passed: $passed,
+              jobs: {
+                backend: $backend,
+                database_acceptance: $database,
+                frontend: $frontend
+              }
+            }' > backend/artifacts/chalin-one-ci-summary.json
+
+          echo "state=${state}" >> "${GITHUB_OUTPUT}"
+          echo "description=${description}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload aggregate CHALIN ONE summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-ci-summary-${{ env.CHALIN_ONE_STATUS_SHA }}
+          path: backend/artifacts/chalin-one-ci-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish aggregated CHALIN ONE result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.aggregate.outputs.state }}
+          DESCRIPTION: ${{ steps.aggregate.outputs.description }}
+        run: |
+          payload="$(jq -nc \
+            --arg state "${STATE}" \
             --arg context chalin-one/ci \
-            --arg description "${description}" \
+            --arg description "${DESCRIPTION}" \
             --arg target_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             '{state: $state, context: $context, description: $description, target_url: $target_url}')"
           curl --fail-with-body --silent --show-error \
@@ -266,4 +322,4 @@ jobs:
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             --data "${payload}" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${CHALIN_ONE_STATUS_SHA}"
