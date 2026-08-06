@@ -296,7 +296,7 @@ export default function EquipmentFinanceDepositReservationPage() {
                     </div>
                     <div className="finance-simplified__compact-record-actions">
                       <button className="is-primary" type="button" disabled={candidate.reserved || candidate.ready_for_deposit === false || !canCollect} onClick={() => open(candidate)}>
-                        {candidate.reserved ? "Reserved" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Select Agreement"}
+                        {candidate.reserved ? "Reserved" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Record Deposit"}
                       </button>
                     </div>
                   </article>
