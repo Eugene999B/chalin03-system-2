@@ -108,6 +108,6 @@ test("the floating centre supports sale edit, sale void, approve and reject", ()
   assert.match(launcher, /Your administrator password/);
   assert.match(main, /OperationalApprovalLauncher/);
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
-  assert.match(main, /browser-cache-integrity-v34/);
+  assert.match(main, /browser-cache-integrity-v35/);
   assert.match(main, /CHALIN03_ASSET_MISMATCH/);
 });
