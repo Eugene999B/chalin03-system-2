@@ -106,7 +106,10 @@ test("navigation approval SQL matches the Phase 2 schema contract", () => {
     /metadata_json/
   );
   assert.match(serviceSource, /content_version_id = \?/);
-  assert.match(serviceSource, /entity_id, content_version_id, request_type/);
+  assert.match(
+    serviceSource,
+    /INSERT INTO public_content_approvals[\s\S]*entity_id,[\s\S]*content_version_id,[\s\S]*request_type/
+  );
   assert.doesNotMatch(serviceSource, /metadata_json/);
   assert.doesNotMatch(serviceSource, /JSON_EXTRACT/);
 });
@@ -135,8 +138,11 @@ test("generic navigation versions never write nonexistent actor timestamp column
 });
 
 test("published navigation remains unchanged until an approved snapshot is applied", () => {
-  assert.match(serviceSource, /public_content_versions/);
-  assert.match(serviceSource, /version_status = 'draft'/);
+  assert.match(serviceSource, /INSERT INTO public_content_versions/);
+  assert.match(
+    serviceSource,
+    /VALUES \('navigation_item', \?, \?, 'draft', \?, \?, \?\)/
+  );
   assert.match(serviceSource, /version_status = 'in_review'/);
   assert.match(serviceSource, /version_status !== "approved"/);
   assert.match(serviceSource, /APPROVED_REVIEW_REQUIRED/);
