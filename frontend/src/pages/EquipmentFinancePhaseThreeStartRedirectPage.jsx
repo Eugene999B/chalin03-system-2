@@ -1,6 +1,13 @@
 import { useEffect } from "react";
 import axiosClient from "../api/axiosClient";
+import EquipmentFinanceCustomerPhotoPanel from "../components/EquipmentFinanceCustomerPhotoPanel";
+import {
+  clearFinanceCustomerPhoto,
+  installFinanceCustomerPhotoRequestBridge,
+  readFinanceCustomerPhoto,
+} from "../utils/equipmentFinanceCustomerPhoto";
 import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
+import "../styles/equipmentFinanceCustomerSelectionPhoto.css";
 
 const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
@@ -51,6 +58,30 @@ function clearCommittedDraft() {
   }
 }
 
+function preservePhotoWarning(response) {
+  const photoResult = response?.data?.customer_photo;
+  if (photoResult?.stored !== false) return;
+  try {
+    window.sessionStorage.setItem(
+      "chalin03_finance_customer_photo_warning",
+      photoResult.message ||
+        "The application was created, but the customer picture still needs to be uploaded from the private document workspace."
+    );
+  } catch {
+    // The committed application remains authoritative.
+  }
+}
+
+function settleCommittedPhoto(response) {
+  if (!readFinanceCustomerPhoto()) return;
+  const photoResult = response?.data?.customer_photo;
+  if (!photoResult || photoResult.stored !== false) {
+    clearFinanceCustomerPhoto();
+    return;
+  }
+  preservePhotoWarning(response);
+}
+
 function replaceFinanceLocation(nextPath) {
   const currentPath = `${window.location.pathname}${window.location.search}`;
   if (currentPath === nextPath) return;
@@ -64,9 +95,11 @@ function replaceFinanceLocation(nextPath) {
 export default function EquipmentFinancePhaseThreeStartRedirectPage() {
   useEffect(() => {
     let redirecting = false;
-    const interceptorId = axiosClient.interceptors.response.use((response) => {
+    const requestInterceptorId = installFinanceCustomerPhotoRequestBridge();
+    const responseInterceptorId = axiosClient.interceptors.response.use((response) => {
       if (!redirecting && successfulCreation(response)) {
         redirecting = true;
+        settleCommittedPhoto(response);
         clearCommittedDraft();
         try {
           window.sessionStorage.setItem(
@@ -88,11 +121,17 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
     });
 
     return () => {
-      axiosClient.interceptors.response.eject(interceptorId);
+      axiosClient.interceptors.request.eject(requestInterceptorId);
+      axiosClient.interceptors.response.eject(responseInterceptorId);
     };
   }, []);
 
-  return <EquipmentFinanceOperationalStartImmediatePage />;
+  return (
+    <>
+      <EquipmentFinanceCustomerPhotoPanel />
+      <EquipmentFinanceOperationalStartImmediatePage />
+    </>
+  );
 }
 
 export {
@@ -100,5 +139,6 @@ export {
   clearCommittedDraft,
   replaceFinanceLocation,
   safeNextPath,
+  settleCommittedPhoto,
   successfulCreation,
 };
