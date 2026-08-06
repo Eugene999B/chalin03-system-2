@@ -27,7 +27,7 @@ const VERSION_STATUSES = Object.freeze([
   "archived",
 ]);
 const MAX_NAVIGATION_ITEMS = 500;
-const MAX_PARENT_DEPTH = 20;
+const MAX_PARENT_DEPTH = 4;
 
 function normalizeNavigationKey(value) {
   const key = cleanText(value, 120)
@@ -329,6 +329,7 @@ async function createNavigationDraft({ input, user, req }) {
       ]
     );
     const itemId = Number(result.insertId);
+    await assertNoNavigationCycle(connection, itemId, snapshot.parent_id);
     const versionId = await insertVersion(
       connection,
       itemId,
