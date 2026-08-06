@@ -7,6 +7,7 @@ on:
       - chalin-one
   pull_request:
     branches:
+      - chalin-one
       - main
       - production
 
