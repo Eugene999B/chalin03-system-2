@@ -50,6 +50,7 @@ function smokeEvidence() {
     passed: true,
     require_published_content: true,
     contact_form_submission_enabled: true,
+    governed_homepage_discovery: true,
     staging: {
       safe: true,
       database_name: "chalin_one_staging_filesystem",
@@ -130,6 +131,10 @@ test("aggregator reads all evidence and writes a private passing report", () => 
     assert.equal(
       saved.gates.final_staging_smoke.reference_code,
       "WEB-20260806-123456ABCDEF"
+    );
+    assert.equal(
+      saved.gates.final_staging_smoke.governed_homepage_discovery,
+      true
     );
     assert.equal(fs.statSync(outputPath).mode & 0o777, 0o600);
   } finally {
