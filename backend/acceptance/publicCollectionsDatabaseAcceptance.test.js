@@ -161,13 +161,20 @@ test(
     const division = divisions.find((item) => item.slug === "acceptance-mining");
     assert.equal(division?.key, "acceptance_mining");
     assert.equal(division?.name, "Acceptance Mining Operations");
-    assert.equal(division?.contact_email, "acceptance-division@example.com");
+    assert.equal(
+      division?.contact?.email,
+      "acceptance-division@example.com"
+    );
     assertPublicOnly("Division collection", divisions);
 
     const divisionDetails = await getPublicDivisionBySlug("acceptance-mining");
     assert.equal(
       divisionDetails?.body?.text,
       "This approved division proves governed company-information delivery."
+    );
+    assert.equal(
+      divisionDetails?.contact?.phone,
+      "+233 24 000 0000"
     );
     assertPublicOnly("Division detail", divisionDetails);
 
@@ -302,10 +309,8 @@ test(
     });
     assert.equal(equipment.total, 1);
     assert.equal(equipment.items[0]?.slug, "acceptance-excavator");
-    assert.deepEqual(equipment.items[0]?.price, {
-      currency: "GHS",
-      amount: "850000.00",
-    });
+    assert.equal(equipment.items[0]?.price?.currency, "GHS");
+    assert.equal(Number(equipment.items[0]?.price?.amount), 850000);
     assert.equal(equipment.items[0]?.hire_available, true);
     assert.equal(equipment.items[0]?.finance_available, true);
     assertPublicOnly("Equipment collection", equipment);
@@ -314,6 +319,7 @@ test(
       "acceptance-excavator"
     );
     assert.equal(equipmentDetails?.availability, "available");
+    assert.equal(Number(equipmentDetails?.price?.amount), 850000);
     assert.equal(equipmentDetails?.specifications?.operating_weight, "20 tonnes");
     assert.deepEqual(equipmentDetails?.features, [
       "Operator cabin",
@@ -368,6 +374,17 @@ test(
       [request.requestId]
     );
     assert.equal(auditRows.length, 6);
+    assert.deepEqual(
+      new Set(auditRows.map((row) => row.entity_type)),
+      new Set([
+        "business_division",
+        "news_article",
+        "project",
+        "equipment",
+        "faq",
+        "testimonial",
+      ])
+    );
     assert.equal(
       auditRows.every((row) => Number(row.actor_user_id) === publisher.id),
       true
