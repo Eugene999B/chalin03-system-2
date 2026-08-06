@@ -4,6 +4,44 @@ const { ContentStudioError, positiveInteger, schemaNotReadyError } = require("./
 
 const MEDIA_USAGE_QUERIES = Object.freeze([
   Object.freeze({
+    type: "leadership_version_snapshot",
+    parameterCount: 2,
+    sql: `SELECT cv.id, CONCAT('leadership:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'leadership_profile'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND (
+              JSON_CONTAINS(cv.snapshot_json, JSON_OBJECT('portrait_media_asset_id', ?))
+              OR JSON_CONTAINS(cv.snapshot_json, JSON_OBJECT('signature_media_asset_id', ?))
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "project_version_snapshot",
+    parameterCount: 2,
+    sql: `SELECT cv.id, CONCAT('project:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'project'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND (
+              JSON_CONTAINS(cv.snapshot_json, JSON_OBJECT('featured_media_asset_id', ?))
+              OR JSON_CONTAINS(cv.snapshot_json, JSON_OBJECT('media_asset_id', ?), '$.gallery')
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "equipment_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('equipment:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'equipment'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
     type: "page_version_primary",
     sql: `SELECT pv.id, p.slug AS label
           FROM public_page_versions pv
@@ -137,7 +175,11 @@ async function getMediaUsage(connection, assetId) {
   try {
     const usage = [];
     for (const definition of MEDIA_USAGE_QUERIES) {
-      const [rows] = await connection.query(definition.sql, [id]);
+      const parameterCount = Number(definition.parameterCount || 1);
+      const [rows] = await connection.query(
+        definition.sql,
+        Array(parameterCount).fill(id)
+      );
       for (const row of rows) {
         usage.push({
           type: definition.type,
