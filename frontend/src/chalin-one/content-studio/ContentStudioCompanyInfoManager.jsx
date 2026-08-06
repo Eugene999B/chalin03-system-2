@@ -302,7 +302,9 @@ function renderField(field, form, updateField, editable, mode) {
     value: form[field.key] ?? "",
     onChange: (event) => updateField(field.key, event.target.value),
     disabled,
-    required: Boolean(field.required),
+    required:
+      Boolean(field.required) &&
+      !(field.type === "structured" && form[`__advanced_${field.key}`]),
     placeholder: field.placeholder,
   };
 
