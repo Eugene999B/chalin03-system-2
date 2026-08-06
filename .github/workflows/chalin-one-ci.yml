@@ -79,6 +79,9 @@ jobs:
       - name: Verify governed Page Manager
         run: node scripts/contentStudioPageManagerTests.mjs
 
+      - name: Verify governed Newsroom Manager
+        run: node scripts/contentStudioNewsroomManagerTests.mjs
+
       - name: Compile isolated Content Studio JSX
         run: node scripts/contentStudioJsxSyntaxTests.mjs
 
