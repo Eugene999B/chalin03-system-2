@@ -7,6 +7,7 @@ import {
   listContentStudioResource,
 } from "./contentStudioApi";
 import ContentStudioDashboard from "./ContentStudioDashboard";
+import ContentStudioPageManager from "./ContentStudioPageManager";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_SECTIONS,
@@ -167,7 +168,7 @@ export default function ContentStudioWorkspace() {
   }, [auth.isLoggedIn, auth.loading, featureLoading, hasPermission, isFeatureEnabled, refreshDashboard]);
 
   useEffect(() => {
-    if (activeKey === "dashboard") {
+    if (activeKey === "dashboard" || activeKey === "pages") {
       setModuleData(null);
       setModuleError("");
       return undefined;
@@ -318,6 +319,8 @@ export default function ContentStudioWorkspace() {
               error={dashboardError}
               onRetry={refreshDashboard}
             />
+          ) : activeKey === "pages" ? (
+            <ContentStudioPageManager />
           ) : activeSection ? (
             <ModuleOverview
               section={activeSection}
