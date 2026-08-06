@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { BrowserRouter } from "react-router";
+import { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter, Route, Routes } from "react-router";
 import FeatureFlagRoute from "../components/FeatureFlagRoute";
 import PageErrorBoundary from "../components/PageErrorBoundary";
 import PermissionRoute from "../components/PermissionRoute";
@@ -19,8 +19,12 @@ const PublicWebsiteUnavailable = lazy(() =>
 
 export function isChalinOneStandalonePath(pathname) {
   const path = String(pathname || "");
-  return path === "/content-studio" || path.startsWith("/content-studio/") ||
-    path === "/website" || path.startsWith("/website/");
+  return (
+    path === "/content-studio" ||
+    path.startsWith("/content-studio/") ||
+    path === "/website" ||
+    path.startsWith("/website/")
+  );
 }
 
 function StandaloneLoading() {
@@ -52,22 +56,40 @@ function SafeStandalone({ children }) {
   );
 }
 
+function FullApplicationHandoff() {
+  const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  useEffect(() => {
+    window.location.replace(destination);
+  }, [destination]);
+
+  return <StandaloneLoading />;
+}
+
 function PublicWebsiteEntry() {
   return (
     <BrowserRouter>
-      <FeatureFlagRoute
-        feature="publicWebsite"
-        fallback={
-          <SafeStandalone>
-            <PublicWebsiteUnavailable />
-          </SafeStandalone>
-        }
-        loadingFallback={<StandaloneLoading />}
-      >
-        <SafeStandalone>
-          <PublicWebsiteApp />
-        </SafeStandalone>
-      </FeatureFlagRoute>
+      <Routes>
+        <Route
+          path="/website/*"
+          element={
+            <FeatureFlagRoute
+              feature="publicWebsite"
+              fallback={
+                <SafeStandalone>
+                  <PublicWebsiteUnavailable />
+                </SafeStandalone>
+              }
+              loadingFallback={<StandaloneLoading />}
+            >
+              <SafeStandalone>
+                <PublicWebsiteApp />
+              </SafeStandalone>
+            </FeatureFlagRoute>
+          }
+        />
+        <Route path="*" element={<FullApplicationHandoff />} />
+      </Routes>
     </BrowserRouter>
   );
 }
@@ -77,19 +99,27 @@ function ContentStudioEntry() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
-          <FeatureFlagRoute
-            feature="contentStudio"
-            fallbackPath="/login"
-            loadingFallback={<StandaloneLoading />}
-          >
-            <ProtectedRoute>
-              <PermissionRoute permissions={["public_content.view"]}>
-                <SafeStandalone>
-                  <ContentStudioWorkspace />
-                </SafeStandalone>
-              </PermissionRoute>
-            </ProtectedRoute>
-          </FeatureFlagRoute>
+          <Routes>
+            <Route
+              path="/content-studio/*"
+              element={
+                <FeatureFlagRoute
+                  feature="contentStudio"
+                  fallbackPath="/login"
+                  loadingFallback={<StandaloneLoading />}
+                >
+                  <ProtectedRoute>
+                    <PermissionRoute permissions={["public_content.view"]}>
+                      <SafeStandalone>
+                        <ContentStudioWorkspace />
+                      </SafeStandalone>
+                    </PermissionRoute>
+                  </ProtectedRoute>
+                </FeatureFlagRoute>
+              }
+            />
+            <Route path="*" element={<FullApplicationHandoff />} />
+          </Routes>
         </BrowserRouter>
       </WorkspaceContextProvider>
     </AuthProvider>
