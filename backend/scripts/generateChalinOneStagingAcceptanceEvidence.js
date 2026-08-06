@@ -249,14 +249,21 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
   );
   const commitMatch = releaseSha === smokeSha && smokeSha === browserSha;
   const releaseEnvironment = clean(release?.environment).toLowerCase();
+  const namedReleaseGates =
+    release?.gates &&
+    typeof release.gates === "object" &&
+    !Array.isArray(release.gates)
+      ? release.gates
+      : {};
+  const releaseGateValues = Object.values(namedReleaseGates);
   const releaseGate = {
     passed:
       release?.release_ready === true &&
       releaseEnvironment !== "production" &&
-      Array.isArray(release?.gates) &&
-      release.gates.every((gate) => gate?.passed === true),
+      releaseGateValues.length > 0 &&
+      releaseGateValues.every((passed) => passed === true),
     environment: releaseEnvironment || null,
-    gate_count: Array.isArray(release?.gates) ? release.gates.length : 0,
+    gate_count: Object.keys(namedReleaseGates).length,
   };
   const smokeGate = smokeEvidence(smoke);
   const browserGate = browserEvidence(browser);
