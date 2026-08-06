@@ -99,22 +99,21 @@
   color: var(--finance-simplified-muted);
 }
 
-.finance-simplified__customer-summary {
-  display: grid;
-  gap: 0.18rem;
-}
-
-.finance-simplified__customer-balance {
+.finance-simplified__customer-summary,
+.finance-simplified__customer-balance,
+.finance-simplified__compact-fact {
   display: grid;
   gap: 0.15rem;
 }
 
-.finance-simplified__customer-balance span {
+.finance-simplified__customer-balance span,
+.finance-simplified__compact-fact span {
   color: var(--finance-simplified-muted);
   font-size: 0.76rem;
 }
 
-.finance-simplified__customer-actions {
+.finance-simplified__customer-actions,
+.finance-simplified__compact-record-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
@@ -166,17 +165,23 @@
   padding: 0.65rem;
 }
 
-.finance-simplified .finance-accounts__profile details {
+.finance-simplified details {
   background: #fff;
   border: 1px solid var(--finance-simplified-border);
   border-radius: 0.85rem;
+  margin-top: 0.75rem;
   padding: 0.75rem;
 }
 
-.finance-simplified .finance-accounts__profile details > summary {
+.finance-simplified details > summary {
   color: var(--finance-simplified-primary);
   cursor: pointer;
   font-weight: 800;
+  list-style-position: inside;
+}
+
+.finance-simplified details[open] > summary {
+  margin-bottom: 0.75rem;
 }
 
 .finance-simplified__embedded {
@@ -185,7 +190,8 @@
   width: 100%;
 }
 
-.finance-simplified__embedded > .finance-simple__section:first-of-type {
+.finance-simplified__embedded > .finance-simple__section:first-of-type,
+.finance-simplified.finance-payments .finance-payments__entry {
   margin-top: 0;
 }
 
@@ -210,6 +216,11 @@
   color: var(--finance-simplified-ink);
   font-size: 0.8rem;
   font-weight: 800;
+}
+
+.finance-simplified__picker-controls input,
+.finance-simplified__picker-controls select {
+  width: 100%;
 }
 
 .finance-simplified__picker-hint {
@@ -262,21 +273,19 @@
   color: var(--finance-simplified-muted);
 }
 
-.finance-simplified__compact-fact {
-  display: grid;
-  gap: 0.15rem;
+.finance-simplified.finance-docs .finance-docs__group,
+.finance-simplified.finance-docs .finance-docs__history {
+  padding: 0.85rem;
 }
 
-.finance-simplified__compact-fact span {
-  color: var(--finance-simplified-muted);
-  font-size: 0.74rem;
+.finance-simplified.finance-docs .finance-docs__group > summary,
+.finance-simplified.finance-docs .finance-docs__history > summary {
+  margin: 0;
 }
 
-.finance-simplified__compact-record-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  justify-content: flex-end;
+.finance-simplified.finance-docs .finance-docs__group[open] > summary,
+.finance-simplified.finance-docs .finance-docs__history[open] > summary {
+  margin-bottom: 0.85rem;
 }
 
 @media (min-width: 760px) {
