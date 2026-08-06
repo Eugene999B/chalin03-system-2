@@ -245,7 +245,7 @@ export default function EquipmentFinanceDepositReservationPage() {
         </section>
       ) : null}
 
-      {readiness.ready === true ? (
+      {readiness.ready === true && !selected ? (
         <>
           <section className="finance-simple__metrics">
             <article className="finance-simple__metric"><span>Awaiting first deposit</span><strong>{summary.awaiting}</strong></article>
