@@ -54,9 +54,9 @@ function drawStatusRibbon(doc, document, items) {
   const template = templateFor(document);
   const width = pageWidth(doc);
   const x = doc.page.margins.left;
-  const y = doc.y;
   const cellWidth = width / items.length;
   ensureSpace(doc, document, 52);
+  const y = doc.y;
   doc.roundedRect(x, y, width, 43, 8).fillAndStroke(COLORS.paper, COLORS.line);
   items.forEach(([name, value], index) => {
     const cellX = x + cellWidth * index;
@@ -132,7 +132,14 @@ function renderLegalAgreement(doc, document) {
     ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received)],
     ["Financed amount", money(agreement.financed_amount)],
     ["Payment plan", `${agreement.installment_count || 0} ${label(agreement.payment_frequency)}`],
-    ["Periodic payment", money(agreement.periodic_amount || agreement.installment_amount)],
+    [
+      "Periodic payment",
+      money(
+        agreement.periodic_amount ||
+          agreement.installment_amount ||
+          document.snapshot?.schedule?.[0]?.scheduled_amount
+      ),
+    ],
   ];
   facts.forEach(([name, value], index) => {
     const column = index % 2;
