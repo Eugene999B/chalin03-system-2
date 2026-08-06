@@ -63,6 +63,7 @@ function smokeFixture(overrides = {}) {
     passed: true,
     require_published_content: true,
     contact_form_submission_enabled: true,
+    governed_homepage_discovery: true,
     staging: {
       safe: true,
       database_name: "chalin_one_staging",
@@ -133,6 +134,10 @@ test("complete evidence for one commit passes every staging gate", () => {
   assert.equal(
     result.gates.final_staging_smoke.frontend_host,
     "preview.example-chalin03.com"
+  );
+  assert.equal(
+    result.gates.final_staging_smoke.governed_homepage_discovery,
+    true
   );
   assert.equal(result.gates.browser_acceptance.screenshot_count, 4);
 });
@@ -273,7 +278,7 @@ test("commit identity mismatch blocks staging readiness", () => {
   assert.ok(result.failures.includes("commit_identity"));
 });
 
-test("missing final smoke check or invalid reference code blocks readiness", () => {
+test("missing final smoke proof or invalid reference code blocks readiness", () => {
   const incomplete = smokeFixture();
   incomplete.checks = incomplete.checks.filter(
     (check) => check.name !== "Content Studio deep link"
@@ -289,6 +294,12 @@ test("missing final smoke check or invalid reference code blocks readiness", () 
       : check
   );
   assert.equal(smokeEvidence(invalidReference).passed, false);
+
+  const legacyHomepageSmoke = smokeEvidence(
+    smokeFixture({ governed_homepage_discovery: false })
+  );
+  assert.equal(legacyHomepageSmoke.governed_homepage_discovery, false);
+  assert.equal(legacyHomepageSmoke.passed, false);
 
   const productionHost = smokeFixture({
     staging: {
@@ -409,6 +420,7 @@ test("aggregator is offline, non-destructive and exposed through package scripts
   assert.match(source, /mode: 0o600/);
   assert.match(source, /release_ready === true/);
   assert.match(source, /contact_form_submission_enabled === true/);
+  assert.match(source, /governed_homepage_discovery === true/);
   assert.match(source, /screenshots\.length >= 4/);
   assert.match(source, /ACCEPTANCE_DATABASE_PATTERN/);
   assert.match(source, /STAGING_DATABASE_PATTERN/);
