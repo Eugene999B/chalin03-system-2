@@ -45,6 +45,11 @@ const renderer = read(
   "services",
   "equipmentFinanceCustomerPhotoRendererService.js"
 );
+const premiumRenderer = read(
+  "backend",
+  "services",
+  "equipmentFinancePremiumDocumentRendererService.js"
+);
 const completionRoutes = read(
   "backend",
   "routes",
@@ -98,14 +103,14 @@ test("customer photo is encrypted after the Finance application commits", () => 
 test("professional Finance documents add a full-frame encrypted identity annex", () => {
   assert.match(renderer, /AsyncLocalStorage/);
   assert.match(renderer, /decryptDocument/);
-  assert.match(renderer, /equipmentFinanceCompletionRendererService/);
   assert.match(renderer, /customer_passport_photo/);
-  assert.match(renderer, /Customer Identity & Passport Photo/);
-  assert.match(renderer, /fit: \[photoWidth - 16, photoHeight - 16\]/);
-  assert.match(renderer, /object-fit:contain/);
   assert.match(renderer, /PHOTO_DOCUMENT_TYPES/);
   assert.doesNotMatch(renderer, /payment_receipt",/);
-  assert.match(completionRoutes, /equipmentFinanceCustomerPhotoRendererService/);
+  assert.match(premiumRenderer, /latestCustomerPhoto/);
+  assert.match(premiumRenderer, /Protected Customer Identity Evidence/);
+  assert.match(premiumRenderer, /fit: \[photoWidth - 16, photoHeight - 16\]/);
+  assert.match(premiumRenderer, /PHOTO_DOCUMENT_TYPES/);
+  assert.match(completionRoutes, /equipmentFinancePremiumDocumentRendererService/);
   assert.match(completionRoutes, /const buffer = await renderCompletionWord\(document\)/);
   assert.match(completionRoutes, /customer_passport_photo_page: true/);
   assert.match(completionRoutes, /customer_photo_encrypted_at_rest: true/);
@@ -119,6 +124,7 @@ test("scope remains Equipment Installment Finance only", () => {
     startRedirect,
     captureRoute,
     renderer,
+    premiumRenderer,
     completionRoutes,
   ].join("\n");
   assert.doesNotMatch(combined, /\/api\/(?:mining|products|sales|debts)/);
