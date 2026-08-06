@@ -229,6 +229,19 @@ function formatPublicMoney(price) {
   }
 }
 
+function formatPublicDate(value, includeTime = false) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return includeTime
+    ? date.toLocaleString("en-GH")
+    : date.toLocaleDateString("en-GH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+}
+
 function usePublicRequest(loader, dependencies = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -309,9 +322,13 @@ function PublicMedia({ media, className = "" }) {
       </figure>
     );
   }
+  const label =
+    media.media_type === "document"
+      ? media.original_name || "Open published document"
+      : "Open published video";
   return (
     <a className="pw-video-link" href={media.url} target="_blank" rel="noreferrer">
-      Open published video
+      {label}
     </a>
   );
 }
@@ -623,6 +640,9 @@ function PublicDetailPage({ resource }) {
   const location = item?.location?.name || item?.location || item?.location_text;
   const status = item?.status || item?.operational_status;
   const availability = item?.availability || item?.availability_status;
+  const category =
+    item?.category?.name ||
+    (typeof item?.category === "string" ? item.category : "");
   const money = formatPublicMoney(item?.price);
   useDocumentMetadata(`${title} | CHALIN ONE`, item ? config.summary(item) : config.description);
 
@@ -637,6 +657,7 @@ function PublicDetailPage({ resource }) {
             </div>
             <aside className="pw-detail-aside">
               {item.division?.name ? <p><strong>Division</strong><span>{item.division.name}</span></p> : null}
+              {category ? <p><strong>Category</strong><span>{category}</span></p> : null}
               {location ? <p><strong>Location</strong><span>{location}</span></p> : null}
               {status ? <p><strong>Status</strong><span>{humanize(status)}</span></p> : null}
               {availability ? <p><strong>Availability</strong><span>{humanize(availability)}</span></p> : null}
@@ -644,14 +665,20 @@ function PublicDetailPage({ resource }) {
               {item.manufacturer ? <p><strong>Manufacturer</strong><span>{item.manufacturer}</span></p> : null}
               {item.model ? <p><strong>Model</strong><span>{item.model}</span></p> : null}
               {item.year ? <p><strong>Model year</strong><span>{item.year}</span></p> : null}
-              {item.category ? <p><strong>Category</strong><span>{item.category}</span></p> : null}
               {item.condition ? <p><strong>Condition</strong><span>{item.condition}</span></p> : null}
+              {item.author ? <p><strong>Author</strong><span>{item.author}</span></p> : null}
+              {formatPublicDate(item.published_at, true) ? <p><strong>Published</strong><span>{formatPublicDate(item.published_at, true)}</span></p> : null}
+              {formatPublicDate(item.start_date) ? <p><strong>Starts</strong><span>{formatPublicDate(item.start_date)}</span></p> : null}
+              {formatPublicDate(item.end_date) ? <p><strong>Ends</strong><span>{formatPublicDate(item.end_date)}</span></p> : null}
               {item.employment_type ? <p><strong>Employment type</strong><span>{item.employment_type}</span></p> : null}
               {item.vacancies_count ? <p><strong>Open positions</strong><span>{item.vacancies_count}</span></p> : null}
+              {formatPublicDate(item.opens_at, true) ? <p><strong>Opens</strong><span>{formatPublicDate(item.opens_at, true)}</span></p> : null}
+              {formatPublicDate(item.closes_at, true) ? <p><strong>Closes</strong><span>{formatPublicDate(item.closes_at, true)}</span></p> : null}
               {item.hire_available ? <p><strong>Hire</strong><span>Available</span></p> : null}
               {item.finance_available ? <p><strong>Finance</strong><span>Available</span></p> : null}
               {item.reference_number ? <p><strong>Reference</strong><span>{item.reference_number}</span></p> : null}
-              {item.closes_at ? <p><strong>Closes</strong><span>{new Date(item.closes_at).toLocaleString("en-GH")}</span></p> : null}
+              {item.contact?.phone ? <p><strong>Phone</strong><PublicLink target={`tel:${item.contact.phone}`}>{item.contact.phone}</PublicLink></p> : null}
+              {item.contact?.email ? <p><strong>Email</strong><PublicLink target={`mailto:${item.contact.email}`}>{item.contact.email}</PublicLink></p> : null}
               {item.application_url ? <PublicLink className="pw-button pw-button-primary" target={item.application_url}>Apply securely</PublicLink> : null}
               {item.document?.url ? <PublicLink className="pw-button pw-button-secondary" target={item.document.url}>Open tender document</PublicLink> : null}
             </aside>
