@@ -87,7 +87,19 @@ test("CI uses ephemeral MySQL and never production migration confirmations", () 
   assert.doesNotMatch(workflow, /CHALIN03_SQL_BACKUP_CONFIRMED/);
 });
 
-test("database acceptance exercises governance, public reads and privacy", () => {
+test("database acceptance runs serially to preserve deterministic evidence", () => {
+  const backendPackage = JSON.parse(read("backend/package.json"));
+  assert.equal(
+    backendPackage.scripts["test:chalin-one:db"],
+    "node --test --test-concurrency=1 acceptance/*.test.js"
+  );
+  assert.doesNotMatch(
+    backendPackage.scripts.start,
+    /acceptance\/|test:chalin-one:db/
+  );
+});
+
+test("core database acceptance exercises governance public reads and privacy", () => {
   const acceptance = read(
     "backend/acceptance/contentStudioDatabaseAcceptance.test.js"
   );
@@ -95,6 +107,7 @@ test("database acceptance exercises governance, public reads and privacy", () =>
     "CONTENT_SELF_APPROVAL_BLOCKED",
     "decidePageApproval",
     "publishPageVersion",
+    "getPublicHomepage",
     "decideFormApproval",
     "publishFormVersion",
     "createPublicFormSubmission",
@@ -108,4 +121,32 @@ test("database acceptance exercises governance, public reads and privacy", () =>
     assert.match(acceptance, new RegExp(marker));
   }
   assert.doesNotMatch(acceptance, /DROP TABLE|DROP DATABASE|TRUNCATE/);
+});
+
+test("expanded database acceptance covers every major public collection safely", () => {
+  const acceptance = read(
+    "backend/acceptance/publicCollectionsDatabaseAcceptance.test.js"
+  );
+  for (const marker of [
+    "publishGoverned",
+    "listPublicNews",
+    "getPublicNewsBySlug",
+    "listPublicDivisions",
+    "getPublicDivisionBySlug",
+    "listPublicProjects",
+    "getPublicProjectBySlug",
+    "listPublicEquipment",
+    "getPublicEquipmentBySlug",
+    "listPublicFaqs",
+    "listPublicTestimonials",
+    "acceptance-private-draft",
+    "privateFieldFindings",
+    "public_content_audit_log",
+  ]) {
+    assert.match(acceptance, new RegExp(marker));
+  }
+  assert.match(acceptance, /assignedTo: reviewer\.id/);
+  assert.match(acceptance, /user: reviewer/);
+  assert.match(acceptance, /user: publisher/);
+  assert.doesNotMatch(acceptance, /DROP TABLE|DROP DATABASE|TRUNCATE|DELETE FROM/);
 });
