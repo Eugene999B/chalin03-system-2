@@ -211,7 +211,7 @@ function buildFinanceSchedule(input = {}) {
     const dueDate = dueDateFor({
       firstDate,
       frequency: normalized.payment_frequency,
-      intervalDays: normalized.custom_interval_interval_days,
+      intervalDays: normalized.custom_interval_days,
       index,
       nonWorkingDayRule: normalized.non_working_day_rule,
     });
