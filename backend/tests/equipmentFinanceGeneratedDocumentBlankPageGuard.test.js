@@ -80,13 +80,13 @@ test("a one-page generated Finance schedule has no trailing blank PDF page", asy
   assert.equal(pageCount(buffer), 1);
 });
 
-test("the completion route installs the guard before loading PDF renderers", () => {
+test("the completion route installs the guard before loading the premium renderer", () => {
   const source = fs.readFileSync(
     path.join(__dirname, "..", "routes", "equipmentFinanceDocumentCompletionRoutes.js"),
     "utf8"
   );
   const guardIndex = source.indexOf("equipmentFinancePdfBlankPageGuardService");
-  const rendererIndex = source.indexOf("equipmentFinanceCustomerPhotoRendererService");
+  const rendererIndex = source.indexOf("equipmentFinancePremiumDocumentRendererService");
   assert.ok(guardIndex >= 0);
   assert.ok(rendererIndex > guardIndex);
 });
