@@ -22,6 +22,7 @@ const jsxFiles = [
   "content-studio/ContentStudioOperationalManagers.jsx",
   "ChalinOneStandaloneEntry.jsx",
   "public-site/PublicWebsiteApp.jsx",
+  "public-site/PublicWebsiteStandaloneApp.jsx",
 ];
 
 for (const fileName of jsxFiles) {
