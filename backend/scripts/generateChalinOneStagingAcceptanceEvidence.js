@@ -205,6 +205,8 @@ function smokeEvidence(report) {
   const apiHostSafe = evidenceHostSafe(apiHost);
   const hostsSeparate =
     Boolean(frontendHost && apiHost) && frontendHost !== apiHost;
+  const governedHomepageDiscovery =
+    report?.governed_homepage_discovery === true;
 
   return {
     passed:
@@ -212,6 +214,7 @@ function smokeEvidence(report) {
       report?.require_published_content === true &&
       report?.contact_form_submission_enabled === true &&
       report?.staging?.safe === true &&
+      governedHomepageDiscovery &&
       databaseSafe &&
       frontendHostSafe &&
       apiHostSafe &&
@@ -224,6 +227,7 @@ function smokeEvidence(report) {
     require_published_content: report?.require_published_content === true,
     contact_form_submission_enabled:
       report?.contact_form_submission_enabled === true,
+    governed_homepage_discovery: governedHomepageDiscovery,
     staging_safe: report?.staging?.safe === true,
     database_name: databaseName || null,
     database_name_safe: databaseSafe,
