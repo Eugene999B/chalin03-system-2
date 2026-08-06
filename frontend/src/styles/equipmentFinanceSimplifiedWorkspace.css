@@ -1,0 +1,340 @@
+.finance-simplified {
+  --finance-simplified-border: #dbe4de;
+  --finance-simplified-soft: #f6f9f7;
+  --finance-simplified-ink: #183025;
+  --finance-simplified-muted: #68766f;
+  --finance-simplified-primary: #1f633d;
+  --finance-simplified-gold: #d5ad3d;
+}
+
+.finance-simplified .finance-simple__hero,
+.finance-simplified.finance-accounts .finance-accounts__hero,
+.finance-simplified.finance-payments .finance-accounts__hero,
+.finance-simplified.finance-docs .finance-docs__hero {
+  padding: clamp(1rem, 2vw, 1.45rem);
+}
+
+.finance-simplified .finance-simple__hero h1,
+.finance-simplified.finance-accounts .finance-accounts__hero h1,
+.finance-simplified.finance-payments .finance-accounts__hero h1,
+.finance-simplified.finance-docs .finance-docs__hero h1 {
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+}
+
+.finance-simplified .finance-simple__hero span,
+.finance-simplified.finance-accounts .finance-accounts__hero span,
+.finance-simplified.finance-payments .finance-accounts__hero span,
+.finance-simplified.finance-docs .finance-docs__hero span {
+  max-width: 48rem;
+  line-height: 1.5;
+}
+
+.finance-simplified .finance-simple__notice.is-info,
+.finance-simplified.finance-accounts > .finance-accounts__notice:not(.is-error),
+.finance-simplified.finance-payments > .finance-accounts__notice:not(.is-error) {
+  padding: 0.7rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.finance-simplified .finance-simple__metrics,
+.finance-simplified.finance-accounts .finance-accounts__metrics {
+  gap: 0.6rem;
+}
+
+.finance-simplified .finance-simple__metric,
+.finance-simplified.finance-accounts .finance-accounts__metrics article {
+  padding: 0.75rem;
+}
+
+.finance-simplified .finance-simple__cards {
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+.finance-simplified .finance-simple__cards .finance-simple__card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.finance-simplified .finance-simple__cards .finance-simple__card-body {
+  padding: 0.78rem;
+}
+
+.finance-simplified .finance-simple__cards .finance-simple__machine-image {
+  aspect-ratio: 16 / 9;
+  max-height: 8rem;
+}
+
+.finance-simplified .finance-simple__cards .finance-simple__facts {
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  margin: 0.55rem 0;
+}
+
+.finance-simplified .finance-simple__cards .finance-simple__facts > div {
+  padding: 0.48rem 0.55rem;
+}
+
+.finance-simplified .finance-simple__customer-grid {
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+}
+
+.finance-simplified__customer-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(8rem, 0.8fr) auto;
+  padding: 0.8rem;
+}
+
+.finance-simplified__customer-row h3,
+.finance-simplified__customer-row p,
+.finance-simplified__customer-row small {
+  margin: 0;
+}
+
+.finance-simplified__customer-row p,
+.finance-simplified__customer-row small {
+  color: var(--finance-simplified-muted);
+}
+
+.finance-simplified__customer-summary,
+.finance-simplified__customer-balance,
+.finance-simplified__compact-fact {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.finance-simplified__customer-balance span,
+.finance-simplified__compact-fact span {
+  color: var(--finance-simplified-muted);
+  font-size: 0.76rem;
+}
+
+.finance-simplified__customer-actions,
+.finance-simplified__compact-record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.finance-simplified__selection-panel {
+  background: linear-gradient(135deg, #fbfdfb, #f2f7f3);
+  border: 1px dashed #aebfb4;
+  border-radius: 1rem;
+  color: var(--finance-simplified-muted);
+  display: grid;
+  min-height: 18rem;
+  padding: 2rem;
+  place-items: center;
+  text-align: center;
+}
+
+.finance-simplified__selection-panel strong {
+  color: var(--finance-simplified-ink);
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.finance-simplified .finance-accounts__split {
+  grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1.55fr);
+}
+
+.finance-simplified .finance-accounts__customer-list {
+  top: 0.75rem;
+}
+
+.finance-simplified .finance-accounts__customer-scroll {
+  max-height: 62vh;
+}
+
+.finance-simplified .finance-accounts__customer-scroll button {
+  min-height: 0;
+  padding: 0.72rem;
+}
+
+.finance-simplified .finance-accounts__profile-hero {
+  padding: 0.85rem;
+}
+
+.finance-simplified .finance-accounts__summary article,
+.finance-simplified .finance-accounts__facts > div {
+  padding: 0.65rem;
+}
+
+.finance-simplified details {
+  background: #fff;
+  border: 1px solid var(--finance-simplified-border);
+  border-radius: 0.85rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+
+.finance-simplified details > summary {
+  color: var(--finance-simplified-primary);
+  cursor: pointer;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.finance-simplified details[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.finance-simplified__embedded {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.finance-simplified__embedded > .finance-simple__section:first-of-type,
+.finance-simplified.finance-payments .finance-payments__entry {
+  margin-top: 0;
+}
+
+.finance-simplified__picker {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.finance-simplified__picker-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 1fr) auto;
+}
+
+.finance-simplified__picker-controls label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.finance-simplified__picker-controls label > span {
+  color: var(--finance-simplified-ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.finance-simplified__picker-controls input,
+.finance-simplified__picker-controls select {
+  width: 100%;
+}
+
+.finance-simplified__picker-hint {
+  color: var(--finance-simplified-muted);
+  font-size: 0.86rem;
+  margin: 0;
+}
+
+.finance-simplified__brand-logo {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 1rem;
+  flex: 0 0 auto;
+  height: 4.3rem;
+  object-fit: contain;
+  padding: 0.35rem;
+  width: 4.3rem;
+}
+
+.finance-simplified__compact-register {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.finance-simplified__compact-record {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--finance-simplified-border);
+  border-left: 0.25rem solid #7ca58b;
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(7rem, 0.75fr)) auto;
+  padding: 0.75rem;
+}
+
+.finance-simplified__compact-record.is-warning {
+  border-left-color: #c58a2d;
+}
+
+.finance-simplified__compact-record h3,
+.finance-simplified__compact-record p,
+.finance-simplified__compact-record small {
+  margin: 0;
+}
+
+.finance-simplified__compact-record p,
+.finance-simplified__compact-record small {
+  color: var(--finance-simplified-muted);
+}
+
+.finance-simplified.finance-docs .finance-docs__group,
+.finance-simplified.finance-docs .finance-docs__history {
+  padding: 0.85rem;
+}
+
+.finance-simplified.finance-docs .finance-docs__group > summary,
+.finance-simplified.finance-docs .finance-docs__history > summary {
+  margin: 0;
+}
+
+.finance-simplified.finance-docs .finance-docs__group[open] > summary,
+.finance-simplified.finance-docs .finance-docs__history[open] > summary {
+  margin-bottom: 0.85rem;
+}
+
+@media (min-width: 760px) {
+  .finance-simplified .finance-simple__cards .finance-simple__card:has(.finance-simple__machine-image) {
+    grid-template-columns: 8rem minmax(0, 1fr);
+  }
+
+  .finance-simplified .finance-simple__cards .finance-simple__machine-image {
+    aspect-ratio: 1;
+    height: 100%;
+    max-height: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .finance-simplified .finance-accounts__split {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-simplified .finance-accounts__customer-list {
+    position: static;
+  }
+
+  .finance-simplified .finance-accounts__customer-scroll {
+    max-height: 24rem;
+  }
+
+  .finance-simplified__picker-controls,
+  .finance-simplified__compact-record,
+  .finance-simplified__customer-row {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-simplified__compact-record-actions,
+  .finance-simplified__customer-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .finance-simplified .finance-simple__hero,
+  .finance-simplified.finance-accounts .finance-accounts__hero,
+  .finance-simplified.finance-payments .finance-accounts__hero,
+  .finance-simplified.finance-docs .finance-docs__hero {
+    border-radius: 0.95rem;
+  }
+
+  .finance-simplified__selection-panel {
+    min-height: 12rem;
+    padding: 1.25rem;
+  }
+}

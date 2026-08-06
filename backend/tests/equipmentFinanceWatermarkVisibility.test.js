@@ -63,24 +63,24 @@ function pageCount(buffer) {
   return (buffer.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length;
 }
 
-test("PDF watermark is drawn below and above the document body for clear visibility", () => {
+test("PDF watermark is a subtle background mark without a foreground overlay", () => {
   const pages = source("services/equipmentFinancePdfV2PageService.js");
-  assert.match(pages, /drawVisibleOverlayWatermark/);
-  assert.match(pages, /fillOpacity\(0\.16\)/);
-  assert.match(pages, /rotate\(-27/);
-  assert.match(pages, /310, 310, 0\.085/);
-  assert.match(pages, /drawVisibleOverlayWatermark\(doc, document\)/);
+  assert.doesNotMatch(pages, /drawVisibleOverlayWatermark/);
+  assert.match(pages, /290, 290, 0\.038/);
+  assert.match(pages, /opacity\(0\.035\)/);
+  assert.match(pages, /fillOpacity\(0\.048\)/);
 });
 
-test("Word watermark is enlarged, rotated and placed above opaque content panels", async () => {
+test("Word watermark remains faded behind document content", async () => {
   const html = (await renderCompletionWord(fixture())).toString("utf8");
-  assert.match(html, /watermark-logo[^}]*opacity:\.12/);
-  assert.match(html, /watermark-text[^}]*transform:rotate\(-26deg\)/);
-  assert.match(html, /watermark-text[^}]*opacity:\.16/);
-  assert.match(html, /z-index:21/);
+  assert.match(html, /watermark-logo[^}]*opacity:\.045/);
+  assert.match(html, /watermark-logo[^}]*z-index:-2/);
+  assert.match(html, /watermark-text[^}]*transform:rotate\(-20deg\)/);
+  assert.match(html, /watermark-text[^}]*opacity:\.055/);
+  assert.match(html, /watermark-text[^}]*z-index:-1/);
 });
 
-test("stronger watermark does not create a trailing blank PDF page", async () => {
+test("faded watermark does not create a trailing blank PDF page", async () => {
   const pdf = await renderCompletionPdf(fixture());
   assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
   assert.ok(pdf.length > 3500);
