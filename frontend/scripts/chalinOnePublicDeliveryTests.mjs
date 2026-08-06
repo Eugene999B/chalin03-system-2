@@ -99,6 +99,8 @@ check("published content rendering blocks raw HTML and unsafe embedded video", (
   assert.match(publicApp, /StructuredContent/);
   assert.match(publicApp, /safeExternalUrl/);
   assert.match(publicApp, /Open published video/);
+  assert.match(publicApp, /Open published document/);
+  assert.match(publicApp, /media\.media_type === "document"/);
 });
 
 check("public collection and detail fields match the backend serializers", () => {
@@ -106,12 +108,17 @@ check("public collection and detail fields match the backend serializers", () =>
   assert.match(publicApp, /item\.customer_name \|\| item\.name/);
   assert.match(publicApp, /item\?\.status \|\| item\?\.operational_status/);
   assert.match(publicApp, /item\?\.availability \|\| item\?\.availability_status/);
+  assert.match(publicApp, /item\?\.category\?\.name/);
+  assert.match(publicApp, /typeof item\?\.category === "string"/);
   assert.match(publicApp, /formatPublicMoney\(item\?\.price\)/);
+  assert.match(publicApp, /formatPublicDate\(item\.published_at, true\)/);
   assert.match(publicApp, /<PublicDetailContent item=\{item\} \/>/);
   assert.match(publicApp, /<StructuredContent value=\{item\.specifications\} \/>/);
   assert.match(publicApp, /<StructuredContent value=\{item\.features\} \/>/);
   assert.match(publicApp, /item\.hire_available/);
   assert.match(publicApp, /item\.finance_available/);
+  assert.match(publicApp, /target=\{`tel:\$\{item\.contact\.phone\}`\}/);
+  assert.match(publicApp, /target=\{`mailto:\$\{item\.contact\.email\}`\}/);
   assert.match(publicApp, /target=\{item\.application_url\}/);
   assert.doesNotMatch(
     publicApp,
@@ -173,6 +180,8 @@ check("public renderer is responsive across desktop tablet and phone", () => {
   assert.match(publicCss, /@media \(max-width: 620px\)/);
   assert.match(publicCss, /@media \(max-width: 390px\)/);
   assert.match(publicCss, /pw-navigation\[data-open="true"\]/);
+  assert.match(publicCss, /pw-detail-grid > div > section/);
+  assert.match(publicCss, /pw-not-found h1/);
 });
 
 check("acceptance database preparation refuses production and non-isolated names", () => {
