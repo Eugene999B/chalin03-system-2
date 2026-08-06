@@ -6,7 +6,7 @@ const test = require("node:test");
 const backendDir = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.json"), "utf8"));
 const runnerSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceProfessionalRebuildMigration.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
 
 test("completed professional Finance migration is not rerun during Railway startup", () => {
   assert.equal(packageJson.scripts.start, EXPECTED_START);
@@ -30,10 +30,12 @@ test("completed professional Finance migration is not rerun during Railway start
     /runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup\.js/,
     /runEquipmentFinancePhaseSixStartup\.js/,
     /runEquipmentFinancePhaseSixPerformanceStartup\.js/,
+    /runEquipmentFinanceTermsApprovalRepair20260806\.js/,
     /runUserAuthorizedInstallmentRestartResetLockFix20260805\.js/,
     /runInstallmentExcavatorCleanupBestEffortStartup20260805\.js/,
     /runBossApprovedProductQuantityCorrection20260802\.js/,
     /runBossApprovedProductQuantityCorrection20260804\.js/,
+    /runKwabenaProductQuantityCorrection20260806\.js/,
     /runCustomerMergeAuditDateSanitizer20260805\.js/,
     /runAutomaticCustomerMergeRollback20260805\.js/,
     /runExactNameReceiptOwnerRecovery20260805\.js/,
@@ -44,12 +46,20 @@ test("completed professional Finance migration is not rerun during Railway start
   ]) assert.match(packageJson.scripts.start, gate);
   assert.equal(packageJson.scripts["migrate:equipment-finance:professional:production"], "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js");
   assert.equal(
+    packageJson.scripts["repair:equipment-finance-terms-approval:20260806:production"],
+    "node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js"
+  );
+  assert.equal(
     packageJson.scripts["reset:equipment-finance:excavators:production"],
     "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js"
   );
   assert.equal(
     packageJson.scripts["reset:equipment-finance:excavators:startup-safe"],
     "node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js"
+  );
+  assert.equal(
+    packageJson.scripts["repair:kwabena-main-store-quantities:20260806:production"],
+    "node scripts/runKwabenaProductQuantityCorrection20260806.js"
   );
   assert.equal(
     packageJson.scripts["repair:customer-merge-audit-dates:20260805:production"],
