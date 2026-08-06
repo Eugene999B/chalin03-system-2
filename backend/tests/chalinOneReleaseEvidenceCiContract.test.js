@@ -42,6 +42,19 @@ test("database acceptance generates and preserves a machine-readable artifact", 
   assert.match(workflow, /retention-days: 30/);
 });
 
+test("CHALIN ONE CI runs for development pushes, synchronization PRs and release PRs", () => {
+  const workflow = read(".github/workflows/chalin-one-ci.yml");
+  assert.match(
+    workflow,
+    /push:\s*\n\s*branches:\s*\n\s*- chalin-one/
+  );
+  assert.match(
+    workflow,
+    /pull_request:\s*\n\s*branches:\s*\n\s*- chalin-one\s*\n\s*- main\s*\n\s*- production/
+  );
+  assert.match(workflow, /cancel-in-progress: true/);
+});
+
 test("generated evidence stays outside source control", () => {
   const gitignore = read(".gitignore");
   assert.match(gitignore, /^backend\/artifacts\/$/m);
