@@ -26,7 +26,7 @@ const statementWorkspace = fs.readFileSync(
   "utf8"
 );
 const debtsPage = fs.readFileSync(
-  path.resolve(__dirname, "../../frontend/src/pages/DebtsPage.jsx"),
+  path.resolve(__dirname, "../../frontend/src/pages/LegacyDebtsPage.jsx"),
   "utf8"
 );
 const consolidationPanel = fs.readFileSync(
@@ -66,7 +66,7 @@ test("filter API supports date ranges, optional customer and all export formats"
   assert.match(serverSource, /\/api\/customer-statement-workspace/);
 });
 
-test("filtered exports remain available from statements and the customer identity workspace", () => {
+test("filtered exports remain available from statements and the preserved identity tools", () => {
   assert.match(statementWorkspace, /Customer Name or Phone/);
   assert.match(statementWorkspace, /Leave blank for all customers/);
   assert.match(statementWorkspace, /Apply Filters/);
