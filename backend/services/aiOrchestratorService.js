@@ -27,9 +27,15 @@ const { resolveAiScope } = require("./aiPermissionService");
 const { generateProviderResponse } = require("./aiProviderService");
 const {
   AiSafetyError,
+  hashText,
   inspectPrompt,
+  redactSensitiveText,
 } = require("./aiSafetyService");
-const { aiToolRegistry } = require("./aiToolRegistry");
+const {
+  aiToolRegistry,
+  hashJson,
+  safeSummary,
+} = require("./aiToolRegistry");
 const {
   completeToolInvocation,
   startToolInvocation,
@@ -52,7 +58,10 @@ const PERSONA_INSTRUCTIONS = Object.freeze({
 });
 
 class AiOrchestratorError extends Error {
-  constructor(message, { code = "AI_ORCHESTRATOR_ERROR", statusCode = 500, details = [] } = {}) {
+  constructor(
+    message,
+    { code = "AI_ORCHESTRATOR_ERROR", statusCode = 500, details = [] } = {}
+  ) {
     super(message);
     this.name = "AiOrchestratorError";
     this.code = code;
@@ -64,15 +73,25 @@ class AiOrchestratorError extends Error {
 function availableTools({ persona, scope, user }) {
   return aiToolRegistry
     .list({ persona, workspace: scope.workspace_code })
-    .filter((tool) => hasEveryAiPermission(user, tool.required_permissions));
+    .filter((tool) =>
+      hasEveryAiPermission(user, tool.required_permissions)
+    );
 }
 
-function providerMessages({ persona, history = [], prompt, evidence, toolResults = [] }) {
+function providerMessages({
+  persona,
+  history = [],
+  prompt,
+  evidence,
+  toolResults = [],
+}) {
   const messages = [
     { role: "system", content: PERSONA_INSTRUCTIONS[persona] },
     {
       role: "system",
-      content: `Approved evidence for this request:\n${evidencePromptBlock(evidence)}`,
+      content: `Approved evidence for this request:\n${evidencePromptBlock(
+        evidence
+      )}`,
     },
   ];
   for (const item of history.slice(-20)) {
@@ -97,7 +116,8 @@ async function conversationHistory(connection, conversationId) {
   const [rows] = await connection.query(
     `SELECT message_role, content_text
      FROM ai_messages
-     WHERE conversation_id = ? AND message_role IN ('user', 'assistant')
+     WHERE conversation_id = ?
+       AND message_role IN ('user', 'assistant')
      ORDER BY id DESC LIMIT 20`,
     [conversationId]
   );
@@ -107,12 +127,18 @@ async function conversationHistory(connection, conversationId) {
   }));
 }
 
-async function persistEvidence({ connection = pool, messageId, invocationId = null, evidence }) {
+async function persistEvidence({
+  connection = pool,
+  messageId,
+  invocationId = null,
+  evidence,
+}) {
   for (const item of normalizeEvidenceList(evidence)) {
     await connection.query(
       `INSERT INTO ai_evidence_records (
          message_id, invocation_id, source_type, source_ref, source_version,
-         label, excerpt_text, as_of_at, classification, workspace_code, metadata_json
+         label, excerpt_text, as_of_at, classification, workspace_code,
+         metadata_json
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         messageId || null,
@@ -149,8 +175,8 @@ async function executeRequestedTools({
       tool,
       persona,
       scope: resolveAiScope({ req, persona }),
-      inputSha256: require("./aiToolRegistry").hashJson(call.input || {}),
-      inputSummary: require("./aiToolRegistry").safeSummary(call.input || {}),
+      inputSha256: hashJson(call.input || {}),
+      inputSummary: safeSummary(call.input || {}),
       permissionSnapshot: req.aiPermissionSnapshot || null,
     });
 
@@ -196,7 +222,12 @@ async function executeRequestedTools({
   return Object.freeze(results);
 }
 
-async function ensureConversation({ req, persona, scope, conversationKey = null }) {
+async function ensureConversation({
+  req,
+  persona,
+  scope,
+  conversationKey = null,
+}) {
   if (conversationKey) {
     const existing = await loadOwnedConversation({
       conversationKey,
@@ -206,8 +237,10 @@ async function ensureConversation({ req, persona, scope, conversationKey = null 
       existing.persona !== persona ||
       existing.workspace_code !== scope.workspace_code ||
       Number(existing.branch_id || 0) !== Number(scope.branch_id || 0) ||
-      Number(existing.mining_site_id || 0) !== Number(scope.mining_site_id || 0) ||
-      Number(existing.hire_location_id || 0) !== Number(scope.hire_location_id || 0)
+      Number(existing.mining_site_id || 0) !==
+        Number(scope.mining_site_id || 0) ||
+      Number(existing.hire_location_id || 0) !==
+        Number(scope.hire_location_id || 0)
     ) {
       throw new AiOrchestratorError(
         "The conversation belongs to a different intelligence scope.",
@@ -235,6 +268,64 @@ async function ensureConversation({ req, persona, scope, conversationKey = null 
   });
 }
 
+function sumProviderUsage(results) {
+  return Object.freeze({
+    input_tokens: results.reduce(
+      (sum, result) => sum + Number(result?.input_tokens || 0),
+      0
+    ),
+    output_tokens: results.reduce(
+      (sum, result) => sum + Number(result?.output_tokens || 0),
+      0
+    ),
+    latency_ms: results.reduce(
+      (sum, result) => sum + Number(result?.latency_ms || 0),
+      0
+    ),
+  });
+}
+
+async function auditBlockedPrompt({
+  req,
+  conversation,
+  persona,
+  scope,
+  message,
+  error,
+}) {
+  const redacted = redactSensitiveText(String(message || ""));
+  await writePromptSafetyEvent({
+    req,
+    userId: req.user.id,
+    conversationId: conversation.id,
+    eventType:
+      error?.code === "AI_PROMPT_INJECTION_BLOCKED"
+        ? "prompt_injection"
+        : error?.code === "AI_SECRET_REQUEST_BLOCKED"
+        ? "secret_request"
+        : "other",
+    action: "blocked",
+    patternKeys: error?.details || [],
+    redactionCount: redacted.redaction_count,
+    inputSha256: hashText(String(message || "")),
+    safeSummary: redacted.text.slice(0, 500),
+  }).catch(() => null);
+  await writeAiAuditEvent({
+    req,
+    userId: req.user.id,
+    conversationId: conversation.id,
+    eventType: "AI_PROMPT_BLOCKED",
+    outcome: "blocked",
+    severity: "high",
+    persona,
+    scope,
+    metadata: {
+      error_code: error?.code || "AI_SAFETY_BLOCKED",
+      prompt_sha256: hashText(String(message || "")),
+    },
+  }).catch(() => null);
+}
+
 async function runAiConversationTurn({
   req,
   persona = "copilot",
@@ -245,25 +336,29 @@ async function runAiConversationTurn({
 } = {}) {
   const normalizedPersona = normalizeAiPersona(persona);
   if (!normalizedPersona || normalizedPersona === "guide") {
-    throw new AiOrchestratorError("This staff endpoint supports Copilot or Executive only.", {
-      code: "AI_PERSONA_INVALID",
-      statusCode: 400,
-    });
+    throw new AiOrchestratorError(
+      "This staff endpoint supports Copilot or Executive only.",
+      { code: "AI_PERSONA_INVALID", statusCode: 400 }
+    );
   }
 
   const scope = resolveAiScope({ req, persona: normalizedPersona });
-  const promptInspection = inspectPrompt(message, {
-    allowHighRiskDiscussion: true,
-  });
   const conversation = await ensureConversation({
     req,
     persona: normalizedPersona,
     scope,
     conversationKey,
   });
+  const history = await conversationHistory(pool, conversation.id);
 
+  let promptInspection = null;
   let userMessage = null;
+  let assistantMessage = null;
+
   try {
+    promptInspection = inspectPrompt(message, {
+      allowHighRiskDiscussion: true,
+    });
     userMessage = await addMessage({
       conversationId: conversation.id,
       role: "user",
@@ -285,7 +380,6 @@ async function runAiConversationTurn({
       safeSummary: promptInspection.safe_summary,
     });
 
-    const history = await conversationHistory(pool, conversation.id);
     const knowledgeEvidence = await searchApprovedKnowledge({
       query: promptInspection.text,
       persona: normalizedPersona,
@@ -303,9 +397,16 @@ async function runAiConversationTurn({
       prompt: promptInspection.text,
       evidence: knowledgeEvidence,
     });
-    const budget = buildRequestBudget({ messages: initialMessages, tools, env });
+    const budget = buildRequestBudget({
+      messages: initialMessages,
+      tools,
+      env,
+    });
     const [dailyUsage, monthlyCost] = await Promise.all([
-      getDailyUsage({ userId: req.user.id, workspaceCode: scope.workspace_code }),
+      getDailyUsage({
+        userId: req.user.id,
+        workspaceCode: scope.workspace_code,
+      }),
       getMonthlyCost(),
     ]);
     assertDailyUsage({
@@ -313,44 +414,51 @@ async function runAiConversationTurn({
       workspaceTokens: dailyUsage.workspace_tokens,
       budget,
     });
-    assertMonthlyCost({ usedMicros: monthlyCost, additionalMicros: 0, budget });
+    assertMonthlyCost({
+      usedMicros: monthlyCost,
+      additionalMicros: 0,
+      budget,
+    });
 
-    let providerResult = await generateProviderResponse({
+    const providerRounds = [];
+    const initialResult = await generateProviderResponse({
       provider,
       messages: initialMessages,
       tools,
       maxOutputTokens: budget.maximum_output_tokens,
       env,
     });
+    providerRounds.push(initialResult);
 
-    const provisionalAssistant = await addMessage({
+    assistantMessage = await addMessage({
       conversationId: conversation.id,
       role: "assistant",
-      content: providerResult.text,
+      content: initialResult.text,
       safetyStatus: "allowed",
-      providerKey: providerResult.provider_key,
-      modelKey: providerResult.model_key,
-      inputTokens: providerResult.input_tokens,
-      outputTokens: providerResult.output_tokens,
-      latencyMs: providerResult.latency_ms,
-      finishReason: providerResult.finish_reason,
+      providerKey: initialResult.provider_key,
+      modelKey: initialResult.model_key,
+      inputTokens: initialResult.input_tokens,
+      outputTokens: initialResult.output_tokens,
+      latencyMs: initialResult.latency_ms,
+      finishReason: initialResult.finish_reason,
       createdBy: req.user.id,
     });
 
+    let finalResult = initialResult;
     let toolResults = [];
-    if (providerResult.tool_calls.length > 0) {
+    if (initialResult.tool_calls.length > 0) {
       toolResults = await executeRequestedTools({
         req,
         persona: normalizedPersona,
-        toolCalls: providerResult.tool_calls,
-        assistantMessageId: provisionalAssistant.id,
+        toolCalls: initialResult.tool_calls,
+        assistantMessageId: assistantMessage.id,
         budget,
       });
       const combinedEvidence = normalizeEvidenceList([
         ...knowledgeEvidence,
         ...toolResults.flatMap((result) => result.evidence || []),
       ]);
-      providerResult = await generateProviderResponse({
+      finalResult = await generateProviderResponse({
         provider,
         messages: providerMessages({
           persona: normalizedPersona,
@@ -363,22 +471,24 @@ async function runAiConversationTurn({
         maxOutputTokens: budget.maximum_output_tokens,
         env,
       });
+      providerRounds.push(finalResult);
       await pool.query(
         `UPDATE ai_messages
-         SET content_text = ?, content_sha256 = ?, provider_key = ?, model_key = ?,
-             input_tokens = input_tokens + ?, output_tokens = output_tokens + ?,
+         SET content_text = ?, content_sha256 = ?, provider_key = ?,
+             model_key = ?, input_tokens = input_tokens + ?,
+             output_tokens = output_tokens + ?,
              latency_ms = COALESCE(latency_ms, 0) + ?, finish_reason = ?
          WHERE id = ?`,
         [
-          providerResult.text,
-          require("./aiSafetyService").hashText(providerResult.text),
-          providerResult.provider_key,
-          providerResult.model_key,
-          providerResult.input_tokens,
-          providerResult.output_tokens,
-          providerResult.latency_ms,
-          providerResult.finish_reason,
-          provisionalAssistant.id,
+          finalResult.text,
+          hashText(finalResult.text),
+          finalResult.provider_key,
+          finalResult.model_key,
+          finalResult.input_tokens,
+          finalResult.output_tokens,
+          finalResult.latency_ms,
+          finalResult.finish_reason,
+          assistantMessage.id,
         ]
       );
     }
@@ -388,20 +498,20 @@ async function runAiConversationTurn({
       ...toolResults.flatMap((result) => result.evidence || []),
     ]);
     await persistEvidence({
-      messageId: provisionalAssistant.id,
+      messageId: assistantMessage.id,
       evidence: finalEvidence,
     });
-    const totalInputTokens = providerResult.input_tokens;
-    const totalOutputTokens = providerResult.output_tokens;
+
+    const totalUsage = sumProviderUsage(providerRounds);
     await recordUsage({
       userId: req.user.id,
       conversationId: conversation.id,
-      messageId: provisionalAssistant.id,
-      providerKey: providerResult.provider_key,
-      modelKey: providerResult.model_key,
+      messageId: assistantMessage.id,
+      providerKey: finalResult.provider_key,
+      modelKey: finalResult.model_key,
       workspaceCode: scope.workspace_code,
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
+      inputTokens: totalUsage.input_tokens,
+      outputTokens: totalUsage.output_tokens,
       costMicros: 0,
       requestId: req.requestId,
     });
@@ -409,17 +519,18 @@ async function runAiConversationTurn({
       req,
       userId: req.user.id,
       conversationId: conversation.id,
-      messageId: provisionalAssistant.id,
+      messageId: assistantMessage.id,
       eventType: "AI_CONVERSATION_TURN_COMPLETED",
       outcome: "success",
       severity: "info",
       persona: normalizedPersona,
       scope,
       metadata: {
-        provider_key: providerResult.provider_key,
-        model_key: providerResult.model_key,
-        input_tokens: totalInputTokens,
-        output_tokens: totalOutputTokens,
+        provider_key: finalResult.provider_key,
+        model_key: finalResult.model_key,
+        provider_round_count: providerRounds.length,
+        input_tokens: totalUsage.input_tokens,
+        output_tokens: totalUsage.output_tokens,
         tool_count: toolResults.length,
         evidence_count: finalEvidence.length,
         prompt_sha256: promptInspection.input_sha256,
@@ -428,50 +539,63 @@ async function runAiConversationTurn({
 
     return Object.freeze({
       conversation_key: conversation.conversation_key,
-      message_key: provisionalAssistant.key,
+      message_key: assistantMessage.key,
       persona: normalizedPersona,
-      answer: providerResult.text,
+      answer: finalResult.text,
       evidence: finalEvidence,
       citations: evidenceCitationMap(finalEvidence),
       provider: Object.freeze({
-        key: providerResult.provider_key,
-        model: providerResult.model_key,
-        finish_reason: providerResult.finish_reason,
+        key: finalResult.provider_key,
+        model: finalResult.model_key,
+        finish_reason: finalResult.finish_reason,
+        rounds: providerRounds.length,
       }),
       usage: Object.freeze({
-        input_tokens: totalInputTokens,
-        output_tokens: totalOutputTokens,
+        input_tokens: totalUsage.input_tokens,
+        output_tokens: totalUsage.output_tokens,
         cost_micros: 0,
       }),
     });
   } catch (error) {
     const safety = error instanceof AiSafetyError;
-    if (userMessage) {
-      await addMessage({
+    if (safety && !userMessage) {
+      await auditBlockedPrompt({
+        req,
+        conversation,
+        persona: normalizedPersona,
+        scope,
+        message,
+        error,
+      });
+    } else {
+      if (userMessage && !assistantMessage) {
+        await addMessage({
+          conversationId: conversation.id,
+          role: "assistant",
+          content:
+            "CHALIN ONE intelligence could not complete this request safely. Ordinary system operations are unaffected.",
+          safetyStatus: safety ? "blocked" : "error",
+          errorCode: error?.code || "AI_REQUEST_FAILED",
+          createdBy: req.user.id,
+        }).catch(() => null);
+      }
+      await writeAiAuditEvent({
+        req,
+        userId: req.user.id,
         conversationId: conversation.id,
-        role: "assistant",
-        content:
-          "CHALIN ONE intelligence could not complete this request safely. Ordinary system operations are unaffected.",
-        safetyStatus: safety ? "blocked" : "error",
-        errorCode: error?.code || "AI_REQUEST_FAILED",
-        createdBy: req.user.id,
+        messageId: userMessage?.id || assistantMessage?.id || null,
+        eventType: "AI_CONVERSATION_TURN_FAILED",
+        outcome: safety ? "blocked" : "failed",
+        severity: safety ? "high" : "warning",
+        persona: normalizedPersona,
+        scope,
+        metadata: {
+          error_code: error?.code || "AI_REQUEST_FAILED",
+          prompt_sha256:
+            promptInspection?.input_sha256 || hashText(String(message || "")),
+        },
       }).catch(() => null);
     }
-    await writeAiAuditEvent({
-      req,
-      userId: req.user.id,
-      conversationId: conversation.id,
-      messageId: userMessage?.id || null,
-      eventType: "AI_CONVERSATION_TURN_FAILED",
-      outcome: safety ? "blocked" : "failed",
-      severity: safety ? "high" : "warning",
-      persona: normalizedPersona,
-      scope,
-      metadata: {
-        error_code: error?.code || "AI_REQUEST_FAILED",
-        prompt_sha256: promptInspection.input_sha256,
-      },
-    }).catch(() => null);
     throw error;
   }
 }
@@ -479,6 +603,7 @@ async function runAiConversationTurn({
 module.exports = {
   AiOrchestratorError,
   PERSONA_INSTRUCTIONS,
+  auditBlockedPrompt,
   availableTools,
   conversationHistory,
   ensureConversation,
@@ -486,4 +611,5 @@ module.exports = {
   persistEvidence,
   providerMessages,
   runAiConversationTurn,
+  sumProviderUsage,
 };
