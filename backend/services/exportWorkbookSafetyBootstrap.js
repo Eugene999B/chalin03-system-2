@@ -25,7 +25,7 @@ function runMasterMickeyMergeProfileVisibility() {
     __dirname,
     "..",
     "scripts",
-    "runMasterMickeyMergeProfileVisibility20260806.js"
+    "runMasterMickeyMergeProfileVisibilityRetry20260806.js"
   );
   const result = spawnSync(process.execPath, [scriptPath], {
     cwd: path.join(__dirname, ".."),
