@@ -7,7 +7,6 @@ import {
 } from "react";
 import {
   Link,
-  NavLink,
   Outlet,
   Route,
   Routes,
@@ -22,6 +21,10 @@ import {
   publicWebsiteErrorMessage,
   submitPublicForm,
 } from "./publicWebsiteApi";
+import {
+  PublicFooterNavigation,
+  PublicNavigation,
+} from "./PublicNavigation";
 import "./publicWebsite.css";
 
 const PUBLIC_ROOT = "/website";
@@ -392,17 +395,12 @@ function PublicWebsiteLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const bootstrap = request.data || {};
   const settings = bootstrap.settings || {};
+  const navigation = bootstrap.navigation || [];
   const siteName = settingValue(settings, "site.name", "CHALIN ONE");
   const tagline = settingValue(
     settings,
     "site.tagline",
     "Integrated equipment, mining and commercial solutions"
-  );
-  const headerItems = (bootstrap.navigation || []).filter(
-    (item) => item.location === "header" && !item.parent_key
-  );
-  const footerItems = (bootstrap.navigation || []).filter(
-    (item) => item.location === "footer" && !item.parent_key
   );
 
   useDocumentMetadata(siteName, settingValue(settings, "site.description", tagline));
@@ -434,18 +432,11 @@ function PublicWebsiteLayout() {
             <span />
             <b>Menu</b>
           </button>
-          <nav id="public-website-navigation" className="pw-navigation" data-open={menuOpen ? "true" : "false"} aria-label="Public website navigation">
-            {headerItems.length > 0 ? headerItems.map((item) => (
-              <PublicLink key={item.key} target={item.url} className="pw-nav-link">{item.label}</PublicLink>
-            )) : (
-              <>
-                <NavLink className="pw-nav-link" to={`${PUBLIC_ROOT}/divisions`}>Divisions</NavLink>
-                <NavLink className="pw-nav-link" to={`${PUBLIC_ROOT}/projects`}>Projects</NavLink>
-                <NavLink className="pw-nav-link" to={`${PUBLIC_ROOT}/equipment`}>Equipment</NavLink>
-                <NavLink className="pw-nav-link" to={`${PUBLIC_ROOT}/news`}>News</NavLink>
-              </>
-            )}
-          </nav>
+          <PublicNavigation
+            items={navigation}
+            menuOpen={menuOpen}
+            onMenuClose={() => setMenuOpen(false)}
+          />
         </header>
 
         <main className="pw-main">
@@ -457,7 +448,7 @@ function PublicWebsiteLayout() {
         <footer className="pw-footer">
           <div><strong>{siteName}</strong><p>{settingValue(settings, "site.description", tagline)}</p></div>
           <nav aria-label="Footer navigation">
-            {footerItems.map((item) => <PublicLink key={item.key} target={item.url}>{item.label}</PublicLink>)}
+            <PublicFooterNavigation items={navigation} />
             <Link to={`${PUBLIC_ROOT}/locations`}>Locations</Link>
             <Link to={`${PUBLIC_ROOT}/vacancies`}>Careers</Link>
             <Link to="/login">Staff sign in</Link>
