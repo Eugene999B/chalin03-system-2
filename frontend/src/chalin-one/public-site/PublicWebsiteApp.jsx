@@ -97,7 +97,7 @@ const COLLECTION_CONFIG = Object.freeze({
       return item.name || "Location";
     },
     summary(item) {
-      return [item.address_line_1, item.city, item.region, item.country]
+      return [item.address, item.city, item.region, item.country]
         .filter(Boolean)
         .join(", ");
     },
@@ -132,7 +132,7 @@ const COLLECTION_CONFIG = Object.freeze({
     description: "Published customer experiences and verified feedback.",
     detail: false,
     label(item) {
-      return item.customer_display_name || item.name || "Customer";
+      return item.customer_name || item.name || "Customer";
     },
     summary(item) {
       return item.quote || item.quote_text || "";
@@ -209,6 +209,24 @@ function publicPath(rawValue) {
     ? `${PUBLIC_ROOT}/${clean}`
     : `${PUBLIC_ROOT}/pages/${clean}`;
   return { external: false, href: `${target}${suffix}` };
+}
+
+function formatPublicMoney(price) {
+  if (!price || price.amount === undefined || price.amount === null) return "";
+  const amount = Number(price.amount);
+  if (!Number.isFinite(amount)) return "";
+  const currency = /^[A-Z]{3}$/.test(String(price.currency || "").toUpperCase())
+    ? String(price.currency).toUpperCase()
+    : "GHS";
+  try {
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString("en-GH")}`;
+  }
 }
 
 function usePublicRequest(loader, dependencies = []) {
@@ -510,18 +528,24 @@ function PublicCollectionPage({ resource }) {
       <div className="pw-section-heading"><span className="pw-eyebrow">{config.eyebrow}</span><h1>{config.title}</h1><p>{config.description}</p></div>
       <PublicState loading={request.loading} error={request.error} empty={!request.loading && !request.error && items.length === 0}>
         <div className="pw-card-grid">
-          {items.map((item, index) => (
-            <article className="pw-card" key={item.key || item.slug || index}>
-              <PublicMedia media={item.media || item.portrait || item.document} />
-              <div>
-                {item.division?.name ? <span className="pw-card-kicker">{item.division.name}</span> : null}
-                <h2>{config.label(item)}</h2>
-                <p>{config.summary(item)}</p>
-                {item.rating ? <span className="pw-rating" aria-label={`${item.rating} out of 5 stars`}>{"★".repeat(Math.max(0, Math.min(5, Number(item.rating))))}</span> : null}
-                {config.detail && item.slug ? <Link to={`${PUBLIC_ROOT}/${resource}/${item.slug}`}>View details</Link> : null}
-              </div>
-            </article>
-          ))}
+          {items.map((item, index) => {
+            const money = formatPublicMoney(item.price);
+            const status = item.status || item.availability;
+            return (
+              <article className="pw-card" key={item.key || item.slug || index}>
+                <PublicMedia media={item.media || item.portrait || item.document} />
+                <div>
+                  {item.division?.name ? <span className="pw-card-kicker">{item.division.name}</span> : null}
+                  <h2>{config.label(item)}</h2>
+                  <p>{config.summary(item)}</p>
+                  {status ? <span className="pw-card-kicker">{humanize(status)}</span> : null}
+                  {money ? <strong>{money}</strong> : null}
+                  {item.rating ? <span className="pw-rating" aria-label={`${item.rating} out of 5 stars`}>{"★".repeat(Math.max(0, Math.min(5, Number(item.rating))))}</span> : null}
+                  {config.detail && item.slug ? <Link to={`${PUBLIC_ROOT}/${resource}/${item.slug}`}>View details</Link> : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </PublicState>
     </section>
@@ -564,6 +588,29 @@ function PublicPageDetail() {
   );
 }
 
+function PublicDetailContent({ item }) {
+  const primary = item.body || item.details || item.description;
+  return (
+    <>
+      <StructuredContent value={primary} />
+      {item.specifications ? (
+        <section>
+          <h2>Specifications</h2>
+          <StructuredContent value={item.specifications} />
+        </section>
+      ) : null}
+      {item.features ? (
+        <section>
+          <h2>Features</h2>
+          <StructuredContent value={item.features} />
+        </section>
+      ) : null}
+      <StructuredContent value={item.requirements} />
+      <StructuredContent value={item.application_instructions || item.submission_instructions} />
+    </>
+  );
+}
+
 function PublicDetailPage({ resource }) {
   const { slug } = useParams();
   const config = COLLECTION_CONFIG[resource];
@@ -573,6 +620,10 @@ function PublicDetailPage({ resource }) {
   );
   const item = request.data;
   const title = item ? config.label(item) : config.title;
+  const location = item?.location?.name || item?.location || item?.location_text;
+  const status = item?.status || item?.operational_status;
+  const availability = item?.availability || item?.availability_status;
+  const money = formatPublicMoney(item?.price);
   useDocumentMetadata(`${title} | CHALIN ONE`, item ? config.summary(item) : config.description);
 
   return (
@@ -582,19 +633,27 @@ function PublicDetailPage({ resource }) {
           <header className="pw-detail-header"><span className="pw-eyebrow">{config.eyebrow}</span><h1>{config.label(item)}</h1>{config.summary(item) ? <p>{config.summary(item)}</p> : null}<PublicMedia media={item.media || item.document} className="pw-detail-media" /></header>
           <div className="pw-detail-grid">
             <div>
-              <StructuredContent value={item.body || item.details || item.description || item.specifications || item.features} />
-              <StructuredContent value={item.requirements} />
-              <StructuredContent value={item.application_instructions || item.submission_instructions} />
+              <PublicDetailContent item={item} />
             </div>
             <aside className="pw-detail-aside">
               {item.division?.name ? <p><strong>Division</strong><span>{item.division.name}</span></p> : null}
-              {item.location?.name || item.location_text ? <p><strong>Location</strong><span>{item.location?.name || item.location_text}</span></p> : null}
-              {item.operational_status ? <p><strong>Status</strong><span>{humanize(item.operational_status)}</span></p> : null}
-              {item.availability_status ? <p><strong>Availability</strong><span>{humanize(item.availability_status)}</span></p> : null}
+              {location ? <p><strong>Location</strong><span>{location}</span></p> : null}
+              {status ? <p><strong>Status</strong><span>{humanize(status)}</span></p> : null}
+              {availability ? <p><strong>Availability</strong><span>{humanize(availability)}</span></p> : null}
+              {money ? <p><strong>Published price</strong><span>{money}</span></p> : null}
+              {item.manufacturer ? <p><strong>Manufacturer</strong><span>{item.manufacturer}</span></p> : null}
+              {item.model ? <p><strong>Model</strong><span>{item.model}</span></p> : null}
+              {item.year ? <p><strong>Model year</strong><span>{item.year}</span></p> : null}
+              {item.category ? <p><strong>Category</strong><span>{item.category}</span></p> : null}
+              {item.condition ? <p><strong>Condition</strong><span>{item.condition}</span></p> : null}
+              {item.employment_type ? <p><strong>Employment type</strong><span>{item.employment_type}</span></p> : null}
+              {item.vacancies_count ? <p><strong>Open positions</strong><span>{item.vacancies_count}</span></p> : null}
+              {item.hire_available ? <p><strong>Hire</strong><span>Available</span></p> : null}
+              {item.finance_available ? <p><strong>Finance</strong><span>Available</span></p> : null}
               {item.reference_number ? <p><strong>Reference</strong><span>{item.reference_number}</span></p> : null}
               {item.closes_at ? <p><strong>Closes</strong><span>{new Date(item.closes_at).toLocaleString("en-GH")}</span></p> : null}
-              {item.application_url ? <a className="pw-button pw-button-primary" href={item.application_url} target="_blank" rel="noreferrer">Apply securely</a> : null}
-              {item.document?.url ? <a className="pw-button pw-button-secondary" href={item.document.url} target="_blank" rel="noreferrer">Open tender document</a> : null}
+              {item.application_url ? <PublicLink className="pw-button pw-button-primary" target={item.application_url}>Apply securely</PublicLink> : null}
+              {item.document?.url ? <PublicLink className="pw-button pw-button-secondary" target={item.document.url}>Open tender document</PublicLink> : null}
             </aside>
           </div>
           {Array.isArray(item.gallery) && item.gallery.length > 0 ? <div className="pw-gallery">{item.gallery.map((media, index) => <PublicMedia media={media.media || media} key={media.asset_key || index} />)}</div> : null}
@@ -703,11 +762,11 @@ function PublicFormPage() {
 
 function PublicNotFound() {
   useDocumentMetadata("Page not found | CHALIN ONE");
-  return <section className="pw-state pw-not-found"><strong>Published page not found</strong><span>The address may be incorrect or the content is not currently published.</span><Link className="pw-button pw-button-primary" to={PUBLIC_ROOT}>Return home</Link></section>;
+  return <section className="pw-state pw-not-found" role="status" aria-live="polite"><h1>Published page not found</h1><span>The address may be incorrect or the content is not currently published.</span><Link className="pw-button pw-button-primary" to={PUBLIC_ROOT}>Return home</Link></section>;
 }
 
 export function PublicWebsiteUnavailable() {
-  return <main className="pw-unavailable"><div><span className="pw-brand-mark">C1</span><h1>Public website is not enabled</h1><p>This CHALIN ONE public experience remains safely disabled in this environment.</p><Link to="/login">Staff sign in</Link></div></main>;
+  return <main className="pw-unavailable"><div><span className="pw-brand-mark" aria-hidden="true">C1</span><h1>Public website is not enabled</h1><p>This CHALIN ONE public experience remains safely disabled in this environment.</p><Link to="/login">Staff sign in</Link></div></main>;
 }
 
 export default function PublicWebsiteApp() {
