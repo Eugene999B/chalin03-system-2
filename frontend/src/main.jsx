@@ -7,6 +7,9 @@ import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccou
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
+import ChalinOneStandaloneEntry, {
+  isChalinOneStandalonePath,
+} from "./chalin-one/ChalinOneStandaloneEntry.jsx";
 import { FeatureFlagProvider } from "./context/FeatureFlagContext.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
@@ -19,6 +22,9 @@ import "./styles/adminMobileHotfix.css";
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
 const APP_SHELL_RELEASE = `browser-cache-integrity-v35-${APP_BUILD_ID}`;
+const standaloneChalinOne = isChalinOneStandalonePath(
+  window.location.pathname
+);
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
@@ -27,13 +33,19 @@ installCriticalFinanceWorkspacePreload();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <FeatureFlagProvider>
-      <App />
-      <ProductsPageShellRepair />
-      <OperationalApprovalLauncher />
-      <ApprovalCentreLiveAttention />
-      <AdvancedAccountingExpenseFundingEvidence />
-      <EmergencyCommandOverlay />
-      <CommandArrivalBanner />
+      {standaloneChalinOne ? (
+        <ChalinOneStandaloneEntry />
+      ) : (
+        <>
+          <App />
+          <ProductsPageShellRepair />
+          <OperationalApprovalLauncher />
+          <ApprovalCentreLiveAttention />
+          <AdvancedAccountingExpenseFundingEvidence />
+          <EmergencyCommandOverlay />
+          <CommandArrivalBanner />
+        </>
+      )}
     </FeatureFlagProvider>
   </React.StrictMode>
 );
