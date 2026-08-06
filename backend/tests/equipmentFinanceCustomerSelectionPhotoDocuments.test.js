@@ -24,12 +24,6 @@ const photoUtility = read(
   "utils",
   "equipmentFinanceCustomerPhoto.js"
 );
-const liveStartWrapper = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentFinanceCustomerPhotoStartPage.jsx"
-);
 const startRedirect = read(
   "frontend",
   "src",
@@ -63,7 +57,8 @@ test("existing Finance customer cards have an unmistakable selected state", () =
   assert.match(selectionCss, /content: "✓"/);
   assert.match(selectionCss, /focus-visible/);
   assert.match(selectionCss, /@media \(max-width: 620px\)/);
-  assert.match(startRedirect, /EquipmentFinanceCustomerPhotoStartPage/);
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /EquipmentFinanceCustomerPhotoPanel/);
 });
 
 test("passport picture is compressed without cropping and bridged only to Finance start", () => {
@@ -77,7 +72,8 @@ test("passport picture is compressed without cropping and bridged only to Financ
   assert.match(selectionCss, /object-fit: contain/);
   assert.match(photoUtility, /START_INSTALLMENT_PATH/);
   assert.match(photoUtility, /customer_photo: photo/);
-  assert.match(liveStartWrapper, /installFinanceCustomerPhotoRequestBridge/);
+  assert.match(startRedirect, /installFinanceCustomerPhotoRequestBridge/);
+  assert.match(startRedirect, /settleCommittedPhoto/);
 });
 
 test("customer photo is encrypted after the Finance application commits", () => {
@@ -102,6 +98,7 @@ test("customer photo is encrypted after the Finance application commits", () => 
 test("professional Finance documents add a full-frame encrypted identity annex", () => {
   assert.match(renderer, /AsyncLocalStorage/);
   assert.match(renderer, /decryptDocument/);
+  assert.match(renderer, /equipmentFinanceCompletionRendererService/);
   assert.match(renderer, /customer_passport_photo/);
   assert.match(renderer, /Customer Identity & Passport Photo/);
   assert.match(renderer, /fit: \[photoWidth - 16, photoHeight - 16\]/);
@@ -119,7 +116,6 @@ test("scope remains Equipment Installment Finance only", () => {
     selectionCss,
     photoPanel,
     photoUtility,
-    liveStartWrapper,
     startRedirect,
     captureRoute,
     renderer,
