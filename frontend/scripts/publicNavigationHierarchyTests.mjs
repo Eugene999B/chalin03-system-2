@@ -12,6 +12,9 @@ const app = read("src/chalin-one/public-site/PublicWebsiteApp.jsx");
 const navigation = read("src/chalin-one/public-site/PublicNavigation.jsx");
 const css = read("src/chalin-one/public-site/publicNavigation.css");
 const publicService = read("../backend/services/publicContentService.js");
+const navigationService = read(
+  "../backend/services/contentStudioNavigationService.js"
+);
 
 let passed = 0;
 function check(name, callback) {
@@ -34,7 +37,17 @@ check("tree builder filters location, duplicates, orphans and cycles", () => {
   assert.match(navigation, /!byKey\.has\(item\.parent_key\)/);
   assert.match(navigation, /item\.parent_key === item\.key/);
   assert.match(navigation, /ancestors\.includes\(item\.key\)/);
-  assert.match(navigation, /MAX_NAVIGATION_DEPTH/);
+  assert.match(navigation, /MAX_NAVIGATION_DEPTH = 4/);
+});
+
+check("frontend and backend enforce the same supported navigation depth", () => {
+  assert.match(navigation, /MAX_NAVIGATION_DEPTH = 4/);
+  assert.match(navigationService, /MAX_PARENT_DEPTH = 4/);
+  assert.match(
+    navigationService,
+    /const itemId = Number\(result\.insertId\);\s*await assertNoNavigationCycle\(connection, itemId, snapshot\.parent_id\);/
+  );
+  assert.match(navigationService, /NAVIGATION_DEPTH_EXCEEDED/);
 });
 
 check("navigation remains inside the public renderer and sanitizes targets", () => {
@@ -58,11 +71,23 @@ check("desktop and mobile menus expose accessible controls", () => {
   assert.match(navigation, /onBlurCapture/);
 });
 
+check("menu lifecycle uses stable callbacks and complete effect dependencies", () => {
+  assert.match(navigation, /useCallback/);
+  assert.match(navigation, /const closeAll = useCallback/);
+  assert.match(navigation, /const toggleKey = useCallback/);
+  assert.match(navigation, /\[closeAll, location\.pathname\]/);
+  assert.match(navigation, /\}, \[closeAll\]\);/);
+});
+
 check("active child routes activate their parent branch", () => {
   assert.match(navigation, /branchIsActive/);
   assert.match(navigation, /node\.children\.some/);
   assert.match(navigation, /data-active=\{active \? "true" : "false"\}/);
   assert.match(navigation, /cleanPath\.startsWith/);
+  assert.match(
+    css,
+    /\.pw-nav-group\[data-active="true"\] > \.pw-nav-parent-row > \.pw-nav-parent-link/
+  );
 });
 
 check("responsive hierarchy styles support dropdown and nested mobile layouts", () => {
@@ -88,4 +113,4 @@ check("fallback navigation remains available without published header records", 
   }
 });
 
-console.log(`\nCHALIN ONE public navigation hierarchy: ${passed}/8 checks passed.`);
+console.log(`\nCHALIN ONE public navigation hierarchy: ${passed}/10 checks passed.`);
