@@ -59,7 +59,10 @@ function cleanText(value, maxLength = MAX_PROMPT_CHARACTERS) {
 }
 
 function hashText(value) {
-  return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(String(value || ""), "utf8")
+    .digest("hex");
 }
 
 function findPatternKeys(text, definitions) {
@@ -75,11 +78,12 @@ function redactSensitiveText(value) {
 
   for (const definition of REDACTION_PATTERNS) {
     definition.pattern.lastIndex = 0;
-    text = text.replace(definition.pattern, () => {
-      patternKeys.push(definition.key);
-      redactionCount += 1;
-      return definition.replacement;
-    });
+    const matches = text.match(definition.pattern) || [];
+    if (matches.length === 0) continue;
+    patternKeys.push(definition.key);
+    redactionCount += matches.length;
+    definition.pattern.lastIndex = 0;
+    text = text.replace(definition.pattern, definition.replacement);
   }
 
   return Object.freeze({
@@ -92,9 +96,10 @@ function redactSensitiveText(value) {
 function inspectPrompt(value, { allowHighRiskDiscussion = true } = {}) {
   const original = cleanText(value, MAX_PROMPT_CHARACTERS + 1);
   if (!original) {
-    throw new AiSafetyError("Enter a message before using CHALIN ONE intelligence.", {
-      code: "AI_PROMPT_REQUIRED",
-    });
+    throw new AiSafetyError(
+      "Enter a message before using CHALIN ONE intelligence.",
+      { code: "AI_PROMPT_REQUIRED" }
+    );
   }
   if (original.length > MAX_PROMPT_CHARACTERS) {
     throw new AiSafetyError(
@@ -103,18 +108,25 @@ function inspectPrompt(value, { allowHighRiskDiscussion = true } = {}) {
     );
   }
 
-  const injectionKeys = findPatternKeys(original, PROMPT_INJECTION_PATTERNS);
+  const injectionKeys = findPatternKeys(
+    original,
+    PROMPT_INJECTION_PATTERNS
+  );
   const secretKeys = findPatternKeys(original, SECRET_REQUEST_PATTERNS);
-  const highRiskKeys = findPatternKeys(original, HIGH_RISK_ACTION_PATTERNS);
+  const highRiskKeys = findPatternKeys(
+    original,
+    HIGH_RISK_ACTION_PATTERNS
+  );
   const redacted = redactSensitiveText(original);
 
   if (injectionKeys.length > 0 || secretKeys.length > 0) {
     throw new AiSafetyError(
       "This request attempts to override security controls or expose restricted information.",
       {
-        code: injectionKeys.length > 0
-          ? "AI_PROMPT_INJECTION_BLOCKED"
-          : "AI_SECRET_REQUEST_BLOCKED",
+        code:
+          injectionKeys.length > 0
+            ? "AI_PROMPT_INJECTION_BLOCKED"
+            : "AI_SECRET_REQUEST_BLOCKED",
         details: [...injectionKeys, ...secretKeys],
       }
     );
@@ -131,7 +143,9 @@ function inspectPrompt(value, { allowHighRiskDiscussion = true } = {}) {
     action: redacted.redaction_count > 0 ? "redacted" : "allowed",
     text: redacted.text,
     input_sha256: hashText(original),
-    pattern_keys: [...new Set([...redacted.pattern_keys, ...highRiskKeys])],
+    pattern_keys: [
+      ...new Set([...redacted.pattern_keys, ...highRiskKeys]),
+    ],
     prompt_injection_keys: injectionKeys,
     secret_request_keys: secretKeys,
     high_risk_action_keys: highRiskKeys,
@@ -156,16 +170,24 @@ function sanitizeProviderMessages(messages) {
   return messages.map((message, index) => {
     const role = String(message?.role || "").trim().toLowerCase();
     if (!["system", "user", "assistant", "tool"].includes(role)) {
-      throw new AiSafetyError(`Invalid AI message role at position ${index}.`, {
-        code: "AI_MESSAGE_ROLE_INVALID",
-      });
+      throw new AiSafetyError(
+        `Invalid AI message role at position ${index}.`,
+        { code: "AI_MESSAGE_ROLE_INVALID" }
+      );
     }
-    const content = cleanText(message?.content, MAX_PROMPT_CHARACTERS + 1);
+    const content = cleanText(
+      message?.content,
+      MAX_PROMPT_CHARACTERS + 1
+    );
     if (!content || content.length > MAX_PROMPT_CHARACTERS) {
-      throw new AiSafetyError(`Invalid AI message content at position ${index}.`, {
-        code: "AI_MESSAGE_CONTENT_INVALID",
-        statusCode: content.length > MAX_PROMPT_CHARACTERS ? 413 : 400,
-      });
+      throw new AiSafetyError(
+        `Invalid AI message content at position ${index}.`,
+        {
+          code: "AI_MESSAGE_CONTENT_INVALID",
+          statusCode:
+            content.length > MAX_PROMPT_CHARACTERS ? 413 : 400,
+        }
+      );
     }
     const redacted = redactSensitiveText(content);
     return Object.freeze({ role, content: redacted.text });
@@ -181,20 +203,23 @@ function validateProviderOutput(value) {
     });
   }
   if (text.length > MAX_PROVIDER_OUTPUT_CHARACTERS) {
-    throw new AiSafetyError("The AI provider response exceeded the safe output limit.", {
-      code: "AI_PROVIDER_OUTPUT_TOO_LARGE",
-      statusCode: 502,
-    });
+    throw new AiSafetyError(
+      "The AI provider response exceeded the safe output limit.",
+      { code: "AI_PROVIDER_OUTPUT_TOO_LARGE", statusCode: 502 }
+    );
   }
 
   const secretKeys = findPatternKeys(text, SECRET_REQUEST_PATTERNS);
   const redacted = redactSensitiveText(text);
   if (secretKeys.length > 0) {
-    throw new AiSafetyError("The AI provider response failed the security review.", {
-      code: "AI_PROVIDER_OUTPUT_BLOCKED",
-      statusCode: 502,
-      details: secretKeys,
-    });
+    throw new AiSafetyError(
+      "The AI provider response failed the security review.",
+      {
+        code: "AI_PROVIDER_OUTPUT_BLOCKED",
+        statusCode: 502,
+        details: secretKeys,
+      }
+    );
   }
 
   return Object.freeze({
