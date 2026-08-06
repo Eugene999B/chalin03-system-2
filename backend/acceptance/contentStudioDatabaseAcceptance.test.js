@@ -38,6 +38,9 @@ const {
   getPublicPageBySlug,
 } = require("../services/publicContentService");
 const {
+  getPublicHomepage,
+} = require("../services/publicHomepageService");
+const {
   createPublicFormSubmission,
 } = require("../services/publicFormSubmissionService");
 const {
@@ -195,6 +198,14 @@ test(
       publicPage.sections[0]?.content?.text,
       "The acceptance database rendered this published section."
     );
+
+    const publicHomepage = await getPublicHomepage();
+    assert.equal(publicHomepage?.slug, "acceptance-home");
+    assert.equal(publicHomepage?.title, publicPage.title);
+    assert.deepEqual(publicHomepage?.sections, publicPage.sections);
+    assert.equal(Object.hasOwn(publicHomepage, "internal_page_version_id"), false);
+    assert.equal(Object.hasOwn(publicHomepage, "page_id"), false);
+    assert.equal(Object.hasOwn(publicHomepage, "approved_by"), false);
 
     const formDraft = await createFormDraft({
       input: {
