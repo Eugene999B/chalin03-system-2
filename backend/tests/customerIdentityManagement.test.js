@@ -12,7 +12,8 @@ function read(relativePath) {
 const matchingService = require("../services/customerIdentityMatchingService");
 
 test("customer identity API includes every customer and duplicate suggestions", () => {
-  const route = read("backend/routes/customerDebtConsolidationRoutes.js");
+  const route = read("backend/routes/legacyCustomerDebtConsolidationRoutes.js");
+  const wrapper = read("backend/routes/customerDebtConsolidationRoutes.js");
   const service = read("backend/services/customerIdentityMatchingService.js");
 
   assert.match(route, /router\.get\("\/directory",/);
@@ -20,6 +21,7 @@ test("customer identity API includes every customer and duplicate suggestions", 
   assert.match(route, /LEFT JOIN \(\s*SELECT\s+branch_id,\s+customer_id,\s+COUNT\(\*\) AS sale_count/);
   assert.match(route, /router\.get\("\/duplicate-suggestions",/);
   assert.match(route, /customerIdentityMatchingService/);
+  assert.match(wrapper, /legacyCustomerDebtConsolidationRoutes/);
   assert.match(service, /function normalizePhone/);
   assert.match(service, /function soundex/);
   assert.match(service, /function diceCoefficient/);
@@ -78,8 +80,9 @@ test("matching algorithm penalizes conflicting valid phone numbers", () => {
   assert.ok(comparison.score < 74);
 });
 
-test("merge preview and transaction-safe merge protect linked records", () => {
-  const route = read("backend/routes/customerDebtConsolidationRoutes.js");
+test("preserved merge preview and transaction-safe merge protect linked records", () => {
+  const route = read("backend/routes/legacyCustomerDebtConsolidationRoutes.js");
+  const wrapper = read("backend/routes/customerDebtConsolidationRoutes.js");
 
   assert.match(route, /router\.post\(\s*"\/merge-preview"/);
   assert.match(route, /requireRole\("admin", "manager"\)/);
@@ -91,9 +94,10 @@ test("merge preview and transaction-safe merge protect linked records", () => {
   assert.match(route, /ER_DUP_ENTRY/);
   assert.match(route, /No data was changed/);
   assert.match(route, /MERGE_CUSTOMER_IDENTITIES/);
+  assert.match(wrapper, /topDebtAccountMergeRoutes/);
 });
 
-test("emergency containment freezes new customer merges before normal merge routes", () => {
+test("emergency containment freezes old customer merges before normal legacy routes", () => {
   const systemRoutes = read("backend/routes/systemRoutes.js");
 
   assert.match(systemRoutes, /CUSTOMER_MERGE_EMERGENCY_FREEZE/);
