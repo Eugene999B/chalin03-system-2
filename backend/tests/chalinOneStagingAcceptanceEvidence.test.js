@@ -63,7 +63,12 @@ function smokeFixture(overrides = {}) {
     passed: true,
     require_published_content: true,
     contact_form_submission_enabled: true,
-    staging: { safe: true, database_name: "chalin_one_staging" },
+    staging: {
+      safe: true,
+      database_name: "chalin_one_staging",
+      frontend_host: "preview.example-chalin03.com",
+      api_host: "api-preview.example-chalin03.com",
+    },
     checks,
     ...overrides,
   };
@@ -110,6 +115,8 @@ test("complete evidence for one commit passes every staging gate", () => {
   assert.equal(result.staging_ready, true);
   assert.equal(result.commit_match, true);
   assert.equal(result.database_match, true);
+  assert.equal(result.endpoint_match, true);
+  assert.equal(result.browser_hosts_separate, true);
   assert.deepEqual(result.failures, []);
   assert.equal(
     result.gates.automated_release_evidence.environment.mode,
@@ -122,6 +129,10 @@ test("complete evidence for one commit passes every staging gate", () => {
   assert.equal(
     result.gates.final_staging_smoke.database_name,
     "chalin_one_staging"
+  );
+  assert.equal(
+    result.gates.final_staging_smoke.frontend_host,
+    "preview.example-chalin03.com"
   );
   assert.equal(result.gates.browser_acceptance.screenshot_count, 4);
 });
@@ -163,7 +174,12 @@ test("release environment must be explicitly safe and isolated", () => {
 test("smoke database must be isolated and staging release evidence must match it", () => {
   const unsafeSmoke = smokeEvidence(
     smokeFixture({
-      staging: { safe: true, database_name: "chalin03_db" },
+      staging: {
+        safe: true,
+        database_name: "chalin03_db",
+        frontend_host: "preview.example-chalin03.com",
+        api_host: "api-preview.example-chalin03.com",
+      },
     })
   );
   assert.equal(unsafeSmoke.passed, false);
@@ -181,6 +197,8 @@ test("smoke database must be isolated and staging release evidence must match it
       staging: {
         safe: true,
         database_name: "chalin_one_staging_smoke",
+        frontend_host: "preview.example-chalin03.com",
+        api_host: "api-preview.example-chalin03.com",
       },
     }),
     browser: browserFixture(),
@@ -201,12 +219,47 @@ test("smoke database must be isolated and staging release evidence must match it
       staging: {
         safe: true,
         database_name: "chalin_one_staging_release",
+        frontend_host: "preview.example-chalin03.com",
+        api_host: "api-preview.example-chalin03.com",
       },
     }),
     browser: browserFixture(),
   });
   assert.equal(matched.database_match, true);
   assert.equal(matched.staging_ready, true);
+});
+
+test("browser evidence must match the exact separated smoke endpoints", () => {
+  const mismatched = evaluateStagingAcceptance({
+    release: releaseFixture(),
+    smoke: smokeFixture(),
+    browser: browserFixture({
+      frontend_url: "https://other-preview.example-chalin03.com",
+    }),
+  });
+  assert.equal(mismatched.staging_ready, false);
+  assert.equal(mismatched.endpoint_match, false);
+  assert.ok(mismatched.failures.includes("endpoint_identity"));
+
+  const sharedHost = evaluateStagingAcceptance({
+    release: releaseFixture(),
+    smoke: smokeFixture({
+      staging: {
+        safe: true,
+        database_name: "chalin_one_staging",
+        frontend_host: "preview.example-chalin03.com",
+        api_host: "preview.example-chalin03.com",
+      },
+    }),
+    browser: browserFixture({
+      frontend_url: "https://preview.example-chalin03.com",
+      api_url: "https://preview.example-chalin03.com",
+    }),
+  });
+  assert.equal(sharedHost.staging_ready, false);
+  assert.equal(sharedHost.browser_hosts_separate, false);
+  assert.ok(sharedHost.failures.includes("browser_host_separation"));
+  assert.ok(sharedHost.failures.includes("final_staging_smoke"));
 });
 
 test("commit identity mismatch blocks staging readiness", () => {
@@ -236,6 +289,17 @@ test("missing final smoke check or invalid reference code blocks readiness", () 
       : check
   );
   assert.equal(smokeEvidence(invalidReference).passed, false);
+
+  const productionHost = smokeFixture({
+    staging: {
+      safe: true,
+      database_name: "chalin_one_staging",
+      frontend_host: "chalin03.com",
+      api_host: "api-preview.example-chalin03.com",
+    },
+  });
+  assert.equal(smokeEvidence(productionHost).frontend_host_safe, false);
+  assert.equal(smokeEvidence(productionHost).passed, false);
 });
 
 test("browser gates require evidence, screenshots and independent sign-off", () => {
@@ -282,14 +346,22 @@ test("production, credentialed and non-isolated URLs are rejected", () => {
   );
 });
 
-test("commit SHA validation rejects placeholders and malformed values", () => {
+test("commit SHA validation requires the complete immutable identity", () => {
   assert.equal(normalizeCommitSha(COMMIT_SHA), COMMIT_SHA);
-  assert.throws(
-    () => normalizeCommitSha("CURRENT_COMMIT_SHA"),
-    (error) =>
-      error instanceof ChalinOneStagingAcceptanceError &&
-      error.code === "CHALIN_ONE_STAGING_ACCEPTANCE_COMMIT_INVALID"
-  );
+  assert.equal(normalizeCommitSha("B".repeat(64)), "b".repeat(64));
+  for (const invalid of [
+    "CURRENT_COMMIT_SHA",
+    "a".repeat(7),
+    "a".repeat(39),
+    "a".repeat(41),
+  ]) {
+    assert.throws(
+      () => normalizeCommitSha(invalid),
+      (error) =>
+        error instanceof ChalinOneStagingAcceptanceError &&
+        error.code === "CHALIN_ONE_STAGING_ACCEPTANCE_COMMIT_INVALID"
+    );
+  }
 });
 
 test("browser evidence template remains complete and deliberately non-passing", () => {
@@ -341,6 +413,8 @@ test("aggregator is offline, non-destructive and exposed through package scripts
   assert.match(source, /ACCEPTANCE_DATABASE_PATTERN/);
   assert.match(source, /STAGING_DATABASE_PATTERN/);
   assert.match(source, /database_identity/);
+  assert.match(source, /endpoint_identity/);
+  assert.match(source, /browser_host_separation/);
   assert.equal(
     packageJson.scripts["evidence:chalin-one:staging"],
     "node scripts/generateChalinOneStagingAcceptanceEvidence.js"
