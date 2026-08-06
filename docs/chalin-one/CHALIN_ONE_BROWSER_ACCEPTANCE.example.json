@@ -1,0 +1,68 @@
+{
+  "report": "CHALIN ONE Browser Acceptance",
+  "generated_at": "replace_with_completion_timestamp",
+  "commit_sha": "replace_with_exact_candidate_commit_sha",
+  "frontend_url": "https://preview.example-chalin03.com",
+  "api_url": "https://api-preview.example-chalin03.com",
+  "passed": false,
+  "gates": {
+    "public_desktop": {
+      "passed": false,
+      "evidence": []
+    },
+    "public_tablet": {
+      "passed": false,
+      "evidence": []
+    },
+    "public_mobile_360": {
+      "passed": false,
+      "evidence": []
+    },
+    "public_mobile_430": {
+      "passed": false,
+      "evidence": []
+    },
+    "keyboard_navigation": {
+      "passed": false,
+      "evidence": []
+    },
+    "public_form_and_enquiry_desk": {
+      "passed": false,
+      "evidence": []
+    },
+    "content_studio_author": {
+      "passed": false,
+      "evidence": []
+    },
+    "content_studio_reviewer": {
+      "passed": false,
+      "evidence": []
+    },
+    "content_studio_publisher": {
+      "passed": false,
+      "evidence": []
+    },
+    "permission_boundaries": {
+      "passed": false,
+      "evidence": []
+    },
+    "private_content_boundary": {
+      "passed": false,
+      "evidence": []
+    },
+    "deep_route_refreshes": {
+      "passed": false,
+      "evidence": []
+    },
+    "existing_staff_regression": {
+      "passed": false,
+      "evidence": []
+    }
+  },
+  "screenshots": [],
+  "sign_off": {
+    "reviewer": "",
+    "publisher": "",
+    "accepted_at": ""
+  }
+}
