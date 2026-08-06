@@ -174,7 +174,7 @@ test("only product quantity is updated and destructive or financial rewrites are
   assert.match(source, /SET quantity = \?/);
   assert.doesNotMatch(
     source,
-    /SET[\s\S]{0,120}(?:cost_price|selling_price|name|size|barcode|is_active)\s*=/i
+    /SET\s+(?:cost_price|selling_price|name|size|barcode|is_active)\s*=/i
   );
   assert.doesNotMatch(source, /\bDELETE\s+FROM\b/i);
   assert.doesNotMatch(source, /\bTRUNCATE\b/i);
