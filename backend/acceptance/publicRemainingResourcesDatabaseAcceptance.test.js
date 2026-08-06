@@ -23,6 +23,13 @@ const request = Object.freeze({
   headers: {},
 });
 
+function relativeUtc(days) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+const OPENS_AT = relativeUtc(-1);
+const CLOSES_AT = relativeUtc(30);
+
 const PRIVATE_FIELD_NAMES = new Set([
   "id",
   "entity_id",
@@ -238,8 +245,8 @@ test(
       application_url:
         "https://preview.example-chalin03.com/forms/acceptance-careers",
       vacancies_count: 2,
-      opens_at: "2026-08-01T00:00:00.000Z",
-      closes_at: "2026-12-31T23:59:59.000Z",
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT,
       sort_order: 10,
       change_summary: "Create acceptance vacancy",
     });
@@ -290,8 +297,8 @@ test(
       submission_instructions: {
         text: "Submit through the approved procurement channel before the deadline.",
       },
-      opens_at: "2026-08-01T00:00:00.000Z",
-      closes_at: "2026-12-31T23:59:59.000Z",
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT,
       document_media_asset_id: null,
       sort_order: 10,
       change_summary: "Create acceptance tender",
