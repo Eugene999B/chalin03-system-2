@@ -109,6 +109,7 @@ test("complete evidence for one commit passes every staging gate", () => {
   });
   assert.equal(result.staging_ready, true);
   assert.equal(result.commit_match, true);
+  assert.equal(result.database_match, true);
   assert.deepEqual(result.failures, []);
   assert.equal(
     result.gates.automated_release_evidence.environment.mode,
@@ -117,6 +118,10 @@ test("complete evidence for one commit passes every staging gate", () => {
   assert.equal(
     result.gates.final_staging_smoke.reference_code,
     "WEB-20260806-ABCDEF123456"
+  );
+  assert.equal(
+    result.gates.final_staging_smoke.database_name,
+    "chalin_one_staging"
   );
   assert.equal(result.gates.browser_acceptance.screenshot_count, 4);
 });
@@ -153,6 +158,55 @@ test("release environment must be explicitly safe and isolated", () => {
     false
   );
   assert.equal(releaseEnvironmentEvidence("test").passed, false);
+});
+
+test("smoke database must be isolated and staging release evidence must match it", () => {
+  const unsafeSmoke = smokeEvidence(
+    smokeFixture({
+      staging: { safe: true, database_name: "chalin03_db" },
+    })
+  );
+  assert.equal(unsafeSmoke.passed, false);
+  assert.equal(unsafeSmoke.database_name_safe, false);
+
+  const mismatched = evaluateStagingAcceptance({
+    release: releaseFixture({
+      environment: {
+        mode: "staging",
+        database_name: "chalin_one_staging_release",
+        safe: true,
+      },
+    }),
+    smoke: smokeFixture({
+      staging: {
+        safe: true,
+        database_name: "chalin_one_staging_smoke",
+      },
+    }),
+    browser: browserFixture(),
+  });
+  assert.equal(mismatched.staging_ready, false);
+  assert.equal(mismatched.database_match, false);
+  assert.ok(mismatched.failures.includes("database_identity"));
+
+  const matched = evaluateStagingAcceptance({
+    release: releaseFixture({
+      environment: {
+        mode: "staging",
+        database_name: "chalin_one_staging_release",
+        safe: true,
+      },
+    }),
+    smoke: smokeFixture({
+      staging: {
+        safe: true,
+        database_name: "chalin_one_staging_release",
+      },
+    }),
+    browser: browserFixture(),
+  });
+  assert.equal(matched.database_match, true);
+  assert.equal(matched.staging_ready, true);
 });
 
 test("commit identity mismatch blocks staging readiness", () => {
@@ -238,6 +292,32 @@ test("commit SHA validation rejects placeholders and malformed values", () => {
   );
 });
 
+test("browser evidence template remains complete and deliberately non-passing", () => {
+  const template = JSON.parse(
+    fs.readFileSync(
+      path.resolve(
+        __dirname,
+        "../../docs/chalin-one/CHALIN_ONE_BROWSER_ACCEPTANCE.example.json"
+      ),
+      "utf8"
+    )
+  );
+  assert.equal(template.passed, false);
+  assert.equal(
+    template.commit_sha,
+    "replace_with_exact_candidate_commit_sha"
+  );
+  assert.deepEqual(Object.keys(template.gates), [...REQUIRED_BROWSER_GATES]);
+  for (const gate of Object.values(template.gates)) {
+    assert.equal(gate.passed, false);
+    assert.deepEqual(gate.evidence, []);
+  }
+  assert.deepEqual(template.screenshots, []);
+  assert.equal(template.sign_off.reviewer, "");
+  assert.equal(template.sign_off.publisher, "");
+  assert.equal(template.sign_off.accepted_at, "");
+});
+
 test("aggregator is offline, non-destructive and exposed through package scripts", () => {
   const backendRoot = path.resolve(__dirname, "..");
   const source = fs.readFileSync(
@@ -260,6 +340,7 @@ test("aggregator is offline, non-destructive and exposed through package scripts
   assert.match(source, /screenshots\.length >= 4/);
   assert.match(source, /ACCEPTANCE_DATABASE_PATTERN/);
   assert.match(source, /STAGING_DATABASE_PATTERN/);
+  assert.match(source, /database_identity/);
   assert.equal(
     packageJson.scripts["evidence:chalin-one:staging"],
     "node scripts/generateChalinOneStagingAcceptanceEvidence.js"
