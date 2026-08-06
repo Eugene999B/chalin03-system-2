@@ -13,6 +13,27 @@ const systemRoutes = fs.readFileSync(
   path.join(repoRoot, "backend/routes/systemRoutes.js"),
   "utf8"
 );
+const financeDocumentRoutes = fs.readFileSync(
+  path.join(
+    repoRoot,
+    "backend/routes/equipmentFinanceDocumentCompletionRoutes.js"
+  ),
+  "utf8"
+);
+const financePdfGuard = fs.readFileSync(
+  path.join(
+    repoRoot,
+    "backend/services/equipmentFinancePdfBlankPageGuardService.js"
+  ),
+  "utf8"
+);
+const kwabenaCorrection = fs.readFileSync(
+  path.join(
+    repoRoot,
+    "backend/scripts/runKwabenaProductQuantityCorrection20260806.js"
+  ),
+  "utf8"
+);
 const frontendMain = fs.readFileSync(
   path.join(repoRoot, "frontend/src/main.jsx"),
   "utf8"
@@ -21,6 +42,8 @@ const frontendMain = fs.readFileSync(
 test("synchronized backend start retains every verified production recovery script", () => {
   const start = backendPackage.scripts.start;
   const requiredScripts = [
+    "runEquipmentFinanceTermsApprovalRepair20260806.js",
+    "runKwabenaProductQuantityCorrection20260806.js",
     "runCustomerMergeAuditDateSanitizer20260805.js",
     "runAutomaticCustomerMergeRollback20260805.js",
     "runExactNameReceiptOwnerRecovery20260805.js",
@@ -34,6 +57,49 @@ test("synchronized backend start retains every verified production recovery scri
   for (const script of requiredScripts) {
     assert.match(start, new RegExp(script.replaceAll(".", "\\.")));
   }
+  assert.equal(
+    backendPackage.scripts[
+      "repair:kwabena-main-store-quantities:20260806:production"
+    ],
+    "node scripts/runKwabenaProductQuantityCorrection20260806.js"
+  );
+});
+
+test("one-time Kwabena correction remains production-only, locked and audited", () => {
+  assert.match(kwabenaCorrection, /NODE_ENV/);
+  assert.match(kwabenaCorrection, /CHALIN03_EXPECTED_DATABASE/);
+  assert.match(kwabenaCorrection, /SELECT GET_LOCK/);
+  assert.match(kwabenaCorrection, /beginTransaction\(\)/);
+  assert.match(kwabenaCorrection, /rollback\(\)/);
+  assert.match(
+    kwabenaCorrection,
+    /20260806_kwabena_main_store_quantity_correction/
+  );
+  assert.match(kwabenaCorrection, /INSERT INTO stock_adjustments/);
+  assert.match(kwabenaCorrection, /INSERT INTO activity_log/);
+  assert.match(kwabenaCorrection, /INSERT INTO schema_migrations/);
+  assert.doesNotMatch(
+    kwabenaCorrection,
+    /DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE|DELETE\s+FROM/i
+  );
+});
+
+test("Finance generated-document blank-page guard stays narrow and ordered", () => {
+  const guardIndex = financeDocumentRoutes.indexOf(
+    'require("../services/equipmentFinancePdfBlankPageGuardService")'
+  );
+  const rendererIndex = financeDocumentRoutes.indexOf(
+    'require("../services/equipmentFinanceCustomerPhotoRendererService")'
+  );
+  assert.ok(guardIndex >= 0);
+  assert.ok(rendererIndex > guardIndex);
+  assert.match(financePdfGuard, /FINANCE_FOOTER_PREFIX/);
+  assert.match(financePdfGuard, /page\.margins\.bottom = 0/);
+  assert.match(
+    financePdfGuard,
+    /page\.margins\.bottom = originalBottomMargin/
+  );
+  assert.doesNotMatch(financePdfGuard, /addPage\s*\(/);
 });
 
 test("CHALIN ONE database migration remains explicit and outside normal startup", () => {
