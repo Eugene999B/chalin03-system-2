@@ -2,36 +2,63 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const COLORS = Object.freeze({
+  forest: "#063D2C",
+  forestDeep: "#032A20",
+  forestSoft: "#E8F2ED",
+  emerald: "#0B5A40",
   navy: "#0A1D2F",
   navySoft: "#EAF0F5",
-  emerald: "#0A5038",
-  emeraldDark: "#073B2A",
-  emeraldSoft: "#EAF4EF",
-  gold: "#D3A72C",
-  goldDark: "#8D6811",
-  goldSoft: "#FBF5DF",
-  ink: "#17231D",
-  muted: "#617067",
-  line: "#D7E1DB",
+  gold: "#D2A83A",
+  goldBright: "#E8C567",
+  goldDark: "#8C6816",
+  champagne: "#F7E9BC",
+  ivory: "#FCFAF4",
   paper: "#FFFFFF",
-  ash: "#F5F7F6",
-  red: "#9C2E2E",
-  redSoft: "#FBEDED",
+  ink: "#17231D",
+  muted: "#67726C",
+  line: "#D8DED9",
+  ash: "#F3F6F4",
+  red: "#9A3030",
+  redSoft: "#FBECEC",
   blue: "#245B8A",
   blueSoft: "#EAF2F9",
 });
 
+function template({
+  family,
+  title,
+  subtitle,
+  classification,
+  watermark,
+  accent,
+  accentSoft,
+  motif,
+}) {
+  return Object.freeze({
+    family,
+    title,
+    subtitle,
+    classification,
+    watermark,
+    accent,
+    accentSoft,
+    motif,
+    design_version: "logo-led-v3",
+  });
+}
+
 const DOCUMENT_TEMPLATES = Object.freeze({
-  installment_agreement: {
+  installment_agreement: template({
     family: "legal",
     title: "INSTALLMENT SALE AGREEMENT",
-    subtitle: "Master Contract",
+    subtitle: "Master Equipment Finance Contract",
     classification: "ORIGINAL",
     watermark: "INSTALLMENT AGREEMENT",
-    accent: COLORS.emerald,
-    accentSoft: COLORS.emeraldSoft,
-  },
-  customer_agreement_copy: {
+    accent: COLORS.forest,
+    accentSoft: COLORS.forestSoft,
+    motif: "contract",
+  }),
+  customer_agreement_copy: template({
     family: "legal",
     title: "INSTALLMENT SALE AGREEMENT",
     subtitle: "Customer Retention Copy",
@@ -39,8 +66,9 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "CUSTOMER COPY",
     accent: COLORS.blue,
     accentSoft: COLORS.blueSoft,
-  },
-  company_agreement_copy: {
+    motif: "contract",
+  }),
+  company_agreement_copy: template({
     family: "legal",
     title: "INSTALLMENT SALE AGREEMENT",
     subtitle: "Controlled Company File",
@@ -48,8 +76,9 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "COMPANY COPY",
     accent: COLORS.navy,
     accentSoft: COLORS.navySoft,
-  },
-  boss_approval_pack: {
+    motif: "contract",
+  }),
+  boss_approval_pack: template({
     family: "executive",
     title: "EXECUTIVE FINANCE APPROVAL PACK",
     subtitle: "Management Decision Dossier",
@@ -57,8 +86,9 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "APPROVAL PACK",
     accent: COLORS.navy,
     accentSoft: COLORS.navySoft,
-  },
-  payment_schedule: {
+    motif: "executive",
+  }),
+  payment_schedule: template({
     family: "schedule",
     title: "OFFICIAL INSTALLMENT SCHEDULE",
     subtitle: "Exact Dated Payment Plan",
@@ -66,17 +96,19 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "PAYMENT SCHEDULE",
     accent: COLORS.blue,
     accentSoft: COLORS.blueSoft,
-  },
-  payment_receipt: {
+    motif: "ledger",
+  }),
+  payment_receipt: template({
     family: "receipt",
     title: "OFFICIAL PAYMENT RECEIPT",
     subtitle: "Committed Finance Payment",
     classification: "PAYMENT RECEIVED",
     watermark: "OFFICIAL RECEIPT",
-    accent: COLORS.emerald,
-    accentSoft: COLORS.emeraldSoft,
-  },
-  customer_statement: {
+    accent: COLORS.forest,
+    accentSoft: COLORS.forestSoft,
+    motif: "receipt",
+  }),
+  customer_statement: template({
     family: "statement",
     title: "CUSTOMER INSTALLMENT STATEMENT",
     subtitle: "Reconciled Account Position",
@@ -84,17 +116,19 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "CUSTOMER STATEMENT",
     accent: COLORS.navy,
     accentSoft: COLORS.navySoft,
-  },
-  machine_annexure: {
+    motif: "statement",
+  }),
+  machine_annexure: template({
     family: "evidence",
     title: "MACHINE IDENTITY ANNEXURE",
     subtitle: "Protected Equipment Evidence",
     classification: "EVIDENCE ANNEXURE",
     watermark: "MACHINE ANNEXURE",
     accent: COLORS.goldDark,
-    accentSoft: COLORS.goldSoft,
-  },
-  guarantor_undertaking: {
+    accentSoft: COLORS.champagne,
+    motif: "evidence",
+  }),
+  guarantor_undertaking: template({
     family: "undertaking",
     title: "GUARANTOR UNDERTAKING",
     subtitle: "Supporting Legal Obligation",
@@ -102,17 +136,19 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "GUARANTOR UNDERTAKING",
     accent: COLORS.navy,
     accentSoft: COLORS.navySoft,
-  },
-  delivery_handover_note: {
+    motif: "undertaking",
+  }),
+  delivery_handover_note: template({
     family: "handover",
     title: "DELIVERY & HANDOVER NOTE",
     subtitle: "Controlled Physical Release Record",
     classification: "HANDOVER RECORD",
     watermark: "DELIVERY HANDOVER",
     accent: COLORS.goldDark,
-    accentSoft: COLORS.goldSoft,
-  },
-  arrears_notice: {
+    accentSoft: COLORS.champagne,
+    motif: "handover",
+  }),
+  arrears_notice: template({
     family: "notice",
     title: "FORMAL ARREARS NOTICE",
     subtitle: "Notice of Overdue Installments",
@@ -120,8 +156,9 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "ARREARS NOTICE",
     accent: COLORS.red,
     accentSoft: COLORS.redSoft,
-  },
-  amendment_agreement: {
+    motif: "notice",
+  }),
+  amendment_agreement: template({
     family: "amendment",
     title: "AGREEMENT AMENDMENT",
     subtitle: "Approved Change Control Record",
@@ -129,17 +166,19 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "AMENDMENT",
     accent: COLORS.blue,
     accentSoft: COLORS.blueSoft,
-  },
-  settlement_confirmation: {
+    motif: "amendment",
+  }),
+  settlement_confirmation: template({
     family: "certificate",
     title: "FULL SETTLEMENT CERTIFICATE",
     subtitle: "Official Account Completion",
     classification: "FULLY SETTLED",
     watermark: "SETTLED",
-    accent: COLORS.emerald,
-    accentSoft: COLORS.emeraldSoft,
-  },
-  ownership_transfer: {
+    accent: COLORS.forest,
+    accentSoft: COLORS.forestSoft,
+    motif: "certificate",
+  }),
+  ownership_transfer: template({
     family: "certificate",
     title: "OWNERSHIP TRANSFER CERTIFICATE",
     subtitle: "Controlled Transfer of Equipment Title",
@@ -147,7 +186,8 @@ const DOCUMENT_TEMPLATES = Object.freeze({
     watermark: "OWNERSHIP TRANSFER",
     accent: COLORS.navy,
     accentSoft: COLORS.navySoft,
-  },
+    motif: "certificate",
+  }),
 });
 
 const PHOTO_DOCUMENT_TYPES = new Set([
@@ -227,15 +267,17 @@ function dataImage(value) {
 
 function templateFor(document) {
   return (
-    DOCUMENT_TEMPLATES[document?.document_type] || {
+    DOCUMENT_TEMPLATES[document?.document_type] ||
+    template({
       family: "legal",
       title: label(document?.document_type, "Official Finance Document"),
       subtitle: "Official Chalin 03 Finance Record",
       classification: "OFFICIAL",
       watermark: label(document?.document_type, "OFFICIAL DOCUMENT"),
-      accent: COLORS.emerald,
-      accentSoft: COLORS.emeraldSoft,
-    }
+      accent: COLORS.forest,
+      accentSoft: COLORS.forestSoft,
+      motif: "official",
+    })
   );
 }
 
@@ -243,6 +285,7 @@ function findOfficialLogoPath() {
   const candidates = [
     path.resolve(__dirname, "..", "assets", "chalin03-logo.png"),
     path.resolve(__dirname, "..", "..", "frontend", "public", "chalin03-logo.png"),
+    path.resolve(process.cwd(), "assets", "chalin03-logo.png"),
     path.resolve(process.cwd(), "..", "frontend", "public", "chalin03-logo.png"),
     path.resolve(process.cwd(), "frontend", "public", "chalin03-logo.png"),
     path.resolve(process.cwd(), "public", "chalin03-logo.png"),
@@ -282,7 +325,7 @@ function machineName(document) {
 function verificationPayload(document) {
   const agreement = agreementOf(document);
   return [
-    "CHALIN03-FINANCE-V2",
+    "CHALIN03-FINANCE-LOGO-LED-V3",
     `DOC:${clean(document?.document_number, "UNKNOWN")}`,
     `TYPE:${clean(document?.document_type, "unknown")}`,
     `AGR:${clean(agreement.agreement_number, "UNKNOWN")}`,
