@@ -7,6 +7,7 @@ import {
   listContentStudioResource,
 } from "./contentStudioApi";
 import ContentStudioDashboard from "./ContentStudioDashboard";
+import ContentStudioNewsroomManager from "./ContentStudioNewsroomManager";
 import ContentStudioPageManager from "./ContentStudioPageManager";
 import {
   CONTENT_STUDIO_PERMISSIONS,
@@ -168,7 +169,11 @@ export default function ContentStudioWorkspace() {
   }, [auth.isLoggedIn, auth.loading, featureLoading, hasPermission, isFeatureEnabled, refreshDashboard]);
 
   useEffect(() => {
-    if (activeKey === "dashboard" || activeKey === "pages") {
+    if (
+      activeKey === "dashboard" ||
+      activeKey === "pages" ||
+      activeKey === "newsroom"
+    ) {
       setModuleData(null);
       setModuleError("");
       return undefined;
@@ -321,6 +326,8 @@ export default function ContentStudioWorkspace() {
             />
           ) : activeKey === "pages" ? (
             <ContentStudioPageManager />
+          ) : activeKey === "newsroom" ? (
+            <ContentStudioNewsroomManager />
           ) : activeSection ? (
             <ModuleOverview
               section={activeSection}
