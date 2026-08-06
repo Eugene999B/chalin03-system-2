@@ -29,6 +29,8 @@ const expected = [
 ];
 
 test("contains the exact eight exported Main Store IDs and requested quantities", () => {
+  assert.equal(correction.SOURCE_EXPORT, "chalin03-main-products (5)(1).xlsx");
+  assert.equal(correction.EXPORT_GENERATED_AT, "2026-08-04 22:57:50 UTC");
   assert.equal(correction.EXPECTED_CORRECTION_COUNT, 8);
   assert.deepEqual(
     correction.PRODUCT_CORRECTIONS.map((item) => [
