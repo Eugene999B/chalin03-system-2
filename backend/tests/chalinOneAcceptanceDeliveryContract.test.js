@@ -150,3 +150,35 @@ test("expanded database acceptance covers every major public collection safely",
   assert.match(acceptance, /user: publisher/);
   assert.doesNotMatch(acceptance, /DROP TABLE|DROP DATABASE|TRUNCATE|DELETE FROM/);
 });
+
+test("remaining resource acceptance covers leadership locations jobs and tenders", () => {
+  const acceptance = read(
+    "backend/acceptance/publicRemainingResourcesDatabaseAcceptance.test.js"
+  );
+  for (const marker of [
+    "listPublicLeadership",
+    "listPublicLocations",
+    "listPublicVacancies",
+    "getPublicVacancyBySlug",
+    "listPublicTenders",
+    "getPublicTenderBySlug",
+    "acceptance_director",
+    "acceptance_head_office",
+    "acceptance_operations_officer",
+    "acceptance_service_tender",
+    "privateFieldFindings",
+    "public_content_audit_log",
+  ]) {
+    assert.match(acceptance, new RegExp(marker));
+  }
+  assert.match(acceptance, /const OPENS_AT = relativeUtc\(-1\)/);
+  assert.match(acceptance, /const CLOSES_AT = relativeUtc\(30\)/);
+  assert.match(acceptance, /assignedTo: reviewer\.id/);
+  assert.match(acceptance, /user: reviewer/);
+  assert.match(acceptance, /user: publisher/);
+  assert.match(acceptance, /document_media_asset_id: null/);
+  assert.doesNotMatch(
+    acceptance,
+    /DROP TABLE|DROP DATABASE|TRUNCATE|DELETE FROM|2026-12-31/
+  );
+});
