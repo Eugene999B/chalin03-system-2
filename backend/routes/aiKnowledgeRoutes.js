@@ -3,6 +3,8 @@
 const express = require("express");
 
 const { requireAiPermission } = require("../middleware/aiPermissionMiddleware");
+const { hasAiPermission } = require("../security/aiPermissionCatalog");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
   createKnowledgeSourceDraft,
   createKnowledgeVersion,
@@ -32,6 +34,47 @@ function success(res, req, data, statusCode = 200) {
   });
 }
 
+function hasCrossWorkspaceKnowledgeAccess(user) {
+  return (
+    isOriginalSystemAdministrator(user) ||
+    hasAiPermission(user, "ai.executive.use")
+  );
+}
+
+function activeKnowledgeWorkspace(req) {
+  if (hasCrossWorkspaceKnowledgeAccess(req.user)) {
+    return String(req.query.workspace_code || "").trim() || null;
+  }
+  return String(req.user?.workspace_code || "").trim() || null;
+}
+
+function scopedKnowledgeInput(req) {
+  const input = { ...(req.body || {}) };
+  if (!hasCrossWorkspaceKnowledgeAccess(req.user)) {
+    input.owner_workspace_code = req.user?.workspace_code || null;
+  }
+  return input;
+}
+
+async function scopedKnowledgeDetails(req, sourceId) {
+  const details = await getKnowledgeSourceDetails(sourceId);
+  const source = details.source || {};
+  if (
+    hasCrossWorkspaceKnowledgeAccess(req.user) ||
+    source.visibility === "public" ||
+    (source.owner_workspace_code &&
+      source.owner_workspace_code === req.user?.workspace_code)
+  ) {
+    return details;
+  }
+
+  const error = new Error("Knowledge source not found.");
+  error.name = "AiKnowledgeError";
+  error.code = "AI_KNOWLEDGE_SOURCE_NOT_FOUND";
+  error.statusCode = 404;
+  throw error;
+}
+
 router.get(
   "/",
   requireAiPermission("ai.knowledge.view"),
@@ -42,7 +85,7 @@ router.get(
       await listKnowledgeSources({
         status: req.query.status,
         visibility: req.query.visibility,
-        workspaceCode: req.query.workspace_code,
+        workspaceCode: activeKnowledgeWorkspace(req),
         search: req.query.search,
         limit: req.query.limit,
         offset: req.query.offset,
@@ -59,7 +102,7 @@ router.post(
       res,
       req,
       await createKnowledgeSourceDraft({
-        input: req.body,
+        input: scopedKnowledgeInput(req),
         user: req.user,
         req,
       }),
@@ -72,36 +115,42 @@ router.get(
   "/:sourceId",
   requireAiPermission("ai.knowledge.view"),
   asyncHandler(async (req, res) =>
-    success(res, req, await getKnowledgeSourceDetails(req.params.sourceId))
+    success(
+      res,
+      req,
+      await scopedKnowledgeDetails(req, req.params.sourceId)
+    )
   )
 );
 
 router.post(
   "/:sourceId/versions",
   requireAiPermission("ai.knowledge.manage"),
-  asyncHandler(async (req, res) =>
-    success(
+  asyncHandler(async (req, res) => {
+    await scopedKnowledgeDetails(req, req.params.sourceId);
+    return success(
       res,
       req,
       await createKnowledgeVersion({
         sourceId: req.params.sourceId,
-        input: req.body,
+        input: scopedKnowledgeInput(req),
         user: req.user,
         req,
       }),
       201
-    )
-  )
+    );
+  })
 );
 
 router.put(
   "/:sourceId/versions/:versionId",
   requireAiPermission("ai.knowledge.manage"),
   asyncHandler(async (req, res) => {
+    await scopedKnowledgeDetails(req, req.params.sourceId);
     await updateKnowledgeDraft({
       sourceId: req.params.sourceId,
       versionId: req.params.versionId,
-      input: req.body,
+      input: scopedKnowledgeInput(req),
       user: req.user,
       req,
     });
@@ -112,8 +161,9 @@ router.put(
 router.post(
   "/:sourceId/versions/:versionId/submit",
   requireAiPermission("ai.knowledge.manage"),
-  asyncHandler(async (req, res) =>
-    success(
+  asyncHandler(async (req, res) => {
+    await scopedKnowledgeDetails(req, req.params.sourceId);
+    return success(
       res,
       req,
       await submitKnowledgeVersion({
@@ -124,8 +174,8 @@ router.post(
         user: req.user,
         req,
       })
-    )
-  )
+    );
+  })
 );
 
 router.post(
@@ -147,6 +197,7 @@ router.post(
   "/:sourceId/versions/:versionId/publish",
   requireAiPermission("ai.knowledge.publish"),
   asyncHandler(async (req, res) => {
+    await scopedKnowledgeDetails(req, req.params.sourceId);
     await publishKnowledgeVersion({
       sourceId: req.params.sourceId,
       versionId: req.params.versionId,
