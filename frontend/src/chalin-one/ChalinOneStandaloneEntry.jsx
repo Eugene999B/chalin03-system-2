@@ -10,6 +10,9 @@ import { WorkspaceContextProvider } from "../context/WorkspaceContext";
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
 );
+const ChalinIntelligenceWorkspace = lazy(() =>
+  import("./ai/ChalinIntelligenceWorkspace")
+);
 const PublicWebsiteApp = lazy(() =>
   import("./public-site/PublicWebsiteStandaloneApp")
 );
@@ -24,6 +27,8 @@ export function isChalinOneStandalonePath(pathname) {
   return (
     path === "/content-studio" ||
     path.startsWith("/content-studio/") ||
+    path === "/intelligence" ||
+    path.startsWith("/intelligence/") ||
     path === "/website" ||
     path.startsWith("/website/")
   );
@@ -96,25 +101,23 @@ function PublicWebsiteEntry() {
   );
 }
 
-function ContentStudioEntry() {
+function StaffStandaloneShell({ routePath, feature, permission, children }) {
   return (
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
           <Routes>
             <Route
-              path="/content-studio/*"
+              path={routePath}
               element={
                 <FeatureFlagRoute
-                  feature="contentStudio"
+                  feature={feature}
                   fallbackPath="/login"
                   loadingFallback={<StandaloneLoading />}
                 >
                   <ProtectedRoute>
-                    <PermissionRoute permissions={["public_content.view"]}>
-                      <SafeStandalone>
-                        <ContentStudioWorkspace />
-                      </SafeStandalone>
+                    <PermissionRoute permissions={[permission]}>
+                      <SafeStandalone>{children}</SafeStandalone>
                     </PermissionRoute>
                   </ProtectedRoute>
                 </FeatureFlagRoute>
@@ -128,10 +131,40 @@ function ContentStudioEntry() {
   );
 }
 
+function ContentStudioEntry() {
+  return (
+    <StaffStandaloneShell
+      routePath="/content-studio/*"
+      feature="contentStudio"
+      permission="public_content.view"
+    >
+      <ContentStudioWorkspace />
+    </StaffStandaloneShell>
+  );
+}
+
+function IntelligenceEntry() {
+  return (
+    <StaffStandaloneShell
+      routePath="/intelligence/*"
+      feature="aiEnabled"
+      permission="workspace.view"
+    >
+      <ChalinIntelligenceWorkspace />
+    </StaffStandaloneShell>
+  );
+}
+
 export default function ChalinOneStandaloneEntry() {
   const pathname = window.location.pathname;
   if (pathname === "/website" || pathname.startsWith("/website/")) {
     return <PublicWebsiteEntry />;
+  }
+  if (
+    pathname === "/intelligence" ||
+    pathname.startsWith("/intelligence/")
+  ) {
+    return <IntelligenceEntry />;
   }
   return <ContentStudioEntry />;
 }
