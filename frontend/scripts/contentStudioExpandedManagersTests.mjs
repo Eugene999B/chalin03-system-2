@@ -108,13 +108,13 @@ check("Company Information fields match backend schema contracts", () => {
   assert.match(company, /structuredForSave/);
 });
 
-check("workspace connects the complete expanded company batch", () => {
+check("workspace maps the complete expanded company batch", () => {
   assert.match(workspace, /ContentStudioProjectManager/);
   assert.match(workspace, /ContentStudioEquipmentManager/);
   assert.match(workspace, /ContentStudioCompanyInfoManager/);
-  assert.match(workspace, /activeKey === "projects"/);
-  assert.match(workspace, /activeKey === "equipment"/);
-  assert.match(workspace, /activeKey === "company-info"/);
+  assert.match(workspace, /projects: ContentStudioProjectManager/);
+  assert.match(workspace, /equipment: ContentStudioEquipmentManager/);
+  assert.match(workspace, /"company-info": ContentStudioCompanyInfoManager/);
 });
 
 check("expanded layouts cover desktop, tablet and mobile", () => {
