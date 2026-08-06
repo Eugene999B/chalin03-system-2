@@ -15,6 +15,10 @@ const {
   STAGING_SEED_MANIFEST,
   validateManifest,
 } = require("../scripts/seedChalinOneStagingContent");
+const {
+  ChalinOneStagingSmokeError,
+  safeRedirectTarget,
+} = require("../scripts/runChalinOneStagingSmokeTests");
 
 function safeEnvironment(overrides = {}) {
   return {
@@ -51,6 +55,14 @@ function safeEnvironment(overrides = {}) {
 function rejectsWithCode(callback, code) {
   assert.throws(callback, (error) => {
     assert.equal(error instanceof ChalinOneStagingSafetyError, true);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
+
+function rejectsSmokeWithCode(callback, code) {
+  assert.throws(callback, (error) => {
+    assert.equal(error instanceof ChalinOneStagingSmokeError, true);
     assert.equal(error.code, code);
     return true;
   });
@@ -178,6 +190,39 @@ test("media storage must be visibly isolated", () => {
   );
 });
 
+test("staging smoke accepts only same-origin canonical redirects", () => {
+  assert.equal(
+    safeRedirectTarget("https://preview.example-chalin03.com/website", {
+      status: 308,
+      location: "/website/",
+    }),
+    "https://preview.example-chalin03.com/website/"
+  );
+  assert.equal(
+    safeRedirectTarget("https://preview.example-chalin03.com/website", {
+      status: 200,
+      location: "/other",
+    }),
+    null
+  );
+  rejectsSmokeWithCode(
+    () =>
+      safeRedirectTarget("https://preview.example-chalin03.com/website", {
+        status: 302,
+        location: "https://chalin03.com/website/",
+      }),
+    "CHALIN_ONE_STAGING_SMOKE_CROSS_ORIGIN_REDIRECT"
+  );
+  rejectsSmokeWithCode(
+    () =>
+      safeRedirectTarget("https://preview.example-chalin03.com/website", {
+        status: 301,
+        location: "",
+      }),
+    "CHALIN_ONE_STAGING_SMOKE_REDIRECT_LOCATION_MISSING"
+  );
+});
+
 test("staging seed manifest is complete, valid and draft-only", () => {
   const summary = validateManifest();
   assert.deepEqual(summary, {
@@ -229,6 +274,19 @@ test("seed implementation uses governed services and contains no destructive SQL
     source,
     /DROP\s+(?:TABLE|DATABASE)|TRUNCATE|DELETE\s+FROM|UPDATE\s+public_/i
   );
+});
+
+test("staging smoke follows bounded redirects without exposing the body", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../scripts/runChalinOneStagingSmokeTests.js"),
+    "utf8"
+  );
+  assert.match(source, /requestWithSafeRedirects/);
+  assert.match(source, /SAFE_REDIRECT_STATUSES/);
+  assert.match(source, /Math\.min\(Number\(options\.maxRedirects\), 5\)/);
+  assert.match(source, /CHALIN_ONE_STAGING_SMOKE_TOO_MANY_REDIRECTS/);
+  assert.match(source, /redirect_count: website\.redirects\.length/);
+  assert.doesNotMatch(source, /redirect:\s*"follow"/);
 });
 
 test("staging environment template cannot be mistaken for production", () => {
