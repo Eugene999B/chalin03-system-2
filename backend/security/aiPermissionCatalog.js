@@ -86,7 +86,9 @@ function normalizeAiPersona(value) {
 }
 
 function normalizeAiWorkspace(value) {
-  const workspace = normalizeCode(value);
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const workspace = normalizeCode(raw);
   return SUPPORTED_AI_WORKSPACES.includes(workspace) ? workspace : null;
 }
 
