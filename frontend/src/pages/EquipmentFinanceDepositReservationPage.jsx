@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/deposit-reservations";
 const DEPOSIT_ROLES = new Set([
@@ -87,8 +88,14 @@ export default function EquipmentFinanceDepositReservationPage() {
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
+  const [queueFilter, setQueueFilter] = useState("open");
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(null);
+
+  const closeEntry = useCallback(() => {
+    setSelected(null);
+    setForm(null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,11 +109,8 @@ export default function EquipmentFinanceDepositReservationPage() {
       setCandidates(response.data?.candidates || []);
     } catch (error) {
       const responseReadiness = error?.response?.data?.readiness;
-      if (responseReadiness?.ready === false) {
-        setReadiness(responseReadiness);
-      } else {
-        setProblem(errorMessage(error, "Could not load Finance deposit agreements."));
-      }
+      if (responseReadiness?.ready === false) setReadiness(responseReadiness);
+      else setProblem(errorMessage(error, "Could not load Finance deposit agreements."));
     } finally {
       setLoading(false);
     }
@@ -119,6 +123,9 @@ export default function EquipmentFinanceDepositReservationPage() {
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return candidates.filter((candidate) => {
+      const state = queueState(candidate);
+      if (queueFilter === "open" && state === "reserved") return false;
+      if (queueFilter !== "all" && queueFilter !== "open" && state !== queueFilter) return false;
       if (!term) return true;
       return [
         candidate.agreement_number,
@@ -131,7 +138,7 @@ export default function EquipmentFinanceDepositReservationPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [candidates, search]);
+  }, [candidates, queueFilter, search]);
 
   const summary = {
     awaiting: candidates.filter((item) => queueState(item) === "awaiting").length,
@@ -150,11 +157,7 @@ export default function EquipmentFinanceDepositReservationPage() {
       return;
     }
     if (candidate.ready_for_deposit === false) {
-      setProblem(
-        `This agreement is blocked: ${(candidate.blockers || [])
-          .map(label)
-          .join(", ")}.`
-      );
+      setProblem(`This agreement is blocked: ${(candidate.blockers || []).map(label).join(", ")}.`);
       return;
     }
     try {
@@ -205,8 +208,7 @@ export default function EquipmentFinanceDepositReservationPage() {
         amount,
       });
       const receipt = response.data?.payment?.receipt_number;
-      setSelected(null);
-      setForm(null);
+      closeEntry();
       setNotice(`${response.data?.message || "Opening deposit recorded."}${receipt ? ` Receipt: ${receipt}.` : ""}`);
       await load();
     } catch (error) {
@@ -217,14 +219,14 @@ export default function EquipmentFinanceDepositReservationPage() {
   }
 
   return (
-    <main className="finance-simple">
+    <main className="finance-simple finance-simplified">
       <header className="finance-simple__hero">
         <div>
-          <p>Agreement â†’ deposit â†’ reservation</p>
+          <p>Search, select, then record</p>
           <h1>Opening Deposit &amp; Machine Reservation</h1>
           <span>
-            Record the opening deposit for an approved agreement; the exact excavator becomes reserved and the agreement becomes active only after the required deposit is complete.
-            Finance is company-wide; no Hire-location selection is required.
+            Find the approved agreement first. Deposit and machine details open only after the
+            correct customer agreement is selected.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -233,15 +235,17 @@ export default function EquipmentFinanceDepositReservationPage() {
         </div>
       </header>
 
-      {problem ? <div className="finance-simple__notice is-error">{problem}</div> : null}
-      {notice ? <div className="finance-simple__notice">{notice}</div> : null}
-      <div className="finance-simple__notice is-info">
-        A partial deposit records a receipt but does not reserve the excavator. Completing the required deposit and confirming reservation creates one protected Finance sale lock. No Hire job, delivery or ownership transfer is created here.
-      </div>
+      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
-      {readiness.ready === false ? <section className="finance-simple__section"><h2>Deposit and reservation are not ready</h2><p>Missing: {[...(readiness.missing_tables || []), ...(readiness.missing_columns || []), ...(readiness.missing_triggers || []), ...(readiness.missing_migrations || [])].join(", ")}</p></section> : null}
+      {readiness.ready === false ? (
+        <section className="finance-simple__section">
+          <h2>Deposit and reservation are not ready</h2>
+          <p>Missing: {[...(readiness.missing_tables || []), ...(readiness.missing_columns || []), ...(readiness.missing_triggers || []), ...(readiness.missing_migrations || [])].join(", ")}</p>
+        </section>
+      ) : null}
 
-      {readiness.ready === true ? (
+      {readiness.ready === true && !selected ? (
         <>
           <section className="finance-simple__metrics">
             <article className="finance-simple__metric"><span>Awaiting first deposit</span><strong>{summary.awaiting}</strong></article>
@@ -251,20 +255,49 @@ export default function EquipmentFinanceDepositReservationPage() {
           </section>
 
           <section className="finance-simple__section">
-            <div className="finance-simple__toolbar"><div><p className="finance-simple__eyebrow">Opening deposit queue</p><h2>{visible.length} agreement(s)</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agreement, customer or excavator" /></div>
-            {loading ? <div className="finance-simple__empty">Loading Finance agreementsâ€¦</div> : null}
-            {!loading && !visible.length ? <div className="finance-simple__empty">No activated Finance agreement is waiting for a deposit.</div> : null}
-            <div className="finance-simple__cards">
+            <div className="finance-simple__toolbar">
+              <div><p className="finance-simple__eyebrow">Choose agreement</p><h2>{visible.length} result(s)</h2></div>
+              <div className="finance-simple__actions">
+                <input
+                  aria-label="Search opening deposit agreements"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Agreement, customer, phone or excavator"
+                  autoComplete="off"
+                />
+                <select aria-label="Filter opening deposit queue" value={queueFilter} onChange={(event) => setQueueFilter(event.target.value)}>
+                  <option value="open">Awaiting / partial</option>
+                  <option value="awaiting">Awaiting first deposit</option>
+                  <option value="partial">Partial deposits</option>
+                  <option value="reserved">Reserved</option>
+                  <option value="all">All agreements</option>
+                </select>
+              </div>
+            </div>
+            {loading ? <div className="finance-simple__empty">Loading Finance agreements…</div> : null}
+            {!loading && !visible.length ? <div className="finance-simple__empty">No agreement matches the current search and filter.</div> : null}
+            <div className="finance-simplified__compact-register">
               {visible.map((candidate) => {
                 const state = queueState(candidate);
                 return (
-                  <article className="finance-simple__card" key={candidate.agreement_id}>
-                    <div className="finance-simple__machine-image">{candidate.main_image_url ? <img src={candidate.main_image_url} alt={candidate.asset_name} /> : <span>ðŸšœ</span>}</div>
-                    <div className="finance-simple__card-body">
-                      <div className="finance-simple__card-head"><div><small>{candidate.agreement_number}</small><h3>{candidate.customer_name}</h3><p>{candidate.asset_code} â€” {candidate.asset_name}</p></div><span className={`finance-simple__pill ${state === "reserved" ? "is-good" : "is-warning"}`}>{label(state)}</span></div>
-                      <div className="finance-simple__facts"><div><span>Sale total</span><strong>{money(candidate.total_amount)}</strong></div><div><span>Deposit required</span><strong>{money(candidate.deposit_required)}</strong></div><div><span>Deposit received</span><strong>{money(candidate.deposit_received)}</strong></div><div><span>Remaining</span><strong>{money(candidate.deposit_remaining)}</strong></div><div><span>Outstanding balance</span><strong>{money(candidate.outstanding_balance)}</strong></div><div><span>Machine status</span><strong>{label(candidate.asset_sale_status)}</strong></div></div>
-                      {(candidate.blockers || []).length ? <p className="finance-simple__muted">Blocked: {candidate.blockers.map(label).join(", ")}</p> : null}
-                      <button className="is-primary" type="button" disabled={candidate.reserved || candidate.ready_for_deposit === false || !canCollect} onClick={() => open(candidate)}>{candidate.reserved ? "Machine reserved" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Record Deposit"}</button>
+                  <article className={`finance-simplified__compact-record ${state === "partial" ? "is-warning" : ""}`} key={candidate.agreement_id}>
+                    <div>
+                      <small>{candidate.agreement_number}</small>
+                      <h3>{candidate.customer_name}</h3>
+                      <p>{candidate.asset_code} — {candidate.asset_name}</p>
+                    </div>
+                    <div className="finance-simplified__compact-fact">
+                      <span>Deposit remaining</span>
+                      <strong>{money(candidate.deposit_remaining)}</strong>
+                    </div>
+                    <div className="finance-simplified__compact-fact">
+                      <span>Status</span>
+                      <strong>{label(state)}</strong>
+                    </div>
+                    <div className="finance-simplified__compact-record-actions">
+                      <button className="is-primary" type="button" disabled={candidate.reserved || candidate.ready_for_deposit === false || !canCollect} onClick={() => open(candidate)}>
+                        {candidate.reserved ? "Reserved" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Record Deposit"}
+                      </button>
                     </div>
                   </article>
                 );
@@ -275,19 +308,51 @@ export default function EquipmentFinanceDepositReservationPage() {
       ) : null}
 
       {selected && form ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>
+        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={closeEntry}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Record opening deposit" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Protected money entry</p><h2>{selected.agreement_number}</h2><span className="finance-simple__muted">{selected.customer_name} Â· {selected.asset_code} {selected.asset_name}</span></div><button type="button" onClick={() => setSelected(null)}>Close</button></div>
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Selected agreement</p>
+                <h2>{selected.agreement_number}</h2>
+                <span className="finance-simple__muted">{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span>
+              </div>
+              <button type="button" onClick={closeEntry}>Close</button>
+            </div>
+            <div className="finance-simple__summary">
+              <article><span>Sale total</span><strong>{money(selected.total_amount)}</strong></article>
+              <article><span>Deposit required</span><strong>{money(selected.deposit_required)}</strong></article>
+              <article><span>Already received</span><strong>{money(selected.deposit_received)}</strong></article>
+              <article><span>Deposit remaining</span><strong>{money(selected.deposit_remaining)}</strong></article>
+            </div>
+            {(selected.blockers || []).length ? <div className="finance-simple__notice is-error">Blocked: {selected.blockers.map(label).join(", ")}</div> : null}
             <form onSubmit={record}>
-              <div className="finance-simple__summary"><article><span>Deposit remaining</span><strong className="finance-simple__money">{money(selected.deposit_remaining)}</strong></article><article><span>Already received</span><strong className="finance-simple__money">{money(selected.deposit_received)}</strong></article></div>
               <div className="finance-simple__grid">
-                 <label className="finance-simple__field"><span>Amount</span><input inputMode="decimal" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value.replace(/[^0-9.]/g, "") }))} required /><strong className="finance-simple__money">{money(form.amount)}</strong></label>
-                <label className="finance-simple__field"><span>Payment method</span><select value={form.payment_method} onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}><option value="cash">Cash</option><option value="momo">Mobile money</option><option value="bank">Bank transfer</option><option value="cheque">Cheque</option><option value="other">Other</option></select></label>
+                <label className="finance-simple__field">
+                  <span>Amount</span>
+                  <input inputMode="decimal" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value.replace(/[^0-9.]/g, "") }))} required />
+                  <strong className="finance-simple__money">{money(form.amount)}</strong>
+                </label>
+                <label className="finance-simple__field">
+                  <span>Payment method</span>
+                  <select value={form.payment_method} onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}>
+                    <option value="cash">Cash</option>
+                    <option value="momo">Mobile money</option>
+                    <option value="bank">Bank transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
                 <label className="finance-simple__field"><span>Reference number</span><input value={form.reference_number} onChange={(event) => setForm((current) => ({ ...current, reference_number: event.target.value }))} /></label>
                 <label className="finance-simple__field"><span>Notes</span><input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} /></label>
-                <label className="finance-simple__check is-wide"><input type="checkbox" checked={form.confirm_reservation} onChange={(event) => setForm((current) => ({ ...current, confirm_reservation: event.target.checked }))} /><span><strong>Reserve this exact excavator when the required deposit is complete</strong><small>This creates the protected Finance sale lock.</small></span></label>
+                <label className="finance-simple__check is-wide">
+                  <input type="checkbox" checked={form.confirm_reservation} onChange={(event) => setForm((current) => ({ ...current, confirm_reservation: event.target.checked }))} />
+                  <span><strong>Reserve this exact excavator when the required deposit is complete</strong><small>This creates the protected Finance sale lock.</small></span>
+                </label>
               </div>
-              <div className="finance-simple__sticky-actions"><span>Receipt first; reservation only after the required deposit</span><div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Recordingâ€¦" : "Record Deposit"}</button></div></div>
+              <div className="finance-simple__sticky-actions">
+                <span>Receipt first; reservation only after the required deposit.</span>
+                <div><button type="button" onClick={closeEntry}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Recording…" : "Record Deposit"}</button></div>
+              </div>
             </form>
           </section>
         </div>
@@ -295,4 +360,3 @@ export default function EquipmentFinanceDepositReservationPage() {
     </main>
   );
 }
-

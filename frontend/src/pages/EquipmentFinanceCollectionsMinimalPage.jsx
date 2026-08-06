@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/finance-lifecycle";
 const COLLECTION_ROLES = new Set([
@@ -58,7 +59,7 @@ function isCollectable(account) {
   );
 }
 
-export default function EquipmentFinanceCollectionsMinimalPage() {
+export default function EquipmentFinanceCollectionsMinimalPage({ embedded = false }) {
   const location = useLocation();
   const requestedAgreement = new URLSearchParams(location.search).get("agreement");
   const { user, workspaceRole } = useAuth();
@@ -90,6 +91,11 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
     notes: "",
     idempotency_key: "",
   });
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    setDetail(null);
+  }, []);
 
   const loadAccounts = useCallback(async () => {
     setLoading(true);
@@ -221,32 +227,31 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
   }
 
   return (
-    <main className="finance-simple" data-testid="finance-collections-minimal">
-      <header className="finance-simple__hero">
-        <div>
-          <p>Payment entry and account file</p>
-          <h1>Collections &amp; Payment History</h1>
-          <span>
-            Record installment payments and review the authoritative server balance,
-            schedule allocation and complete receipt history in one place.
-          </span>
-        </div>
-        <div className="finance-simple__hero-actions">
-          <Link className="finance-simple__button" to="/equipment-installment-finance">
-            Workflow home
-          </Link>
-          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=deposit">
-            Opening deposit
-          </Link>
-        </div>
-      </header>
+    <main className={`finance-simple finance-simplified ${embedded ? "finance-simplified__embedded" : ""}`} data-testid="finance-collections-minimal">
+      {!embedded ? (
+        <header className="finance-simple__hero">
+          <div>
+            <p>Search, select, then record</p>
+            <h1>Collections &amp; Payment History</h1>
+            <span>
+              Search an active account first. The payment form and complete account details open
+              only after the correct customer agreement is selected.
+            </span>
+          </div>
+          <div className="finance-simple__hero-actions">
+            <Link className="finance-simple__button" to="/equipment-installment-finance">Workflow home</Link>
+            <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=deposit">Opening deposit</Link>
+          </div>
+        </header>
+      ) : null}
 
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
-      <div className="finance-simple__notice is-info">
-        The outstanding balance shown here is returned by the backend after committed payments.
-        The browser does not calculate the official account debt.
-      </div>
+      {!embedded ? (
+        <div className="finance-simple__notice is-info">
+          Official balances are returned by the backend from committed receipts and schedule allocations.
+        </div>
+      ) : null}
 
       {readiness.ready === false ? (
         <section className="finance-simple__section">
@@ -259,48 +264,47 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
         <section className="finance-simple__section">
           <div className="finance-simple__toolbar">
             <div>
-              <p className="finance-simple__eyebrow">Active reserved accounts</p>
-              <h2>{visibleAccounts.length} account(s)</h2>
+              <p className="finance-simple__eyebrow">Choose account</p>
+              <h2>{visibleAccounts.length} payment-ready account(s)</h2>
             </div>
             <input
+              aria-label="Search payment-ready Finance accounts"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Agreement, customer, phone or excavator"
+              placeholder="Search agreement, customer, phone or excavator"
+              autoComplete="off"
             />
           </div>
 
           {loading ? <div className="finance-simple__empty">Loading official accounts…</div> : null}
           {!loading && !visibleAccounts.length ? (
-            <div className="finance-simple__empty">
-              No reserved installment account currently has an outstanding balance.
-            </div>
+            <div className="finance-simple__empty">No reserved installment account currently has an outstanding balance.</div>
           ) : null}
 
-          <div className="finance-simple__cards">
+          <div className="finance-simplified__compact-register">
             {visibleAccounts.map((account) => (
-              <article className="finance-simple__card" key={account.agreement_id}>
-                <div className="finance-simple__card-body">
-                  <div className="finance-simple__card-head">
-                    <div>
-                      <small>{account.agreement_number}</small>
-                      <h3>{account.customer_name}</h3>
-                      <p>{account.asset_code} — {account.asset_name}</p>
-                    </div>
-                    <span className="finance-simple__pill is-good">{label(account.agreement_status)}</span>
-                  </div>
-                  <div className="finance-simple__facts">
-                    <div><span>Official balance</span><strong data-testid="collection-official-balance">{money(account.outstanding_balance)}</strong></div>
-                    <div><span>Amount paid</span><strong>{money(account.amount_paid)}</strong></div>
-                    <div><span>Next due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
-                    <div><span>Payment pattern</span><strong>{label(account.payment_frequency)}</strong></div>
-                  </div>
+              <article className="finance-simplified__compact-record" key={account.agreement_id}>
+                <div>
+                  <small>{account.agreement_number}</small>
+                  <h3>{account.customer_name}</h3>
+                  <p>{account.asset_code} — {account.asset_name}</p>
+                </div>
+                <div className="finance-simplified__compact-fact">
+                  <span>Official balance</span>
+                  <strong data-testid="collection-official-balance">{money(account.outstanding_balance)}</strong>
+                </div>
+                <div className="finance-simplified__compact-fact">
+                  <span>Next due</span>
+                  <strong>{dateLabel(account.next_due_date)}</strong>
+                </div>
+                <div className="finance-simplified__compact-record-actions">
                   <button
                     className="is-primary"
                     type="button"
                     disabled={!canCollect}
                     onClick={() => loadDetail(account)}
                   >
-                    Open account
+                    Select Account
                   </button>
                 </div>
               </article>
@@ -310,121 +314,105 @@ export default function EquipmentFinanceCollectionsMinimalPage() {
       ) : null}
 
       {selected ? (
-        <section className="finance-simple__section" data-testid="finance-account-detail">
-          <div className="finance-simple__section-header">
-            <div>
-              <p className="finance-simple__eyebrow">Authoritative account file</p>
-              <h2>{selected.agreement_number}</h2>
-              <span className="finance-simple__muted">
-                {selected.customer_name} · {selected.asset_code} {selected.asset_name}
-              </span>
+        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={closeDetail}>
+          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance account and payment entry" data-testid="finance-account-detail" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Selected account</p>
+                <h2>{selected.agreement_number}</h2>
+                <span className="finance-simple__muted">{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span>
+              </div>
+              <button type="button" onClick={closeDetail}>Close</button>
             </div>
-            <button type="button" onClick={() => { setSelected(null); setDetail(null); }}>
-              Close
-            </button>
-          </div>
 
-          {detailLoading ? <div className="finance-simple__empty">Loading account details…</div> : null}
-          {!detailLoading ? (
-            <>
-              {detail?.reconciliation?.consistent === false ? (
-                <div className="finance-simple__alert is-warning" data-testid="finance-reconciliation-warning">
-                  This account is temporarily locked because its receipts, allocations, schedule and ledger do not reconcile. No payment can be recorded until Finance corrects the evidence.
-                </div>
-              ) : null}
-              <div className="finance-simple__summary">
-                <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
-                <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
-                <article><span>Official outstanding balance</span><strong data-testid="account-detail-official-balance">{money(selected.outstanding_balance)}</strong></article>
-                <article><span>Next due date</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
-              </div>
-
-              <div className="finance-simple__grid">
-                <section className="finance-simple__section">
-                  <h3>Payment schedule</h3>
-                  <div className="finance-simple__schedule-list">
-                    {(detail?.schedule || []).map((row) => (
-                      <article key={row.id || row.sequence_number}>
-                        <span>Payment {row.sequence_number}</span>
-                        <strong>{dateLabel(row.due_date)}</strong>
-                        <b>{money(row.scheduled_amount)}</b>
-                        <small>{label(row.schedule_status)}</small>
-                      </article>
-                    ))}
+            {detailLoading ? <div className="finance-simple__empty">Loading account details…</div> : null}
+            {!detailLoading ? (
+              <>
+                {detail?.reconciliation?.consistent === false ? (
+                  <div className="finance-simple__alert is-warning" data-testid="finance-reconciliation-warning">
+                    This account is temporarily locked because its receipts, allocations, schedule and ledger do not reconcile.
                   </div>
-                </section>
+                ) : null}
+                <div className="finance-simple__summary">
+                  <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
+                  <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
+                  <article><span>Official balance</span><strong data-testid="account-detail-official-balance">{money(selected.outstanding_balance)}</strong></article>
+                  <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
+                </div>
 
-                <section className="finance-simple__section" data-testid="payment-history">
-                  <h3>Payment history</h3>
-                  {!(detail?.payments || []).length ? (
-                    <div className="finance-simple__empty">No payment has been recorded.</div>
-                  ) : (
-                    <div className="finance-simple__schedule-list">
-                      {(detail?.payments || []).map((payment) => (
-                        <article key={payment.id} data-testid="payment-history-row">
-                          <span>{payment.receipt_number || payment.payment_number}</span>
-                          <strong>{dateLabel(payment.payment_date)}</strong>
-                          <b>{money(payment.amount)}</b>
-                          <small>{label(payment.payment_method)}</small>
-                        </article>
-                      ))}
+                <form onSubmit={recordPayment}>
+                  <div className="finance-simple__grid">
+                    <label className="finance-simple__field">
+                      <span>Amount received</span>
+                      <input type="number" min="0.01" max={selected.outstanding_balance} step="0.01" required value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} />
+                    </label>
+                    <label className="finance-simple__field">
+                      <span>Payment method</span>
+                      <select value={form.payment_method} onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}>
+                        <option value="cash">Cash</option>
+                        <option value="momo">Mobile money</option>
+                        <option value="bank">Bank transfer</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                    <label className="finance-simple__field">
+                      <span>Reference number</span>
+                      <input value={form.reference_number} onChange={(event) => setForm((current) => ({ ...current, reference_number: event.target.value }))} />
+                    </label>
+                    <label className="finance-simple__field">
+                      <span>Payment note</span>
+                      <input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+                    </label>
+                  </div>
+                  <div className="finance-simple__sticky-actions">
+                    <span>Maximum: {money(selected.outstanding_balance)}</span>
+                    <div>
+                      <button type="button" onClick={closeDetail}>Cancel</button>
+                      <button className="is-primary" type="submit" disabled={!canCollect || saving || detail?.reconciliation?.consistent === false}>
+                        {saving ? "Recording payment…" : "Record Payment"}
+                      </button>
                     </div>
-                  )}
-                </section>
-              </div>
+                  </div>
+                </form>
 
-              <form onSubmit={recordPayment}>
-                <div className="finance-simple__grid">
-                  <label className="finance-simple__field">
-                    <span>Amount received</span>
-                    <input
-                      type="number"
-                      min="0.01"
-                      max={selected.outstanding_balance}
-                      step="0.01"
-                      required
-                      value={form.amount}
-                      onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-                    />
-                  </label>
-                  <label className="finance-simple__field">
-                    <span>Payment method</span>
-                    <select
-                      value={form.payment_method}
-                      onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="momo">Mobile money</option>
-                      <option value="bank">Bank transfer</option>
-                      <option value="cheque">Cheque</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  <label className="finance-simple__field">
-                    <span>Reference number</span>
-                    <input
-                      value={form.reference_number}
-                      onChange={(event) => setForm((current) => ({ ...current, reference_number: event.target.value }))}
-                    />
-                  </label>
-                  <label className="finance-simple__field is-wide">
-                    <span>Payment note</span>
-                    <textarea
-                      value={form.notes}
-                      onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                    />
-                  </label>
-                </div>
-                <div className="finance-simple__sticky-actions">
-                  <span>Maximum: {money(selected.outstanding_balance)}</span>
-                  <button className="is-primary" type="submit" disabled={!canCollect || saving || detail?.reconciliation?.consistent === false}>
-                    {saving ? "Recording payment…" : "Record Payment"}
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : null}
-        </section>
+                <details>
+                  <summary>Show payment schedule and receipt history</summary>
+                  <div className="finance-simple__grid">
+                    <section className="finance-simple__section">
+                      <h3>Payment schedule</h3>
+                      <div className="finance-simple__schedule-list">
+                        {(detail?.schedule || []).map((row) => (
+                          <article key={row.id || row.sequence_number}>
+                            <span>Payment {row.sequence_number}</span>
+                            <strong>{dateLabel(row.due_date)}</strong>
+                            <b>{money(row.scheduled_amount)}</b>
+                            <small>{label(row.schedule_status)}</small>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                    <section className="finance-simple__section" data-testid="payment-history">
+                      <h3>Payment history</h3>
+                      {!(detail?.payments || []).length ? <div className="finance-simple__empty">No payment has been recorded.</div> : (
+                        <div className="finance-simple__schedule-list">
+                          {(detail?.payments || []).map((payment) => (
+                            <article key={payment.id} data-testid="payment-history-row">
+                              <span>{payment.receipt_number || payment.payment_number}</span>
+                              <strong>{dateLabel(payment.payment_date)}</strong>
+                              <b>{money(payment.amount)}</b>
+                              <small>{label(payment.payment_method)}</small>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </div>
+                </details>
+              </>
+            ) : null}
+          </section>
+        </div>
       ) : null}
     </main>
   );
