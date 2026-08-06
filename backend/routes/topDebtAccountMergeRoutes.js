@@ -38,13 +38,13 @@ function parseAccountKey(value) {
 
 function parseMergeRequest(req) {
   const target = parseAccountKey(req.body?.target_customer_key);
-  const sourceKeys = Array.isArray(req.body?.source_customer_keys)
+  const rawSources = Array.isArray(req.body?.source_customer_keys)
     ? req.body.source_customer_keys
     : [];
   const sources = [];
   const seen = new Set();
 
-  for (const value of sourceKeys) {
+  for (const value of rawSources) {
     const parsed = parseAccountKey(value);
     if (!parsed || parsed.key === target?.key || seen.has(parsed.key)) continue;
     seen.add(parsed.key);
@@ -129,8 +129,7 @@ async function columnExists(connection, tableName, columnName) {
 }
 
 async function financialSnapshot(connection) {
-  const hasDailyClosings = await tableExists(connection, "daily_closings");
-  const closingSql = hasDailyClosings
+  const closingSql = (await tableExists(connection, "daily_closings"))
     ? "(SELECT COUNT(*) FROM daily_closings)"
     : "0";
   const [[row]] = await connection.query(
@@ -163,22 +162,21 @@ async function financialSnapshot(connection) {
   );
 }
 
-function assertFinancialSnapshot(before, after, expected) {
-  const unchangedCounts = [
+function assertFinancialSnapshot(before, after, expected = {}) {
+  for (const field of [
     "sale_count",
     "debt_count",
     "payment_count",
     "product_count",
     "stock_quantity",
     "daily_closing_count",
-  ];
-  for (const field of unchangedCounts) {
+  ]) {
     if (Number(before[field]) !== Number(after[field])) {
       throw new Error(`Protected count changed for ${field}.`);
     }
   }
 
-  const unchangedMoney = [
+  for (const field of [
     "sale_total",
     "sale_paid",
     "sale_balance",
@@ -186,8 +184,7 @@ function assertFinancialSnapshot(before, after, expected) {
     "debt_paid",
     "debt_balance",
     "payment_total",
-  ];
-  for (const field of unchangedMoney) {
+  ]) {
     if (Math.abs(roundMoney(before[field]) - roundMoney(after[field])) > 0.01) {
       throw new Error(`Protected financial total changed for ${field}.`);
     }
@@ -273,7 +270,32 @@ function normaliseLegacyRow(row) {
   };
 }
 
-async function loadLegacyDebts(connection, branchId, debtIds) {
+async function lockLegacyDebtIds(connection, branchId, debtIds) {
+  if (debtIds.length === 0) return;
+  const placeholders = debtIds.map(() => "?").join(",");
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM debts
+     WHERE branch_id = ? AND id IN (${placeholders})
+     ORDER BY id
+     FOR UPDATE`,
+    [branchId, ...debtIds]
+  );
+  if (rows.length !== debtIds.length) {
+    const error = new Error(
+      "One or more receipt-level debt accounts no longer exist in this store."
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+async function loadLegacyDebts(
+  connection,
+  branchId,
+  debtIds,
+  { expectedCustomerId = null } = {}
+) {
   if (debtIds.length === 0) return [];
   const placeholders = debtIds.map(() => "?").join(",");
   const [rows] = await connection.query(
@@ -302,13 +324,12 @@ async function loadLegacyDebts(connection, branchId, debtIds) {
        d.id, d.sale_id, d.customer_id, d.customer_name,
        d.amount_owed, d.amount_paid, d.balance, d.status,
        s.customer_id, s.customer_name, s.total, s.amount_paid, s.balance
-     ORDER BY d.id
-     FOR UPDATE`,
+     ORDER BY d.id`,
     [branchId, ...debtIds]
   );
   if (rows.length !== debtIds.length) {
     const error = new Error(
-      "One or more receipt-level debt accounts no longer exist in this store."
+      "One or more receipt-level debt accounts could not be verified."
     );
     error.statusCode = 409;
     throw error;
@@ -316,12 +337,21 @@ async function loadLegacyDebts(connection, branchId, debtIds) {
 
   const normalised = rows.map(normaliseLegacyRow);
   for (const row of normalised) {
-    if (row.debt_customer_id !== null || row.sale_customer_id !== null) {
-      const error = new Error(
-        `Receipt-level debt #${row.debt_id} is already linked to a saved customer. Refresh the Debt Desk and try again.`
+    if (expectedCustomerId === null) {
+      if (row.debt_customer_id !== null || row.sale_customer_id !== null) {
+        const error = new Error(
+          `Receipt-level debt #${row.debt_id} is already linked to a saved customer. Refresh the Debt Desk and try again.`
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+    } else if (
+      row.debt_customer_id !== expectedCustomerId ||
+      (row.sale_id && row.sale_customer_id !== expectedCustomerId)
+    ) {
+      throw new Error(
+        `Receipt-level debt #${row.debt_id} was not linked to the selected master customer.`
       );
-      error.statusCode = 409;
-      throw error;
     }
   }
   return normalised;
@@ -383,7 +413,6 @@ async function discoverAdditionalCustomerReferences(connection) {
     "debts.customer_id",
     "installment_agreements.customer_id",
   ]);
-
   return rows
     .filter((row) => !excluded.has(`${row.table_name}.${row.column_name}`))
     .map((row) => ({
@@ -458,6 +487,7 @@ router.post(
         branchId,
         sourceCustomerIds
       );
+      await lockLegacyDebtIds(connection, branchId, legacyDebtIds);
       const legacyBefore = await loadLegacyDebts(
         connection,
         branchId,
@@ -506,16 +536,16 @@ router.post(
       ];
 
       if (legacyDebtIds.length > 0) {
-        const debtPlaceholders = legacyDebtIds.map(() => "?").join(",");
-        const [debtUpdate] = await connection.query(
+        const placeholders = legacyDebtIds.map(() => "?").join(",");
+        const [result] = await connection.query(
           `UPDATE debts
            SET customer_id = ?
            WHERE branch_id = ?
-             AND id IN (${debtPlaceholders})
+             AND id IN (${placeholders})
              AND customer_id IS NULL`,
           [request.target.id, branchId, ...legacyDebtIds]
         );
-        if (Number(debtUpdate.affectedRows || 0) !== legacyDebtIds.length) {
+        if (Number(result.affectedRows || 0) !== legacyDebtIds.length) {
           throw new Error(
             "A receipt-level debt changed while the merge was being prepared. No data was saved."
           );
@@ -523,16 +553,16 @@ router.post(
       }
 
       if (legacySaleIds.length > 0) {
-        const salePlaceholders = legacySaleIds.map(() => "?").join(",");
-        const [saleUpdate] = await connection.query(
+        const placeholders = legacySaleIds.map(() => "?").join(",");
+        const [result] = await connection.query(
           `UPDATE sales
            SET customer_id = ?
            WHERE branch_id = ?
-             AND id IN (${salePlaceholders})
+             AND id IN (${placeholders})
              AND customer_id IS NULL`,
           [request.target.id, branchId, ...legacySaleIds]
         );
-        if (Number(saleUpdate.affectedRows || 0) !== legacySaleIds.length) {
+        if (Number(result.affectedRows || 0) !== legacySaleIds.length) {
           throw new Error(
             "A receipt-level sale changed while the merge was being prepared. No data was saved."
           );
@@ -558,7 +588,8 @@ router.post(
       const legacyAfter = await loadLegacyDebts(
         connection,
         branchId,
-        legacyDebtIds
+        legacyDebtIds,
+        { expectedCustomerId: request.target.id }
       );
       assertLegacyRowsPreserved(
         legacyBefore,
