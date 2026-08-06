@@ -26,6 +26,12 @@ export async function getPublicBootstrap({ signal } = {}) {
   );
 }
 
+export async function getPublicHomepage({ signal } = {}) {
+  return unwrap(
+    await publicWebsiteClient.get("/public/content/homepage", { signal })
+  );
+}
+
 export async function getPublicPage(slug, { signal } = {}) {
   return unwrap(
     await publicWebsiteClient.get(
