@@ -190,6 +190,8 @@ function smokeEvidence(report) {
   });
   const submission = checksByName.get("Published contact form submission");
   const referenceCode = clean(submission?.reference_code);
+  const databaseName = clean(report?.staging?.database_name);
+  const databaseSafe = STAGING_DATABASE_PATTERN.test(databaseName);
 
   return {
     passed:
@@ -197,6 +199,7 @@ function smokeEvidence(report) {
       report?.require_published_content === true &&
       report?.contact_form_submission_enabled === true &&
       report?.staging?.safe === true &&
+      databaseSafe &&
       missing.length === 0 &&
       /^WEB-\d{8}-[A-F0-9]{12}$/.test(referenceCode),
     missing_checks: missing,
@@ -206,6 +209,8 @@ function smokeEvidence(report) {
     contact_form_submission_enabled:
       report?.contact_form_submission_enabled === true,
     staging_safe: report?.staging?.safe === true,
+    database_name: databaseName || null,
+    database_name_safe: databaseSafe,
   };
 }
 
@@ -287,6 +292,10 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
   };
   const smokeGate = smokeEvidence(smoke);
   const browserGate = browserEvidence(browser);
+  const databaseMatch =
+    environmentGate.mode !== "staging" ||
+    (Boolean(environmentGate.database_name) &&
+      environmentGate.database_name === smokeGate.database_name);
   const frontendUrl = safeStagingUrl(
     browser?.frontend_url,
     "Browser frontend URL"
@@ -295,6 +304,7 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
   const failures = [];
 
   if (!commitMatch) failures.push("commit_identity");
+  if (!databaseMatch) failures.push("database_identity");
   if (!releaseGate.passed) failures.push("automated_release_evidence");
   if (!smokeGate.passed) failures.push("final_staging_smoke");
   if (!browserGate.passed) failures.push("browser_acceptance");
@@ -303,6 +313,7 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
     staging_ready: failures.length === 0,
     commit_sha: releaseSha,
     commit_match: commitMatch,
+    database_match: databaseMatch,
     frontend_url: frontendUrl,
     api_url: apiUrl,
     failures,
