@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
-const page = fs.readFileSync(path.join(root, "src/pages/DebtsPage.jsx"), "utf8");
+const wrapper = fs.readFileSync(
+  path.join(root, "src/pages/DebtsPage.jsx"),
+  "utf8"
+);
+const page = fs.readFileSync(
+  path.join(root, "src/pages/LegacyDebtsPage.jsx"),
+  "utf8"
+);
 const history = fs.readFileSync(
   path.join(root, "src/components/DebtPaymentHistory.jsx"),
   "utf8"
@@ -15,6 +22,7 @@ const styles = fs.readFileSync(
   "utf8"
 );
 
+assert.match(wrapper, /LegacyDebtsPage/);
 assert.match(page, /DebtPaymentHistory/);
 assert.match(page, /debts=\{selected\.debts\}/);
 assert.match(page, /customer=\{selected\.customer\}/);
