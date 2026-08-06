@@ -25,7 +25,7 @@ function documentFixture(type = "payment_schedule") {
     issued_at: "2026-08-06T17:50:00.000Z",
     snapshot: {
       generated_at: "2026-08-06T17:50:00.000Z",
-      template_version: "FIN-TERMS-1",
+      template_version: "FIN-TERMS-V3",
       company: {
         name: "CHALIN 03 COMPANY LIMITED",
         phone: "0249469080",
@@ -70,19 +70,19 @@ function documentFixture(type = "payment_schedule") {
   };
 }
 
-test("the legacy guard still recognises the V2 Chalin 03 Finance footer", () => {
+test("the legacy guard still recognises Chalin 03 Finance footer text", () => {
   assert.equal(isFinanceFooterText(`${FINANCE_FOOTER_PREFIX} EFS-001 | Page 1 of 1`), true);
   assert.equal(isFinanceFooterText("Ordinary agreement body text"), false);
 });
 
-test("a one-page V2 Finance schedule has no trailing blank PDF page", async () => {
+test("a one-page logo-led V3 Finance schedule has no trailing blank PDF page", async () => {
   const buffer = await renderCompletionPdf(documentFixture());
   assert.equal(buffer.subarray(0, 4).toString(), "%PDF");
-  assert.ok(buffer.length > 2500);
+  assert.ok(buffer.length > 3500);
   assert.equal(pageCount(buffer), 1);
 });
 
-test("the V2 renderer uses manual first-page creation and no-break footer writing", () => {
+test("the logo-led renderer uses manual pages and no-break footer writing", () => {
   const renderer = fs.readFileSync(
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
@@ -93,7 +93,9 @@ test("the V2 renderer uses manual first-page creation and no-break footer writin
   );
   assert.match(renderer, /autoFirstPage: false/);
   assert.match(renderer, /addPage\(doc, document\)/);
+  assert.match(renderer, /logo-led-v3/);
   assert.match(pages, /safeAbsoluteText/);
   assert.match(pages, /page\.margins\.bottom = 0/);
   assert.match(pages, /page\.margins\.bottom = oldBottom/);
+  assert.match(pages, /drawBrandWave/);
 });
