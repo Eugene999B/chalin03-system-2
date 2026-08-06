@@ -348,9 +348,80 @@ With both Release B flags enabled only in staging, verify the existing staff sys
 
 No CHALIN ONE failure may prevent existing operational pages from loading.
 
-## Step 12 — Acceptance evidence
+## Step 12 — Complete browser evidence
 
-Record:
+Copy:
+
+```text
+docs/chalin-one/CHALIN_ONE_BROWSER_ACCEPTANCE.example.json
+```
+
+to:
+
+```text
+backend/artifacts/chalin-one-browser-acceptance.json
+```
+
+Fill the copied file with:
+
+- The exact full candidate commit SHA.
+- The isolated preview frontend and API URLs.
+- `passed: true` only after every named gate passes.
+- At least one concrete evidence reference for every gate.
+- At least four screenshot references covering desktop, mobile and Content Studio.
+- Different reviewer and publisher names.
+- A valid acceptance timestamp.
+
+The template is deliberately non-passing. Do not remove a required gate or invent evidence to make it pass.
+
+## Step 13 — Generate final staging acceptance evidence
+
+The following three files must describe the exact same candidate commit:
+
+```text
+backend/artifacts/chalin-one-release-evidence.json
+backend/artifacts/chalin-one-staging-smoke.json
+backend/artifacts/chalin-one-browser-acceptance.json
+```
+
+Run:
+
+```bash
+npm run evidence:chalin-one:staging
+```
+
+The offline aggregator:
+
+- Makes no network or database calls.
+- Rejects malformed or mismatched commit SHAs.
+- Rejects production, credentialed and non-isolated URLs.
+- Requires every automated release gate to be true.
+- Requires the final published-content smoke and real staging enquiry reference.
+- Requires every browser, mobile, permission and regression gate.
+- Requires at least four screenshot references.
+- Requires independent reviewer and publisher sign-off.
+
+It writes:
+
+```text
+backend/artifacts/chalin-one-staging-acceptance.json
+```
+
+The only acceptable final result is:
+
+```json
+{
+  "staging_ready": true,
+  "commit_match": true,
+  "failures": []
+}
+```
+
+Any other result blocks integration. Generated evidence files remain outside source control.
+
+## Step 14 — Acceptance record
+
+Preserve:
 
 - Git commit SHA
 - Database name
@@ -364,9 +435,9 @@ Record:
 - Non-writing smoke report
 - Final published-content smoke report
 - Intentional staging enquiry reference code
-- Browser acceptance screenshots
-- Mobile acceptance screenshots
+- Browser and mobile acceptance screenshots
 - Permission test matrix
+- Final staging acceptance artifact
 - Known non-blocking issues
 - Reviewer and publisher sign-off
 
@@ -395,6 +466,7 @@ Release B is ready for integration only when:
 - Existing business workflows pass regression testing.
 - Content is reviewed and approved.
 - Backup and rollback evidence is complete.
+- The final staging evidence says `staging_ready: true` for one exact commit.
 
 Only then may Eugene separately authorize:
 
