@@ -27,9 +27,14 @@ export async function getPublicBootstrap({ signal } = {}) {
 }
 
 export async function getPublicHomepage({ signal } = {}) {
-  return unwrap(
-    await publicWebsiteClient.get("/public/content/homepage", { signal })
-  );
+  try {
+    return unwrap(
+      await publicWebsiteClient.get("/public/content/homepage", { signal })
+    );
+  } catch (error) {
+    if (error?.response?.status === 404) return null;
+    throw error;
+  }
 }
 
 export async function getPublicPage(slug, { signal } = {}) {
