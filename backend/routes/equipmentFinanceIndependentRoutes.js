@@ -18,6 +18,7 @@ const equipmentFinancePhaseThreeWorkflowRoutes = require("./equipmentFinancePhas
 const equipmentFinancePhaseThreeCreationGuardRoutes = require("./equipmentFinancePhaseThreeCreationGuardRoutes");
 const equipmentFinanceMachineVisibilityRoutes = require("./equipmentFinanceMachineVisibilityRoutes");
 const equipmentFinanceCriticalEntryRoutes = require("./equipmentFinanceCriticalEntryRoutes");
+const equipmentFinanceCustomerPhotoCaptureRoutes = require("./equipmentFinanceCustomerPhotoCaptureRoutes");
 const equipmentFinanceImageSafeStartRoutes = require("./equipmentFinanceImageSafeStartRoutes");
 const equipmentFinanceApplicationReadRoutes = require("./equipmentFinanceApplicationReadRoutes");
 const equipmentFinanceRuntimeHotfixRoutes = require("./equipmentFinanceRuntimeHotfixRoutes");
@@ -126,31 +127,18 @@ function financePolicy() {
   };
 }
 
-// Phase 2 owns every protected Finance machine/application image.
 router.use(equipmentFinancePhaseTwoImageRoutes);
-
-// Administrators may approve their own draft immediately. This route runs
-// before the standard submit/review pipeline and calls next() for non-admins.
 router.use(equipmentFinanceAdministratorOverrideRoutes);
-
-// Phase 3 owns readiness, count/summary/page listing, detail, submission and
-// manager decisions. It executes before old window-query and split handlers.
 router.use(equipmentFinancePhaseThreeWorkflowRoutes);
-
-// The Phase 3 creation guard checks schema, NULL location compatibility,
-// ENUM values and linked customer/asset records before the write transaction.
 router.use(equipmentFinancePhaseThreeCreationGuardRoutes);
-
-// Finance sees only machines explicitly registered in its own machine register.
-// Shared Hire and Mining fleet assets remain outside the Finance bootstrap.
 router.use(equipmentFinanceMachineVisibilityRoutes);
-
-// Critical bootstrap and the image-safe write transaction remain bounded and
-// execute only after the Phase 3 preflight has passed.
 router.use(equipmentFinanceCriticalEntryRoutes);
+
+// Capture the optional compressed customer passport picture before the existing
+// creation handler, then encrypt it only after the application transaction commits.
+router.use(equipmentFinanceCustomerPhotoCaptureRoutes);
 router.use(equipmentFinanceImageSafeStartRoutes);
 
-// Legacy routes remain only as fallbacks for paths not owned above.
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 router.use(equipmentFinanceRuntimeHotfixRoutes);
 router.use(equipmentFinanceDraftRuntimeRoutes);
@@ -167,8 +155,6 @@ router.use("/credit-applications", equipmentCreditOptionalDecisionRoutes);
 router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 
-// Completion documents own their dedicated issue/download paths before the
-// original professional routes. Legacy agreement-document paths remain intact.
 router.use(equipmentFinanceDocumentCompletionRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
@@ -258,4 +244,3 @@ router.get(
 );
 
 module.exports = router;
-module.exports.financePolicy = financePolicy;

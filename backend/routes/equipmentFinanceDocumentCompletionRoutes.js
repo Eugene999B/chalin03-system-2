@@ -7,10 +7,12 @@ const {
   issueCompletionDocument,
   publicDefinitions,
 } = require("../services/equipmentFinanceDocumentCompletionService");
+// The photo-aware service wraps equipmentFinanceCompletionRendererService; the
+// established branded document layouts remain the authoritative base renderer.
 const {
   renderCompletionPdf,
   renderCompletionWord,
-} = require("../services/equipmentFinanceCompletionRendererService");
+} = require("../services/equipmentFinanceCustomerPhotoRendererService");
 const {
   ProfessionalFinanceError,
 } = require("../services/equipmentFinanceProfessionalService");
@@ -60,6 +62,8 @@ router.get(
         legal_approval_required_for_legal_documents: true,
         exact_payment_required_for_receipts: true,
         thermal_receipt_available: true,
+        customer_passport_photo_page: true,
+        customer_photo_encrypted_at_rest: true,
         supported_downloads: ["pdf", "word", "print", "thermal"],
       },
     });
@@ -137,7 +141,7 @@ router.get(
         `${document.document_number}-${definition.short_title}`
       );
       if (requested === "word") {
-        const buffer = renderCompletionWord(document);
+        const buffer = await renderCompletionWord(document);
         res.setHeader("Content-Type", "application/msword; charset=utf-8");
         res.setHeader(
           "Content-Disposition",
