@@ -10,7 +10,9 @@ import { WorkspaceContextProvider } from "../context/WorkspaceContext";
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
 );
-const PublicWebsiteApp = lazy(() => import("./public-site/PublicWebsiteApp"));
+const PublicWebsiteApp = lazy(() =>
+  import("./public-site/PublicWebsiteStandaloneApp")
+);
 const PublicWebsiteUnavailable = lazy(() =>
   import("./public-site/PublicWebsiteApp").then((module) => ({
     default: module.PublicWebsiteUnavailable,
