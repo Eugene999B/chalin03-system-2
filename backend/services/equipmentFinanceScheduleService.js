@@ -19,13 +19,24 @@ function cleanText(value, maxLength = 100) {
 }
 
 function dateValue(value) {
-  const text = cleanText(value, 20);
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  if (!match) return null;
+  let year;
+  let month;
+  let day;
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    year = value.getUTCFullYear();
+    month = value.getUTCMonth() + 1;
+    day = value.getUTCDate();
+  } else {
+    const text = cleanText(value, 50);
+    const match = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T\s])/.exec(text);
+    if (!match) return null;
+    year = Number(match[1]);
+    month = Number(match[2]);
+    day = Number(match[3]);
+  }
+
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (
     parsed.getUTCFullYear() !== year ||
@@ -34,7 +45,8 @@ function dateValue(value) {
   ) {
     return null;
   }
-  return text;
+
+  return [year, String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
 }
 
 function moneyValue(value, minimum = 0) {
@@ -150,19 +162,23 @@ function normalizeScheduleInput(input = {}) {
       input.payment_interval_days
   );
 
-  if (
-    sellingPrice === undefined ||
-    deposit === undefined ||
-    deposit >= sellingPrice ||
-    installmentCount === undefined ||
-    !paymentFrequency ||
-    !firstDueDate ||
-    !nonWorkingDayRule ||
-    (paymentFrequency !== "monthly" && intervalDays === undefined)
-  ) {
+  const invalidFields = [];
+  if (sellingPrice === undefined) invalidFields.push("selling price");
+  if (deposit === undefined || (sellingPrice !== undefined && deposit >= sellingPrice)) {
+    invalidFields.push("deposit below the selling price");
+  }
+  if (!paymentFrequency) invalidFields.push("payment frequency");
+  if (paymentFrequency && paymentFrequency !== "monthly" && intervalDays === undefined) {
+    invalidFields.push("payment interval");
+  }
+  if (installmentCount === undefined) invalidFields.push("number of payments");
+  if (!firstDueDate) invalidFields.push("first due date");
+  if (!nonWorkingDayRule) invalidFields.push("non-working-day rule");
+
+  if (invalidFields.length) {
     throw new FinanceScheduleError(
       400,
-      "Enter a valid selling price, deposit below the selling price, payment frequency, interval, number of payments and first due date."
+      `The approved payment plan has invalid or missing ${invalidFields.join(", ")}. Correct only those fields in the application and try again.`
     );
   }
 
@@ -195,7 +211,7 @@ function buildFinanceSchedule(input = {}) {
     const dueDate = dueDateFor({
       firstDate,
       frequency: normalized.payment_frequency,
-      intervalDays: normalized.custom_interval_days,
+      intervalDays: normalized.custom_interval_interval_days,
       index,
       nonWorkingDayRule: normalized.non_working_day_rule,
     });
