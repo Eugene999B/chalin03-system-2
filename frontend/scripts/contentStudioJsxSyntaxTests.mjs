@@ -23,6 +23,7 @@ const jsxFiles = [
   "ChalinOneStandaloneEntry.jsx",
   "public-site/PublicWebsiteApp.jsx",
   "public-site/PublicWebsiteStandaloneApp.jsx",
+  "public-site/PublicNavigation.jsx",
 ];
 
 for (const fileName of jsxFiles) {
