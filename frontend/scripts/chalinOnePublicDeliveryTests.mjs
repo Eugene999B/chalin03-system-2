@@ -105,6 +105,14 @@ check("standalone entry applies fail-closed feature and staff access gates", () 
   assert.match(standalone, /WorkspaceContextProvider/);
 });
 
+check("standalone routes preserve website context and hand non-CHALIN paths to the full app", () => {
+  assert.match(standalone, /path="\/website\/\*"/);
+  assert.match(standalone, /path="\/content-studio\/\*"/);
+  assert.match(standalone, /FullApplicationHandoff/);
+  assert.match(standalone, /window\.location\.replace\(destination\)/);
+  assert.equal((standalone.match(/<Route path="\*"/g) || []).length, 2);
+});
+
 check("main entry isolates CHALIN ONE surfaces from operational overlays", () => {
   assert.match(main, /isChalinOneStandalonePath/);
   assert.match(main, /standaloneChalinOne \?/);
@@ -157,4 +165,4 @@ check("CI runs real MySQL migration twice before database acceptance", () => {
   assert.match(backendPackage, /test:chalin-one:db/);
 });
 
-console.log(`\nCHALIN ONE public delivery: ${passed}/12 checks passed.`);
+console.log(`\nCHALIN ONE public delivery: ${passed}/13 checks passed.`);
