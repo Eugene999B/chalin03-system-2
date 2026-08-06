@@ -13,6 +13,8 @@ const {
 require("../services/equipmentFinancePdfBlankPageGuardService");
 // The premium renderer gives every Finance document its own layout family,
 // official Chalin 03 mark, watermark, QR verification and tamper-evident footer.
+// It supersedes equipmentFinanceCompletionRendererService while preserving the
+// immutable snapshot, lifecycle and download contracts already in production.
 const {
   renderCompletionPdf,
   renderCompletionWord,
