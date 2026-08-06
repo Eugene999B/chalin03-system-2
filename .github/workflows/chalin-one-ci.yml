@@ -50,6 +50,65 @@ jobs:
       - name: Run backend tests
         run: npm test
 
+  chalin-one-database-acceptance:
+    name: CHALIN ONE database acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: acceptance-root-password
+          MYSQL_DATABASE: chalin_one_acceptance
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h localhost -pacceptance-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: acceptance-root-password
+      DB_NAME: chalin_one_acceptance
+      DB_SSL: "false"
+      CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: 20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION
+      PUBLIC_FORM_IP_HASH_SECRET: chalin-one-acceptance-only-ip-hash-secret-000000000000000000000000
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Prepare isolated legacy database fixture
+        run: npm run prepare:chalin-one:acceptance-db
+
+      - name: Rehearse approved public-content migration
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Verify migration idempotency
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Run database-backed Content Studio acceptance
+        run: npm run test:chalin-one:db
+
   frontend-tests:
     name: Frontend tests and build
     runs-on: ubuntu-latest
