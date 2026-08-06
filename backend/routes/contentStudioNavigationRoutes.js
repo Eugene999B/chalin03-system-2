@@ -4,7 +4,9 @@ const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
-  archiveNavigationItem,
+  archiveNavigationItemSafely,
+} = require("../services/contentStudioNavigationArchiveService");
+const {
   createNavigationDraft,
   createNavigationVersion,
   decideNavigationApproval,
@@ -25,7 +27,6 @@ function asyncHandler(handler) {
 function success(res, req, data, statusCode = 200) {
   res.set("Cache-Control", "no-store, private, max-age=0");
   res.set("Pragma", "no-cache");
-
   return res.status(statusCode).json({
     status: "success",
     data,
@@ -48,11 +49,7 @@ router.post(
     success(
       res,
       req,
-      await createNavigationDraft({
-        input: req.body,
-        user: req.user,
-        req,
-      }),
+      await createNavigationDraft({ input: req.body, user: req.user, req }),
       201
     )
   )
@@ -155,7 +152,7 @@ router.post(
     success(
       res,
       req,
-      await archiveNavigationItem({
+      await archiveNavigationItemSafely({
         itemId: req.params.itemId,
         reason: req.body?.reason,
         user: req.user,
