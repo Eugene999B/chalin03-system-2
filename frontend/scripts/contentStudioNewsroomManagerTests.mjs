@@ -117,6 +117,13 @@ check("category manager displays usage and confirms protected archival", () => {
   assert.match(managerSource, /Archive category/);
 });
 
+check("failed category saves preserve the editor and entered form data", () => {
+  assert.match(managerSource, /const saved = await onSave\(mode, selectedId, form\)/);
+  assert.match(managerSource, /if \(!saved\) return/);
+  assert.match(managerSource, /setNotice\("The news category was saved safely\."\);\s+return true/);
+  assert.match(managerSource, /setError\(contentStudioErrorMessage\(categoryError\)\);\s+return false/);
+});
+
 check("requests are abortable and errors use the shared safe formatter", () => {
   assert.match(managerSource, /new AbortController\(\)/);
   assert.match(managerSource, /controller\.abort\(\)/);
@@ -131,4 +138,4 @@ check("Newsroom layout covers tablet and narrow-phone breakpoints", () => {
   assert.match(cssSource, /overflow-x: auto/);
 });
 
-console.log(`\nContent Studio Newsroom Manager: ${passed}/11 checks passed.`);
+console.log(`\nContent Studio Newsroom Manager: ${passed}/12 checks passed.`);
