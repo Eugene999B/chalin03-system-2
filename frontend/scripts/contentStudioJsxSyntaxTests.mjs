@@ -7,26 +7,25 @@ const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".."
 );
-const moduleRoot = path.join(
-  frontendRoot,
-  "src/chalin-one/content-studio"
-);
+const chalinOneRoot = path.join(frontendRoot, "src/chalin-one");
 const jsxFiles = [
-  "ContentStudioDashboard.jsx",
-  "ContentStudioWorkspace.jsx",
-  "ContentStudioPageManager.jsx",
-  "ContentStudioNewsroomManager.jsx",
-  "ContentStudioLeadershipManager.jsx",
-  "ContentStudioGovernedManager.jsx",
-  "ContentStudioPortfolioManagers.jsx",
-  "ContentStudioCompanyInfoManager.jsx",
-  "ContentStudioMediaManager.jsx",
-  "ContentStudioFormManager.jsx",
-  "ContentStudioOperationalManagers.jsx",
+  "content-studio/ContentStudioDashboard.jsx",
+  "content-studio/ContentStudioWorkspace.jsx",
+  "content-studio/ContentStudioPageManager.jsx",
+  "content-studio/ContentStudioNewsroomManager.jsx",
+  "content-studio/ContentStudioLeadershipManager.jsx",
+  "content-studio/ContentStudioGovernedManager.jsx",
+  "content-studio/ContentStudioPortfolioManagers.jsx",
+  "content-studio/ContentStudioCompanyInfoManager.jsx",
+  "content-studio/ContentStudioMediaManager.jsx",
+  "content-studio/ContentStudioFormManager.jsx",
+  "content-studio/ContentStudioOperationalManagers.jsx",
+  "ChalinOneStandaloneEntry.jsx",
+  "public-site/PublicWebsiteApp.jsx",
 ];
 
 for (const fileName of jsxFiles) {
-  const source = fs.readFileSync(path.join(moduleRoot, fileName), "utf8");
+  const source = fs.readFileSync(path.join(chalinOneRoot, fileName), "utf8");
   await transformWithEsbuild(source, fileName, {
     loader: "jsx",
     jsx: "automatic",
@@ -35,4 +34,6 @@ for (const fileName of jsxFiles) {
   console.log(`✓ ${fileName} compiled as JSX`);
 }
 
-console.log(`\nContent Studio JSX syntax: ${jsxFiles.length}/${jsxFiles.length} files passed.`);
+console.log(
+  `\nCHALIN ONE JSX syntax: ${jsxFiles.length}/${jsxFiles.length} files passed.`
+);
