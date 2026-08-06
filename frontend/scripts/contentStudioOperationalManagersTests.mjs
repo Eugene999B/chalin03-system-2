@@ -47,7 +47,7 @@ check("Media Library covers assets folders image processing video usage metadata
     "archiveMediaFolder",
   ]) assert.match(media, new RegExp(marker));
   assert.match(media, /image\/jpeg,image\/png,image\/webp/);
-  assert.match(media, /PUBLIC_MEDIA/);
+  assert.match(media, /processing_status/);
   assert.match(media, /CONTENT_STUDIO_PERMISSIONS\.mediaManage/);
   assert.match(media, /window\.confirm/);
 });
