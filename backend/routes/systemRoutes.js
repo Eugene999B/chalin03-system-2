@@ -18,6 +18,7 @@ const customerMergeRecoveryRoutes = require("./customerMergeRecoveryRoutes");
 const {
   MERGE_FREEZE_MESSAGE,
 } = require("./customerMergeRecoveryRoutes");
+const aiRoutes = require("./aiRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
 
@@ -293,6 +294,17 @@ router.use(
   requireFeature("contentStudio"),
   requireAuth,
   contentStudioRoutes
+);
+
+// CHALIN ONE intelligence remains completely hidden unless the master AI
+// emergency switch is effective. Staff must also pass authentication, the
+// existing workspace permission, persona flags and AI-specific permissions.
+router.use(
+  "/ai",
+  requireFeature("aiEnabled"),
+  requireAuth,
+  requirePermission("workspace.view"),
+  aiRoutes
 );
 
 router.get("/readiness", async (req, res) => {
