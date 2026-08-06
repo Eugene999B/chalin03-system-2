@@ -33,6 +33,12 @@
   cursor: pointer;
 }
 
+.pw-nav-group[data-active="true"] > .pw-nav-parent-row > .pw-nav-parent-link,
+.pw-nav-group[data-active="true"] > .pw-nav-parent-row > .pw-nav-label-button {
+  background: var(--pw-blue-100);
+  color: var(--pw-navy-900);
+}
+
 .pw-submenu-toggle {
   width: 30px;
   min-height: 34px;
