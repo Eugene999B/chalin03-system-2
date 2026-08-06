@@ -7,6 +7,7 @@ const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
 const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
 const contentStudioNavigationRoutes = require("./contentStudioNavigationRoutes");
+const contentStudioNewsroomRoutes = require("./contentStudioNewsroomRoutes");
 const contentStudioPortfolioRoutes = require("./contentStudioPortfolioRoutes");
 const contentStudioSettingsRoutes = require("./contentStudioSettingsRoutes");
 
@@ -22,6 +23,7 @@ router.use("/settings", contentStudioSettingsRoutes);
 router.use("/navigation", contentStudioNavigationRoutes);
 router.use("/media", contentStudioMediaRoutes);
 router.use("/forms", contentStudioFormRoutes);
+router.use("/newsroom", contentStudioNewsroomRoutes);
 router.use("/portfolio", contentStudioPortfolioRoutes);
 router.use("/", contentStudioCoreRoutes);
 
