@@ -13,12 +13,12 @@ const routeSource = fs.readFileSync(
   "utf8"
 );
 
-test("generated-document downloads load blank-page protection before the renderer", () => {
+test("generated-document downloads load blank-page protection before the premium renderer", () => {
   const guardIndex = routeSource.indexOf(
     'require("../services/equipmentFinancePdfBlankPageGuardService")'
   );
   const rendererIndex = routeSource.indexOf(
-    'require("../services/equipmentFinanceCustomerPhotoRendererService")'
+    'require("../services/equipmentFinancePremiumDocumentRendererService")'
   );
   assert.ok(guardIndex >= 0);
   assert.ok(rendererIndex > guardIndex);
