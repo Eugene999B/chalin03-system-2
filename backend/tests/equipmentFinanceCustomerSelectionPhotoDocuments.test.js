@@ -45,10 +45,15 @@ const renderer = read(
   "services",
   "equipmentFinanceCustomerPhotoRendererService.js"
 );
-const premiumRenderer = read(
+const v2Renderer = read(
   "backend",
   "services",
-  "equipmentFinancePremiumDocumentRendererService.js"
+  "equipmentFinanceDocumentRendererV2Service.js"
+);
+const v2Flow = read(
+  "backend",
+  "services",
+  "equipmentFinancePdfV2FlowWidgetService.js"
 );
 const completionRoutes = read(
   "backend",
@@ -100,17 +105,17 @@ test("customer photo is encrypted after the Finance application commits", () => 
   assert.doesNotMatch(captureRoute, /DELETE\s+FROM/i);
 });
 
-test("professional Finance documents add a full-frame encrypted identity annex", () => {
+test("professional V2 Finance documents retain the full-frame encrypted identity annex", () => {
   assert.match(renderer, /AsyncLocalStorage/);
   assert.match(renderer, /decryptDocument/);
   assert.match(renderer, /customer_passport_photo/);
   assert.match(renderer, /PHOTO_DOCUMENT_TYPES/);
   assert.doesNotMatch(renderer, /payment_receipt",/);
-  assert.match(premiumRenderer, /latestCustomerPhoto/);
-  assert.match(premiumRenderer, /Protected Customer Identity Evidence/);
-  assert.match(premiumRenderer, /fit: \[photoWidth - 16, photoHeight - 16\]/);
-  assert.match(premiumRenderer, /PHOTO_DOCUMENT_TYPES/);
-  assert.match(completionRoutes, /equipmentFinancePremiumDocumentRendererService/);
+  assert.match(v2Renderer, /latestCustomerPhoto/);
+  assert.match(v2Renderer, /drawIdentityAnnex/);
+  assert.match(v2Flow, /Protected customer identity annex/);
+  assert.match(v2Flow, /fit: \[photoWidth - 16, photoHeight - 16\]/);
+  assert.match(completionRoutes, /equipmentFinanceDocumentRendererV2Service/);
   assert.match(completionRoutes, /const buffer = await renderCompletionWord\(document\)/);
   assert.match(completionRoutes, /customer_passport_photo_page: true/);
   assert.match(completionRoutes, /customer_photo_encrypted_at_rest: true/);
@@ -124,7 +129,8 @@ test("scope remains Equipment Installment Finance only", () => {
     startRedirect,
     captureRoute,
     renderer,
-    premiumRenderer,
+    v2Renderer,
+    v2Flow,
     completionRoutes,
   ].join("\n");
   assert.doesNotMatch(combined, /\/api\/(?:mining|products|sales|debts)/);
