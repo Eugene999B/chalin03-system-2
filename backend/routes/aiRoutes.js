@@ -1,0 +1,267 @@
+"use strict";
+
+const express = require("express");
+
+const { requireAiPermission, requireAiPersona } = require("../middleware/aiPermissionMiddleware");
+const { requireFeature, getFeatureSnapshot } = require("../services/featureFlagService");
+const { getAiPermissionSnapshot } = require("../security/aiPermissionCatalog");
+const { cleanProviderKey } = require("../services/aiProviderService");
+const { aiToolRegistry } = require("../services/aiToolRegistry");
+const {
+  archiveConversation,
+  getConversationDetails,
+  listConversations,
+  renameConversation,
+} = require("../services/aiConversationService");
+const { createFeedback, listFeedback } = require("../services/aiFeedbackService");
+const { runAiConversationTurn } = require("../services/aiOrchestratorService");
+const { listUsageSummary } = require("../services/aiUsageService");
+const { resolveAiScope } = require("../services/aiPermissionService");
+const { registerFoundationAiTools } = require("../ai-tools/foundationTools");
+const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
+
+registerFoundationAiTools();
+
+const router = express.Router();
+
+function asyncHandler(handler) {
+  return function wrappedAiHandler(req, res, next) {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
+
+function noStore(res) {
+  res.set("Cache-Control", "no-store, private, max-age=0");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+}
+
+function success(res, req, data, statusCode = 200) {
+  noStore(res);
+  return res.status(statusCode).json({
+    status: "success",
+    data,
+    request_id: req.requestId || null,
+  });
+}
+
+function personaRouter(persona, featureKey) {
+  const personaRoutes = express.Router();
+  personaRoutes.use(requireFeature(featureKey), requireAiPersona(persona));
+
+  personaRoutes.get(
+    "/tools",
+    requireAiPermission("ai.tools.view"),
+    asyncHandler(async (req, res) => {
+      const scope = resolveAiScope({ req, persona });
+      return success(
+        res,
+        req,
+        aiToolRegistry.list({ persona, workspace: scope.workspace_code })
+      );
+    })
+  );
+
+  personaRoutes.get(
+    "/conversations",
+    requireAiPermission("ai.conversations.view"),
+    asyncHandler(async (req, res) =>
+      success(
+        res,
+        req,
+        await listConversations({
+          userId: req.user.id,
+          persona,
+          workspaceCode: req.user.workspace_code,
+          status: req.query.status || "active",
+          limit: req.query.limit,
+          offset: req.query.offset,
+        })
+      )
+    )
+  );
+
+  personaRoutes.get(
+    "/conversations/:conversationKey",
+    requireAiPermission("ai.conversations.view"),
+    asyncHandler(async (req, res) => {
+      const details = await getConversationDetails({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+      });
+      if (details.conversation.persona !== persona) {
+        return res.status(404).json({
+          status: "error",
+          code: "AI_CONVERSATION_NOT_FOUND",
+          message: "AI conversation not found.",
+          request_id: req.requestId || null,
+        });
+      }
+      return success(res, req, details);
+    })
+  );
+
+  personaRoutes.patch(
+    "/conversations/:conversationKey",
+    requireAiPermission("ai.conversations.manage"),
+    asyncHandler(async (req, res) => {
+      const details = await getConversationDetails({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+        messageLimit: 1,
+      });
+      if (details.conversation.persona !== persona) {
+        return res.status(404).json({
+          status: "error",
+          code: "AI_CONVERSATION_NOT_FOUND",
+          message: "AI conversation not found.",
+          request_id: req.requestId || null,
+        });
+      }
+      await renameConversation({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+        title: req.body.title,
+      });
+      return success(res, req, { updated: true });
+    })
+  );
+
+  personaRoutes.post(
+    "/conversations/:conversationKey/archive",
+    requireAiPermission("ai.conversations.manage"),
+    asyncHandler(async (req, res) => {
+      const details = await getConversationDetails({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+        messageLimit: 1,
+      });
+      if (details.conversation.persona !== persona) {
+        return res.status(404).json({
+          status: "error",
+          code: "AI_CONVERSATION_NOT_FOUND",
+          message: "AI conversation not found.",
+          request_id: req.requestId || null,
+        });
+      }
+      await archiveConversation({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+      });
+      return success(res, req, { archived: true });
+    })
+  );
+
+  personaRoutes.post(
+    "/chat",
+    requireAiPermission("ai.use", "ai.conversations.manage"),
+    asyncHandler(async (req, res) =>
+      success(
+        res,
+        req,
+        await runAiConversationTurn({
+          req,
+          persona,
+          conversationKey: req.body.conversation_key || null,
+          message: req.body.message,
+        })
+      )
+    )
+  );
+
+  return personaRoutes;
+}
+
+router.get(
+  "/status",
+  requireAiPermission("ai.use"),
+  asyncHandler(async (req, res) =>
+    success(res, req, {
+      flags: getFeatureSnapshot(),
+      provider: {
+        key: cleanProviderKey(process.env.AI_PROVIDER || "disabled") || "disabled",
+        secret_values_exposed: false,
+      },
+      permissions: getAiPermissionSnapshot(req.user),
+      execution_authority: "read_recommend_prepare_only",
+      ai_actions_enabled: false,
+    })
+  )
+);
+
+router.use("/copilot", personaRouter("copilot", "chalinCopilot"));
+router.use("/executive", personaRouter("executive", "chalinExecutive"));
+router.use("/knowledge", aiKnowledgeRoutes);
+
+router.post(
+  "/feedback",
+  requireAiPermission("ai.feedback.create"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await createFeedback({
+        conversationKey: req.body.conversation_key,
+        messageKey: req.body.message_key,
+        rating: req.body.rating,
+        comment: req.body.comment,
+        correction: req.body.correction,
+        user: req.user,
+        req,
+      }),
+      201
+    )
+  )
+);
+
+router.get(
+  "/feedback",
+  requireAiPermission("ai.audit.view"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await listFeedback({
+        status: req.query.status,
+        rating: req.query.rating,
+        limit: req.query.limit,
+      })
+    )
+  )
+);
+
+router.get(
+  "/usage",
+  requireAiPermission("ai.usage.view"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await listUsageSummary({
+        workspaceCode: req.query.workspace_code || req.user.workspace_code,
+        userId: req.query.mine === "true" ? req.user.id : null,
+        days: req.query.days,
+      })
+    )
+  )
+);
+
+router.use((error, req, res, next) => {
+  const code = String(error?.code || "");
+  if (
+    !code.startsWith("AI_") &&
+    !String(error?.name || "").startsWith("Ai")
+  ) {
+    return next(error);
+  }
+  noStore(res);
+  return res.status(Number(error.statusCode) || 400).json({
+    status: "error",
+    code: code || "AI_REQUEST_FAILED",
+    message: error.message || "CHALIN ONE intelligence request failed safely.",
+    details: error.details || [],
+    request_id: req.requestId || null,
+  });
+});
+
+module.exports = router;
