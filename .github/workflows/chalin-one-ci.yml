@@ -41,6 +41,38 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
+      - name: Verify CHALIN ONE staging safety package
+        env:
+          NODE_ENV: staging
+          CHALIN_ONE_STAGING_CONFIRM: CHALIN_ONE_STAGING_PREVIEW_ONLY
+          DB_HOST: 127.0.0.1
+          DB_NAME: chalin_one_staging_ci
+          FRONTEND_URL: https://preview-ci.example-chalin03.com
+          CHALIN_ONE_STAGING_API_URL: https://api-preview-ci.example-chalin03.com
+          FEATURE_PUBLIC_WEBSITE: "true"
+          FEATURE_CONTENT_STUDIO: "true"
+          FEATURE_AI_ENABLED: "false"
+          FEATURE_CHALIN_COPILOT: "false"
+          FEATURE_CHALIN_EXECUTIVE: "false"
+          FEATURE_CHALIN_GUIDE: "false"
+          FEATURE_CUSTOMER_PORTAL: "false"
+          FEATURE_SUPPLIER_PORTAL: "false"
+          FEATURE_APPLICANT_PORTAL: "false"
+          FEATURE_AI_ACTIONS: "false"
+          FEATURE_AI_SCHEDULED_JOBS: "false"
+          PUBLIC_MEDIA_STORAGE_PROVIDER: local
+          PUBLIC_MEDIA_LOCAL_ROOT: ./tmp/chalin-one-staging-media
+          PUBLIC_FORM_IP_HASH_SECRET: chalin-one-staging-ci-only-public-form-secret-000000000000000000000000000000
+          CHALIN_ONE_STAGING_AUTHOR_USER_ID: "101"
+          CHALIN_ONE_STAGING_REVIEWER_USER_ID: "102"
+          CHALIN_ONE_STAGING_PUBLISHER_USER_ID: "103"
+          CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "false"
+          CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: ""
+        run: |
+          npm run verify:chalin-one:staging
+          npm run seed:chalin-one:staging:dry-run
+          CHALIN_ONE_ALLOW_SCHEMA_MIGRATION=true CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM=20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION npm run verify:chalin-one:staging:migration
+
       - name: Enforce additive migration safety
         run: npm run migration-safety -- --base origin/main --head HEAD
 
