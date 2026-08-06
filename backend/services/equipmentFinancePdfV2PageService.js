@@ -116,10 +116,7 @@ function drawWatermark(doc, document) {
   const centreX = doc.page.width / 2;
   const centreY = doc.page.height / 2 + 28;
 
-  doc.save();
-  doc.opacity(0.055);
-  drawOfficialLogo(doc, centreX - 140, centreY - 145, 280, 280, 1);
-  doc.restore();
+  drawOfficialLogo(doc, centreX - 140, centreY - 145, 280, 280, 0.055);
 
   doc.save();
   doc.strokeColor(template.accent).opacity(0.055).lineWidth(2.2);
@@ -177,12 +174,12 @@ function drawHeader(doc, document) {
 
   const logoDrawn = drawOfficialLogo(doc, left + 2, 20, 72, 72);
   const brandX = logoDrawn ? left + 86 : left;
-  const brandWidth = 300;
+  const brandWidth = 260;
   doc.fillColor(COLORS.paper).font("Times-Bold").fontSize(18).text(
     clean(snapshot.company?.name, "CHALIN 03 COMPANY LIMITED"),
     brandX,
     28,
-    { width: brandWidth, lineBreak: false }
+    { width: brandWidth, lineBreak: false, ellipsis: true }
   );
   doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(7.2).text(
     "EQUIPMENT  •  FINANCE  •  TRUST",
@@ -196,7 +193,7 @@ function drawHeader(doc, document) {
       .join("  •  "),
     brandX,
     75,
-    { width: brandWidth, lineBreak: false }
+    { width: brandWidth, lineBreak: false, ellipsis: true }
   );
 
   const metaWidth = 152;
