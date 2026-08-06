@@ -1,8 +1,15 @@
 # CHALIN ONE local/staging migration order.
-# Run only against a confirmed isolated _test or staging database.
+# Run only against a confirmed isolated acceptance, development or staging database.
 # Never run this list automatically during backend startup.
 
+# Release B public website and Content Studio foundation.
 database/migrations/20260805_chalin_one_public_content_foundation.sql
 
-# Read-only verification runs after the migration.
+# Read-only public-content verification.
 database/migrations/20260805_chalin_one_public_content_foundation_verify.sql
+
+# Release C secure AI and governed knowledge foundation.
+database/migrations/20260806_chalin_one_ai_foundation.sql
+
+# Read-only AI foundation and secret-column verification.
+database/migrations/20260806_chalin_one_ai_foundation_verify.sql
