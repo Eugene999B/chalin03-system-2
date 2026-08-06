@@ -49,10 +49,11 @@ assert.match(deposit, /queueFilter/);
 assert.match(deposit, /Search opening deposit agreements/);
 assert.match(deposit, /finance-simplified__compact-register/);
 assert.match(deposit, /Selected agreement/);
+assert.match(deposit, /Record Deposit/);
 assert.doesNotMatch(deposit, /â|ðŸ/);
 
 assert.match(activation, /Search agreement activation candidates/);
-assert.match(activation, /Review & Activate/);
+assert.match(activation, /Create Agreement/);
 assert.match(activation, /finance-simplified__compact-register/);
 assert.match(activation, /Selected application/);
 
