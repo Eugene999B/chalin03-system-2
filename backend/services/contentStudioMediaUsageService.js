@@ -1,6 +1,10 @@
 "use strict";
 
-const { ContentStudioError, positiveInteger, schemaNotReadyError } = require("./contentStudioPageService");
+const {
+  ContentStudioError,
+  positiveInteger,
+  schemaNotReadyError,
+} = require("./contentStudioPageService");
 
 const MEDIA_USAGE_QUERIES = Object.freeze([
   Object.freeze({
@@ -50,6 +54,66 @@ const MEDIA_USAGE_QUERIES = Object.freeze([
             AND JSON_CONTAINS(
               cv.snapshot_json,
               JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "business_division_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('division:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'business_division'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "location_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('location:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'location'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "testimonial_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('testimonial:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'testimonial'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('portrait_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "job_vacancy_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('vacancy:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'job_vacancy'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('featured_media_asset_id', ?)
+            )
+          LIMIT 25`,
+  }),
+  Object.freeze({
+    type: "tender_version_snapshot",
+    sql: `SELECT cv.id, CONCAT('tender:v', cv.version_number) AS label
+          FROM public_content_versions cv
+          WHERE cv.entity_type = 'tender'
+            AND cv.version_status IN ('draft','in_review','approved','published')
+            AND JSON_CONTAINS(
+              cv.snapshot_json,
+              JSON_OBJECT('document_media_asset_id', ?)
             )
           LIMIT 25`,
   }),
