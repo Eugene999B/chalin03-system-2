@@ -77,7 +77,7 @@ check("dashboard normalization converts SQL values to safe non-negative numbers"
   assert.equal(result.media.quarantined, 0);
 });
 
-check("API client reuses authenticated Axios and has no token or raw fetch logic", () => {
+check("foundation API reuses authenticated Axios and has no token or raw fetch logic", () => {
   assert.match(apiSource, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
   assert.doesNotMatch(apiSource, /localStorage|sessionStorage|Bearer|fetch\(/);
   assert.match(apiSource, /Unsupported Content Studio resource path/);
@@ -114,11 +114,23 @@ check("requests are abortable and permission changes reset inaccessible modules"
   assert.match(workspaceSource, /sections\.some/);
 });
 
-check("first visual release is read-only and does not bypass approval writes", () => {
-  assert.doesNotMatch(apiSource, /axiosClient\.(post|put|patch|delete)/);
-  assert.match(workspaceSource, /Read-only foundation/);
-  assert.match(workspaceSource, /approval workflow/);
-  assert.doesNotMatch(workspaceSource, /window\.location\.href/);
+check("workspace maps every manager without direct routing or token bypass", () => {
+  for (const manager of [
+    "ContentStudioPageManager",
+    "ContentStudioNewsroomManager",
+    "ContentStudioLeadershipManager",
+    "ContentStudioProjectManager",
+    "ContentStudioEquipmentManager",
+    "ContentStudioCompanyInfoManager",
+    "ContentStudioMediaManager",
+    "ContentStudioFormManager",
+    "ContentStudioEnquiryDesk",
+    "ContentStudioApprovalInbox",
+    "ContentStudioNavigationManager",
+    "ContentStudioSettingsManager",
+  ]) assert.match(workspaceSource, new RegExp(manager));
+  assert.match(workspaceSource, /const MANAGERS/);
+  assert.doesNotMatch(workspaceSource, /window\.location\.href|localStorage|Bearer/);
 });
 
 check("dashboard communicates protected governance and operational queues", () => {
@@ -145,9 +157,12 @@ check("design system includes required professional status colors", () => {
   assert.match(cssSource, /--cs-danger/);
 });
 
-check("package barrel exposes the isolated Content Studio foundation", () => {
+check("package barrel exposes the complete Content Studio package", () => {
   assert.match(indexSource, /ContentStudioWorkspace/);
-  assert.match(indexSource, /contentStudioApi/);
+  assert.match(indexSource, /ContentStudioMediaManager/);
+  assert.match(indexSource, /ContentStudioFormManager/);
+  assert.match(indexSource, /ContentStudioApprovalInbox/);
+  assert.match(indexSource, /contentStudioOperationsApi/);
   assert.match(indexSource, /contentStudioModel/);
 });
 
