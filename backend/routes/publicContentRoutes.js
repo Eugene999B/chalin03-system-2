@@ -24,6 +24,9 @@ const {
   listPublicVacancies,
 } = require("../services/publicContentService");
 const {
+  getPublicHomepage,
+} = require("../services/publicHomepageService");
+const {
   PublicSubmissionValidationError,
   createPublicFormSubmission,
 } = require("../services/publicFormSubmissionService");
@@ -157,6 +160,16 @@ router.get("/bootstrap", async (req, res) => {
     return success(res, req, await getPublicBootstrap(), {
       cacheSeconds: 60,
     });
+  } catch (error) {
+    return sendPublicError(res, req, error);
+  }
+});
+
+router.get("/homepage", async (req, res) => {
+  try {
+    const page = await getPublicHomepage();
+    if (!page) return notFound(res, req, "Homepage");
+    return success(res, req, page, { cacheSeconds: 120 });
   } catch (error) {
     return sendPublicError(res, req, error);
   }
