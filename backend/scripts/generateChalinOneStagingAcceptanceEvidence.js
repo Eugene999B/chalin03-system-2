@@ -21,6 +21,8 @@ const DEFAULT_OUTPUT = path.join(
   "chalin-one-staging-acceptance.json"
 );
 
+const ACCEPTANCE_DATABASE_PATTERN = /^chalin_one_acceptance(?:_[a-z0-9_]+)?$/i;
+const STAGING_DATABASE_PATTERN = /^chalin_one_staging(?:_[a-z0-9_]+)?$/i;
 const PRODUCTION_HOSTS = new Set([
   "chalin03.com",
   "www.chalin03.com",
@@ -159,6 +161,24 @@ function safeStagingUrl(value, label) {
   return parsed.toString().replace(/\/$/, "");
 }
 
+function releaseEnvironmentEvidence(value) {
+  const environment =
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const mode = clean(environment.mode).toLowerCase();
+  const databaseName = clean(environment.database_name);
+  const databaseSafe =
+    (mode === "acceptance" && ACCEPTANCE_DATABASE_PATTERN.test(databaseName)) ||
+    (mode === "staging" && STAGING_DATABASE_PATTERN.test(databaseName));
+
+  return {
+    passed: environment.safe === true && databaseSafe,
+    safe: environment.safe === true,
+    mode: mode || null,
+    database_name: databaseName || null,
+    database_name_safe: databaseSafe,
+  };
+}
+
 function smokeEvidence(report) {
   const checks = Array.isArray(report?.checks) ? report.checks : [];
   const checksByName = new Map(
@@ -248,7 +268,7 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
     "Browser evidence commit SHA"
   );
   const commitMatch = releaseSha === smokeSha && smokeSha === browserSha;
-  const releaseEnvironment = clean(release?.environment).toLowerCase();
+  const environmentGate = releaseEnvironmentEvidence(release?.environment);
   const namedReleaseGates =
     release?.gates &&
     typeof release.gates === "object" &&
@@ -259,10 +279,10 @@ function evaluateStagingAcceptance({ release, smoke, browser }) {
   const releaseGate = {
     passed:
       release?.release_ready === true &&
-      releaseEnvironment !== "production" &&
+      environmentGate.passed &&
       releaseGateValues.length > 0 &&
       releaseGateValues.every((passed) => passed === true),
-    environment: releaseEnvironment || null,
+    environment: environmentGate,
     gate_count: Object.keys(namedReleaseGates).length,
   };
   const smokeGate = smokeEvidence(smoke);
@@ -369,6 +389,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ACCEPTANCE_DATABASE_PATTERN,
   ChalinOneStagingAcceptanceError,
   DEFAULT_BROWSER_EVIDENCE,
   DEFAULT_OUTPUT,
@@ -377,6 +398,7 @@ module.exports = {
   PRODUCTION_HOSTS,
   REQUIRED_BROWSER_GATES,
   REQUIRED_SMOKE_CHECKS,
+  STAGING_DATABASE_PATTERN,
   argumentValue,
   browserEvidence,
   commandOptions,
@@ -384,6 +406,7 @@ module.exports = {
   generateStagingAcceptanceEvidence,
   normalizeCommitSha,
   readJson,
+  releaseEnvironmentEvidence,
   safeStagingUrl,
   smokeEvidence,
 };
