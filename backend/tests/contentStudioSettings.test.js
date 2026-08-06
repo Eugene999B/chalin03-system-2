@@ -21,6 +21,10 @@ const serviceSource = fs.readFileSync(
   path.join(repoRoot, "backend/services/contentStudioSettingsService.js"),
   "utf8"
 );
+const sharedAuditSource = fs.readFileSync(
+  path.join(repoRoot, "backend/services/contentStudioPageService.js"),
+  "utf8"
+);
 const settingsRouteSource = fs.readFileSync(
   path.join(repoRoot, "backend/routes/contentStudioSettingsRoutes.js"),
   "utf8"
@@ -69,7 +73,8 @@ test("settings writes are transactional, audited and never delete records", () =
   assert.match(serviceSource, /beginTransaction\(\)/);
   assert.match(serviceSource, /commit\(\)/);
   assert.match(serviceSource, /rollback\(\)/);
-  assert.match(serviceSource, /public_content_audit_log/);
+  assert.match(serviceSource, /insertContentAudit\(connection/);
+  assert.match(sharedAuditSource, /INSERT INTO public_content_audit_log/);
   assert.match(serviceSource, /PUBLIC_SITE_SETTING_CREATED/);
   assert.match(serviceSource, /PUBLIC_SITE_SETTING_UPDATED/);
   assert.match(serviceSource, /PUBLIC_SITE_SETTING_DEACTIVATED/);
