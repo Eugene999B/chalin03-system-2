@@ -1,8 +1,62 @@
 (() => {
-  const STATE_KEY = "chalin03:asset-recovery-state:v34";
+  const STATE_KEY = "chalin03:asset-recovery-state:v35";
+  const RECOVERY_PARAM = "__chalin03_recovery";
+  const RETURN_PARAM = "__chalin03_return";
+  const INTERNAL_PARAMS = [
+    RECOVERY_PARAM,
+    RETURN_PARAM,
+    "__chalin03_sw_recovery",
+    "__chalin03_sw_release",
+  ];
   const WINDOW_MS = 2 * 60 * 1000;
-  const MAX_ATTEMPTS = 8;
+  const MAX_ATTEMPTS = 5;
   let recoveryStarted = false;
+
+  function removeInternalParams(url) {
+    INTERNAL_PARAMS.forEach((name) => url.searchParams.delete(name));
+    return url;
+  }
+
+  function safeReturnTarget(value) {
+    if (!value) return "/";
+
+    try {
+      const url = removeInternalParams(
+        new URL(String(value), window.location.origin)
+      );
+      if (url.origin !== window.location.origin) return "/";
+      if (!url.pathname.startsWith("/") || url.pathname.startsWith("//")) {
+        return "/";
+      }
+      if (
+        url.pathname.startsWith("/assets/") ||
+        /\.(?:js|mjs|css|wasm)$/i.test(url.pathname)
+      ) {
+        return "/";
+      }
+      return `${url.pathname}${url.search}${url.hash}` || "/";
+    } catch {
+      return "/";
+    }
+  }
+
+  function requestedReturnTarget() {
+    const current = new URL(window.location.href);
+    const supplied = current.searchParams.get(RETURN_PARAM);
+    if (supplied) return safeReturnTarget(supplied);
+    return safeReturnTarget(
+      `${current.pathname}${current.search}${current.hash}`
+    );
+  }
+
+  function restoreReturnTarget() {
+    const current = new URL(window.location.href);
+    const supplied = current.searchParams.get(RETURN_PARAM);
+    if (!supplied) return;
+
+    const target = safeReturnTarget(supplied);
+    window.history.replaceState(window.history.state, "", target);
+  }
 
   function readState() {
     try {
@@ -42,8 +96,9 @@
   }
 
   function recoveryUrl() {
-    const url = new URL(window.location.href);
-    url.searchParams.set("__chalin03_recovery", String(Date.now()));
+    const url = new URL("/", window.location.origin);
+    url.searchParams.set(RECOVERY_PARAM, String(Date.now()));
+    url.searchParams.set(RETURN_PARAM, requestedReturnTarget());
     return url.toString();
   }
 
@@ -63,26 +118,38 @@
       document.body.appendChild(panel);
     }
 
-    panel.innerHTML =
-      '<section style="max-width:560px;background:#fff;border:1px solid #dbe3ef;' +
-      'border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(16,33,59,.14)">' +
-      '<h1 style="margin:0 0 12px;font-size:1.55rem">Updating Chalin 03</h1>' +
-      '<p style="margin:0;line-height:1.6;color:#526178">' +
-      message +
-      "</p>" +
-      (allowRetry
-        ? '<button id="chalin03-update-retry" type="button" style="margin-top:18px;' +
-          'border:0;border-radius:10px;padding:11px 18px;background:#07182c;color:#fff;' +
-          'font:inherit;font-weight:700;cursor:pointer">Retry now</button>'
-        : "") +
-      "</section>";
+    panel.replaceChildren();
+    const section = document.createElement("section");
+    section.style.cssText =
+      "max-width:560px;background:#fff;border:1px solid #dbe3ef;" +
+      "border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(16,33,59,.14)";
 
-    document
-      .getElementById("chalin03-update-retry")
-      ?.addEventListener("click", () => {
+    const heading = document.createElement("h1");
+    heading.style.cssText = "margin:0 0 12px;font-size:1.55rem";
+    heading.textContent = "Updating Chalin 03";
+
+    const paragraph = document.createElement("p");
+    paragraph.style.cssText = "margin:0;line-height:1.6;color:#526178";
+    paragraph.textContent = message;
+
+    section.append(heading, paragraph);
+
+    if (allowRetry) {
+      const button = document.createElement("button");
+      button.id = "chalin03-update-retry";
+      button.type = "button";
+      button.style.cssText =
+        "margin-top:18px;border:0;border-radius:10px;padding:11px 18px;" +
+        "background:#07182c;color:#fff;font:inherit;font-weight:700;cursor:pointer";
+      button.textContent = "Retry now";
+      button.addEventListener("click", () => {
         clearState();
         window.location.replace(recoveryUrl());
       });
+      section.appendChild(button);
+    }
+
+    panel.appendChild(section);
   }
 
   async function clearRuntimeCaches() {
@@ -154,15 +221,17 @@
     }
 
     showStatus(
-      `A retired browser file was detected (${reason}). Clearing it and loading the current release automatically.`
+      `A retired browser file was detected (${reason}). Loading the current release automatically without losing your page.`
     );
 
     await clearRuntimeCaches();
 
     window.setTimeout(() => {
       window.location.replace(recoveryUrl());
-    }, Math.min(750 * state.attempts, 4500));
+    }, Math.min(600 * state.attempts, 3000));
   }
+
+  restoreReturnTarget();
 
   window.__chalin03RecoverFromAssetMismatch = recover;
   window.__chalin03MarkBootHealthy = clearState;
