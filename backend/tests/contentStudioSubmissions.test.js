@@ -21,7 +21,11 @@ const serviceSource = fs.readFileSync(
   path.join(repoRoot, "backend/services/contentStudioSubmissionService.js"),
   "utf8"
 );
-const routeSource = fs.readFileSync(
+const coreRouteSource = fs.readFileSync(
+  path.join(repoRoot, "backend/routes/contentStudioCoreRoutes.js"),
+  "utf8"
+);
+const aggregatorSource = fs.readFileSync(
   path.join(repoRoot, "backend/routes/contentStudioRoutes.js"),
   "utf8"
 );
@@ -97,19 +101,23 @@ test("assignment, review and status changes are transactional and audited", () =
 
 test("enquiry desk routes separate viewing, responding and management authority", () => {
   assert.match(
-    routeSource,
+    coreRouteSource,
     /"\/submissions"[\s\S]*?public_submissions\.view/
   );
   assert.match(
-    routeSource,
+    coreRouteSource,
     /"\/submissions\/:submissionId\/review"[\s\S]*?public_submissions\.respond/
   );
   assert.match(
-    routeSource,
+    coreRouteSource,
     /"\/submissions\/:submissionId\/assign"[\s\S]*?public_submissions\.manage/
   );
   assert.match(
-    routeSource,
+    coreRouteSource,
     /"\/submissions\/:submissionId\/status"[\s\S]*?public_submissions\.manage/
+  );
+  assert.match(
+    aggregatorSource,
+    /router\.use\("\/", contentStudioCoreRoutes\)/
   );
 });
