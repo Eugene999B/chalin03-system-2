@@ -85,6 +85,9 @@ jobs:
       - name: Verify governed Leadership Manager
         run: node scripts/contentStudioLeadershipManagerTests.mjs
 
+      - name: Verify expanded company manager batch
+        run: node scripts/contentStudioExpandedManagersTests.mjs
+
       - name: Compile isolated Content Studio JSX
         run: node scripts/contentStudioJsxSyntaxTests.mjs
 
