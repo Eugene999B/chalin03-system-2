@@ -4,6 +4,7 @@ const express = require("express");
 
 const { ContentStudioError } = require("../services/contentStudioPageService");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
+const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
 const contentStudioNavigationRoutes = require("./contentStudioNavigationRoutes");
 const contentStudioPortfolioRoutes = require("./contentStudioPortfolioRoutes");
 const contentStudioSettingsRoutes = require("./contentStudioSettingsRoutes");
@@ -13,10 +14,12 @@ const router = express.Router();
 // Capability boundaries are enforced inside the mounted routers:
 // public_content.view, public_content.create, public_content.edit,
 // public_content.submit, public_content.review, public_content.approve,
-// public_content.publish, public_content.restore_version, public_content.archive.
+// public_content.publish, public_content.restore_version, public_content.archive,
+// public_media.view and public_media.manage.
 
 router.use("/settings", contentStudioSettingsRoutes);
 router.use("/navigation", contentStudioNavigationRoutes);
+router.use("/media", contentStudioMediaRoutes);
 router.use("/portfolio", contentStudioPortfolioRoutes);
 router.use("/", contentStudioCoreRoutes);
 
