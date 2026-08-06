@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import axiosClient from "../api/axiosClient";
-import EquipmentFinanceCustomerPhotoStartPage from "./EquipmentFinanceCustomerPhotoStartPage";
+import EquipmentFinanceOperationalStartImmediatePage from "./EquipmentFinanceOperationalStartImmediatePage";
 
 const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
@@ -92,7 +92,7 @@ export default function EquipmentFinancePhaseThreeStartRedirectPage() {
     };
   }, []);
 
-  return <EquipmentFinanceCustomerPhotoStartPage />;
+  return <EquipmentFinanceOperationalStartImmediatePage />;
 }
 
 export {
