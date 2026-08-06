@@ -7,7 +7,9 @@ const path = require("node:path");
 
 const { ContentStudioError } = require("../services/contentStudioPageService");
 const {
+  MAX_PARENT_DEPTH,
   NAVIGATION_LOCATIONS,
+  assertNoNavigationCycle,
   normalizeNavigationKey,
   normalizeNavigationLocation,
   normalizeNavigationUrl,
@@ -160,13 +162,51 @@ test("navigation review blocks self approval and assigned-reviewer bypass", () =
   assert.match(serviceSource, /CONTENT_APPROVAL_ASSIGNED_ELSEWHERE/);
 });
 
-test("navigation hierarchy validates parents, cycles and maximum depth", () => {
+test("navigation hierarchy validates parents, cycles and shared public depth", () => {
+  assert.equal(MAX_PARENT_DEPTH, 4);
   assert.match(serviceSource, /NAVIGATION_SELF_PARENT_BLOCKED/);
   assert.match(serviceSource, /NAVIGATION_PARENT_NOT_FOUND/);
   assert.match(serviceSource, /NAVIGATION_CYCLE_BLOCKED/);
   assert.match(serviceSource, /NAVIGATION_CYCLE_DETECTED/);
   assert.match(serviceSource, /NAVIGATION_DEPTH_EXCEEDED/);
-  assert.match(serviceSource, /MAX_PARENT_DEPTH = 20/);
+  assert.match(serviceSource, /MAX_PARENT_DEPTH = 4/);
+  assert.match(
+    serviceSource,
+    /const itemId = Number\(result\.insertId\);\s*await assertNoNavigationCycle\(connection, itemId, snapshot\.parent_id\);/
+  );
+});
+
+test("navigation depth accepts four ancestors and rejects a fifth", async () => {
+  function connectionFor(parentById) {
+    return {
+      async query(_sql, values) {
+        const id = Number(values[0]);
+        return [[{ parent_id: parentById.get(id) ?? null }]];
+      },
+    };
+  }
+
+  await assert.doesNotReject(() =>
+    assertNoNavigationCycle(
+      connectionFor(new Map([[4, 3], [3, 2], [2, 1], [1, null]])),
+      99,
+      4
+    )
+  );
+
+  await assert.rejects(
+    () =>
+      assertNoNavigationCycle(
+        connectionFor(
+          new Map([[5, 4], [4, 3], [3, 2], [2, 1], [1, null]])
+        ),
+        99,
+        5
+      ),
+    (error) =>
+      error instanceof ContentStudioError &&
+      error.code === "NAVIGATION_DEPTH_EXCEEDED"
+  );
 });
 
 test("parent archive is blocked transactionally while active children remain", () => {
