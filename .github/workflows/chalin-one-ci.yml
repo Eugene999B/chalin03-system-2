@@ -88,6 +88,8 @@ jobs:
           FEATURE_APPLICANT_PORTAL: "false"
           FEATURE_AI_ACTIONS: "false"
           FEATURE_AI_SCHEDULED_JOBS: "false"
+          AI_PROVIDER: disabled
+          AI_ALLOW_MOCK_PROVIDER: "false"
           PUBLIC_MEDIA_STORAGE_PROVIDER: local
           PUBLIC_MEDIA_LOCAL_ROOT: ./tmp/chalin-one-staging-media
           PUBLIC_FORM_IP_HASH_SECRET: chalin-one-staging-ci-only-public-form-secret-000000000000000000000000000000
@@ -96,6 +98,8 @@ jobs:
           CHALIN_ONE_STAGING_PUBLISHER_USER_ID: "103"
           CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "false"
           CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: ""
+          CHALIN_ONE_ALLOW_AI_SCHEMA_MIGRATION: "false"
+          CHALIN_ONE_AI_MIGRATION_CONFIRM: ""
         run: |
           npm run verify:chalin-one:staging
           npm run seed:chalin-one:staging:dry-run
@@ -111,9 +115,9 @@ jobs:
         run: npm test
 
   chalin-one-database-acceptance:
-    name: CHALIN ONE database acceptance
+    name: CHALIN ONE public and AI database acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.4
@@ -140,6 +144,16 @@ jobs:
       DB_SSL: "false"
       CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "true"
       CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: 20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION
+      CHALIN_ONE_ALLOW_AI_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_AI_MIGRATION_CONFIRM: 20260806_CHALIN_ONE_AI_FOUNDATION
+      FEATURE_AI_ENABLED: "false"
+      FEATURE_CHALIN_COPILOT: "false"
+      FEATURE_CHALIN_EXECUTIVE: "false"
+      FEATURE_CHALIN_GUIDE: "false"
+      FEATURE_AI_ACTIONS: "false"
+      FEATURE_AI_SCHEDULED_JOBS: "false"
+      AI_PROVIDER: disabled
+      AI_ALLOW_MOCK_PROVIDER: "false"
       PUBLIC_FORM_IP_HASH_SECRET: chalin-one-acceptance-only-ip-hash-secret-000000000000000000000000
     steps:
       - name: Check out repository
@@ -163,10 +177,16 @@ jobs:
       - name: Rehearse approved public-content migration
         run: npm run migrate:chalin-one:public-content
 
-      - name: Verify migration idempotency
+      - name: Verify public-content migration idempotency
         run: npm run migrate:chalin-one:public-content
 
-      - name: Run database-backed Content Studio acceptance
+      - name: Rehearse approved AI foundation migration
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Verify AI foundation migration idempotency
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Run database-backed Content Studio and AI acceptance
         run: npm run test:chalin-one:db
 
       - name: Generate machine-readable release evidence
@@ -252,7 +272,7 @@ jobs:
           FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
         run: |
           state=success
-          description="Backend, MySQL acceptance, frontend tests and build passed"
+          description="Backend, public/AI MySQL acceptance, frontend tests and build passed"
           passed=true
           if [[ "${BACKEND_RESULT}" != "success" || "${DATABASE_RESULT}" != "success" || "${FRONTEND_RESULT}" != "success" ]]; then
             state=failure
