@@ -9,7 +9,7 @@ const {
 } = require("../services/equipmentFinancePdfBlankPageGuardService");
 const {
   renderCompletionPdf,
-} = require("../services/equipmentFinanceCompletionRendererService");
+} = require("../services/equipmentFinanceDocumentRendererV2Service");
 
 function pageCount(buffer) {
   return (buffer.toString("latin1").match(/\/Type\s*\/Page\b/g) || []).length;
@@ -43,6 +43,7 @@ function documentFixture(type = "payment_schedule") {
         asset_name: "BULLDOZER",
         total_amount: 100000,
         deposit_required: 1,
+        financed_amount: 99999,
         amount_paid: 0,
         outstanding_balance: 100000,
         payment_frequency: "monthly",
@@ -69,24 +70,30 @@ function documentFixture(type = "payment_schedule") {
   };
 }
 
-test("the guard recognises only Chalin 03 Finance page footers", () => {
+test("the legacy guard still recognises the V2 Chalin 03 Finance footer", () => {
   assert.equal(isFinanceFooterText(`${FINANCE_FOOTER_PREFIX} EFS-001 | Page 1 of 1`), true);
   assert.equal(isFinanceFooterText("Ordinary agreement body text"), false);
 });
 
-test("a one-page generated Finance schedule has no trailing blank PDF page", async () => {
+test("a one-page V2 Finance schedule has no trailing blank PDF page", async () => {
   const buffer = await renderCompletionPdf(documentFixture());
   assert.equal(buffer.subarray(0, 4).toString(), "%PDF");
+  assert.ok(buffer.length > 2500);
   assert.equal(pageCount(buffer), 1);
 });
 
-test("the completion route installs the guard before loading PDF renderers", () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, "..", "routes", "equipmentFinanceDocumentCompletionRoutes.js"),
+test("the V2 renderer uses manual first-page creation and no-break footer writing", () => {
+  const renderer = fs.readFileSync(
+    path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
   );
-  const guardIndex = source.indexOf("equipmentFinancePdfBlankPageGuardService");
-  const rendererIndex = source.indexOf("equipmentFinanceCustomerPhotoRendererService");
-  assert.ok(guardIndex >= 0);
-  assert.ok(rendererIndex > guardIndex);
+  const pages = fs.readFileSync(
+    path.join(__dirname, "..", "services", "equipmentFinancePdfV2PageService.js"),
+    "utf8"
+  );
+  assert.match(renderer, /autoFirstPage: false/);
+  assert.match(renderer, /addPage\(doc, document\)/);
+  assert.match(pages, /safeAbsoluteText/);
+  assert.match(pages, /page\.margins\.bottom = 0/);
+  assert.match(pages, /page\.margins\.bottom = oldBottom/);
 });
