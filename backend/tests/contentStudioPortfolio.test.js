@@ -194,7 +194,7 @@ test("publishing requires independent approval and public-ready media", () => {
   assert.match(serviceSource, /visibility !== "public"/);
   assert.match(serviceSource, /processing_status !== "ready"/);
   assert.match(serviceSource, /PUBLIC_MEDIA_NOT_READY/);
-  assert.match(serviceSource, /SCHEDULED_LIVE_UPDATE_BLOCKED/);
+  assert.match(serviceSource, /PORTFOLIO_SCHEDULING_NOT_READY/);
 });
 
 test("project gallery changes are isolated in versions and applied only during publication", () => {
