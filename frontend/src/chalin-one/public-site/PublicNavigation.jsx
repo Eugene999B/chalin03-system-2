@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router";
 import "./publicNavigation.css";
 
 const PUBLIC_ROOT = "/website";
@@ -248,23 +248,27 @@ export function PublicNavigation({ items, menuOpen, onMenuClose }) {
     () => buildPublicNavigationTree(items, "header"),
     [items]
   );
-  const tree = publishedTree.length > 0
-    ? publishedTree
-    : buildPublicNavigationTree(
-        FALLBACK_HEADER_ITEMS.map((item, index) => ({
-          ...item,
-          location: "header",
-          sort_order: index,
-        })),
-        "header"
-      );
+  const tree = useMemo(
+    () =>
+      publishedTree.length > 0
+        ? publishedTree
+        : buildPublicNavigationTree(
+            FALLBACK_HEADER_ITEMS.map((item, index) => ({
+              ...item,
+              location: "header",
+              sort_order: index,
+            })),
+            "header"
+          ),
+    [publishedTree]
+  );
 
-  function closeAll() {
+  const closeAll = useCallback(() => {
     setOpenKeys(new Set());
     onMenuClose?.();
-  }
+  }, [onMenuClose]);
 
-  function toggleKey(key, forced) {
+  const toggleKey = useCallback((key, forced) => {
     setOpenKeys((current) => {
       const next = new Set(current);
       const shouldOpen = forced === undefined ? !next.has(key) : forced;
@@ -272,11 +276,11 @@ export function PublicNavigation({ items, menuOpen, onMenuClose }) {
       else next.delete(key);
       return next;
     });
-  }
+  }, []);
 
   useEffect(() => {
     closeAll();
-  }, [location.pathname]);
+  }, [closeAll, location.pathname]);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -294,7 +298,7 @@ export function PublicNavigation({ items, menuOpen, onMenuClose }) {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [closeAll]);
 
   return (
     <nav
