@@ -55,6 +55,21 @@ test("CHALIN ONE CI runs for development pushes, synchronization PRs and release
   assert.match(workflow, /cancel-in-progress: true/);
 });
 
+test("CI publishes an explicit aggregate commit status for connected verification", () => {
+  const workflow = read(".github/workflows/chalin-one-ci.yml");
+  assert.match(workflow, /statuses: write/);
+  assert.match(workflow, /ci-status-start:/);
+  assert.match(workflow, /ci-status-final:/);
+  assert.match(workflow, /--arg state pending/);
+  assert.match(workflow, /context chalin-one\/ci/);
+  assert.match(workflow, /needs\.backend-tests\.result/);
+  assert.match(workflow, /needs\.chalin-one-database-acceptance\.result/);
+  assert.match(workflow, /needs\.frontend-tests\.result/);
+  assert.match(workflow, /\/statuses\/\$\{GITHUB_SHA\}/);
+  assert.match(workflow, /CHALIN ONE CI failed; inspect the workflow run/);
+  assert.match(workflow, /Backend, MySQL acceptance, frontend tests and build passed/);
+});
+
 test("generated evidence stays outside source control", () => {
   const gitignore = read(".gitignore");
   assert.match(gitignore, /^backend\/artifacts\/$/m);
