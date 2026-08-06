@@ -154,6 +154,10 @@ test("definition validation rejects missing, duplicate and invalid quantities", 
 });
 
 test("correction is production-only, one-time, locked, transactional and audited", () => {
+  assert.equal(
+    correction.CORRECTION_RECORD,
+    "20260806_kwabena_main_store_quantity_correction"
+  );
   assert.match(source, /NODE_ENV/);
   assert.match(source, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(source, /SELECT GET_LOCK/);
