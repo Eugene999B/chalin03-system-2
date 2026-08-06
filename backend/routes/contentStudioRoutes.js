@@ -4,6 +4,7 @@ const express = require("express");
 
 const { ContentStudioError } = require("../services/contentStudioPageService");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
+const contentStudioFormRoutes = require("./contentStudioFormRoutes");
 const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
 const contentStudioNavigationRoutes = require("./contentStudioNavigationRoutes");
 const contentStudioPortfolioRoutes = require("./contentStudioPortfolioRoutes");
@@ -15,11 +16,12 @@ const router = express.Router();
 // public_content.view, public_content.create, public_content.edit,
 // public_content.submit, public_content.review, public_content.approve,
 // public_content.publish, public_content.restore_version, public_content.archive,
-// public_media.view and public_media.manage.
+// public_media.view/manage and public_forms.view/manage.
 
 router.use("/settings", contentStudioSettingsRoutes);
 router.use("/navigation", contentStudioNavigationRoutes);
 router.use("/media", contentStudioMediaRoutes);
+router.use("/forms", contentStudioFormRoutes);
 router.use("/portfolio", contentStudioPortfolioRoutes);
 router.use("/", contentStudioCoreRoutes);
 
