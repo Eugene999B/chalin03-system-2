@@ -15,6 +15,7 @@ const jsxFiles = [
   "ContentStudioDashboard.jsx",
   "ContentStudioWorkspace.jsx",
   "ContentStudioPageManager.jsx",
+  "ContentStudioNewsroomManager.jsx",
 ];
 
 for (const fileName of jsxFiles) {
