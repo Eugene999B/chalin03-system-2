@@ -71,10 +71,10 @@ async function loadApplicationPipeline(connection = pool) {
        COALESCE(SUM(CASE WHEN application_status = 'declined' THEN 1 ELSE 0 END), 0) AS declined_count,
        COALESCE(SUM(CASE WHEN application_status = 'withdrawn' THEN 1 ELSE 0 END), 0) AS withdrawn_count,
        COALESCE(SUM(CASE WHEN kyc_status = 'verified' THEN 1 ELSE 0 END), 0) AS kyc_verified_count,
-       COALESCE(SUM(CASE WHEN kyc_status IN ('pending', 'incomplete', 'not_started') THEN 1 ELSE 0 END), 0) AS kyc_pending_count,
+       COALESCE(SUM(CASE WHEN kyc_status IN ('not_started', 'incomplete', 'complete') THEN 1 ELSE 0 END), 0) AS kyc_pending_count,
        COALESCE(SUM(CASE WHEN affordability_status = 'eligible' THEN 1 ELSE 0 END), 0) AS affordability_eligible_count,
        COALESCE(SUM(CASE WHEN affordability_status = 'manual_review' THEN 1 ELSE 0 END), 0) AS affordability_manual_review_count,
-       COALESCE(SUM(CASE WHEN risk_band IN ('high', 'very_high') THEN 1 ELSE 0 END), 0) AS high_risk_count
+       COALESCE(SUM(CASE WHEN risk_band IN ('high', 'critical') THEN 1 ELSE 0 END), 0) AS high_risk_count
      FROM equipment_credit_applications`
   );
   const row = rows[0] || {};
@@ -154,7 +154,7 @@ function portfolioAlerts(summary = {}, applications = {}, salesInventory = {}) {
     add(
       "warning",
       "high_risk_applications",
-      `${positiveCount(applications.high_risk_count)} application(s) are currently classified high or very high risk.`
+      `${positiveCount(applications.high_risk_count)} application(s) are currently classified high or critical risk.`
     );
   }
   if (positiveCount(salesInventory.available_for_sale) === 0 && positiveCount(salesInventory.sale_capable_assets) > 0) {
