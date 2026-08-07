@@ -13,6 +13,12 @@ const ContentStudioWorkspace = lazy(() =>
 const ChalinIntelligenceWorkspace = lazy(() =>
   import("./ai/ChalinIntelligenceWorkspace")
 );
+const ExecutiveScorecardPage = lazy(() =>
+  import("./ai/ExecutiveScorecardPage")
+);
+const ExecutiveScorecardLauncher = lazy(() =>
+  import("./ai/ExecutiveScorecardLauncher")
+);
 const PublicWebsiteApp = lazy(() =>
   import("./public-site/PublicWebsiteStandaloneApp")
 );
@@ -143,6 +149,19 @@ function ContentStudioEntry() {
   );
 }
 
+function IntelligenceWorkspaceSurface() {
+  if (window.location.pathname === "/intelligence/executive-scorecard") {
+    return <ExecutiveScorecardPage />;
+  }
+
+  return (
+    <>
+      <ChalinIntelligenceWorkspace />
+      <ExecutiveScorecardLauncher />
+    </>
+  );
+}
+
 function IntelligenceEntry() {
   return (
     <StaffStandaloneShell
@@ -150,7 +169,7 @@ function IntelligenceEntry() {
       feature="aiEnabled"
       permission="workspace.view"
     >
-      <ChalinIntelligenceWorkspace />
+      <IntelligenceWorkspaceSurface />
     </StaffStandaloneShell>
   );
 }
