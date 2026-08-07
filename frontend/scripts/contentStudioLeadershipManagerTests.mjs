@@ -47,7 +47,7 @@ check("structured biography is preserved until deliberately replaced", () => {
 
 check("social and contact fields match the backend allowlist", () => {
   for (const key of ["website", "linkedin", "facebook", "instagram", "x", "youtube", "email", "phone"]) {
-    assert.match(manager, new RegExp(`\["${key}"`));
+    assert.equal(manager.includes(`["${key}"`), true);
   }
   assert.match(manager, /mailto:/);
   assert.match(manager, /tel:\+233/);
