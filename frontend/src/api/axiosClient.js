@@ -1,4 +1,5 @@
 import axios from "axios";
+import { API_BASE_URL } from "./apiBaseUrl";
 import "../utils/equipmentMediaCaptureBridge";
 import {
   assertSparePartsInstallmentRequestAllowed,
@@ -7,6 +8,12 @@ import {
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
 const REQUEST_TOKEN_KEY = "__chalin03RequestToken";
+const STALE_SESSION_RETRY_KEY = "__chalin03StaleSessionRetried";
+const FINANCE_APPLICATION_PATH =
+  "/equipment-catalogue/sales/credit-applications";
+const FINANCE_READINESS_PATH = `${FINANCE_APPLICATION_PATH}/readiness`;
+const FINANCE_READINESS_TIMEOUT_MS = 8000;
+const FINANCE_APPLICATION_TIMEOUT_MS = 12000;
 const PUBLIC_SESSION_PATHS = new Set([
   "/auth/login",
   "/auth/recovery/request-otp",
@@ -15,7 +22,7 @@ const PUBLIC_SESSION_PATHS = new Set([
 ]);
 
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: API_BASE_URL,
   timeout: 30000,
 });
 
@@ -35,6 +42,31 @@ function isInstallmentFinanceScreen() {
     typeof window !== "undefined" &&
     window.location.pathname.startsWith("/equipment-installment-finance")
   );
+}
+
+function isFinanceApplicationRead(config) {
+  if (String(config?.method || "get").toLowerCase() !== "get") return false;
+  const path = cleanRequestPath(config?.url);
+  return (
+    path === FINANCE_APPLICATION_PATH ||
+    path === FINANCE_READINESS_PATH ||
+    new RegExp(`^${FINANCE_APPLICATION_PATH}/\\d+(?:/image)?$`).test(path)
+  );
+}
+
+function applyFinanceApplicationDeadline(config) {
+  if (!isFinanceApplicationRead(config)) return config;
+  const path = cleanRequestPath(config?.url);
+  const deadline =
+    path === FINANCE_READINESS_PATH
+      ? FINANCE_READINESS_TIMEOUT_MS
+      : FINANCE_APPLICATION_TIMEOUT_MS;
+  const configuredTimeout = Number(config.timeout);
+  config.timeout =
+    Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? Math.min(configuredTimeout, deadline)
+      : deadline;
+  return config;
 }
 
 function getStoredUser() {
@@ -109,12 +141,6 @@ function clearStoredSession() {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem("chalin03_active_context_mining");
   localStorage.removeItem("chalin03_active_context_equipment_hire");
-}
-
-function restartWithCurrentSession() {
-  window.setTimeout(() => {
-    window.location.reload();
-  }, 0);
 }
 
 function buildCachedProfileResponse(error, cachedUser) {
@@ -198,7 +224,7 @@ axiosClient.interceptors.request.use((config) => {
     config.headers["X-Chalin03-Branch-Name"] = String(branchName);
   }
 
-  return config;
+  return applyFinanceApplicationDeadline(config);
 });
 
 axiosClient.interceptors.response.use(
@@ -246,11 +272,27 @@ axiosClient.interceptors.response.use(
       (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
 
     if (isStaleSessionResponse) {
-      // The user has already received a newer token. Do not reject this old
-      // request into AuthContext.logout(), because that would delete the new
-      // desktop session. Reload once so every component adopts the new token.
-      restartWithCurrentSession();
-      return new Promise(() => {});
+      const alreadyRetried = Boolean(error.config?.[STALE_SESSION_RETRY_KEY]);
+      const requestWasAborted = Boolean(error.config?.signal?.aborted);
+      if (!alreadyRetried && !requestWasAborted) {
+        // Retry once with the current token. Never return an unresolved promise:
+        // that previously left loading flags permanently true without an error.
+        return axiosClient.request({
+          ...error.config,
+          [STALE_SESSION_RETRY_KEY]: true,
+          [REQUEST_TOKEN_KEY]: activeToken,
+          headers: {
+            ...(error.config?.headers || {}),
+            Authorization: `Bearer ${activeToken}`,
+          },
+        });
+      }
+
+      return Promise.reject(
+        new axios.CanceledError(
+          "A stale authenticated request was replaced by the current session."
+        )
+      );
     }
 
     if (isTemporaryProfileFailure) {

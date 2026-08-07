@@ -2,25 +2,32 @@ const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
-  FOLLOW_UP_OUTCOMES,
-  FOLLOW_UP_TYPES,
   getAgreementReminderPreview,
-  getInstallmentAccount,
   getInstallmentReminderSettings,
   listInstallmentReminderHistory,
   previewInstallmentReminders,
-  recordInstallmentFollowUp,
   runEquipmentSalesReminderSync,
   saveInstallmentReminderSettings,
   sendManualInstallmentReminder,
 } = require("../services/equipmentInstallmentCommandService");
 const {
+  FOLLOW_UP_OUTCOMES,
+  FOLLOW_UP_TYPES,
+  QUEUES,
+  correctFinanceCollectionFollowUp,
+  getFinanceArrearsAccount,
+  listFinanceArrears,
+  recordFinanceCollectionFollowUp,
+} = require("../services/equipmentFinanceArrearsService");
+const {
   getInstallmentPortfolio,
-  listInstallmentCollections,
 } = require("../services/equipmentInstallmentReadModelService");
+const equipmentFinanceRecoveryGovernanceRoutes = require("./equipmentFinanceRecoveryGovernanceRoutes");
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
+
+router.use("/governance", equipmentFinanceRecoveryGovernanceRoutes);
 
 function positiveId(value, label) {
   const id = Number(value);
@@ -81,12 +88,12 @@ router.get(
   "/collections",
   requirePermission("fleet.assets.view"),
   asyncHandler(async (req, res) => {
-    const result = await listInstallmentCollections({
-      locationId: locationIdFromScope(req),
+    const result = await listFinanceArrears({
       search: req.query?.search,
       status: req.query?.status,
       risk: req.query?.risk,
       aging: req.query?.aging,
+      queue: req.query?.queue,
       limit: req.query?.limit,
     });
     return res.json({ status: "success", ...result });
@@ -98,10 +105,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   asyncHandler(async (req, res) => {
     const agreementId = positiveId(req.params.agreementId, "Agreement ID");
-    const result = await getInstallmentAccount({
-      agreementId,
-      locationId: locationIdFromScope(req),
-    });
+    const result = await getFinanceArrearsAccount(agreementId);
     return res.json({ status: "success", ...result });
   })
 );
@@ -111,17 +115,38 @@ router.post(
   requirePermission("fleet.assets.manage"),
   asyncHandler(async (req, res) => {
     const agreementId = positiveId(req.params.agreementId, "Agreement ID");
-    const followUp = await recordInstallmentFollowUp({
+    const result = await recordFinanceCollectionFollowUp({
       agreementId,
-      locationId: locationIdFromScope(req, { required: true }),
       userId: userId(req),
       input: req.body || {},
       req,
     });
     return res.status(201).json({
       status: "success",
-      message: "Installment customer follow-up recorded successfully.",
-      follow_up: followUp,
+      message: "Finance collection follow-up recorded successfully.",
+      ...result,
+    });
+  })
+);
+
+router.post(
+  "/agreements/:agreementId/follow-ups/:followUpId/corrections",
+  requirePermission("fleet.assets.manage"),
+  asyncHandler(async (req, res) => {
+    const agreementId = positiveId(req.params.agreementId, "Agreement ID");
+    const followUpId = positiveId(req.params.followUpId, "Follow-up ID");
+    const result = await correctFinanceCollectionFollowUp({
+      agreementId,
+      followUpId,
+      userId: userId(req),
+      input: req.body || {},
+      req,
+    });
+    return res.status(201).json({
+      status: "success",
+      message:
+        "Finance collection follow-up correction recorded. The original evidence was preserved.",
+      ...result,
     });
   })
 );
@@ -264,6 +289,7 @@ router.get("/options", requirePermission("fleet.assets.view"), (_req, res) => {
     status: "success",
     follow_up_types: [...FOLLOW_UP_TYPES],
     follow_up_outcomes: [...FOLLOW_UP_OUTCOMES],
+    queues: [...QUEUES],
     run_confirmation: RUN_CONFIRMATION,
   });
 });

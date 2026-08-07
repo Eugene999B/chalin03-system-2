@@ -4,24 +4,38 @@ import App from "./App.jsx";
 import EmergencyCommandOverlay from "./components/EmergencyCommandOverlay.jsx";
 import CommandArrivalBanner from "./components/CommandArrivalBanner.jsx";
 import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccountingExpenseFundingEvidence.jsx";
+import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
+import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
+import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
+import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
 import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 
+const APP_BUILD_ID =
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v35-${APP_BUILD_ID}`;
+
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
+installCriticalFinanceWorkspacePreload();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
+    <ProductsPageShellRepair />
+    <OperationalApprovalLauncher />
+    <ApprovalCentreLiveAttention />
     <AdvancedAccountingExpenseFundingEvidence />
     <EmergencyCommandOverlay />
     <CommandArrivalBanner />
   </React.StrictMode>
 );
+
+window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
 
 async function removeDevelopmentServiceWorkerCaches() {
   if (!("serviceWorker" in navigator)) {
@@ -39,7 +53,11 @@ async function removeDevelopmentServiceWorkerCaches() {
       const cacheNames = await caches.keys();
 
       await Promise.all(
-        cacheNames.map((cacheName) => caches.delete(cacheName))
+        cacheNames
+          .filter((cacheName) =>
+            String(cacheName).startsWith("chalin03-")
+          )
+          .map((cacheName) => caches.delete(cacheName))
       );
     }
 
@@ -56,7 +74,22 @@ async function removeDevelopmentServiceWorkerCaches() {
   }
 }
 
+function requestAssetRecovery(reason) {
+  if (typeof window.__chalin03RecoverFromAssetMismatch === "function") {
+    window.__chalin03RecoverFromAssetMismatch(reason);
+    return;
+  }
+
+  window.location.reload();
+}
+
 if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
+      requestAssetRecovery("service-worker-asset-mismatch");
+    }
+  });
+
   window.addEventListener("load", () => {
     if (import.meta.env.PROD) {
       const hadActiveController = Boolean(navigator.serviceWorker.controller);
@@ -72,12 +105,25 @@ if ("serviceWorker" in navigator) {
       });
 
       navigator.serviceWorker
-        .register("/sw.js", { updateViaCache: "none" })
+        .register(
+          `/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`,
+          {
+            scope: "/",
+            updateViaCache: "none",
+          }
+        )
         .then((registration) => {
+          registration.waiting?.postMessage({
+            type: "CHALIN03_SKIP_WAITING",
+          });
+
           registration.update().catch(() => {
             // The active worker remains available if an update check is offline.
           });
-          console.log("✅ Chalin 03 service worker registered");
+
+          console.log(
+            `✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`
+          );
         })
         .catch((error) => {
           console.error("❌ Service worker registration failed:", error);

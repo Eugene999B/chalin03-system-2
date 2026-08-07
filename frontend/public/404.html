@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>Updating Chalin 03</title>
+    <style>
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        padding: 24px;
+        background: #f5f7fb;
+        color: #10213b;
+        font-family: Arial, sans-serif;
+        text-align: center;
+      }
+
+      main {
+        max-width: 560px;
+        border: 1px solid #dbe3ef;
+        border-radius: 20px;
+        padding: 30px;
+        background: #fff;
+        box-shadow: 0 18px 50px rgba(16, 33, 59, 0.14);
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.55rem;
+      }
+
+      p {
+        margin: 0;
+        color: #526178;
+        line-height: 1.6;
+      }
+
+      a {
+        display: inline-block;
+        margin-top: 18px;
+        border-radius: 10px;
+        padding: 11px 18px;
+        background: #07182c;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body data-chalin03-static-404="true">
+    <main>
+      <h1>Updating Chalin 03</h1>
+      <p>
+        The current application release is being loaded automatically. Your page and
+        business records are safe.
+      </p>
+      <a href="/">Open Chalin 03</a>
+    </main>
+    <script>
+      (() => {
+        const current = new URL(window.location.href);
+        const isRetiredBuildAsset =
+          current.pathname.startsWith("/assets/") ||
+          /\.(?:js|mjs|css|wasm)$/i.test(current.pathname);
+
+        if (isRetiredBuildAsset) return;
+
+        [
+          "__chalin03_recovery",
+          "__chalin03_return",
+          "__chalin03_sw_recovery",
+          "__chalin03_sw_release",
+        ].forEach((name) => current.searchParams.delete(name));
+
+        const returnTarget = `${current.pathname}${current.search}${current.hash}` || "/";
+        const recovery = new URL("/", window.location.origin);
+        recovery.searchParams.set("__chalin03_recovery", String(Date.now()));
+        recovery.searchParams.set("__chalin03_return", returnTarget);
+        window.location.replace(recovery.toString());
+      })();
+    </script>
+  </body>
+</html>

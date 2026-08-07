@@ -65,6 +65,9 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
 );
+const EquipmentBusinessWorkforcePage = lazy(() =>
+  import("./pages/EquipmentBusinessWorkforcePage")
+);
 const HireCommercialControlPage = lazy(() =>
   import("./pages/HireCommercialControlPage")
 );
@@ -611,6 +614,13 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
@@ -708,6 +718,13 @@ export default function App() {
               element={permissionPage(
                 HIRE_SECTION_PERMISSIONS.shared,
                 <SharedReportsDocumentsPage />
+              )}
+            />
+            <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
               )}
             />
             <Route

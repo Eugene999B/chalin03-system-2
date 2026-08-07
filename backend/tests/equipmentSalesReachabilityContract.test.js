@@ -4,86 +4,69 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "../..");
-const read = (relativePath) =>
-  fs.readFileSync(path.join(root, relativePath), "utf8");
+const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
+const app = read("frontend", "src", "App.jsx");
+const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const startRedirect = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
+);
+const operationalStart = read(
+  "frontend",
+  "src",
+  "pages",
+  "EquipmentFinanceOperationalStartImmediatePage.jsx"
+);
+const applications = read("frontend", "src", "pages", "EquipmentFinanceApplicationsPage.jsx");
+const wizard = read("frontend", "src", "pages", "EquipmentFinanceStartWizardPage.jsx");
+const backend = read("backend", "routes", "equipmentFinancePhaseOneRoutes.js");
 
-const server = read("backend/server.js");
-const boundary = read(
-  "backend/middleware/equipmentCatalogueIntegrityMiddleware.js"
-);
-const schemaService = read("backend/services/equipmentSalesSchemaService.js");
-const salesRoutes = read("backend/routes/equipmentSalesRoutes.js");
-const creditRoutes = read("backend/routes/equipmentCreditApplicationRoutes.js");
-const finalizationRoutes = read(
-  "backend/routes/equipmentSalesFinalizationRoutes.js"
-);
-const workspacePage = read(
-  "frontend/src/pages/EquipmentSalesWorkspacePage.jsx"
-);
-const creditPage = read(
-  "frontend/src/pages/EquipmentCreditApplicationsPage.jsx"
-);
-const reportsPage = read("frontend/src/pages/EquipmentSalesReportsPage.jsx");
-
-test("Equipment Sales remains reachable through the protected catalogue router chain", () => {
-  assert.match(
-    server,
-    /app\.use\(\s*["']\/api\/equipment-catalogue["'][\s\S]*requireAuth[\s\S]*hireBoundary[\s\S]*enforceEquipmentCatalogueWriteIntegrity[\s\S]*equipmentCatalogueRoutes/
-  );
-  assert.doesNotMatch(
-    server,
-    /require\(["']\.\/routes\/equipmentSalesRoutes["']\)/
-  );
-  assert.match(
-    boundary,
-    /const equipmentSalesRoutes = require\(["']\.\.\/routes\/equipmentSalesRoutes["']\)/
-  );
-  assert.match(boundary, /function isEquipmentSalesRequest/);
-  assert.match(boundary, /\^\\\/sales/);
-  assert.match(boundary, /function dispatchEquipmentSalesRouter/);
-  assert.match(boundary, /req\.url = req\.url\.replace/);
-  assert.match(boundary, /return equipmentSalesRoutes\(req, res/);
+test("all simplified Finance routes resolve through the protected Finance layout", () => {
+  assert.match(app, /path="\/equipment-installment-finance"/);
+  assert.match(app, /path="applications"/);
+  assert.match(app, /path="reports"/);
+  assert.match(app, /path="change-password"/);
+  assert.match(app, /InstallmentFinanceLayout/);
 });
 
-test("Equipment Sales finalization routes remain attached exactly once", () => {
-  assert.match(
-    schemaService,
-    /const equipmentSalesRoutes = require\(["']\.\.\/routes\/equipmentSalesRoutes["']\)/
-  );
-  assert.match(
-    schemaService,
-    /const equipmentSalesFinalizationRoutes = require\(["']\.\.\/routes\/equipmentSalesFinalizationRoutes["']\)/
-  );
-  assert.match(
-    schemaService,
-    /if \(!equipmentSalesRoutes\.__chalin03FinalizationMounted\)/
-  );
-  assert.match(
-    schemaService,
-    /equipmentSalesRoutes\.use\(equipmentSalesFinalizationRoutes\)/
-  );
-  assert.match(salesRoutes, /router\.get\(["']\/summary["']/);
-  assert.match(salesRoutes, /router\.post\(["']\/agreements["']/);
-  assert.match(
-    finalizationRoutes,
-    /["']\/agreements\/:id\/documents\/:type\.pdf["']/
-  );
-  assert.match(finalizationRoutes, /["']\/reports\/management["']/);
+test("workspace query stages resolve to explicit Finance pages", () => {
+  for (const pageName of [
+    "EquipmentFinancePhaseThreeStartRedirectPage",
+    "EquipmentFinanceOperationalPolishPage",
+    "EquipmentFinanceCustomerCentrePage",
+    "EquipmentFinanceExcavatorsPage",
+    "EquipmentFinanceApplicationsPage",
+    "EquipmentFinanceAgreementActivationPage",
+    "EquipmentFinanceDepositReservationPage",
+    "EquipmentFinanceArrearsPage",
+    "EquipmentFinanceRecoveryGovernancePage",
+    "EquipmentFinanceFinalLifecyclePage",
+  ]) {
+    assert.match(workspace, new RegExp(pageName));
+  }
+  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
+  assert.match(startRedirect, /START_INSTALLMENT_PATH/);
+  assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
+  assert.match(operationalStart, /EquipmentFinanceStartWizardPage/);
+  assert.match(operationalStart, /recoverInBackground/);
+  assert.match(operationalStart, /Server recovery never blocks this screen/);
 });
 
-test("frontend Finance applications use the protected credit path and cannot finalize sales", () => {
-  assert.match(workspacePage, /EquipmentCreditApplicationsPage/);
-  assert.match(
-    creditPage,
-    /const API = ["']\/equipment-catalogue\/sales\/credit-applications["']/
-  );
-  assert.match(
-    reportsPage,
-    /const API = ["']\/equipment-catalogue\/sales["']/
-  );
-  assert.match(creditRoutes, /router\.post\(\s*["']\/["']/);
-  assert.match(creditRoutes, /["']\/:id\/kyc\/verify["']/);
-  assert.match(creditRoutes, /["']\/:id\/review["']/);
-  assert.doesNotMatch(creditPage, /axiosClient\.post\([^\n]*\/agreements/);
-  assert.doesNotMatch(creditPage, /ownership-transfer|equipment reserved/);
+test("new applications use the protected automatic Offer path", () => {
+  assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
+  assert.match(wizard, /`\$\{API\}\/start-installment`/);
+  assert.match(backend, /\/phase-one\/start-installment/);
+  assert.match(backend, /equipment_sales_quotations/);
+  assert.match(backend, /equipment_credit_applications/);
+  assert.match(backend, /created_automatically:\s*true/);
+  assert.match(applications, /Approve credit application/);
+});
+
+test("application pages cannot silently finalize a sale", () => {
+  assert.doesNotMatch(applications, /ownership-transfer|deliveries\/complete/);
+  assert.doesNotMatch(wizard, /ownership-transfer|deliveries\/complete/);
+  assert.match(workspace, /stage === "activation"/);
+  assert.match(workspace, /stage === "deposit"/);
 });

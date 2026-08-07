@@ -6,12 +6,30 @@ const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
-const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
+const {
+  assertFinanceMutationSafe,
+  refreshFinanceAgreementFromEvidence,
+} = require("../services/equipmentFinanceReconciliationService");
 
 const router = express.Router();
 
-const DEPOSIT_ROLES = new Set(["finance_manager", "finance_accountant"]);
+const DEPOSIT_ROLES = new Set([
+  "finance_manager",
+  "finance_accountant",
+  "equipment_business_manager",
+  "equipment_business_accountant",
+]);
+const ADMIN_ROLES = new Set([
+  "admin",
+  "administrator",
+  "manager",
+  "system_administrator",
+  "super_admin",
+]);
 const PAYMENT_METHODS = new Set(["cash", "momo", "bank", "cheque", "other"]);
+const REQUIRED_MIGRATIONS = Object.freeze([
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+]);
 const REQUIRED_COLUMNS = Object.freeze({
   equipment_sale_agreements: [
     "credit_application_id",
@@ -59,9 +77,11 @@ function positiveId(value) {
 
 function money(value, fallback = undefined) {
   if (value === undefined || value === null || value === "") return fallback;
+  const text = String(value).trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return undefined;
   const number = Number(value);
-  return Number.isFinite(number) && number >= 0
-    ? Number(number.toFixed(2))
+  return Number.isSafeInteger(Math.round(number * 100)) && number >= 0
+    ? Math.round(number * 100) / 100
     : undefined;
 }
 
@@ -78,27 +98,51 @@ function boolValue(value, fallback = false) {
   return undefined;
 }
 
-function selectedLocationId(req) {
-  const id = positiveId(req.hireLocationScope?.locationId);
-  if (!id) {
-    throw new DepositError(
-      400,
-      "Choose a specific Finance location before collecting a deposit or reserving equipment.",
-      "EQUIPMENT_FINANCE_LOCATION_REQUIRED"
-    );
+function normalizeRole(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function rolesFor(user = {}) {
+  const values = [
+    user.workspace_role,
+    user.access_role,
+    user.role,
+    ...(Array.isArray(user.roles) ? user.roles : []),
+    ...(Array.isArray(user.workspace_roles) ? user.workspace_roles : []),
+  ];
+  const roles = new Set();
+  for (const value of values) {
+    const candidate =
+      value && typeof value === "object"
+        ? value.code || value.role_code || value.name || value.role
+        : value;
+    const normalized = normalizeRole(candidate);
+    if (normalized) roles.add(normalized);
   }
-  return id;
+  return roles;
 }
 
 function assertDepositOfficer(req) {
   if (isOriginalSystemAdministrator(req.user)) return;
-  if (!DEPOSIT_ROLES.has(workspaceRoleFor(req.user))) {
+  const roles = rolesFor(req.user);
+  if (![...roles].some((role) => DEPOSIT_ROLES.has(role) || ADMIN_ROLES.has(role))) {
     throw new DepositError(
       403,
-      "Only the Finance Manager or Finance Accountant can collect the opening deposit and reserve equipment.",
+      "Only an authorised Finance manager or accountant can collect the opening deposit and reserve equipment.",
       "EQUIPMENT_FINANCE_DEPOSIT_PERMISSION_REQUIRED"
     );
   }
+}
+
+function toCents(value) {
+  return Math.round(Number(value || 0) * 100);
+}
+
+function fromCents(value) {
+  return Number((Number(value || 0) / 100).toFixed(2));
 }
 
 function fallbackNumber(prefix) {
@@ -152,10 +196,28 @@ async function schemaStatus(connection = pool) {
     (triggerName) => !installedTriggers.has(triggerName)
   );
 
+  const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
+  const [migrationRows] = await connection.query(
+    `SELECT migration_name
+     FROM schema_migrations
+     WHERE migration_name IN (${migrationPlaceholders})`,
+    REQUIRED_MIGRATIONS
+  );
+  const installedMigrations = new Set(
+    migrationRows.map((row) => row.migration_name)
+  );
+  const missingMigrations = REQUIRED_MIGRATIONS.filter(
+    (migrationName) => !installedMigrations.has(migrationName)
+  );
+
   return {
-    ready: missingColumns.length === 0 && missingTriggers.length === 0,
+    ready:
+      missingColumns.length === 0 &&
+      missingTriggers.length === 0 &&
+      missingMigrations.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
+    missing_migrations: missingMigrations,
   };
 }
 
@@ -180,6 +242,15 @@ function sendError(res, error, fallbackMessage) {
       code: error.code,
       message: error.message,
       readiness: error.readiness,
+    });
+  }
+  if (Number(error?.statusCode || 0) >= 400) {
+    return res.status(Number(error.statusCode)).json({
+      status: "error",
+      code: error.code || "EQUIPMENT_FINANCE_DEPOSIT_ERROR",
+      message: error.message || fallbackMessage,
+      ...(error.details ? { details: error.details } : {}),
+      ...(error.readiness ? { readiness: error.readiness } : {}),
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
@@ -227,7 +298,7 @@ async function withTransaction(work) {
   }
 }
 
-async function loadAgreement(connection, agreementId, locationId, lock = false) {
+async function loadAgreement(connection, agreementId) {
   const [rows] = await connection.query(
     `SELECT
        agreement.*,
@@ -243,9 +314,19 @@ async function loadAgreement(connection, agreementId, locationId, lock = false) 
        asset.operational_purpose,
        asset.sale_status,
        asset.is_active AS asset_is_active,
-       location.name AS hire_location_name,
-       sale_lock.lock_status AS active_lock_status,
-       sale_lock.released_at AS active_lock_released_at,
+       location.name AS equipment_origin_name,
+       (SELECT sale_lock.id
+          FROM equipment_asset_sale_locks sale_lock
+         WHERE sale_lock.asset_id = agreement.asset_id
+           AND sale_lock.released_at IS NULL
+         ORDER BY sale_lock.id
+         LIMIT 1) AS active_lock_id,
+       (SELECT sale_lock.agreement_id
+          FROM equipment_asset_sale_locks sale_lock
+         WHERE sale_lock.asset_id = agreement.asset_id
+           AND sale_lock.released_at IS NULL
+         ORDER BY sale_lock.id
+         LIMIT 1) AS active_lock_agreement_id,
        (SELECT COUNT(*)
         FROM hire_contract_assets hire_asset
         WHERE hire_asset.asset_id = agreement.asset_id
@@ -257,15 +338,11 @@ async function loadAgreement(connection, agreementId, locationId, lock = false) 
        ON customer.id = agreement.customer_id
      INNER JOIN fleet_assets asset
        ON asset.id = agreement.asset_id
-     INNER JOIN business_locations location
+     LEFT JOIN business_locations location
        ON location.id = agreement.hire_location_id
-     LEFT JOIN equipment_asset_sale_locks sale_lock
-       ON sale_lock.agreement_id = agreement.id
-      AND sale_lock.released_at IS NULL
      WHERE agreement.id = ?
-       AND agreement.hire_location_id = ?
-     LIMIT 1 ${lock ? "FOR UPDATE" : ""}`,
-    [agreementId, locationId]
+     LIMIT 1`,
+    [agreementId]
   );
   return rows[0] || null;
 }
@@ -285,14 +362,11 @@ function assertControlledAgreement(agreement) {
       "EQUIPMENT_FINANCE_LEGACY_AGREEMENT"
     );
   }
-  if (
-    agreement.application_status !== "approved" ||
-    agreement.kyc_status !== "verified" ||
-    !["eligible", "manual_review"].includes(agreement.affordability_status)
-  ) {
+  if (agreement.application_status !== "approved") {
     throw new DepositError(
       409,
-      "The linked credit application no longer satisfies the approved Finance gate."
+      "The linked credit application is no longer explicitly approved.",
+      "EQUIPMENT_FINANCE_APPLICATION_APPROVAL_REQUIRED"
     );
   }
   if (!["approved", "active"].includes(agreement.agreement_status)) {
@@ -304,7 +378,7 @@ function assertControlledAgreement(agreement) {
 }
 
 function assertAssetCanBeReserved(agreement) {
-  if (!agreement.asset_is_active) {
+  if (!Boolean(Number(agreement.asset_is_active))) {
     throw new DepositError(409, "The equipment is not active in the fleet register.");
   }
   if (!['sale_only', 'sale_or_hire'].includes(agreement.operational_purpose)) {
@@ -323,17 +397,35 @@ function assertAssetCanBeReserved(agreement) {
     throw new DepositError(409, "The equipment is not currently available for reservation.");
   }
   if (
-    agreement.active_lock_status &&
-    agreement.equipment_commitment_status !== "reserved"
+    agreement.active_lock_agreement_id &&
+    Number(agreement.active_lock_agreement_id) !== Number(agreement.id)
   ) {
     throw new DepositError(409, "The equipment already has another active sale lock.");
   }
 }
 
 function candidateShape(agreement) {
-  const required = Number(agreement.deposit_required || 0);
-  const received = Number(agreement.deposit_received || 0);
-  const remaining = Number(Math.max(required - received, 0).toFixed(2));
+  const requiredCents = toCents(agreement.deposit_required);
+  const receivedCents = toCents(agreement.deposit_received);
+  const remainingCents = Math.max(requiredCents - receivedCents, 0);
+  const reserved = agreement.equipment_commitment_status === "reserved";
+  const blockers = [];
+  if (agreement.application_status !== "approved") {
+    blockers.push("application_not_approved");
+  }
+  if (!Boolean(Number(agreement.asset_is_active))) blockers.push("asset_inactive");
+  if (!["sale_only", "sale_or_hire"].includes(agreement.operational_purpose)) {
+    blockers.push("asset_not_sale_authorised");
+  }
+  if (Number(agreement.active_hire_count || 0) > 0) {
+    blockers.push("asset_active_on_hire");
+  }
+  if (
+    agreement.active_lock_agreement_id &&
+    Number(agreement.active_lock_agreement_id) !== Number(agreement.id)
+  ) {
+    blockers.push("asset_locked_to_another_agreement");
+  }
   return {
     agreement_id: agreement.id,
     agreement_number: agreement.agreement_number,
@@ -351,9 +443,9 @@ function candidateShape(agreement) {
     asset_sale_status: agreement.sale_status,
     active_hire_count: Number(agreement.active_hire_count || 0),
     total_amount: Number(agreement.total_amount || 0),
-    deposit_required: required,
-    deposit_received: received,
-    deposit_remaining: remaining,
+    deposit_required: fromCents(requiredCents),
+    deposit_received: fromCents(receivedCents),
+    deposit_remaining: fromCents(remainingCents),
     financed_amount: Number(agreement.financed_amount || 0),
     outstanding_balance: Number(agreement.outstanding_balance || 0),
     payment_frequency: agreement.payment_frequency,
@@ -361,7 +453,20 @@ function candidateShape(agreement) {
     first_due_date: agreement.first_due_date,
     deposit_completed_at: agreement.deposit_completed_at,
     reservation_activated_at: agreement.reservation_activated_at,
-    reserved: agreement.equipment_commitment_status === "reserved",
+    reserved,
+    equipment_origin_location_id: agreement.hire_location_id || null,
+    equipment_origin_name: agreement.equipment_origin_name || null,
+    optional_advisory: {
+      kyc_status: agreement.kyc_status || null,
+      affordability_status: agreement.affordability_status || null,
+    },
+    blockers,
+    ready_for_deposit: !reserved && blockers.length === 0,
+    next_action: reserved
+      ? { code: "await_delivery_authorization", label: "Machine reserved; continue to independent delivery authorization." }
+      : remainingCents > 0
+        ? { code: "collect_deposit", label: "Record the remaining required opening deposit." }
+        : { code: "confirm_reservation", label: "Confirm reservation of the exact machine." },
   };
 }
 
@@ -383,10 +488,9 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
   }
 });
 
-router.get("/candidates", requirePermission("fleet.assets.view"), async (req, res) => {
+router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     await assertSchemaReady(pool);
-    const locationId = selectedLocationId(req);
     const [rows] = await pool.query(
       `SELECT
          agreement.*,
@@ -402,9 +506,19 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (req, re
          asset.operational_purpose,
          asset.sale_status,
          asset.is_active AS asset_is_active,
-         location.name AS hire_location_name,
-         sale_lock.lock_status AS active_lock_status,
-         sale_lock.released_at AS active_lock_released_at,
+         location.name AS equipment_origin_name,
+         (SELECT sale_lock.id
+            FROM equipment_asset_sale_locks sale_lock
+           WHERE sale_lock.asset_id = agreement.asset_id
+             AND sale_lock.released_at IS NULL
+           ORDER BY sale_lock.id
+           LIMIT 1) AS active_lock_id,
+         (SELECT sale_lock.agreement_id
+            FROM equipment_asset_sale_locks sale_lock
+           WHERE sale_lock.asset_id = agreement.asset_id
+             AND sale_lock.released_at IS NULL
+           ORDER BY sale_lock.id
+           LIMIT 1) AS active_lock_agreement_id,
          (SELECT COUNT(*)
           FROM hire_contract_assets hire_asset
           WHERE hire_asset.asset_id = agreement.asset_id
@@ -414,23 +528,21 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (req, re
          ON application.id = agreement.credit_application_id
        INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
        INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-       INNER JOIN business_locations location ON location.id = agreement.hire_location_id
-       LEFT JOIN equipment_asset_sale_locks sale_lock
-         ON sale_lock.agreement_id = agreement.id
-        AND sale_lock.released_at IS NULL
-       WHERE agreement.hire_location_id = ?
-         AND agreement.sale_type = 'installment'
+       LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
+       WHERE agreement.sale_type = 'installment'
          AND agreement.activation_source = 'approved_credit_application'
          AND agreement.agreement_status IN ('approved','active')
        ORDER BY
          CASE WHEN agreement.equipment_commitment_status = 'reserved' THEN 1 ELSE 0 END,
          agreement.approved_at,
-         agreement.id`,
-      [locationId]
+         agreement.id`
     );
     return res.json({
       status: "success",
       candidates: rows.map(candidateShape),
+      scope: "company_wide",
+      hire_location_selection_required: false,
+      optional_advisory_fields: ["kyc_status", "affordability_status"],
       safeguards: {
         hire_work_created: false,
         delivery_created: false,
@@ -450,7 +562,6 @@ router.post(
     try {
       assertDepositOfficer(req);
       await assertSchemaReady(pool);
-      const locationId = selectedLocationId(req);
       const agreementId = positiveId(req.params.agreementId);
       const amount = money(req.body.amount, 0);
       const method = enumValue(req.body.payment_method, PAYMENT_METHODS, undefined);
@@ -458,7 +569,10 @@ router.post(
       const idempotencyKey = cleanText(req.body.idempotency_key, 191);
 
       if (!agreementId || amount === undefined || confirmReservation === undefined) {
-        throw new DepositError(400, "Enter a valid agreement, deposit amount and confirmation.");
+        throw new DepositError(
+          400,
+          "Enter a valid agreement and a deposit amount with no more than two decimal places."
+        );
       }
       if (amount > 0 && method === undefined) {
         throw new DepositError(400, "Choose the payment method for this deposit.");
@@ -468,38 +582,123 @@ router.post(
       }
 
       const result = await withTransaction(async (connection) => {
-        const agreement = await loadAgreement(connection, agreementId, locationId, true);
-        assertControlledAgreement(agreement);
-        assertAssetCanBeReserved(agreement);
+        const [agreementLocks] = await connection.query(
+          "SELECT id FROM equipment_sale_agreements WHERE id = ? LIMIT 1 FOR UPDATE",
+          [agreementId]
+        );
+        if (!agreementLocks.length) {
+          throw new DepositError(404, "Finance agreement was not found.");
+        }
+
+        let agreement = await loadAgreement(connection, agreementId);
+        if (!agreement) {
+          throw new DepositError(
+            409,
+            "The Finance agreement has an invalid application, customer or machine link.",
+            "EQUIPMENT_FINANCE_AGREEMENT_LINK_INVALID"
+          );
+        }
 
         if (idempotencyKey) {
           const [existingRows] = await connection.query(
             `SELECT * FROM equipment_sale_payments
              WHERE idempotency_key = ?
-             LIMIT 1`,
+             LIMIT 1
+             FOR UPDATE`,
             [idempotencyKey]
           );
           const existing = existingRows[0];
           if (existing) {
             if (Number(existing.agreement_id) !== Number(agreement.id)) {
-              throw new DepositError(409, "That deposit request key belongs to another agreement.");
+              throw new DepositError(
+                409,
+                "That deposit request key belongs to another agreement.",
+                "EQUIPMENT_FINANCE_IDEMPOTENCY_COLLISION"
+              );
+            }
+            if (
+              toCents(existing.amount) !== toCents(amount) ||
+              normalizeRole(existing.payment_method) !== normalizeRole(method)
+            ) {
+              throw new DepositError(
+                409,
+                "That deposit request key was already used with a different amount or payment method.",
+                "EQUIPMENT_FINANCE_IDEMPOTENCY_PAYLOAD_MISMATCH"
+              );
             }
             return {
               agreement: candidateShape(agreement),
               payment: existing,
               already_recorded: true,
-              reservation_created: agreement.equipment_commitment_status === "reserved",
+              reservation_created:
+                agreement.equipment_commitment_status === "reserved",
             };
           }
         }
 
-        const required = Number(agreement.deposit_required || 0);
-        const received = Number(agreement.deposit_received || 0);
-        const remaining = Number(Math.max(required - received, 0).toFixed(2));
+        assertControlledAgreement(agreement);
+        const currentReconciliation = await assertFinanceMutationSafe(agreement.id, {
+          connection,
+          lock: false,
+        });
+        agreement = { ...agreement, ...currentReconciliation.calculated };
+
+        const [assetRows] = await connection.query(
+          `SELECT id, is_active, operational_purpose, sale_status
+             FROM fleet_assets
+            WHERE id = ?
+            LIMIT 1
+            FOR UPDATE`,
+          [agreement.asset_id]
+        );
+        if (!assetRows.length) {
+          throw new DepositError(409, "The agreement machine no longer exists.");
+        }
+
+        const [activeHireRows] = await connection.query(
+          `SELECT id
+             FROM hire_contract_assets
+            WHERE asset_id = ?
+              AND status IN ('assigned','dispatched','active')
+            ORDER BY id
+            FOR UPDATE`,
+          [agreement.asset_id]
+        );
+        const [activeLockRows] = await connection.query(
+          `SELECT id, agreement_id, lock_status
+             FROM equipment_asset_sale_locks
+            WHERE asset_id = ?
+              AND released_at IS NULL
+            ORDER BY id
+            FOR UPDATE`,
+          [agreement.asset_id]
+        );
+        const conflictingLock = activeLockRows.find(
+          (lock) => Number(lock.agreement_id) !== Number(agreement.id)
+        );
+
+        agreement = {
+          ...agreement,
+          asset_is_active: assetRows[0].is_active,
+          operational_purpose: assetRows[0].operational_purpose,
+          sale_status: assetRows[0].sale_status,
+          active_hire_count: activeHireRows.length,
+          active_lock_id: activeLockRows[0]?.id || null,
+          active_lock_agreement_id: conflictingLock?.agreement_id || null,
+        };
+        assertAssetCanBeReserved(agreement);
+
+        const amountCents = toCents(amount);
+        const requiredCents = toCents(agreement.deposit_required);
+        const receivedCents = toCents(agreement.deposit_received);
+        const remainingCents = Math.max(requiredCents - receivedCents, 0);
 
         if (agreement.equipment_commitment_status === "reserved") {
-          if (amount > 0) {
-            throw new DepositError(409, "The opening deposit is complete and the machine is already reserved.");
+          if (amountCents > 0) {
+            throw new DepositError(
+              409,
+              "The opening deposit is complete and the machine is already reserved."
+            );
           }
           return {
             agreement: candidateShape(agreement),
@@ -508,24 +707,24 @@ router.post(
             reservation_created: true,
           };
         }
-        if (amount <= 0 && remaining > 0.01) {
+        if (amountCents === 0 && remainingCents > 0) {
           throw new DepositError(400, "Enter a deposit amount before reserving this machine.");
         }
-        if (amount > remaining + 0.01) {
+        if (amountCents > remainingCents) {
           throw new DepositError(400, "The deposit exceeds the remaining required deposit.");
         }
 
-        let payment = null;
-        const depositAfter = Number((received + amount).toFixed(2));
-        const depositComplete = depositAfter + 0.01 >= required;
+        const depositAfterCents = receivedCents + amountCents;
+        const depositComplete = depositAfterCents >= requiredCents;
         if (depositComplete && !confirmReservation) {
           throw new DepositError(
             400,
-            "Confirm that the machine should be reserved when the required deposit is complete."
+            "Confirm that the exact machine should be reserved when the required deposit is complete."
           );
         }
 
-        if (amount > 0) {
+        let payment = null;
+        if (amountCents > 0) {
           const paymentNumber = await documentNumber(
             "EQUIPMENT_SALE_PAYMENT",
             "ESP",
@@ -554,7 +753,7 @@ router.post(
               agreement.credit_application_id,
               agreement.customer_id,
               depositComplete ? "reserved" : "none",
-              amount,
+              fromCents(amountCents),
               method,
               nullableText(req.body.reference_number, 150),
               nullableText(req.body.notes, 500),
@@ -569,19 +768,24 @@ router.post(
           payment = paymentRows[0] || null;
         }
 
-        const amountPaidAfter = Number(
-          (Number(agreement.amount_paid || 0) + amount).toFixed(2)
+        const depositAfter = fromCents(depositAfterCents);
+        const amountPaidAfter = fromCents(
+          toCents(agreement.amount_paid) + amountCents
         );
-        const outstandingAfter = Number(
-          Math.max(Number(agreement.total_amount || 0) - amountPaidAfter, 0).toFixed(2)
+        const outstandingAfter = fromCents(
+          Math.max(toCents(agreement.total_amount) - toCents(amountPaidAfter), 0)
         );
 
         await connection.query(
           `UPDATE equipment_sale_agreements
-           SET deposit_received = ?, amount_paid = ?, outstanding_balance = ?,
-               deposit_completed_at = CASE WHEN ? THEN COALESCE(deposit_completed_at, NOW()) ELSE deposit_completed_at END,
-               deposit_completed_by = CASE WHEN ? THEN COALESCE(deposit_completed_by, ?) ELSE deposit_completed_by END
-           WHERE id = ?`,
+              SET deposit_received = ?, amount_paid = ?, outstanding_balance = ?,
+                  deposit_completed_at =
+                    CASE WHEN ? THEN COALESCE(deposit_completed_at, NOW())
+                         ELSE deposit_completed_at END,
+                  deposit_completed_by =
+                    CASE WHEN ? THEN COALESCE(deposit_completed_by, ?)
+                         ELSE deposit_completed_by END
+            WHERE id = ?`,
           [
             depositAfter,
             amountPaidAfter,
@@ -595,13 +799,10 @@ router.post(
 
         let reservationCreated = false;
         if (depositComplete) {
-          const [lockRows] = await connection.query(
-            `SELECT * FROM equipment_asset_sale_locks
-             WHERE agreement_id = ? AND released_at IS NULL
-             LIMIT 1 FOR UPDATE`,
-            [agreement.id]
+          const existingAgreementLock = activeLockRows.find(
+            (lock) => Number(lock.agreement_id) === Number(agreement.id)
           );
-          if (!lockRows[0]) {
+          if (!existingAgreementLock) {
             await connection.query(
               `INSERT INTO equipment_asset_sale_locks (
                  asset_id, agreement_id, hire_location_id, lock_status,
@@ -618,25 +819,40 @@ router.post(
             reservationCreated = true;
           }
 
-          await connection.query(
+          const [assetUpdate] = await connection.query(
             `UPDATE fleet_assets
-             SET sale_status = 'installment_active', sale_reserved_until = NULL,
-                 updated_by = ?
-             WHERE id = ?`,
+                SET sale_status = 'installment_active',
+                    sale_reserved_until = NULL,
+                    updated_by = ?
+              WHERE id = ?
+                AND sale_status IN ('available','installment_active')`,
             [positiveId(req.user?.id), agreement.asset_id]
           );
+          if (Number(assetUpdate.affectedRows || 0) !== 1) {
+            throw new DepositError(
+              409,
+              "The machine changed status before reservation. The deposit and reservation were rolled back."
+            );
+          }
+
           await connection.query(
             `UPDATE equipment_sale_agreements
-             SET agreement_status = 'active',
-                 equipment_commitment_status = 'reserved',
-                 reservation_activated_at = COALESCE(reservation_activated_at, NOW()),
-                 reservation_activated_by = COALESCE(reservation_activated_by, ?)
-             WHERE id = ?`,
+                SET agreement_status = 'active',
+                    equipment_commitment_status = 'reserved',
+                    reservation_activated_at =
+                      COALESCE(reservation_activated_at, NOW()),
+                    reservation_activated_by =
+                      COALESCE(reservation_activated_by, ?)
+              WHERE id = ?`,
             [positiveId(req.user?.id), agreement.id]
           );
         }
 
-        const refreshed = await loadAgreement(connection, agreement.id, locationId, false);
+        const reconciliation = await refreshFinanceAgreementFromEvidence(
+          connection,
+          agreement.id
+        );
+        const refreshed = reconciliation.agreement;
         await writeAuditEvent({
           connection,
           req,
@@ -648,8 +864,8 @@ router.post(
             : "equipment.finance.deposit.partial",
           entityType: "equipment_sale_agreement",
           entityId: agreement.id,
-          workspaceCode: "equipment_hire",
-          hireLocationId: agreement.hire_location_id,
+          workspaceCode: "equipment_installment_finance",
+          hireLocationId: null,
           severity: "notice",
           outcome: "success",
           details: depositComplete
@@ -658,10 +874,13 @@ router.post(
           metadata: {
             credit_application_id: agreement.credit_application_id,
             payment_id: payment?.id || null,
-            amount,
-            deposit_required: required,
+            amount: fromCents(amountCents),
+            deposit_required: fromCents(requiredCents),
             deposit_received: depositAfter,
-            deposit_remaining: Number(Math.max(required - depositAfter, 0).toFixed(2)),
+            deposit_remaining: fromCents(
+              Math.max(requiredCents - depositAfterCents, 0)
+            ),
+            equipment_origin_location_id: agreement.hire_location_id || null,
             reservation_created: reservationCreated,
             hire_contract_created: false,
             delivery_created: false,
@@ -702,5 +921,9 @@ router.post(
 module.exports = router;
 module.exports.DEPOSIT_ROLES = DEPOSIT_ROLES;
 module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_MIGRATIONS = REQUIRED_MIGRATIONS;
 module.exports.REQUIRED_TRIGGERS = REQUIRED_TRIGGERS;
+module.exports.money = money;
+module.exports.rolesFor = rolesFor;
 module.exports.schemaStatus = schemaStatus;
+
