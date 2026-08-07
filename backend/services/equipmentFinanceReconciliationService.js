@@ -54,10 +54,17 @@ function emptyEvidence() {
     overdue_amount: 0,
     next_due_date: null,
     oldest_overdue_date: null,
+    first_schedule_due_date: null,
+    final_schedule_due_date: null,
+    schedule_line_count: 0,
+    distinct_sequence_count: 0,
+    non_positive_schedule_count: 0,
     rescheduled_line_count: 0,
     active_allocated_amount: 0,
     voided_allocated_amount: 0,
     rescheduled_allocated_amount: 0,
+    cross_agreement_allocation_count: 0,
+    negative_allocation_count: 0,
     ledger_debits: 0,
     ledger_credits: 0,
   };
@@ -78,10 +85,17 @@ function normalizeEvidence(input = {}) {
     overdue_amount: numberValue(input.overdue_amount),
     next_due_date: input.next_due_date || null,
     oldest_overdue_date: input.oldest_overdue_date || null,
+    first_schedule_due_date: input.first_schedule_due_date || null,
+    final_schedule_due_date: input.final_schedule_due_date || null,
+    schedule_line_count: Number(input.schedule_line_count || 0),
+    distinct_sequence_count: Number(input.distinct_sequence_count || 0),
+    non_positive_schedule_count: Number(input.non_positive_schedule_count || 0),
     rescheduled_line_count: Number(input.rescheduled_line_count || 0),
     active_allocated_amount: numberValue(input.active_allocated_amount),
     voided_allocated_amount: numberValue(input.voided_allocated_amount),
     rescheduled_allocated_amount: numberValue(input.rescheduled_allocated_amount),
+    cross_agreement_allocation_count: Number(input.cross_agreement_allocation_count || 0),
+    negative_allocation_count: Number(input.negative_allocation_count || 0),
     ledger_debits: numberValue(input.ledger_debits),
     ledger_credits: numberValue(input.ledger_credits),
   };
@@ -107,6 +121,28 @@ async function loadAgreement(connection, agreementId, { lock = false } = {}) {
   return rows[0];
 }
 
+function scheduleEvidenceSql(groupColumn = null) {
+  const prefix = groupColumn ? `${groupColumn},` : "";
+  return `SELECT
+       ${prefix}
+       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.scheduled_amount ELSE 0 END), 0) AS scheduled_amount,
+       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.amount_paid ELSE 0 END), 0) AS schedule_amount_paid,
+       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.late_charge_amount ELSE 0 END), 0) AS late_charges,
+       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.waived_charge_amount ELSE 0 END), 0) AS waived_charges,
+       COALESCE(SUM(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN GREATEST(
+         schedule.scheduled_amount + schedule.late_charge_amount - schedule.waived_charge_amount - schedule.amount_paid,
+         0
+       ) ELSE 0 END), 0) AS overdue_amount,
+       MIN(CASE WHEN ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS next_due_date,
+       MIN(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS oldest_overdue_date,
+       MIN(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.due_date END) AS first_schedule_due_date,
+       MAX(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.due_date END) AS final_schedule_due_date,
+       COUNT(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN 1 END) AS schedule_line_count,
+       COUNT(DISTINCT CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.sequence_number END) AS distinct_sequence_count,
+       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' AND schedule.scheduled_amount <= 0 THEN 1 ELSE 0 END), 0) AS non_positive_schedule_count,
+       COUNT(CASE WHEN schedule.schedule_status = 'rescheduled' THEN 1 END) AS rescheduled_line_count`;
+}
+
 async function loadEvidence(connection, agreementId) {
   const id = positiveId(agreementId, "Agreement ID");
   const [paymentRows] = await connection.query(
@@ -120,18 +156,7 @@ async function loadEvidence(connection, agreementId) {
     [id]
   );
   const [scheduleRows] = await connection.query(
-    `SELECT
-       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.scheduled_amount ELSE 0 END), 0) AS scheduled_amount,
-       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.amount_paid ELSE 0 END), 0) AS schedule_amount_paid,
-       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.late_charge_amount ELSE 0 END), 0) AS late_charges,
-       COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.waived_charge_amount ELSE 0 END), 0) AS waived_charges,
-       COALESCE(SUM(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN GREATEST(
-         schedule.scheduled_amount + schedule.late_charge_amount - schedule.waived_charge_amount - schedule.amount_paid,
-         0
-       ) ELSE 0 END), 0) AS overdue_amount,
-       MIN(CASE WHEN ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS next_due_date,
-       MIN(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS oldest_overdue_date,
-       COUNT(CASE WHEN schedule.schedule_status = 'rescheduled' THEN 1 END) AS rescheduled_line_count
+    `${scheduleEvidenceSql()}
      FROM equipment_installment_schedule schedule
      WHERE schedule.agreement_id = ?`,
     [id]
@@ -140,7 +165,9 @@ async function loadEvidence(connection, agreementId) {
     `SELECT
        COALESCE(SUM(CASE WHEN payment.is_voided = FALSE AND schedule.schedule_status <> 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS active_allocated_amount,
        COALESCE(SUM(CASE WHEN payment.is_voided = TRUE THEN allocation.allocated_amount ELSE 0 END), 0) AS voided_allocated_amount,
-       COALESCE(SUM(CASE WHEN schedule.schedule_status = 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS rescheduled_allocated_amount
+       COALESCE(SUM(CASE WHEN schedule.schedule_status = 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS rescheduled_allocated_amount,
+       COALESCE(SUM(CASE WHEN payment.agreement_id <> schedule.agreement_id THEN 1 ELSE 0 END), 0) AS cross_agreement_allocation_count,
+       COALESCE(SUM(CASE WHEN allocation.allocated_amount < 0 THEN 1 ELSE 0 END), 0) AS negative_allocation_count
      FROM equipment_sale_payment_allocations allocation
      INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id
      INNER JOIN equipment_installment_schedule schedule ON schedule.id = allocation.schedule_id
@@ -189,6 +216,10 @@ function mismatch(field, stored, expected, severity = "repairable") {
   };
 }
 
+function dateText(value) {
+  return value ? String(value).slice(0, 10) : null;
+}
+
 function buildReconciliation(agreement, evidenceInput = {}) {
   const evidence = normalizeEvidence(evidenceInput);
   const outstandingBalance = numberValue(
@@ -226,10 +257,89 @@ function buildReconciliation(agreement, evidenceInput = {}) {
   if (String(agreement.agreement_status || "") !== status) {
     mismatches.push(mismatch("agreement_status", agreement.agreement_status, status));
   }
-  const storedNextDue = agreement.next_due_date ? String(agreement.next_due_date).slice(0, 10) : null;
-  const expectedNextDue = nextDueDate ? String(nextDueDate).slice(0, 10) : null;
+
+  const storedNextDue = dateText(agreement.next_due_date);
+  const expectedNextDue = dateText(nextDueDate);
   if (storedNextDue !== expectedNextDue) {
     mismatches.push(mismatch("next_due_date", storedNextDue, expectedNextDue));
+  }
+
+  const totalAmount = numberValue(agreement.total_amount);
+  const financedAmount = numberValue(agreement.financed_amount);
+  const depositRequired = numberValue(agreement.deposit_required);
+  if (moneyDiff(totalAmount, financedAmount + depositRequired) > MONEY_TOLERANCE) {
+    mismatches.push(
+      mismatch(
+        "agreement_principal_identity",
+        totalAmount,
+        numberValue(financedAmount + depositRequired),
+        "critical"
+      )
+    );
+  }
+  if (moneyDiff(evidence.scheduled_amount, financedAmount) > MONEY_TOLERANCE) {
+    mismatches.push(
+      mismatch(
+        "schedule_principal_total",
+        evidence.scheduled_amount,
+        financedAmount,
+        "critical"
+      )
+    );
+  }
+  if (evidence.schedule_line_count !== evidence.distinct_sequence_count) {
+    mismatches.push(
+      mismatch(
+        "schedule_sequence_uniqueness",
+        evidence.schedule_line_count,
+        evidence.distinct_sequence_count,
+        "critical"
+      )
+    );
+  }
+  if (evidence.non_positive_schedule_count > 0) {
+    mismatches.push(
+      mismatch(
+        "non_positive_schedule_lines",
+        evidence.non_positive_schedule_count,
+        0,
+        "critical"
+      )
+    );
+  }
+  const storedFirstDue = dateText(agreement.first_due_date);
+  const evidenceFirstDue = dateText(evidence.first_schedule_due_date);
+  if (storedFirstDue && evidenceFirstDue && storedFirstDue !== evidenceFirstDue) {
+    mismatches.push(
+      mismatch("first_due_date_schedule", storedFirstDue, evidenceFirstDue, "critical")
+    );
+  }
+  const storedFinalDue = dateText(agreement.final_due_date);
+  const evidenceFinalDue = dateText(evidence.final_schedule_due_date);
+  if (storedFinalDue && evidenceFinalDue && storedFinalDue !== evidenceFinalDue) {
+    mismatches.push(
+      mismatch("final_due_date_schedule", storedFinalDue, evidenceFinalDue, "critical")
+    );
+  }
+  if (evidence.cross_agreement_allocation_count > 0) {
+    mismatches.push(
+      mismatch(
+        "cross_agreement_payment_allocations",
+        evidence.cross_agreement_allocation_count,
+        0,
+        "critical"
+      )
+    );
+  }
+  if (evidence.negative_allocation_count > 0) {
+    mismatches.push(
+      mismatch(
+        "negative_payment_allocations",
+        evidence.negative_allocation_count,
+        0,
+        "critical"
+      )
+    );
   }
   if (evidence.active_allocated_amount - evidence.allocatable_payment_amount > MONEY_TOLERANCE) {
     mismatches.push(
@@ -271,6 +381,9 @@ function buildReconciliation(agreement, evidenceInput = {}) {
       overdue_amount: overdueAmount,
       next_due_date: expectedNextDue,
       agreement_status: status,
+      schedule_principal_total: evidence.scheduled_amount,
+      first_schedule_due_date: evidenceFirstDue,
+      final_schedule_due_date: evidenceFinalDue,
     },
   };
 }
@@ -297,7 +410,7 @@ async function reconcileFinancePortfolio({ connection = pool } = {}) {
             agreement.amount_paid, agreement.deposit_received,
             agreement.late_charges_total, agreement.waived_charges_total,
             agreement.outstanding_balance, agreement.overdue_amount,
-            agreement.next_due_date, agreement.final_due_date,
+            agreement.first_due_date, agreement.next_due_date, agreement.final_due_date,
             agreement.customer_name_snapshot, agreement.customer_phone_snapshot,
             agreement.asset_code_snapshot, agreement.asset_name_snapshot,
             agreement.created_at
@@ -320,18 +433,7 @@ async function reconcileFinancePortfolio({ connection = pool } = {}) {
         GROUP BY payment.agreement_id`
     ),
     connection.query(
-      `SELECT schedule.agreement_id,
-              COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.scheduled_amount ELSE 0 END), 0) AS scheduled_amount,
-              COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.amount_paid ELSE 0 END), 0) AS schedule_amount_paid,
-              COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.late_charge_amount ELSE 0 END), 0) AS late_charges,
-              COALESCE(SUM(CASE WHEN schedule.schedule_status <> 'rescheduled' THEN schedule.waived_charge_amount ELSE 0 END), 0) AS waived_charges,
-              COALESCE(SUM(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN GREATEST(
-                schedule.scheduled_amount + schedule.late_charge_amount - schedule.waived_charge_amount - schedule.amount_paid,
-                0
-              ) ELSE 0 END), 0) AS overdue_amount,
-              MIN(CASE WHEN ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS next_due_date,
-              MIN(CASE WHEN schedule.due_date < CURDATE() AND ${activeScheduleCondition("schedule")} THEN schedule.due_date END) AS oldest_overdue_date,
-              COUNT(CASE WHEN schedule.schedule_status = 'rescheduled' THEN 1 END) AS rescheduled_line_count
+      `${scheduleEvidenceSql("schedule.agreement_id")}
          FROM equipment_installment_schedule schedule
          INNER JOIN equipment_sale_agreements agreement ON agreement.id = schedule.agreement_id
         WHERE ${financeAgreementScope("agreement")}
@@ -341,7 +443,9 @@ async function reconcileFinancePortfolio({ connection = pool } = {}) {
       `SELECT schedule.agreement_id,
               COALESCE(SUM(CASE WHEN payment.is_voided = FALSE AND schedule.schedule_status <> 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS active_allocated_amount,
               COALESCE(SUM(CASE WHEN payment.is_voided = TRUE THEN allocation.allocated_amount ELSE 0 END), 0) AS voided_allocated_amount,
-              COALESCE(SUM(CASE WHEN schedule.schedule_status = 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS rescheduled_allocated_amount
+              COALESCE(SUM(CASE WHEN schedule.schedule_status = 'rescheduled' THEN allocation.allocated_amount ELSE 0 END), 0) AS rescheduled_allocated_amount,
+              COALESCE(SUM(CASE WHEN payment.agreement_id <> schedule.agreement_id THEN 1 ELSE 0 END), 0) AS cross_agreement_allocation_count,
+              COALESCE(SUM(CASE WHEN allocation.allocated_amount < 0 THEN 1 ELSE 0 END), 0) AS negative_allocation_count
          FROM equipment_sale_payment_allocations allocation
          INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id
          INNER JOIN equipment_installment_schedule schedule ON schedule.id = allocation.schedule_id
@@ -434,8 +538,6 @@ async function refreshFinanceAgreementFromEvidence(connection, agreementId) {
     ]
   );
 
-  // The production balance guard may normalize values during UPDATE. Always
-  // re-read and return the authoritative post-trigger record.
   const after = await reconcileFinanceAgreement(agreementId, { connection, lock: false });
   if (!after.consistent) {
     throw new EquipmentFinanceReconciliationError(
