@@ -30,7 +30,9 @@ function safeJson(value, fallback = null) {
   try {
     return JSON.parse(value);
   } catch {
-    return fallback;
+    // mysql2 parses JSON columns by default. A JSON scalar string therefore
+    // arrives here already decoded, while raw JSON text still parses above.
+    return typeof value === "string" ? value : fallback;
   }
 }
 
