@@ -6,6 +6,7 @@ const {
   normalizeAiPersona,
 } = require("../security/aiPermissionCatalog");
 const { hasEveryPermission } = require("../security/permissionCatalog");
+const { hasEquipmentDivisionAccess } = require("../security/equipmentDivisionAccess");
 const {
   assertDailyUsage,
   assertMonthlyCost,
@@ -77,7 +78,9 @@ function availableTools({ persona, scope, user }) {
     .filter(
       (tool) =>
         hasEveryAiPermission(user, tool.required_permissions) &&
-        hasEveryPermission(user, tool.required_business_permissions || [])
+        hasEveryPermission(user, tool.required_business_permissions || []) &&
+        (!tool.required_equipment_division ||
+          hasEquipmentDivisionAccess(user, tool.required_equipment_division))
     );
 }
 
