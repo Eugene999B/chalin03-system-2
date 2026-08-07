@@ -6,8 +6,8 @@
 **Live provider:** Disabled  
 **Production migration:** Not run  
 **Deployment:** Not performed  
-**Green source commit:** `3fea5cc41a6e49fd11c4b5fd214fe6592dd95642`  
-**Green CI run:** `31205059229`
+**Green source commit:** `463b07a44e0e974fa806dd43bed37eec1ae07086`  
+**Green CI run:** `31206956829`
 
 Legend:
 
@@ -37,6 +37,7 @@ Legend:
 - [x] Provider tool menus hide tools the staff account cannot ordinarily access.
 - [x] Explicit workspace, branch, mining-site and hire-location scope.
 - [x] Mining-site and Hire-location context IDs are independently revalidated against existing assignment/scope services before tool execution.
+- [x] Equipment Hire and Equipment Finance AI tools preserve the backend's hard division boundary even though both share the `equipment_hire` workspace code.
 - [x] Prompt-injection detection.
 - [x] Secret-extraction blocking.
 - [x] Secret redaction.
@@ -46,7 +47,7 @@ Legend:
 - [x] Reviewed-adapter registry boundary.
 - [x] Provider timeout and response limits.
 - [x] Registered backend tool boundary.
-- [x] AI and business permission-name validation at tool-registration time.
+- [x] AI, business-permission and equipment-division validation at tool-registration time.
 - [x] Direct database/SQL tool rejection.
 - [x] Risk-level tool enforcement.
 - [x] Request token budget.
@@ -75,7 +76,7 @@ Legend:
 - [x] Isolated MySQL 8.4 AI acceptance passed in the recorded green CI run.
 - [x] AI foundation migration idempotency passed in the recorded green CI run.
 - [x] Governed AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations passed twice inside isolated database acceptance.
-- [x] Domain-tool security regression tests cover unknown permission names, business-permission denial, provider visibility, sensitive evidence classification and forged Mining/Hire context mismatch.
+- [x] Domain-tool security regression tests cover unknown permission names, business-permission denial, provider visibility, sensitive evidence classification, forged Mining/Hire context mismatch and Hire-vs-Finance division isolation.
 - [-] Provider failure isolation still requires browser/API staging acceptance.
 - [-] Audit and usage evidence still requires staging review with real accounts.
 
@@ -138,21 +139,29 @@ Legend:
 - [x] Equipment Hire operations snapshot tool.
 - [x] Equipment Hire fleet-health tool.
 - [x] Equipment Hire receivables-health tool.
+- [x] Equipment Finance portfolio-health tool.
+- [x] Equipment Finance arrears-health tool.
+- [x] Equipment Finance cash-flow-health tool.
+- [x] Equipment sales / credit-application pipeline tool.
+- [x] Finance tools are company-wide, aggregate-only and do not require or inherit Hire location selection.
+- [x] Finance AI suppresses customer/agreement/payment rows and exposes only governed confidential aggregate evidence.
+- [x] Finance application KYC/risk and fleet sale-status classifications are locked to the actual schema by regression tests.
 - [x] Domain tools require existing ordinary business permissions as well as AI permissions.
 - [x] Mining and Hire tools validate actual authorized site/location assignment before execution.
+- [x] Hire-only users cannot see or execute Finance AI tools; Finance-only users cannot see or execute Hire AI tools.
 
 ### Runtime acceptance
 
 - [x] Frontend JSX compilation and source tests passed CI.
 - [x] Production-mode frontend build passed CI.
-- [x] Spare Parts, customer-identity, Mining and Equipment Hire domain-tool source/security tests passed the backend suite in the recorded green CI run.
-- [x] Isolated MySQL acceptance and machine-readable release evidence passed on the exact recorded domain-tool source commit.
+- [x] Spare Parts, customer-identity, Mining, Equipment Hire and Equipment Finance domain-tool source/security tests passed the backend suite in the recorded green CI run.
+- [x] Isolated MySQL acceptance and machine-readable release evidence passed on the exact recorded Finance source commit.
 - [-] Browser keyboard/mobile acceptance is pending.
 - [-] A live provider is deliberately not registered.
 - [x] Domain insight tools for Spare Parts.
 - [x] Domain insight tools for Mining Operations.
 - [x] Domain insight tools for Equipment Hire.
-- [ ] Equipment Sales and Installment Finance tool layer.
+- [x] Equipment Sales and Installment Finance tool layer.
 - [ ] Executive scorecards and trend panels.
 - [ ] Scenario comparison engine.
 
@@ -229,7 +238,7 @@ The three portal feature flags remain false.
 - [x] Backend source contracts expanded.
 - [x] Isolated MySQL CI job expanded.
 - [x] Frontend source contracts expanded.
-- [x] Visible green GitHub CI for exact source commit `3fea5cc41a6e49fd11c4b5fd214fe6592dd95642` in run `31205059229`.
+- [x] Visible green GitHub CI for exact source commit `463b07a44e0e974fa806dd43bed37eec1ae07086` in run `31206956829`.
 - [ ] Isolated staging AI migration twice.
 - [ ] Staging provider acceptance.
 - [ ] Desktop/mobile browser evidence.
@@ -249,6 +258,6 @@ The three portal feature flags remain false.
 
 ## Current truthful status
 
-The secure AI foundation, governed knowledge workflow, staff intelligence workspace, public Guide foundation, AI action-governance foundation, scheduled-intelligence governance foundation and shared portal-security foundation are source-implemented on `chalin-one`. Spare Parts, customer-identity, Mining Operations and Equipment Hire now also have governed, read-only/suggestion-only domain intelligence tools with ordinary business-permission enforcement, provider visibility filtering and Mining/Hire assignment revalidation. The exact source commit `3fea5cc41a6e49fd11c4b5fd214fe6592dd95642` passed the **fully green recorded source/isolated-MySQL CI run `31205059229`**.
+The secure AI foundation, governed knowledge workflow, staff intelligence workspace, public Guide foundation, AI action-governance foundation, scheduled-intelligence governance foundation and shared portal-security foundation are source-implemented on `chalin-one`. Spare Parts, customer identity, Mining Operations, Equipment Hire and Equipment Sales/Installment Finance now have governed read-only/suggestion-only domain intelligence tools with ordinary business-permission enforcement, provider visibility filtering, Mining/Hire assignment revalidation, and hard Hire-vs-Finance Equipment division isolation. Finance intelligence is company-wide, aggregate-only and suppresses customer/agreement/payment rows. The exact source commit `463b07a44e0e974fa806dd43bed37eec1ae07086` passed the **fully green recorded source/isolated-MySQL CI run `31206956829`**.
 
 They are **still not production-ready** because isolated staging, real-account browser acceptance, live-provider acceptance, ordinary-business staging regression, full-system backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled and no production database migration or deployment has been performed.
