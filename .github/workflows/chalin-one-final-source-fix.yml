@@ -1,0 +1,69 @@
+name: CHALIN ONE final source fix
+
+on:
+  push:
+    branches:
+      - chalin-one
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact public-content fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          public_path = Path('backend/services/publicContentService.js')
+          source = public_path.read_text()
+          old = '''  try {
+            return JSON.parse(value);
+          } catch {
+            // mysql2 parses JSON columns by default. A JSON scalar string therefore
+            // arrives here already decoded, while raw JSON text still parses above.
+            return typeof value === "string" ? value : fallback;
+          }'''
+          new = '''  try {
+            return JSON.parse(value);
+          } catch {
+            return fallback;
+          }'''
+          if source.count(old) != 1:
+              raise SystemExit('Expected exactly one broadened safeJson catch block')
+          source = source.replace(old, new, 1)
+
+          old = '    settings[row.setting_key] = safeJson(row.value_json, null);'
+          new = '''    settings[row.setting_key] =
+              typeof row.value_json === "string"
+                ? row.value_json
+                : safeJson(row.value_json, null);'''
+          if source.count(old) != 1:
+              raise SystemExit('Expected exactly one public setting assignment')
+          public_path.write_text(source.replace(old, new, 1))
+
+          company_path = Path('backend/services/contentStudioCompanyInfoWorkflow.js')
+          source = company_path.read_text()
+          old = '    snapshot.publish_at = snapshot.publish_at || new Date();'
+          new = '''    // Immediate publication is represented by status + published_at.
+              // Keep publish_at NULL unless an explicit non-future timestamp was supplied.
+              snapshot.publish_at = snapshot.publish_at || null;'''
+          if source.count(old) != 1:
+              raise SystemExit('Expected exactly one company-info immediate publish assignment')
+          company_path.write_text(source.replace(old, new, 1))
+          PY
+      - name: Commit exact source fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/services/publicContentService.js backend/services/contentStudioCompanyInfoWorkflow.js
+          git diff --cached --check
+          git commit -m "Fix public settings parsing and company publication timing"
+          git push origin HEAD:chalin-one
