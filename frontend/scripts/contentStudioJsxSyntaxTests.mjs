@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { transformWithEsbuild } from "vite";
+import { parse } from "@babel/parser";
 
 const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -28,12 +28,11 @@ const jsxFiles = [
 
 for (const fileName of jsxFiles) {
   const source = fs.readFileSync(path.join(chalinOneRoot, fileName), "utf8");
-  await transformWithEsbuild(source, fileName, {
-    loader: "jsx",
-    jsx: "automatic",
-    sourcemap: false,
+  parse(source, {
+    sourceType: "module",
+    plugins: ["jsx"],
   });
-  console.log(`✓ ${fileName} compiled as JSX`);
+  console.log(`✓ ${fileName} parsed as JSX`);
 }
 
 console.log(
