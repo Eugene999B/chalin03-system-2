@@ -33,8 +33,8 @@ test("activation calls only the protected agreement activation API", () => {
 });
 
 test("activation does not post payment, reservation, delivery or ownership actions", () => {
-  assert.match(page, /Activation does not record a payment, reserve the machine, deliver it or transfer ownership/);
+  assert.match(page, /Agreement and schedule only\./);
   assert.match(page, /terms_accepted/);
   assert.doesNotMatch(page, /deposit-payments|ownership-transfer|deliveries\/complete|payment-allocations/);
-  assert.match(page, /no Hire location is selected here/i);
+  assert.doesNotMatch(page, /hire_location_id|activeHireLocation|selectedHireLocation/i);
 });
