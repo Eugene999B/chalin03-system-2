@@ -10,6 +10,7 @@ import "../styles/equipmentFinanceLifecycleProfessional.css";
 import "../styles/equipmentFinanceSignatureShell.css";
 import "../styles/equipmentFinanceSignaturePolish.css";
 import "../styles/equipmentFinanceThreePageSignature.css";
+import "../styles/equipmentFinanceApplicationsSignature.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
