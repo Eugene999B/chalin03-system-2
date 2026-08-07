@@ -1,71 +1,371 @@
-name: CHALIN ONE exact source correction
+name: CHALIN ONE CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - chalin-one
+  pull_request:
+    branches:
+      - chalin-one
+      - main
+      - production
 
 permissions:
-  contents: write
+  contents: read
+  statuses: write
 
 concurrency:
-  group: chalin-one-source-correction-${{ github.ref }}
+  group: chalin-one-ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CHALIN_ONE_STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
-  source-fix:
-    name: Apply exact final source correction
-    if: github.actor != 'github-actions[bot]'
+  ci-status-start:
+    name: Publish pending CI status
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    steps:
+      - name: Mark CHALIN ONE CI as pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          payload="$(jq -nc \
+            --arg state pending \
+            --arg context chalin-one/ci \
+            --arg description "CHALIN ONE CI is running" \
+            --arg target_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}')"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "${payload}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${CHALIN_ONE_STATUS_SHA}"
+
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Apply exact public-content fixes
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Verify CHALIN ONE staging safety package
+        env:
+          NODE_ENV: staging
+          CHALIN_ONE_STAGING_CONFIRM: CHALIN_ONE_STAGING_PREVIEW_ONLY
+          DB_HOST: 127.0.0.1
+          DB_NAME: chalin_one_staging_ci
+          FRONTEND_URL: https://preview-ci.example-chalin03.com
+          CHALIN_ONE_STAGING_API_URL: https://api-preview-ci.example-chalin03.com
+          FEATURE_PUBLIC_WEBSITE: "true"
+          FEATURE_CONTENT_STUDIO: "true"
+          FEATURE_AI_ENABLED: "false"
+          FEATURE_CHALIN_COPILOT: "false"
+          FEATURE_CHALIN_EXECUTIVE: "false"
+          FEATURE_CHALIN_GUIDE: "false"
+          FEATURE_CUSTOMER_PORTAL: "false"
+          FEATURE_SUPPLIER_PORTAL: "false"
+          FEATURE_APPLICANT_PORTAL: "false"
+          FEATURE_AI_ACTIONS: "false"
+          FEATURE_AI_SCHEDULED_JOBS: "false"
+          AI_PROVIDER: disabled
+          AI_ALLOW_MOCK_PROVIDER: "false"
+          PUBLIC_MEDIA_STORAGE_PROVIDER: local
+          PUBLIC_MEDIA_LOCAL_ROOT: ./tmp/chalin-one-staging-media
+          PUBLIC_FORM_IP_HASH_SECRET: chalin-one-staging-ci-only-public-form-secret-000000000000000000000000000000
+          CHALIN_ONE_STAGING_AUTHOR_USER_ID: "101"
+          CHALIN_ONE_STAGING_REVIEWER_USER_ID: "102"
+          CHALIN_ONE_STAGING_PUBLISHER_USER_ID: "103"
+          CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "false"
+          CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: ""
+          CHALIN_ONE_ALLOW_AI_SCHEMA_MIGRATION: "false"
+          CHALIN_ONE_AI_MIGRATION_CONFIRM: ""
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
+          npm run verify:chalin-one:staging
+          npm run seed:chalin-one:staging:dry-run
+          CHALIN_ONE_ALLOW_SCHEMA_MIGRATION=true CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM=20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION npm run verify:chalin-one:staging:migration
 
-          public_path = Path('backend/services/publicContentService.js')
-          source = public_path.read_text()
-          pattern = re.compile(r'  try \{\n    return JSON\.parse\(value\);\n  \} catch \{\n    // mysql2 parses JSON columns by default\. A JSON scalar string therefore\n    // arrives here already decoded, while raw JSON text still parses above\.\n    return typeof value === "string" \? value : fallback;\n  \}')
-          source, count = pattern.subn('  try {\n    return JSON.parse(value);\n  } catch {\n    return fallback;\n  }', source, count=1)
-          if count != 1:
-              raise SystemExit('Expected exactly one broadened safeJson catch block')
+      - name: Enforce additive migration safety
+        run: npm run migration-safety -- --base origin/main --head HEAD
 
-          old_setting = '    settings[row.setting_key] = safeJson(row.value_json, null);'
-          new_setting = '\n'.join([
-              '    settings[row.setting_key] =',
-              '      typeof row.value_json === "string"',
-              '        ? row.value_json',
-              '        : safeJson(row.value_json, null);',
-          ])
-          if source.count(old_setting) != 1:
-              raise SystemExit('Expected exactly one public setting assignment')
-          public_path.write_text(source.replace(old_setting, new_setting, 1))
+      - name: Run backend syntax checks
+        run: npm run syntax-check
 
-          company_path = Path('backend/services/contentStudioCompanyInfoWorkflow.js')
-          source = company_path.read_text()
-          old_publish = '    snapshot.publish_at = snapshot.publish_at || new Date();'
-          new_publish = '\n'.join([
-              '    // Immediate publication is represented by status + published_at.',
-              '    // Keep publish_at NULL unless an explicit non-future timestamp was supplied.',
-              '    snapshot.publish_at = snapshot.publish_at || null;',
-          ])
-          if source.count(old_publish) != 1:
-              raise SystemExit('Expected exactly one company-info immediate publish assignment')
-          company_path.write_text(source.replace(old_publish, new_publish, 1))
-          PY
-
-      - name: Commit exact source fixes
+      - name: Run backend tests
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/services/publicContentService.js backend/services/contentStudioCompanyInfoWorkflow.js
-          git diff --cached --check
-          git commit -m "Fix public settings parsing and company publication timing"
-          git push origin HEAD:chalin-one
+          mkdir -p artifacts
+          set -o pipefail
+          npm test 2>&1 | tee artifacts/chalin-one-backend-tests.log
+
+      - name: Upload backend test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-backend-tests-${{ github.sha }}
+          path: backend/artifacts/chalin-one-backend-tests.log
+          if-no-files-found: error
+          retention-days: 30
+
+  chalin-one-database-acceptance:
+    name: CHALIN ONE public and AI database acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: acceptance-root-password
+          MYSQL_DATABASE: chalin_one_acceptance
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h localhost -pacceptance-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: acceptance-root-password
+      DB_NAME: chalin_one_acceptance
+      DB_SSL: "false"
+      CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: 20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION
+      CHALIN_ONE_ALLOW_AI_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_AI_MIGRATION_CONFIRM: 20260806_CHALIN_ONE_AI_FOUNDATION
+      FEATURE_AI_ENABLED: "false"
+      FEATURE_CHALIN_COPILOT: "false"
+      FEATURE_CHALIN_EXECUTIVE: "false"
+      FEATURE_CHALIN_GUIDE: "false"
+      FEATURE_AI_ACTIONS: "false"
+      FEATURE_AI_SCHEDULED_JOBS: "false"
+      AI_PROVIDER: disabled
+      AI_ALLOW_MOCK_PROVIDER: "false"
+      PUBLIC_FORM_IP_HASH_SECRET: chalin-one-acceptance-only-ip-hash-secret-000000000000000000000000
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Prepare isolated legacy database fixture
+        run: npm run prepare:chalin-one:acceptance-db
+
+      - name: Rehearse approved public-content migration
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Verify public-content migration idempotency
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Rehearse approved AI foundation migration
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Verify AI foundation migration idempotency
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Run database-backed Content Studio and AI acceptance
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          npm run test:chalin-one:db 2>&1 | tee artifacts/chalin-one-database-acceptance.log
+
+      - name: Upload database acceptance output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-database-acceptance-${{ github.sha }}
+          path: backend/artifacts/chalin-one-database-acceptance.log
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Generate machine-readable release evidence
+        run: npm run evidence:chalin-one:release
+
+      - name: Upload CHALIN ONE release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-release-evidence-${{ github.sha }}
+          path: backend/artifacts/chalin-one-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+  frontend-tests:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify Content Studio foundation
+        run: node scripts/contentStudioFoundationTests.mjs
+
+      - name: Verify governed Page Manager
+        run: node scripts/contentStudioPageManagerTests.mjs
+
+      - name: Verify governed Newsroom Manager
+        run: node scripts/contentStudioNewsroomManagerTests.mjs
+
+      - name: Verify governed Leadership Manager
+        run: node scripts/contentStudioLeadershipManagerTests.mjs
+
+      - name: Verify expanded company manager batch
+        run: node scripts/contentStudioExpandedManagersTests.mjs
+
+      - name: Verify complete operational workspace
+        run: node scripts/contentStudioOperationalManagersTests.mjs
+
+      - name: Verify acceptance and public delivery block
+        run: node scripts/chalinOnePublicDeliveryTests.mjs
+
+      - name: Compile complete CHALIN ONE JSX
+        run: node scripts/contentStudioJsxSyntaxTests.mjs
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  ci-status-final:
+    name: Publish final CI status
+    if: always()
+    needs:
+      - backend-tests
+      - chalin-one-database-acceptance
+      - frontend-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate aggregate CHALIN ONE summary
+        id: aggregate
+        env:
+          BACKEND_RESULT: ${{ needs.backend-tests.result }}
+          DATABASE_RESULT: ${{ needs.chalin-one-database-acceptance.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
+        run: |
+          state=success
+          description="Backend, public/AI MySQL acceptance, frontend tests and build passed"
+          passed=true
+          if [[ "${BACKEND_RESULT}" != "success" || "${DATABASE_RESULT}" != "success" || "${FRONTEND_RESULT}" != "success" ]]; then
+            state=failure
+            description="CHALIN ONE CI failed; inspect the workflow run"
+            passed=false
+          fi
+
+          mkdir -p backend/artifacts
+          jq -n \
+            --arg report "CHALIN ONE CI Summary" \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg commit_sha "${CHALIN_ONE_STATUS_SHA}" \
+            --arg workflow_run_id "${GITHUB_RUN_ID}" \
+            --arg workflow_run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg event_name "${GITHUB_EVENT_NAME}" \
+            --arg ref_name "${GITHUB_REF_NAME}" \
+            --arg backend "${BACKEND_RESULT}" \
+            --arg database "${DATABASE_RESULT}" \
+            --arg frontend "${FRONTEND_RESULT}" \
+            --arg state "${state}" \
+            --argjson passed "${passed}" \
+            '{
+              report: $report,
+              generated_at: $generated_at,
+              commit_sha: $commit_sha,
+              workflow_run_id: $workflow_run_id,
+              workflow_run_url: $workflow_run_url,
+              event_name: $event_name,
+              ref_name: $ref_name,
+              state: $state,
+              passed: $passed,
+              jobs: {
+                backend: $backend,
+                database_acceptance: $database,
+                frontend: $frontend
+              }
+            }' > backend/artifacts/chalin-one-ci-summary.json
+
+          echo "state=${state}" >> "${GITHUB_OUTPUT}"
+          echo "description=${description}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload aggregate CHALIN ONE summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-ci-summary-${{ env.CHALIN_ONE_STATUS_SHA }}
+          path: backend/artifacts/chalin-one-ci-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish aggregated CHALIN ONE result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.aggregate.outputs.state }}
+          DESCRIPTION: ${{ steps.aggregate.outputs.description }}
+        run: |
+          payload="$(jq -nc \
+            --arg state "${STATE}" \
+            --arg context chalin-one/ci \
+            --arg description "${DESCRIPTION}" \
+            --arg target_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{state: $state, context: $context, description: $description, target_url: $target_url}')"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data "${payload}" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${CHALIN_ONE_STATUS_SHA}"
