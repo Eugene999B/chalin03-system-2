@@ -6,8 +6,10 @@ const { isFeatureEnabled } = require("./featureFlagService");
 const {
   AiPermissionError,
   buildToolExecutionContext,
+  validateAiScopeAccess,
 } = require("./aiPermissionService");
 const { normalizeAiPersona } = require("../security/aiPermissionCatalog");
+const { ALL_PERMISSIONS } = require("../security/permissionCatalog");
 
 const DEFAULT_TOOL_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_INPUT_BYTES = 12000;
@@ -59,6 +61,7 @@ function normalizeToolDefinition(definition = {}) {
   const riskLevel = Number(definition.risk_level || 1);
   const personas = [...new Set((definition.personas || []).map(normalizeAiPersona).filter(Boolean))];
   const requiredPermissions = [...new Set((definition.required_permissions || []).map((value) => String(value || "").trim()).filter(Boolean))];
+  const requiredBusinessPermissions = [...new Set((definition.required_business_permissions || []).map((value) => String(value || "").trim()).filter(Boolean))];
   const allowedWorkspaces = [...new Set((definition.allowed_workspaces || []).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
   const handler = definition.handler;
 
@@ -77,6 +80,18 @@ function normalizeToolDefinition(definition = {}) {
     throw new AiToolRegistryError("AI tools require at least one allowed persona.", {
       code: "AI_TOOL_PERSONA_REQUIRED",
     });
+  }
+  const invalidBusinessPermissions = requiredBusinessPermissions.filter(
+    (permission) => !ALL_PERMISSIONS.includes(permission)
+  );
+  if (invalidBusinessPermissions.length > 0) {
+    throw new AiToolRegistryError(
+      "AI tool business permissions must exist in the CHALIN permission catalog.",
+      {
+        code: "AI_TOOL_BUSINESS_PERMISSION_INVALID",
+        details: invalidBusinessPermissions,
+      }
+    );
   }
   if (typeof handler !== "function") {
     throw new AiToolRegistryError("AI tools require an executable handler.", {
@@ -100,6 +115,7 @@ function normalizeToolDefinition(definition = {}) {
     risk_level: riskLevel,
     personas: Object.freeze(personas),
     required_permissions: Object.freeze(requiredPermissions),
+    required_business_permissions: Object.freeze(requiredBusinessPermissions),
     allowed_workspaces: Object.freeze(allowedWorkspaces),
     scope_requirements: Object.freeze({
       branch: definition.scope_requirements?.branch === true,
@@ -136,6 +152,7 @@ function publicToolDefinition(tool) {
     risk_level: tool.risk_level,
     personas: [...tool.personas],
     required_permissions: [...tool.required_permissions],
+    required_business_permissions: [...tool.required_business_permissions],
     allowed_workspaces: [...tool.allowed_workspaces],
     scope_requirements: { ...tool.scope_requirements },
     input_schema: tool.input_schema,
@@ -236,6 +253,8 @@ class AiToolRegistry {
     }
 
     const context = buildToolExecutionContext({ req, persona: normalizedPersona, tool });
+    await validateAiScopeAccess({ req, scope: context.scope, tool });
+
     const started = Date.now();
     const output = await withTimeout(
       Promise.resolve(tool.handler(Object.freeze({ input: Object.freeze({ ...input }), context }))),
