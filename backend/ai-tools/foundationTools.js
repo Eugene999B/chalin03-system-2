@@ -1,7 +1,9 @@
 "use strict";
 
 const { getFeatureSnapshot } = require("../services/featureFlagService");
-const { searchApprovedKnowledge } = require("../services/aiKnowledgeService");
+const {
+  searchGovernedKnowledge,
+} = require("../services/aiKnowledgeRetrievalService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 
 let registered = false;
@@ -43,8 +45,8 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
     key: "knowledge.search",
     title: "Search approved knowledge",
     description:
-      "Searches only published, currently effective knowledge visible to the active persona and workspace.",
-    version: "1",
+      "Searches only published, currently effective governed knowledge. Document chunks use precise locators and local provider-independent retrieval before the legacy governed-text fallback.",
+    version: "2",
     risk_level: 1,
     personas: ["copilot", "executive"],
     required_permissions: ["ai.use", "ai.knowledge.view"],
@@ -64,7 +66,7 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
     },
     handler: async ({ input, context }) => {
       const query = String(input.query || "").trim().slice(0, 240);
-      const evidence = await searchApprovedKnowledge({
+      const evidence = await searchGovernedKnowledge({
         query,
         persona: context.scope.persona,
         workspaceCode: context.scope.workspace_code,
@@ -73,6 +75,7 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
       return {
         query,
         result_count: evidence.length,
+        retrieval_authority: "published_governed_knowledge_only",
         evidence,
       };
     },
