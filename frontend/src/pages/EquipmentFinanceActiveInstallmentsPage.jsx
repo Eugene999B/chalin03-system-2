@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import "../styles/equipmentFinanceAccountsCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/equipmentFinanceIntegrityHealth.css";
 
 const API = "/equipment-catalogue/sales/finance-lifecycle";
 
@@ -40,6 +41,111 @@ function accountTone(account) {
   if (Number(account.overdue_amount || 0) > 0.01) return "overdue";
   if (account.agreement_status === "defaulted") return "defaulted";
   return "active";
+}
+
+function accountHealth(account, detail) {
+  if (detail?.reconciliation?.consistent === false) {
+    return {
+      tone: "danger",
+      mark: "!",
+      title: "Integrity review required",
+      note: "Receipts, allocations, schedule or ledger evidence do not reconcile. Financial mutations remain blocked.",
+    };
+  }
+  if (account.agreement_status === "defaulted") {
+    return {
+      tone: "danger",
+      mark: "!",
+      title: "Defaulted account",
+      note: "The Finance account requires controlled recovery or correction handling.",
+    };
+  }
+  if (Number(account.outstanding_balance || 0) <= 0.01) {
+    return {
+      tone: "settled",
+      mark: "✓",
+      title: "Financially settled",
+      note: account.ownership_id
+        ? "The account is settled and ownership completion is recorded."
+        : "The account is settled. Complete any outstanding delivery or ownership controls.",
+    };
+  }
+  if (Number(account.overdue_amount || 0) > 0.01) {
+    return {
+      tone: "warning",
+      mark: "!",
+      title: "Payment attention required",
+      note: `${money(account.overdue_amount)} is overdue. The underlying account evidence is still reconciled.`,
+    };
+  }
+  return {
+    tone: "healthy",
+    mark: "✓",
+    title: "Account healthy",
+    note: "The Finance evidence reconciles and the account is currently within its payment lifecycle.",
+  };
+}
+
+function lifecycleSteps(account, detail) {
+  const paymentCount = detail?.payments?.filter((payment) => !payment.is_voided).length || 0;
+  const reserved = account.equipment_commitment_status === "reserved";
+  const delivered = Boolean(account.delivery_id || account.delivery_datetime);
+  const transferred = Boolean(account.ownership_id || account.transfer_number);
+  const fullyPaid = Number(account.outstanding_balance || 0) <= 0.01;
+
+  const steps = [
+    {
+      key: "application",
+      title: "Approved Application",
+      note: account.application_number || "Approved credit file",
+      complete: true,
+    },
+    {
+      key: "agreement",
+      title: "Agreement",
+      note: account.agreement_number,
+      complete: true,
+    },
+    {
+      key: "reservation",
+      title: "Deposit & Reservation",
+      note: reserved ? "Machine reserved" : "Awaiting required deposit",
+      complete: reserved,
+    },
+    {
+      key: "collections",
+      title: "Collections",
+      note: fullyPaid
+        ? "Fully settled"
+        : paymentCount
+          ? `${paymentCount} payment record${paymentCount === 1 ? "" : "s"}`
+          : "No installment collection yet",
+      complete: fullyPaid,
+      current: reserved && !fullyPaid,
+    },
+    {
+      key: "delivery",
+      title: "Delivery",
+      note: delivered ? dateLabel(account.delivery_datetime) : "Not handed over",
+      complete: delivered,
+      current: fullyPaid && !delivered,
+    },
+    {
+      key: "ownership",
+      title: "Ownership",
+      note: transferred ? dateLabel(account.transfer_date) : "Not transferred",
+      complete: transferred,
+      current: fullyPaid && delivered && !transferred,
+    },
+  ];
+
+  let currentAssigned = steps.some((step) => step.current);
+  if (!currentAssigned) {
+    const firstIncomplete = steps.find((step) => !step.complete);
+    if (firstIncomplete) firstIncomplete.current = true;
+    currentAssigned = Boolean(firstIncomplete);
+  }
+  return steps;
 }
 
 export default function EquipmentFinanceActiveInstallmentsPage() {
@@ -136,6 +242,9 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
         .some((value) => String(value).toLowerCase().includes(term));
     });
   }, [accounts, search, status]);
+
+  const health = selected ? accountHealth(selected, detail) : null;
+  const lifecycle = selected ? lifecycleSteps(selected, detail) : [];
 
   return (
     <main className="finance-accounts finance-simplified" data-testid="finance-active-installments">
@@ -239,6 +348,42 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                     schedule and ledger evidence reconcile.
                   </div>
                 ) : null}
+
+                {health ? (
+                  <section className="finance-integrity-health" data-testid="finance-account-health">
+                    <div className={`finance-integrity-health__banner is-${health.tone}`}>
+                      <div className="finance-integrity-health__identity">
+                        <div className="finance-integrity-health__mark">{health.mark}</div>
+                        <div>
+                          <small>Account health</small>
+                          <strong>{health.title}</strong>
+                          <span>{health.note}</span>
+                        </div>
+                      </div>
+                      <div className="finance-integrity-health__chips">
+                        <span>{detail?.reconciliation?.consistent === false ? "Reconciliation blocked" : "Reconciled"}</span>
+                        <span>{selected.equipment_commitment_status === "reserved" ? "Machine reserved" : "Reservation pending"}</span>
+                        <span>{Number(selected.overdue_amount || 0) > 0.01 ? `${money(selected.overdue_amount)} overdue` : "No overdue balance"}</span>
+                      </div>
+                    </div>
+
+                    <div className="finance-integrity-health__timeline" aria-label="Installment lifecycle timeline">
+                      {lifecycle.map((step, index) => (
+                        <article
+                          key={step.key}
+                          className={`finance-integrity-health__step ${step.complete ? "is-complete" : ""} ${step.current ? "is-current" : ""}`}
+                        >
+                          <div className="finance-integrity-health__dot">
+                            {step.complete ? "✓" : index + 1}
+                          </div>
+                          <strong>{step.title}</strong>
+                          <span>{step.note}</span>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
                 <div className="finance-accounts__summary">
                   <article><span>Official balance</span><strong>{money(selected.outstanding_balance)}</strong></article>
                   <article><span>Overdue</span><strong>{money(selected.overdue_amount)}</strong></article>
