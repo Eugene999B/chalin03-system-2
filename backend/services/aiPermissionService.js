@@ -7,6 +7,9 @@ const {
   normalizeAiPersona,
   normalizeAiWorkspace,
 } = require("../security/aiPermissionCatalog");
+const { hasEveryPermission } = require("../security/permissionCatalog");
+const { resolveMiningSiteScope } = require("./miningSiteScope");
+const { resolveHireLocationScope } = require("./hireLocationScope");
 
 class AiPermissionError extends Error {
   constructor(message, { code = "AI_PERMISSION_DENIED", statusCode = 403, details = [] } = {}) {
@@ -102,6 +105,17 @@ function assertPermissions(user, requiredPermissions = []) {
   return true;
 }
 
+function assertBusinessPermissions(user, requiredPermissions = []) {
+  const required = [...new Set(requiredPermissions.filter(Boolean))];
+  if (!hasEveryPermission(user, required)) {
+    throw new AiPermissionError(
+      "The current account does not have the required business permissions for this intelligence tool.",
+      { code: "AI_TOOL_BUSINESS_PERMISSION_DENIED", details: required }
+    );
+  }
+  return true;
+}
+
 function assertWorkspaceAllowed(scope, allowedWorkspaces = []) {
   if (!allowedWorkspaces.length) return true;
   if (!allowedWorkspaces.includes(scope.workspace_code)) {
@@ -141,9 +155,59 @@ function assertRequiredLocationScope(scope, requirements = {}) {
   return true;
 }
 
+function scopedAccessError(error, workspace) {
+  const code =
+    workspace === "mining"
+      ? "AI_MINING_SITE_ACCESS_DENIED"
+      : "AI_HIRE_LOCATION_ACCESS_DENIED";
+  return new AiPermissionError(
+    error?.message || "The selected intelligence context is not authorized.",
+    {
+      code,
+      statusCode: Number(error?.statusCode) || 403,
+      details: error?.code ? [String(error.code)] : [],
+    }
+  );
+}
+
+async function validateAiScopeAccess({
+  req,
+  scope,
+  tool,
+  miningResolver = resolveMiningSiteScope,
+  hireResolver = resolveHireLocationScope,
+} = {}) {
+  const requirements = tool?.scope_requirements || {};
+
+  if (requirements.mining_site === true) {
+    try {
+      const resolved = await miningResolver(req, { requireSelection: true });
+      if (Number(resolved?.siteId || 0) !== Number(scope?.mining_site_id || 0)) {
+        throw new Error("The selected Mining site does not match the authorized intelligence scope.");
+      }
+    } catch (error) {
+      throw scopedAccessError(error, "mining");
+    }
+  }
+
+  if (requirements.hire_location === true) {
+    try {
+      const resolved = await hireResolver(req, { requireSelection: true });
+      if (Number(resolved?.locationId || 0) !== Number(scope?.hire_location_id || 0)) {
+        throw new Error("The selected Equipment Hire location does not match the authorized intelligence scope.");
+      }
+    } catch (error) {
+      throw scopedAccessError(error, "equipment_hire");
+    }
+  }
+
+  return true;
+}
+
 function buildToolExecutionContext({ req, persona, tool }) {
   const scope = resolveAiScope({ req, persona });
   assertPermissions(req.user, tool.required_permissions || []);
+  assertBusinessPermissions(req.user, tool.required_business_permissions || []);
   assertWorkspaceAllowed(scope, tool.allowed_workspaces || []);
   assertRequiredLocationScope(scope, tool.scope_requirements || {});
 
@@ -170,6 +234,7 @@ function buildToolExecutionContext({ req, persona, tool }) {
 
 module.exports = {
   AiPermissionError,
+  assertBusinessPermissions,
   assertPermissions,
   assertRequiredLocationScope,
   assertWorkspaceAllowed,
@@ -177,4 +242,5 @@ module.exports = {
   contextHeader,
   positiveInteger,
   resolveAiScope,
+  validateAiScopeAccess,
 };
