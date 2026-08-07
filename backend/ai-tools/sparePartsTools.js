@@ -1,0 +1,184 @@
+"use strict";
+
+const { aiToolRegistry } = require("../services/aiToolRegistry");
+const {
+  buildCollectionsHealth,
+  buildInventoryHealth,
+  buildOperationsSnapshot,
+  loadSparePartsIntelligence,
+} = require("../services/aiSparePartsIntelligenceService");
+
+let registered = false;
+
+const DATE_PROPERTIES = Object.freeze({
+  start_date: {
+    type: "string",
+    pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+    description: "Optional inclusive start date in YYYY-MM-DD format.",
+  },
+  end_date: {
+    type: "string",
+    pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+    description: "Optional inclusive end date in YYYY-MM-DD format.",
+  },
+});
+
+function evidenceExcerpt(viewKey, output) {
+  if (viewKey === "inventory") {
+    return JSON.stringify({
+      branch_id: output.scope.branch_id,
+      period: [output.scope.start_date, output.scope.end_date],
+      product_count: output.inventory.product_count,
+      low_stock_count: output.inventory.low_stock_count,
+      negative_stock_count: output.inventory.negative_stock_count,
+      estimated_stock_cost_value: output.inventory.estimated_stock_cost_value,
+      estimated_stock_retail_value: output.inventory.estimated_stock_retail_value,
+      stock_control: output.stock_control,
+    });
+  }
+  if (viewKey === "collections") {
+    return JSON.stringify({
+      branch_id: output.scope.branch_id,
+      period: [output.scope.start_date, output.scope.end_date],
+      active_debt_count: output.collections.active_debt_count,
+      total_debt_balance: output.collections.total_debt_balance,
+      debt_payments: output.collections.debt_payments,
+      collection_rate: output.collections.collection_rate,
+      aging: output.collections.aging,
+    });
+  }
+  return JSON.stringify({
+    branch_id: output.scope.branch_id,
+    period: [output.scope.start_date, output.scope.end_date],
+    sales: output.sales,
+    collections: output.collections,
+    inventory: output.inventory,
+    operations: output.operations,
+    audit: {
+      score: output.audit.score,
+      status: output.audit.status,
+    },
+  });
+}
+
+function buildAggregateEvidence(viewKey, output) {
+  const label =
+    viewKey === "inventory"
+      ? "Spare Parts inventory health snapshot"
+      : viewKey === "collections"
+      ? "Spare Parts collections health snapshot"
+      : "Spare Parts operations snapshot";
+  return [
+    {
+      source_type: "system_snapshot",
+      source_ref: `spare_parts:${viewKey}:branch:${output.scope.branch_id}`,
+      source_version: "live-read-only",
+      label,
+      excerpt_text: evidenceExcerpt(viewKey, output).slice(0, 6000),
+      as_of_at: output.generated_at,
+      classification: "internal",
+      workspace_code: "spare_parts",
+      metadata: {
+        branch_id: output.scope.branch_id,
+        start_date: output.scope.start_date,
+        end_date: output.scope.end_date,
+        aggregate_only: true,
+        execution_authority: "read_only",
+      },
+    },
+  ];
+}
+
+async function executeView({ input, context, loader, projector, viewKey }) {
+  const { intelligence } = await loader({ context, input });
+  const output = projector(intelligence, context);
+  return {
+    ...output,
+    evidence: buildAggregateEvidence(viewKey, output),
+    execution_authority: "read_only",
+  };
+}
+
+function registerSparePartsAiTools(
+  registry = aiToolRegistry,
+  { loader = loadSparePartsIntelligence } = {}
+) {
+  if (registered && registry === aiToolRegistry) return registry.list();
+
+  const common = {
+    version: "1",
+    risk_level: 1,
+    personas: ["copilot", "executive"],
+    required_permissions: ["ai.use", "ai.read"],
+    allowed_workspaces: ["spare_parts"],
+    scope_requirements: { branch: true },
+    evidence_required: true,
+    max_input_bytes: 2000,
+    max_output_bytes: 70000,
+    timeout_ms: 12000,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: DATE_PROPERTIES,
+    },
+  };
+
+  registry.register({
+    ...common,
+    key: "spare_parts.operations_snapshot",
+    title: "Spare Parts operations snapshot",
+    description:
+      "Returns branch-scoped aggregate sales, collections, inventory, expense, purchase, return and audit health without customer identities or raw rows.",
+    handler: async ({ input, context }) =>
+      executeView({
+        input,
+        context,
+        loader,
+        projector: buildOperationsSnapshot,
+        viewKey: "operations",
+      }),
+  });
+
+  registry.register({
+    ...common,
+    key: "spare_parts.inventory_health",
+    title: "Spare Parts inventory health",
+    description:
+      "Returns branch-scoped stock value, low/negative stock signals and aggregate transfer/adjustment controls with evidence.",
+    handler: async ({ input, context }) =>
+      executeView({
+        input,
+        context,
+        loader,
+        projector: buildInventoryHealth,
+        viewKey: "inventory",
+      }),
+  });
+
+  registry.register({
+    ...common,
+    key: "spare_parts.collections_health",
+    title: "Spare Parts collections health",
+    description:
+      "Returns aggregate debt balance, debt aging, payments and sales collection rate for the authorized branch without customer identities.",
+    handler: async ({ input, context }) =>
+      executeView({
+        input,
+        context,
+        loader,
+        projector: buildCollectionsHealth,
+        viewKey: "collections",
+      }),
+  });
+
+  if (registry === aiToolRegistry) registered = true;
+  return registry.list();
+}
+
+module.exports = {
+  DATE_PROPERTIES,
+  buildAggregateEvidence,
+  evidenceExcerpt,
+  executeView,
+  registerSparePartsAiTools,
+};
