@@ -15,6 +15,11 @@ const {
   submitKnowledgeVersion,
   updateKnowledgeDraft,
 } = require("../services/aiKnowledgeService");
+const {
+  getKnowledgeChunk,
+  ingestKnowledgeDocument,
+  listKnowledgeDocuments,
+} = require("../services/aiDocumentIntelligenceService");
 
 const router = express.Router();
 
@@ -73,6 +78,29 @@ async function scopedKnowledgeDetails(req, sourceId) {
   error.code = "AI_KNOWLEDGE_SOURCE_NOT_FOUND";
   error.statusCode = 404;
   throw error;
+}
+
+async function resolveScopedKnowledgeDetails(req, sourceReference) {
+  const reference = String(sourceReference || "").trim();
+  if (/^\d+$/.test(reference)) {
+    return scopedKnowledgeDetails(req, reference);
+  }
+
+  const candidates = await listKnowledgeSources({
+    search: reference,
+    workspaceCode: activeKnowledgeWorkspace(req),
+    limit: 100,
+    offset: 0,
+  });
+  const match = candidates.find((item) => item.source_key === reference);
+  if (!match) {
+    const error = new Error("Knowledge source not found.");
+    error.name = "AiKnowledgeError";
+    error.code = "AI_KNOWLEDGE_SOURCE_NOT_FOUND";
+    error.statusCode = 404;
+    throw error;
+  }
+  return scopedKnowledgeDetails(req, match.id);
 }
 
 router.get(
@@ -155,6 +183,62 @@ router.put(
       req,
     });
     return success(res, req, { updated: true });
+  })
+);
+
+router.post(
+  "/:sourceId/versions/:versionId/documents",
+  requireAiPermission("ai.knowledge.manage"),
+  asyncHandler(async (req, res) => {
+    await scopedKnowledgeDetails(req, req.params.sourceId);
+    return success(
+      res,
+      req,
+      await ingestKnowledgeDocument({
+        sourceId: req.params.sourceId,
+        versionId: req.params.versionId,
+        input: req.body || {},
+        user: req.user,
+        req,
+      }),
+      201
+    );
+  })
+);
+
+router.get(
+  "/:sourceId/documents",
+  requireAiPermission("ai.knowledge.view"),
+  asyncHandler(async (req, res) => {
+    const details = await scopedKnowledgeDetails(req, req.params.sourceId);
+    return success(
+      res,
+      req,
+      await listKnowledgeDocuments({
+        sourceId: details.source.id,
+        versionId: req.query.version_id || null,
+      })
+    );
+  })
+);
+
+router.get(
+  "/:sourceReference/documents/:documentId/chunks/:chunkId",
+  requireAiPermission("ai.knowledge.view"),
+  asyncHandler(async (req, res) => {
+    const details = await resolveScopedKnowledgeDetails(
+      req,
+      req.params.sourceReference
+    );
+    return success(
+      res,
+      req,
+      await getKnowledgeChunk({
+        sourceId: details.source.id,
+        documentId: req.params.documentId,
+        chunkId: req.params.chunkId,
+      })
+    );
   })
 );
 
