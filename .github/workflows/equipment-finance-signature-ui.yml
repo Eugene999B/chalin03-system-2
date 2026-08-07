@@ -8,7 +8,9 @@ on:
       - "frontend/src/styles/equipmentFinanceSignatureShell.css"
       - "frontend/src/styles/equipmentFinanceSignaturePolish.css"
       - "frontend/src/styles/equipmentFinanceSimplifiedWorkspace.css"
+      - "frontend/src/styles/equipmentFinanceThreePageSignature.css"
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
+      - "frontend/scripts/equipmentFinanceThreePageSignatureTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
       - ".github/workflows/equipment-finance-signature-ui.yml"
   workflow_dispatch:
@@ -38,7 +40,7 @@ jobs:
         run: npm ci
 
       - name: Run isolated signature UI source contracts
-        run: node scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs
+        run: node scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs && node scripts/equipmentFinanceThreePageSignatureTests.mjs
 
       - name: Build production frontend
         run: npm run build
