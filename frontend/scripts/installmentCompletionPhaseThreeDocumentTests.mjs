@@ -81,12 +81,11 @@ for (const discoveryContract of [
   "documents inside",
   "finance-docs__group-toggle",
   "Open category",
-  "finance-document-group-payments",
-  "finance-document-group-machine",
-  "finance-document-group-completion",
 ]) {
   assert.ok(page.includes(discoveryContract), `Missing document discovery contract: ${discoveryContract}`);
 }
+assert.match(page, /getElementById\(`finance-document-group-\$\{groupCode\}`\)/);
+assert.match(page, /id=\{`finance-document-group-\$\{group\.code\}`\}/);
 
 assert.match(layout, /title: "Generated Documents"/);
 assert.match(layout, /stage=generated-documents/);
