@@ -13,6 +13,12 @@ const ContentStudioWorkspace = lazy(() =>
 const ChalinIntelligenceWorkspace = lazy(() =>
   import("./ai/ChalinIntelligenceWorkspace")
 );
+const DocumentIntelligencePage = lazy(() =>
+  import("./ai/DocumentIntelligencePage")
+);
+const DocumentIntelligenceLauncher = lazy(() =>
+  import("./ai/DocumentIntelligenceLauncher")
+);
 const ExecutiveScorecardPage = lazy(() =>
   import("./ai/ExecutiveScorecardPage")
 );
@@ -153,6 +159,9 @@ function ContentStudioEntry() {
 }
 
 function IntelligenceWorkspaceSurface() {
+  if (window.location.pathname === "/intelligence/documents") {
+    return <DocumentIntelligencePage />;
+  }
   if (window.location.pathname === "/intelligence/executive-scorecard") {
     return <ExecutiveScorecardPage />;
   }
@@ -163,6 +172,7 @@ function IntelligenceWorkspaceSurface() {
   return (
     <>
       <ChalinIntelligenceWorkspace />
+      <DocumentIntelligenceLauncher />
       <ExecutiveScorecardLauncher />
     </>
   );
