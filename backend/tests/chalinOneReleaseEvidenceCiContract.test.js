@@ -11,7 +11,7 @@ function read(relativePath) {
   return fs.readFileSync(path.resolve(repositoryRoot, relativePath), "utf8");
 }
 
-test("backend package exposes staging smoke and release evidence commands", () => {
+test("backend package exposes governed staging smoke and release evidence commands", () => {
   const packageJson = JSON.parse(read("backend/package.json"));
   assert.equal(
     packageJson.scripts["evidence:chalin-one:release"],
@@ -19,11 +19,11 @@ test("backend package exposes staging smoke and release evidence commands", () =
   );
   assert.equal(
     packageJson.scripts["smoke:chalin-one:staging"],
-    "node scripts/runChalinOneStagingSmokeTests.js"
+    "node scripts/runChalinOneGovernedHomepageStagingSmoke.js"
   );
   assert.doesNotMatch(
     packageJson.scripts.start,
-    /generateChalinOneReleaseEvidence|runChalinOneStagingSmokeTests/
+    /generateChalinOneReleaseEvidence|runChalinOneGovernedHomepageStagingSmoke/
   );
 });
 
@@ -76,7 +76,10 @@ test("CI publishes aggregate status against the real candidate commit", () => {
   );
   assert.doesNotMatch(workflow, /\/statuses\/\$\{GITHUB_SHA\}/);
   assert.match(workflow, /CHALIN ONE CI failed; inspect the workflow run/);
-  assert.match(workflow, /Backend, MySQL acceptance, frontend tests and build passed/);
+  assert.match(
+    workflow,
+    /Backend, public\/AI MySQL acceptance, frontend tests and build passed/
+  );
 });
 
 test("CI always uploads a compact aggregate result artifact", () => {
