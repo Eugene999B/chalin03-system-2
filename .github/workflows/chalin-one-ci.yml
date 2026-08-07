@@ -112,7 +112,20 @@ jobs:
         run: npm run syntax-check
 
       - name: Run backend tests
-        run: npm test
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          npm test 2>&1 | tee artifacts/chalin-one-backend-tests.log
+
+      - name: Upload backend test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-backend-tests-${{ github.sha }}
+          path: backend/artifacts/chalin-one-backend-tests.log
+          if-no-files-found: error
+          retention-days: 30
 
   chalin-one-database-acceptance:
     name: CHALIN ONE public and AI database acceptance
@@ -187,7 +200,20 @@ jobs:
         run: npm run migrate:chalin-one:ai-foundation
 
       - name: Run database-backed Content Studio and AI acceptance
-        run: npm run test:chalin-one:db
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          npm run test:chalin-one:db 2>&1 | tee artifacts/chalin-one-database-acceptance.log
+
+      - name: Upload database acceptance output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-database-acceptance-${{ github.sha }}
+          path: backend/artifacts/chalin-one-database-acceptance.log
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Generate machine-readable release evidence
         run: npm run evidence:chalin-one:release
