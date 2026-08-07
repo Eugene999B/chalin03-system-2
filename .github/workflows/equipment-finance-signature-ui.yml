@@ -10,6 +10,7 @@ on:
       - "frontend/src/styles/equipmentFinanceSimplifiedWorkspace.css"
       - "frontend/src/styles/equipmentFinanceThreePageSignature.css"
       - "frontend/src/styles/equipmentFinanceApplicationsSignature.css"
+      - "frontend/src/styles/equipmentFinanceThreePageRouteSignature.css"
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
       - "frontend/scripts/equipmentFinanceThreePageSignatureTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
