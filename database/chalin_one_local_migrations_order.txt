@@ -13,3 +13,27 @@ database/migrations/20260806_chalin_one_ai_foundation.sql
 
 # Read-only AI foundation and secret-column verification.
 database/migrations/20260806_chalin_one_ai_foundation_verify.sql
+
+# Human-governed AI action proposals. No executor is enabled by this migration.
+database/migrations/20260806_chalin_one_ai_action_governance.sql
+
+# Read-only AI action-governance verification.
+database/migrations/20260806_chalin_one_ai_action_governance_verify.sql
+
+# Approved scheduled-intelligence definitions and immutable run evidence.
+database/migrations/20260806_chalin_one_ai_scheduled_governance.sql
+
+# Read-only scheduled-intelligence verification.
+database/migrations/20260806_chalin_one_ai_scheduled_governance_verify.sql
+
+# Anonymous Public Guide session/message security foundation.
+database/migrations/20260806_chalin_one_public_guide_foundation.sql
+
+# Read-only Public Guide verification.
+database/migrations/20260806_chalin_one_public_guide_foundation_verify.sql
+
+# Invitation-only customer, supplier and applicant portal security foundation.
+database/migrations/20260806_chalin_one_portal_security_foundation.sql
+
+# Read-only external-portal security verification.
+database/migrations/20260806_chalin_one_portal_security_foundation_verify.sql
