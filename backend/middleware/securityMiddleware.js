@@ -8,7 +8,6 @@ const OFFICIAL_FRONTEND_ORIGINS = new Set([
   "https://chalin03.com",
   "https://www.chalin03.com",
 ]);
-const TRUSTED_BROWSER_METHODS = "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS";
 
 function isProductionEnvironment() {
   return String(process.env.NODE_ENV || "").toLowerCase() === "production";
@@ -92,34 +91,6 @@ function safeSecretEquals(expectedValue, suppliedValue) {
   return crypto.timingSafeEqual(expected, supplied);
 }
 
-function trustedBrowserCorsBoundary(req, res, next) {
-  const suppliedOrigin = req.get("origin");
-  if (!suppliedOrigin || !isTrustedFrontendOrigin(suppliedOrigin)) {
-    return next();
-  }
-
-  const normalizedOrigin = normalizeOrigin(suppliedOrigin);
-  res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  if (typeof res.vary === "function") {
-    res.vary("Origin");
-  } else {
-    res.setHeader("Vary", "Origin");
-  }
-
-  if (req.method !== "OPTIONS") {
-    return next();
-  }
-
-  const requestedHeaders = req.get("access-control-request-headers");
-  res.setHeader("Access-Control-Allow-Methods", TRUSTED_BROWSER_METHODS);
-  if (requestedHeaders) {
-    res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
-  }
-  res.setHeader("Access-Control-Max-Age", "86400");
-  return res.status(204).end();
-}
-
 function trustedFrontendOriginMiddleware(req, res, next) {
   if (!isProductionEnvironment() || shouldSkipOriginProtection(req)) {
     return next();
@@ -198,7 +169,6 @@ function buildSecurityMiddleware() {
   const production = isProductionEnvironment();
 
   return [
-    trustedBrowserCorsBoundary,
     helmet({
       contentSecurityPolicy: {
         directives: {
@@ -263,7 +233,6 @@ const sensitiveAdminLimiter = buildRateLimiter({
 module.exports = {
   OFFICIAL_FRONTEND_ORIGINS,
   ORIGIN_SECRET_HEADER,
-  TRUSTED_BROWSER_METHODS,
   additionalSecurityHeaders,
   buildSecurityMiddleware,
   buildRateLimiter,
@@ -277,7 +246,6 @@ module.exports = {
   normalizeOrigin,
   safeSecretEquals,
   sensitiveAdminLimiter,
-  trustedBrowserCorsBoundary,
   trustedFrontendOriginMiddleware,
   trustedHostMiddleware,
 };
