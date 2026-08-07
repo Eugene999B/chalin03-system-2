@@ -6,8 +6,9 @@
 **Live provider:** Disabled  
 **Production migration:** Not run  
 **Deployment:** Not performed  
-**Green Phase 9 source commit:** `ced97c58673e28be8599da2dec6e4a087540f955`  
-**Green Phase 9 CI run:** `31208580817`
+**Latest green source commit:** `c7758b2cea55c9e244385cad12fc375d5dc22b96`  
+**Latest green CI run:** `31210633268`  
+**Green Phase 9 baseline:** `ced97c58673e28be8599da2dec6e4a087540f955` / `31208580817`
 
 Legend:
 
@@ -60,8 +61,8 @@ Legend:
 
 ### Runtime acceptance
 
-- [x] Backend suite green on the recorded Phase 9 baseline.
-- [x] Isolated MySQL 8.4 AI acceptance green on the recorded Phase 9 baseline.
+- [x] Backend suite green on the recorded latest baseline.
+- [x] Isolated MySQL 8.4 AI acceptance green on the recorded latest baseline.
 - [x] AI foundation migration idempotency green.
 - [x] AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations passed twice inside isolated acceptance.
 - [x] Security regressions cover unknown permission names, business-permission denial, provider visibility, sensitive evidence classification, forged Mining/Hire context mismatch and Hire-vs-Finance division isolation.
@@ -84,16 +85,44 @@ Legend:
 - [x] Checksums and evidence conversion.
 - [x] Knowledge administration API and staff governance UI.
 - [x] Workspace ownership enforcement.
-- [-] Approved-media/document ingestion remains partial; governed text knowledge works, but document-level ingestion is the next source block.
-- [ ] OCR/document parsing pipeline.
-- [ ] Approved chunking/embedding pipeline.
-- [ ] Vector retrieval provider.
-- [ ] Document-level citation deep links.
+- [x] Governed document-ingestion schema bound to exact knowledge source/version records.
+- [x] Additive `ai_knowledge_documents` and `ai_knowledge_chunks` tables.
+- [x] Raw binary storage is structurally forbidden by schema and runtime checks.
+- [x] Guarded document-intelligence migration runner with isolated non-production target restriction and production dual-backup gates.
+- [x] Built-in parsers for TXT, Markdown, CSV, JSON, HTML and XML.
+- [x] Maximum governed ingestion size of 2 MB per supported text document.
+- [x] UTF-8 validation, HTML script/style removal and JSON validation before chunking.
+- [x] Draft-only ingestion so independent review covers the exact parsed document content.
+- [x] Deterministic overlapping chunking with character offsets, line ranges, heading paths, chunk checksums and token estimates.
+- [x] Provider-independent local `local_hash_v1` vector fingerprints with deterministic cosine + query-token coverage ranking.
+- [x] Hybrid `knowledge.search` tool ranks published document chunks first and falls back to the existing governed-text search.
+- [x] Retrieval remains limited to published, currently effective content visible to the active persona/workspace.
+- [x] Precise document evidence includes document key, file name, chunk index, line range, chunk checksum, retrieval model/score and exact citation API deep link.
+- [x] Read-only chunk-list and exact-chunk review APIs.
+- [x] Staff Document Intelligence page at `/intelligence/documents`.
+- [x] Permission-aware Document Intelligence launcher inside the Intelligence workspace.
+- [x] Staff page supports source/version selection, supported-file ingestion, parser/checksum metadata and exact chunk/line preview.
+- [x] Responsive desktop/tablet/mobile source layout and reduced-motion support.
+- [-] PDF binary parser adapter remains pending.
+- [-] DOCX binary parser adapter remains pending.
+- [-] Image OCR pipeline remains pending.
+- [-] External semantic embedding/vector provider remains deliberately unregistered; current retrieval is local deterministic hashed-vector retrieval.
+- [-] Chat evidence metadata contains exact citation API deep links; dedicated clickable citation rendering inside the chat UI remains a later browser/UI polish item.
 
 ### Runtime acceptance
 
-- [x] Real isolated-MySQL knowledge-governance flow passed CI acceptance.
-- [-] Desktop/mobile governance browser acceptance pending.
+- [x] Frontend Document Intelligence source contract passed.
+- [x] Complete CHALIN ONE JSX compilation passed.
+- [x] Production-mode frontend build passed.
+- [x] Full backend unit/security suite passed.
+- [x] Additive migration safety gate passed.
+- [x] Document-intelligence migration ran twice successfully against isolated MySQL.
+- [x] Real isolated-MySQL acceptance exercised draft source → document ingestion/chunking → independent reviewer → separate publisher → published document retrieval.
+- [x] Wrong-workspace document retrieval denial passed.
+- [x] Public Guide exclusion of workspace-only ingested documents passed.
+- [x] Exact chunk lookup and no-raw-binary invariant passed.
+- [x] Exact document-intelligence source commit `c7758b2cea55c9e244385cad12fc375d5dc22b96` is fully green in CI run `31210633268`.
+- [-] Desktop/mobile browser evidence with real accounts remains pending.
 
 ## Phase 9 — Chalin Copilot and Executive
 
@@ -241,6 +270,7 @@ The three portal feature flags remain false.
 - [x] Isolated MySQL CI expanded.
 - [x] Frontend source contracts expanded.
 - [x] Visible green GitHub CI for exact Phase 9 source commit `ced97c58673e28be8599da2dec6e4a087540f955` in run `31208580817`.
+- [x] Visible green GitHub CI for exact Phase 8 document-intelligence source commit `c7758b2cea55c9e244385cad12fc375d5dc22b96` in run `31210633268`.
 - [ ] Isolated staging AI migration twice.
 - [ ] Staging provider acceptance.
 - [ ] Desktop/mobile browser evidence with real accounts.
@@ -260,6 +290,6 @@ The three portal feature flags remain false.
 
 ## Current truthful status
 
-Phase 9 is source-complete and CI-proven on `chalin-one`. CHALIN ONE now contains governed Copilot/Executive foundations plus read-only or suggestion-only intelligence for Spare Parts, duplicate customers, Mining Operations, Equipment Hire and Equipment Sales/Installment Finance. It also contains provider-independent Executive Scorecards and a transparent Scenario Comparison Engine driven by the existing original-administrator Group Executive Control baseline.
+CHALIN ONE Phase 9 remains source-complete and CI-proven, and the Phase 8 document-intelligence source block is now also CI-proven. Governed TXT/Markdown/CSV/JSON/HTML/XML documents can be ingested only into an editable knowledge draft, parsed without storing raw binary, chunked with precise locators, independently reviewed/published through the existing knowledge governance flow, and retrieved using the provider-independent `local_hash_v1` ranking layer with exact citation metadata. The staff review surface is available at `/intelligence/documents` in source.
 
-The next source gap is Phase 8 document intelligence: governed document ingestion, parsing/chunking and later vector retrieval. Staging/browser/live-provider acceptance, backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled, and no production database migration or deployment has been performed.
+PDF, DOCX and image OCR parser adapters and an external semantic embedding/vector provider are **not** claimed complete. Staging/browser/live-provider acceptance, backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled, and no production database migration or deployment has been performed.
