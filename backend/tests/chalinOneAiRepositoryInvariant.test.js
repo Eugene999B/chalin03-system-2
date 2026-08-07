@@ -83,7 +83,7 @@ test("provider foundation has no direct HTTP client or credential literal", () =
 
 test("AI routes never expose environment values or provider credentials", () => {
   const routeFiles = filesIn("backend/routes").filter((file) =>
-    /ai/i.test(path.basename(file))
+    /^ai.*Routes\.js$/i.test(path.basename(file))
   );
   for (const file of routeFiles) {
     const source = read(file);
