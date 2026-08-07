@@ -177,7 +177,7 @@ test("public response scanner detects private field names recursively", () => {
   ]);
 });
 
-test("release tools are read-only and staging smoke sends no credentials", () => {
+test("release tools stay credential-free and staging writes are explicitly gated", () => {
   const evidenceSource = fs.readFileSync(
     path.resolve(
       __dirname,
@@ -199,7 +199,10 @@ test("release tools are read-only and staging smoke sends no credentials", () =>
   assert.match(evidenceSource, /pending_self_assigned/);
 
   assert.doesNotMatch(smokeSource, /Authorization|Bearer|Cookie|localStorage/);
-  assert.doesNotMatch(smokeSource, /method:\s*["']POST["']/i);
+  assert.match(smokeSource, /CHALIN_ONE_STAGING_SMOKE_SUBMIT_FORM/);
+  assert.match(smokeSource, /!submitContactForm \|\| requirePublished/);
+  assert.match(smokeSource, /public\/content\/forms\/contact\/submissions/);
+  assert.match(smokeSource, /method:\s*["']POST["']/i);
   assert.match(smokeSource, /features\/staff/);
   assert.match(smokeSource, /content-studio/);
   assert.match(smokeSource, /__chalin_one_unpublished_probe__/);
