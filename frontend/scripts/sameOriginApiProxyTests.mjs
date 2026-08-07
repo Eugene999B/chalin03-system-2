@@ -111,11 +111,18 @@ try {
 }
 
 const axiosClient = read("src", "api", "axiosClient.js");
+const viteConfig = read("vite.config.js");
 const serviceWorker = read("public", "sw.js");
 const headersFile = read("public", "_headers");
+const mediaBridge = read("src", "utils", "equipmentMediaCaptureBridge.js");
+const commandGate = read("src", "utils", "commandGate.js");
 
 assert.match(axiosClient, /import \{ API_BASE_URL \} from "\.\/apiBaseUrl"/);
 assert.match(axiosClient, /baseURL: API_BASE_URL/);
+assert.match(viteConfig, /CF_PAGES/);
+assert.match(viteConfig, /process\.env\.VITE_API_URL = "\/api"/);
+assert.match(mediaBridge, /import\.meta\.env\.VITE_API_URL/);
+assert.match(commandGate, /import\.meta\.env\.VITE_API_URL/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
 assert.match(headersFile, /connect-src 'self'/);
 
