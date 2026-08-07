@@ -15,6 +15,7 @@ const {
   hasAiPermission,
   hasEveryAiPermission,
 } = require("../security/aiPermissionCatalog");
+const { hasEveryPermission } = require("../security/permissionCatalog");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { cleanProviderKey } = require("../services/aiProviderService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
@@ -36,11 +37,15 @@ const { registerSparePartsAiTools } = require("../ai-tools/sparePartsTools");
 const {
   registerCustomerIdentityAiTools,
 } = require("../ai-tools/customerIdentityTools");
+const { registerMiningAiTools } = require("../ai-tools/miningTools");
+const { registerHireAiTools } = require("../ai-tools/hireTools");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
 
 registerFoundationAiTools();
 registerSparePartsAiTools();
 registerCustomerIdentityAiTools();
+registerMiningAiTools();
+registerHireAiTools();
 
 const router = express.Router();
 
@@ -90,8 +95,10 @@ function personaRouter(persona, featureKey) {
       const scope = resolveAiScope({ req, persona });
       const tools = aiToolRegistry
         .list({ persona, workspace: scope.workspace_code })
-        .filter((tool) =>
-          hasEveryAiPermission(req.user, tool.required_permissions)
+        .filter(
+          (tool) =>
+            hasEveryAiPermission(req.user, tool.required_permissions) &&
+            hasEveryPermission(req.user, tool.required_business_permissions || [])
         );
       return success(res, req, tools);
     })
