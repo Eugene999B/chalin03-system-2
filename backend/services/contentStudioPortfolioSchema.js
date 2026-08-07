@@ -129,6 +129,15 @@ function normalizeMoney(value) {
 
 function normalizeDateOnly(value, label) {
   if (value === undefined || value === null || value === "") return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new ContentStudioError(`${label} is not a valid calendar date.`, {
+        code: "INVALID_PORTFOLIO_DATE",
+        statusCode: 400,
+      });
+    }
+    return value.toISOString().slice(0, 10);
+  }
   const raw = cleanText(value, 20);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     throw new ContentStudioError(`${label} must use YYYY-MM-DD format.`, {
