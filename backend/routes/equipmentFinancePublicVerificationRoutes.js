@@ -54,7 +54,7 @@ function money(value) {
 function dateLabel(value) {
   if (!value) return "Not published";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return escapeHtml(String(value).slice(0, 10));
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
   return parsed.toLocaleDateString("en-GH", {
     year: "numeric",
     month: "long",
@@ -70,7 +70,8 @@ function statusTheme(code) {
       icon: "✓",
       eyebrow: "AUTHENTIC CHALIN 03 RECORD",
       title: "Document Verified",
-      message: "This QR matches an issued Chalin 03 Equipment Installment Finance record and its stored snapshot checksum is intact.",
+      message:
+        "This QR matches a current document in the Chalin 03 Equipment Installment Finance issue register and is bound to the issuance fingerprint recorded with that document.",
     };
   }
   if (code === "superseded") {
@@ -79,7 +80,8 @@ function statusTheme(code) {
       icon: "↻",
       eyebrow: "VALID HISTORICAL RECORD",
       title: "Document Superseded",
-      message: "This was issued by Chalin 03, but a newer active version exists. Use the latest issued document for current decisions.",
+      message:
+        "This was issued by Chalin 03, but a newer active version exists. Use the latest issued document for current decisions.",
     };
   }
   if (code === "revoked") {
@@ -88,16 +90,23 @@ function statusTheme(code) {
       icon: "!",
       eyebrow: "WITHDRAWN RECORD",
       title: "Document Revoked",
-      message: "This document exists in the Chalin 03 issue history but is no longer an active record.",
+      message:
+        "This document exists in the Chalin 03 issue history but is no longer an active record.",
     };
   }
   return {
     className: "danger",
     icon: "×",
-    eyebrow: "INTEGRITY WARNING",
+    eyebrow: "VERIFICATION WARNING",
     title: "Verification Failed",
-    message: "The stored document snapshot no longer matches the checksum recorded when the document was issued.",
+    message: "This reference could not be confirmed as a current Chalin 03 issued record.",
   };
+}
+
+function factValue(fact) {
+  if (fact.amount !== undefined) return money(fact.amount);
+  if (fact.kind === "date") return dateLabel(fact.value);
+  return String(fact.value ?? "Not published");
 }
 
 function financialFactsHtml(facts = []) {
@@ -111,11 +120,7 @@ function financialFactsHtml(facts = []) {
             (fact) => `
               <div class="fact">
                 <span>${escapeHtml(fact.label)}</span>
-                <strong>${
-                  fact.amount !== undefined
-                    ? escapeHtml(money(fact.amount))
-                    : escapeHtml(dateLabel(fact.value))
-                }</strong>
+                <strong>${escapeHtml(factValue(fact))}</strong>
               </div>`
           )
           .join("")}
@@ -182,7 +187,7 @@ function renderVerifiedPage(result) {
         <div class="fact"><span>Machine</span><strong>${escapeHtml(`${result.agreement.machine_code} — ${result.agreement.machine_name}`)}</strong></div>
         <div class="fact"><span>Machine serial</span><strong>${escapeHtml(result.agreement.serial_number)}</strong></div>
         <div class="fact"><span>Template</span><strong>${escapeHtml(result.document.template_version)}</strong></div>
-        <div class="fact"><span>Checksum fingerprint</span><strong class="fingerprint">${escapeHtml(result.document.checksum_fingerprint)}</strong></div>
+        <div class="fact"><span>Issuance fingerprint</span><strong class="fingerprint">${escapeHtml(result.document.checksum_fingerprint)}</strong></div>
       </div>
     </section>
 
@@ -193,8 +198,8 @@ function renderVerifiedPage(result) {
     </div>
 
     <footer class="footer">
-      Verification is performed against the immutable Chalin 03 issued-document record and its stored SHA-256 snapshot checksum.<br />
-      This page confirms the system record; it does not replace legal review of the underlying transaction.
+      Verification matches this QR reference to the Chalin 03 issued-document register and the SHA-256 fingerprint recorded at issuance.<br />
+      This page confirms the system record and its current/revoked/superseded status; it does not replace legal review of the underlying transaction.
     </footer>
   </main>
 </body>
@@ -215,12 +220,13 @@ router.get("/:documentId/:token", verificationLimiter, async (req, res) => {
       documentId: req.params.documentId,
       token: req.params.token,
     });
-    const statusCode = result.status.code === "verified" ? 200 : result.status.code === "invalid" ? 409 : 410;
+    const statusCode = result.status.code === "verified" ? 200 : 410;
     return res.status(statusCode).type("html").send(renderVerifiedPage(result));
   } catch (error) {
-    const statusCode = error instanceof FinanceVerificationError
-      ? Number(error.statusCode || 404)
-      : 500;
+    const statusCode =
+      error instanceof FinanceVerificationError
+        ? Number(error.statusCode || 404)
+        : 500;
     if (!(error instanceof FinanceVerificationError)) {
       console.error("Finance document verification error:", error);
     }
