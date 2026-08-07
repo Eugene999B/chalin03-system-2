@@ -1,4 +1,6 @@
 -- CHALIN ONE public Guide foundation.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Professional Backup and separate SQL backup must be verified before production execution.
 -- Additive and manual only. This migration is intentionally separate from the
 -- staff AI foundation so public anonymous sessions can be released independently.
 
