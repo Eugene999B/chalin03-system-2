@@ -7,6 +7,7 @@ import {
   resolveApiBaseUrl,
 } from "../src/api/apiBaseUrl.js";
 import {
+  classifyFetchFailure,
   onRequest,
   upstreamHeadersFor,
   upstreamUrlFor,
@@ -14,7 +15,9 @@ import {
 
 const currentFile = fileURLToPath(import.meta.url);
 const frontendRoot = path.resolve(path.dirname(currentFile), "..");
+const repositoryRoot = path.resolve(frontendRoot, "..");
 const read = (...parts) => fs.readFileSync(path.join(frontendRoot, ...parts), "utf8");
+const readRoot = (...parts) => fs.readFileSync(path.join(repositoryRoot, ...parts), "utf8");
 
 assert.equal(
   resolveApiBaseUrl({
@@ -62,6 +65,10 @@ const requestHeaders = upstreamHeadersFor(
       "X-Chalin03-Workspace": "equipment_hire",
       "X-Chalin03-Division": "installment_finance",
       Host: "chalin03.com",
+      "CF-EW-Via": "15",
+      "CDN-Loop": "cloudflare; loops=1",
+      "CF-Ray": "test-ray",
+      "X-Forwarded-For": "203.0.113.10",
     },
   })
 );
@@ -70,9 +77,22 @@ assert.equal(requestHeaders.get("origin"), "https://chalin03.com");
 assert.equal(requestHeaders.get("x-chalin03-workspace"), "equipment_hire");
 assert.equal(requestHeaders.get("x-chalin03-division"), "installment_finance");
 assert.equal(requestHeaders.get("host"), null);
+assert.equal(requestHeaders.get("cf-ew-via"), null);
+assert.equal(requestHeaders.get("cdn-loop"), null);
+assert.equal(requestHeaders.get("cf-ray"), null);
+assert.equal(requestHeaders.get("x-forwarded-for"), null);
 assert.equal(
   requestHeaders.get("x-chalin03-same-origin-proxy"),
-  "cloudflare-pages"
+  "cloudflare-pages-v2"
+);
+
+assert.equal(
+  classifyFetchFailure(new Error("1042 Worker tried to fetch from another Worker")),
+  "same-zone-worker-route"
+);
+assert.equal(
+  classifyFetchFailure(new Error("1019 loop limit reached")),
+  "worker-loop-protection"
 );
 
 const originalFetch = globalThis.fetch;
@@ -104,7 +124,7 @@ try {
   assert.equal(capturedRequest.init.method, "GET");
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
-  assert.equal(response.headers.get("x-chalin03-api-path"), "same-origin-pages-proxy");
+  assert.equal(response.headers.get("x-chalin03-api-path"), "same-origin-pages-proxy-v2");
   assert.deepEqual(await response.json(), { status: "success", user: { id: 1 } });
 } finally {
   globalThis.fetch = originalFetch;
@@ -116,6 +136,8 @@ const serviceWorker = read("public", "sw.js");
 const headersFile = read("public", "_headers");
 const mediaBridge = read("src", "utils", "equipmentMediaCaptureBridge.js");
 const commandGate = read("src", "utils", "commandGate.js");
+const frontendWrangler = read("wrangler.toml");
+const rootWrangler = readRoot("wrangler.toml");
 
 assert.match(axiosClient, /import \{ API_BASE_URL \} from "\.\/apiBaseUrl"/);
 assert.match(axiosClient, /baseURL: API_BASE_URL/);
@@ -125,5 +147,9 @@ assert.match(mediaBridge, /import\.meta\.env\.VITE_API_URL/);
 assert.match(commandGate, /import\.meta\.env\.VITE_API_URL/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
 assert.match(headersFile, /connect-src 'self'/);
+assert.match(frontendWrangler, /global_fetch_strictly_public/);
+assert.match(frontendWrangler, /pages_build_output_dir = "\.\/dist"/);
+assert.match(rootWrangler, /global_fetch_strictly_public/);
+assert.match(rootWrangler, /pages_build_output_dir = "\.\/frontend\/dist"/);
 
 console.log("Same-origin Chalin 03 production API proxy contracts passed.");
