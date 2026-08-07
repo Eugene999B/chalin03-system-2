@@ -42,7 +42,7 @@ function buildEvidence(output) {
       label: "Spare Parts duplicate-customer suggestions",
       excerpt_text: JSON.stringify(excerpt).slice(0, 12000),
       as_of_at: output.generated_at,
-      classification: "restricted",
+      classification: "sensitive",
       workspace_code: "spare_parts",
       metadata: {
         branch_id: output.branch_id,
@@ -69,6 +69,7 @@ function registerCustomerIdentityAiTools(
     risk_level: 2,
     personas: ["copilot", "executive"],
     required_permissions: ["ai.use", "ai.read_sensitive"],
+    required_business_permissions: ["spare_parts.manage"],
     allowed_workspaces: ["spare_parts"],
     scope_requirements: { branch: true },
     evidence_required: true,
