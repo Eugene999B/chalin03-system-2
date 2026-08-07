@@ -6,6 +6,7 @@ on:
     paths:
       - "frontend/src/layouts/InstallmentFinanceLayout.jsx"
       - "frontend/src/styles/equipmentFinanceSignatureShell.css"
+      - "frontend/src/styles/equipmentFinanceSignaturePolish.css"
       - "frontend/src/styles/equipmentFinanceSimplifiedWorkspace.css"
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
