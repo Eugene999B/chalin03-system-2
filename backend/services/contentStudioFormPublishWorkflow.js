@@ -68,7 +68,10 @@ async function publishFormVersion({ formId, versionId, publishAt, expiresAt, use
         { code: "PUBLIC_FORM_SCHEDULING_NOT_READY", statusCode: 409 }
       );
     }
-    snapshot.publish_at = snapshot.publish_at || new Date();
+    // Immediate publication is represented by publication_status + published_at.
+    // Keep publish_at NULL unless an explicit non-future timestamp was supplied so
+    // the public publication predicate cannot race a freshly generated JS time.
+    snapshot.publish_at = snapshot.publish_at || null;
     await connection.query(
       `UPDATE public_forms
        SET form_key = ?, slug = ?, name = ?, form_type = ?, description = ?,
