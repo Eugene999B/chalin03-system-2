@@ -10,6 +10,7 @@ const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
 const customerMergeRecoveryRoutes = require("./customerMergeRecoveryRoutes");
+const equipmentFinancePublicVerificationRoutes = require("./equipmentFinancePublicVerificationRoutes");
 const {
   MERGE_FREEZE_MESSAGE,
 } = require("./customerMergeRecoveryRoutes");
@@ -226,6 +227,11 @@ function sendMergeFreeze(_req, res) {
 router.post("/debt-customers/merge", requireAuth, sendMergeFreeze);
 router.post("/debt-customers/merge-preview", requireAuth, sendMergeFreeze);
 router.use("/customer-merge-recovery", customerMergeRecoveryRoutes);
+
+// Public, read-only verification for QR codes printed on Equipment Installment
+// Finance documents. The route reveals only masked verification facts and never
+// grants access to the underlying customer/KYC document.
+router.use("/finance-verification", equipmentFinancePublicVerificationRoutes);
 
 router.get("/health", (req, res) => {
   res.json({
