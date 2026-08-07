@@ -1,4 +1,6 @@
 -- CHALIN ONE external portal security foundation.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Professional Backup and separate SQL backup must be verified before production execution.
 -- Additive and invitation-only. No portal business-record API is created here.
 
 CREATE TABLE IF NOT EXISTS portal_accounts (
