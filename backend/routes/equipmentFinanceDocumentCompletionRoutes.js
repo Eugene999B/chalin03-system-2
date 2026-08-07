@@ -1,6 +1,8 @@
 const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
 const {
   DOCUMENT_DEFINITIONS,
   getCompletionDocument,
@@ -22,6 +24,31 @@ const {
 const router = express.Router();
 const PREFIX = "/professional/completion-documents";
 
+const EXECUTIVE_DOCUMENTS = new Set(["boss_approval_pack"]);
+const LEGAL_CONTROL_DOCUMENTS = new Set([
+  "installment_agreement",
+  "customer_agreement_copy",
+  "company_agreement_copy",
+  "guarantor_undertaking",
+  "amendment_agreement",
+  "settlement_confirmation",
+  "ownership_transfer",
+]);
+const EXECUTIVE_ISSUE_ROLES = new Set([
+  "finance_manager",
+  "equipment_business_manager",
+]);
+const LEGAL_ISSUE_ROLES = new Set([
+  ...EXECUTIVE_ISSUE_ROLES,
+  "finance_accountant",
+  "equipment_business_accountant",
+]);
+const OPERATING_ISSUE_ROLES = new Set([
+  ...LEGAL_ISSUE_ROLES,
+  "collections_officer",
+  "credit_officer",
+]);
+
 function actor(req) {
   const value = Number(req.user?.id || 0);
   return Number.isInteger(value) && value > 0 ? value : null;
@@ -32,6 +59,54 @@ function safeFileName(value) {
     .replace(/[^a-z0-9._-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 180) || "finance-document";
+}
+
+function normalizeRole(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function roleCandidates(req) {
+  const values = [
+    workspaceRoleFor(req.user),
+    req.user?.workspace_role,
+    req.user?.access_role,
+    req.user?.role,
+    req.user?.base_role,
+    ...(Array.isArray(req.user?.roles) ? req.user.roles : []),
+  ];
+  return new Set(
+    values
+      .map((value) =>
+        value && typeof value === "object"
+          ? value.code || value.role_code || value.name || value.role
+          : value
+      )
+      .map(normalizeRole)
+      .filter(Boolean)
+  );
+}
+
+function allowedIssueRoles(documentType) {
+  if (EXECUTIVE_DOCUMENTS.has(documentType)) return EXECUTIVE_ISSUE_ROLES;
+  if (LEGAL_CONTROL_DOCUMENTS.has(documentType)) return LEGAL_ISSUE_ROLES;
+  return OPERATING_ISSUE_ROLES;
+}
+
+function assertDocumentIssueRole(req, documentType) {
+  if (isOriginalSystemAdministrator(req.user)) return;
+  const candidates = roleCandidates(req);
+  const allowed = allowedIssueRoles(documentType);
+  if ([...candidates].some((role) => allowed.has(role))) return;
+
+  const definition = DOCUMENT_DEFINITIONS[documentType];
+  throw new ProfessionalFinanceError(
+    403,
+    `${definition?.short_title || "This Finance document"} can only be issued by an authorised Installment Finance officer for this document class.`,
+    "EQUIPMENT_FINANCE_DOCUMENT_ISSUE_ROLE_REQUIRED"
+  );
 }
 
 function sendError(req, res, error, fallback) {
@@ -72,10 +147,17 @@ router.get(
         logo_led_visual_architecture: true,
         integrated_logo_and_document_watermark: true,
         qr_verification_identity: true,
+        qr_public_online_verification: true,
+        public_verification_privacy_masking: true,
         tamper_evident_footer: true,
         manual_page_flow_no_blank_pages: true,
         design_version: "professional-logo-led-v3",
         supported_downloads: ["pdf", "word", "print", "thermal"],
+        issue_control: {
+          executive_documents: [...EXECUTIVE_DOCUMENTS],
+          legal_control_documents: [...LEGAL_CONTROL_DOCUMENTS],
+          operating_documents_use_finance_roles: true,
+        },
       },
     });
   }
@@ -97,6 +179,7 @@ router.post(
           "Choose a supported professional Finance document."
         );
       }
+      assertDocumentIssueRole(req, documentType);
       const requestedFormat = String(req.body?.format || "pdf")
         .trim()
         .toLowerCase();
@@ -187,3 +270,6 @@ router.get(
 );
 
 module.exports = router;
+module.exports.EXECUTIVE_DOCUMENTS = EXECUTIVE_DOCUMENTS;
+module.exports.LEGAL_CONTROL_DOCUMENTS = LEGAL_CONTROL_DOCUMENTS;
+module.exports.allowedIssueRoles = allowedIssueRoles;
