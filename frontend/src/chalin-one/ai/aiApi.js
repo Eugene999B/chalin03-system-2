@@ -182,6 +182,20 @@ export async function listAiKnowledgeDocuments(
   return unwrap(response) || [];
 }
 
+export async function listAiKnowledgeDocumentChunks(
+  sourceReference,
+  documentId,
+  { signal } = {}
+) {
+  const response = await axiosClient.get(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceReference
+    )}/documents/${encodeURIComponent(documentId)}/chunks`,
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || [];
+}
+
 export async function getAiKnowledgeChunk(
   sourceReference,
   documentId,
