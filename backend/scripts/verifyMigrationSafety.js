@@ -60,6 +60,7 @@ const DESTRUCTIVE_MIGRATION_RULES = [
 ];
 
 const VERIFY_WRITE_PATTERN = /\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE|CALL|EXECUTE|PREPARE|DEALLOCATE|SET)\b/i;
+const SCHEMA_MIGRATION_RECORD_PATTERN = /\bINSERT\s+(?:IGNORE\s+)?INTO\s+schema_migrations\b/i;
 
 function normalizePath(value) {
   return String(value || "").replaceAll("\\", "/").replace(/^\.\//, "");
@@ -193,7 +194,7 @@ function validateAdditiveMigration({ repoRoot, filePath, content, errors }) {
     );
   }
 
-  if (!/\bINSERT\s+INTO\s+schema_migrations\b/i.test(executableSql)) {
+  if (!SCHEMA_MIGRATION_RECORD_PATTERN.test(executableSql)) {
     addError(
       errors,
       filePath,
@@ -394,6 +395,7 @@ if (require.main === module) {
 module.exports = {
   DESTRUCTIVE_MIGRATION_RULES,
   MIGRATION_NAME_PATTERN,
+  SCHEMA_MIGRATION_RECORD_PATTERN,
   VERIFY_WRITE_PATTERN,
   expectedVerifyPath,
   formatErrors,
