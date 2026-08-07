@@ -1,0 +1,48 @@
+name: Live API Gateway Diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe public API and same-origin gateway
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo '=== DIRECT API HEALTH ==='
+          curl -sS -D /tmp/direct-health.headers -o /tmp/direct-health.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/health || true
+          cat /tmp/direct-health.headers || true
+          cat /tmp/direct-health.body || true
+          echo
+          echo '=== DIRECT API AUTH ==='
+          curl -sS -D /tmp/direct-auth.headers -o /tmp/direct-auth.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/auth/me || true
+          cat /tmp/direct-auth.headers || true
+          cat /tmp/direct-auth.body || true
+          echo
+          echo '=== SAME ORIGIN HEALTH ==='
+          curl -sS -D /tmp/proxy-health.headers -o /tmp/proxy-health.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/health || true
+          cat /tmp/proxy-health.headers || true
+          cat /tmp/proxy-health.body || true
+          echo
+          echo '=== SAME ORIGIN AUTH ==='
+          curl -sS -D /tmp/proxy-auth.headers -o /tmp/proxy-auth.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/auth/me || true
+          cat /tmp/proxy-auth.headers || true
+          cat /tmp/proxy-auth.body || true
+          echo
+          echo '=== DIRECT API CORS PREFLIGHT ==='
+          curl -sS -X OPTIONS \
+            -H 'Origin: https://chalin03.com' \
+            -H 'Access-Control-Request-Method: GET' \
+            -H 'Access-Control-Request-Headers: authorization,x-chalin03-workspace,x-chalin03-division' \
+            -D /tmp/preflight.headers -o /tmp/preflight.body -w 'HTTP %{http_code}\n' \
+            https://api.chalin03.com/api/auth/me || true
+          cat /tmp/preflight.headers || true
+          cat /tmp/preflight.body || true
