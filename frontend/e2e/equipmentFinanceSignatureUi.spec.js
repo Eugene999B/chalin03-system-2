@@ -124,6 +124,20 @@ test("Installment Finance signature UI renders as an isolated desktop cockpit", 
   );
   expect(sidebarBackground).toContain("linear-gradient");
 
+  const customerGridColumns = await page.locator(".finance-simple__customer-grid").evaluate(
+    (node) => getComputedStyle(node).gridTemplateColumns
+  );
+  expect(customerGridColumns.trim().split(/\s+/)).toHaveLength(1);
+
+  const firstSummaryBox = await page.locator(".finance-simplified__customer-summary").first().boundingBox();
+  expect(firstSummaryBox).not.toBeNull();
+  expect(firstSummaryBox.width).toBeGreaterThan(300);
+
+  const firstCustomerHeading = await page.locator(".finance-simplified__customer-summary h3").first().boundingBox();
+  expect(firstCustomerHeading).not.toBeNull();
+  expect(firstCustomerHeading.width).toBeGreaterThan(250);
+  expect(firstCustomerHeading.height).toBeLessThan(60);
+
   await expectNoDocumentOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("installment-signature-desktop.png"), fullPage: true });
 });
@@ -154,10 +168,11 @@ test("Installment Finance signature UI is purpose-built for a phone viewport", a
   await expectNoDocumentOverflow(page);
 
   await mobileToggle.click();
-  await expect(page.locator(".bwl-sidebar.is-open")).toBeVisible();
-  const sidebarBox = await page.locator(".bwl-sidebar.is-open").boundingBox();
+  const openSidebar = page.locator(".bwl-sidebar.is-open");
+  await expect(openSidebar).toBeVisible();
+  await expect.poll(async () => (await openSidebar.boundingBox())?.x ?? -999).toBeGreaterThanOrEqual(-1);
+  const sidebarBox = await openSidebar.boundingBox();
   expect(sidebarBox).not.toBeNull();
-  expect(sidebarBox.x).toBeGreaterThanOrEqual(-1);
   expect(sidebarBox.width).toBeLessThanOrEqual(390 * 0.91);
   await expect(page.getByRole("link", { name: /Customers/ })).toBeVisible();
 
@@ -165,5 +180,6 @@ test("Installment Finance signature UI is purpose-built for a phone viewport", a
 
   await page.locator(".bwl-overlay").click({ position: { x: 380, y: 820 } });
   await expect(page.locator(".bwl-sidebar")).not.toHaveClass(/is-open/);
+  await expect.poll(async () => (await page.locator(".bwl-sidebar").boundingBox())?.x ?? 0).toBeLessThan(-100);
   await page.screenshot({ path: testInfo.outputPath("installment-signature-mobile.png"), fullPage: true });
 });
