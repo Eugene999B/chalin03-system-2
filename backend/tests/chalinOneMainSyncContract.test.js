@@ -20,6 +20,13 @@ const financeDocumentRoutes = fs.readFileSync(
   ),
   "utf8"
 );
+const financeDocumentRenderer = fs.readFileSync(
+  path.join(
+    repoRoot,
+    "backend/services/equipmentFinanceDocumentRendererV2Service.js"
+  ),
+  "utf8"
+);
 const financePdfGuard = fs.readFileSync(
   path.join(
     repoRoot,
@@ -89,10 +96,14 @@ test("Finance generated-document blank-page guard stays narrow and ordered", () 
     'require("../services/equipmentFinancePdfBlankPageGuardService")'
   );
   const rendererIndex = financeDocumentRoutes.indexOf(
-    'require("../services/equipmentFinanceCustomerPhotoRendererService")'
+    'require("../services/equipmentFinanceDocumentRendererV2Service")'
   );
   assert.ok(guardIndex >= 0);
   assert.ok(rendererIndex > guardIndex);
+  assert.match(
+    financeDocumentRenderer,
+    /equipmentFinanceCustomerPhotoRendererService/
+  );
   assert.match(financePdfGuard, /FINANCE_FOOTER_PREFIX/);
   assert.match(financePdfGuard, /page\.margins\.bottom = 0/);
   assert.match(
