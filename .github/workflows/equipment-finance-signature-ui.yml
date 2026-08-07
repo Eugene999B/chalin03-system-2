@@ -12,6 +12,7 @@ on:
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
       - "frontend/scripts/equipmentFinanceThreePageSignatureTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
+      - "frontend/e2e/equipmentFinanceThreePageSignature.spec.js"
       - ".github/workflows/equipment-finance-signature-ui.yml"
   workflow_dispatch:
 
@@ -52,7 +53,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Prove desktop and mobile Installment signature UI
-        run: npx playwright test e2e/equipmentFinanceSignatureUi.spec.js
+        run: npx playwright test e2e/equipmentFinanceSignatureUi.spec.js e2e/equipmentFinanceThreePageSignature.spec.js
 
       - name: Upload signature UI browser evidence
         if: always()
