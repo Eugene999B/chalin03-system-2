@@ -12,7 +12,9 @@ function read(relativePath) {
 const publicApi = read("frontend/src/chalin-one/public-site/publicWebsiteApi.js");
 const publicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
 const homepageApp = read("frontend/src/chalin-one/public-site/PublicWebsiteStandaloneApp.jsx");
+const homepageExperience = read("frontend/src/chalin-one/public-site/PublicHomepageExperience.jsx");
 const publicCss = read("frontend/src/chalin-one/public-site/publicWebsite.css");
+const homepageCss = read("frontend/src/chalin-one/public-site/publicHomepageExperience.css");
 const standalone = read("frontend/src/chalin-one/ChalinOneStandaloneEntry.jsx");
 const main = read("frontend/src/main.jsx");
 const publicRoutes = read("backend/routes/publicContentRoutes.js");
@@ -81,17 +83,46 @@ check("governed homepage discovery exposes only a currently published homepage",
   assert.match(publicRoutes, /notFound\(res, req, "Homepage"\)/);
 });
 
-check("website root hands off safely to the governed page renderer", () => {
+check("website root renders the approved homepage through the rich governed experience", () => {
   assert.match(homepageApp, /getPublicHomepage/);
   assert.match(homepageApp, /controller\.abort\(\)/);
-  assert.match(homepageApp, /<Navigate/);
-  assert.match(homepageApp, /replace/);
-  assert.match(homepageApp, /encodeURIComponent\(state\.page\.slug\)/);
+  assert.match(homepageApp, /PublicHomepageExperience/);
+  assert.match(homepageApp, /<PublicHomepageExperience page=\{state\.page\} \/>/);
   assert.match(homepageApp, /return <PublicWebsiteApp \/>/);
   assert.match(homepageApp, /role="status"/);
   assert.match(homepageApp, /role="alert"/);
   assert.match(standalone, /public-site\/PublicWebsiteStandaloneApp/);
   assert.doesNotMatch(homepageApp, /dangerouslySetInnerHTML|localStorage|sessionStorage|Bearer|Authorization/);
+});
+
+check("governed homepage combines approved page content with published business collections", () => {
+  assert.match(homepageExperience, /getPublicBootstrap/);
+  assert.match(homepageExperience, /listPublicResource/);
+  for (const resource of ["news", "leadership", "projects", "equipment", "locations"]) {
+    assert.match(homepageExperience, new RegExp(`${resource}:\\s*\\d+`));
+  }
+  assert.match(homepageExperience, /bootstrap\.divisions/);
+  assert.match(homepageExperience, /bootstrap\.statistics/);
+  assert.match(homepageExperience, /page\?\.sections/);
+  assert.match(homepageExperience, /PublishedPageSections/);
+  assert.match(homepageExperience, /NewsTicker/);
+  assert.match(homepageExperience, /LeadershipSpotlight/);
+  assert.match(homepageExperience, /ProjectGrid/);
+  assert.match(homepageExperience, /EquipmentGrid/);
+  assert.match(homepageExperience, /chalin03-logo\.png/);
+  assert.doesNotMatch(homepageExperience, /dangerouslySetInnerHTML|contentEditable|eval\(|<iframe/);
+});
+
+check("homepage metadata includes canonical Open Graph Twitter and robots controls", () => {
+  assert.match(homepageExperience, /useHomepageMetadata/);
+  assert.match(homepageExperience, /link\[rel="canonical"\]/);
+  assert.match(homepageExperience, /og:title/);
+  assert.match(homepageExperience, /og:description/);
+  assert.match(homepageExperience, /og:image/);
+  assert.match(homepageExperience, /twitter:card/);
+  assert.match(homepageExperience, /twitter:title/);
+  assert.match(homepageExperience, /twitter:description/);
+  assert.match(homepageExperience, /meta\[name="robots"\]/);
 });
 
 check("published content rendering blocks raw HTML and unsafe embedded video", () => {
@@ -126,7 +157,7 @@ check("public collection and detail fields match the backend serializers", () =>
   );
 });
 
-check("dynamic forms implement contact, honeypot, consent and supported field controls", () => {
+check("dynamic forms implement contact honeypot consent and supported field controls", () => {
   for (const marker of [
     "full_name",
     "company_name",
@@ -186,6 +217,13 @@ check("public renderer is responsive across desktop tablet and phone", () => {
   assert.match(publicCss, /pw-navigation\[data-open="true"\]/);
   assert.match(publicCss, /pw-detail-grid > div > section/);
   assert.match(publicCss, /pw-not-found h1/);
+  assert.match(homepageCss, /@media \(max-width: 1100px\)/);
+  assert.match(homepageCss, /@media \(max-width: 820px\)/);
+  assert.match(homepageCss, /@media \(max-width: 620px\)/);
+  assert.match(homepageCss, /prefers-reduced-motion: reduce/);
+  assert.match(homepageCss, /c1h-news-ticker/);
+  assert.match(homepageCss, /c1h-project-grid/);
+  assert.match(homepageCss, /c1h-equipment-grid/);
 });
 
 check("acceptance database preparation refuses production and non-isolated names", () => {
@@ -224,4 +262,4 @@ check("CI runs real MySQL migration twice before database acceptance", () => {
   assert.match(backendPackage, /test:chalin-one:db/);
 });
 
-console.log(`\nCHALIN ONE public delivery: ${passed}/16 checks passed.`);
+console.log(`\nCHALIN ONE public delivery: ${passed}/18 checks passed.`);
