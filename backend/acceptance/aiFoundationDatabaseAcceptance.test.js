@@ -274,3 +274,7 @@ test(
     assert.equal((await tableCount("ai_audit_events")) >= 1, true);
   }
 );
+
+test.after(async () => {
+  await pool.end();
+});
