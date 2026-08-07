@@ -12,6 +12,7 @@ const {
   buildReconciliation,
 } = require("../services/equipmentFinanceReconciliationService");
 const {
+  validChecksum,
   verificationToken,
   verificationUrl,
 } = require("../services/equipmentFinanceVerificationService");
@@ -98,6 +99,8 @@ test("Finance QR payload is now a stable Chalin 03 online verification URL", () 
     verificationUrl(document),
     `https://chalin03.com/api/finance-verification/91/${token}`
   );
+  assert.equal(validChecksum(document.snapshot_checksum), true);
+  assert.equal(validChecksum("not-a-checksum"), false);
 });
 
 test("Finance document design no longer emits the old raw QR text payload", () => {
@@ -124,10 +127,12 @@ test("public Finance verifier is read-only, rate limited and privacy masking is 
   assert.match(route, /verificationLimiter/);
   assert.match(route, /Cache-Control", "no-store/);
   assert.match(route, /sensitive identity and contact information/i);
+  assert.match(route, /issuance fingerprint/i);
   assert.match(service, /maskName/);
   assert.match(service, /maskPhone/);
   assert.match(service, /maskSerial/);
-  assert.match(service, /checksum_valid/);
+  assert.match(service, /checksum_bound/);
+  assert.match(service, /issuance_fingerprint_bound_to_qr_reference/);
   assert.match(service, /superseded/);
   assert.match(service, /revoked/);
 });
