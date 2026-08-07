@@ -16,6 +16,7 @@ const {
   hasEveryAiPermission,
 } = require("../security/aiPermissionCatalog");
 const { hasEveryPermission } = require("../security/permissionCatalog");
+const { hasEquipmentDivisionAccess } = require("../security/equipmentDivisionAccess");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { cleanProviderKey } = require("../services/aiProviderService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
@@ -39,6 +40,9 @@ const {
 } = require("../ai-tools/customerIdentityTools");
 const { registerMiningAiTools } = require("../ai-tools/miningTools");
 const { registerHireAiTools } = require("../ai-tools/hireTools");
+const {
+  registerEquipmentFinanceAiTools,
+} = require("../ai-tools/equipmentFinanceTools");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
 
 registerFoundationAiTools();
@@ -46,6 +50,7 @@ registerSparePartsAiTools();
 registerCustomerIdentityAiTools();
 registerMiningAiTools();
 registerHireAiTools();
+registerEquipmentFinanceAiTools();
 
 const router = express.Router();
 
@@ -84,6 +89,13 @@ function usageWorkspace(req) {
   return String(req.user?.workspace_code || "").trim() || null;
 }
 
+function hasToolDivisionAccess(user, tool) {
+  return (
+    !tool.required_equipment_division ||
+    hasEquipmentDivisionAccess(user, tool.required_equipment_division)
+  );
+}
+
 function personaRouter(persona, featureKey) {
   const personaRoutes = express.Router();
   personaRoutes.use(requireFeature(featureKey), requireAiPersona(persona));
@@ -98,7 +110,8 @@ function personaRouter(persona, featureKey) {
         .filter(
           (tool) =>
             hasEveryAiPermission(req.user, tool.required_permissions) &&
-            hasEveryPermission(req.user, tool.required_business_permissions || [])
+            hasEveryPermission(req.user, tool.required_business_permissions || []) &&
+            hasToolDivisionAccess(req.user, tool)
         );
       return success(res, req, tools);
     })
