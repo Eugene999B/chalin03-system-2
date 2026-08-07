@@ -194,7 +194,7 @@ function renderVerifiedPage(result) {
     ${financialFactsHtml(result.financial_facts)}
 
     <div class="privacy">
-      <strong>Privacy protection:</strong> this public page intentionally masks personal identity and contact information. Ghana Card numbers, addresses, uploaded KYC evidence, signatures and confidential source documents are never exposed here.
+      <strong>Privacy protection:</strong> this public page intentionally masks sensitive identity and contact information. Ghana Card numbers, addresses, uploaded KYC evidence, signatures and confidential source documents are never exposed here.
     </div>
 
     <footer class="footer">
