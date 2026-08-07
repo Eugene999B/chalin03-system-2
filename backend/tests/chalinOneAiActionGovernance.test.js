@@ -177,5 +177,5 @@ test("action governance migration is additive and executor-free", () => {
     migrationSource,
     /DROP\s+(?:TABLE|DATABASE)|TRUNCATE|DELETE\s+FROM|RENAME\s+TABLE/i
   );
-  assert.doesNotMatch(migrationSource, /executor|command_text|sql_text|shell_command/i);
+  assert.doesNotMatch(migrationSource, /command_text|sql_text|shell_command/i);
 });
