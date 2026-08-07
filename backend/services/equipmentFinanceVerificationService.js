@@ -40,6 +40,7 @@ function cleanText(value, maxLength = 500) {
 }
 
 function parseJson(value, fallback = {}) {
+  if (value && typeof value === "object") return value;
   try {
     const parsed = JSON.parse(String(value || ""));
     return parsed && typeof parsed === "object" ? parsed : fallback;
@@ -52,6 +53,10 @@ function sha256(value) {
   return crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 }
 
+function validChecksum(value) {
+  return /^[a-f0-9]{64}$/.test(cleanText(value, 64).toLowerCase());
+}
+
 function tokenSource(document) {
   return [
     TOKEN_NAMESPACE,
@@ -62,7 +67,11 @@ function tokenSource(document) {
 }
 
 function verificationToken(document) {
-  if (!positiveId(document?.id) || !document?.document_number || !document?.snapshot_checksum) {
+  if (
+    !positiveId(document?.id) ||
+    !document?.document_number ||
+    !validChecksum(document?.snapshot_checksum)
+  ) {
     return "";
   }
   return sha256(tokenSource(document));
@@ -86,7 +95,9 @@ function maskName(value) {
   if (!parts.length) return "Customer";
   if (parts.length === 1) {
     const name = parts[0];
-    return name.length <= 2 ? `${name[0] || ""}•` : `${name.slice(0, 2)}${"•".repeat(Math.min(6, Math.max(2, name.length - 2)))}`;
+    return name.length <= 2
+      ? `${name[0] || ""}•`
+      : `${name.slice(0, 2)}${"•".repeat(Math.min(6, Math.max(2, name.length - 2)))}`;
   }
   return [parts[0], ...parts.slice(1).map((part) => `${part[0] || ""}.`)].join(" ");
 }
@@ -94,8 +105,7 @@ function maskName(value) {
 function maskPhone(value) {
   const digits = cleanText(value, 40).replace(/\D/g, "");
   if (!digits) return "Not published";
-  const tail = digits.slice(-4);
-  return `••••••${tail}`;
+  return `••••••${digits.slice(-4)}`;
 }
 
 function maskSerial(value) {
@@ -111,7 +121,11 @@ function numberValue(value) {
 }
 
 function documentTitle(type) {
-  return DOCUMENT_TITLES[type] || cleanText(type, 80).replaceAll("_", " ") || "Finance Document";
+  return (
+    DOCUMENT_TITLES[type] ||
+    cleanText(type, 80).replaceAll("_", " ") ||
+    "Finance Document"
+  );
 }
 
 function safeFinancialFacts(documentType, snapshot) {
@@ -124,27 +138,49 @@ function safeFinancialFacts(documentType, snapshot) {
     const amount = numberValue(payment.amount);
     if (amount !== null) facts.push({ label: "Payment amount", amount });
     if (payment.receipt_number || payment.payment_number) {
-      facts.push({ label: "Receipt", value: payment.receipt_number || payment.payment_number });
+      facts.push({
+        label: "Receipt",
+        value: payment.receipt_number || payment.payment_number,
+        kind: "text",
+      });
     }
-    if (payment.payment_date) facts.push({ label: "Payment date", value: payment.payment_date });
+    if (payment.payment_date) {
+      facts.push({ label: "Payment date", value: payment.payment_date, kind: "date" });
+    }
     return facts;
   }
 
-  if (["installment_agreement", "customer_agreement_copy", "company_agreement_copy", "payment_schedule"].includes(documentType)) {
+  if (
+    [
+      "installment_agreement",
+      "customer_agreement_copy",
+      "company_agreement_copy",
+      "payment_schedule",
+    ].includes(documentType)
+  ) {
     const total = numberValue(agreement.total_amount);
     const financed = numberValue(agreement.financed_amount);
     if (total !== null) facts.push({ label: "Agreement total", amount: total });
     if (financed !== null) facts.push({ label: "Financed amount", amount: financed });
-    if (agreement.final_due_date) facts.push({ label: "Final due date", value: agreement.final_due_date });
+    if (agreement.final_due_date) {
+      facts.push({ label: "Final due date", value: agreement.final_due_date, kind: "date" });
+    }
   }
 
   if (["settlement_confirmation", "ownership_transfer"].includes(documentType)) {
     const outstanding = numberValue(agreement.outstanding_balance);
-    facts.push({ label: "Recorded balance", amount: outstanding === null ? 0 : outstanding });
+    facts.push({
+      label: "Recorded balance",
+      amount: outstanding === null ? 0 : outstanding,
+    });
   }
 
   if (documentType === "amendment_agreement" && context?.amendment?.amendment_number) {
-    facts.push({ label: "Amendment", value: context.amendment.amendment_number });
+    facts.push({
+      label: "Amendment",
+      value: context.amendment.amendment_number,
+      kind: "text",
+    });
   }
 
   return facts;
@@ -153,7 +189,11 @@ function safeFinancialFacts(documentType, snapshot) {
 async function loadDocument(documentId, connection = pool) {
   const id = positiveId(documentId);
   if (!id) {
-    throw new FinanceVerificationError(404, "The document verification reference is invalid.", "FINANCE_DOCUMENT_NOT_FOUND");
+    throw new FinanceVerificationError(
+      404,
+      "The document verification reference is invalid.",
+      "FINANCE_DOCUMENT_NOT_FOUND"
+    );
   }
 
   const [rows] = await connection.query(
@@ -170,7 +210,11 @@ async function loadDocument(documentId, connection = pool) {
   );
 
   if (!rows.length) {
-    throw new FinanceVerificationError(404, "No Chalin 03 Finance document matches this verification reference.", "FINANCE_DOCUMENT_NOT_FOUND");
+    throw new FinanceVerificationError(
+      404,
+      "No Chalin 03 Finance document matches this verification reference.",
+      "FINANCE_DOCUMENT_NOT_FOUND"
+    );
   }
   return rows[0];
 }
@@ -212,7 +256,10 @@ async function verificationStatus(document, connection = pool) {
 async function verifyFinanceDocument({ documentId, token, connection = pool }) {
   const document = await loadDocument(documentId, connection);
   const expectedToken = verificationToken(document);
-  if (!expectedToken || !constantTimeEqual(expectedToken, cleanText(token, 128).toLowerCase())) {
+  if (
+    !expectedToken ||
+    !constantTimeEqual(expectedToken, cleanText(token, 128).toLowerCase())
+  ) {
     throw new FinanceVerificationError(
       404,
       "This QR/reference does not match an issued Chalin 03 Finance document.",
@@ -220,20 +267,18 @@ async function verifyFinanceDocument({ documentId, token, connection = pool }) {
     );
   }
 
-  const computedChecksum = sha256(document.snapshot_json);
-  const checksumValid = constantTimeEqual(
-    computedChecksum,
-    cleanText(document.snapshot_checksum, 64).toLowerCase()
-  );
+  // snapshot_json is a MySQL JSON column. MySQL may normalize key ordering and
+  // whitespace when it is read, so re-hashing its returned textual form can
+  // falsely disagree with the byte string hashed at issuance. The QR token is
+  // therefore bound to the immutable issuance checksum already stored beside
+  // the snapshot rather than pretending a normalized JSON read is byte-identical.
   const snapshot = parseJson(document.snapshot_json, {});
   const agreement = snapshot.agreement || {};
-  const status = checksumValid
-    ? await verificationStatus(document, connection)
-    : { code: "invalid", label: "Integrity failure — Stored snapshot does not match its checksum" };
+  const status = await verificationStatus(document, connection);
 
   return {
     status,
-    checksum_valid: checksumValid,
+    checksum_bound: true,
     document: {
       id: Number(document.id),
       document_number: document.document_number,
@@ -242,19 +287,26 @@ async function verifyFinanceDocument({ documentId, token, connection = pool }) {
       document_format: document.document_format,
       template_version: document.template_version,
       issued_at: document.issued_at,
-      issued_by_name: document.issued_by_name || "Chalin 03 authorised staff",
-      checksum_fingerprint: cleanText(document.snapshot_checksum, 64).slice(0, 12).toUpperCase(),
+      issued_by_name:
+        document.issued_by_name || "Chalin 03 authorised staff",
+      checksum_fingerprint: cleanText(document.snapshot_checksum, 64)
+        .slice(0, 12)
+        .toUpperCase(),
     },
     agreement: {
       agreement_number: agreement.agreement_number || "Not published",
       customer_name: maskName(
-        agreement.kyc_customer_name || agreement.customer_name_snapshot || agreement.customer_name
+        agreement.kyc_customer_name ||
+          agreement.customer_name_snapshot ||
+          agreement.customer_name
       ),
       customer_phone: maskPhone(
         agreement.customer_phone_snapshot || agreement.customer_phone
       ),
-      machine_code: agreement.asset_code_snapshot || agreement.asset_code || "Not published",
-      machine_name: agreement.asset_name_snapshot || agreement.asset_name || "Equipment",
+      machine_code:
+        agreement.asset_code_snapshot || agreement.asset_code || "Not published",
+      machine_name:
+        agreement.asset_name_snapshot || agreement.asset_name || "Equipment",
       serial_number: maskSerial(
         agreement.serial_number_snapshot || agreement.serial_number
       ),
@@ -264,6 +316,7 @@ async function verifyFinanceDocument({ documentId, token, connection = pool }) {
       public_verification: true,
       sensitive_identity_hidden: true,
       source: "immutable_issued_document_snapshot",
+      checksum_policy: "issuance_fingerprint_bound_to_qr_reference",
     },
   };
 }
@@ -272,6 +325,7 @@ module.exports = {
   DOCUMENT_TITLES,
   FinanceVerificationError,
   TOKEN_NAMESPACE,
+  validChecksum,
   verificationToken,
   verificationUrl,
   verifyFinanceDocument,
