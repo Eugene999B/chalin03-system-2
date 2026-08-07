@@ -139,11 +139,10 @@ function lifecycleSteps(account, detail) {
     },
   ];
 
-  let currentAssigned = steps.some((step) => step.current);
+  const currentAssigned = steps.some((step) => step.current);
   if (!currentAssigned) {
     const firstIncomplete = steps.find((step) => !step.complete);
     if (firstIncomplete) firstIncomplete.current = true;
-    currentAssigned = Boolean(firstIncomplete);
   }
   return steps;
 }
