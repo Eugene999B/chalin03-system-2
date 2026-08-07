@@ -184,7 +184,7 @@ test("V3 source uses the logo as architecture with a subtle background watermark
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
   );
-  assert.match(design, /backend", "assets", "chalin03-logo\.png/);
+  assert.match(design, /path\.resolve\(__dirname, "\.\.", "assets", "chalin03-logo\.png"\)/);
   assert.match(pages, /drawBrandWave/);
   assert.match(pages, /drawGuilloche/);
   assert.match(pages, /fillOpacity\(0\.048\)/);
