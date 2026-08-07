@@ -15,7 +15,9 @@ const documentCentre = read("src", "pages", "EquipmentFinanceDocumentCentrePage.
 const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPage.jsx");
 const activation = read("src", "pages", "EquipmentFinanceAgreementActivationPage.jsx");
 const accounts = read("src", "pages", "EquipmentFinanceActiveInstallmentsPage.jsx");
+const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const styles = read("src", "styles", "equipmentFinanceSimplifiedWorkspace.css");
+const signatureShell = read("src", "styles", "equipmentFinanceSignatureShell.css");
 
 assert.match(customerCentre, /selectedCustomer/);
 assert.match(customerCentre, /View Details/);
@@ -67,10 +69,43 @@ for (const contract of [
   ".finance-simplified__compact-record",
   ".finance-simplified__picker-controls",
   ".finance-simplified__customer-row",
+  "--fi-night",
+  "INSTALLMENT FINANCE",
+  "scroll-snap-type: x mandatory",
   "@media (max-width: 980px)",
   "grid-template-columns: 1fr",
+  "@media (prefers-reduced-motion: reduce)",
 ]) {
-  assert.ok(styles.includes(contract), `Missing simplified Finance style contract: ${contract}`);
+  assert.ok(styles.includes(contract), `Missing signature Finance style contract: ${contract}`);
 }
 
-console.log("Equipment Finance simplified search-first workspace contracts passed.");
+assert.match(layout, /equipmentFinanceSignatureShell\.css/);
+assert.match(layout, /theme="finance-signature"/);
+assert.doesNotMatch(layout, /theme="earth"/);
+
+for (const contract of [
+  ".bwl-shell.bwl-theme-finance-signature",
+  ".bwl-shell.bwl-theme-finance-signature .bwl-sidebar",
+  ".bwl-shell.bwl-theme-finance-signature .bwl-nav-item.is-active",
+  ".bwl-shell.bwl-theme-finance-signature .bwl-mobile-toggle",
+  "@media (max-width: 960px)",
+  "@media (prefers-reduced-motion: reduce)",
+]) {
+  assert.ok(signatureShell.includes(contract), `Missing Installment-only shell contract: ${contract}`);
+}
+
+for (const forbiddenSelector of [
+  ".bwl-theme-earth",
+  ".bwl-theme-blue",
+  ".bwl-theme-navy",
+  ".mining-",
+  ".hire-",
+  ".spare-",
+]) {
+  assert.ok(
+    !signatureShell.includes(forbiddenSelector),
+    `Installment signature shell must not style another workspace: ${forbiddenSelector}`
+  );
+}
+
+console.log("Equipment Finance signature search-first workspace contracts passed.");
