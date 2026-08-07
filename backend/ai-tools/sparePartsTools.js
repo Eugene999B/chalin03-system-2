@@ -110,6 +110,7 @@ function registerSparePartsAiTools(
     risk_level: 1,
     personas: ["copilot", "executive"],
     required_permissions: ["ai.use", "ai.read"],
+    required_business_permissions: ["spare_parts.read"],
     allowed_workspaces: ["spare_parts"],
     scope_requirements: { branch: true },
     evidence_required: true,
@@ -161,6 +162,7 @@ function registerSparePartsAiTools(
     title: "Spare Parts collections health",
     description:
       "Returns aggregate debt balance, debt aging, payments and sales collection rate for the authorized branch without customer identities.",
+    required_business_permissions: ["spare_parts.audit"],
     handler: async ({ input, context }) =>
       executeView({
         input,
