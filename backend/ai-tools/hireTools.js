@@ -28,6 +28,7 @@ function evidenceFor(viewKey, output) {
       workspace_code: "equipment_hire",
       metadata: {
         hire_location_id: output.scope.hire_location_id,
+        equipment_division: "hire",
         aggregate_only: true,
         execution_authority: "read_only",
       },
@@ -56,6 +57,7 @@ function registerHireAiTools(
     risk_level: 1,
     personas: ["copilot", "executive"],
     required_permissions: ["ai.use", "ai.read"],
+    required_equipment_division: "hire",
     allowed_workspaces: ["equipment_hire"],
     scope_requirements: { hire_location: true },
     evidence_required: true,
