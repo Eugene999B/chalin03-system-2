@@ -7,6 +7,8 @@ import {
   ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
 import "../styles/equipmentFinanceLifecycleProfessional.css";
+import "../styles/equipmentFinanceSignatureShell.css";
+import "../styles/equipmentFinanceSignaturePolish.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
@@ -247,7 +249,7 @@ export default function InstallmentFinanceLayout() {
       workspaceCode="equipment_installment_finance"
       workspaceName="Equipment Installment Finance"
       icon="🏦"
-      theme="earth"
+      theme="finance-signature"
       independenceLabel=""
       description=""
       contextHeading="Company-wide Finance portfolio — no Hire-location selection"
