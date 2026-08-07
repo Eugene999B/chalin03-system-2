@@ -17,28 +17,29 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          CURL='curl --connect-timeout 5 --max-time 12 -sS'
           echo '=== DIRECT API HEALTH ==='
-          curl -sS -D /tmp/direct-health.headers -o /tmp/direct-health.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/health || true
+          $CURL -D /tmp/direct-health.headers -o /tmp/direct-health.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/health || true
           cat /tmp/direct-health.headers || true
           cat /tmp/direct-health.body || true
           echo
           echo '=== DIRECT API AUTH ==='
-          curl -sS -D /tmp/direct-auth.headers -o /tmp/direct-auth.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/auth/me || true
+          $CURL -D /tmp/direct-auth.headers -o /tmp/direct-auth.body -w 'HTTP %{http_code}\n' https://api.chalin03.com/api/auth/me || true
           cat /tmp/direct-auth.headers || true
           cat /tmp/direct-auth.body || true
           echo
           echo '=== SAME ORIGIN HEALTH ==='
-          curl -sS -D /tmp/proxy-health.headers -o /tmp/proxy-health.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/health || true
+          $CURL -D /tmp/proxy-health.headers -o /tmp/proxy-health.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/health || true
           cat /tmp/proxy-health.headers || true
           cat /tmp/proxy-health.body || true
           echo
           echo '=== SAME ORIGIN AUTH ==='
-          curl -sS -D /tmp/proxy-auth.headers -o /tmp/proxy-auth.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/auth/me || true
+          $CURL -D /tmp/proxy-auth.headers -o /tmp/proxy-auth.body -w 'HTTP %{http_code}\n' https://chalin03.com/api/auth/me || true
           cat /tmp/proxy-auth.headers || true
           cat /tmp/proxy-auth.body || true
           echo
           echo '=== DIRECT API CORS PREFLIGHT ==='
-          curl -sS -X OPTIONS \
+          $CURL -X OPTIONS \
             -H 'Origin: https://chalin03.com' \
             -H 'Access-Control-Request-Method: GET' \
             -H 'Access-Control-Request-Headers: authorization,x-chalin03-workspace,x-chalin03-division' \
