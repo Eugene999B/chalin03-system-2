@@ -37,3 +37,9 @@ database/migrations/20260806_chalin_one_portal_security_foundation.sql
 
 # Read-only external-portal security verification.
 database/migrations/20260806_chalin_one_portal_security_foundation_verify.sql
+
+# Governed text-document ingestion, exact chunks and provider-independent local retrieval vectors.
+database/migrations/20260807_chalin_one_document_intelligence.sql
+
+# Read-only document-intelligence and no-raw-binary verification.
+database/migrations/20260807_chalin_one_document_intelligence_verify.sql
