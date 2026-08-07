@@ -1,15 +1,18 @@
 # CHALIN ONE AI Phase Tracker
 
 **Branch:** `chalin-one`  
+**Last updated:** August 7, 2026  
 **Production flags:** Disabled  
 **Live provider:** Disabled  
 **Production migration:** Not run  
-**Deployment:** Not performed
+**Deployment:** Not performed  
+**Green source commit:** `e4b4c19397b9a579a4dabec8805d72fdefb92d27`  
+**Green CI run:** `31200046205`
 
 Legend:
 
-- `[x]` Source implementation and source contracts completed.
-- `[-]` Implemented but runtime/database/browser acceptance remains pending.
+- `[x]` Source implementation and the stated source/CI acceptance completed.
+- `[-]` Implemented but staging/provider/browser acceptance or a later operational layer remains pending.
 - `[ ]` Not yet implemented.
 
 ## Phase 0 — AI governance matrices
@@ -64,11 +67,12 @@ Legend:
 
 ### Runtime acceptance
 
-- [-] Backend unit/source tests are configured but a visible successful CI run is still required.
-- [-] MySQL 8.4 acceptance is configured but a visible successful run is still required.
-- [-] Migration idempotency is configured but has not been observed in a successful workflow.
-- [-] Provider failure isolation requires browser/API staging acceptance.
-- [-] Audit and usage evidence requires staging review.
+- [x] Backend unit/source suite passed in the recorded green CI run.
+- [x] Isolated MySQL 8.4 AI acceptance passed in the recorded green CI run.
+- [x] AI foundation migration idempotency passed in the recorded green CI run.
+- [x] Governed AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations passed twice inside isolated database acceptance.
+- [-] Provider failure isolation still requires browser/API staging acceptance.
+- [-] Audit and usage evidence still requires staging review with real accounts.
 
 ## Phase 8 — Knowledge and document intelligence
 
@@ -94,8 +98,8 @@ Legend:
 
 ### Runtime acceptance
 
-- [-] Real MySQL governance flow is configured but not visibly observed as passing.
-- [-] Desktop and mobile governance UI acceptance is pending.
+- [x] Real isolated-MySQL governance flow passed CI acceptance.
+- [-] Desktop and mobile governance UI browser acceptance is pending.
 - [-] Approved-media/document ingestion remains pending.
 - [ ] OCR/document parsing pipeline.
 - [ ] Approved chunking/embedding pipeline.
@@ -116,14 +120,14 @@ Legend:
 - [x] Evidence display.
 - [x] Feedback controls.
 - [x] Usage ledger UI.
-- [x] Responsive desktop/tablet/360–430px layout.
+- [x] Responsive desktop/tablet/360–430px source layout.
 - [x] No sensitive action-execution controls.
 - [x] First three read-only foundation tools.
 
 ### Runtime acceptance
 
-- [-] Frontend JSX compilation and source tests are configured but not visibly observed as passing.
-- [-] Production frontend build result is not visible.
+- [x] Frontend JSX compilation and source tests passed CI.
+- [x] Production-mode frontend build passed CI.
 - [-] Browser keyboard/mobile acceptance is pending.
 - [-] A live provider is deliberately not registered.
 - [ ] Domain insight tools for Spare Parts.
@@ -135,68 +139,83 @@ Legend:
 
 ## Phase 10 — Chalin Guide
 
-- [ ] Anonymous public Guide API.
-- [ ] Public-only session storage.
-- [ ] Public-only knowledge retrieval.
-- [ ] Enquiry handoff.
-- [ ] Public rate limits.
-- [ ] Public website widget.
-- [ ] Abuse and privacy acceptance.
+### Source implementation
 
-The Guide feature flag remains false.
+- [x] Anonymous public Guide API foundation.
+- [x] Public-only Guide persistence/security schema foundation.
+- [x] Public-only approved knowledge retrieval boundary.
+- [x] Public rate-limit and privacy controls.
+- [x] Public website Guide surface/widget foundation.
+- [x] Prompt safety rule that forbids claiming execution, approval or completion of business actions.
+- [-] Human enquiry handoff/domain guidance coverage needs staging verification and expansion.
+
+### Runtime acceptance
+
+- [x] Public Guide migration passed twice inside isolated MySQL acceptance.
+- [-] Abuse, privacy and anonymous browser acceptance remain pending.
+- [-] Real published-content guidance quality acceptance remains pending.
+
+`FEATURE_CHALIN_GUIDE` remains false outside controlled acceptance.
 
 ## Phase 11 — Customer portal
 
-- [ ] Customer identity and access.
-- [ ] Customer-scoped data APIs.
-- [ ] Portal UI.
-- [ ] Approval and privacy acceptance.
+- [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
+- [ ] Customer business-record ownership APIs.
+- [ ] Customer portal UI.
+- [ ] Customer-specific recovery and privacy acceptance.
 
 ## Phase 12 — Supplier portal
 
-- [ ] Supplier identity and access.
-- [ ] Supplier-scoped data APIs.
-- [ ] Portal UI.
-- [ ] Approval and privacy acceptance.
+- [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
+- [ ] Supplier-scoped business APIs.
+- [ ] Supplier portal UI.
+- [ ] Supplier-specific recovery and privacy acceptance.
 
 ## Phase 13 — Applicant portal
 
-- [ ] Applicant identity and access.
-- [ ] Applicant-scoped data APIs.
-- [ ] Portal UI.
-- [ ] Approval and privacy acceptance.
+- [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
+- [ ] Applicant-scoped business APIs.
+- [ ] Applicant portal UI.
+- [ ] Applicant-specific recovery and privacy acceptance.
+
+The three portal feature flags remain false.
 
 ## Phase 14 — AI action proposals
 
-- [ ] Action proposal records.
-- [ ] Independent human review.
-- [ ] Exact payload checksum.
-- [ ] Expiry and cancellation.
+- [x] Action proposal records.
+- [x] Independent human review.
+- [x] Exact payload checksum.
+- [x] Expiry and cancellation.
+- [x] Additive action-governance migration and isolated MySQL idempotency acceptance.
+- [x] No-executor security invariant.
 - [ ] Low-risk executor allowlist.
-- [ ] Dual-control acceptance.
+- [-] Dual-control browser acceptance and Approval Inbox integration.
 
-`FEATURE_AI_ACTIONS` remains false.
+`FEATURE_AI_ACTIONS` remains false and no action executor is active.
 
 ## Phase 15 — Scheduled intelligence
 
-- [ ] Approved scheduled-job definitions.
-- [ ] Independent approval.
-- [ ] Bounded scheduler.
-- [ ] Delivery and audit.
+- [x] Approved scheduled-job definition records.
+- [x] Independent approval/review records.
+- [x] Additive scheduled-governance migration and isolated MySQL idempotency acceptance.
+- [x] Run-evidence schema without an active runner.
+- [x] No-runner/no-delivery security invariant.
+- [ ] Bounded operational scheduler.
+- [ ] Delivery channels and delivery audit.
 
-`FEATURE_AI_SCHEDULED_JOBS` remains false.
+`FEATURE_AI_SCHEDULED_JOBS` remains false and no scheduler is active.
 
 ## Phase 16 — Release candidate
 
-- [-] Backend source contracts expanded.
-- [-] MySQL CI job expanded.
-- [-] Frontend source contracts expanded.
-- [ ] Visible green GitHub CI for one exact commit.
+- [x] Backend source contracts expanded.
+- [x] Isolated MySQL CI job expanded.
+- [x] Frontend source contracts expanded.
+- [x] Visible green GitHub CI for exact source commit `e4b4c19397b9a579a4dabec8805d72fdefb92d27` in run `31200046205`.
 - [ ] Isolated staging AI migration twice.
 - [ ] Staging provider acceptance.
 - [ ] Desktop/mobile browser evidence.
 - [ ] Ordinary business regression evidence.
-- [ ] Backup and rollback evidence.
+- [ ] Full-system backup and rollback evidence.
 - [ ] Management content/provider/cost sign-off.
 
 ## Phase 17 — Production release
@@ -204,13 +223,13 @@ The Guide feature flag remains false.
 - [ ] Separate authorization to merge `chalin-one` into `main`.
 - [ ] Integrated release verification.
 - [ ] Separate authorization to merge `main` into `production`.
-- [ ] Signed backup and SQL backup verification.
+- [ ] Signed full-system backup and SQL backup verification.
 - [ ] Production migration.
 - [ ] Controlled feature activation.
 - [ ] Post-release monitoring and rollback drill.
 
 ## Current truthful status
 
-The secure AI foundation, governed knowledge workflow and staff intelligence workspace are substantially source-implemented on `chalin-one`.
+The secure AI foundation, governed knowledge workflow, staff intelligence workspace, public Guide foundation, AI action-governance foundation, scheduled-intelligence governance foundation and shared portal-security foundation are source-implemented on `chalin-one` and now have a **fully green recorded source/isolated-MySQL CI run**.
 
-They are **not production-ready** because no visible successful CI, isolated staging migration, browser acceptance, live provider acceptance or production authorization has occurred.
+They are **still not production-ready** because isolated staging, real-account browser acceptance, live-provider acceptance, ordinary-business staging regression, full-system backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled and no production database migration or deployment has been performed.
