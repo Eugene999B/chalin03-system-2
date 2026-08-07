@@ -162,7 +162,9 @@ check("standalone entry applies fail-closed feature and staff access gates", () 
 
 check("standalone routes preserve website context and hand non-CHALIN paths to the full app", () => {
   assert.match(standalone, /path="\/website\/\*"/);
-  assert.match(standalone, /path="\/content-studio\/\*"/);
+  assert.match(standalone, /path=\{routePath\}/);
+  assert.match(standalone, /routePath="\/content-studio\/\*"/);
+  assert.match(standalone, /routePath="\/intelligence\/\*"/);
   assert.match(standalone, /FullApplicationHandoff/);
   assert.match(standalone, /window\.location\.replace\(destination\)/);
   assert.equal((standalone.match(/<Route path="\*"/g) || []).length, 2);
