@@ -20,6 +20,9 @@ const {
   ingestKnowledgeDocument,
   listKnowledgeDocuments,
 } = require("../services/aiDocumentIntelligenceService");
+const {
+  listDocumentChunks,
+} = require("../services/aiDocumentReviewService");
 
 const router = express.Router();
 
@@ -217,6 +220,25 @@ router.get(
       await listKnowledgeDocuments({
         sourceId: details.source.id,
         versionId: req.query.version_id || null,
+      })
+    );
+  })
+);
+
+router.get(
+  "/:sourceReference/documents/:documentId/chunks",
+  requireAiPermission("ai.knowledge.view"),
+  asyncHandler(async (req, res) => {
+    const details = await resolveScopedKnowledgeDetails(
+      req,
+      req.params.sourceReference
+    );
+    return success(
+      res,
+      req,
+      await listDocumentChunks({
+        sourceId: details.source.id,
+        documentId: req.params.documentId,
       })
     );
   })
