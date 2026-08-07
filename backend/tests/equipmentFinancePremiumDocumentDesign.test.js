@@ -185,7 +185,7 @@ test("V3 source uses the logo as architecture rather than a pasted badge", () =>
   assert.match(design, /__dirname,\s*"\.\.",\s*"assets",\s*"chalin03-logo\.png"/);
   assert.match(pages, /drawBrandWave/);
   assert.match(pages, /drawGuilloche/);
-  assert.match(pages, /fillOpacity\(0\.082\)/);
+  assert.match(pages, /fillOpacity\(0\.105\)/);
   assert.match(pages, /drawOfficialLogo/);
   assert.match(flow, /drawSecuritySeal/);
   assert.match(accountBodies, /AGREEMENT AT A GLANCE/);
