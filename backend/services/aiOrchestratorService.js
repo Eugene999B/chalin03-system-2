@@ -5,6 +5,7 @@ const {
   hasEveryAiPermission,
   normalizeAiPersona,
 } = require("../security/aiPermissionCatalog");
+const { hasEveryPermission } = require("../security/permissionCatalog");
 const {
   assertDailyUsage,
   assertMonthlyCost,
@@ -73,8 +74,10 @@ class AiOrchestratorError extends Error {
 function availableTools({ persona, scope, user }) {
   return aiToolRegistry
     .list({ persona, workspace: scope.workspace_code })
-    .filter((tool) =>
-      hasEveryAiPermission(user, tool.required_permissions)
+    .filter(
+      (tool) =>
+        hasEveryAiPermission(user, tool.required_permissions) &&
+        hasEveryPermission(user, tool.required_business_permissions || [])
     );
 }
 
