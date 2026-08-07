@@ -182,7 +182,7 @@ test("V3 source uses the logo as architecture rather than a pasted badge", () =>
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
   );
-  assert.match(design, /backend", "assets", "chalin03-logo\.png/);
+  assert.match(design, /__dirname,\s*"\.\.",\s*"assets",\s*"chalin03-logo\.png"/);
   assert.match(pages, /drawBrandWave/);
   assert.match(pages, /drawGuilloche/);
   assert.match(pages, /fillOpacity\(0\.082\)/);
