@@ -1,4 +1,6 @@
 -- CHALIN ONE AI action proposal governance.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Professional Backup and separate SQL backup must be verified before production execution.
 -- This migration creates proposal and human-review evidence only.
 -- It does not create an executor and does not enable FEATURE_AI_ACTIONS.
 
