@@ -10,8 +10,6 @@ import {
 import "../styles/equipmentFinanceLifecycleProfessional.css";
 import "../styles/equipmentFinanceSignatureShell.css";
 import "../styles/equipmentFinanceSignaturePolish.css";
-import "../styles/equipmentFinanceThreePageSignature.css";
-import "../styles/equipmentFinanceApplicationsSignature.css";
 import "../styles/equipmentFinanceThreePageRouteSignature.css";
 
 const BLOCKED_FINANCE_PATHS = [
