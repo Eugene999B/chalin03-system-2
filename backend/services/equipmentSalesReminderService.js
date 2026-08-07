@@ -2,6 +2,9 @@ const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const installmentCommandRoutes = require("../routes/equipmentInstallmentCommandRoutes");
 const equipmentFinanceFinalLifecycleRoutes = require("../routes/equipmentFinanceFinalLifecycleRoutes");
 const {
+  equipmentFinanceLifecycleIntegrityGuard,
+} = require("../middleware/equipmentFinanceLifecycleIntegrityGuard");
+const {
   buildInstallmentReminderMessage,
   defaultInstallmentReminderSettings,
   refreshEquipmentInstallmentStatuses,
@@ -47,6 +50,13 @@ if (!equipmentSalesRoutes.__chalin03InstallmentCommandMounted) {
 }
 
 if (!equipmentSalesRoutes.__chalin03FinanceFinalLifecycleMounted) {
+  // The guard is deliberately mounted immediately before the established
+  // lifecycle router. It validates replay keys and ownership date sequencing
+  // without changing the existing payment/delivery/ownership transaction code.
+  equipmentSalesRoutes.use(
+    "/finance-lifecycle",
+    equipmentFinanceLifecycleIntegrityGuard
+  );
   equipmentSalesRoutes.use(
     "/finance-lifecycle",
     equipmentFinanceFinalLifecycleRoutes
