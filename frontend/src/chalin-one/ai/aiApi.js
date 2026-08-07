@@ -152,6 +152,53 @@ export async function updateAiKnowledgeDraft(sourceId, versionId, input) {
   return unwrap(response) || null;
 }
 
+export async function ingestAiKnowledgeDocument(
+  sourceId,
+  versionId,
+  input,
+  { signal } = {}
+) {
+  const response = await axiosClient.post(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceId
+    )}/versions/${encodeURIComponent(versionId)}/documents`,
+    input,
+    { signal }
+  );
+  return unwrap(response) || null;
+}
+
+export async function listAiKnowledgeDocuments(
+  sourceId,
+  { versionId = null, signal } = {}
+) {
+  const response = await axiosClient.get(
+    `/ai/knowledge/${encodeURIComponent(sourceId)}/documents`,
+    noCacheConfig({
+      params: versionId ? { version_id: versionId } : {},
+      signal,
+    })
+  );
+  return unwrap(response) || [];
+}
+
+export async function getAiKnowledgeChunk(
+  sourceReference,
+  documentId,
+  chunkId,
+  { signal } = {}
+) {
+  const response = await axiosClient.get(
+    `/ai/knowledge/${encodeURIComponent(
+      sourceReference
+    )}/documents/${encodeURIComponent(documentId)}/chunks/${encodeURIComponent(
+      chunkId
+    )}`,
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || null;
+}
+
 export async function submitAiKnowledgeVersion(
   sourceId,
   versionId,
@@ -193,6 +240,12 @@ export function aiErrorMessage(error) {
   }
   if (code === "AI_SCHEMA_NOT_READY") {
     return "The intelligence database foundation has not been prepared in this environment.";
+  }
+  if (code === "AI_DOCUMENT_PARSER_NOT_AVAILABLE") {
+    return "This document type is not enabled yet. Use TXT, Markdown, CSV, JSON, HTML or XML. PDF, DOCX and OCR remain separately disabled until their parser adapters are reviewed.";
+  }
+  if (code === "AI_DOCUMENT_VERSION_NOT_DRAFT") {
+    return "Documents can be ingested only into an editable draft knowledge version so the exact parsed content is covered by independent review.";
   }
   if (code === "AI_PROMPT_INJECTION_BLOCKED") {
     return "This message was blocked because it attempted to override security controls.";
