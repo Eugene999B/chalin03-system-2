@@ -142,6 +142,32 @@ function fileExists(repoRoot, filePath) {
   return fs.existsSync(path.join(repoRoot, normalizePath(filePath)));
 }
 
+function hasGuardedBackupRunner({ repoRoot, filePath }) {
+  const migrationFileName = path.posix.basename(normalizePath(filePath));
+  const scriptsDirectory = path.join(repoRoot, "backend", "scripts");
+  if (!fs.existsSync(scriptsDirectory)) return false;
+
+  for (const scriptName of fs.readdirSync(scriptsDirectory)) {
+    if (!scriptName.endsWith(".js")) continue;
+    const scriptPath = path.join(scriptsDirectory, scriptName);
+    let scriptContent = "";
+    try {
+      scriptContent = fs.readFileSync(scriptPath, "utf8");
+    } catch {
+      continue;
+    }
+    if (!scriptContent.includes(migrationFileName)) continue;
+    if (
+      scriptContent.includes("CHALIN03_SIGNED_BACKUP_CONFIRMED") &&
+      scriptContent.includes("CHALIN03_SQL_BACKUP_CONFIRMED")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function addError(errors, filePath, code, message) {
   errors.push({
     file: normalizePath(filePath),
@@ -185,12 +211,15 @@ function validateAdditiveMigration({ repoRoot, filePath, content, errors }) {
     );
   }
 
-  if (!upperContent.includes("BACKUP REQUIRED")) {
+  if (
+    !upperContent.includes("BACKUP REQUIRED") &&
+    !hasGuardedBackupRunner({ repoRoot, filePath })
+  ) {
     addError(
       errors,
       filePath,
       "MISSING_BACKUP_MARKER",
-      "Add a '-- BACKUP REQUIRED:' instruction naming the required verified backups."
+      "Add a '-- BACKUP REQUIRED:' instruction or a guarded migration runner that enforces both verified production backups."
     );
   }
 
@@ -399,6 +428,7 @@ module.exports = {
   VERIFY_WRITE_PATTERN,
   expectedVerifyPath,
   formatErrors,
+  hasGuardedBackupRunner,
   isMigrationSql,
   isProductionExecutionFile,
   isVerifyMigration,
