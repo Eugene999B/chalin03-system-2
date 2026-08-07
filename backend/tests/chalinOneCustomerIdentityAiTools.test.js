@@ -143,7 +143,7 @@ test("duplicate customer AI tool is R2, branch-scoped and suggestion-only", asyn
   const output = await tool.handler({ input: { limit: 8 }, context });
   assert.equal(output.execution_authority, "suggestion_only");
   assert.equal(output.merge_executed, false);
-  assert.equal(output.evidence[0].classification, "restricted");
+  assert.equal(output.evidence[0].classification, "sensitive");
   assert.equal(output.evidence[0].metadata.phones_masked, true);
   assert.equal(output.evidence[0].metadata.merge_executed, false);
   assert.doesNotMatch(JSON.stringify(output), /024\d{7}/);
