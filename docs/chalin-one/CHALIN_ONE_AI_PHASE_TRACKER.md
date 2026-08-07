@@ -6,8 +6,8 @@
 **Live provider:** Disabled  
 **Production migration:** Not run  
 **Deployment:** Not performed  
-**Green source commit:** `463b07a44e0e974fa806dd43bed37eec1ae07086`  
-**Green CI run:** `31206956829`
+**Green Phase 9 source commit:** `ced97c58673e28be8599da2dec6e4a087540f955`  
+**Green Phase 9 CI run:** `31208580817`
 
 Legend:
 
@@ -32,156 +32,158 @@ Legend:
 - [x] Master AI feature gate.
 - [x] Independent Copilot, Executive and Guide feature flags.
 - [x] Future action and scheduled-job feature flags.
-- [x] AI-specific permissions, including registered normal-read and sensitive-read authority.
+- [x] Registered normal-read and sensitive-read AI permissions.
 - [x] Existing business permissions enforced in addition to AI permissions for domain tools.
-- [x] Provider tool menus hide tools the staff account cannot ordinarily access.
-- [x] Explicit workspace, branch, mining-site and hire-location scope.
-- [x] Mining-site and Hire-location context IDs are independently revalidated against existing assignment/scope services before tool execution.
-- [x] Equipment Hire and Equipment Finance AI tools preserve the backend's hard division boundary even though both share the `equipment_hire` workspace code.
+- [x] Provider tool menus hide tools the account cannot ordinarily access.
+- [x] Explicit workspace, Spare Parts branch, Mining site and Hire location scope.
+- [x] Mining-site and Hire-location context IDs independently revalidated against existing assignment/scope services.
+- [x] Equipment Hire and Equipment Finance AI preserve the backend hard division boundary even though they share the `equipment_hire` workspace code.
 - [x] Prompt-injection detection.
-- [x] Secret-extraction blocking.
-- [x] Secret redaction.
+- [x] Secret-extraction blocking and sensitive-value redaction.
 - [x] High-risk action recognition.
-- [x] Provider-disabled default.
-- [x] Deterministic test-only mock provider.
-- [x] Reviewed-adapter registry boundary.
+- [x] Provider-disabled default and deterministic mock-provider boundary.
 - [x] Provider timeout and response limits.
 - [x] Registered backend tool boundary.
 - [x] AI, business-permission and equipment-division validation at tool-registration time.
-- [x] Direct database/SQL tool rejection.
+- [x] Direct database/SQL access blocked inside AI tool handlers.
 - [x] Risk-level tool enforcement.
-- [x] Request token budget.
-- [x] Daily user and workspace budgets.
-- [x] Monthly integer-micro cost budget.
-- [x] Tool-call loop limit.
-- [x] Owned conversation storage.
-- [x] Hidden system-message filtering.
-- [x] Evidence and citation records.
-- [x] Usage ledger.
-- [x] Dedicated AI audit events.
-- [x] Prompt-safety events.
-- [x] Tool invocation audit/status.
-- [x] Feedback and correction records.
-- [x] Additive 12-table AI migration.
-- [x] Read-only AI verifier.
-- [x] Guarded manual migration runner.
-- [x] Production backup gates.
-- [x] Legacy row-count preservation.
-- [x] Serial MySQL acceptance source.
-- [x] CI migration twice for idempotency.
+- [x] Request, daily-user, workspace and monthly-cost budgets.
+- [x] Tool-call loop limits.
+- [x] Owned conversation storage and scope isolation.
+- [x] Evidence/citation records.
+- [x] Usage ledger and dedicated AI audit events.
+- [x] Prompt-safety events and tool invocation audit/status.
+- [x] Feedback/correction records.
+- [x] Additive AI foundation migration and guarded migration runner.
+- [x] Production backup gates and legacy row-count preservation.
+- [x] Serial MySQL acceptance and migration idempotency CI.
 
 ### Runtime acceptance
 
-- [x] Backend unit/source suite passed in the recorded green CI run.
-- [x] Isolated MySQL 8.4 AI acceptance passed in the recorded green CI run.
-- [x] AI foundation migration idempotency passed in the recorded green CI run.
-- [x] Governed AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations passed twice inside isolated database acceptance.
-- [x] Domain-tool security regression tests cover unknown permission names, business-permission denial, provider visibility, sensitive evidence classification, forged Mining/Hire context mismatch and Hire-vs-Finance division isolation.
-- [-] Provider failure isolation still requires browser/API staging acceptance.
-- [-] Audit and usage evidence still requires staging review with real accounts.
+- [x] Backend suite green on the recorded Phase 9 baseline.
+- [x] Isolated MySQL 8.4 AI acceptance green on the recorded Phase 9 baseline.
+- [x] AI foundation migration idempotency green.
+- [x] AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations passed twice inside isolated acceptance.
+- [x] Security regressions cover unknown permission names, business-permission denial, provider visibility, sensitive evidence classification, forged Mining/Hire context mismatch and Hire-vs-Finance division isolation.
+- [-] Real-provider failure isolation still requires controlled staging acceptance.
+- [-] Real-account audit and usage evidence still requires staging review.
 
 ## Phase 8 — Knowledge and document intelligence
 
 ### Source implementation
 
 - [x] Knowledge source identities and classifications.
-- [x] Draft knowledge source/version creation.
-- [x] Draft updates.
-- [x] Exact-version review requests.
-- [x] Assigned independent reviewer.
+- [x] Draft knowledge source/version creation and editing.
+- [x] Exact-version independent review workflow.
 - [x] Self-approval prevention.
-- [x] Third-person publisher requirement.
-- [x] Superseding prior published versions.
+- [x] Independent third-person publishing.
+- [x] Published-version supersession.
 - [x] Effective and expiry dates.
 - [x] Public/workspace/executive retrieval separation.
-- [x] Restricted sources excluded from automatic retrieval.
 - [x] Draft/rejected/expired/superseded/archived retrieval blocked.
-- [x] Checksums.
-- [x] Evidence conversion.
-- [x] Knowledge administration API.
+- [x] Checksums and evidence conversion.
+- [x] Knowledge administration API and staff governance UI.
 - [x] Workspace ownership enforcement.
-- [x] Knowledge governance staff UI.
-
-### Runtime acceptance
-
-- [x] Real isolated-MySQL governance flow passed CI acceptance.
-- [-] Desktop and mobile governance UI browser acceptance is pending.
-- [-] Approved-media/document ingestion remains pending.
+- [-] Approved-media/document ingestion remains partial; governed text knowledge works, but document-level ingestion is the next source block.
 - [ ] OCR/document parsing pipeline.
 - [ ] Approved chunking/embedding pipeline.
 - [ ] Vector retrieval provider.
 - [ ] Document-level citation deep links.
 
-## Phase 9 — Chalin Copilot and Executive foundation
+### Runtime acceptance
 
-### Source implementation
+- [x] Real isolated-MySQL knowledge-governance flow passed CI acceptance.
+- [-] Desktop/mobile governance browser acceptance pending.
+
+## Phase 9 — Chalin Copilot and Executive
+
+### Core workspace
 
 - [x] Protected `/intelligence/*` standalone surface.
-- [x] Master feature gate, authentication and existing workspace permission.
+- [x] Master feature gate, authentication and workspace permission.
 - [x] Server-authoritative capability snapshot.
 - [x] Independent Copilot and Executive persona switches.
 - [x] Explicit Executive permission.
 - [x] Owned conversation list/detail/archive/rename.
 - [x] Safe provider-disabled state.
-- [x] Evidence display.
-- [x] Feedback controls.
-- [x] Usage ledger UI.
-- [x] Responsive desktop/tablet/360–430px source layout.
+- [x] Evidence display, feedback controls and usage ledger UI.
+- [x] Responsive desktop/tablet/360–430px source layouts.
 - [x] No sensitive action-execution controls.
-- [x] First three read-only foundation tools.
-- [x] Spare Parts operations snapshot tool.
-- [x] Spare Parts inventory-health tool.
-- [x] Spare Parts collections-health tool.
-- [x] Sensitive duplicate-customer suggestions using the proven customer-identity matcher, masked phones, stronger permissions and suggestion-only authority with no merge path.
-- [x] Mining Operations snapshot tool.
-- [x] Mining stockpile-and-fuel health tool.
-- [x] Mining production, cost and equipment-utilization health tool.
-- [x] Equipment Hire operations snapshot tool.
-- [x] Equipment Hire fleet-health tool.
-- [x] Equipment Hire receivables-health tool.
-- [x] Equipment Finance portfolio-health tool.
-- [x] Equipment Finance arrears-health tool.
-- [x] Equipment Finance cash-flow-health tool.
-- [x] Equipment sales / credit-application pipeline tool.
-- [x] Finance tools are company-wide, aggregate-only and do not require or inherit Hire location selection.
-- [x] Finance AI suppresses customer/agreement/payment rows and exposes only governed confidential aggregate evidence.
-- [x] Finance application KYC/risk and fleet sale-status classifications are locked to the actual schema by regression tests.
-- [x] Domain tools require existing ordinary business permissions as well as AI permissions.
-- [x] Mining and Hire tools validate actual authorized site/location assignment before execution.
-- [x] Hire-only users cannot see or execute Finance AI tools; Finance-only users cannot see or execute Hire AI tools.
 
-### Runtime acceptance
+### Foundation and Spare Parts tools
 
-- [x] Frontend JSX compilation and source tests passed CI.
-- [x] Production-mode frontend build passed CI.
-- [x] Spare Parts, customer-identity, Mining, Equipment Hire and Equipment Finance domain-tool source/security tests passed the backend suite in the recorded green CI run.
-- [x] Isolated MySQL acceptance and machine-readable release evidence passed on the exact recorded Finance source commit.
-- [-] Browser keyboard/mobile acceptance is pending.
-- [-] A live provider is deliberately not registered.
-- [x] Domain insight tools for Spare Parts.
-- [x] Domain insight tools for Mining Operations.
-- [x] Domain insight tools for Equipment Hire.
-- [x] Equipment Sales and Installment Finance tool layer.
-- [ ] Executive scorecards and trend panels.
-- [ ] Scenario comparison engine.
+- [x] Foundation scope/status/knowledge tools.
+- [x] `spare_parts.operations_snapshot`.
+- [x] `spare_parts.inventory_health`.
+- [x] `spare_parts.collections_health`.
+- [x] `spare_parts.duplicate_customer_suggestions` using the proven CHALIN identity matcher, masked phones, sensitive-read permission and suggestion-only authority with no merge path.
+
+### Mining Operations tools
+
+- [x] `mining.operations_snapshot`.
+- [x] `mining.stock_fuel_health`.
+- [x] `mining.production_cost_health`.
+- [x] Mining tools revalidate the selected authorized Mining site before execution.
+
+### Equipment Hire tools
+
+- [x] `equipment_hire.operations_snapshot`.
+- [x] `equipment_hire.fleet_health`.
+- [x] `equipment_hire.receivables_health`.
+- [x] Hire tools revalidate the selected authorized Hire location before execution.
+- [x] Hire tools are explicitly Hire-division only.
+
+### Equipment Sales / Installment Finance tools
+
+- [x] `equipment_finance.portfolio_health`.
+- [x] `equipment_finance.arrears_health`.
+- [x] `equipment_finance.cashflow_health`.
+- [x] `equipment_finance.sales_pipeline`.
+- [x] Finance tools are company-wide, aggregate-only and do not inherit Hire-location selection.
+- [x] Finance outputs suppress customer, agreement and payment rows.
+- [x] Finance evidence is confidential and read-only.
+- [x] KYC/risk and fleet sale-status classifications are locked to the actual schema by regression tests.
+- [x] Hire-only users cannot see or execute Finance tools; Finance-only users cannot see or execute Hire tools.
+
+### Executive management intelligence
+
+- [x] Provider-independent Executive Scorecard at `/intelligence/executive-scorecard`.
+- [x] Scorecard inherits the existing Group Executive Control original-System-Administrator restriction.
+- [x] KPI cards for recorded revenue, cash received, operating cost, receivables, indicative balance and management alerts.
+- [x] Business-pulse cards for Spare Parts, Mining, Equipment Hire, Shared Fleet and Cash Control.
+- [x] Daily revenue/cash/cost trend visualization.
+- [x] Management alert radar and recommendation panel.
+- [x] Responsive desktop/tablet/mobile design and reduced-motion support.
+- [x] Provider-independent Scenario Comparison Engine at `/intelligence/executive-scenarios`.
+- [x] Four scenario presets: Protect Cash, Balanced Plan, Growth Push and Stress Test.
+- [x] Custom levers for revenue change, collection-rate change, operating-cost change and existing-receivables recovery.
+- [x] Baseline-vs-scenario comparisons for revenue, collections, cash inflow, cost, indicative balance, existing receivables, collection rate and cost ratio.
+- [x] Side-by-side comparison visualization.
+- [x] Formula transparency panel with no hidden AI calculations.
+- [x] Scenario ranges bounded and collection rate clamped to 0–100%.
+- [x] Scenario engine is explicitly a no-write management simulation: no forecast claim, no accounting entry, no operational mutation and no AI action proposal.
+
+### Phase 9 acceptance
+
+- [x] Frontend source tests and full JSX compilation passed.
+- [x] Production-mode frontend build passed.
+- [x] Full backend suite passed.
+- [x] Isolated MySQL acceptance and machine-readable release evidence passed.
+- [x] Exact Phase 9 baseline `ced97c58673e28be8599da2dec6e4a087540f955` is fully green in CI run `31208580817`.
+- [-] Browser keyboard/mobile evidence with real accounts remains pending.
+- [-] Live provider remains deliberately unregistered.
 
 ## Phase 10 — Chalin Guide
-
-### Source implementation
 
 - [x] Anonymous public Guide API foundation.
 - [x] Public-only Guide persistence/security schema foundation.
 - [x] Public-only approved knowledge retrieval boundary.
 - [x] Public rate-limit and privacy controls.
 - [x] Public website Guide surface/widget foundation.
-- [x] Prompt safety rule that forbids claiming execution, approval or completion of business actions.
+- [x] Safety rule forbidding claims of execution, approval or completion of business actions.
 - [-] Human enquiry handoff/domain guidance coverage needs staging verification and expansion.
-
-### Runtime acceptance
-
-- [x] Public Guide migration passed twice inside isolated MySQL acceptance.
-- [-] Abuse, privacy and anonymous browser acceptance remain pending.
-- [-] Real published-content guidance quality acceptance remains pending.
+- [-] Abuse/privacy/anonymous browser acceptance pending.
+- [-] Real published-content guidance quality acceptance pending.
 
 `FEATURE_CHALIN_GUIDE` remains false outside controlled acceptance.
 
@@ -190,21 +192,21 @@ Legend:
 - [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
 - [ ] Customer business-record ownership APIs.
 - [ ] Customer portal UI.
-- [ ] Customer-specific recovery and privacy acceptance.
+- [ ] Customer-specific recovery/privacy acceptance.
 
 ## Phase 12 — Supplier portal
 
 - [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
 - [ ] Supplier-scoped business APIs.
 - [ ] Supplier portal UI.
-- [ ] Supplier-specific recovery and privacy acceptance.
+- [ ] Supplier-specific recovery/privacy acceptance.
 
 ## Phase 13 — Applicant portal
 
 - [x] Shared invitation-only portal account/session/grant/consent/audit schema foundation.
 - [ ] Applicant-scoped business APIs.
 - [ ] Applicant portal UI.
-- [ ] Applicant-specific recovery and privacy acceptance.
+- [ ] Applicant-specific recovery/privacy acceptance.
 
 The three portal feature flags remain false.
 
@@ -236,13 +238,13 @@ The three portal feature flags remain false.
 ## Phase 16 — Release candidate
 
 - [x] Backend source contracts expanded.
-- [x] Isolated MySQL CI job expanded.
+- [x] Isolated MySQL CI expanded.
 - [x] Frontend source contracts expanded.
-- [x] Visible green GitHub CI for exact source commit `463b07a44e0e974fa806dd43bed37eec1ae07086` in run `31206956829`.
+- [x] Visible green GitHub CI for exact Phase 9 source commit `ced97c58673e28be8599da2dec6e4a087540f955` in run `31208580817`.
 - [ ] Isolated staging AI migration twice.
 - [ ] Staging provider acceptance.
-- [ ] Desktop/mobile browser evidence.
-- [ ] Ordinary business regression evidence.
+- [ ] Desktop/mobile browser evidence with real accounts.
+- [ ] Ordinary business staging regression evidence.
 - [ ] Full-system backup and rollback evidence.
 - [ ] Management content/provider/cost sign-off.
 
@@ -258,6 +260,6 @@ The three portal feature flags remain false.
 
 ## Current truthful status
 
-The secure AI foundation, governed knowledge workflow, staff intelligence workspace, public Guide foundation, AI action-governance foundation, scheduled-intelligence governance foundation and shared portal-security foundation are source-implemented on `chalin-one`. Spare Parts, customer identity, Mining Operations, Equipment Hire and Equipment Sales/Installment Finance now have governed read-only/suggestion-only domain intelligence tools with ordinary business-permission enforcement, provider visibility filtering, Mining/Hire assignment revalidation, and hard Hire-vs-Finance Equipment division isolation. Finance intelligence is company-wide, aggregate-only and suppresses customer/agreement/payment rows. The exact source commit `463b07a44e0e974fa806dd43bed37eec1ae07086` passed the **fully green recorded source/isolated-MySQL CI run `31206956829`**.
+Phase 9 is source-complete and CI-proven on `chalin-one`. CHALIN ONE now contains governed Copilot/Executive foundations plus read-only or suggestion-only intelligence for Spare Parts, duplicate customers, Mining Operations, Equipment Hire and Equipment Sales/Installment Finance. It also contains provider-independent Executive Scorecards and a transparent Scenario Comparison Engine driven by the existing original-administrator Group Executive Control baseline.
 
-They are **still not production-ready** because isolated staging, real-account browser acceptance, live-provider acceptance, ordinary-business staging regression, full-system backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled and no production database migration or deployment has been performed.
+The next source gap is Phase 8 document intelligence: governed document ingestion, parsing/chunking and later vector retrieval. Staging/browser/live-provider acceptance, backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled, and no production database migration or deployment has been performed.
