@@ -84,7 +84,9 @@ async function publishEntityVersion({
         { code: "NEWSROOM_SCHEDULING_NOT_READY", statusCode: 409 }
       );
     }
-    snapshot.publish_at = snapshot.publish_at || new Date();
+    // Immediate publication is represented by status + published_at.
+    // Keep publish_at NULL unless an explicit non-future timestamp was supplied.
+    snapshot.publish_at = snapshot.publish_at || null;
     await assertReferences(connection, kind, snapshot, { publicReady: true });
     await applyPublishedSnapshot(
       connection,
