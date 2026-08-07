@@ -112,3 +112,7 @@ test(
     await assertMigrationRecorded(PORTAL_RECORD);
   }
 );
+
+test.after(async () => {
+  await pool.end();
+});
