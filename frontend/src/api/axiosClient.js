@@ -1,4 +1,5 @@
 import axios from "axios";
+import { API_BASE_URL } from "./apiBaseUrl";
 import "../utils/equipmentMediaCaptureBridge";
 import {
   assertSparePartsInstallmentRequestAllowed,
@@ -21,7 +22,7 @@ const PUBLIC_SESSION_PATHS = new Set([
 ]);
 
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: API_BASE_URL,
   timeout: 30000,
 });
 

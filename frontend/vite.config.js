@@ -54,6 +54,21 @@ function resolveBuildId(environment = process.env) {
   return `local-${Date.now().toString(36)}`;
 }
 
+function isCloudflarePagesBuild(environment = process.env) {
+  return (
+    String(environment.CF_PAGES || "").trim() === "1" ||
+    Boolean(String(environment.CF_PAGES_URL || "").trim())
+  );
+}
+
+// The production browser must not depend on cross-origin preflight to reach the
+// business API. Pages Functions owns /api/* and proxies it server-side to the
+// protected api.chalin03.com origin. Force every Cloudflare Pages bundle,
+// including code that still reads VITE_API_URL directly, to use that gateway.
+if (isCloudflarePagesBuild()) {
+  process.env.VITE_API_URL = "/api";
+}
+
 const chalin03BuildId = resolveBuildId();
 
 export default defineConfig({
@@ -64,3 +79,5 @@ export default defineConfig({
     ),
   },
 });
+
+export { isCloudflarePagesBuild, resolveBuildId };
