@@ -13,6 +13,7 @@ const {
   normalizeAiPersona,
 } = require("../security/aiPermissionCatalog");
 const { ALL_PERMISSIONS } = require("../security/permissionCatalog");
+const { EQUIPMENT_DIVISIONS } = require("../security/equipmentDivisionAccess");
 
 const DEFAULT_TOOL_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_INPUT_BYTES = 12000;
@@ -20,6 +21,7 @@ const DEFAULT_MAX_OUTPUT_BYTES = 64000;
 const TOOL_KEY_PATTERN = /^[a-z][a-z0-9_.-]{2,149}$/;
 const FORBIDDEN_HANDLER_SOURCE =
   /(config\/db|mysql2|\bpool\s*\.|\bconnection\s*\.|\.query\s*\(|\bSELECT\s+|\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bDELETE\s+FROM\b)/i;
+const EQUIPMENT_DIVISION_VALUES = Object.freeze(Object.values(EQUIPMENT_DIVISIONS));
 
 class AiToolRegistryError extends Error {
   constructor(message, { code = "AI_TOOL_REGISTRY_ERROR", statusCode = 400, details = [] } = {}) {
@@ -66,6 +68,11 @@ function normalizeToolDefinition(definition = {}) {
   const requiredPermissions = [...new Set((definition.required_permissions || []).map((value) => String(value || "").trim()).filter(Boolean))];
   const requiredBusinessPermissions = [...new Set((definition.required_business_permissions || []).map((value) => String(value || "").trim()).filter(Boolean))];
   const allowedWorkspaces = [...new Set((definition.allowed_workspaces || []).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
+  const requiredEquipmentDivision = String(
+    definition.required_equipment_division || ""
+  )
+    .trim()
+    .toLowerCase() || null;
   const handler = definition.handler;
 
   if (!TOOL_KEY_PATTERN.test(key) || !title || !description) {
@@ -108,6 +115,18 @@ function normalizeToolDefinition(definition = {}) {
       }
     );
   }
+  if (
+    requiredEquipmentDivision &&
+    !EQUIPMENT_DIVISION_VALUES.includes(requiredEquipmentDivision)
+  ) {
+    throw new AiToolRegistryError(
+      "AI tool equipment division must be hire, finance or both.",
+      {
+        code: "AI_TOOL_EQUIPMENT_DIVISION_INVALID",
+        details: [requiredEquipmentDivision],
+      }
+    );
+  }
   if (typeof handler !== "function") {
     throw new AiToolRegistryError("AI tools require an executable handler.", {
       code: "AI_TOOL_HANDLER_REQUIRED",
@@ -131,6 +150,7 @@ function normalizeToolDefinition(definition = {}) {
     personas: Object.freeze(personas),
     required_permissions: Object.freeze(requiredPermissions),
     required_business_permissions: Object.freeze(requiredBusinessPermissions),
+    required_equipment_division: requiredEquipmentDivision,
     allowed_workspaces: Object.freeze(allowedWorkspaces),
     scope_requirements: Object.freeze({
       branch: definition.scope_requirements?.branch === true,
@@ -168,6 +188,7 @@ function publicToolDefinition(tool) {
     personas: [...tool.personas],
     required_permissions: [...tool.required_permissions],
     required_business_permissions: [...tool.required_business_permissions],
+    required_equipment_division: tool.required_equipment_division,
     allowed_workspaces: [...tool.allowed_workspaces],
     scope_requirements: { ...tool.scope_requirements },
     input_schema: tool.input_schema,
@@ -305,6 +326,7 @@ module.exports = {
   DEFAULT_MAX_INPUT_BYTES,
   DEFAULT_MAX_OUTPUT_BYTES,
   DEFAULT_TOOL_TIMEOUT_MS,
+  EQUIPMENT_DIVISION_VALUES,
   FORBIDDEN_HANDLER_SOURCE,
   TOOL_KEY_PATTERN,
   aiToolRegistry,
