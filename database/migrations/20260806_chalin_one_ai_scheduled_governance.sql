@@ -1,4 +1,6 @@
 -- CHALIN ONE scheduled intelligence governance.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Professional Backup and separate SQL backup must be verified before production execution.
 -- This migration stores approved schedule definitions and review evidence only.
 -- It does not create or start a scheduler and FEATURE_AI_SCHEDULED_JOBS remains false.
 
