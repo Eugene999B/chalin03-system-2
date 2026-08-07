@@ -32,9 +32,11 @@ const { runAiConversationTurn } = require("../services/aiOrchestratorService");
 const { listUsageSummary } = require("../services/aiUsageService");
 const { resolveAiScope } = require("../services/aiPermissionService");
 const { registerFoundationAiTools } = require("../ai-tools/foundationTools");
+const { registerSparePartsAiTools } = require("../ai-tools/sparePartsTools");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
 
 registerFoundationAiTools();
+registerSparePartsAiTools();
 
 const router = express.Router();
 
