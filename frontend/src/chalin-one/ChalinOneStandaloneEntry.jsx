@@ -16,6 +16,9 @@ const ChalinIntelligenceWorkspace = lazy(() =>
 const ExecutiveScorecardPage = lazy(() =>
   import("./ai/ExecutiveScorecardPage")
 );
+const ExecutiveScenarioEnginePage = lazy(() =>
+  import("./ai/ExecutiveScenarioEnginePage")
+);
 const ExecutiveScorecardLauncher = lazy(() =>
   import("./ai/ExecutiveScorecardLauncher")
 );
@@ -152,6 +155,9 @@ function ContentStudioEntry() {
 function IntelligenceWorkspaceSurface() {
   if (window.location.pathname === "/intelligence/executive-scorecard") {
     return <ExecutiveScorecardPage />;
+  }
+  if (window.location.pathname === "/intelligence/executive-scenarios") {
+    return <ExecutiveScenarioEnginePage />;
   }
 
   return (
