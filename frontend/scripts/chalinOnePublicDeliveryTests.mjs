@@ -153,7 +153,9 @@ check("standalone entry applies fail-closed feature and staff access gates", () 
   assert.match(standalone, /feature="publicWebsite"/);
   assert.match(standalone, /feature="contentStudio"/);
   assert.match(standalone, /ProtectedRoute/);
-  assert.match(standalone, /PermissionRoute permissions=\{\["public_content\.view"\]\}/);
+  assert.match(standalone, /PermissionRoute permissions=\{\[permission\]\}/);
+  assert.match(standalone, /permission="public_content\.view"/);
+  assert.match(standalone, /permission="workspace\.view"/);
   assert.match(standalone, /AuthProvider/);
   assert.match(standalone, /WorkspaceContextProvider/);
 });
