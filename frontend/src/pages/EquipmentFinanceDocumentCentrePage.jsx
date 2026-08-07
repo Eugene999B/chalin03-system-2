@@ -4,34 +4,40 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinanceDocumentCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/equipmentFinanceDocumentDiscovery.css";
 
 const API = "/equipment-catalogue/sales";
 const ACCOUNTS_API = `${API}/finance-lifecycle/accounts`;
 const PROFESSIONAL_API = `${API}/professional`;
 const COMPLETION_API = `${PROFESSIONAL_API}/completion-documents`;
 const DOCUMENTS_API = `${PROFESSIONAL_API}/documents`;
+const OPERATIONAL_API = `${API}/operational-polish`;
 
 const GROUPS = [
   {
     code: "agreement",
+    icon: "§",
     title: "Agreement & Approval Pack",
     description: "Legally controlled copies for the customer, company file and management approval.",
     types: ["installment_agreement", "customer_agreement_copy", "company_agreement_copy", "boss_approval_pack"],
   },
   {
     code: "payments",
+    icon: "₵",
     title: "Payments & Customer Account",
     description: "Schedules, exact-payment receipts, statements and overdue notices.",
     types: ["payment_schedule", "payment_receipt", "customer_statement", "arrears_notice"],
   },
   {
     code: "machine",
+    icon: "⚙",
     title: "Machine, Guarantor & Handover",
     description: "Photo evidence, guarantor undertaking and physical machine handover records.",
     types: ["machine_annexure", "guarantor_undertaking", "delivery_handover_note"],
   },
   {
     code: "completion",
+    icon: "✓",
     title: "Changes, Settlement & Ownership",
     description: "Approved amendments and documents available at the end of the account lifecycle.",
     types: ["amendment_agreement", "settlement_confirmation", "ownership_transfer"],
@@ -76,7 +82,13 @@ function overdueAmount(schedule = []) {
   }, 0);
 }
 
-function documentAvailability(type, snapshot, selectedPaymentId) {
+function documentAvailability(
+  type,
+  snapshot,
+  selectedPaymentId,
+  selectedAmendment,
+  amendmentLookupProblem
+) {
   if (!snapshot) return { available: false, note: "Choose an installment account first." };
   const agreement = snapshot.agreement || {};
   if (type === "payment_receipt") {
@@ -94,7 +106,21 @@ function documentAvailability(type, snapshot, selectedPaymentId) {
     return { available: false, note: "Available only after the official balance reaches zero." };
   }
   if (type === "amendment_agreement") {
-    return { available: true, note: "The server uses the latest approved or applied numbered amendment." };
+    if (amendmentLookupProblem) {
+      return {
+        available: false,
+        note: "Amendment availability could not be verified. Open the case file and try again.",
+      };
+    }
+    return selectedAmendment
+      ? {
+          available: true,
+          note: `Ready to issue ${selectedAmendment.amendment_number} (${label(selectedAmendment.amendment_status)}).`,
+        }
+      : {
+          available: false,
+          note: "No approved or applied numbered amendment exists for this account yet.",
+        };
   }
   if (type === "delivery_handover_note") {
     return { available: true, note: "Uses the controlled delivery record when handover is confirmed." };
@@ -102,8 +128,25 @@ function documentAvailability(type, snapshot, selectedPaymentId) {
   return { available: true, note: "Issued from the selected immutable account snapshot." };
 }
 
-function DocumentCard({ definition, snapshot, selectedPaymentId, canManage, working, onIssue }) {
-  const availability = documentAvailability(definition.code, snapshot, selectedPaymentId);
+function DocumentCard({
+  definition,
+  snapshot,
+  selectedPaymentId,
+  selectedAmendment,
+  amendmentLookupProblem,
+  canManage,
+  working,
+  issueError,
+  recoveryHref,
+  onIssue,
+}) {
+  const availability = documentAvailability(
+    definition.code,
+    snapshot,
+    selectedPaymentId,
+    selectedAmendment,
+    amendmentLookupProblem
+  );
   return (
     <article className={`finance-docs__document-card ${availability.available ? "" : "is-disabled"}`}>
       <div className="finance-docs__document-icon" aria-hidden="true">
@@ -115,6 +158,7 @@ function DocumentCard({ definition, snapshot, selectedPaymentId, canManage, work
         <p>{availability.note}</p>
         <span>{definition.formats.map((format) => format.toUpperCase()).join(" · ")}</span>
       </div>
+      {issueError ? <div className="finance-docs__card-error" role="alert">{issueError}</div> : null}
       <div className="finance-docs__document-actions">
         {definition.formats.includes("pdf") ? (
           <button type="button" className="is-primary" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "pdf")}>
@@ -130,6 +174,9 @@ function DocumentCard({ definition, snapshot, selectedPaymentId, canManage, work
           <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "thermal")}>
             {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}
           </button>
+        ) : null}
+        {!availability.available && recoveryHref ? (
+          <Link className="finance-docs__recovery-link" to={recoveryHref}>Open Amendments</Link>
         ) : null}
       </div>
     </article>
@@ -151,17 +198,23 @@ export default function EquipmentFinanceDocumentCentrePage() {
   const [agreementId, setAgreementId] = useState(requestedAgreement || "");
   const [snapshot, setSnapshot] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [amendments, setAmendments] = useState([]);
+  const [amendmentLookupProblem, setAmendmentLookupProblem] = useState("");
   const [selectedPaymentId, setSelectedPaymentId] = useState("");
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [working, setWorking] = useState("");
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
+  const [documentErrors, setDocumentErrors] = useState({});
 
   const clearSelection = useCallback(() => {
     setAgreementId("");
     setSnapshot(null);
     setDocuments([]);
+    setAmendments([]);
+    setAmendmentLookupProblem("");
+    setDocumentErrors({});
     setSelectedPaymentId("");
   }, []);
 
@@ -192,23 +245,40 @@ export default function EquipmentFinanceDocumentCentrePage() {
     if (!selectedAgreementId) {
       setSnapshot(null);
       setDocuments([]);
+      setAmendments([]);
+      setAmendmentLookupProblem("");
+      setDocumentErrors({});
       setSelectedPaymentId("");
       return;
     }
     setPreviewLoading(true);
     setProblem("");
+    setDocumentErrors({});
     try {
-      const [previewResponse, documentResponse] = await Promise.all([
+      const amendmentRequest = axiosClient
+        .get(`${OPERATIONAL_API}/cases/agreement/${selectedAgreementId}/amendments`)
+        .then((response) => ({ response, error: null }))
+        .catch((error) => ({ response: null, error }));
+      const [previewResponse, documentResponse, amendmentResult] = await Promise.all([
         axiosClient.get(`${PROFESSIONAL_API}/agreements/${selectedAgreementId}/preview`),
         axiosClient.get(DOCUMENTS_API, { params: { agreement_id: selectedAgreementId, limit: 500 } }),
+        amendmentRequest,
       ]);
       setSnapshot(previewResponse.data?.snapshot || null);
       setDocuments(documentResponse.data?.documents || []);
+      setAmendments(amendmentResult.response?.data?.amendments || []);
+      setAmendmentLookupProblem(
+        amendmentResult.error
+          ? errorMessage(amendmentResult.error, "Could not verify amendment availability.")
+          : ""
+      );
       setSelectedPaymentId("");
     } catch (error) {
       setProblem(errorMessage(error, "Could not open the selected agreement document file."));
       setSnapshot(null);
       setDocuments([]);
+      setAmendments([]);
+      setAmendmentLookupProblem("");
       setSelectedPaymentId("");
     } finally {
       setPreviewLoading(false);
@@ -243,12 +313,25 @@ export default function EquipmentFinanceDocumentCentrePage() {
 
   const selectedAccount = accounts.find((account) => String(account.agreement_id) === String(agreementId));
   const definitionsByCode = useMemo(() => new Map(definitions.map((item) => [item.code, item])), [definitions]);
+  const selectedAmendment = useMemo(
+    () => amendments.find((item) => ["approved", "applied"].includes(String(item.amendment_status || "").toLowerCase())) || null,
+    [amendments]
+  );
   const primaryPhoto = useMemo(() => (
     snapshot?.media?.find((item) => item.evidence_type === "main")?.file_url ||
     snapshot?.media?.find((item) => item.is_primary)?.file_url ||
     snapshot?.agreement?.main_image_url ||
     ""
   ), [snapshot]);
+
+  function openDocumentGroup(groupCode) {
+    const target = globalThis.document?.getElementById(`finance-document-group-${groupCode}`);
+    if (!target) return;
+    target.open = true;
+    globalThis.requestAnimationFrame?.(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   async function downloadDocument(documentId, format, fallbackName) {
     const response = await axiosClient.get(`${COMPLETION_API}/${documentId}/download`, { params: { format }, responseType: "blob" });
@@ -274,16 +357,24 @@ export default function EquipmentFinanceDocumentCentrePage() {
 
   async function issueDocument(documentType, format) {
     if (!agreementId) return;
+    if (documentType === "amendment_agreement" && !selectedAmendment) {
+      const message = amendmentLookupProblem || "No approved or applied numbered amendment is available for issue.";
+      setDocumentErrors((current) => ({ ...current, [documentType]: message }));
+      setProblem(message);
+      return;
+    }
     const key = `${documentType}:${format}`;
     setWorking(key);
     setProblem("");
     setNotice("");
+    setDocumentErrors((current) => ({ ...current, [documentType]: "" }));
     try {
       const response = await axiosClient.post(`${COMPLETION_API}/issue`, {
         agreement_id: Number(agreementId),
         document_type: documentType,
         format,
         payment_id: documentType === "payment_receipt" && selectedPaymentId ? Number(selectedPaymentId) : null,
+        amendment_id: documentType === "amendment_agreement" ? Number(selectedAmendment?.id || 0) || null : null,
       });
       const issued = response.data?.document;
       setNotice(response.data?.message || "Professional Finance document issued.");
@@ -292,7 +383,9 @@ export default function EquipmentFinanceDocumentCentrePage() {
       }
       await loadAgreement(agreementId);
     } catch (error) {
-      setProblem(errorMessage(error, "Could not issue the selected Finance document."));
+      const message = errorMessage(error, "Could not issue the selected Finance document.");
+      setProblem(message);
+      setDocumentErrors((current) => ({ ...current, [documentType]: message }));
     } finally {
       setWorking("");
     }
@@ -411,16 +504,78 @@ export default function EquipmentFinanceDocumentCentrePage() {
             </select>
           </section>
 
+          <section className="finance-docs__category-hub" aria-labelledby="finance-document-categories">
+            <div className="finance-docs__category-hub-heading">
+              <div>
+                <p>Document library</p>
+                <h2 id="finance-document-categories">Choose a document category</h2>
+                <span>Every category below contains real document actions. Select one to open it immediately.</span>
+              </div>
+              <strong>{definitions.length || 14} documents</strong>
+            </div>
+            <nav className="finance-docs__category-index" aria-label="Finance document categories">
+              {GROUPS.map((group) => (
+                <button
+                  type="button"
+                  className={`finance-docs__category-button is-${group.code}`}
+                  key={group.code}
+                  onClick={() => openDocumentGroup(group.code)}
+                >
+                  <span className="finance-docs__category-icon" aria-hidden="true">{group.icon}</span>
+                  <span className="finance-docs__category-copy">
+                    <small>{group.code}</small>
+                    <strong>{group.title}</strong>
+                    <em>{group.types.length} documents inside</em>
+                  </span>
+                  <span className="finance-docs__category-open">View →</span>
+                </button>
+              ))}
+            </nav>
+          </section>
+
           {GROUPS.map((group, index) => (
-            <details className="finance-docs__group" key={group.code} open={index === 0 ? true : undefined}>
-              <summary className="finance-docs__section-heading">
-                <div><p>{group.code}</p><h2>{group.title}</h2><span>{group.description}</span></div>
+            <details
+              className={`finance-docs__group finance-docs__group--discovery is-${group.code}`}
+              id={`finance-document-group-${group.code}`}
+              key={group.code}
+              open={index === 0 ? true : undefined}
+            >
+              <summary className="finance-docs__section-heading finance-docs__group-summary">
+                <span className="finance-docs__group-identity">
+                  <span className="finance-docs__group-icon" aria-hidden="true">{group.icon}</span>
+                  <span className="finance-docs__group-copy">
+                    <small>{group.code}</small>
+                    <strong>{group.title}</strong>
+                    <em>{group.description}</em>
+                  </span>
+                </span>
+                <span className="finance-docs__group-toggle">
+                  <b>{group.types.length} documents</b>
+                  <small>Open category</small>
+                  <i aria-hidden="true">⌄</i>
+                </span>
               </summary>
               <div className="finance-docs__document-grid">
                 {group.types.map((type) => {
                   const definition = definitionsByCode.get(type);
+                  const recoveryHref =
+                    type === "amendment_agreement" && selectedAccount
+                      ? `/equipment-installment-finance/applications?stage=case-operations&case_type=agreement&case_id=${selectedAccount.agreement_id}`
+                      : null;
                   return definition ? (
-                    <DocumentCard key={type} definition={definition} snapshot={snapshot} selectedPaymentId={selectedPaymentId} canManage={canManage} working={working} onIssue={issueDocument} />
+                    <DocumentCard
+                      key={type}
+                      definition={definition}
+                      snapshot={snapshot}
+                      selectedPaymentId={selectedPaymentId}
+                      selectedAmendment={selectedAmendment}
+                      amendmentLookupProblem={amendmentLookupProblem}
+                      canManage={canManage}
+                      working={working}
+                      issueError={documentErrors[type]}
+                      recoveryHref={recoveryHref}
+                      onIssue={issueDocument}
+                    />
                   ) : null;
                 })}
               </div>
