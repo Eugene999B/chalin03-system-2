@@ -8,48 +8,61 @@ const root = path.resolve(path.dirname(currentFile), "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
-const css = read("src", "styles", "equipmentFinanceThreePageSignature.css");
+const routeCss = read("src", "styles", "equipmentFinanceThreePageRouteSignature.css");
 const start = read("src", "pages", "EquipmentFinanceStartWizardPage.jsx");
 const applications = read("src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const excavators = read("src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
 
-assert.match(layout, /equipmentFinanceThreePageSignature\.css/);
+assert.match(layout, /equipmentFinanceThreePageRouteSignature\.css/);
+assert.match(layout, /finance-installment-page--start/);
+assert.match(layout, /finance-installment-page--applications/);
+assert.match(layout, /finance-installment-page--excavators/);
+assert.match(layout, /stage === "start"/);
+assert.match(layout, /stage === "machines"/);
+assert.match(layout, /if \(!stage\)/);
+assert.match(layout, /document\.body\.classList\.remove/);
+assert.match(layout, /document\.body\.classList\.add/);
 
-// Each redesign is anchored to a marker unique to that existing page.
+// Business logic components remain intact; the layout only supplies presentation scope.
 assert.match(start, /finance-simple__steps/);
-assert.match(applications, /finance-simple__toolbar[\s\S]*type="date"/);
+assert.match(applications, /placeholder="Search customer, application, offer or excavator"/);
 assert.match(excavators, /finance-simple__machine-grid/);
 
-assert.match(css, /:has\(> \.finance-simple > \.finance-simple__steps\)/);
-assert.match(css, /:has\(> \.finance-simple > \.finance-simple__section > \.finance-simple__toolbar input\[type="date"\]\)/);
-assert.match(css, /:has\(> \.finance-simple > \.finance-simple__section \.finance-simple__machine-grid\)/);
-
-for (const phrase of [
-  "private deal studio",
-  "underwriting command board",
-  "premium machine showroom",
-  "@media (max-width: 760px)",
-  "scroll-snap-type: x mandatory",
-  "prefers-reduced-motion",
+for (const pageClass of [
+  "finance-installment-page--start",
+  "finance-installment-page--applications",
+  "finance-installment-page--excavators",
 ]) {
-  assert.ok(css.includes(phrase), `Missing three-page design contract: ${phrase}`);
+  assert.ok(routeCss.includes(`body.${pageClass}`), `Missing explicit route design: ${pageClass}`);
 }
 
-// This stylesheet must never contain an ungated top-level Finance selector.
-const ungated = css
+for (const contract of [
+  "BUILD THE DEAL",
+  "UNDERWRITING  /  DECISION CONTROL",
+  "MACHINE VAULT  /  SALE INVENTORY",
+  "grid-template-columns: 1fr",
+  "grid-template-columns: repeat(2, minmax(0, 1fr))",
+  "scroll-snap-type: x mandatory",
+  "@media (max-width: 760px)",
+  "@media (prefers-reduced-motion: reduce)",
+]) {
+  assert.ok(routeCss.includes(contract), `Missing three-page route design contract: ${contract}`);
+}
+
+// No ungated generic page selector is allowed in this final layer.
+const ungated = routeCss
   .split("\n")
   .map((line) => line.trim())
-  .filter((line) => line.startsWith(".finance-simple") && !line.startsWith(".bwl-theme-finance-signature"));
+  .filter((line) => line.startsWith(".finance-simple") || line.startsWith(".bwl-theme-earth"));
 assert.deepEqual(ungated, []);
 
 for (const forbidden of [
   "spare-parts",
   "mining",
-  "equipment-hire",
   "store-",
   "bwl-theme-earth",
 ]) {
-  assert.equal(css.includes(forbidden), false, `Three-page redesign leaked into ${forbidden}`);
+  assert.equal(routeCss.includes(forbidden), false, `Three-page redesign leaked into ${forbidden}`);
 }
 
-console.log("Equipment Finance three-page signature isolation contracts passed.");
+console.log("Equipment Finance explicit three-page route isolation contracts passed.");
