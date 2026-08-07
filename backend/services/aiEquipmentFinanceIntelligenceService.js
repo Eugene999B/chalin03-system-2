@@ -100,8 +100,8 @@ async function loadSalesInventory(connection = pool) {
     `SELECT
        COUNT(*) AS sale_capable_assets,
        COALESCE(SUM(CASE WHEN sale_status = 'available' THEN 1 ELSE 0 END), 0) AS available_for_sale,
-       COALESCE(SUM(CASE WHEN sale_status IN ('reserved', 'application_hold', 'agreement_hold') THEN 1 ELSE 0 END), 0) AS held_for_finance,
-       COALESCE(SUM(CASE WHEN sale_status IN ('sold', 'completed') THEN 1 ELSE 0 END), 0) AS sold_assets,
+       COALESCE(SUM(CASE WHEN sale_status IN ('reserved', 'installment_active') THEN 1 ELSE 0 END), 0) AS held_for_finance,
+       COALESCE(SUM(CASE WHEN sale_status = 'sold' THEN 1 ELSE 0 END), 0) AS sold_assets,
        COALESCE(SUM(CASE WHEN current_status IN ('maintenance', 'breakdown') THEN 1 ELSE 0 END), 0) AS maintenance_or_breakdown
      FROM fleet_assets
      WHERE is_active = TRUE
