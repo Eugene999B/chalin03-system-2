@@ -508,7 +508,9 @@ async function publishEntityVersion({
         { code: "COMPANY_INFO_SCHEDULING_NOT_READY", statusCode: 409 }
       );
     }
-    snapshot.publish_at = snapshot.publish_at || new Date();
+    // Immediate publication is represented by status + published_at.
+    // Keep publish_at NULL unless an explicit non-future timestamp was supplied.
+    snapshot.publish_at = snapshot.publish_at || null;
     await applyPublishedSnapshot(
       connection,
       kind,

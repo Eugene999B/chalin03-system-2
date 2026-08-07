@@ -30,9 +30,7 @@ function safeJson(value, fallback = null) {
   try {
     return JSON.parse(value);
   } catch {
-    // mysql2 parses JSON columns by default. A JSON scalar string therefore
-    // arrives here already decoded, while raw JSON text still parses above.
-    return typeof value === "string" ? value : fallback;
+    return fallback;
   }
 }
 
@@ -220,7 +218,10 @@ async function getPublicBootstrap() {
 
   const settings = {};
   for (const row of settingRows) {
-    settings[row.setting_key] = safeJson(row.value_json, null);
+    settings[row.setting_key] =
+      typeof row.value_json === "string"
+        ? row.value_json
+        : safeJson(row.value_json, null);
   }
 
   return {
