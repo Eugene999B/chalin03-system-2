@@ -1,18 +1,30 @@
 # CHALIN ONE — Implementation Phase Tracker
 
-**Last updated:** August 6, 2026  
+**Last updated:** August 7, 2026  
 **Development branch:** `chalin-one`
 
-This tracker is the source of truth for CHALIN ONE work. A checked source item means the code or document exists on `chalin-one`; it does not automatically mean browser, database, staging or production acceptance has passed.
+This tracker is the source of truth for CHALIN ONE work. A checked source item means the code or document exists on `chalin-one`; it does not automatically mean browser, staging, provider or production acceptance has passed.
+
+## Latest CI evidence
+
+- Exact green source commit: `e4b4c19397b9a579a4dabec8805d72fdefb92d27`
+- GitHub Actions run: `31200046205`
+- Backend tests, staging safety, migration safety and syntax: **passed**
+- Frontend manager tests, JSX compilation, full tests and production build: **passed**
+- Isolated MySQL 8.4 public-content + AI database acceptance: **passed**
+- Public-content and AI-foundation migrations twice for idempotency: **passed**
+- Governed AI Actions, Scheduled Intelligence, Public Guide and Portal Security migrations twice: **passed inside database acceptance**
+- Machine-readable release evidence generation/upload: **passed**
+- Production deployment and production database migration: **not performed**
 
 ## Permanent release rule
 
 1. All CHALIN ONE development and testing happens on `chalin-one`.
-2. Current production fixes may be synchronized from `main` into `chalin-one` after inspection.
+2. Current production fixes may be synchronized from `main` into `chalin-one` only after inspection.
 3. CHALIN ONE is not merged into `main` in small pieces.
-4. After the complete accepted release candidate is ready, `chalin-one` is merged into `main`.
+4. After the complete accepted release candidate is ready, `chalin-one` is merged into `main` only with explicit authorization.
 5. The complete integrated `main` branch is verified.
-6. Only verified `main` is merged into `production`.
+6. Only verified `main` is merged into `production` with explicit authorization.
 7. Cloudflare and Railway production deploy only from `production`.
 8. Production is never deployed directly from `chalin-one` or an unverified `main` commit.
 
@@ -32,15 +44,15 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Add master architecture, release flow and database runbooks
 - [x] Add public-content schema and media documentation
 - [x] Add staging environment and acceptance runbook
-- [-] Complete final AI permission, tool, risk and approval matrices
-- [-] Complete final portal and sensitive-data classification matrices
+- [x] AI permission, provider, tool, risk and approval source matrices
+- [x] Portal security and sensitive-data source classification foundation
 - [ ] Complete production cutover and rollback checklist after staging acceptance
 
 ### Phase 0 gate
 
 - [x] No CHALIN ONE production deployment configuration changed
 - [x] `main` and `production` remain protected from incomplete CHALIN ONE releases
-- [-] Architecture documents agree with current code; AI and portal documents remain incomplete
+- [x] Architecture/source contracts cover the implemented public, AI and portal-security foundations
 
 ---
 
@@ -57,7 +69,7 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 
 ### Phase 1 gate
 
-- [-] Existing operations remain usable when feature-status requests fail
+- [x] Existing operations remain protected by fail-closed source and CI contracts when CHALIN ONE features are disabled
 - [x] Disabled frontend and backend capabilities fail closed by source contract
 - [x] Feature flags do not replace authentication, permissions or workspace checks
 
@@ -76,16 +88,16 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Read-only verification SQL
 - [x] MySQL 8.4 acceptance job configured in CHALIN ONE CI
 - [x] Second migration run configured for idempotency proof
-- [ ] Confirm a completed successful MySQL CI execution
+- [x] Completed successful isolated MySQL 8.4 CI execution
 - [ ] Rehearse on an isolated staging database
 - [ ] Rehearse on a recent safe production copy before release
 
 ### Phase 2 gate
 
-- [x] Migration is additive and repeat-safe by source contract
-- [ ] Real MySQL run reports no structural or foreign-key errors
+- [x] Migration is additive and repeat-safe by source contract and isolated MySQL execution
+- [x] Isolated MySQL run reports no structural or foreign-key errors
 - [ ] Existing business records and totals remain unchanged in staging rehearsal
-- [ ] Previous application version remains operational against the expanded schema
+- [ ] Previous application version remains operational against the expanded schema in staging rehearsal
 
 ---
 
@@ -102,14 +114,14 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Draft, archived, future and expired-content exclusion
 - [x] Safe public media joins
 - [x] Database-backed acceptance suite written
-- [ ] Confirm successful database-backed CI execution
+- [x] Successful database-backed CI execution
 - [ ] Complete staging API and privacy acceptance
 
 ### Phase 3 gate
 
-- [x] Anonymous routes return only public-shaped records by source contract
+- [x] Anonymous routes return only public-shaped records by source contract and isolated MySQL acceptance
 - [x] Public submissions are validated and audited by source contract
-- [ ] Database proof that no draft or archived content leaks
+- [x] Database proof that unpublished/draft content does not leak through accepted public collections
 - [ ] Browser proof that no internal API or private operational data is exposed
 
 ---
@@ -159,7 +171,7 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Newer managers fail closed on unsupported future scheduling
 - [-] Version-aware scheduling for every manager
 - [x] Real-service MySQL acceptance suite written
-- [ ] Confirm successful MySQL acceptance execution
+- [x] Successful MySQL acceptance execution
 - [ ] Exercise a dedicated staging R2 bucket and media hostname
 
 ### Phase 4 gate
@@ -168,8 +180,8 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Submitters cannot approve their own exact versions
 - [x] Previous versions restore only as new drafts
 - [x] Media archive protection covers live and draft references
-- [ ] All supported scheduling passes database-backed acceptance
-- [ ] Full Content Studio transaction acceptance passes
+- [-] All supported immediate-publishing flows pass isolated database acceptance; universal future scheduling remains pending
+- [x] Governed Content Studio database transaction acceptance passes in isolated MySQL
 
 ---
 
@@ -200,7 +212,7 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 
 - [-] A non-programmer can update company content by implemented UI; browser proof pending
 - [-] A non-programmer can upload and reuse media; staging storage proof pending
-- [-] Editor → reviewer → publisher workflow is implemented; end-to-end staging proof pending
+- [-] Editor → reviewer → publisher workflow is implemented and database-proven; real-account staging proof pending
 - [ ] Mobile and desktop preview match public rendering
 - [ ] Frontend and backend permissions pass a real account matrix
 
@@ -235,7 +247,7 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 
 - [x] Public renderer uses only published public APIs by source contract
 - [x] Public site is isolated from staff authentication and private APIs by source contract
-- [-] Existing staff login remains operational by source contract; browser proof pending
+- [x] Existing staff login handoff passes frontend source/CI contracts; browser proof remains pending
 - [ ] Mobile performance and accessibility acceptance pass
 
 ---
@@ -255,101 +267,112 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 - [x] Header and footer navigation drafts
 - [x] Staging environment template and runbook
 - [x] Staging safety tests and CI contract
-- [ ] Confirm the latest full GitHub Actions run is green
+- [x] Latest full source/isolated-DB GitHub Actions run is green
 - [ ] Provision the isolated preview database, API, frontend and media store
 - [ ] Run migration twice in staging
 - [ ] Run the seed against staging
 - [ ] Review, approve and publish verified staging content
 - [ ] Complete operational regression testing
-- [ ] Capture acceptance evidence and management sign-off
+- [ ] Capture browser/staging acceptance evidence and management sign-off
 
 ### Release B gate
 
-- [ ] Backend, frontend and MySQL CI jobs are green
+- [x] Backend, frontend and isolated MySQL CI jobs are green
 - [ ] Preview website and Content Studio pass browser acceptance
-- [ ] Existing Spare Parts, Mining, Hire and Finance workflows pass regression
-- [ ] No unverified address, leadership, testimonial, vacancy or tender is published
+- [ ] Existing Spare Parts, Mining, Hire and Finance workflows pass staging regression
+- [ ] No unverified address, leadership, testimonial, vacancy or tender is published in staging/production
 - [ ] Backup, rollback and emergency-disable evidence is complete
 
 ---
 
 # Phase 7 — AI Security and Provider Foundation
 
-- [ ] AI database migration and verification
-- [ ] AI provider abstraction and failure handling
-- [ ] Registered backend tool catalogue
-- [ ] AI permission and workspace-scope engine
-- [ ] Evidence and calculation summaries
-- [ ] Conversation and approved knowledge services
-- [ ] Immutable AI audit, usage and cost controls
-- [ ] Prompt-injection and sensitive-data protections
-- [ ] Emergency AI shutdown acceptance
+- [x] AI database migration and verification source
+- [x] AI provider abstraction and failure handling
+- [x] Registered backend tool catalogue
+- [x] AI permission and workspace-scope engine
+- [x] Evidence and calculation summaries
+- [x] Conversation and approved knowledge services
+- [x] Immutable AI audit, usage and cost controls
+- [x] Prompt-injection and sensitive-data protections
+- [-] Emergency AI shutdown browser/API staging acceptance
 
 ### Phase 7 gate
 
-- [ ] AI never connects directly to MySQL
-- [ ] AI calls only registered backend tools
-- [ ] Every tool repeats normal permission and scope checks
-- [ ] AI outage does not affect ordinary Chalin 03 operation
+- [x] AI/provider layer has no direct arbitrary SQL tool path by source and CI invariant
+- [x] AI calls only registered backend tools
+- [x] Registered tools repeat required permission and scope checks by contract
+- [x] Provider-disabled/default state is isolated from ordinary Chalin 03 operations by source/CI contracts
 
 ---
 
 # Phase 8 — AI Knowledge and Feedback
 
-- [ ] Approved knowledge sources and versions
-- [ ] Workspace, visibility, effective-date and expiry scope
-- [ ] Retrieval with evidence and citations
-- [ ] Feedback, corrections and review
-- [ ] Knowledge administration and security tests
+- [x] Approved knowledge sources and versions
+- [x] Workspace, visibility, effective-date and expiry scope
+- [x] Retrieval with evidence and citations
+- [x] Feedback, corrections and review
+- [x] Knowledge administration and security tests
+- [x] Isolated MySQL governance acceptance
+- [ ] Approved document ingestion/vector retrieval production design
+- [ ] Browser acceptance for knowledge administration
 
 ---
 
 # Phase 9 — Chalin Copilot Read-Only Release
 
-- [ ] Sales, inventory and reorder intelligence
-- [ ] Customer 360, duplicate suggestions and statements
-- [ ] Debt, collections and reminder drafts
-- [ ] Accounting, closing and anomaly explanations
-- [ ] Documents, system health, backups and reports
-- [ ] Floating Copilot and full intelligence workspace
-- [ ] Evidence, feedback, role and location-isolation tests
+- [ ] Sales, inventory and reorder intelligence domain tools
+- [ ] Customer 360, duplicate suggestions and statements domain tools
+- [ ] Debt, collections and reminder-draft domain tools
+- [ ] Accounting, closing and anomaly-explanation domain tools
+- [ ] Documents, system health, backups and reports domain tools
+- [x] Floating/standalone intelligence workspace foundation
+- [x] Evidence, feedback, role and location-isolation source/CI contracts
+- [ ] Live-provider and browser acceptance
 
 ---
 
 # Phase 10 — AI Approval and Controlled Actions
 
-- [ ] AI action proposals and Approval Inbox integration
-- [ ] Approve, reject, request-change and expiry workflow
-- [ ] Before/after previews, locks and idempotency
-- [ ] Approved communications, quotations, reports and stock proposals
-- [ ] Controlled-action security tests
+- [-] AI action proposals and human-review governance foundation implemented; unified Approval Inbox integration remains pending
+- [-] Approve/reject/cancel/expiry workflow implemented; request-change workflow remains pending
+- [ ] Before/after previews, execution locks and idempotent executor
+- [ ] Approved communications, quotations, reports and stock proposal executors
+- [x] Controlled-action security and no-executor source/CI tests
+
+`FEATURE_AI_ACTIONS` remains disabled; no action executor is active.
 
 ---
 
 # Phase 11 — Chalin Executive
 
-- [ ] Executive-only permissions and stronger authentication
-- [ ] Private executive conversations
+- [x] Executive-only permission and persona separation foundation
+- [x] Private executive conversation foundation
 - [ ] Group-wide briefs, forecasts, risks and scenarios
-- [ ] Executive reports and security tests
+- [ ] Executive reports and browser/security acceptance
 
 ---
 
 # Phase 12 — Chalin Guide and Public Enquiries
 
-- [ ] Isolated public persona and tool allowlist
-- [ ] Company, equipment, quotation, hire and finance guidance
-- [ ] Careers, enquiries and human handoff
-- [ ] Consent, abuse and public-isolation tests
+- [x] Isolated public Guide persona, public API boundary and tool allowlist foundation
+- [-] Company/equipment/hire/finance guidance foundation; domain coverage expansion remains pending
+- [-] Careers/enquiry/human handoff foundation requires staging/browser verification
+- [-] Consent, abuse, rate-limit and public-isolation source protections implemented; browser acceptance pending
+
+`FEATURE_CHALIN_GUIDE` remains disabled outside controlled acceptance.
 
 ---
 
 # Phase 13 — External Portals
 
-- [ ] Customer portal
-- [ ] Supplier portal
-- [ ] Applicant portal
-- [ ] Ownership, document, notification and recovery security
+- [x] Shared invitation-only portal security schema, sessions, grants, consent and audit foundation
+- [ ] Customer portal business APIs and UI
+- [ ] Supplier portal business APIs and UI
+- [ ] Applicant portal business APIs and UI
+- [ ] Ownership, document, notification and recovery end-to-end security acceptance
+
+Portal feature flags remain disabled.
 
 ---
 
@@ -371,7 +394,7 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 
 # Phase 16 — Equipment Finance Intelligence
 
-- [ ] Application and document completeness
+- [ ] Application and document completeness intelligence
 - [ ] Schedule, overdue, collections and delivery intelligence
 - [ ] Risk, reminder and management-review proposals
 - [ ] Finance decision-boundary tests
@@ -390,27 +413,28 @@ This tracker is the source of truth for CHALIN ONE work. A checked source item m
 
 # Current immediate work order
 
-1. Confirm and fix the complete CHALIN ONE CI run.
-2. Provision isolated Release B staging.
-3. Run the migration twice and seed controlled drafts.
-4. Complete real author, reviewer and publisher acceptance.
-5. Finish browser, mobile, accessibility and operational regression testing.
-6. Freeze the Release B candidate and prepare integration evidence.
-7. Begin the secure AI foundation only after Release B acceptance.
+1. Preserve the green `chalin-one` source/CI baseline; do not merge or deploy it.
+2. Provision isolated Release B preview/staging infrastructure and database.
+3. Run approved migrations twice and seed controlled staging drafts.
+4. Complete real author, reviewer and publisher browser acceptance on desktop/mobile.
+5. Run ordinary Spare Parts, Mining, Hire and Finance staging regression with CHALIN ONE flags controlled.
+6. Complete AI staging acceptance with provider still disabled first, then controlled live-provider testing only when configured.
+7. Finish remaining domain AI tools, universal scheduling/preview polish and external portal business surfaces.
+8. Freeze a release candidate only after staging/browser/regression evidence is complete.
 
 ---
 
 # Final Release Acceptance
 
-- [ ] No unresolved critical or high-severity defect
-- [ ] Latest `main` production fixes are synchronized into the release candidate
-- [ ] Full backend, frontend and MySQL tests/builds pass
-- [ ] Permission, workspace and location isolation pass
+- [ ] No unresolved critical or high-severity defect after staging/browser acceptance
+- [ ] Latest required `main` production fixes are deliberately synchronized into the release candidate
+- [x] Full CHALIN ONE backend, frontend and isolated MySQL tests/builds pass on an exact recorded commit
+- [ ] Permission, workspace and location isolation pass real-account staging acceptance
 - [ ] Migration rehearsal passes on a recent safe production copy
-- [ ] Backup and restore rehearsal passes
+- [ ] Full-system backup and restore rehearsal passes
 - [ ] Desktop and mobile acceptance passes
-- [ ] Public/private and AI-disabled regressions pass
-- [ ] Exact release-candidate commit is frozen and recorded
+- [ ] Public/private and AI-disabled staging regressions pass
+- [ ] Exact final release-candidate commit is frozen and recorded
 - [ ] Final production backups are completed and verified
 - [ ] Eugene authorizes `chalin-one → main`
 - [ ] Complete integrated `main` verification passes
