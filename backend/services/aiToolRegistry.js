@@ -8,7 +8,10 @@ const {
   buildToolExecutionContext,
   validateAiScopeAccess,
 } = require("./aiPermissionService");
-const { normalizeAiPersona } = require("../security/aiPermissionCatalog");
+const {
+  normalizeAiPermission,
+  normalizeAiPersona,
+} = require("../security/aiPermissionCatalog");
 const { ALL_PERMISSIONS } = require("../security/permissionCatalog");
 
 const DEFAULT_TOOL_TIMEOUT_MS = 8000;
@@ -80,6 +83,18 @@ function normalizeToolDefinition(definition = {}) {
     throw new AiToolRegistryError("AI tools require at least one allowed persona.", {
       code: "AI_TOOL_PERSONA_REQUIRED",
     });
+  }
+  const invalidAiPermissions = requiredPermissions.filter(
+    (permission) => !normalizeAiPermission(permission)
+  );
+  if (invalidAiPermissions.length > 0) {
+    throw new AiToolRegistryError(
+      "AI tool permissions must exist in the CHALIN AI permission catalog.",
+      {
+        code: "AI_TOOL_AI_PERMISSION_INVALID",
+        details: invalidAiPermissions,
+      }
+    );
   }
   const invalidBusinessPermissions = requiredBusinessPermissions.filter(
     (permission) => !ALL_PERMISSIONS.includes(permission)
