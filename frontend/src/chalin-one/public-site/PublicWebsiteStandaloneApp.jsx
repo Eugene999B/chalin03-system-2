@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router";
+import { useLocation } from "react-router";
+import PublicHomepageExperience from "./PublicHomepageExperience";
 import PublicWebsiteApp from "./PublicWebsiteApp";
 import {
   getPublicHomepage,
@@ -54,7 +55,7 @@ export default function PublicWebsiteStandaloneApp() {
     return (
       <main className="pw-unavailable" role="status" aria-live="polite">
         <div>
-          <span className="pw-brand-mark" aria-hidden="true">C1</span>
+          <img className="c1h-loading-logo" src="/chalin03-logo.png" alt="" />
           <h1>Opening published homepage…</h1>
           <p>Checking the latest approved CHALIN ONE homepage.</p>
         </div>
@@ -75,12 +76,7 @@ export default function PublicWebsiteStandaloneApp() {
   }
 
   if (isRoot && state.page?.slug) {
-    return (
-      <Navigate
-        replace
-        to={`${PUBLIC_ROOT}/pages/${encodeURIComponent(state.page.slug)}`}
-      />
-    );
+    return <PublicHomepageExperience page={state.page} />;
   }
 
   return <PublicWebsiteApp />;
