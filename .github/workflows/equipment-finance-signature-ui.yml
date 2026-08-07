@@ -9,6 +9,7 @@ on:
       - "frontend/src/styles/equipmentFinanceSignaturePolish.css"
       - "frontend/src/styles/equipmentFinanceSimplifiedWorkspace.css"
       - "frontend/src/styles/equipmentFinanceThreePageSignature.css"
+      - "frontend/src/styles/equipmentFinanceApplicationsSignature.css"
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
       - "frontend/scripts/equipmentFinanceThreePageSignatureTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
