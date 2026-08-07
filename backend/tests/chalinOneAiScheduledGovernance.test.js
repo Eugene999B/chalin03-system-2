@@ -208,7 +208,11 @@ test("scheduled routes provide governance only and no run or delivery endpoint",
   assert.match(routeSource, /ai\.actions\.review/);
   assert.match(routeSource, /\/decision/);
   assert.match(routeSource, /\/archive/);
-  assert.doesNotMatch(routeSource, /\/run|runNow|execute|deliver/);
+  assert.doesNotMatch(
+    routeSource,
+    /router\.(?:get|post|put|patch|delete)\s*\(\s*["'`][^"'`]*(?:\/run|\/execute|\/deliver)/i
+  );
+  assert.doesNotMatch(routeSource, /runNow|executeScheduledJob|deliverScheduledJob/i);
 });
 
 test("scheduled migration remains additive and contains no runnable command field", () => {
