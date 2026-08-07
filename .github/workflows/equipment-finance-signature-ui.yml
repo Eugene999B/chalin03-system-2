@@ -8,8 +8,11 @@ on:
       - "frontend/src/styles/equipmentFinanceSignatureShell.css"
       - "frontend/src/styles/equipmentFinanceSignaturePolish.css"
       - "frontend/src/styles/equipmentFinanceSimplifiedWorkspace.css"
+      - "frontend/src/styles/equipmentFinanceThreePageRouteSignature.css"
       - "frontend/scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs"
+      - "frontend/scripts/equipmentFinanceThreePageSignatureTests.mjs"
       - "frontend/e2e/equipmentFinanceSignatureUi.spec.js"
+      - "frontend/e2e/equipmentFinanceThreePageSignature.spec.js"
       - ".github/workflows/equipment-finance-signature-ui.yml"
   workflow_dispatch:
 
@@ -38,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Run isolated signature UI source contracts
-        run: node scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs
+        run: node scripts/equipmentFinanceSimplifiedWorkspaceTests.mjs && node scripts/equipmentFinanceThreePageSignatureTests.mjs
 
       - name: Build production frontend
         run: npm run build
@@ -50,7 +53,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Prove desktop and mobile Installment signature UI
-        run: npx playwright test e2e/equipmentFinanceSignatureUi.spec.js
+        run: npx playwright test e2e/equipmentFinanceSignatureUi.spec.js e2e/equipmentFinanceThreePageSignature.spec.js
 
       - name: Upload signature UI browser evidence
         if: always()
