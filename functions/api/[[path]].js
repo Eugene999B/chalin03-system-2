@@ -12,6 +12,19 @@ const HOP_BY_HOP_REQUEST_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const CLOUDFLARE_HOP_REQUEST_HEADERS = new Set([
+  "cdn-loop",
+  "cf-connecting-ip",
+  "cf-ew-via",
+  "cf-ipcountry",
+  "cf-ray",
+  "cf-visitor",
+  "cf-worker",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+]);
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -36,20 +49,10 @@ function upstreamHeadersFor(request) {
   for (const header of HOP_BY_HOP_REQUEST_HEADERS) {
     headers.delete(header);
   }
-
-  for (const header of [
-    "cf-connecting-ip",
-    "cf-ipcountry",
-    "cf-ray",
-    "cf-visitor",
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-  ]) {
+  for (const header of CLOUDFLARE_HOP_REQUEST_HEADERS) {
     headers.delete(header);
   }
-
-  headers.set("X-Chalin03-Same-Origin-Proxy", "cloudflare-pages");
+  headers.set("X-Chalin03-Same-Origin-Proxy", "cloudflare-pages-v2");
   return headers;
 }
 
@@ -58,29 +61,41 @@ function responseHeadersFor(upstreamResponse) {
   for (const header of HOP_BY_HOP_RESPONSE_HEADERS) {
     headers.delete(header);
   }
-
   headers.delete("access-control-allow-origin");
   headers.delete("access-control-allow-credentials");
   headers.delete("access-control-allow-headers");
   headers.delete("access-control-allow-methods");
   headers.delete("access-control-max-age");
-  headers.set("X-Chalin03-API-Path", "same-origin-pages-proxy");
+  headers.set("X-Chalin03-API-Path", "same-origin-pages-proxy-v2");
   headers.set("Cache-Control", "no-store, max-age=0");
   return headers;
 }
 
-function jsonError(status, code, message) {
+function jsonError(status, code, message, diagnostic = "") {
+  const headers = {
+    "Content-Type": "application/json; charset=UTF-8",
+    "Cache-Control": "no-store, max-age=0",
+    "X-Chalin03-API-Path": "same-origin-pages-proxy-v2",
+  };
+  if (diagnostic) headers["X-Chalin03-Gateway-Diagnostic"] = diagnostic;
   return new Response(
     JSON.stringify({ status: "error", code, message }),
-    {
-      status,
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-        "Cache-Control": "no-store, max-age=0",
-        "X-Chalin03-API-Path": "same-origin-pages-proxy",
-      },
-    }
+    { status, headers }
   );
+}
+
+function classifyFetchFailure(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("1042") || message.includes("another worker")) {
+    return "same-zone-worker-route";
+  }
+  if (message.includes("1019") || message.includes("loop")) {
+    return "worker-loop-protection";
+  }
+  if (message.includes("dns") || message.includes("resolve")) {
+    return "upstream-dns";
+  }
+  return "upstream-fetch";
 }
 
 export async function onRequest({ request }) {
@@ -95,7 +110,7 @@ export async function onRequest({ request }) {
       headers: {
         Allow: "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
         "Cache-Control": "no-store, max-age=0",
-        "X-Chalin03-API-Path": "same-origin-pages-proxy",
+        "X-Chalin03-API-Path": "same-origin-pages-proxy-v2",
       },
     });
   }
@@ -106,9 +121,7 @@ export async function onRequest({ request }) {
     headers: upstreamHeadersFor(request),
     redirect: "manual",
   };
-  if (!NO_BODY_METHODS.has(request.method)) {
-    init.body = request.body;
-  }
+  if (!NO_BODY_METHODS.has(request.method)) init.body = request.body;
 
   try {
     const upstreamResponse = await fetch(upstreamUrl.toString(), init);
@@ -118,22 +131,27 @@ export async function onRequest({ request }) {
       headers: responseHeadersFor(upstreamResponse),
     });
   } catch (error) {
+    const diagnostic = classifyFetchFailure(error);
     console.error("Chalin 03 same-origin API proxy failed", {
       path: incoming.pathname,
       method: request.method,
+      diagnostic,
       message: error?.message || String(error),
     });
     return jsonError(
       502,
       "API_PROXY_UPSTREAM_UNAVAILABLE",
-      "The Chalin 03 API could not be reached through the secure same-origin gateway."
+      "The Chalin 03 API gateway could not reach the upstream service.",
+      diagnostic
     );
   }
 }
 
 export {
+  CLOUDFLARE_HOP_REQUEST_HEADERS,
   NO_BODY_METHODS,
   UPSTREAM_API_ORIGIN,
+  classifyFetchFailure,
   responseHeadersFor,
   upstreamHeadersFor,
   upstreamUrlFor,
