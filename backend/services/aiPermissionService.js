@@ -8,6 +8,10 @@ const {
   normalizeAiWorkspace,
 } = require("../security/aiPermissionCatalog");
 const { hasEveryPermission } = require("../security/permissionCatalog");
+const {
+  divisionAccessDeniedMessage,
+  hasEquipmentDivisionAccess,
+} = require("../security/equipmentDivisionAccess");
 const { resolveMiningSiteScope } = require("./miningSiteScope");
 const { resolveHireLocationScope } = require("./hireLocationScope");
 
@@ -116,6 +120,20 @@ function assertBusinessPermissions(user, requiredPermissions = []) {
   return true;
 }
 
+function hasRequiredEquipmentDivision(user, requiredDivision = null) {
+  if (!requiredDivision) return true;
+  return hasEquipmentDivisionAccess(user, requiredDivision);
+}
+
+function assertEquipmentDivision(user, requiredDivision = null) {
+  if (hasRequiredEquipmentDivision(user, requiredDivision)) return true;
+  throw new AiPermissionError(divisionAccessDeniedMessage(requiredDivision), {
+    code: "AI_EQUIPMENT_DIVISION_DENIED",
+    statusCode: 403,
+    details: requiredDivision ? [requiredDivision] : [],
+  });
+}
+
 function assertWorkspaceAllowed(scope, allowedWorkspaces = []) {
   if (!allowedWorkspaces.length) return true;
   if (!allowedWorkspaces.includes(scope.workspace_code)) {
@@ -208,6 +226,7 @@ function buildToolExecutionContext({ req, persona, tool }) {
   const scope = resolveAiScope({ req, persona });
   assertPermissions(req.user, tool.required_permissions || []);
   assertBusinessPermissions(req.user, tool.required_business_permissions || []);
+  assertEquipmentDivision(req.user, tool.required_equipment_division || null);
   assertWorkspaceAllowed(scope, tool.allowed_workspaces || []);
   assertRequiredLocationScope(scope, tool.scope_requirements || {});
 
@@ -219,6 +238,9 @@ function buildToolExecutionContext({ req, persona, tool }) {
       id: scope.user_id,
       username: String(req.user?.username || "").slice(0, 120) || null,
       role: String(req.user?.role || "").slice(0, 80) || null,
+      workspace_role: String(
+        req.user?.workspace_role || req.user?.access_role || req.user?.role || ""
+      ).slice(0, 80) || null,
     }),
     scope,
     permissions: Object.freeze([
@@ -228,6 +250,7 @@ function buildToolExecutionContext({ req, persona, tool }) {
       key: tool.key,
       version: tool.version,
       risk_level: tool.risk_level,
+      required_equipment_division: tool.required_equipment_division || null,
     }),
   });
 }
@@ -235,11 +258,13 @@ function buildToolExecutionContext({ req, persona, tool }) {
 module.exports = {
   AiPermissionError,
   assertBusinessPermissions,
+  assertEquipmentDivision,
   assertPermissions,
   assertRequiredLocationScope,
   assertWorkspaceAllowed,
   buildToolExecutionContext,
   contextHeader,
+  hasRequiredEquipmentDivision,
   positiveInteger,
   resolveAiScope,
   validateAiScopeAccess,
