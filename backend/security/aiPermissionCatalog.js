@@ -11,6 +11,8 @@ const AI_PERSONAS = Object.freeze({
 
 const AI_PERMISSIONS = Object.freeze([
   "ai.use",
+  "ai.read",
+  "ai.read_sensitive",
   "ai.tools.view",
   "ai.conversations.view",
   "ai.conversations.manage",
@@ -30,6 +32,7 @@ const AI_PERMISSIONS = Object.freeze([
 
 const AI_WORKSPACE_PERMISSIONS = Object.freeze([
   "ai.use",
+  "ai.read",
   "ai.tools.view",
   "ai.conversations.view",
   "ai.conversations.manage",
@@ -41,6 +44,7 @@ const AI_WORKSPACE_PERMISSIONS = Object.freeze([
 
 const AI_ADMIN_PERMISSIONS = Object.freeze([
   ...AI_WORKSPACE_PERMISSIONS,
+  "ai.read_sensitive",
   "ai.knowledge.manage",
   "ai.knowledge.review",
   "ai.knowledge.publish",
@@ -51,6 +55,7 @@ const AI_ROLE_GRANTS = Object.freeze({
   admin: AI_ADMIN_PERMISSIONS,
   manager: Object.freeze([
     "ai.use",
+    "ai.read",
     "ai.tools.view",
     "ai.conversations.view",
     "ai.conversations.manage",
@@ -60,6 +65,7 @@ const AI_ROLE_GRANTS = Object.freeze({
   ]),
   auditor: Object.freeze([
     "ai.use",
+    "ai.read",
     "ai.tools.view",
     "ai.conversations.view",
     "ai.feedback.create",
