@@ -5,6 +5,9 @@ const {
   equipmentFinanceLifecycleIntegrityGuard,
 } = require("../middleware/equipmentFinanceLifecycleIntegrityGuard");
 const {
+  equipmentFinanceActivationIntegrityGuard,
+} = require("../middleware/equipmentFinanceActivationIntegrityGuard");
+const {
   buildInstallmentReminderMessage,
   defaultInstallmentReminderSettings,
   refreshEquipmentInstallmentStatuses,
@@ -47,6 +50,26 @@ if (!equipmentSalesRoutes.__chalin03InstallmentCommandMounted) {
     enumerable: false,
     writable: false,
   });
+}
+
+if (!equipmentSalesRoutes.__chalin03FinanceActivationIntegrityMounted) {
+  // This guard is registered before equipmentSalesSchemaService mounts the
+  // agreement-activation router. It performs a current KYC/affordability/date
+  // recheck but leaves previously activated replay handling to the established route.
+  equipmentSalesRoutes.use(
+    "/agreement-activations",
+    equipmentFinanceActivationIntegrityGuard
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03FinanceActivationIntegrityMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
 }
 
 if (!equipmentSalesRoutes.__chalin03FinanceFinalLifecycleMounted) {
