@@ -1,0 +1,9 @@
+{
+  "name": "chalin03-monorepo-staging-bootstrap-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Repository-root Node marker used only for controlled CHALIN ONE staging bootstrap deployments that need the canonical database schema outside /backend.",
+  "engines": {
+    "node": ">=20"
+  }
+}
