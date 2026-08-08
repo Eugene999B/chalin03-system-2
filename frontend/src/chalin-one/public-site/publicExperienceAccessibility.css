@@ -1,0 +1,41 @@
+.c1-skip-link {
+  position: fixed;
+  left: 16px;
+  top: 10px;
+  z-index: 900;
+  transform: translateY(-160%);
+  padding: 11px 15px;
+  border-radius: 10px;
+  background: #f0bd35;
+  color: #08111d;
+  font: 900 .78rem/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+  box-shadow: 0 14px 38px rgba(0,0,0,.28);
+  transition: transform .18s ease;
+}
+
+.c1-skip-link:focus {
+  transform: translateY(0);
+  outline: 3px solid rgba(122,214,255,.7);
+  outline-offset: 3px;
+}
+
+.c1-route-announcer {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#c1-main-content:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1-skip-link {
+    transition: none;
+  }
+}
