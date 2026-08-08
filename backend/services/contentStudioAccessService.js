@@ -172,9 +172,7 @@ async function loadContentStudioAccess(user, connection = pool) {
 }
 
 function scopeForContentStudioRequest(req) {
-  const path = clean(req?.path || req?.originalUrl || "/")
-    .split("?")[0]
-    .toLowerCase();
+  const path = clean(req?.path || "/").toLowerCase();
 
   for (const [prefix, scope] of CONTENT_STUDIO_SCOPE_PREFIXES) {
     if (path === prefix || path.startsWith(`${prefix}/`)) return scope;
@@ -222,8 +220,8 @@ async function hydrateContentStudioSession(user, connection = pool) {
   };
 }
 
-function contentStudioPathAllowedForSession(originalUrl = "") {
-  const path = clean(originalUrl).split("?")[0].toLowerCase();
+function contentStudioPathAllowedForSession(trustedPath = "") {
+  const path = clean(trustedPath).toLowerCase();
   return (
     path === "/api/content-studio-auth/me" ||
     path === "/api/content-studio-auth/change-password" ||
