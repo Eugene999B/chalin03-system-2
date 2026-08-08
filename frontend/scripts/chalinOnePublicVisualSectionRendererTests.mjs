@@ -56,7 +56,9 @@ assert.match(renderer, /listPublicResource/);
 assert.match(renderer, /new AbortController\(\)/);
 assert.match(renderer, /controller\.abort\(\)/);
 assert.match(renderer, /Promise\.allSettled/);
-assert.match(api, /publicAxiosClient/);
+assert.match(api, /const publicWebsiteClient = axios\.create/);
+assert.match(api, /export \{ publicWebsiteClient \}/);
+assert.doesNotMatch(api, /Authorization|Bearer|localStorage|sessionStorage/);
 
 assert.match(app, /import PublicVisualSections from "\.\/PublicVisualSectionRenderer"/);
 assert.match(app, /<PublicVisualSections sections=\{page\?\.sections \|\| \[\]\} excludeTypes=\{\["hero"\]\}/);
