@@ -20,7 +20,11 @@ assert.ok(
   "Staging API hostname must clearly identify a staging/preview host or Railway preview domain."
 );
 
-const branch = clean(process.env.CF_PAGES_BRANCH || process.env.CHAlIN_ONE_STAGING_BRANCH || "chalin-one");
+const branch = clean(
+  process.env.CF_PAGES_BRANCH ||
+    process.env.CHALIN_ONE_STAGING_BRANCH ||
+    "chalin-one"
+);
 assert.equal(
   branch.toLowerCase(),
   "chalin-one",
