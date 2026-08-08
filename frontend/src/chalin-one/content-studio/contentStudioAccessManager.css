@@ -1,0 +1,60 @@
+.cs-access-manager { display: grid; gap: 28px; }
+.cs-access-manager-hero { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(320px,.65fr); gap: 24px; padding: clamp(26px,4vw,48px); border-radius: 28px; background: linear-gradient(135deg,#07131f,#102f46); color: #fff; }
+.cs-access-manager-hero > div:first-child > span,.cs-access-create > div > span,.cs-access-accounts > header span { color: #f0bd35; font-size: .62rem; font-weight: 950; letter-spacing: .15em; }
+.cs-access-manager-hero h1 { margin: 12px 0; font-size: clamp(2.5rem,5vw,5.4rem); line-height: .92; letter-spacing: -.06em; }
+.cs-access-manager-hero p { max-width: 760px; margin: 0; color: rgba(255,255,255,.62); line-height: 1.65; }
+.cs-access-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; align-self: end; }
+.cs-access-stats article { min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: rgba(255,255,255,.045); }
+.cs-access-stats strong { color: #f0bd35; font-size: 2rem; }
+.cs-access-stats span { margin-top: 5px; color: rgba(255,255,255,.5); font-size: .63rem; font-weight: 800; }
+.cs-access-message { padding: 13px 16px; border-radius: 14px; font-size: .75rem; font-weight: 750; }
+.cs-access-message.is-error { border: 1px solid rgba(170,41,41,.2); background: rgba(170,41,41,.07); color: #8e2929; }
+.cs-access-message.is-success { border: 1px solid rgba(22,125,78,.2); background: rgba(22,125,78,.07); color: #176a48; }
+.cs-access-role-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.cs-access-role-grid article { min-height: 240px; display: flex; flex-direction: column; padding: 22px; border: 1px solid rgba(8,17,29,.1); border-radius: 20px; background: #fff; }
+.cs-access-role-grid article > span { color: #2d7fb8; font-size: .6rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.cs-access-role-grid h2 { margin: auto 0 10px; font-size: 1.55rem; letter-spacing: -.035em; }
+.cs-access-role-grid p { margin: 0; color: #687581; font-size: .76rem; line-height: 1.55; }
+.cs-access-role-grid article > div { margin-top: 18px; color: #7b8791; font-size: .65rem; }
+.cs-access-create { display: grid; grid-template-columns: minmax(260px,.65fr) minmax(0,1.35fr); gap: 30px; padding: 30px; border: 1px solid rgba(8,17,29,.1); border-radius: 24px; background: #f7f4ed; }
+.cs-access-create h2,.cs-access-accounts h2 { margin: 10px 0 10px; font-size: clamp(2rem,3vw,3.6rem); letter-spacing: -.05em; line-height: .98; }
+.cs-access-create p { color: #687581; line-height: 1.6; }
+.cs-access-create form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.cs-access-create label { display: grid; align-content: start; gap: 7px; }
+.cs-access-create label > span,.cs-access-reset label > span { color: #4e5e6c; font-size: .68rem; font-weight: 850; }
+.cs-access-create label.is-wide { grid-column: 1/-1; }
+.cs-access-create input,.cs-access-create select,.cs-access-account-role select,.cs-access-reset input { min-height: 48px; width: 100%; padding: 0 13px; border: 1px solid rgba(8,17,29,.14); border-radius: 12px; background: #fff; color: #08111d; font: inherit; }
+.cs-access-create label > small { color: #7b8791; font-size: .62rem; line-height: 1.45; }
+.cs-access-create form > button { grid-column: 1/-1; min-height: 50px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 16px; border: 0; border-radius: 12px; background: #08111d; color: #fff; font: inherit; font-weight: 900; cursor: pointer; }
+.cs-access-create form > button b { color: #f0bd35; }
+.cs-access-accounts { padding: 28px; border: 1px solid rgba(8,17,29,.1); border-radius: 24px; background: #fff; }
+.cs-access-accounts > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.cs-access-accounts > header button { min-height: 40px; padding: 0 14px; border: 1px solid rgba(8,17,29,.12); border-radius: 999px; background: transparent; cursor: pointer; }
+.cs-access-account-list { display: grid; gap: 9px; }
+.cs-access-account-list article { display: grid; grid-template-columns: minmax(200px,1.2fr) minmax(180px,.8fr) minmax(150px,.6fr) auto; gap: 18px; align-items: center; padding: 17px; border: 1px solid rgba(8,17,29,.09); border-radius: 16px; background: #fbfaf7; }
+.cs-access-account-list article.is-owner { border-color: rgba(240,189,53,.4); background: linear-gradient(90deg,rgba(240,189,53,.08),#fbfaf7); }
+.cs-access-account-id > span { color: #2d7fb8; font-size: .55rem; font-weight: 950; letter-spacing: .11em; }
+.cs-access-account-id h3 { margin: 5px 0 2px; font-size: 1rem; }
+.cs-access-account-id p { margin: 0; color: #7a858f; font-size: .66rem; }
+.cs-access-account-role,.cs-access-account-state { display: grid; gap: 5px; }
+.cs-access-account-role small,.cs-access-account-state small { color: #89939c; font-size: .56rem; font-weight: 850; text-transform: uppercase; letter-spacing: .09em; }
+.cs-access-account-state span { color: #9a6b14; font-size: .58rem; }
+.cs-access-account-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.cs-access-account-actions button,.cs-owner-lock { min-height: 36px; display: inline-flex; align-items: center; padding: 0 11px; border: 1px solid rgba(8,17,29,.12); border-radius: 999px; background: #fff; color: #344653; font: inherit; font-size: .63rem; font-weight: 850; cursor: pointer; }
+.cs-access-account-actions button.is-disable { color: #9b2f2f; }
+.cs-access-account-actions button.is-enable { color: #176a48; }
+.cs-owner-lock { border-color: rgba(240,189,53,.4); background: rgba(240,189,53,.1); color: #79540d; }
+.cs-access-empty { min-height: 160px; display: grid; place-items: center; border: 1px dashed rgba(8,17,29,.14); border-radius: 16px; color: #7a858f; }
+.cs-access-reset { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 20px; }
+.cs-access-reset-backdrop { position: absolute; inset: 0; border: 0; background: rgba(2,7,12,.78); backdrop-filter: blur(12px); }
+.cs-access-reset form { position: relative; width: min(560px,100%); display: grid; gap: 16px; padding: 28px; border-radius: 24px; background: #fff; box-shadow: 0 44px 120px rgba(0,0,0,.35); }
+.cs-access-reset form > span { color: #9a6b14; font-size: .6rem; font-weight: 950; letter-spacing: .13em; }
+.cs-access-reset h2 { margin: 0; font-size: 2.2rem; letter-spacing: -.05em; }
+.cs-access-reset p { margin: 0; color: #687581; line-height: 1.55; }
+.cs-access-reset label { display: grid; gap: 7px; }
+.cs-access-reset form > div { display: flex; justify-content: flex-end; gap: 8px; }
+.cs-access-reset form > div button { min-height: 42px; padding: 0 14px; border: 1px solid rgba(8,17,29,.12); border-radius: 11px; background: #fff; font: inherit; font-weight: 850; cursor: pointer; }
+.cs-access-reset form > div button:last-child { border-color: #08111d; background: #08111d; color: #fff; }
+@media (max-width: 1100px) { .cs-access-manager-hero,.cs-access-create { grid-template-columns: 1fr; } .cs-access-role-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .cs-access-account-list article { grid-template-columns: 1fr 1fr; } .cs-access-account-actions { justify-content: flex-start; } }
+@media (max-width: 680px) { .cs-access-manager { gap: 18px; } .cs-access-manager-hero { padding: 24px 18px; border-radius: 22px; } .cs-access-stats { grid-template-columns: repeat(3,minmax(0,1fr)); } .cs-access-stats article { min-height: 92px; padding: 11px; } .cs-access-stats strong { font-size: 1.45rem; } .cs-access-role-grid { display: grid; grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: min(82vw,340px); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; } .cs-access-role-grid article { min-height: 220px; scroll-snap-align: start; } .cs-access-create,.cs-access-accounts { padding: 20px 15px; border-radius: 20px; } .cs-access-create form { grid-template-columns: 1fr; } .cs-access-create label.is-wide,.cs-access-create form > button { grid-column: auto; } .cs-access-account-list article { grid-template-columns: 1fr; gap: 13px; } .cs-access-account-actions { justify-content: flex-start; } .cs-access-reset { padding: 0; place-items: end stretch; } .cs-access-reset form { width: 100%; border-radius: 24px 24px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom,0px)); } }
+@media (prefers-reduced-motion: reduce) { .cs-access-reset,.cs-access-role-grid { scroll-behavior: auto !important; } }
