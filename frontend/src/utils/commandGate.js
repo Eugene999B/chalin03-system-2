@@ -11,10 +11,42 @@ const STATION_KEY_PREFIX = "chalin03_station_mode_";
 const LAST_WORK_KEY_PREFIX = "chalin03_last_work_";
 
 const WORKSPACE_PREFIXES = {
-  spare_parts: ["/"],
+  spare_parts: ["/staff"],
   mining: ["/mining"],
   equipment_hire: ["/equipment-hire-operations"],
 };
+
+const PUBLIC_TOP_LEVEL_PATHS = new Set([
+  "about",
+  "businesses",
+  "projects",
+  "equipment",
+  "news",
+  "leadership",
+  "media",
+  "careers",
+  "locations",
+  "contact",
+  "faqs",
+  "tenders",
+  "testimonials",
+  "forms",
+  "pages",
+  "website",
+]);
+
+const SEPARATE_APPLICATION_PREFIXES = [
+  "/login",
+  "/owner-recovery",
+  "/mining",
+  "/mining-operations",
+  "/equipment-hire",
+  "/equipment-hire-operations",
+  "/equipment-installment-finance",
+  "/content-studio",
+  "/intelligence",
+  "/group-executive-control",
+];
 
 export const stationModes = {
   spare_parts: [
@@ -254,7 +286,7 @@ export function saveStationMode(workspaceCode, stationCode) {
 export function saveLastWork(workspaceCode, pathname) {
   const cleanPath = String(pathname || "").trim();
 
-  if (!cleanPath || cleanPath === "/login") {
+  if (!isWorkspacePath(workspaceCode, cleanPath)) {
     return;
   }
 
@@ -268,19 +300,28 @@ export function getLastWork(workspaceCode) {
 }
 
 export function isWorkspacePath(workspaceCode, path) {
-  const cleanPath = String(path || "");
+  const cleanPath = String(path || "").split(/[?#]/)[0];
 
   if (!cleanPath || cleanPath === "/login") {
     return false;
   }
 
   if (workspaceCode === "spare_parts") {
-    return (
-      cleanPath.startsWith("/") &&
-      !cleanPath.startsWith("/mining") &&
-      !cleanPath.startsWith("/equipment-hire-operations") &&
-      !cleanPath.startsWith("/owner-recovery")
-    );
+    if (cleanPath === "/") return false;
+    if (cleanPath === "/staff" || cleanPath.startsWith("/staff/")) return true;
+
+    const firstSegment = cleanPath.replace(/^\/+/, "").split("/")[0];
+    if (PUBLIC_TOP_LEVEL_PATHS.has(firstSegment)) return false;
+
+    if (
+      SEPARATE_APPLICATION_PREFIXES.some(
+        (prefix) => cleanPath === prefix || cleanPath.startsWith(`${prefix}/`)
+      )
+    ) {
+      return false;
+    }
+
+    return cleanPath.startsWith("/");
   }
 
   return (WORKSPACE_PREFIXES[workspaceCode] || []).some(
@@ -352,7 +393,7 @@ export function getRoleDefaultDestination(user, workspaceCode) {
     return "/audit-accounting";
   }
 
-  return "/";
+  return "/staff";
 }
 
 function canOpenStation(user, workspaceCode, stationCode) {
@@ -423,7 +464,7 @@ export function getPostLoginDestination({
 
 export function describeResumePath(path) {
   const labels = {
-    "/": "Spare Parts Dashboard",
+    "/staff": "Spare Parts Dashboard",
     "/new-sale": "New Sale",
     "/products": "Products & Stock",
     "/daily-closing": "Daily Closing",
