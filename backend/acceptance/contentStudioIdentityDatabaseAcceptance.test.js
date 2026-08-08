@@ -128,3 +128,7 @@ test(
     assert.equal(Number(migrationRecord.total), 1);
   }
 );
+
+test.after(async () => {
+  await pool.end();
+});
