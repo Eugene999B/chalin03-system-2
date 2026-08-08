@@ -25,6 +25,15 @@ const {
 const {
   searchGovernedKnowledge,
 } = require("../services/aiKnowledgeRetrievalService");
+const {
+  persistEvidence,
+  retrieveAutomaticEvidence,
+} = require("../services/aiOrchestratorService");
+const {
+  addMessage,
+  createConversation,
+  getConversationDetails,
+} = require("../services/aiConversationService");
 
 const author = Object.freeze({ id: 1, full_name: "Document Acceptance Author" });
 const reviewer = Object.freeze({ id: 2, full_name: "Document Acceptance Reviewer" });
@@ -178,6 +187,16 @@ test(
     assert.equal(hybrid.length >= 1, true);
     assert.match(hybrid[0].source_type, /^knowledge_document\./);
 
+    const automatic = await retrieveAutomaticEvidence({
+      query: "critical defect release stop",
+      persona: "copilot",
+      workspaceCode: "equipment_hire",
+      limit: 5,
+    });
+    assert.equal(automatic.length >= 1, true);
+    assert.match(automatic[0].source_type, /^knowledge_document\./);
+    assert.equal(automatic[0].metadata.document_id, document.document_id);
+
     const wrongWorkspace = await searchPublishedDocumentChunks({
       query: "critical defect release stop",
       persona: "copilot",
@@ -206,6 +225,44 @@ test(
     assert.equal(chunk.file_name, "equipment-release-procedure.md");
     assert.match(chunk.chunk_text, /signed inspection checklist/);
     assert.equal(chunk.version_status, "published");
+
+    const conversation = await createConversation({
+      persona: "copilot",
+      userId: author.id,
+      scope: { workspace_code: "equipment_hire" },
+      title: "Document Evidence Persistence Acceptance",
+    });
+    const assistantMessage = await addMessage({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: "Release stops when a critical defect remains open [E1].",
+      safetyStatus: "allowed",
+      providerKey: "mock",
+      modelKey: "mock-v1",
+      createdBy: author.id,
+    });
+    await persistEvidence({
+      messageId: assistantMessage.id,
+      evidence: [direct[0]],
+    });
+    const reopened = await getConversationDetails({
+      conversationKey: conversation.key,
+      userId: author.id,
+    });
+    assert.equal(reopened.messages.length, 1);
+    assert.equal(reopened.messages[0].evidence.length, 1);
+    assert.equal(
+      reopened.messages[0].evidence[0].metadata.document_id,
+      document.document_id
+    );
+    assert.equal(
+      reopened.messages[0].evidence[0].metadata.chunk_id,
+      direct[0].metadata.chunk_id
+    );
+    assert.match(
+      reopened.messages[0].evidence[0].metadata.citation_deep_link,
+      /\/api\/ai\/knowledge\/acceptance_document_release_manual\/documents\//
+    );
 
     const [[rawBinary]] = await pool.query(
       "SELECT COUNT(*) AS total FROM ai_knowledge_documents WHERE raw_binary_stored <> 0"
