@@ -23,6 +23,17 @@ export const CONTENT_STUDIO_PERMISSIONS = Object.freeze({
 
 export const CONTENT_STUDIO_SECTIONS = Object.freeze([
   Object.freeze({
+    key: "visual-builder",
+    label: "Visual Builder",
+    shortLabel: "Visual Builder",
+    badge: "VB",
+    description: "Compose governed pages visually with reusable sections and responsive preview.",
+    permission: CONTENT_STUDIO_PERMISSIONS.view,
+    endpoint: "/content-studio/pages",
+    group: "Content",
+    tone: "blue",
+  }),
+  Object.freeze({
     key: "pages",
     label: "Pages",
     shortLabel: "Pages",
