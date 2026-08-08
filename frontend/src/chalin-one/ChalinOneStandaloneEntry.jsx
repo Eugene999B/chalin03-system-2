@@ -8,6 +8,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
+import PublicWorldEnhancements from "./public-site/PublicWorldEnhancements";
 
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
@@ -153,6 +154,7 @@ function PublicWebsiteEntry() {
               <>
                 <PublicExperienceCompletion />
                 <PublicDetailCompanion />
+                <PublicWorldEnhancements />
                 <SafeStandalone fallback={quietFallback}>
                   <PublicCorporateWebsiteApp />
                 </SafeStandalone>
