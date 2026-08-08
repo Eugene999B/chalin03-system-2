@@ -71,12 +71,22 @@ async function setDedicatedStudioIdentity(connection, userId) {
       [userId]
     );
   }
+
   if (await columnExists(connection, "users", "category_assignment_status")) {
+    const hasConflictReason = await columnExists(
+      connection,
+      "users",
+      "category_conflict_reason"
+    );
     await connection.query(
-      `UPDATE users
-          SET category_assignment_status = 'unassigned',
-              category_conflict_reason = NULL
-        WHERE id = ?`,
+      hasConflictReason
+        ? `UPDATE users
+              SET category_assignment_status = 'unassigned',
+                  category_conflict_reason = NULL
+            WHERE id = ?`
+        : `UPDATE users
+              SET category_assignment_status = 'unassigned'
+            WHERE id = ?`,
       [userId]
     );
   }
