@@ -76,6 +76,9 @@ test("Content Studio session is an API-whitelisted authentication domain", () =>
   assert.match(authMiddleware, /req\.path/);
   assert.doesNotMatch(authMiddleware, /req\.originalUrl|req\.url/);
   assert.match(studioAccess, /const CONTENT_STUDIO_WORKSPACE_CODE = "content_studio"/);
+  assert.match(studioAccess, /function scopeForContentStudioRequest/);
+  assert.match(studioAccess, /req\?\.path/);
+  assert.doesNotMatch(studioAccess, /req\?\.originalUrl|req\?\.url/);
   assert.match(studioAccess, /\/api\/content-studio-auth\/me/);
   assert.match(studioAccess, /\/api\/content-studio-auth\/change-password/);
   assert.match(studioAccess, /\/api\/auth\/logout/);
