@@ -1,0 +1,51 @@
+/* CHALIN ONE public boot polish.
+   The public website must never feel like an operational app repeatedly booting.
+   Keep the shell stable while governed bootstrap data hydrates in the background. */
+
+.c1-page-loading {
+  min-height: calc(100svh - 84px);
+  opacity: 0;
+  animation: c1-public-loader-reveal .18s ease 1.15s forwards;
+}
+
+/* Never show the old dramatic "Opening the CHALIN ONE universe" copy. */
+.c1-page-loading .c1-state > strong,
+.c1-page-loading .c1-state > span:not(.c1-state-orbit) {
+  display: none !important;
+}
+
+.c1-page-loading .c1-state {
+  min-height: inherit;
+  display: grid;
+  place-items: start stretch;
+  padding: 0;
+  background:
+    linear-gradient(90deg, rgba(240,189,53,.92), rgba(122,214,255,.9), rgba(240,189,53,.92))
+    top left / 34% 2px no-repeat,
+    transparent;
+  animation: c1-public-quiet-progress 1.25s linear infinite;
+}
+
+.c1-page-loading .c1-state-orbit {
+  display: none !important;
+}
+
+@keyframes c1-public-loader-reveal {
+  to { opacity: 1; }
+}
+
+@keyframes c1-public-quiet-progress {
+  from { background-position: -40% 0; }
+  to { background-position: 140% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1-page-loading {
+    animation: c1-public-loader-reveal 0s linear 1.15s forwards;
+  }
+
+  .c1-page-loading .c1-state {
+    animation: none;
+    background-size: 100% 2px;
+  }
+}
