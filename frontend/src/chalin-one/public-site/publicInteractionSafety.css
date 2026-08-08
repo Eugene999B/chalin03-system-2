@@ -1,0 +1,54 @@
+/* Phase 1C interaction safety: keep public controls separated on touch layouts. */
+
+@media (max-width: 760px) {
+  /* The mobile dock already contains the primary Start action. Keeping the
+     desktop floating Start Here button on top of it creates a duplicated and
+     visually colliding control. */
+  .c1-signal-dock {
+    display: none !important;
+  }
+
+  /* Keep the two secondary floating controls balanced above the dock. */
+  .c1-mobile-discovery-trigger {
+    right: 14px !important;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    z-index: 116 !important;
+  }
+
+  .c1-detail-companion-trigger {
+    left: 14px !important;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    z-index: 117 !important;
+  }
+
+  .c1-mobile-public-dock {
+    z-index: 120 !important;
+  }
+
+  .c1-deep-page {
+    padding-bottom: calc(94px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .c1-mobile-discovery-trigger,
+  .c1-detail-companion-trigger {
+    min-height: 42px;
+    max-width: 132px;
+  }
+
+  .c1-mobile-discovery-trigger strong,
+  .c1-detail-companion-trigger strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1-mobile-discovery-trigger,
+  .c1-detail-companion-trigger,
+  .c1-mobile-public-dock {
+    transition: none !important;
+  }
+}
