@@ -3,6 +3,10 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const {
+  requireContentStudioSession,
+} = require("../middleware/contentStudioAccessMiddleware");
+const { loginLimiter } = require("../middleware/securityMiddleware");
 const { getPublicPermissionCatalog } = require("../security/permissionCatalog");
 const { getSmsConfig } = require("../services/smsService");
 const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");
@@ -19,6 +23,7 @@ const {
   MERGE_FREEZE_MESSAGE,
 } = require("./customerMergeRecoveryRoutes");
 const aiRoutes = require("./aiRoutes");
+const contentStudioAuthRoutes = require("./contentStudioAuthRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
 
@@ -61,6 +66,10 @@ const EXPECTED_TABLES = Object.freeze([
   "hire_invoices",
   "hire_payments",
   "hire_return_inspections",
+  "content_studio_roles",
+  "content_studio_role_permissions",
+  "content_studio_role_scopes",
+  "content_studio_user_access",
 ]);
 
 function appVersion() {
@@ -253,7 +262,6 @@ router.get("/health", (req, res) => {
   });
 });
 
-// Anonymous clients receive only flags explicitly classified as public.
 router.get("/features/public", (req, res) => {
   disableFeatureStatusCaching(res);
 
@@ -265,8 +273,6 @@ router.get("/features/public", (req, res) => {
   });
 });
 
-// Authenticated staff may load the complete effective flag snapshot. This
-// reveals no environment-variable values, secrets or configuration metadata.
 router.get("/features/staff", requireAuth, (req, res) => {
   disableFeatureStatusCaching(res);
 
@@ -278,27 +284,31 @@ router.get("/features/staff", requireAuth, (req, res) => {
   });
 });
 
-// The public website API is anonymous but completely disabled unless the
-// publicWebsite feature flag is effective. The feature gate runs before any
-// database query or route-specific rate limiter.
 router.use(
   "/public/content",
   requireFeature("publicWebsite"),
   publicContentRoutes
 );
 
-// Content Studio is hidden while disabled, then requires an authenticated
-// staff session. Individual routes apply their own capability permissions.
+// Content Studio owns its authentication domain. Login is feature-gated and
+// rate-limited but does not require an operational Staff session.
+router.use("/content-studio-auth/login", loginLimiter);
+router.use(
+  "/content-studio-auth",
+  requireFeature("contentStudio"),
+  contentStudioAuthRoutes
+);
+
+// Every Content Studio manager requires an authenticated content_studio
+// session. Ordinary Spare Parts, Mining and Equipment sessions cannot enter.
 router.use(
   "/content-studio",
   requireFeature("contentStudio"),
   requireAuth,
+  requireContentStudioSession,
   contentStudioRoutes
 );
 
-// CHALIN ONE intelligence remains completely hidden unless the master AI
-// emergency switch is effective. Staff must also pass authentication, the
-// existing workspace permission, persona flags and AI-specific permissions.
 router.use(
   "/ai",
   requireFeature("aiEnabled"),
