@@ -27,6 +27,9 @@ const REQUIRED_DISABLED_FLAGS = Object.freeze([
   "FEATURE_AI_SCHEDULED_JOBS",
 ]);
 
+const RAILWAY_DEFAULT_DATABASE_NAME = "railway";
+const RAILWAY_STAGING_ISOLATION_CONFIRMATION = "RAILWAY_DEDICATED_STAGING_MYSQL";
+
 class ChalinOneFullStagingSafetyError extends Error {
   constructor(message, code = "CHALIN_ONE_FULL_STAGING_UNSAFE") {
     super(message);
@@ -146,13 +149,21 @@ function validateFullStagingEnvironment(env = process.env, options = {}) {
   }
 
   const databaseName = clean(env.DB_NAME || env.MYSQLDATABASE || env.MYSQL_DATABASE);
-  if (!STAGING_DATABASE_PATTERN.test(databaseName)) {
+  const databaseHost = clean(env.DB_HOST || env.MYSQLHOST || env.MYSQL_HOST);
+  const usesNamedStagingDatabase = STAGING_DATABASE_PATTERN.test(databaseName);
+  const usesDedicatedRailwayDefaultDatabase =
+    databaseName.toLowerCase() === RAILWAY_DEFAULT_DATABASE_NAME &&
+    railwayEnvironment === "staging" &&
+    clean(env.CHALIN_ONE_STAGING_DATABASE_ISOLATION) === RAILWAY_STAGING_ISOLATION_CONFIRMATION &&
+    /\.railway\.internal$/i.test(databaseHost);
+
+  if (!usesNamedStagingDatabase && !usesDedicatedRailwayDefaultDatabase) {
     unsafe(
-      "Staging database name must match chalin_one_staging or chalin_one_staging_<name>.",
+      "Staging must use a chalin_one_staging database, or Railway's default database only when it is the dedicated internal MySQL service in the staging environment and the exact isolation confirmation is set.",
       "CHALIN_ONE_FULL_STAGING_DATABASE_NOT_ISOLATED"
     );
   }
-  if (!clean(env.DB_HOST || env.MYSQLHOST || env.MYSQL_HOST)) {
+  if (!databaseHost) {
     unsafe("A staging database host is required.", "CHALIN_ONE_FULL_STAGING_DATABASE_HOST_REQUIRED");
   }
 
@@ -255,6 +266,8 @@ module.exports = {
   ChalinOneFullStagingSafetyError,
   REQUIRED_DISABLED_FLAGS,
   REQUIRED_ENABLED_FLAGS,
+  RAILWAY_DEFAULT_DATABASE_NAME,
+  RAILWAY_STAGING_ISOLATION_CONFIRMATION,
   assertFeatures,
   assertMigrationGatesClosed,
   assertProvider,
