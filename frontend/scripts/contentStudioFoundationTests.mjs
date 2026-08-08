@@ -33,9 +33,10 @@ function check(name, callback) {
   console.log(`✓ ${name}`);
 }
 
-check("model contains every first-release Content Studio manager", () => {
+check("model contains every governed Content Studio manager", () => {
   const keys = model.CONTENT_STUDIO_SECTIONS.map((section) => section.key);
   assert.deepEqual(keys, [
+    "visual-builder",
     "pages",
     "newsroom",
     "leadership",
@@ -49,6 +50,11 @@ check("model contains every first-release Content Studio manager", () => {
     "navigation",
     "settings",
   ]);
+  const visualBuilder = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "visual-builder"
+  );
+  assert.equal(visualBuilder.permission, "public_content.view");
+  assert.equal(visualBuilder.endpoint, "/content-studio/pages");
 });
 
 check("access helpers fail closed and filter by backend permission", () => {
@@ -102,6 +108,7 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /isContentStudioWorkspace/);
   assert.match(workspaceSource, /contentStudioScopes/);
   assert.match(workspaceSource, /SECTION_SCOPES/);
+  assert.match(workspaceSource, /"visual-builder": "pages"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
   assert.match(modelSource, /public_content\.view/);
   assert.match(workspaceSource, /CONTENT_STUDIO_PERMISSIONS\.view/);
@@ -119,6 +126,7 @@ check("requests are abortable and permission changes reset inaccessible modules"
 
 check("workspace maps every manager without direct routing or token bypass", () => {
   for (const manager of [
+    "ContentStudioVisualBuilder",
     "ContentStudioPageManager",
     "ContentStudioNewsroomManager",
     "ContentStudioLeadershipManager",
@@ -163,10 +171,12 @@ check("design system includes required professional status colors", () => {
 
 check("package barrel exposes the complete Content Studio package", () => {
   assert.match(indexSource, /ContentStudioWorkspace/);
+  assert.match(indexSource, /ContentStudioVisualBuilder/);
   assert.match(indexSource, /ContentStudioMediaManager/);
   assert.match(indexSource, /ContentStudioFormManager/);
   assert.match(indexSource, /ContentStudioApprovalInbox/);
   assert.match(indexSource, /contentStudioOperationsApi/);
+  assert.match(indexSource, /contentStudioVisualBuilderModel/);
   assert.match(indexSource, /contentStudioModel/);
 });
 
