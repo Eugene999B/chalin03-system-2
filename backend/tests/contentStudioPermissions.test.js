@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   ALL_PERMISSIONS,
@@ -20,26 +22,35 @@ const {
   validateOverridePolicy,
 } = require("../services/permissionOverrideService");
 
+const repoRoot = path.resolve(__dirname, "../..");
+const studioMigration = fs.readFileSync(
+  path.join(repoRoot, "database/migrations/20260808_chalin_one_content_studio_identity.sql"),
+  "utf8"
+);
+
 const WORKSPACES = ["spare_parts", "mining", "equipment_hire"];
 
-test("every Content Studio capability is registered centrally in every workspace", () => {
+test("every Content Studio capability remains registered centrally", () => {
   assert.equal(CONTENT_STUDIO_PERMISSIONS.length, 20);
 
   for (const permission of CONTENT_STUDIO_PERMISSIONS) {
     assert.equal(ALL_PERMISSIONS.includes(permission), true, permission);
     assert.equal(isContentStudioPermission(permission), true, permission);
 
+    // The legacy catalog still knows the capability names so existing route
+    // middleware remains stable, but Phase 2A no longer exposes these through
+    // the operational permission manager or operational override resolution.
     for (const workspace of WORKSPACES) {
       assert.equal(
         permissionsForWorkspace(workspace).includes(permission),
         true,
-        `${permission} missing from ${workspace}`
+        `${permission} missing from central catalog for ${workspace}`
       );
     }
   }
 });
 
-test("administrators receive Content Studio permissions but ordinary staff do not automatically", () => {
+test("legacy role catalog remains backward compatible while ordinary staff have no Studio defaults", () => {
   const adminPermissions = getEffectivePermissions({
     id: 9,
     username: "category-admin",
@@ -70,7 +81,7 @@ test("administrators receive Content Studio permissions but ordinary staff do no
   assert.equal(staffPermissions.includes("public_media.manage"), false);
 });
 
-test("existing permission overrides can deliberately grant and deny Content Studio access", () => {
+test("low-level override reducer still handles generic allow and deny records deterministically", () => {
   const base = ["workspace.view"];
   const granted = applyPermissionOverrides(base, [
     {
@@ -96,72 +107,69 @@ test("existing permission overrides can deliberately grant and deny Content Stud
   assert.equal(denied.includes("public_content.edit"), false);
 });
 
-test("editorial permissions may be granted deliberately to non-admin staff", () => {
-  const policy = validateOverridePolicy({
-    targetUser: {
+test("operational permission overrides cannot grant Content Studio capabilities", () => {
+  for (const targetUser of [
+    {
       id: 20,
       username: "communications-officer",
       role: "staff",
     },
-    permissionCode: "public_content.edit",
-    effect: "allow",
-    workspaceCode: "spare_parts",
-  });
+    {
+      id: 22,
+      username: "operational-admin",
+      role: "admin",
+    },
+  ]) {
+    const policy = validateOverridePolicy({
+      targetUser,
+      permissionCode: "public_content.edit",
+      effect: "allow",
+      workspaceCode: "spare_parts",
+    });
 
-  assert.equal(policy.ok, true);
-  assert.equal(policy.effect, "allow");
+    assert.equal(policy.ok, false);
+    assert.equal(policy.code, "CONTENT_STUDIO_PERMISSION_DOMAIN_SEPARATE");
+  }
 });
 
-test("website-wide settings management remains administrator-only", () => {
+test("website-wide settings management belongs to the Studio role system", () => {
   assert.deepEqual(CONTENT_STUDIO_PROTECTED_GRANTS, [
     "public_settings.manage",
   ]);
   assert.equal(ADMIN_ONLY_GRANTS.includes("public_settings.manage"), true);
 
-  const staffPolicy = validateOverridePolicy({
-    targetUser: {
-      id: 21,
-      username: "communications-officer",
-      role: "staff",
-    },
-    permissionCode: "public_settings.manage",
-    effect: "allow",
-    workspaceCode: "spare_parts",
-  });
-  assert.equal(staffPolicy.ok, false);
-  assert.equal(staffPolicy.code, "ADMIN_PERMISSION_PROTECTED");
+  for (const role of ["staff", "admin"]) {
+    const policy = validateOverridePolicy({
+      targetUser: {
+        id: role === "admin" ? 22 : 21,
+        username: `${role}-operator`,
+        role,
+      },
+      permissionCode: "public_settings.manage",
+      effect: "allow",
+      workspaceCode: "spare_parts",
+    });
+    assert.equal(policy.ok, false);
+    assert.equal(policy.code, "CONTENT_STUDIO_PERMISSION_DOMAIN_SEPARATE");
+  }
 
-  const adminPolicy = validateOverridePolicy({
-    targetUser: {
-      id: 22,
-      username: "content-admin",
-      role: "admin",
-    },
-    permissionCode: "public_settings.manage",
-    effect: "allow",
-    workspaceCode: "spare_parts",
-  });
-  assert.equal(adminPolicy.ok, true);
+  assert.match(
+    studioMigration,
+    /WHERE r\.role_code = 'content_administrator';/
+  );
+  assert.match(studioMigration, /SELECT 'public_settings\.manage'/);
 });
 
-test("permission manager groups Content Studio capabilities clearly", () => {
+test("operational permission manager excludes Content Studio capabilities", () => {
   const descriptors = buildPermissionDescriptors("spare_parts");
-  const byCode = new Map(descriptors.map((item) => [item.code, item]));
+  const codes = new Set(descriptors.map((item) => item.code));
 
-  assert.equal(
-    byCode.get("public_content.publish")?.category,
-    "Content Studio — Content"
-  );
-  assert.equal(
-    byCode.get("public_media.manage")?.category,
-    "Content Studio — Media"
-  );
-  assert.equal(
-    byCode.get("public_submissions.respond")?.category,
-    "Content Studio — Enquiries"
-  );
-  assert.equal(
-    byCode.get("public_settings.manage")?.admin_only_grant,
-    true
-  );
+  for (const permission of CONTENT_STUDIO_PERMISSIONS) {
+    assert.equal(
+      codes.has(permission),
+      false,
+      `${permission} must be managed through Content Studio roles instead`
+    );
+  }
+  assert.equal(codes.has("workspace.view"), true);
 });
