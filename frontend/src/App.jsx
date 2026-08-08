@@ -185,7 +185,7 @@ function LegacyWorkspaceRedirect({ target }) {
     return <Navigate to={`/equipment-hire-operations/${target}`} replace />;
   }
 
-  return <Navigate to="/" replace />;
+  return <Navigate to="/staff" replace />;
 }
 
 export default function App() {
@@ -209,6 +209,7 @@ export default function App() {
             }
           >
             <Route index element={<SparePartsHomePage />} />
+            <Route path="staff" element={<SparePartsHomePage />} />
 
             <Route
               path="products"
