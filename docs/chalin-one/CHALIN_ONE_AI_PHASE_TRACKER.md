@@ -1,13 +1,14 @@
 # CHALIN ONE AI Phase Tracker
 
 **Branch:** `chalin-one`  
-**Last updated:** August 7, 2026  
+**Last updated:** August 8, 2026  
 **Production flags:** Disabled  
 **Live provider:** Disabled  
 **Production migration:** Not run  
 **Deployment:** Not performed  
-**Latest green source commit:** `c7758b2cea55c9e244385cad12fc375d5dc22b96`  
-**Latest green CI run:** `31210633268`  
+**Latest green source commit:** `a30a2c63acf37bf7c0d7460e2985f01b4ef610c3`  
+**Latest green CI run:** `31245078786`  
+**Green automatic-citation baseline:** `f09e2df0b9ef3d45118ad77d7c5590b40b56f34c` / `31244763786`  
 **Green Phase 9 baseline:** `ced97c58673e28be8599da2dec6e4a087540f955` / `31208580817`
 
 Legend:
@@ -87,41 +88,54 @@ Legend:
 - [x] Workspace ownership enforcement.
 - [x] Governed document-ingestion schema bound to exact knowledge source/version records.
 - [x] Additive `ai_knowledge_documents` and `ai_knowledge_chunks` tables.
-- [x] Raw binary storage is structurally forbidden by schema and runtime checks.
+- [x] Raw binary storage structurally forbidden by schema and runtime checks.
 - [x] Guarded document-intelligence migration runner with isolated non-production target restriction and production dual-backup gates.
 - [x] Built-in parsers for TXT, Markdown, CSV, JSON, HTML and XML.
-- [x] Maximum governed ingestion size of 2 MB per supported text document.
-- [x] UTF-8 validation, HTML script/style removal and JSON validation before chunking.
-- [x] Draft-only ingestion so independent review covers the exact parsed document content.
+- [x] Hardened DOCX text parser using the already-installed ZIP stack.
+- [x] DOCX parser accepts only in-memory binary input and stores extracted text/chunks only.
+- [x] DOCX macro, ActiveX and embedded-object content blocked.
+- [x] DOCX external-file access, image extraction and OCR disabled.
+- [x] DOCX archive-entry, text-part, compressed-input and declared/actual expanded-XML limits.
+- [x] Maximum governed ingestion size of 2 MB for supported documents.
+- [x] UTF-8 validation, HTML script/style removal and JSON validation before text-document chunking.
+- [x] Draft-only ingestion so independent review covers the exact parsed content.
 - [x] Deterministic overlapping chunking with character offsets, line ranges, heading paths, chunk checksums and token estimates.
 - [x] Provider-independent local `local_hash_v1` vector fingerprints with deterministic cosine + query-token coverage ranking.
-- [x] Hybrid `knowledge.search` tool ranks published document chunks first and falls back to the existing governed-text search.
+- [x] Hybrid `knowledge.search` ranks published document chunks first and falls back to governed text.
+- [x] Copilot/Executive automatic pre-answer evidence retrieval now ranks published document chunks before legacy whole-body evidence.
+- [x] Automatic retrieval suppresses duplicate whole-source fallback when the same source is already represented by document chunks.
 - [x] Retrieval remains limited to published, currently effective content visible to the active persona/workspace.
 - [x] Precise document evidence includes document key, file name, chunk index, line range, chunk checksum, retrieval model/score and exact citation API deep link.
 - [x] Read-only chunk-list and exact-chunk review APIs.
+- [x] Saved/reopened staff conversations restore persisted `ai_evidence_records` with document/chunk metadata.
 - [x] Staff Document Intelligence page at `/intelligence/documents`.
 - [x] Permission-aware Document Intelligence launcher inside the Intelligence workspace.
 - [x] Staff page supports source/version selection, supported-file ingestion, parser/checksum metadata and exact chunk/line preview.
+- [x] Chat document evidence exposes an `Open exact governed chunk` deep link.
+- [x] Deep links select the exact governed source/document/chunk and scroll/focus the cited chunk after navigation or page reload.
 - [x] Responsive desktop/tablet/mobile source layout and reduced-motion support.
-- [-] PDF binary parser adapter remains pending.
-- [-] DOCX binary parser adapter remains pending.
+- [-] PDF parser adapter remains deliberately disabled pending a pinned parser/runtime compatibility decision.
 - [-] Image OCR pipeline remains pending.
 - [-] External semantic embedding/vector provider remains deliberately unregistered; current retrieval is local deterministic hashed-vector retrieval.
-- [-] Chat evidence metadata contains exact citation API deep links; dedicated clickable citation rendering inside the chat UI remains a later browser/UI polish item.
 
 ### Runtime acceptance
 
-- [x] Frontend Document Intelligence source contract passed.
+- [x] Frontend Document Intelligence and citation-navigation source contracts passed.
 - [x] Complete CHALIN ONE JSX compilation passed.
 - [x] Production-mode frontend build passed.
 - [x] Full backend unit/security suite passed.
 - [x] Additive migration safety gate passed.
 - [x] Document-intelligence migration ran twice successfully against isolated MySQL.
 - [x] Real isolated-MySQL acceptance exercised draft source → document ingestion/chunking → independent reviewer → separate publisher → published document retrieval.
+- [x] Automatic pre-answer document retrieval passed real isolated-MySQL acceptance.
+- [x] Persisted document evidence survived conversation reopen with exact document/chunk/deep-link metadata.
 - [x] Wrong-workspace document retrieval denial passed.
 - [x] Public Guide exclusion of workspace-only ingested documents passed.
 - [x] Exact chunk lookup and no-raw-binary invariant passed.
-- [x] Exact document-intelligence source commit `c7758b2cea55c9e244385cad12fc375d5dc22b96` is fully green in CI run `31210633268`.
+- [x] Hardened DOCX unit tests generated real ZIP/DOCX containers and validated text extraction, active-content rejection and archive limits.
+- [x] Real isolated-MySQL DOCX acceptance exercised draft-only binary ingestion → independent review → separate publish → published chunk retrieval.
+- [x] Automatic-citation source commit `f09e2df0b9ef3d45118ad77d7c5590b40b56f34c` is fully green in CI run `31244763786`.
+- [x] DOCX source commit `a30a2c63acf37bf7c0d7460e2985f01b4ef610c3` is fully green in CI run `31245078786`.
 - [-] Desktop/mobile browser evidence with real accounts remains pending.
 
 ## Phase 9 — Chalin Copilot and Executive
@@ -210,6 +224,7 @@ Legend:
 - [x] Public rate-limit and privacy controls.
 - [x] Public website Guide surface/widget foundation.
 - [x] Safety rule forbidding claims of execution, approval or completion of business actions.
+- [-] Public Guide still uses the governed legacy public-text retrieval path; direct public document-chunk ranking is the next Guide retrieval upgrade.
 - [-] Human enquiry handoff/domain guidance coverage needs staging verification and expansion.
 - [-] Abuse/privacy/anonymous browser acceptance pending.
 - [-] Real published-content guidance quality acceptance pending.
@@ -270,7 +285,8 @@ The three portal feature flags remain false.
 - [x] Isolated MySQL CI expanded.
 - [x] Frontend source contracts expanded.
 - [x] Visible green GitHub CI for exact Phase 9 source commit `ced97c58673e28be8599da2dec6e4a087540f955` in run `31208580817`.
-- [x] Visible green GitHub CI for exact Phase 8 document-intelligence source commit `c7758b2cea55c9e244385cad12fc375d5dc22b96` in run `31210633268`.
+- [x] Visible green GitHub CI for automatic document retrieval/citation commit `f09e2df0b9ef3d45118ad77d7c5590b40b56f34c` in run `31244763786`.
+- [x] Visible green GitHub CI for hardened DOCX source commit `a30a2c63acf37bf7c0d7460e2985f01b4ef610c3` in run `31245078786`.
 - [ ] Isolated staging AI migration twice.
 - [ ] Staging provider acceptance.
 - [ ] Desktop/mobile browser evidence with real accounts.
@@ -290,6 +306,8 @@ The three portal feature flags remain false.
 
 ## Current truthful status
 
-CHALIN ONE Phase 9 remains source-complete and CI-proven, and the Phase 8 document-intelligence source block is now also CI-proven. Governed TXT/Markdown/CSV/JSON/HTML/XML documents can be ingested only into an editable knowledge draft, parsed without storing raw binary, chunked with precise locators, independently reviewed/published through the existing knowledge governance flow, and retrieved using the provider-independent `local_hash_v1` ranking layer with exact citation metadata. The staff review surface is available at `/intelligence/documents` in source.
+CHALIN ONE Phase 9 remains source-complete and CI-proven. Phase 8 now includes governed TXT/Markdown/CSV/JSON/HTML/XML and hardened DOCX ingestion, deterministic local chunk retrieval, automatic Copilot/Executive document evidence, persisted citations after conversation reopen, and click-through navigation to the exact governed document chunk. DOCX binary input is parsed in memory, active content is rejected, raw binary is not stored, and the extracted text remains subject to the existing independent review and separate publication workflow.
 
-PDF, DOCX and image OCR parser adapters and an external semantic embedding/vector provider are **not** claimed complete. Staging/browser/live-provider acceptance, backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled, and no production database migration or deployment has been performed.
+PDF and image OCR remain deliberately disabled. Current PDF parser candidates impose a stricter Node runtime floor than CHALIN presently declares, so PDF support is not claimed until runtime compatibility and a reproducible pinned dependency are proven. External semantic embeddings remain unregistered because local deterministic `local_hash_v1` retrieval is already available.
+
+Staging/browser/live-provider acceptance, public Guide document-chunk ranking, full-system backup/restore rehearsal and explicit production authorization remain outstanding. Production feature flags remain disabled, and no production database migration or deployment has been performed.
