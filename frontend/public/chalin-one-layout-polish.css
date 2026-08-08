@@ -1,0 +1,761 @@
+/* CHALIN ONE Phase One responsive experience polish.
+   Loaded globally but scoped entirely to .c1-site / CHALIN ONE surfaces. */
+
+@media (min-width: 1181px) {
+  .c1-site {
+    --c1-max: 1440px;
+    --c1-pad: clamp(28px, 3.5vw, 58px);
+  }
+
+  .c1-header {
+    min-height: 78px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    gap: 30px;
+  }
+
+  .c1-brand img {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+  }
+
+  .c1-nav {
+    gap: 5px;
+  }
+
+  .c1-nav a {
+    padding-inline: 11px;
+    font-size: .73rem;
+    letter-spacing: .005em;
+  }
+
+  .c1-hero {
+    min-height: min(880px, calc(100vh - 78px));
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  }
+
+  .c1-hero-copy {
+    max-width: 1120px;
+    padding-left: max(76px, calc((100vw - var(--c1-max)) / 2));
+    padding-bottom: 92px;
+  }
+
+  .c1-hero h1 {
+    max-width: 1040px;
+    font-size: clamp(4.7rem, 7vw, 8.1rem);
+    line-height: .88;
+  }
+
+  .c1-hero-copy > p {
+    max-width: 660px;
+    font-size: 1.03rem;
+  }
+
+  .c1-intent-section,
+  .c1-section,
+  .c1-stats,
+  .c1-editorial-grid,
+  .c1-content-split,
+  .c1-business-directory,
+  .c1-collection,
+  .c1-detail-layout,
+  .c1-contact-layout,
+  .c1-published-body,
+  .c1-media-mosaic,
+  .c1-footer-top,
+  .c1-footer-bottom,
+  .c1-footer-statement {
+    width: min(var(--c1-max), calc(100% - 80px));
+  }
+
+  .c1-section {
+    padding-top: clamp(92px, 8vw, 132px);
+    padding-bottom: clamp(92px, 8vw, 132px);
+  }
+
+  .c1-section-heading {
+    align-items: end;
+    margin-bottom: 54px;
+  }
+
+  .c1-section-heading h2 {
+    max-width: 880px;
+    font-size: clamp(3.5rem, 5vw, 6.3rem);
+  }
+
+  .c1-intent-grid {
+    gap: 12px;
+  }
+
+  .c1-intent-grid > a {
+    border-radius: 18px;
+    overflow: hidden;
+    transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease;
+  }
+
+  .c1-intent-grid > a:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 24px 60px rgba(4, 13, 22, .11);
+  }
+
+  .c1-business-grid {
+    gap: 10px;
+    background: transparent;
+  }
+
+  .c1-business-card {
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 22px;
+    overflow: hidden;
+  }
+
+  .c1-business-card:nth-child(2) {
+    transform: translateY(34px);
+  }
+
+  .c1-business-section {
+    padding-bottom: calc(clamp(92px, 8vw, 132px) + 34px);
+  }
+
+  .c1-project-showcase,
+  .c1-project-empty-showcase {
+    gap: 10px;
+    background: transparent;
+  }
+
+  .c1-project,
+  .c1-project-empty-showcase article {
+    border-radius: 20px;
+  }
+
+  .c1-equipment-strip {
+    gap: 12px;
+    background: transparent;
+    padding-bottom: 10px;
+  }
+
+  .c1-equipment-strip > a {
+    border: 1px solid var(--c1-line);
+    border-radius: 18px;
+  }
+
+  .c1-news-grid {
+    gap: 12px;
+    background: transparent;
+  }
+
+  .c1-news-grid > a {
+    border: 1px solid var(--c1-line);
+    border-radius: 18px;
+  }
+
+  .c1-operating-model {
+    margin-inline: auto;
+    width: min(1600px, 100%);
+  }
+
+  .c1-final-stage {
+    min-height: 650px;
+  }
+}
+
+@media (min-width: 1500px) {
+  .c1-hero-copy {
+    padding-left: max(90px, calc((100vw - 1440px) / 2));
+  }
+
+  .c1-compass {
+    left: max(0px, calc((100vw - 1720px) / 2));
+  }
+}
+
+@media (max-width: 1180px) {
+  .c1-header {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .c1-menu-button {
+    grid-column: 4;
+  }
+
+  .c1-nav {
+    z-index: 130;
+    box-shadow: 0 28px 60px rgba(0,0,0,.24);
+  }
+}
+
+@media (max-width: 900px) {
+  .c1-site {
+    --c1-mobile-gutter: 18px;
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .c1-header {
+    position: sticky;
+    top: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    min-height: 68px;
+    padding: 9px 14px;
+    background: rgba(5, 8, 13, .96);
+  }
+
+  .c1-brand {
+    gap: 9px;
+  }
+
+  .c1-brand img {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  .c1-brand b {
+    font-size: .9rem;
+  }
+
+  .c1-nav {
+    position: fixed;
+    inset: 68px 10px auto 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    max-height: calc(100dvh - 88px);
+    padding: 10px;
+    overflow: auto;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 90% 0, rgba(45,127,184,.16), transparent 26%),
+      rgba(5, 8, 13, .985);
+    box-shadow: 0 32px 90px rgba(0,0,0,.42);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-10px) scale(.985);
+    transform-origin: top;
+    transition: opacity .2s ease, transform .2s ease, visibility .2s ease;
+  }
+
+  .c1-nav[data-open="true"] {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+
+  .c1-nav a {
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    color: rgba(255,255,255,.82);
+    font-size: .92rem;
+    letter-spacing: -.01em;
+  }
+
+  .c1-nav a::after {
+    content: "↗";
+    color: rgba(255,255,255,.3);
+    font-size: .8rem;
+  }
+
+  .c1-nav a:last-child {
+    border-bottom: 0;
+  }
+
+  .c1-menu-button,
+  .c1-access-staff {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .c1-menu-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .c1-access-staff {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .c1-hero {
+    min-height: min(760px, calc(100svh - 68px));
+    border-radius: 0 0 26px 26px;
+  }
+
+  .c1-hero-copy {
+    padding: 84px var(--c1-mobile-gutter) 64px;
+  }
+
+  .c1-hero h1 {
+    max-width: 760px;
+    font-size: clamp(3.8rem, 12.5vw, 6.5rem);
+    line-height: .86;
+    letter-spacing: -.07em;
+  }
+
+  .c1-hero-copy > p {
+    max-width: 590px;
+    font-size: .96rem;
+  }
+
+  .c1-hero-actions {
+    gap: 8px;
+  }
+
+  .c1-hero-actions .c1-button {
+    min-height: 52px;
+  }
+
+  .c1-newsline {
+    min-height: 58px;
+  }
+
+  .c1-intent-section,
+  .c1-section {
+    width: 100%;
+    padding: 72px 0;
+  }
+
+  .c1-intent-heading,
+  .c1-section-heading {
+    width: calc(100% - (var(--c1-mobile-gutter) * 2));
+    margin-inline: auto;
+  }
+
+  .c1-intent-grid,
+  .c1-business-grid,
+  .c1-project-showcase,
+  .c1-project-empty-showcase,
+  .c1-news-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: min(82vw, 430px);
+    gap: 12px;
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--c1-mobile-gutter);
+    padding: 6px var(--c1-mobile-gutter) 18px;
+    background: transparent;
+    scrollbar-width: none;
+  }
+
+  .c1-intent-grid::-webkit-scrollbar,
+  .c1-business-grid::-webkit-scrollbar,
+  .c1-project-showcase::-webkit-scrollbar,
+  .c1-project-empty-showcase::-webkit-scrollbar,
+  .c1-news-grid::-webkit-scrollbar,
+  .c1-equipment-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .c1-intent-grid > a,
+  .c1-business-card,
+  .c1-project,
+  .c1-project-empty-showcase article,
+  .c1-news-grid > a,
+  .c1-news-grid > a.is-featured {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .c1-intent-grid > a {
+    min-height: 220px;
+  }
+
+  .c1-business-grid {
+    min-height: 0;
+  }
+
+  .c1-business-card {
+    min-height: 520px;
+    border: 1px solid rgba(255,255,255,.1);
+  }
+
+  .c1-business-card + .c1-business-card {
+    border-left: 1px solid rgba(255,255,255,.1);
+  }
+
+  .c1-project-showcase,
+  .c1-project-empty-showcase {
+    min-height: 0;
+  }
+
+  .c1-project,
+  .c1-project-empty-showcase article {
+    min-height: 430px;
+  }
+
+  .c1-project-1 {
+    grid-row: auto;
+  }
+
+  .c1-news-grid > a,
+  .c1-news-grid > a.is-featured {
+    min-height: 500px;
+  }
+
+  .c1-operating-intro {
+    min-height: 420px;
+    padding: 64px var(--c1-mobile-gutter);
+  }
+
+  .c1-operating-panels {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: min(82vw, 420px);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .c1-operating-panels::-webkit-scrollbar {
+    display: none;
+  }
+
+  .c1-operating-panels article {
+    min-height: 300px;
+    scroll-snap-align: start;
+  }
+
+  .c1-equipment-band {
+    padding: 72px 0;
+  }
+
+  .c1-equipment-band-head {
+    width: calc(100% - (var(--c1-mobile-gutter) * 2));
+    margin-inline: auto;
+  }
+
+  .c1-equipment-strip {
+    grid-auto-columns: min(80vw, 390px);
+    gap: 12px;
+    padding: 4px var(--c1-mobile-gutter) 18px;
+    background: transparent;
+    scrollbar-width: none;
+  }
+
+  .c1-equipment-strip > a {
+    min-height: 500px;
+    border: 1px solid var(--c1-line);
+    border-radius: 20px;
+  }
+
+  .c1-leadership-feature {
+    margin: 0 var(--c1-mobile-gutter);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  .c1-leadership-image {
+    min-height: 470px;
+  }
+
+  .c1-location-band {
+    margin-top: 20px;
+  }
+
+  .c1-final-stage {
+    margin: 12px;
+    border-radius: 26px;
+    overflow: hidden;
+  }
+
+  .c1-page-hero {
+    min-height: 500px;
+    border-radius: 0 0 24px 24px;
+  }
+
+  .c1-page-hero-copy {
+    padding-bottom: 58px;
+  }
+
+  .c1-collection-card {
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .c1-signal-dock {
+    right: 50%;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(50%);
+    min-width: 128px;
+    width: auto;
+    height: 50px;
+    padding: 6px 6px 6px 14px;
+    border-color: rgba(255,255,255,.16);
+    box-shadow: 0 18px 46px rgba(0,0,0,.3);
+  }
+
+  .c1-signal-dock span {
+    display: inline;
+    font-size: .54rem;
+  }
+
+  .c1-signal-dock b {
+    width: 36px;
+    height: 36px;
+  }
+
+  .c1-navigator {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .c1-navigator-panel {
+    width: 100%;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    padding: max(24px, env(safe-area-inset-top, 0px)) 18px calc(24px + env(safe-area-inset-bottom, 0px));
+    border: 0;
+    border-radius: 0;
+  }
+
+  .c1-navigator-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    border: 0;
+  }
+
+  .c1-navigator-grid > button {
+    min-height: 176px;
+    padding: 16px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 18px;
+  }
+
+  .c1-navigator-grid > button strong {
+    margin-top: 10px;
+    font-size: 1.35rem;
+  }
+
+  .c1-navigator-grid > button p {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .c1-site {
+    --c1-mobile-gutter: 14px;
+  }
+
+  .c1-announcement {
+    border-bottom: 1px solid rgba(8,17,29,.12);
+  }
+
+  .c1-header {
+    min-height: 64px;
+    padding: 8px 10px;
+  }
+
+  .c1-nav {
+    inset: 64px 8px auto 8px;
+    max-height: calc(100dvh - 76px);
+  }
+
+  .c1-brand img {
+    width: 40px;
+    height: 40px;
+  }
+
+  .c1-hero {
+    min-height: min(700px, calc(100svh - 64px));
+    border-radius: 0 0 22px 22px;
+  }
+
+  .c1-hero-copy {
+    padding: 72px var(--c1-mobile-gutter) 54px;
+  }
+
+  .c1-hero h1 {
+    font-size: clamp(3.2rem, 14.5vw, 5rem);
+    line-height: .88;
+  }
+
+  .c1-hero-copy > p {
+    font-size: .88rem;
+    line-height: 1.56;
+  }
+
+  .c1-hero-actions .c1-button {
+    min-height: 50px;
+  }
+
+  .c1-intent-section,
+  .c1-section {
+    padding: 58px 0;
+  }
+
+  .c1-intent-heading h2,
+  .c1-section-heading h2 {
+    font-size: clamp(2.6rem, 11vw, 4rem);
+    line-height: .94;
+  }
+
+  .c1-intent-grid,
+  .c1-business-grid,
+  .c1-project-showcase,
+  .c1-project-empty-showcase,
+  .c1-news-grid {
+    grid-auto-columns: 86vw;
+    gap: 10px;
+  }
+
+  .c1-business-card {
+    min-height: 470px;
+  }
+
+  .c1-project,
+  .c1-project-empty-showcase article {
+    min-height: 380px;
+  }
+
+  .c1-equipment-strip {
+    grid-auto-columns: 86vw;
+  }
+
+  .c1-equipment-strip > a {
+    min-height: 460px;
+  }
+
+  .c1-operating-intro h2,
+  .c1-equipment-band-head h2,
+  .c1-leadership-copy h2,
+  .c1-location-band h2,
+  .c1-footer-statement h2 {
+    font-size: clamp(2.8rem, 11.5vw, 4.2rem);
+  }
+
+  .c1-leadership-feature {
+    margin-inline: 10px;
+  }
+
+  .c1-leadership-image {
+    min-height: 390px;
+  }
+
+  .c1-leadership-copy {
+    padding: 48px 18px;
+  }
+
+  .c1-final-stage {
+    min-height: 500px;
+    margin: 8px;
+    padding: 58px 16px;
+  }
+
+  .c1-final-stage h2 {
+    font-size: clamp(3.4rem, 15vw, 5.2rem);
+  }
+
+  .c1-footer-grid {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 14px;
+  }
+
+  .c1-footer-grid > div {
+    min-width: 0;
+  }
+
+  .c1-footer-grid a {
+    line-height: 1.35;
+  }
+
+  .c1-page-hero {
+    min-height: 440px;
+  }
+
+  .c1-page-hero-copy h1 {
+    font-size: clamp(3rem, 13vw, 5rem);
+    line-height: .9;
+  }
+
+  .c1-collection-card {
+    min-height: 430px;
+  }
+
+  .c1-navigator-head h2 {
+    font-size: clamp(2.5rem, 11vw, 4rem);
+  }
+
+  .c1-navigator-grid > button {
+    min-height: 158px;
+    padding: 14px;
+  }
+
+  .c1-navigator-grid > button strong {
+    font-size: 1.16rem;
+  }
+
+  .c1-navigator-grid > button b {
+    font-size: .62rem;
+  }
+
+  .c1-navigator-foot {
+    gap: 4px;
+  }
+}
+
+@media (max-width: 390px) {
+  .c1-brand b {
+    font-size: .8rem;
+  }
+
+  .c1-access-staff,
+  .c1-menu-button {
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
+  }
+
+  .c1-hero h1 {
+    font-size: clamp(3rem, 14vw, 4.25rem);
+  }
+
+  .c1-navigator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .c1-navigator-grid > button {
+    min-height: 132px;
+  }
+
+  .c1-navigator-grid > button small,
+  .c1-navigator-grid > button > span {
+    font-size: .52rem;
+  }
+
+  .c1-navigator-grid > button strong {
+    font-size: 1.08rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .c1-business-card:hover,
+  .c1-intent-grid > a:hover,
+  .c1-project:hover,
+  .c1-equipment-strip > a:hover,
+  .c1-news-grid > a:hover {
+    transform: none;
+  }
+
+  .c1-button,
+  .c1-nav a,
+  .c1-navigator-grid > button,
+  .c1-signal-dock {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
