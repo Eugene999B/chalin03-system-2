@@ -14,6 +14,8 @@ const completion = read("src/chalin-one/public-site/PublicExperienceCompletion.j
 const completionCss = read("src/chalin-one/public-site/publicExperienceCompletion.css");
 const accessibilityCss = read("src/chalin-one/public-site/publicExperienceAccessibility.css");
 const explorerCss = read("src/chalin-one/public-site/publicCollectionExplorer.css");
+const detailCompanion = read("src/chalin-one/public-site/PublicDetailCompanion.jsx");
+const detailCss = read("src/chalin-one/public-site/publicDetailCompanion.css");
 const standalone = read("src/chalin-one/ChalinOneStandaloneEntry.jsx");
 
 for (const resource of ["divisions", "equipment", "projects", "news", "vacancies", "locations"]) {
@@ -71,7 +73,34 @@ assert.match(explorerCss, /@media \(max-width: 760px\)/);
 assert.match(explorerCss, /@media \(max-width: 390px\)/);
 assert.match(explorerCss, /prefers-reduced-motion/);
 
+for (const marker of ["equipment", "projects", "news", "careers"]) {
+  assert.match(detailCompanion, new RegExp(`${marker}: \\{`));
+}
+assert.match(detailCompanion, /getPublicResource/);
+assert.match(detailCompanion, /listPublicResource/);
+assert.match(detailCompanion, /relatedRecords/);
+assert.match(detailCompanion, /comparableValues/);
+assert.match(detailCompanion, /score > 0/);
+assert.match(detailCompanion, /Connected by published metadata/);
+assert.match(detailCompanion, /VERIFIED PUBLIC FIELDS/);
+assert.match(detailCompanion, /item\?\.manufacturer/);
+assert.match(detailCompanion, /item\?\.model/);
+assert.match(detailCompanion, /item\?\.availability/);
+assert.match(detailCompanion, /item\?\.category\?\.name/);
+assert.match(detailCompanion, /item\?\.division\?\.name/);
+assert.match(detailCompanion, /item\?\.employment_type/);
+assert.match(detailCompanion, /locationValue/);
+assert.doesNotMatch(detailCompanion, /localStorage|sessionStorage|Bearer|Authorization/);
+assert.match(detailCss, /\.c1-detail-companion-trigger/);
+assert.match(detailCss, /\.c1-detail-facts/);
+assert.match(detailCss, /\.c1-detail-related/);
+assert.match(detailCss, /@media \(max-width: 800px\)/);
+assert.match(detailCss, /safe-area-inset-bottom/);
+assert.match(detailCss, /prefers-reduced-motion/);
+
 assert.match(standalone, /PublicExperienceCompletion/);
+assert.match(standalone, /PublicDetailCompanion/);
+assert.match(standalone, /<PublicDetailCompanion \/>/);
 assert.match(standalone, /PublicStandaloneLoading/);
 assert.match(standalone, /Loading secure workspace/);
 assert.doesNotMatch(standalone, />\s*Opening CHALIN ONE…\s*</);
@@ -79,5 +108,5 @@ assert.match(standalone, /feature="publicWebsite"/);
 assert.match(standalone, /<PublicExperienceCompletion \/>/);
 
 console.log(
-  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, responsive explorer, route metadata and accessibility helpers remain protected."
+  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, published detail facts, metadata-related records, responsive explorer, route metadata and accessibility helpers remain protected."
 );
