@@ -26,6 +26,10 @@ const routeSource = fs.readFileSync(
   path.join(repoRoot, "backend/routes/contentStudioRoutes.js"),
   "utf8"
 );
+const coreRouteSource = fs.readFileSync(
+  path.join(repoRoot, "backend/routes/contentStudioCoreRoutes.js"),
+  "utf8"
+);
 const systemRouteSource = fs.readFileSync(
   path.join(repoRoot, "backend/routes/systemRoutes.js"),
   "utf8"
@@ -160,7 +164,7 @@ test("review workflow blocks self approval and publishing without approved evide
   assert.match(serviceSource, /version_status = 'superseded'/);
 });
 
-test("Content Studio routes use distinct capability permissions", () => {
+test("Content Studio scoped router preserves distinct capability permissions", () => {
   const requiredPermissions = [
     "public_content.view",
     "public_content.create",
@@ -173,16 +177,20 @@ test("Content Studio routes use distinct capability permissions", () => {
     "public_content.archive",
   ];
 
+  assert.match(routeSource, /requireContentStudioRouteScope/);
+  assert.match(routeSource, /router\.use\(requireContentStudioRouteScope\)/);
+  assert.match(routeSource, /contentStudioCoreRoutes/);
+
   for (const permission of requiredPermissions) {
-    assert.match(routeSource, new RegExp(permission.replace(".", "\\.")));
+    assert.match(coreRouteSource, new RegExp(permission.replace(".", "\\.")));
   }
 
-  assert.match(routeSource, /Cache-Control.*no-store/s);
+  assert.match(coreRouteSource, /Cache-Control.*no-store/s);
 });
 
-test("Content Studio is feature-gated before authentication and route execution", () => {
+test("Content Studio is feature-gated and session-gated before route execution", () => {
   assert.match(
     systemRouteSource,
-    /router\.use\([\s\S]*?"\/content-studio"[\s\S]*?requireFeature\("contentStudio"\)[\s\S]*?requireAuth[\s\S]*?contentStudioRoutes/
+    /router\.use\([\s\S]*?"\/content-studio"[\s\S]*?requireFeature\("contentStudio"\)[\s\S]*?requireAuth[\s\S]*?requireContentStudioSession[\s\S]*?contentStudioRoutes/
   );
 });
