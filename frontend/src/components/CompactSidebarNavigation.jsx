@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 
+function navigationTarget(item) {
+  return item?.title === "Dashboard" && item?.path === "/" ? "/staff" : item?.path;
+}
+
 function sectionContainsPath(section, pathname) {
-  return section.items.some((item) =>
-    item.path === "/"
-      ? pathname === "/"
-      : pathname === item.path || pathname.startsWith(`${item.path}/`)
-  );
+  return section.items.some((item) => {
+    const target = navigationTarget(item);
+    return target === "/staff"
+      ? pathname === "/staff"
+      : pathname === target || pathname.startsWith(`${target}/`);
+  });
 }
 
 function readMobileNavigationMode() {
@@ -115,21 +120,24 @@ export default function CompactSidebarNavigation({ sections, onNavigate }) {
 
             {isOpen ? (
               <div className="compact-nav-items" id={sectionId}>
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/"}
-                    className={({ isActive: linkActive }) =>
-                      `premium-nav-link ${linkActive ? "active" : ""}`
-                    }
-                    onClick={onNavigate}
-                    title={item.description}
-                  >
-                    <span className="premium-nav-icon">{item.icon}</span>
-                    <span className="premium-nav-text">{item.title}</span>
-                  </NavLink>
-                ))}
+                {section.items.map((item) => {
+                  const target = navigationTarget(item);
+                  return (
+                    <NavLink
+                      key={`${item.title}-${target}`}
+                      to={target}
+                      end={target === "/staff"}
+                      className={({ isActive: linkActive }) =>
+                        `premium-nav-link ${linkActive ? "active" : ""}`
+                      }
+                      onClick={onNavigate}
+                      title={item.description}
+                    >
+                      <span className="premium-nav-icon">{item.icon}</span>
+                      <span className="premium-nav-text">{item.title}</span>
+                    </NavLink>
+                  );
+                })}
               </div>
             ) : null}
           </section>
