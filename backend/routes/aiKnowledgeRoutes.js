@@ -21,6 +21,10 @@ const {
   listKnowledgeDocuments,
 } = require("../services/aiDocumentIntelligenceService");
 const {
+  ingestDocxKnowledgeDocument,
+} = require("../services/aiBinaryDocumentIngestionService");
+const { DOCX_MIME_TYPE } = require("../services/aiDocxParserService");
+const {
   listDocumentChunks,
 } = require("../services/aiDocumentReviewService");
 
@@ -62,6 +66,13 @@ function scopedKnowledgeInput(req) {
     input.owner_workspace_code = req.user?.workspace_code || null;
   }
   return input;
+}
+
+function requestMimeType(req) {
+  return String(req.body?.mime_type || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
 }
 
 async function scopedKnowledgeDetails(req, sourceId) {
@@ -194,10 +205,14 @@ router.post(
   requireAiPermission("ai.knowledge.manage"),
   asyncHandler(async (req, res) => {
     await scopedKnowledgeDetails(req, req.params.sourceId);
+    const ingestion =
+      requestMimeType(req) === DOCX_MIME_TYPE
+        ? ingestDocxKnowledgeDocument
+        : ingestKnowledgeDocument;
     return success(
       res,
       req,
-      await ingestKnowledgeDocument({
+      await ingestion({
         sourceId: req.params.sourceId,
         versionId: req.params.versionId,
         input: req.body || {},
