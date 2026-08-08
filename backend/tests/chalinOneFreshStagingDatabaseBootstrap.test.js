@@ -90,7 +90,7 @@ test("fresh staging bootstrap requires the exact one-time confirmation", () => {
 test("fresh staging bootstrap rejects public DB hosts and production-like DB names", () => {
   assert.throws(
     () => validateFreshStagingBootstrapEnvironment(safeEnv({ DB_HOST: "mysql.example.com" })),
-    /internal Railway MySQL host/i
+    /database host is internal/i
   );
 
   assert.throws(
