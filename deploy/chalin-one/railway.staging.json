@@ -1,10 +1,10 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "buildCommand": "cd backend && npm ci"
+    "buildCommand": "npm ci"
   },
   "deploy": {
-    "startCommand": "node backend/scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && cd backend && npm start",
+    "startCommand": "node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && npm start",
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
