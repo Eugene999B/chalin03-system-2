@@ -13,6 +13,10 @@ const {
 const {
   completeChalinOneFullStagingDatabase,
 } = require("./completeChalinOneFullStagingDatabase");
+const {
+  RELEASE_CONFIRMATION: CONTENT_STUDIO_IDENTITY_CONFIRMATION,
+  runChalinOneContentStudioIdentityMigration,
+} = require("./runChalinOneContentStudioIdentityMigration");
 
 const PASSWORD_SPECS = Object.freeze([
   Object.freeze({
@@ -96,6 +100,18 @@ async function tableExists(connection, tableName) {
       WHERE TABLE_SCHEMA = DATABASE()
         AND TABLE_NAME = ?`,
     [tableName]
+  );
+  return Number(row?.present || 0) === 1;
+}
+
+async function columnExists(connection, tableName, columnName) {
+  const [[row]] = await connection.query(
+    `SELECT COUNT(*) AS present
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?`,
+    [tableName, columnName]
   );
   return Number(row?.present || 0) === 1;
 }
@@ -199,18 +215,114 @@ async function applyConfiguredGovernancePasswords(env = process.env) {
   }
 }
 
+async function configureStagingStudioGovernance(env = process.env) {
+  const reviewerId = Number(env.CHALIN_ONE_STAGING_REVIEWER_USER_ID);
+  const publisherId = Number(env.CHALIN_ONE_STAGING_PUBLISHER_USER_ID);
+  if (!Number.isSafeInteger(reviewerId) || reviewerId <= 0 || !Number.isSafeInteger(publisherId) || publisherId <= 0) {
+    throw new Error("Staging reviewer and publisher IDs are required before Content Studio governance can be isolated.");
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const assignments = [
+      [reviewerId, "reviewer"],
+      [publisherId, "publisher"],
+    ];
+
+    for (const [userId, roleCode] of assignments) {
+      const [roleRows] = await connection.query(
+        `SELECT id FROM content_studio_roles WHERE role_code = ? AND is_active = TRUE LIMIT 1`,
+        [roleCode]
+      );
+      if (!roleRows[0]) throw new Error(`Content Studio staging role ${roleCode} is missing.`);
+
+      await connection.query(
+        `INSERT INTO content_studio_user_access
+          (user_id, role_id, access_mode, is_active, created_by, updated_by)
+         VALUES (?, ?, 'studio_only', TRUE, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           role_id = VALUES(role_id),
+           access_mode = 'studio_only',
+           is_active = TRUE,
+           updated_by = VALUES(updated_by)`,
+        [userId, roleRows[0].id, Number(env.CHALIN_ONE_STAGING_AUTHOR_USER_ID), Number(env.CHALIN_ONE_STAGING_AUTHOR_USER_ID)]
+      );
+
+      await connection.query(
+        `UPDATE users
+            SET role = 'staff',
+                default_branch_id = NULL,
+                can_access_all_branches = FALSE,
+                is_active = TRUE
+          WHERE id = ?`,
+        [userId]
+      );
+
+      if (await columnExists(connection, "users", "primary_workspace_code")) {
+        await connection.query(`UPDATE users SET primary_workspace_code = NULL WHERE id = ?`, [userId]);
+      }
+      if (await columnExists(connection, "users", "category_assignment_status")) {
+        await connection.query(
+          `UPDATE users
+              SET category_assignment_status = 'unassigned',
+                  category_conflict_reason = NULL
+            WHERE id = ?`,
+          [userId]
+        );
+      }
+      if (await tableExists(connection, "user_branch_access")) {
+        await connection.query(`UPDATE user_branch_access SET can_access = FALSE, is_primary = FALSE WHERE user_id = ?`, [userId]);
+      }
+      if (await tableExists(connection, "user_business_access")) {
+        await connection.query(`UPDATE user_business_access SET can_access = FALSE, is_default = FALSE WHERE user_id = ?`, [userId]);
+      }
+    }
+
+    await connection.commit();
+    return assignments.map(([id, role]) => ({ id, role, access_mode: "studio_only" }));
+  } catch (error) {
+    try { await connection.rollback(); } catch {}
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function countTables() {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS table_count
+       FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_TYPE = 'BASE TABLE'`
+  );
+  return Number(row?.table_count || 0);
+}
+
 async function bootstrapChalinOneStaging({ env = process.env } = {}) {
   validateFullStagingEnvironment(env, { mode: "runtime" });
 
   const maskedEnv = maskedCompletionEnvironment(env);
   await repairChalinOneStagingAuthBaseline({ env: maskedEnv });
   const database = await completeChalinOneFullStagingDatabase({ env: maskedEnv });
+
+  const studioMigration = await runChalinOneContentStudioIdentityMigration({
+    env: {
+      ...env,
+      CHALIN_ONE_ALLOW_CONTENT_STUDIO_IDENTITY_MIGRATION: "true",
+      CHALIN_ONE_CONTENT_STUDIO_IDENTITY_MIGRATION_CONFIRM:
+        CONTENT_STUDIO_IDENTITY_CONFIRMATION,
+    },
+  });
+  const studioGovernance = await configureStagingStudioGovernance(env);
   const credentials = await applyConfiguredGovernancePasswords(env);
 
   const result = Object.freeze({
     safe: true,
     database: database.database,
-    table_count: database.table_count,
+    table_count: await countTables(),
+    content_studio_identity: studioMigration,
+    content_studio_governance: studioGovernance,
     password_policy: {
       minimum_length: 8,
       requires_uppercase: true,
@@ -221,7 +333,7 @@ async function bootstrapChalinOneStaging({ env = process.env } = {}) {
     credentials,
   });
 
-  console.log("CHALIN ONE staging bootstrap completed with the 8+ password policy.");
+  console.log("CHALIN ONE staging bootstrap completed with isolated Content Studio governance and the 8+ password policy.");
   console.log(JSON.stringify(result, null, 2));
   return result;
 }
@@ -241,6 +353,7 @@ module.exports = {
   PASSWORD_SPECS,
   applyConfiguredGovernancePasswords,
   bootstrapChalinOneStaging,
+  configureStagingStudioGovernance,
   configuredCredential,
   maskedCompletionEnvironment,
   passwordPolicyError,
