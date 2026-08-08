@@ -229,42 +229,24 @@ function ContentStudioEntry() {
           <Routes>
             <Route
               path="/content-studio/login"
-              element={
-                <FeatureFlagRoute
-                  feature="contentStudio"
-                  fallbackPath="/"
-                  loadingFallback={<StandaloneLoading />}
-                >
-                  <SafeStandalone><ContentStudioLoginPage /></SafeStandalone>
-                </FeatureFlagRoute>
-              }
+              element={<SafeStandalone><ContentStudioLoginPage /></SafeStandalone>}
             />
             <Route
               path="/content-studio/change-password"
               element={
-                <FeatureFlagRoute
-                  feature="contentStudio"
-                  fallbackPath="/"
-                  loadingFallback={<StandaloneLoading />}
-                >
+                <ContentStudioSessionGate>
                   <SafeStandalone><ContentStudioChangePasswordPage /></SafeStandalone>
-                </FeatureFlagRoute>
+                </ContentStudioSessionGate>
               }
             />
             <Route
               path="/content-studio/*"
               element={
-                <FeatureFlagRoute
-                  feature="contentStudio"
-                  fallbackPath="/"
-                  loadingFallback={<StandaloneLoading />}
-                >
-                  <ContentStudioSessionGate>
-                    <PermissionRoute permissions={["public_content.view"]}>
-                      <SafeStandalone><ContentStudioWorkspace /></SafeStandalone>
-                    </PermissionRoute>
-                  </ContentStudioSessionGate>
-                </FeatureFlagRoute>
+                <ContentStudioSessionGate>
+                  <PermissionRoute permissions={["public_content.view"]}>
+                    <SafeStandalone><ContentStudioWorkspace /></SafeStandalone>
+                  </PermissionRoute>
+                </ContentStudioSessionGate>
               }
             />
             <Route path="*" element={<FullApplicationHandoff />} />
