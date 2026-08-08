@@ -122,28 +122,54 @@ function StatePanel({ loading = false, error = "", empty = false, children }) {
   return children;
 }
 
+function documentEvidenceLink(item) {
+  const metadata = item?.metadata || {};
+  const documentId = Number(metadata.document_id || 0);
+  const chunkId = Number(metadata.chunk_id || 0);
+  const sourceKey = String(item?.source_ref || "").split("#", 1)[0];
+  if (!sourceKey || !documentId || !chunkId) return null;
+  const params = new URLSearchParams({
+    source: sourceKey,
+    document: String(documentId),
+    chunk: String(chunkId),
+  });
+  return `/intelligence/documents?${params.toString()}`;
+}
+
 function EvidenceList({ evidence = [] }) {
   if (!Array.isArray(evidence) || evidence.length === 0) return null;
   return (
     <div className="ci-evidence" aria-label="Answer evidence">
-      {evidence.map((item, index) => (
-        <details key={`${item.source_type}-${item.source_ref}-${index}`}>
-          <summary>
-            [{item.citation || `E${index + 1}`}] {item.label}
-          </summary>
-          <div className="ci-evidence-detail">
-            <strong>
-              {humanize(item.source_type)} · {item.source_ref}
-              {item.source_version ? ` · Version ${item.source_version}` : ""}
-            </strong>
-            {item.excerpt_text ? <p>{item.excerpt_text}</p> : null}
-            <small>
-              {item.classification ? humanize(item.classification) : "Approved evidence"}
-              {item.as_of_at ? ` · As of ${formatDate(item.as_of_at, true)}` : ""}
-            </small>
-          </div>
-        </details>
-      ))}
+      {evidence.map((item, index) => {
+        const deepLink = documentEvidenceLink(item);
+        return (
+          <details key={`${item.source_type}-${item.source_ref}-${index}`}>
+            <summary>
+              [{item.citation || `E${index + 1}`}] {item.label}
+            </summary>
+            <div className="ci-evidence-detail">
+              <strong>
+                {humanize(item.source_type)} · {item.source_ref}
+                {item.source_version ? ` · Version ${item.source_version}` : ""}
+              </strong>
+              {item.excerpt_text ? <p>{item.excerpt_text}</p> : null}
+              <small>
+                {item.classification ? humanize(item.classification) : "Approved evidence"}
+                {item.as_of_at ? ` · As of ${formatDate(item.as_of_at, true)}` : ""}
+              </small>
+              {deepLink ? (
+                <Link
+                  className="ci-button ci-button-secondary"
+                  style={{ marginTop: 8, width: "fit-content" }}
+                  to={deepLink}
+                >
+                  Open exact governed chunk
+                </Link>
+              ) : null}
+            </div>
+          </details>
+        );
+      })}
     </div>
   );
 }
