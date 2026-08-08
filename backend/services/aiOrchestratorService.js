@@ -25,6 +25,9 @@ const {
   normalizeEvidenceList,
 } = require("./aiEvidenceService");
 const { searchApprovedKnowledge } = require("./aiKnowledgeService");
+const {
+  searchPublishedDocumentChunks,
+} = require("./aiDocumentIntelligenceService");
 const { resolveAiScope } = require("./aiPermissionService");
 const { generateProviderResponse } = require("./aiProviderService");
 const {
@@ -291,6 +294,37 @@ function sumProviderUsage(results) {
   });
 }
 
+async function retrieveAutomaticEvidence({
+  query,
+  persona,
+  workspaceCode = null,
+  limit = 8,
+} = {}) {
+  const safeLimit = Math.max(1, Math.min(20, Number(limit) || 8));
+  const documentEvidence = await searchPublishedDocumentChunks({
+    query,
+    persona,
+    workspaceCode,
+    limit: safeLimit,
+  });
+  const coveredSources = new Set(
+    documentEvidence.map((item) => String(item.source_ref || "").split("#", 1)[0])
+  );
+  const textEvidence = await searchApprovedKnowledge({
+    query,
+    persona,
+    workspaceCode,
+    limit: safeLimit,
+  });
+  const fallback = textEvidence.filter(
+    (item) => !coveredSources.has(String(item.source_ref || ""))
+  );
+  return normalizeEvidenceList([...documentEvidence, ...fallback]).slice(
+    0,
+    safeLimit
+  );
+}
+
 async function auditBlockedPrompt({
   req,
   conversation,
@@ -386,7 +420,7 @@ async function runAiConversationTurn({
       safeSummary: promptInspection.safe_summary,
     });
 
-    const knowledgeEvidence = await searchApprovedKnowledge({
+    const knowledgeEvidence = await retrieveAutomaticEvidence({
       query: promptInspection.text,
       persona: normalizedPersona,
       workspaceCode: scope.workspace_code,
@@ -616,6 +650,7 @@ module.exports = {
   executeRequestedTools,
   persistEvidence,
   providerMessages,
+  retrieveAutomaticEvidence,
   runAiConversationTurn,
   sumProviderUsage,
 };
