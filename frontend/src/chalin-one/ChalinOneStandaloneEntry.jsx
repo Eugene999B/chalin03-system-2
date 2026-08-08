@@ -6,6 +6,7 @@ import PermissionRoute from "../components/PermissionRoute";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { AuthProvider } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
+import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
 
 const ContentStudioWorkspace = lazy(() =>
@@ -151,6 +152,7 @@ function PublicWebsiteEntry() {
             >
               <>
                 <PublicExperienceCompletion />
+                <PublicDetailCompanion />
                 <SafeStandalone fallback={quietFallback}>
                   <PublicCorporateWebsiteApp />
                 </SafeStandalone>
