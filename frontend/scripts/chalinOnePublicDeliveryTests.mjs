@@ -83,7 +83,10 @@ check("corporate website owns a complete root-level public route tree", () => {
     "pages/:slug",
     "website/*",
   ]) {
-    assert.match(corporateApp, new RegExp(`path="${route.replaceAll("/", "\\/")}"`));
+    assert.ok(
+      corporateApp.includes(`path="${route}"`),
+      `Expected corporate route ${route}`
+    );
   }
   assert.match(corporateApp, /<Route index element=\{<HomePage \/>\}/);
   assert.match(corporateApp, /LegacyWebsiteRedirect/);
@@ -221,7 +224,7 @@ check("contact experience uses governed form honeypot consent and public submiss
 
 check("legacy /website route remains a compatibility bridge instead of a second homepage", () => {
   assert.match(corporateApp, /function LegacyWebsiteRedirect/);
-  assert.match(corporateApp, /path="website\/\*"/);
+  assert.ok(corporateApp.includes('path="website/*"'));
   assert.match(corporateApp, /<Navigate replace to=/);
   assert.match(legacyPublicApp, /PUBLIC_ROOT = "\/website"/);
 });
