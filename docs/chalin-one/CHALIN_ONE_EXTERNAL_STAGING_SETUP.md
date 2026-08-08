@@ -9,7 +9,7 @@ Deploy the `chalin-one` branch into a completely separate Railway + Cloudflare p
 - Branch: `chalin-one` only.
 - Do not merge to `main` or `production`.
 - Railway staging project must be separate from the production Railway project.
-- Railway staging MySQL must be a separate database named `chalin_one_staging` or `chalin_one_staging_<name>`.
+- Railway staging MySQL must be a separate staging-only MySQL service. A staging-named database is preferred; Railway's default `railway` database is permitted only when the full staging verifier confirms the dedicated internal staging MySQL service and exact isolation token.
 - Cloudflare Pages staging project must be separate from the production Pages project.
 - Staging must never use `chalin03.com`, `www.chalin03.com`, `staff.chalin03.com` or `api.chalin03.com` as its frontend/API targets.
 - Use staging-only secrets. Do not copy production JWT, MFA, backup-signing or privacy-hash secrets.
@@ -34,20 +34,22 @@ Add:
 
 1. A Node service connected to `Eugene999B/chalin03-system-2`, branch `chalin-one`.
 2. A separate Railway MySQL service.
-3. Configure the Node service to use config-as-code path:
-   `deploy/chalin-one/railway.staging.json`
-4. Copy variable names from `backend/.env.chalin-one-full-staging.example` and replace all placeholders with staging-only values.
-5. Set `DB_NAME=chalin_one_staging`.
-6. Set `CHALIN_ONE_STAGING_API_URL` to the Railway staging public domain once generated.
-7. Set `TRUSTED_API_HOSTS` to that staging Railway hostname.
+3. Set the Node service Root Directory to `/backend` so Railpack detects `backend/package.json` and installs Node/npm correctly.
+4. Configure the Node service to use config-as-code path:
+   `/deploy/chalin-one/railway.staging.json`
+5. The staging manifest assumes `/backend` is the service root and therefore uses `npm ci` for build and `node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && npm start` for start. Do not add another `cd backend` prefix.
+6. Copy variable names from `backend/.env.chalin-one-full-staging.example` and replace all placeholders with staging-only values.
+7. For a dedicated Railway staging MySQL service, `DB_NAME=${{MySQL.MYSQLDATABASE}}` is permitted only with `CHALIN_ONE_STAGING_DATABASE_ISOLATION=RAILWAY_DEDICATED_STAGING_MYSQL` and the internal Railway MySQL host.
+8. Set `CHALIN_ONE_STAGING_API_URL` to the Railway staging public domain once generated.
+9. Set `TRUSTED_API_HOSTS` to that staging Railway hostname.
 
-The Railway start command runs the full staging safety verifier before the backend can start. It fails closed if production hosts, unsafe feature flags, weak secrets, live SMS, an unsafe DB name or open migration gates are detected.
+The Railway start command runs the full staging safety verifier before the backend can start. It fails closed if production hosts, unsafe feature flags, weak secrets, live SMS, an unsafe DB target or open migration gates are detected.
 
 ## 2. Database restore and migrations
 
 Before copying operational data, create the normal CHALIN application backup plus a raw SQL export from production.
 
-Restore the chosen staging copy only into the separate Railway MySQL staging database.
+Restore the chosen staging copy only into the separate Railway MySQL staging service.
 
 Run CHALIN ONE migrations manually and one at a time using the existing guarded migration commands. Enable only the exact migration gate required for that command, verify it, run the migration twice to prove idempotency, then immediately close the gate again.
 
@@ -118,7 +120,8 @@ Only after infrastructure and ordinary-business smoke tests are green:
 2. Set `AI_PROVIDER` to the approved provider.
 3. Keep `AI_ALLOW_MOCK_PROVIDER=false`.
 4. Run:
-   `node backend/scripts/verifyChalinOneFullStagingEnvironment.js --mode=provider`
+   `node scripts/verifyChalinOneFullStagingEnvironment.js --mode=provider`
+   from the `/backend` service root.
 5. Test Copilot, Executive, Document Intelligence, DOCX retrieval, clickable citations and Guide.
 
 Permission/adversarial acceptance must include:
