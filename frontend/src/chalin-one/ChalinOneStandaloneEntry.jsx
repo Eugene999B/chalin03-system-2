@@ -8,6 +8,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
+import PublicInteractionSafety from "./public-site/PublicInteractionSafety";
 import PublicWorldEnhancements from "./public-site/PublicWorldEnhancements";
 
 const ContentStudioWorkspace = lazy(() =>
@@ -152,6 +153,7 @@ function PublicWebsiteEntry() {
               loadingFallback={quietFallback}
             >
               <>
+                <PublicInteractionSafety />
                 <PublicExperienceCompletion />
                 <PublicDetailCompanion />
                 <PublicWorldEnhancements />
