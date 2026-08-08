@@ -20,6 +20,7 @@ import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
+import "./chalin-one/public-site/publicBootPolish.css";
 
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
