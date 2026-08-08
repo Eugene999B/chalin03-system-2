@@ -12,7 +12,9 @@ import {
 import "./documentIntelligence.css";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const ACCEPT = ".txt,.md,.markdown,.csv,.json,.html,.htm,.xml";
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const ACCEPT = ".txt,.md,.markdown,.csv,.json,.html,.htm,.xml,.docx";
 const MIME_BY_EXTENSION = Object.freeze({
   txt: "text/plain",
   md: "text/markdown",
@@ -22,6 +24,7 @@ const MIME_BY_EXTENSION = Object.freeze({
   html: "text/html",
   htm: "text/html",
   xml: "application/xml",
+  docx: DOCX_MIME,
 });
 
 function humanize(value) {
@@ -56,6 +59,16 @@ function fileMime(file) {
     .pop()
     .toLowerCase();
   return String(file?.type || "").split(";", 1)[0] || MIME_BY_EXTENSION[extension] || "";
+}
+
+async function fileToBase64(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return window.btoa(binary);
 }
 
 function permissionSet(status) {
@@ -210,23 +223,27 @@ export default function DocumentIntelligencePage() {
     const mimeType = fileMime(file);
     if (!Object.values(MIME_BY_EXTENSION).includes(mimeType)) {
       setError(
-        "This parser is not enabled. Use TXT, Markdown, CSV, JSON, HTML or XML. PDF, DOCX and OCR remain separately disabled."
+        "This parser is not enabled. Use TXT, Markdown, CSV, JSON, HTML, XML or DOCX. PDF, images and OCR remain separately disabled."
       );
       return;
     }
 
     setIngesting(true);
     try {
-      const text = await file.text();
+      const payload = {
+        file_name: file.name,
+        mime_type: mimeType,
+        source_locator: sourceLocator.trim() || null,
+      };
+      if (mimeType === DOCX_MIME) {
+        payload.content_base64 = await fileToBase64(file);
+      } else {
+        payload.content_text = await file.text();
+      }
       const result = await ingestAiKnowledgeDocument(
         details.source.id,
         draftVersion.id,
-        {
-          file_name: file.name,
-          mime_type: mimeType,
-          source_locator: sourceLocator.trim() || null,
-          content_text: text,
-        }
+        payload
       );
       setNotice(
         `${result.file_name} parsed into ${result.chunk_count} governed chunk${
@@ -309,7 +326,7 @@ export default function DocumentIntelligencePage() {
           <span className="di-eyebrow">CHALIN ONE · Governed Knowledge</span>
           <h1>Document Intelligence</h1>
           <p>
-            Parse approved text documents into exact-version chunks before independent review. Retrieval remains read-only and provider-independent.
+            Parse approved documents into exact-version chunks before independent review. Retrieval remains read-only and provider-independent.
           </p>
         </div>
         <div className="di-actions">
@@ -321,7 +338,7 @@ export default function DocumentIntelligencePage() {
       <section className="di-safety-banner" role="status">
         <strong>No raw binary storage.</strong>
         <span>
-          TXT, Markdown, CSV, JSON, HTML and XML are enabled. PDF, DOCX, images and OCR remain disabled until separate parser adapters are reviewed.
+          TXT, Markdown, CSV, JSON, HTML, XML and hardened DOCX text extraction are enabled. PDF, images and OCR remain disabled until separate parser adapters are reviewed.
         </span>
       </section>
 
@@ -393,7 +410,7 @@ export default function DocumentIntelligencePage() {
           <div className="di-panel-head">
             <div>
               <span className="di-eyebrow">2 · Ingest</span>
-              <h2>Attach a text document</h2>
+              <h2>Attach a governed document</h2>
             </div>
           </div>
           {!canManage ? (
@@ -413,11 +430,11 @@ export default function DocumentIntelligencePage() {
                   required
                   onChange={(event) => setFile(event.target.files?.[0] || null)}
                 />
-                <strong>{file ? file.name : "Choose governed text document"}</strong>
+                <strong>{file ? file.name : "Choose governed document"}</strong>
                 <span>
                   {file
                     ? `${formatBytes(file.size)} · ${fileMime(file) || "unknown type"}`
-                    : "TXT · Markdown · CSV · JSON · HTML · XML · maximum 2 MB"}
+                    : "TXT · Markdown · CSV · JSON · HTML · XML · DOCX · maximum 2 MB"}
                 </span>
               </label>
               <label className="di-field">
@@ -433,7 +450,7 @@ export default function DocumentIntelligencePage() {
                 {ingesting ? "Parsing and chunking…" : `Ingest into draft v${draftVersion.version_number}`}
               </button>
               <small className="di-helper">
-                The exact parsed document becomes part of this draft version's review evidence. It cannot be added after the version enters review.
+                DOCX is parsed in memory for text only: macros, ActiveX, embedded objects, external files and images are not accepted. The extracted text becomes part of this exact draft's review evidence.
               </small>
             </form>
           )}
