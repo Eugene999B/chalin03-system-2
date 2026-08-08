@@ -95,8 +95,15 @@ function sendSessionFailure(res, req, sessionState) {
   });
 }
 
+function trustedMatchedRequestPath(req) {
+  const baseUrl = String(req.baseUrl || "");
+  const path = String(req.path || "");
+  return `${baseUrl}${path}` || "/";
+}
+
 async function attachContentStudioUser({ req, res, next, decoded, state, currentTokenVersion }) {
-  if (!contentStudioPathAllowedForSession(req.originalUrl || req.url || "")) {
+  const trustedPath = trustedMatchedRequestPath(req);
+  if (!contentStudioPathAllowedForSession(trustedPath)) {
     return res.status(403).json({
       status: "error",
       code: "CONTENT_STUDIO_SESSION_BOUNDARY",
@@ -272,4 +279,5 @@ module.exports = {
   loadUserSecurityState,
   requireAuth,
   requiresExportStoreContext,
+  trustedMatchedRequestPath,
 };
