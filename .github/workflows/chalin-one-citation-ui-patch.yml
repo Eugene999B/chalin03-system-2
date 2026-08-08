@@ -1,0 +1,264 @@
+name: CHALIN ONE citation UI patch
+
+on:
+  push:
+    branches: [chalin-one]
+    paths:
+      - .github/workflows/chalin-one-citation-ui-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chalin-one
+          fetch-depth: 0
+
+      - name: Apply exact guarded citation patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          workspace_path = Path("frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx")
+          workspace = workspace_path.read_text()
+          old_evidence = '''function EvidenceList({ evidence = [] }) {
+            if (!Array.isArray(evidence) || evidence.length === 0) return null;
+            return (
+              <div className="ci-evidence" aria-label="Answer evidence">
+                {evidence.map((item, index) => (
+                  <details key={`${item.source_type}-${item.source_ref}-${index}`}>
+                    <summary>
+                      [{item.citation || `E${index + 1}`}] {item.label}
+                    </summary>
+                    <div className="ci-evidence-detail">
+                      <strong>
+                        {humanize(item.source_type)} · {item.source_ref}
+                        {item.source_version ? ` · Version ${item.source_version}` : ""}
+                      </strong>
+                      {item.excerpt_text ? <p>{item.excerpt_text}</p> : null}
+                      <small>
+                        {item.classification ? humanize(item.classification) : "Approved evidence"}
+                        {item.as_of_at ? ` · As of ${formatDate(item.as_of_at, true)}` : ""}
+                      </small>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            );
+          }
+          '''.replace("          ", "")
+          new_evidence = '''function documentEvidenceLink(item) {
+            const metadata = item?.metadata || {};
+            const documentId = Number(metadata.document_id || 0);
+            const chunkId = Number(metadata.chunk_id || 0);
+            const sourceKey = String(item?.source_ref || "").split("#", 1)[0];
+            if (!sourceKey || !documentId || !chunkId) return null;
+            const params = new URLSearchParams({
+              source: sourceKey,
+              document: String(documentId),
+              chunk: String(chunkId),
+            });
+            return `/intelligence/documents?${params.toString()}`;
+          }
+
+          function EvidenceList({ evidence = [] }) {
+            if (!Array.isArray(evidence) || evidence.length === 0) return null;
+            return (
+              <div className="ci-evidence" aria-label="Answer evidence">
+                {evidence.map((item, index) => {
+                  const deepLink = documentEvidenceLink(item);
+                  return (
+                    <details key={`${item.source_type}-${item.source_ref}-${index}`}>
+                      <summary>
+                        [{item.citation || `E${index + 1}`}] {item.label}
+                      </summary>
+                      <div className="ci-evidence-detail">
+                        <strong>
+                          {humanize(item.source_type)} · {item.source_ref}
+                          {item.source_version ? ` · Version ${item.source_version}` : ""}
+                        </strong>
+                        {item.excerpt_text ? <p>{item.excerpt_text}</p> : null}
+                        <small>
+                          {item.classification ? humanize(item.classification) : "Approved evidence"}
+                          {item.as_of_at ? ` · As of ${formatDate(item.as_of_at, true)}` : ""}
+                        </small>
+                        {deepLink ? (
+                          <Link className="ci-evidence-link" to={deepLink}>
+                            Open exact governed chunk
+                          </Link>
+                        ) : null}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            );
+          }
+          '''.replace("          ", "")
+          if old_evidence not in workspace:
+            raise SystemExit("EvidenceList guard did not match; refusing to patch.")
+          workspace = workspace.replace(old_evidence, new_evidence, 1)
+          workspace_path.write_text(workspace)
+
+          document_path = Path("frontend/src/chalin-one/ai/DocumentIntelligencePage.jsx")
+          document = document_path.read_text()
+          old_import = 'import { Link } from "react-router";'
+          new_import = 'import { Link, useSearchParams } from "react-router";'
+          if old_import not in document:
+            raise SystemExit("Document router import guard did not match.")
+          document = document.replace(old_import, new_import, 1)
+
+          old_start = '''export default function DocumentIntelligencePage() {
+            const [status, setStatus] = useState(null);
+          '''.replace("          ", "")
+          new_start = '''export default function DocumentIntelligencePage() {
+            const [searchParams] = useSearchParams();
+            const requestedSourceKey = searchParams.get("source") || "";
+            const requestedDocumentId = Number(searchParams.get("document") || 0);
+            const requestedChunkId = Number(searchParams.get("chunk") || 0);
+            const [status, setStatus] = useState(null);
+          '''.replace("          ", "")
+          if old_start not in document:
+            raise SystemExit("Document component-start guard did not match.")
+          document = document.replace(old_start, new_start, 1)
+
+          old_initial = '''        setStatus(nextStatus);
+        setSources(nextSources);
+        if (nextSources[0]?.id) setSelectedId(String(nextSources[0].id));
+          '''.replace("          ", "")
+          new_initial = '''        setStatus(nextStatus);
+        setSources(nextSources);
+        const requestedSource = nextSources.find(
+          (source) => source.source_key === requestedSourceKey
+        );
+        const initialSource = requestedSource || nextSources[0];
+        if (initialSource?.id) setSelectedId(String(initialSource.id));
+          '''.replace("          ", "")
+          if old_initial not in document:
+            raise SystemExit("Document initial-source guard did not match.")
+          document = document.replace(old_initial, new_initial, 1)
+
+          old_selected_effect = '''  useEffect(() => {
+    const controller = new AbortController();
+    if (selectedId) loadSource(selectedId, controller.signal);
+    return () => controller.abort();
+  }, [loadSource, selectedId]);
+
+  async function ingest(event) {
+'''
+          new_selected_effect = '''  useEffect(() => {
+    const controller = new AbortController();
+    if (selectedId) loadSource(selectedId, controller.signal);
+    return () => controller.abort();
+  }, [loadSource, selectedId]);
+
+  useEffect(() => {
+    if (
+      !requestedDocumentId ||
+      !details?.source ||
+      details.source.source_key !== requestedSourceKey ||
+      Number(selectedDocument?.id || 0) === requestedDocumentId
+    ) {
+      return;
+    }
+    const targetDocument = documents.find(
+      (document) => Number(document.id) === requestedDocumentId
+    );
+    if (targetDocument) inspectDocument(targetDocument);
+  }, [
+    details?.source,
+    documents,
+    requestedDocumentId,
+    requestedSourceKey,
+    selectedDocument?.id,
+  ]);
+
+  useEffect(() => {
+    if (!requestedChunkId || chunkLoading || chunks.length === 0) return;
+    const target = window.document.getElementById(
+      `knowledge-chunk-${requestedChunkId}`
+    );
+    if (!target) return;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus({ preventScroll: true });
+    });
+  }, [chunkLoading, chunks, requestedChunkId]);
+
+  async function ingest(event) {
+'''
+          if old_selected_effect not in document:
+            raise SystemExit("Document selection-effect guard did not match.")
+          document = document.replace(old_selected_effect, new_selected_effect, 1)
+
+          old_chunk_article = '<article className="di-chunk-card" key={chunk.id}>'
+          new_chunk_article = '''<article
+                    className={`di-chunk-card${
+                      Number(chunk.id) === requestedChunkId ? " is-citation-target" : ""
+                    }`}
+                    id={`knowledge-chunk-${chunk.id}`}
+                    key={chunk.id}
+                    tabIndex={-1}
+                  >'''
+          if old_chunk_article not in document:
+            raise SystemExit("Document chunk-card guard did not match.")
+          document = document.replace(old_chunk_article, new_chunk_article, 1)
+          document_path.write_text(document)
+
+          css_path = Path("frontend/src/chalin-one/ai/chalinIntelligence.css")
+          css = css_path.read_text()
+          citation_css = '''
+
+          .ci-evidence-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+            margin-top: 8px;
+            font-weight: 800;
+            text-decoration: none;
+          }
+          '''.replace("          ", "")
+          if ".ci-evidence-link" not in css:
+            css_path.write_text(css.rstrip() + citation_css)
+
+          document_css_path = Path("frontend/src/chalin-one/ai/documentIntelligence.css")
+          document_css = document_css_path.read_text()
+          target_css = '''
+
+          .di-chunk-card.is-citation-target {
+            outline: 3px solid currentColor;
+            outline-offset: 3px;
+          }
+
+          .di-chunk-card.is-citation-target::before {
+            content: "Cited evidence";
+            display: inline-flex;
+            margin-bottom: 8px;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+          '''.replace("          ", "")
+          if ".di-chunk-card.is-citation-target" not in document_css:
+            document_css_path.write_text(document_css.rstrip() + target_css)
+
+      - name: Commit exact citation UI patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No patch changes were produced."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx \
+                  frontend/src/chalin-one/ai/DocumentIntelligencePage.jsx \
+                  frontend/src/chalin-one/ai/chalinIntelligence.css \
+                  frontend/src/chalin-one/ai/documentIntelligence.css
+          git commit -m "Add clickable governed document citations"
+          git push origin HEAD:chalin-one
