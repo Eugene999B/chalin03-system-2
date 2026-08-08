@@ -99,7 +99,10 @@ assert.match(mainEntry, /"\/content-studio"/);
 assert.match(mainEntry, /"\/intelligence"/);
 assert.match(mainEntry, /installPublicApplicationBoundaryHandoffs/);
 assert.match(mainEntry, /event\.target\?\.closest\?\.\("a\[href\]"\)/);
-assert.match(mainEntry, /window\.location\.assign/);
+assert.match(mainEntry, /event\.preventDefault\(\)/);
+assert.match(mainEntry, /event\.stopPropagation\(\)/);
+assert.match(mainEntry, /event\.stopImmediatePropagation\?\.\(\)/);
+assert.match(mainEntry, /window\.location\.href\s*=/);
 
 assert.match(viteConfig, /RAILWAY_GIT_COMMIT_SHA/);
 assert.match(viteConfig, /CF_PAGES_COMMIT_SHA/);
@@ -150,5 +153,5 @@ assert.match(
 assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser cache recovery contracts passed: public CHALIN ONE does not register or react to service-worker refresh events, secure links hard-handoff to protected apps, and operational pages retain stale-asset recovery."
+  "✅ Browser cache recovery contracts passed: public CHALIN ONE does not register or react to service-worker refresh events, secure links fully stop the public router before a native protected-app navigation, and operational pages retain stale-asset recovery."
 );
