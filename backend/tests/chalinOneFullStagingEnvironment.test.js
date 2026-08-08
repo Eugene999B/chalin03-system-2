@@ -67,6 +67,30 @@ test("full CHALIN ONE staging accepts isolated Website + AI runtime", () => {
   assert.equal(result.ai_provider, "disabled");
 });
 
+test("full staging accepts Railway default database only on dedicated staging MySQL", () => {
+  const result = validateFullStagingEnvironment(
+    safeEnv({
+      DB_NAME: "railway",
+      DB_HOST: "mysql.railway.internal",
+      CHALIN_ONE_STAGING_DATABASE_ISOLATION: "RAILWAY_DEDICATED_STAGING_MYSQL",
+    })
+  );
+  assert.equal(result.safe, true);
+  assert.equal(result.database_name, "railway");
+
+  assert.throws(
+    () =>
+      validateFullStagingEnvironment(
+        safeEnv({
+          DB_NAME: "railway",
+          DB_HOST: "mysql.example.com",
+          CHALIN_ONE_STAGING_DATABASE_ISOLATION: "RAILWAY_DEDICATED_STAGING_MYSQL",
+        })
+      ),
+    /dedicated internal MySQL service/i
+  );
+});
+
 test("provider acceptance requires a real non-mock provider", () => {
   assert.throws(
     () => validateFullStagingEnvironment(safeEnv(), { mode: "provider" }),
@@ -89,7 +113,7 @@ test("full staging fails closed on production hosts, DB names and risky feature 
   );
   assert.throws(
     () => validateFullStagingEnvironment(safeEnv({ DB_NAME: "railway" })),
-    /database name must match/i
+    /Staging must use a chalin_one_staging database/i
   );
   assert.throws(
     () => validateFullStagingEnvironment(safeEnv({ FEATURE_AI_ACTIONS: "true" })),
