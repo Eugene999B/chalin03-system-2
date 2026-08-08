@@ -19,6 +19,7 @@ import {
   ContentStudioEquipmentManager,
   ContentStudioProjectManager,
 } from "./ContentStudioPortfolioManagers";
+import ContentStudioVisualBuilder from "./ContentStudioVisualBuilder";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_SECTIONS,
@@ -47,6 +48,7 @@ const ACCESS_SECTION = Object.freeze({
 });
 
 const SECTION_SCOPES = Object.freeze({
+  "visual-builder": "pages",
   pages: "pages",
   newsroom: "newsroom",
   leadership: "company",
@@ -62,6 +64,7 @@ const SECTION_SCOPES = Object.freeze({
 });
 
 const MANAGERS = Object.freeze({
+  "visual-builder": ContentStudioVisualBuilder,
   pages: ContentStudioPageManager,
   newsroom: ContentStudioNewsroomManager,
   leadership: ContentStudioLeadershipManager,
