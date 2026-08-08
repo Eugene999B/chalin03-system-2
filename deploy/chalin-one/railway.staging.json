@@ -1,10 +1,10 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "buildCommand": "npm ci"
+    "buildCommand": "cd backend && npm ci"
   },
   "deploy": {
-    "startCommand": "node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "startCommand": "cd backend && npm run bootstrap:chalin-one:staging-base && node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
