@@ -28,24 +28,49 @@ const ExecutiveScenarioEnginePage = lazy(() =>
 const ExecutiveScorecardLauncher = lazy(() =>
   import("./ai/ExecutiveScorecardLauncher")
 );
-const PublicWebsiteApp = lazy(() =>
-  import("./public-site/PublicWebsiteStandaloneApp")
+const PublicCorporateWebsiteApp = lazy(() =>
+  import("./public-site/PublicCorporateWebsiteApp")
 );
-const PublicWebsiteUnavailable = lazy(() =>
-  import("./public-site/PublicWebsiteApp").then((module) => ({
-    default: module.PublicWebsiteUnavailable,
+const PublicCorporateWebsiteUnavailable = lazy(() =>
+  import("./public-site/PublicCorporateWebsiteApp").then((module) => ({
+    default: module.PublicCorporateWebsiteUnavailable,
   }))
 );
+
+const PUBLIC_TOP_LEVEL_PATHS = new Set([
+  "about",
+  "businesses",
+  "projects",
+  "equipment",
+  "news",
+  "leadership",
+  "media",
+  "careers",
+  "locations",
+  "contact",
+  "faqs",
+  "tenders",
+  "testimonials",
+  "forms",
+  "pages",
+  "website",
+]);
+
+export function isPublicWebsitePath(pathname) {
+  const path = String(pathname || "").split(/[?#]/)[0] || "/";
+  if (path === "/") return true;
+  const firstSegment = path.replace(/^\/+/, "").split("/")[0];
+  return PUBLIC_TOP_LEVEL_PATHS.has(firstSegment);
+}
 
 export function isChalinOneStandalonePath(pathname) {
   const path = String(pathname || "");
   return (
+    isPublicWebsitePath(path) ||
     path === "/content-studio" ||
     path.startsWith("/content-studio/") ||
     path === "/intelligence" ||
-    path.startsWith("/intelligence/") ||
-    path === "/website" ||
-    path.startsWith("/website/")
+    path.startsWith("/intelligence/")
   );
 }
 
@@ -59,8 +84,8 @@ function StandaloneLoading() {
         display: "grid",
         placeItems: "center",
         padding: "2rem",
-        background: "#f4f7fb",
-        color: "#0a2342",
+        background: "#07131f",
+        color: "#ffffff",
         fontFamily: "Inter, system-ui, sans-serif",
         fontWeight: 800,
       }}
@@ -93,24 +118,23 @@ function PublicWebsiteEntry() {
     <BrowserRouter>
       <Routes>
         <Route
-          path="/website/*"
+          path="/*"
           element={
             <FeatureFlagRoute
               feature="publicWebsite"
               fallback={
                 <SafeStandalone>
-                  <PublicWebsiteUnavailable />
+                  <PublicCorporateWebsiteUnavailable />
                 </SafeStandalone>
               }
               loadingFallback={<StandaloneLoading />}
             >
               <SafeStandalone>
-                <PublicWebsiteApp />
+                <PublicCorporateWebsiteApp />
               </SafeStandalone>
             </FeatureFlagRoute>
           }
         />
-        <Route path="*" element={<FullApplicationHandoff />} />
       </Routes>
     </BrowserRouter>
   );
@@ -192,14 +216,11 @@ function IntelligenceEntry() {
 
 export default function ChalinOneStandaloneEntry() {
   const pathname = window.location.pathname;
-  if (pathname === "/website" || pathname.startsWith("/website/")) {
-    return <PublicWebsiteEntry />;
+  if (pathname === "/content-studio" || pathname.startsWith("/content-studio/")) {
+    return <ContentStudioEntry />;
   }
-  if (
-    pathname === "/intelligence" ||
-    pathname.startsWith("/intelligence/")
-  ) {
+  if (pathname === "/intelligence" || pathname.startsWith("/intelligence/")) {
     return <IntelligenceEntry />;
   }
-  return <ContentStudioEntry />;
+  return <PublicWebsiteEntry />;
 }
