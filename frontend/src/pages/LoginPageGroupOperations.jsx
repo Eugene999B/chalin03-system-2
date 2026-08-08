@@ -22,7 +22,7 @@ const DEFAULT_WORKSPACE = "spare_parts";
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
 const DASHBOARD_PATHS = {
-  spare_parts: "/",
+  spare_parts: "/staff",
   mining: "/mining",
   equipment_hire: "/equipment-hire-operations",
 };
