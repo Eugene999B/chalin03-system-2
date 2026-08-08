@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import FeatureFlagRoute from "../components/FeatureFlagRoute";
 import PageErrorBoundary from "../components/PageErrorBoundary";
 import PermissionRoute from "../components/PermissionRoute";
 import ProtectedRoute from "../components/ProtectedRoute";
-import { AuthProvider } from "../context/AuthContext";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
@@ -15,6 +15,12 @@ import PublicWorldEnhancements from "./public-site/PublicWorldEnhancements";
 
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
+);
+const ContentStudioLoginPage = lazy(() =>
+  import("./content-studio/ContentStudioLoginPage")
+);
+const ContentStudioChangePasswordPage = lazy(() =>
+  import("./content-studio/ContentStudioChangePasswordPage")
 );
 const ChalinIntelligenceWorkspace = lazy(() =>
   import("./ai/ChalinIntelligenceWorkspace")
@@ -64,11 +70,7 @@ const PUBLIC_TOP_LEVEL_PATHS = new Set([
 
 export function isPublicWebsitePath(pathname) {
   const path = String(pathname || "").split(/[?#]/)[0] || "/";
-
-  // CHALIN ONE is the permanent company front door. Staff work now enters
-  // through /login and the explicit /staff dashboard rather than borrowing /.
   if (path === "/") return true;
-
   const firstSegment = path.replace(/^\/+/, "").split("/")[0];
   return PUBLIC_TOP_LEVEL_PATHS.has(firstSegment);
 }
@@ -129,11 +131,9 @@ function SafeStandalone({ children, fallback = <StandaloneLoading /> }) {
 
 function FullApplicationHandoff() {
   const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-
   useEffect(() => {
     window.location.replace(destination);
   }, [destination]);
-
   return <StandaloneLoading />;
 }
 
@@ -203,15 +203,75 @@ function StaffStandaloneShell({ routePath, feature, permission, children }) {
   );
 }
 
+function ContentStudioSessionGate({ children }) {
+  const {
+    loading,
+    isLoggedIn,
+    isContentStudioWorkspace,
+    mustChangePassword,
+  } = useAuth();
+
+  if (loading) return <StandaloneLoading />;
+  if (!isLoggedIn || !isContentStudioWorkspace) {
+    return <Navigate replace to="/content-studio/login" />;
+  }
+  if (mustChangePassword) {
+    return <Navigate replace to="/content-studio/change-password" />;
+  }
+  return children;
+}
+
 function ContentStudioEntry() {
   return (
-    <StaffStandaloneShell
-      routePath="/content-studio/*"
-      feature="contentStudio"
-      permission="public_content.view"
-    >
-      <ContentStudioWorkspace />
-    </StaffStandaloneShell>
+    <AuthProvider>
+      <WorkspaceContextProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/content-studio/login"
+              element={
+                <FeatureFlagRoute
+                  feature="contentStudio"
+                  fallbackPath="/"
+                  loadingFallback={<StandaloneLoading />}
+                >
+                  <SafeStandalone><ContentStudioLoginPage /></SafeStandalone>
+                </FeatureFlagRoute>
+              }
+            />
+            <Route
+              path="/content-studio/change-password"
+              element={
+                <FeatureFlagRoute
+                  feature="contentStudio"
+                  fallbackPath="/"
+                  loadingFallback={<StandaloneLoading />}
+                >
+                  <SafeStandalone><ContentStudioChangePasswordPage /></SafeStandalone>
+                </FeatureFlagRoute>
+              }
+            />
+            <Route
+              path="/content-studio/*"
+              element={
+                <FeatureFlagRoute
+                  feature="contentStudio"
+                  fallbackPath="/"
+                  loadingFallback={<StandaloneLoading />}
+                >
+                  <ContentStudioSessionGate>
+                    <PermissionRoute permissions={["public_content.view"]}>
+                      <SafeStandalone><ContentStudioWorkspace /></SafeStandalone>
+                    </PermissionRoute>
+                  </ContentStudioSessionGate>
+                </FeatureFlagRoute>
+              }
+            />
+            <Route path="*" element={<FullApplicationHandoff />} />
+          </Routes>
+        </BrowserRouter>
+      </WorkspaceContextProvider>
+    </AuthProvider>
   );
 }
 
@@ -225,7 +285,6 @@ function IntelligenceWorkspaceSurface() {
   if (window.location.pathname === "/intelligence/executive-scenarios") {
     return <ExecutiveScenarioEnginePage />;
   }
-
   return (
     <>
       <ChalinIntelligenceWorkspace />
