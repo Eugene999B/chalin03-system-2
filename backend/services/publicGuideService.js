@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const { pool } = require("../config/db");
 const { createPublicFormSubmission } = require("./publicFormSubmissionService");
 const { evidenceCitationMap, evidencePromptBlock } = require("./aiEvidenceService");
-const { searchApprovedKnowledge } = require("./aiKnowledgeService");
+const { searchGovernedKnowledge } = require("./aiKnowledgeRetrievalService");
 const { generateProviderResponse } = require("./aiProviderService");
 const {
   AiSafetyError,
@@ -323,7 +323,7 @@ async function answerPublicGuide({
 
     const [history, evidence] = await Promise.all([
       guideHistory(session.id),
-      searchApprovedKnowledge({
+      searchGovernedKnowledge({
         query: inspection.text,
         persona: "guide",
         limit: 6,
