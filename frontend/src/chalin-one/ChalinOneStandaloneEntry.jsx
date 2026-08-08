@@ -6,6 +6,7 @@ import PermissionRoute from "../components/PermissionRoute";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { AuthProvider } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
+import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
 
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
@@ -108,15 +109,29 @@ function StandaloneLoading() {
         fontWeight: 800,
       }}
     >
-      Opening CHALIN ONE…
+      Loading secure workspace…
     </main>
   );
 }
 
-function SafeStandalone({ children }) {
+function PublicStandaloneLoading() {
+  return (
+    <main
+      role="status"
+      aria-label="Loading CHALIN ONE public website"
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(90deg, rgba(240,189,53,.95), rgba(122,214,255,.9), rgba(240,189,53,.95)) top left / 26% 2px no-repeat, #05080d",
+      }}
+    />
+  );
+}
+
+function SafeStandalone({ children, fallback = <StandaloneLoading /> }) {
   return (
     <PageErrorBoundary>
-      <Suspense fallback={<StandaloneLoading />}>{children}</Suspense>
+      <Suspense fallback={fallback}>{children}</Suspense>
     </PageErrorBoundary>
   );
 }
@@ -132,8 +147,10 @@ function FullApplicationHandoff() {
 }
 
 function PublicWebsiteEntry() {
+  const quietFallback = <PublicStandaloneLoading />;
   return (
     <BrowserRouter>
+      <PublicExperienceCompletion />
       <Routes>
         <Route
           path="/*"
@@ -141,13 +158,13 @@ function PublicWebsiteEntry() {
             <FeatureFlagRoute
               feature="publicWebsite"
               fallback={
-                <SafeStandalone>
+                <SafeStandalone fallback={quietFallback}>
                   <PublicCorporateWebsiteUnavailable />
                 </SafeStandalone>
               }
-              loadingFallback={<StandaloneLoading />}
+              loadingFallback={quietFallback}
             >
-              <SafeStandalone>
+              <SafeStandalone fallback={quietFallback}>
                 <PublicCorporateWebsiteApp />
               </SafeStandalone>
             </FeatureFlagRoute>
