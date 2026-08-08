@@ -215,6 +215,43 @@ async function applyConfiguredGovernancePasswords(env = process.env) {
   }
 }
 
+async function disableLegacyBranchAccess(connection, userId) {
+  if (!(await tableExists(connection, "user_branch_access"))) return;
+  const hasPrimary = await columnExists(connection, "user_branch_access", "is_primary");
+  await connection.query(
+    hasPrimary
+      ? `UPDATE user_branch_access SET can_access = FALSE, is_primary = FALSE WHERE user_id = ?`
+      : `UPDATE user_branch_access SET can_access = FALSE WHERE user_id = ?`,
+    [userId]
+  );
+}
+
+async function disableLegacyBusinessAccess(connection, userId) {
+  if (!(await tableExists(connection, "user_business_access"))) return;
+  const hasDefault = await columnExists(connection, "user_business_access", "is_default");
+  await connection.query(
+    hasDefault
+      ? `UPDATE user_business_access SET can_access = FALSE, is_default = FALSE WHERE user_id = ?`
+      : `UPDATE user_business_access SET can_access = FALSE WHERE user_id = ?`,
+    [userId]
+  );
+}
+
+async function markStudioOnlyCategoryState(connection, userId) {
+  if (await columnExists(connection, "users", "primary_workspace_code")) {
+    await connection.query(`UPDATE users SET primary_workspace_code = NULL WHERE id = ?`, [userId]);
+  }
+  if (await columnExists(connection, "users", "category_assignment_status")) {
+    const hasConflictReason = await columnExists(connection, "users", "category_conflict_reason");
+    await connection.query(
+      hasConflictReason
+        ? `UPDATE users SET category_assignment_status = 'unassigned', category_conflict_reason = NULL WHERE id = ?`
+        : `UPDATE users SET category_assignment_status = 'unassigned' WHERE id = ?`,
+      [userId]
+    );
+  }
+}
+
 async function configureStagingStudioGovernance(env = process.env) {
   const reviewerId = Number(env.CHALIN_ONE_STAGING_REVIEWER_USER_ID);
   const publisherId = Number(env.CHALIN_ONE_STAGING_PUBLISHER_USER_ID);
@@ -259,24 +296,9 @@ async function configureStagingStudioGovernance(env = process.env) {
         [userId]
       );
 
-      if (await columnExists(connection, "users", "primary_workspace_code")) {
-        await connection.query(`UPDATE users SET primary_workspace_code = NULL WHERE id = ?`, [userId]);
-      }
-      if (await columnExists(connection, "users", "category_assignment_status")) {
-        await connection.query(
-          `UPDATE users
-              SET category_assignment_status = 'unassigned',
-                  category_conflict_reason = NULL
-            WHERE id = ?`,
-          [userId]
-        );
-      }
-      if (await tableExists(connection, "user_branch_access")) {
-        await connection.query(`UPDATE user_branch_access SET can_access = FALSE, is_primary = FALSE WHERE user_id = ?`, [userId]);
-      }
-      if (await tableExists(connection, "user_business_access")) {
-        await connection.query(`UPDATE user_business_access SET can_access = FALSE, is_default = FALSE WHERE user_id = ?`, [userId]);
-      }
+      await markStudioOnlyCategoryState(connection, userId);
+      await disableLegacyBranchAccess(connection, userId);
+      await disableLegacyBusinessAccess(connection, userId);
     }
 
     await connection.commit();
@@ -355,6 +377,9 @@ module.exports = {
   bootstrapChalinOneStaging,
   configureStagingStudioGovernance,
   configuredCredential,
+  disableLegacyBranchAccess,
+  disableLegacyBusinessAccess,
+  markStudioOnlyCategoryState,
   maskedCompletionEnvironment,
   passwordPolicyError,
 };
