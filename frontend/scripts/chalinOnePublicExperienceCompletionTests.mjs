@@ -18,6 +18,8 @@ const detailCompanion = read("src/chalin-one/public-site/PublicDetailCompanion.j
 const detailCss = read("src/chalin-one/public-site/publicDetailCompanion.css");
 const worldEnhancements = read("src/chalin-one/public-site/PublicWorldEnhancements.jsx");
 const worldCss = read("src/chalin-one/public-site/publicWorldEnhancements.css");
+const interactionSafety = read("src/chalin-one/public-site/PublicInteractionSafety.jsx");
+const interactionSafetyCss = read("src/chalin-one/public-site/publicInteractionSafety.css");
 const standalone = read("src/chalin-one/ChalinOneStandaloneEntry.jsx");
 
 for (const resource of ["divisions", "equipment", "projects", "news", "vacancies", "locations"]) {
@@ -135,9 +137,36 @@ assert.match(worldCss, /@media \(max-width: 760px\)/);
 assert.match(worldCss, /safe-area-inset-bottom/);
 assert.match(worldCss, /prefers-reduced-motion/);
 
+for (const secureRoot of [
+  "/login",
+  "/staff",
+  "/content-studio",
+  "/intelligence",
+  "/mining",
+  "/equipment-hire-operations",
+]) {
+  assert.match(interactionSafety, new RegExp(`\\"${secureRoot}\\"`));
+}
+assert.match(interactionSafety, /document\.addEventListener\("click", handleSecureApplicationClick, true\)/);
+assert.match(interactionSafety, /event\.preventDefault\(\)/);
+assert.match(interactionSafety, /event\.stopImmediatePropagation\(\)/);
+assert.match(interactionSafety, /window\.location\.href = destination\.href/);
+assert.match(interactionSafety, /destination\.origin !== window\.location\.origin/);
+assert.doesNotMatch(interactionSafety, /localStorage|sessionStorage|Bearer|Authorization/);
+assert.match(interactionSafetyCss, /\.c1-signal-dock/);
+assert.match(interactionSafetyCss, /display: none !important/);
+assert.match(interactionSafetyCss, /\.c1-mobile-discovery-trigger/);
+assert.match(interactionSafetyCss, /\.c1-detail-companion-trigger/);
+assert.match(interactionSafetyCss, /\.c1-mobile-public-dock/);
+assert.match(interactionSafetyCss, /safe-area-inset-bottom/);
+assert.match(interactionSafetyCss, /@media \(max-width: 390px\)/);
+assert.match(interactionSafetyCss, /prefers-reduced-motion/);
+
+assert.match(standalone, /PublicInteractionSafety/);
 assert.match(standalone, /PublicExperienceCompletion/);
 assert.match(standalone, /PublicDetailCompanion/);
 assert.match(standalone, /PublicWorldEnhancements/);
+assert.match(standalone, /<PublicInteractionSafety \/>/);
 assert.match(standalone, /<PublicDetailCompanion \/>/);
 assert.match(standalone, /<PublicWorldEnhancements \/>/);
 assert.match(standalone, /PublicStandaloneLoading/);
@@ -147,9 +176,11 @@ assert.match(standalone, /feature="publicWebsite"/);
 assert.match(standalone, /<PublicExperienceCompletion \/>/);
 const publicEntryIndex = standalone.indexOf("function PublicWebsiteEntry");
 const staffShellIndex = standalone.indexOf("function StaffStandaloneShell");
+const interactionMountIndex = standalone.indexOf("<PublicInteractionSafety />");
 const worldMountIndex = standalone.indexOf("<PublicWorldEnhancements />");
+assert.ok(publicEntryIndex >= 0 && interactionMountIndex > publicEntryIndex && interactionMountIndex < staffShellIndex);
 assert.ok(publicEntryIndex >= 0 && worldMountIndex > publicEntryIndex && worldMountIndex < staffShellIndex);
 
 console.log(
-  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, published detail facts, metadata-related records, responsive explorer, business worlds, governed media journal, public location routing and accessibility helpers remain protected."
+  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, published detail facts, metadata-related records, responsive explorer, business worlds, governed media journal, public location routing, secure application handoffs, mobile collision safety and accessibility helpers remain protected."
 );
