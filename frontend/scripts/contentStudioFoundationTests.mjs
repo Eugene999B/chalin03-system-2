@@ -97,14 +97,17 @@ check("foundation API reuses authenticated Axios and has no token or raw fetch l
   }
 });
 
-check("workspace enforces feature, login and permission gates", () => {
+check("workspace enforces isolated Studio session, role permission and scoped managers", () => {
   assert.match(workspaceSource, /useAuth/);
-  assert.match(workspaceSource, /useFeatureFlags/);
-  assert.match(workspaceSource, /isFeatureEnabled\("contentStudio"\)/);
+  assert.match(workspaceSource, /isContentStudioWorkspace/);
+  assert.match(workspaceSource, /contentStudioScopes/);
+  assert.match(workspaceSource, /SECTION_SCOPES/);
+  assert.match(workspaceSource, /isContentStudioOwner/);
   assert.match(modelSource, /public_content\.view/);
   assert.match(workspaceSource, /CONTENT_STUDIO_PERMISSIONS\.view/);
-  assert.match(workspaceSource, /Staff sign-in required/);
-  assert.match(workspaceSource, /Permission required/);
+  assert.match(workspaceSource, /Content Studio sign-in required/);
+  assert.match(workspaceSource, /Studio role required/);
+  assert.doesNotMatch(workspaceSource, /useFeatureFlags|isFeatureEnabled\("contentStudio"\)/);
   assert.doesNotMatch(workspaceSource, /dangerouslySetInnerHTML/);
 });
 
@@ -128,6 +131,7 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioApprovalInbox",
     "ContentStudioNavigationManager",
     "ContentStudioSettingsManager",
+    "ContentStudioAccessManager",
   ]) assert.match(workspaceSource, new RegExp(manager));
   assert.match(workspaceSource, /const MANAGERS/);
   assert.doesNotMatch(workspaceSource, /window\.location\.href|localStorage|Bearer/);
