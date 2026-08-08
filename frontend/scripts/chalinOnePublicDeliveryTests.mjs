@@ -10,11 +10,9 @@ function read(relativePath) {
 }
 
 const publicApi = read("frontend/src/chalin-one/public-site/publicWebsiteApi.js");
-const publicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
-const homepageApp = read("frontend/src/chalin-one/public-site/PublicWebsiteStandaloneApp.jsx");
-const homepageExperience = read("frontend/src/chalin-one/public-site/PublicHomepageExperience.jsx");
-const publicCss = read("frontend/src/chalin-one/public-site/publicWebsite.css");
-const homepageCss = read("frontend/src/chalin-one/public-site/publicHomepageExperience.css");
+const corporateApp = read("frontend/src/chalin-one/public-site/PublicCorporateWebsiteApp.jsx");
+const corporateCss = read("frontend/src/chalin-one/public-site/publicCorporateWebsite.css");
+const legacyPublicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
 const standalone = read("frontend/src/chalin-one/ChalinOneStandaloneEntry.jsx");
 const main = read("frontend/src/main.jsx");
 const publicRoutes = read("backend/routes/publicContentRoutes.js");
@@ -34,7 +32,10 @@ function check(name, callback) {
 check("public renderer uses a separate anonymous Axios client", () => {
   assert.match(publicApi, /axios\.create/);
   assert.match(publicApi, /\/public\/content\/bootstrap/);
-  assert.doesNotMatch(publicApi, /axiosClient|localStorage|sessionStorage|Bearer|Authorization/);
+  assert.doesNotMatch(
+    publicApi,
+    /axiosClient|localStorage|sessionStorage|Bearer|Authorization/
+  );
 });
 
 check("public API supports every published collection, detail and form route", () => {
@@ -49,27 +50,44 @@ check("public API supports every published collection, detail and form route", (
     "vacancies",
     "tenders",
     "testimonials",
-  ]) assert.match(publicApi, new RegExp(`"${resource}"`));
+  ]) {
+    assert.match(publicApi, new RegExp(`"${resource}"`));
+  }
   assert.match(publicApi, /getPublicHomepage/);
   assert.match(publicApi, /getPublicPage/);
   assert.match(publicApi, /getPublicForm/);
   assert.match(publicApi, /submitPublicForm/);
 });
 
-check("public website routes cover the complete anonymous experience", () => {
+check("corporate website owns a complete root-level public route tree", () => {
   for (const route of [
-    "pages/:slug",
-    "news/:slug",
-    "divisions/:slug",
+    "about",
+    "businesses",
+    "businesses/:slug",
+    "projects",
     "projects/:slug",
+    "equipment",
     "equipment/:slug",
-    "vacancies/:slug",
+    "news",
+    "news/:slug",
+    "leadership",
+    "media",
+    "careers",
+    "careers/:slug",
+    "locations",
+    "contact",
+    "faqs",
+    "tenders",
     "tenders/:slug",
-    "forms/:slug",
-  ]) assert.match(publicApp, new RegExp(route.replace("/", "\\/")));
-  assert.match(publicApp, /PublicHomePage/);
-  assert.match(publicApp, /PublicFaqPage/);
-  assert.match(publicApp, /PublicNotFound/);
+    "testimonials",
+    "pages/:slug",
+    "website/*",
+  ]) {
+    assert.match(corporateApp, new RegExp(`path="${route.replaceAll("/", "\\/")}"`));
+  }
+  assert.match(corporateApp, /<Route index element=\{<HomePage \/>\}/);
+  assert.match(corporateApp, /LegacyWebsiteRedirect/);
+  assert.match(corporateApp, /NotFoundPage/);
 });
 
 check("governed homepage discovery exposes only a currently published homepage", () => {
@@ -83,81 +101,107 @@ check("governed homepage discovery exposes only a currently published homepage",
   assert.match(publicRoutes, /notFound\(res, req, "Homepage"\)/);
 });
 
-check("website root renders the approved homepage through the rich governed experience", () => {
-  assert.match(homepageApp, /getPublicHomepage/);
-  assert.match(homepageApp, /controller\.abort\(\)/);
-  assert.match(homepageApp, /PublicHomepageExperience/);
-  assert.match(homepageApp, /<PublicHomepageExperience page=\{state\.page\} \/>/);
-  assert.match(homepageApp, /return <PublicWebsiteApp \/>/);
-  assert.match(homepageApp, /role="status"/);
-  assert.match(homepageApp, /role="alert"/);
-  assert.match(standalone, /public-site\/PublicWebsiteStandaloneApp/);
-  assert.doesNotMatch(homepageApp, /dangerouslySetInnerHTML|localStorage|sessionStorage|Bearer|Authorization/);
-});
-
-check("governed homepage combines approved page content with published business collections", () => {
-  assert.match(homepageExperience, /getPublicBootstrap/);
-  assert.match(homepageExperience, /listPublicResource/);
+check("root homepage combines governed page content with published business collections", () => {
+  assert.match(corporateApp, /getPublicHomepage/);
+  assert.match(corporateApp, /getPublicBootstrap/);
+  assert.match(corporateApp, /listPublicResource/);
   for (const resource of ["news", "leadership", "projects", "equipment", "locations"]) {
-    assert.match(homepageExperience, new RegExp(`${resource}:\\s*\\d+`));
+    assert.match(corporateApp, new RegExp(`listPublicResource\\("${resource}"`));
   }
-  assert.match(homepageExperience, /bootstrap\.divisions/);
-  assert.match(homepageExperience, /bootstrap\.statistics/);
-  assert.match(homepageExperience, /page\?\.sections/);
-  assert.match(homepageExperience, /PublishedPageSections/);
-  assert.match(homepageExperience, /NewsTicker/);
-  assert.match(homepageExperience, /LeadershipSpotlight/);
-  assert.match(homepageExperience, /ProjectGrid/);
-  assert.match(homepageExperience, /EquipmentGrid/);
-  assert.match(homepageExperience, /chalin03-logo\.png/);
-  assert.doesNotMatch(homepageExperience, /dangerouslySetInnerHTML|contentEditable|eval\(|<iframe/);
+  assert.match(corporateApp, /statistics/);
+  assert.match(corporateApp, /divisions/);
+  assert.match(corporateApp, /page\?\.sections/);
+  assert.match(corporateApp, /CHALIN 03 COMPANY LIMITED/);
+  assert.match(corporateApp, /Staff portal/);
+  assert.match(corporateApp, /Content Studio/);
 });
 
-check("homepage metadata includes canonical Open Graph Twitter and robots controls", () => {
-  assert.match(homepageExperience, /useHomepageMetadata/);
-  assert.match(homepageExperience, /link\[rel="canonical"\]/);
-  assert.match(homepageExperience, /og:title/);
-  assert.match(homepageExperience, /og:description/);
-  assert.match(homepageExperience, /og:image/);
-  assert.match(homepageExperience, /twitter:card/);
-  assert.match(homepageExperience, /twitter:title/);
-  assert.match(homepageExperience, /twitter:description/);
-  assert.match(homepageExperience, /meta\[name="robots"\]/);
+check("corporate experience exposes real business newsroom media careers and contact surfaces", () => {
+  for (const marker of [
+    "BusinessesPage",
+    "BusinessDetailPage",
+    "CollectionPage",
+    "DetailPage",
+    "MediaPage",
+    "ContactPage",
+    "FaqPage",
+    "PublishedPage",
+  ]) {
+    assert.match(corporateApp, new RegExp(marker));
+  }
+  assert.match(corporateApp, /Spare Parts/);
+  assert.match(corporateApp, /Mining Operations/);
+  assert.match(corporateApp, /Equipment Business/);
 });
 
-check("published content rendering blocks raw HTML and unsafe embedded video", () => {
-  assert.doesNotMatch(publicApp, /dangerouslySetInnerHTML|contentEditable|eval\(|<iframe/);
-  assert.match(publicApp, /StructuredContent/);
-  assert.match(publicApp, /safeExternalUrl/);
-  assert.match(publicApp, /Open published video/);
-  assert.match(publicApp, /Open published document/);
-  assert.match(publicApp, /media\.media_type === "document"/);
+check("public root routing hands only authenticated Spare Parts root back to operational App", () => {
+  assert.match(standalone, /isPublicWebsitePath/);
+  assert.match(standalone, /if \(path === "\/"\) return !hasOperationalBrowserSession\(\)/);
+  assert.match(standalone, /localStorage\?\.getItem\("chalin03_token"\)/);
+  assert.match(standalone, /localStorage\?\.getItem\("chalin03_user"\)/);
+  assert.match(standalone, /PUBLIC_TOP_LEVEL_PATHS/);
+  for (const pathName of [
+    "about",
+    "businesses",
+    "projects",
+    "equipment",
+    "news",
+    "leadership",
+    "media",
+    "careers",
+    "contact",
+  ]) {
+    assert.match(standalone, new RegExp(`"${pathName}"`));
+  }
 });
 
-check("public collection and detail fields match the backend serializers", () => {
-  assert.match(publicApp, /\[item\.address, item\.city, item\.region, item\.country\]/);
-  assert.match(publicApp, /item\.customer_name \|\| item\.name/);
-  assert.match(publicApp, /item\?\.status \|\| item\?\.operational_status/);
-  assert.match(publicApp, /item\?\.availability \|\| item\?\.availability_status/);
-  assert.match(publicApp, /item\?\.category\?\.name/);
-  assert.match(publicApp, /typeof item\?\.category === "string"/);
-  assert.match(publicApp, /formatPublicMoney\(item\?\.price\)/);
-  assert.match(publicApp, /formatPublicDate\(item\.published_at, true\)/);
-  assert.match(publicApp, /<PublicDetailContent item=\{item\} \/>/);
-  assert.match(publicApp, /<StructuredContent value=\{item\.specifications\} \/>/);
-  assert.match(publicApp, /<StructuredContent value=\{item\.features\} \/>/);
-  assert.match(publicApp, /item\.hire_available/);
-  assert.match(publicApp, /item\.finance_available/);
-  assert.match(publicApp, /target=\{`tel:\$\{item\.contact\.phone\}`\}/);
-  assert.match(publicApp, /target=\{`mailto:\$\{item\.contact\.email\}`\}/);
-  assert.match(publicApp, /target=\{item\.application_url\}/);
+check("standalone entry renders the corporate root behind the public feature flag", () => {
+  assert.match(standalone, /public-site\/PublicCorporateWebsiteApp/);
+  assert.match(standalone, /PublicCorporateWebsiteUnavailable/);
+  assert.match(standalone, /path="\/\*"/);
+  assert.match(standalone, /feature="publicWebsite"/);
+  assert.match(standalone, /<PublicCorporateWebsiteApp \/>/);
+});
+
+check("Content Studio and Intelligence remain protected standalone surfaces", () => {
+  assert.match(standalone, /feature="contentStudio"/);
+  assert.match(standalone, /feature="aiEnabled"/);
+  assert.match(standalone, /ProtectedRoute/);
+  assert.match(standalone, /PermissionRoute permissions=\{\[permission\]\}/);
+  assert.match(standalone, /permission="public_content\.view"/);
+  assert.match(standalone, /permission="workspace\.view"/);
+  assert.match(standalone, /AuthProvider/);
+  assert.match(standalone, /WorkspaceContextProvider/);
+  assert.match(standalone, /routePath="\/content-studio\/\*"/);
+  assert.match(standalone, /routePath="\/intelligence\/\*"/);
+});
+
+check("published content rendering blocks raw HTML and unsafe embedded execution", () => {
   assert.doesNotMatch(
-    publicApp,
-    /item\.body \|\| item\.details \|\| item\.description \|\| item\.specifications \|\| item\.features/
+    corporateApp,
+    /dangerouslySetInnerHTML|contentEditable|eval\(|<iframe/
   );
+  assert.match(corporateApp, /StructuredContent/);
+  assert.match(corporateApp, /CorporateMedia/);
+  assert.doesNotMatch(corporateApp, /Bearer|Authorization/);
+  assert.doesNotMatch(corporateApp, /localStorage|sessionStorage/);
 });
 
-check("dynamic forms implement contact honeypot consent and supported field controls", () => {
+check("public collections and detail pages use governed serializer fields", () => {
+  assert.match(corporateApp, /item\.division\?\.name/);
+  assert.match(corporateApp, /item\.location\?\.name/);
+  assert.match(corporateApp, /item\.status/);
+  assert.match(corporateApp, /item\.availability/);
+  assert.match(corporateApp, /item\.manufacturer/);
+  assert.match(corporateApp, /item\.model/);
+  assert.match(corporateApp, /item\.reference_number/);
+  assert.match(corporateApp, /formatMoney\(item\.price\)/);
+  assert.match(corporateApp, /formatDate\(item\.published_at\)/);
+  assert.match(corporateApp, /item\.specifications/);
+  assert.match(corporateApp, /item\.features/);
+});
+
+check("contact experience uses governed form honeypot consent and public submission API", () => {
   for (const marker of [
     "full_name",
     "company_name",
@@ -165,43 +209,24 @@ check("dynamic forms implement contact honeypot consent and supported field cont
     "consent_text_version",
     "source_url",
     "responses",
-    "pw-honeypot",
-    "multiselect",
-    "checkbox_group",
-  ]) assert.match(publicApp, new RegExp(marker));
-  assert.match(publicApp, /submitPublicForm/);
-  assert.match(publicApp, /reference_code/);
+    "c1-honeypot",
+    "reference_code",
+  ]) {
+    assert.match(corporateApp, new RegExp(marker));
+  }
+  assert.match(corporateApp, /getPublicForm/);
+  assert.match(corporateApp, /submitPublicForm/);
+  assert.match(corporateApp, /getPublicForm\(formSlug/);
 });
 
-check("relative navigation stays inside the separate website renderer", () => {
-  assert.match(publicApp, /PUBLIC_ROOT = "\/website"/);
-  assert.match(publicApp, /directResources/);
-  assert.match(publicApp, /`\$\{PUBLIC_ROOT\}\/pages\/\$\{clean\}`/);
-  assert.match(publicApp, /mailto:\|tel:/);
+check("legacy /website route remains a compatibility bridge instead of a second homepage", () => {
+  assert.match(corporateApp, /function LegacyWebsiteRedirect/);
+  assert.match(corporateApp, /path="website\/\*"/);
+  assert.match(corporateApp, /<Navigate replace to=/);
+  assert.match(legacyPublicApp, /PUBLIC_ROOT = "\/website"/);
 });
 
-check("standalone entry applies fail-closed feature and staff access gates", () => {
-  assert.match(standalone, /feature="publicWebsite"/);
-  assert.match(standalone, /feature="contentStudio"/);
-  assert.match(standalone, /ProtectedRoute/);
-  assert.match(standalone, /PermissionRoute permissions=\{\[permission\]\}/);
-  assert.match(standalone, /permission="public_content\.view"/);
-  assert.match(standalone, /permission="workspace\.view"/);
-  assert.match(standalone, /AuthProvider/);
-  assert.match(standalone, /WorkspaceContextProvider/);
-});
-
-check("standalone routes preserve website context and hand non-CHALIN paths to the full app", () => {
-  assert.match(standalone, /path="\/website\/\*"/);
-  assert.match(standalone, /path=\{routePath\}/);
-  assert.match(standalone, /routePath="\/content-studio\/\*"/);
-  assert.match(standalone, /routePath="\/intelligence\/\*"/);
-  assert.match(standalone, /FullApplicationHandoff/);
-  assert.match(standalone, /window\.location\.replace\(destination\)/);
-  assert.equal((standalone.match(/<Route path="\*"/g) || []).length, 2);
-});
-
-check("main entry isolates CHALIN ONE surfaces from operational overlays", () => {
+check("main entry isolates public Content Studio and intelligence surfaces from operational overlays", () => {
   assert.match(main, /isChalinOneStandalonePath/);
   assert.match(main, /standaloneChalinOne \?/);
   assert.match(main, /<ChalinOneStandaloneEntry \/>/);
@@ -209,21 +234,16 @@ check("main entry isolates CHALIN ONE surfaces from operational overlays", () =>
   assert.match(main, /browser-cache-integrity-v35/);
 });
 
-check("public renderer is responsive across desktop tablet and phone", () => {
-  assert.match(publicCss, /@media \(max-width: 1050px\)/);
-  assert.match(publicCss, /@media \(max-width: 820px\)/);
-  assert.match(publicCss, /@media \(max-width: 620px\)/);
-  assert.match(publicCss, /@media \(max-width: 390px\)/);
-  assert.match(publicCss, /pw-navigation\[data-open="true"\]/);
-  assert.match(publicCss, /pw-detail-grid > div > section/);
-  assert.match(publicCss, /pw-not-found h1/);
-  assert.match(homepageCss, /@media \(max-width: 1100px\)/);
-  assert.match(homepageCss, /@media \(max-width: 820px\)/);
-  assert.match(homepageCss, /@media \(max-width: 620px\)/);
-  assert.match(homepageCss, /prefers-reduced-motion: reduce/);
-  assert.match(homepageCss, /c1h-news-ticker/);
-  assert.match(homepageCss, /c1h-project-grid/);
-  assert.match(homepageCss, /c1h-equipment-grid/);
+check("corporate renderer is responsive and reduced-motion safe", () => {
+  assert.match(corporateCss, /@media \(max-width: 1180px\)/);
+  assert.match(corporateCss, /@media \(max-width: 900px\)/);
+  assert.match(corporateCss, /@media \(max-width: 620px\)/);
+  assert.match(corporateCss, /prefers-reduced-motion: reduce/);
+  assert.match(corporateCss, /c1-business-grid/);
+  assert.match(corporateCss, /c1-project-showcase/);
+  assert.match(corporateCss, /c1-equipment-band/);
+  assert.match(corporateCss, /c1-media-mosaic/);
+  assert.match(corporateCss, /c1-contact-layout/);
 });
 
 check("acceptance database preparation refuses production and non-isolated names", () => {
@@ -231,7 +251,10 @@ check("acceptance database preparation refuses production and non-isolated names
   assert.match(acceptanceFixture, /ACCEPTANCE_DATABASE_PATTERN/);
   assert.match(acceptanceFixture, /chalin_one_acceptance/);
   assert.match(acceptanceFixture, /legacy-row-must-survive/);
-  assert.doesNotMatch(acceptanceFixture, /DROP DATABASE|railway|production[^\n]*database/i);
+  assert.doesNotMatch(
+    acceptanceFixture,
+    /DROP DATABASE|railway|production[^\n]*database/i
+  );
 });
 
 check("database acceptance proves governance public delivery and privacy", () => {
@@ -246,7 +269,9 @@ check("database acceptance proves governance public delivery and privacy", () =>
     "upsertSiteSetting",
     "getPublicBootstrap",
     "legacy rows must survive",
-  ]) assert.match(acceptanceTest, new RegExp(marker));
+  ]) {
+    assert.match(acceptanceTest, new RegExp(marker));
+  }
 });
 
 check("CI runs real MySQL migration twice before database acceptance", () => {
