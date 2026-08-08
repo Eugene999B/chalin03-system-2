@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useFeatureFlags } from "../../context/FeatureFlagContext";
 import { contentStudioErrorMessage, getContentStudioDashboard } from "./contentStudioApi";
+import ContentStudioAccessManager from "./ContentStudioAccessManager";
 import ContentStudioCompanyInfoManager from "./ContentStudioCompanyInfoManager";
 import ContentStudioDashboard from "./ContentStudioDashboard";
 import ContentStudioFormManager from "./ContentStudioFormManager";
@@ -38,6 +39,29 @@ function AccessState({ title, message, tone = "warning" }) {
   );
 }
 
+const ACCESS_SECTION = Object.freeze({
+  key: "access",
+  label: "Studio Team & Access",
+  shortLabel: "Team & Access",
+  badge: "TA",
+  scope: "access",
+});
+
+const SECTION_SCOPES = Object.freeze({
+  pages: "pages",
+  newsroom: "newsroom",
+  leadership: "company",
+  projects: "company",
+  equipment: "company",
+  "company-info": "company",
+  media: "media",
+  forms: "forms",
+  submissions: "submissions",
+  approvals: "pages",
+  navigation: "navigation",
+  settings: "settings",
+});
+
 const MANAGERS = Object.freeze({
   pages: ContentStudioPageManager,
   newsroom: ContentStudioNewsroomManager,
@@ -51,6 +75,7 @@ const MANAGERS = Object.freeze({
   approvals: ContentStudioApprovalInbox,
   navigation: ContentStudioNavigationManager,
   settings: ContentStudioSettingsManager,
+  access: ContentStudioAccessManager,
 });
 
 export default function ContentStudioWorkspace() {
@@ -67,12 +92,24 @@ export default function ContentStudioWorkspace() {
     (permission) => auth.hasPermission(permission),
     [auth]
   );
-  const sections = useMemo(
-    () => getAccessibleContentStudioSections(hasPermission),
-    [hasPermission]
+  const scopeSet = useMemo(
+    () => new Set(auth.contentStudioScopes || []),
+    [auth.contentStudioScopes]
   );
+  const sections = useMemo(() => {
+    const permissionSections = getAccessibleContentStudioSections(hasPermission).filter(
+      (section) =>
+        auth.isContentStudioOwner || scopeSet.has(SECTION_SCOPES[section.key] || "dashboard")
+    );
+    return auth.isContentStudioOwner
+      ? [...permissionSections, ACCESS_SECTION]
+      : permissionSections;
+  }, [auth.isContentStudioOwner, hasPermission, scopeSet]);
   const activeSection = useMemo(
-    () => CONTENT_STUDIO_SECTIONS.find((section) => section.key === activeKey) || null,
+    () =>
+      activeKey === "access"
+        ? ACCESS_SECTION
+        : CONTENT_STUDIO_SECTIONS.find((section) => section.key === activeKey) || null,
     [activeKey]
   );
   const ActiveManager = activeKey === "dashboard" ? null : MANAGERS[activeKey] || null;
@@ -95,6 +132,7 @@ export default function ContentStudioWorkspace() {
       auth.loading ||
       featureLoading ||
       !auth.isLoggedIn ||
+      !auth.isContentStudioWorkspace ||
       !isFeatureEnabled("contentStudio") ||
       !hasPermission(CONTENT_STUDIO_PERMISSIONS.view)
     ) {
@@ -104,6 +142,7 @@ export default function ContentStudioWorkspace() {
     refreshDashboard({ signal: controller.signal });
     return () => controller.abort();
   }, [
+    auth.isContentStudioWorkspace,
     auth.isLoggedIn,
     auth.loading,
     featureLoading,
@@ -130,17 +169,17 @@ export default function ContentStudioWorkspace() {
     return (
       <AccessState
         title="Opening Content Studio"
-        message="Confirming your secure session, feature access and publishing permissions."
+        message="Confirming your isolated Studio session, role and publishing scope."
         tone="neutral"
       />
     );
   }
 
-  if (!auth.isLoggedIn) {
+  if (!auth.isLoggedIn || !auth.isContentStudioWorkspace) {
     return (
       <AccessState
-        title="Staff sign-in required"
-        message="Content Studio is a protected staff workspace. Sign in through the normal Chalin 03 login."
+        title="Content Studio sign-in required"
+        message="Open Content Studio with a dedicated Studio identity. Operational Staff sessions cannot enter this workspace."
         tone="danger"
       />
     );
@@ -158,8 +197,8 @@ export default function ContentStudioWorkspace() {
   if (!hasPermission(CONTENT_STUDIO_PERMISSIONS.view)) {
     return (
       <AccessState
-        title="Permission required"
-        message="Your account does not have permission to view public website content administration."
+        title="Studio role required"
+        message="Your Content Studio role does not include access to the publishing workspace."
         tone="danger"
       />
     );
@@ -180,7 +219,7 @@ export default function ContentStudioWorkspace() {
           <span className="cs-brand-mark" aria-hidden="true">C1</span>
           <div>
             <strong>Chalin Content Studio</strong>
-            <span>Public website control</span>
+            <span>Governed publishing workspace</span>
           </div>
         </div>
 
@@ -207,9 +246,9 @@ export default function ContentStudioWorkspace() {
         </nav>
 
         <div className="cs-sidebar-footer">
-          <span>Signed in as</span>
-          <strong>{auth.user?.full_name || auth.user?.username || "Staff member"}</strong>
-          <small>{auth.workspaceName || "Chalin 03"}</small>
+          <span>Studio identity</span>
+          <strong>{auth.user?.full_name || auth.user?.username || "Content Studio user"}</strong>
+          <small>{auth.contentStudioRoleName || auth.contentStudioRole || "Publishing role"}</small>
         </div>
       </aside>
 
@@ -231,15 +270,18 @@ export default function ContentStudioWorkspace() {
             <strong>{activeSection?.label || "Dashboard"}</strong>
           </div>
           <div className="cs-topbar-actions">
-            <span className="cs-status-chip cs-status-success">Protected</span>
-            <button
-              type="button"
+            <span className="cs-status-chip cs-status-success">
+              {auth.isContentStudioOwner ? "Owner" : auth.contentStudioRoleName || "Protected"}
+            </span>
+            <a
               className="cs-button cs-button-secondary"
-              disabled
-              title="Public preview will be enabled after the separate website renderer is connected."
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              title="Open the governed public website in a new tab."
             >
-              Preview website
-            </button>
+              Open website
+            </a>
           </div>
         </header>
 
@@ -247,7 +289,7 @@ export default function ContentStudioWorkspace() {
           {activeKey === "dashboard" ? (
             <ContentStudioDashboard
               dashboard={dashboard}
-              sections={sections}
+              sections={sections.filter((section) => section.key !== "access")}
               onOpenSection={openSection}
               loading={dashboardLoading}
               error={dashboardError}
@@ -258,7 +300,7 @@ export default function ContentStudioWorkspace() {
           ) : (
             <AccessState
               title="Manager unavailable"
-              message="This Content Studio manager is not available to your account."
+              message="This Content Studio manager is not available to your Studio role."
             />
           )}
         </main>
