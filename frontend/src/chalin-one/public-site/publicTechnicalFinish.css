@@ -1,0 +1,158 @@
+.c1-route-stage main[tabindex="-1"]:focus {
+  outline: none;
+}
+
+.c1-recovery-panel {
+  width: min(1120px, 100%);
+  margin-top: clamp(34px, 5vw, 70px);
+  padding-top: clamp(28px, 4vw, 48px);
+  border-top: 1px solid rgba(255,255,255,.14);
+}
+
+.c1-recovery-panel > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.c1-recovery-panel > header span {
+  color: #f0bd35;
+  font-size: .6rem;
+  font-weight: 950;
+  letter-spacing: .14em;
+}
+
+.c1-recovery-panel > header p {
+  margin: 0;
+  color: rgba(255,255,255,.42);
+  font-size: .65rem;
+}
+
+.c1-recovery-panel code {
+  color: rgba(255,255,255,.72);
+  font: inherit;
+}
+
+.c1-recovery-panel > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+}
+
+.c1-recovery-panel > div > a {
+  position: relative;
+  min-height: 138px;
+  display: grid;
+  align-content: end;
+  gap: 6px;
+  padding: 18px 42px 18px 18px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  background: rgba(255,255,255,.04);
+  color: #fff;
+  text-decoration: none;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.c1-recovery-panel > div > a:hover,
+.c1-recovery-panel > div > a:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(240,189,53,.36);
+  background: rgba(255,255,255,.07);
+  outline: 0;
+}
+
+.c1-recovery-panel strong {
+  font-size: 1rem;
+  letter-spacing: -.025em;
+}
+
+.c1-recovery-panel p {
+  margin: 0;
+  color: rgba(255,255,255,.48);
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.c1-recovery-panel a b {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  color: #f0bd35;
+}
+
+.c1-recovery-panel > small {
+  display: block;
+  margin-top: 14px;
+  color: rgba(255,255,255,.38);
+  font-size: .62rem;
+}
+
+.c1-recovery-panel kbd {
+  display: inline-grid;
+  min-width: 22px;
+  min-height: 22px;
+  place-items: center;
+  margin-inline: 3px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 6px;
+  background: rgba(255,255,255,.06);
+  color: #f0bd35;
+  font: inherit;
+  font-weight: 900;
+}
+
+.c1-state.c1-state-error {
+  width: min(760px, calc(100% - 36px));
+  margin: clamp(40px, 7vw, 90px) auto;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(143,48,48,.18);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(143,48,48,.08), transparent 32%),
+    rgba(255,255,255,.58);
+  box-shadow: 0 24px 70px rgba(7,19,31,.08);
+}
+
+.c1-state.c1-state-error strong {
+  font-size: clamp(1.4rem, 3vw, 2.3rem);
+  letter-spacing: -.035em;
+}
+
+.c1-site a:focus-visible,
+.c1-site button:focus-visible,
+.c1-site input:focus-visible,
+.c1-site textarea:focus-visible,
+.c1-site select:focus-visible {
+  outline: 3px solid rgba(122,214,255,.72);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .c1-recovery-panel > header {
+    display: grid;
+    align-items: start;
+  }
+
+  .c1-recovery-panel > div {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .c1-recovery-panel > div > a {
+    min-height: 122px;
+  }
+}
+
+@media (max-width: 390px) {
+  .c1-recovery-panel > div {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1-recovery-panel > div > a {
+    transition: none !important;
+  }
+}
