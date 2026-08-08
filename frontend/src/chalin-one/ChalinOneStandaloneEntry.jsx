@@ -57,26 +57,12 @@ const PUBLIC_TOP_LEVEL_PATHS = new Set([
   "website",
 ]);
 
-function hasOperationalBrowserSession() {
-  if (typeof window === "undefined") return false;
-  try {
-    return Boolean(
-      window.localStorage?.getItem("chalin03_token") ||
-        window.localStorage?.getItem("chalin03_user")
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function isPublicWebsitePath(pathname) {
   const path = String(pathname || "").split(/[?#]/)[0] || "/";
 
-  // The company website owns / for every signed-out visitor. Spare Parts still
-  // uses / as its established protected dashboard destination after login, so
-  // an authenticated operational browser is handed back to App at that one
-  // exact path until the later staff-portal route migration is introduced.
-  if (path === "/") return !hasOperationalBrowserSession();
+  // CHALIN ONE is the permanent company front door. Staff work now enters
+  // through /login and the explicit /staff dashboard rather than borrowing /.
+  if (path === "/") return true;
 
   const firstSegment = path.replace(/^\/+/, "").split("/")[0];
   return PUBLIC_TOP_LEVEL_PATHS.has(firstSegment);
