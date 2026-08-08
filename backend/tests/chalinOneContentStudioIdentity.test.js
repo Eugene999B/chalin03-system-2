@@ -59,7 +59,9 @@ test("Content Studio migration runner is gated to isolated databases", () => {
   assert.match(migrationRunner, /CHALIN_ONE_ALLOW_CONTENT_STUDIO_IDENTITY_MIGRATION/);
   assert.match(migrationRunner, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
   assert.match(migrationRunner, /CHALIN03_SQL_BACKUP_CONFIRMED/);
-  assert.match(migrationRunner, /chalin_one_\(\?:acceptance\|staging\|development\)/);
+  assert.match(migrationRunner, /SAFE_NON_PRODUCTION_DATABASE/);
+  assert.match(migrationRunner, /acceptance\|staging\|development/);
+  assert.match(migrationRunner, /Non-production Content Studio identity migration may target only isolated CHALIN ONE acceptance, staging or development databases/);
   assert.match(migrationRunner, /GET_LOCK/);
   assert.match(migrationRunner, /RELEASE_LOCK/);
 });
