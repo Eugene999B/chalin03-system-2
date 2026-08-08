@@ -16,6 +16,7 @@
     "migrate:chalin-one:public-guide": "node scripts/runChalinOnePublicGuideFoundationMigration.js",
     "migrate:chalin-one:portal-security": "node scripts/runChalinOnePortalSecurityFoundationMigration.js",
     "migrate:chalin-one:document-intelligence": "node scripts/runChalinOneDocumentIntelligenceMigration.js",
+    "migrate:chalin-one:content-studio-identity": "node scripts/runChalinOneContentStudioIdentityMigration.js",
     "prepare:chalin-one:acceptance-db": "node scripts/prepareChalinOneAcceptanceDatabase.js",
     "test:chalin-one:db": "node --test --test-concurrency=1 acceptance/*.test.js",
     "test:chalin-one:ai-db": "node --test --test-concurrency=1 acceptance/aiFoundationDatabaseAcceptance.test.js",
@@ -72,7 +73,7 @@
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
+    "cors": "^2.8.0",
     "dotenv": "^16.0.0",
     "exceljs": "npm:@excel.js/exceljs@0.9.0",
     "express": "^4.18.0",
