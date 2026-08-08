@@ -59,11 +59,13 @@ assert.match(workspace, /ContentStudioVisualBuilder/);
 assert.match(workspace, /"visual-builder": "pages"/);
 assert.match(workspace, /"visual-builder": ContentStudioVisualBuilder/);
 
+assert.match(model, /VISUAL_PREVIEW_DEVICES/);
+for (const device of ["desktop", "tablet", "mobile"]) {
+  assert.match(model, new RegExp(`key: "${device}"`), `${device} preview device missing`);
+}
 assert.match(builder, /VISUAL_PREVIEW_DEVICES/);
 assert.match(builder, /previewDevice/);
-assert.match(builder, /"desktop"/);
-assert.match(builder, /"tablet"/);
-assert.match(builder, /"mobile"/);
+assert.match(builder, /setPreviewDevice/);
 assert.match(builder, /data-mobile-surface=\{mobileSurface\}/);
 assert.match(builder, /LIVE STUDIO PREVIEW/);
 assert.match(builder, /governed public renderer remains the final publication surface/i);
