@@ -4,7 +4,7 @@
     "buildCommand": "npm ci"
   },
   "deploy": {
-    "startCommand": "node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && npm start",
+    "startCommand": "node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
