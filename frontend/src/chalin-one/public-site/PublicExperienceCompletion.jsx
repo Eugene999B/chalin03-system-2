@@ -126,6 +126,43 @@ function contextualActions(pathname) {
   return [["Explore businesses", "/businesses"], ["Start an enquiry", "/contact"]];
 }
 
+function ensureMeta(selector, attributes) {
+  let node = document.head.querySelector(selector);
+  if (!node) {
+    node = document.createElement("meta");
+    document.head.appendChild(node);
+  }
+  Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+  return node;
+}
+
+function syncPublicMetadata(pathname) {
+  const title = document.title || "CHALIN ONE | Chalin 03 Company Limited";
+  const description =
+    document.head.querySelector('meta[name="description"]')?.getAttribute("content") ||
+    "CHALIN ONE — the public company platform for Chalin 03 Company Limited.";
+  const canonicalUrl = `${window.location.origin}${pathname}${window.location.search}`;
+
+  let canonical = document.head.querySelector('link[rel="canonical"]');
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.setAttribute("rel", "canonical");
+    document.head.appendChild(canonical);
+  }
+  canonical.setAttribute("href", canonicalUrl);
+
+  ensureMeta('meta[property="og:title"]', { property: "og:title", content: title });
+  ensureMeta('meta[property="og:description"]', { property: "og:description", content: description });
+  ensureMeta('meta[property="og:url"]', { property: "og:url", content: canonicalUrl });
+  ensureMeta('meta[property="og:type"]', {
+    property: "og:type",
+    content: pathname.startsWith("/news/") ? "article" : "website",
+  });
+  ensureMeta('meta[name="twitter:card"]', { name: "twitter:card", content: "summary_large_image" });
+  ensureMeta('meta[name="twitter:title"]', { name: "twitter:title", content: title });
+  ensureMeta('meta[name="twitter:description"]', { name: "twitter:description", content: description });
+}
+
 export default function PublicExperienceCompletion() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -136,12 +173,31 @@ export default function PublicExperienceCompletion() {
   const [error, setError] = useState("");
   const [catalogue, setCatalogue] = useState([]);
   const [recent, setRecent] = useState(() => readRecentPages());
+  const [routeAnnouncement, setRouteAnnouncement] = useState("CHALIN ONE public website");
 
   useEffect(() => {
     rememberPage(location.pathname);
     setRecent(readRecentPages());
     setOpen(false);
-  }, [location.pathname]);
+
+    const settle = window.setTimeout(() => {
+      const main = document.querySelector(".c1-site main");
+      if (main) {
+        main.id = "c1-main-content";
+      }
+      syncPublicMetadata(location.pathname);
+      setRouteAnnouncement(`${humanPath(location.pathname)} — ${document.title}`);
+    }, 80);
+
+    const resync = window.setTimeout(() => {
+      syncPublicMetadata(location.pathname);
+    }, 650);
+
+    return () => {
+      window.clearTimeout(settle);
+      window.clearTimeout(resync);
+    };
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -228,6 +284,9 @@ export default function PublicExperienceCompletion() {
 
   return (
     <>
+      <a className="c1-skip-link" href="#c1-main-content">Skip to main content</a>
+      <div className="c1-route-announcer" aria-live="polite" aria-atomic="true">{routeAnnouncement}</div>
+
       <aside className="c1-completion-rail" aria-label="CHALIN ONE page actions">
         <button type="button" onClick={() => setOpen(true)}>
           <span>DISCOVER</span>
