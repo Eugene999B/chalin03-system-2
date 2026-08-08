@@ -5,7 +5,7 @@ export const businessWorkspaces = [
     shortName: "Spare Parts",
     icon: "🧰",
     route: "/login",
-    openRoute: "/",
+    openRoute: "/staff",
     requiresBranch: true,
     loginContextTitle: "Choose Spare Parts Store",
     loginContextMessage:
@@ -182,5 +182,5 @@ export function getBusinessWorkspace(code) {
 
 export function getWorkspaceHomeRoute(code) {
   const workspace = getBusinessWorkspace(code);
-  return workspace?.openRoute || "/";
+  return workspace?.openRoute || "/staff";
 }
