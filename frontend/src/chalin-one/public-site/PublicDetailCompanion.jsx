@@ -82,7 +82,19 @@ function formatDate(value) {
 }
 
 function locationValue(item) {
-  return item?.location?.name || item?.location || item?.location_text || "";
+  const location = item?.location;
+  if (typeof location === "string" || typeof location === "number") {
+    return String(location);
+  }
+  if (location && typeof location === "object") {
+    return (
+      location.name ||
+      [location.address, location.city, location.region, location.country]
+        .filter(Boolean)
+        .join(", ")
+    );
+  }
+  return String(item?.location_text || "");
 }
 
 function factPairs(item, context) {
