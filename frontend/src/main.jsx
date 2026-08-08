@@ -7,6 +7,7 @@ import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccou
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
+import ChalinOneGatewayLinks from "./components/ChalinOneGatewayLinks.jsx";
 import ChalinOneStandaloneEntry, {
   isChalinOneStandalonePath,
 } from "./chalin-one/ChalinOneStandaloneEntry.jsx";
@@ -38,6 +39,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       ) : (
         <>
           <App />
+          <ChalinOneGatewayLinks />
           <ProductsPageShellRepair />
           <OperationalApprovalLauncher />
           <ApprovalCentreLiveAttention />
