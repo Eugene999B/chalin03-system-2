@@ -150,7 +150,6 @@ function PublicWebsiteEntry() {
   const quietFallback = <PublicStandaloneLoading />;
   return (
     <BrowserRouter>
-      <PublicExperienceCompletion />
       <Routes>
         <Route
           path="/*"
@@ -164,9 +163,12 @@ function PublicWebsiteEntry() {
               }
               loadingFallback={quietFallback}
             >
-              <SafeStandalone fallback={quietFallback}>
-                <PublicCorporateWebsiteApp />
-              </SafeStandalone>
+              <>
+                <PublicExperienceCompletion />
+                <SafeStandalone fallback={quietFallback}>
+                  <PublicCorporateWebsiteApp />
+                </SafeStandalone>
+              </>
             </FeatureFlagRoute>
           }
         />
