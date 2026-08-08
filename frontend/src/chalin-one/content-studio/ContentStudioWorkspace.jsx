@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { useFeatureFlags } from "../../context/FeatureFlagContext";
 import { contentStudioErrorMessage, getContentStudioDashboard } from "./contentStudioApi";
 import ContentStudioAccessManager from "./ContentStudioAccessManager";
 import ContentStudioCompanyInfoManager from "./ContentStudioCompanyInfoManager";
@@ -80,8 +79,6 @@ const MANAGERS = Object.freeze({
 
 export default function ContentStudioWorkspace() {
   const auth = useAuth();
-  const { loading: featureLoading, error: featureError, isFeatureEnabled } =
-    useFeatureFlags();
   const [activeKey, setActiveKey] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [dashboard, setDashboard] = useState({});
@@ -130,10 +127,8 @@ export default function ContentStudioWorkspace() {
   useEffect(() => {
     if (
       auth.loading ||
-      featureLoading ||
       !auth.isLoggedIn ||
       !auth.isContentStudioWorkspace ||
-      !isFeatureEnabled("contentStudio") ||
       !hasPermission(CONTENT_STUDIO_PERMISSIONS.view)
     ) {
       return undefined;
@@ -145,9 +140,7 @@ export default function ContentStudioWorkspace() {
     auth.isContentStudioWorkspace,
     auth.isLoggedIn,
     auth.loading,
-    featureLoading,
     hasPermission,
-    isFeatureEnabled,
     refreshDashboard,
   ]);
 
@@ -165,7 +158,7 @@ export default function ContentStudioWorkspace() {
     setMenuOpen(false);
   }
 
-  if (auth.loading || featureLoading) {
+  if (auth.loading) {
     return (
       <AccessState
         title="Opening Content Studio"
@@ -181,15 +174,6 @@ export default function ContentStudioWorkspace() {
         title="Content Studio sign-in required"
         message="Open Content Studio with a dedicated Studio identity. Operational Staff sessions cannot enter this workspace."
         tone="danger"
-      />
-    );
-  }
-
-  if (!isFeatureEnabled("contentStudio")) {
-    return (
-      <AccessState
-        title="Content Studio is not enabled"
-        message={featureError || "This CHALIN ONE feature remains safely disabled in this environment."}
       />
     );
   }
