@@ -4,7 +4,7 @@
     "buildCommand": "cd backend && npm ci"
   },
   "deploy": {
-    "startCommand": "cd backend && npm run verify:chalin-one:full-staging && npm start",
+    "startCommand": "node backend/scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && cd backend && npm start",
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
