@@ -176,16 +176,20 @@ check("standalone entry renders the corporate root behind the public feature fla
   assert.match(standalone, /<PublicCorporateWebsiteApp \/>/);
 });
 
-check("Content Studio and Intelligence remain protected standalone surfaces", () => {
-  assert.match(standalone, /feature="contentStudio"/);
+check("Content Studio uses isolated auth while Intelligence remains staff-protected", () => {
+  assert.match(standalone, /function ContentStudioSessionGate/);
+  assert.match(standalone, /path="\/content-studio\/login"/);
+  assert.match(standalone, /path="\/content-studio\/change-password"/);
+  assert.match(standalone, /path="\/content-studio\/\*"/);
+  assert.match(standalone, /!isLoggedIn \|\| !isContentStudioWorkspace/);
+  assert.match(standalone, /permissions=\{\["public_content\.view"\]\}/);
+  assert.doesNotMatch(standalone, /feature="contentStudio"/);
   assert.match(standalone, /feature="aiEnabled"/);
   assert.match(standalone, /ProtectedRoute/);
   assert.match(standalone, /PermissionRoute permissions=\{\[permission\]\}/);
-  assert.match(standalone, /permission="public_content\.view"/);
   assert.match(standalone, /permission="workspace\.view"/);
   assert.match(standalone, /AuthProvider/);
   assert.match(standalone, /WorkspaceContextProvider/);
-  assert.match(standalone, /routePath="\/content-studio\/\*"/);
   assert.match(standalone, /routePath="\/intelligence\/\*"/);
 });
 
