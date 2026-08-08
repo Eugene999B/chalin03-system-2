@@ -16,6 +16,8 @@ const accessibilityCss = read("src/chalin-one/public-site/publicExperienceAccess
 const explorerCss = read("src/chalin-one/public-site/publicCollectionExplorer.css");
 const detailCompanion = read("src/chalin-one/public-site/PublicDetailCompanion.jsx");
 const detailCss = read("src/chalin-one/public-site/publicDetailCompanion.css");
+const worldEnhancements = read("src/chalin-one/public-site/PublicWorldEnhancements.jsx");
+const worldCss = read("src/chalin-one/public-site/publicWorldEnhancements.css");
 const standalone = read("src/chalin-one/ChalinOneStandaloneEntry.jsx");
 
 for (const resource of ["divisions", "equipment", "projects", "news", "vacancies", "locations"]) {
@@ -98,15 +100,56 @@ assert.match(detailCss, /@media \(max-width: 800px\)/);
 assert.match(detailCss, /safe-area-inset-bottom/);
 assert.match(detailCss, /prefers-reduced-motion/);
 
+for (const marker of [
+  "BusinessWorldPulse",
+  "MediaJournal",
+  "LocationsNetwork",
+  "ContactRouting",
+  "usePortalTarget",
+  "useEnhancementData",
+]) {
+  assert.match(worldEnhancements, new RegExp(marker));
+}
+for (const resource of ["projects", "equipment", "news", "locations", "divisions", "leadership"]) {
+  assert.match(worldEnhancements, new RegExp(`\\"${resource}\\"`));
+}
+assert.match(worldEnhancements, /Promise\.allSettled/);
+assert.match(worldEnhancements, /matchesBusiness/);
+assert.match(worldEnhancements, /entryDivision\.slug/);
+assert.match(worldEnhancements, /entryDivision\.name/);
+assert.match(worldEnhancements, /media\?\.media_type === "image"/);
+assert.match(worldEnhancements, /Only locations approved for public display/);
+assert.match(worldEnhancements, /Published work, machines, company signals and locations/);
+assert.match(worldEnhancements, /createPortal\(content, target\)/);
+assert.match(worldEnhancements, /document\.querySelector\("\.c1-route-stage main\.c1-deep-page"\)/);
+assert.doesNotMatch(worldEnhancements, /localStorage|sessionStorage|Bearer|Authorization/);
+assert.doesNotMatch(worldEnhancements, /dangerouslySetInnerHTML|eval\(/);
+
+assert.match(worldCss, /main\[data-c1-enhancement="media"\] \.c1-media-mosaic-page/);
+assert.match(worldCss, /\.c1-world-pulse-metrics/);
+assert.match(worldCss, /\.c1-media-journal-grid/);
+assert.match(worldCss, /\.c1-media-lightbox/);
+assert.match(worldCss, /\.c1-location-network-grid/);
+assert.match(worldCss, /\.c1-contact-routing-grid/);
+assert.match(worldCss, /@media \(max-width: 760px\)/);
+assert.match(worldCss, /safe-area-inset-bottom/);
+assert.match(worldCss, /prefers-reduced-motion/);
+
 assert.match(standalone, /PublicExperienceCompletion/);
 assert.match(standalone, /PublicDetailCompanion/);
+assert.match(standalone, /PublicWorldEnhancements/);
 assert.match(standalone, /<PublicDetailCompanion \/>/);
+assert.match(standalone, /<PublicWorldEnhancements \/>/);
 assert.match(standalone, /PublicStandaloneLoading/);
 assert.match(standalone, /Loading secure workspace/);
 assert.doesNotMatch(standalone, />\s*Opening CHALIN ONE…\s*</);
 assert.match(standalone, /feature="publicWebsite"/);
 assert.match(standalone, /<PublicExperienceCompletion \/>/);
+const publicEntryIndex = standalone.indexOf("function PublicWebsiteEntry");
+const staffShellIndex = standalone.indexOf("function StaffStandaloneShell");
+const worldMountIndex = standalone.indexOf("<PublicWorldEnhancements />");
+assert.ok(publicEntryIndex >= 0 && worldMountIndex > publicEntryIndex && worldMountIndex < staffShellIndex);
 
 console.log(
-  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, published detail facts, metadata-related records, responsive explorer, route metadata and accessibility helpers remain protected."
+  "✅ CHALIN ONE Phase 1C public completion contracts passed: quiet public boot, governed discovery, derived collection filters, published detail facts, metadata-related records, responsive explorer, business worlds, governed media journal, public location routing and accessibility helpers remain protected."
 );
