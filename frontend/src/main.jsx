@@ -89,12 +89,14 @@ function installPublicApplicationBoundaryHandoffs() {
       if (!handoffPath) return;
 
       // Public CHALIN ONE and the protected staff applications use different
-      // router roots. A hard same-origin handoff is intentional here so React's
-      // public router cannot swallow /login or protected standalone routes.
+      // router roots. Stop React Router from seeing this click at all and let
+      // the browser perform a genuine document navigation. The new document
+      // then boots App, Content Studio or Intelligence from the destination
+      // pathname instead of leaving the public router mounted at that URL.
       event.preventDefault();
-      window.location.assign(
-        `${target.pathname}${target.search}${target.hash}`
-      );
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      window.location.href = `${target.pathname}${target.search}${target.hash}`;
     },
     true
   );
