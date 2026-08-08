@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   aiErrorMessage,
   getAiKnowledgeSource,
@@ -77,6 +77,10 @@ function StatusCard({ title, value, note }) {
 }
 
 export default function DocumentIntelligencePage() {
+  const [searchParams] = useSearchParams();
+  const requestedSourceKey = searchParams.get("source") || "";
+  const requestedDocumentId = Number(searchParams.get("document") || 0);
+  const requestedChunkId = Number(searchParams.get("chunk") || 0);
   const [status, setStatus] = useState(null);
   const [sources, setSources] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -139,7 +143,11 @@ export default function DocumentIntelligencePage() {
       .then(([nextStatus, nextSources]) => {
         setStatus(nextStatus);
         setSources(nextSources);
-        if (nextSources[0]?.id) setSelectedId(String(nextSources[0].id));
+        const requestedSource = nextSources.find(
+          (source) => source.source_key === requestedSourceKey
+        );
+        const initialSource = requestedSource || nextSources[0];
+        if (initialSource?.id) setSelectedId(String(initialSource.id));
       })
       .catch((requestError) => {
         if (!controller.signal.aborted) setError(aiErrorMessage(requestError));
@@ -148,13 +156,46 @@ export default function DocumentIntelligencePage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [requestedSourceKey]);
 
   useEffect(() => {
     const controller = new AbortController();
     if (selectedId) loadSource(selectedId, controller.signal);
     return () => controller.abort();
   }, [loadSource, selectedId]);
+
+  useEffect(() => {
+    if (
+      !requestedDocumentId ||
+      !details?.source ||
+      details.source.source_key !== requestedSourceKey ||
+      Number(selectedDocument?.id || 0) === requestedDocumentId
+    ) {
+      return;
+    }
+    const targetDocument = documents.find(
+      (document) => Number(document.id) === requestedDocumentId
+    );
+    if (targetDocument) inspectDocument(targetDocument);
+  }, [
+    details?.source,
+    documents,
+    requestedDocumentId,
+    requestedSourceKey,
+    selectedDocument?.id,
+  ]);
+
+  useEffect(() => {
+    if (!requestedChunkId || chunkLoading || chunks.length === 0) return;
+    const target = window.document.getElementById(
+      `knowledge-chunk-${requestedChunkId}`
+    );
+    if (!target) return;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus({ preventScroll: true });
+    });
+  }, [chunkLoading, chunks, requestedChunkId]);
 
   async function ingest(event) {
     event.preventDefault();
@@ -441,7 +482,14 @@ export default function DocumentIntelligencePage() {
                 <div className="di-empty">No chunks were returned for this document.</div>
               ) : (
                 chunks.map((chunk) => (
-                  <article className="di-chunk-card" key={chunk.id}>
+                  <article
+                    className={`di-chunk-card${
+                      Number(chunk.id) === requestedChunkId ? " is-citation-target" : ""
+                    }`}
+                    id={`knowledge-chunk-${chunk.id}`}
+                    key={chunk.id}
+                    tabIndex={-1}
+                  >
                     <div className="di-chunk-head">
                       <strong>Chunk {chunk.chunk_index + 1}</strong>
                       <span>
