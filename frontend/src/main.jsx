@@ -28,6 +28,11 @@ const publicWebsiteSurface = isPublicWebsitePath(window.location.pathname);
 const standaloneChalinOne = isChalinOneStandalonePath(
   window.location.pathname
 );
+const PUBLIC_APP_HANDOFF_PATHS = new Set([
+  "/login",
+  "/content-studio",
+  "/intelligence",
+]);
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
@@ -56,7 +61,48 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 
 window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
 
-async function removeDevelopmentServiceWorkerCaches() {
+function installPublicApplicationBoundaryHandoffs() {
+  if (!publicWebsiteSurface) return;
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (event.defaultPrevented || event.button > 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const anchor = event.target?.closest?.("a[href]");
+      if (!anchor) return;
+
+      let target;
+      try {
+        target = new URL(anchor.href, window.location.origin);
+      } catch {
+        return;
+      }
+
+      if (target.origin !== window.location.origin) return;
+
+      const handoffPath = Array.from(PUBLIC_APP_HANDOFF_PATHS).find(
+        (path) =>
+          target.pathname === path || target.pathname.startsWith(`${path}/`)
+      );
+      if (!handoffPath) return;
+
+      // Public CHALIN ONE and the protected staff applications use different
+      // router roots. A hard same-origin handoff is intentional here so React's
+      // public router cannot swallow /login or protected standalone routes.
+      event.preventDefault();
+      window.location.assign(
+        `${target.pathname}${target.search}${target.hash}`
+      );
+    },
+    true
+  );
+}
+
+installPublicApplicationBoundaryHandoffs();
+
+async function removeChalinServiceWorkerCaches({ logMessage = "" } = {}) {
   if (!("serviceWorker" in navigator)) {
     return;
   }
@@ -80,14 +126,12 @@ async function removeDevelopmentServiceWorkerCaches() {
       );
     }
 
-    if (registrations.length > 0) {
-      console.log(
-        "✅ Development service workers and old local caches were removed"
-      );
+    if (logMessage) {
+      console.log(logMessage);
     }
   } catch (error) {
     console.warn(
-      "⚠️ Could not fully clear development service-worker caches:",
+      "⚠️ Could not fully clear CHALIN service-worker caches:",
       error
     );
   }
@@ -103,33 +147,41 @@ function requestAssetRecovery(reason) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
-      requestAssetRecovery("service-worker-asset-mismatch");
-    }
-  });
+  // The public company website is deliberately outside the aggressive business-
+  // app cache-recovery loop. It must never jump, reload, or interrupt a visitor
+  // merely because another staging release has been deployed.
+  if (!publicWebsiteSurface) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
+        requestAssetRecovery("service-worker-asset-mismatch");
+      }
+    });
+  }
 
   window.addEventListener("load", () => {
     if (import.meta.env.PROD) {
+      if (publicWebsiteSurface) {
+        removeChalinServiceWorkerCaches({
+          logMessage:
+            "✅ CHALIN ONE public website is running without automatic service-worker refreshes",
+        });
+        return;
+      }
+
       const hadActiveController = Boolean(navigator.serviceWorker.controller);
       let reloadingForUpdate = false;
 
-      // The operational application keeps its one-time reload on a service-worker
-      // handover because stale business-app chunks can be dangerous. The public
-      // CHALIN ONE website deliberately does not reload on controllerchange:
-      // visitors keep reading uninterrupted and receive the new release naturally
-      // on their next navigation/reopen/refresh. Genuine retired-asset failures
-      // are still handled by the page-owned asset recovery flow above.
-      if (!publicWebsiteSurface) {
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          if (!hadActiveController || reloadingForUpdate) {
-            return;
-          }
+      // Operational workspaces retain their one-time handover reload because
+      // stale cashier/finance/operations code is materially riskier than a
+      // public website interruption.
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadActiveController || reloadingForUpdate) {
+          return;
+        }
 
-          reloadingForUpdate = true;
-          window.location.reload();
-        });
-      }
+        reloadingForUpdate = true;
+        window.location.reload();
+      });
 
       navigator.serviceWorker
         .register(
@@ -159,6 +211,9 @@ if ("serviceWorker" in navigator) {
       return;
     }
 
-    removeDevelopmentServiceWorkerCaches();
+    removeChalinServiceWorkerCaches({
+      logMessage:
+        "✅ Development service workers and old local caches were removed",
+    });
   });
 }
