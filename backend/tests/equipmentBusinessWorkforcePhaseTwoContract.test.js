@@ -71,7 +71,11 @@ test("role defaults are resolved before protected allow and deny overrides", () 
   assert.match(overrides, /\.\.\.getEffectivePermissions\(session\)/);
   assert.match(overrides, /\.\.\.equipmentRoleDefaultPermissions/);
   assert.match(overrides, /const basePermissions = roleDefaultPermissions/);
-  assert.match(overrides, /return applyPermissionOverrides\(basePermissions, overrides\)/);
+  assert.match(
+    overrides,
+    /return operationalOnly\(applyPermissionOverrides\(basePermissions, overrides\)\)/
+  );
+  assert.match(overrides, /CONTENT_STUDIO_PERMISSION_SET/);
   assert.match(overrides, /for \(const permissionCode of denied\)[\s\S]*allowed\.delete/);
 });
 
