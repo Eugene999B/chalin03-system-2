@@ -7,6 +7,7 @@ const {
   permissionsForWorkspace,
 } = require("../security/permissionCatalog");
 const {
+  CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_PROTECTED_GRANTS,
 } = require("../security/contentStudioPermissionCatalog");
 const {
@@ -21,6 +22,7 @@ const WORKSPACE_CODES = new Set([
   "mining",
   "equipment_hire",
 ]);
+const CONTENT_STUDIO_PERMISSION_SET = new Set(CONTENT_STUDIO_PERMISSIONS);
 
 // The original System Administrator is the protected owner account. Every
 // permission is immutable for that identity; ordinary administrators remain
@@ -59,6 +61,10 @@ function uniquePermissions(values = []) {
   return [...new Set(values.filter(Boolean))].sort();
 }
 
+function operationalOnly(values = []) {
+  return values.filter((permission) => !CONTENT_STUDIO_PERMISSION_SET.has(permission));
+}
+
 function roleDefaultPermissions(session = {}) {
   if (isOriginalSystemAdministrator(session)) {
     return uniquePermissions(getEffectivePermissions(session));
@@ -68,13 +74,15 @@ function roleDefaultPermissions(session = {}) {
     session.workspace_code || session.active_workspace?.code
   );
   const allowed = new Set(permissionsForWorkspace(workspace));
-  return uniquePermissions([
-    ...getEffectivePermissions(session),
-    ...equipmentRoleDefaultPermissions({
-      ...session,
-      workspace_code: workspace,
-    }),
-  ]).filter((permission) => allowed.has(permission));
+  return operationalOnly(
+    uniquePermissions([
+      ...getEffectivePermissions(session),
+      ...equipmentRoleDefaultPermissions({
+        ...session,
+        workspace_code: workspace,
+      }),
+    ]).filter((permission) => allowed.has(permission))
+  );
 }
 
 function applyPermissionOverrides(basePermissions = [], overrides = []) {
@@ -176,7 +184,10 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
     connection: options.connection || pool,
   });
 
-  return applyPermissionOverrides(basePermissions, overrides);
+  // Content Studio is a separate authentication/access domain. Operational
+  // permission overrides can no longer recreate Studio access for an ordinary
+  // Spare Parts, Mining or Equipment session.
+  return operationalOnly(applyPermissionOverrides(basePermissions, overrides));
 }
 
 function validateOverridePolicy({
@@ -211,6 +222,16 @@ function validateOverridePolicy({
       code: "OWNER_PERMISSION_IMMUTABLE",
       message:
         "The original System Administrator always retains every system permission and cannot receive permission overrides.",
+    };
+  }
+
+  if (CONTENT_STUDIO_PERMISSION_SET.has(String(permissionCode || "").trim())) {
+    return {
+      ok: false,
+      statusCode: 409,
+      code: "CONTENT_STUDIO_PERMISSION_DOMAIN_SEPARATE",
+      message:
+        "Content Studio access is managed only through the Content Studio role system, not operational permission overrides.",
     };
   }
 
@@ -286,7 +307,10 @@ function humanizePermission(permissionCode) {
 
 function buildPermissionDescriptors(workspaceCode = "spare_parts") {
   const allowed = new Set(permissionsForWorkspace(workspaceCode));
-  return ALL_PERMISSIONS.filter((permissionCode) => allowed.has(permissionCode))
+  return ALL_PERMISSIONS.filter(
+    (permissionCode) =>
+      allowed.has(permissionCode) && !CONTENT_STUDIO_PERMISSION_SET.has(permissionCode)
+  )
     .map((permissionCode) => ({
       code: permissionCode,
       label: humanizePermission(permissionCode),
@@ -309,6 +333,7 @@ module.exports = {
   loadActivePermissionOverrides,
   normalizeEffect,
   normalizeWorkspace,
+  operationalOnly,
   resolveEffectivePermissions,
   roleDefaultPermissions,
   validateOverridePolicy,
