@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
+    "bootstrap:chalin-one:staging-base": "node scripts/bootstrapChalinOneFreshStagingDatabase.js",
     "migrate:chalin-one:public-content": "node scripts/runChalinOnePublicContentFoundationMigration.js",
     "migrate:chalin-one:ai-foundation": "node scripts/runChalinOneAiFoundationMigration.js",
     "migrate:chalin-one:ai-actions": "node scripts/runChalinOneAiActionGovernanceMigration.js",
