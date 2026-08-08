@@ -73,6 +73,14 @@ assert.match(mainEntry, /updateViaCache: "none"/);
 assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
 assert.match(mainEntry, /encodeURIComponent\(APP_SHELL_RELEASE\)/);
+assert.match(mainEntry, /isPublicWebsitePath/);
+assert.match(
+  mainEntry,
+  /const publicWebsiteSurface = isPublicWebsitePath\(window\.location\.pathname\)/
+);
+assert.match(mainEntry, /if \(!publicWebsiteSurface\) \{/);
+assert.match(mainEntry, /navigator\.serviceWorker\.addEventListener\("controllerchange"/);
+assert.match(mainEntry, /window\.location\.reload\(\)/);
 
 assert.match(viteConfig, /RAILWAY_GIT_COMMIT_SHA/);
 assert.match(viteConfig, /CF_PAGES_COMMIT_SHA/);
@@ -120,5 +128,5 @@ assert.match(notFound, /window\.location\.replace\(recovery\.toString\(\)\)/);
 assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser cache recovery contracts passed: one page-owned recovery flow loads the root shell, restores the staff's deep route without a second network request, and self-heals unexpected navigation 404 responses."
+  "✅ Browser cache recovery contracts passed: the public CHALIN ONE website stays uninterrupted during normal service-worker updates, while operational pages retain one-time update recovery and retired assets still self-heal safely."
 );
