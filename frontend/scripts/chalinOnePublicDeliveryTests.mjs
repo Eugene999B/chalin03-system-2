@@ -15,6 +15,10 @@ const corporateCss = read("frontend/src/chalin-one/public-site/publicCorporateWe
 const legacyPublicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
 const standalone = read("frontend/src/chalin-one/ChalinOneStandaloneEntry.jsx");
 const main = read("frontend/src/main.jsx");
+const operationalApp = read("frontend/src/App.jsx");
+const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
+const businessWorkspaces = read("frontend/src/data/businessWorkspaces.js");
+const commandGate = read("frontend/src/utils/commandGate.js");
 const publicRoutes = read("backend/routes/publicContentRoutes.js");
 const homepageService = read("backend/services/publicHomepageService.js");
 const workflow = read(".github/workflows/chalin-one-ci.yml");
@@ -137,11 +141,10 @@ check("corporate experience exposes real business newsroom media careers and con
   assert.match(corporateApp, /Equipment Business/);
 });
 
-check("public root routing hands only authenticated Spare Parts root back to operational App", () => {
+check("public root is permanent and Spare Parts uses an explicit staff dashboard", () => {
   assert.match(standalone, /isPublicWebsitePath/);
-  assert.match(standalone, /if \(path === "\/"\) return !hasOperationalBrowserSession\(\)/);
-  assert.match(standalone, /localStorage\?\.getItem\("chalin03_token"\)/);
-  assert.match(standalone, /localStorage\?\.getItem\("chalin03_user"\)/);
+  assert.match(standalone, /if \(path === "\/"\) return true/);
+  assert.doesNotMatch(standalone, /hasOperationalBrowserSession/);
   assert.match(standalone, /PUBLIC_TOP_LEVEL_PATHS/);
   for (const pathName of [
     "about",
@@ -156,6 +159,13 @@ check("public root routing hands only authenticated Spare Parts root back to ope
   ]) {
     assert.match(standalone, new RegExp(`"${pathName}"`));
   }
+
+  assert.match(operationalApp, /path="staff" element=\{<SparePartsHomePage \/>\}/);
+  assert.match(loginPage, /spare_parts: "\/staff"/);
+  assert.match(businessWorkspaces, /openRoute: "\/staff"/);
+  assert.match(commandGate, /return "\/staff"/);
+  assert.match(commandGate, /cleanPath === "\/"\) return false/);
+  assert.match(commandGate, /PUBLIC_TOP_LEVEL_PATHS/);
 });
 
 check("standalone entry renders the corporate root behind the public feature flag", () => {
