@@ -6,6 +6,9 @@ const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const { executeSqlScript } = require("./sqlScriptRunner");
+const {
+  validateFullStagingEnvironment,
+} = require("./verifyChalinOneFullStagingEnvironment");
 
 const RELEASE_CONFIRMATION = "20260808_CHALIN_ONE_CONTENT_STUDIO_IDENTITY";
 const MIGRATION_RECORD = "20260808_chalin_one_content_studio_identity";
@@ -60,6 +63,17 @@ function connectionOptions(env = process.env) {
   };
 }
 
+function assertVerifiedStagingIsolation(env) {
+  // The normal staging validator requires every migration gate to be closed.
+  // Prove the environment with this migration's temporary gate removed rather
+  // than weakening the validator or trusting the generic Railway DB name.
+  const validationEnv = {
+    ...env,
+    CHALIN_ONE_ALLOW_CONTENT_STUDIO_IDENTITY_MIGRATION: "",
+  };
+  return validateFullStagingEnvironment(validationEnv, { mode: "runtime" });
+}
+
 function assertExecutionGates(env = process.env) {
   if (!truthy(env.CHALIN_ONE_ALLOW_CONTENT_STUDIO_IDENTITY_MIGRATION)) {
     throw new Error("Set CHALIN_ONE_ALLOW_CONTENT_STUDIO_IDENTITY_MIGRATION=true only for an isolated CHALIN ONE staging/acceptance rehearsal or separately approved release operation.");
@@ -77,7 +91,16 @@ function assertExecutionGates(env = process.env) {
       throw new Error("Production Content Studio identity migration requires both verified Professional and SQL backups.");
     }
   } else if (!SAFE_NON_PRODUCTION_DATABASE.test(databaseName)) {
-    throw new Error("Non-production Content Studio identity migration may target only isolated CHALIN ONE acceptance, staging or development databases.");
+    if (environment !== "staging") {
+      throw new Error("Non-production Content Studio identity migration may target only isolated CHALIN ONE acceptance, staging or development databases.");
+    }
+    try {
+      assertVerifiedStagingIsolation(env);
+    } catch (error) {
+      throw new Error(
+        `Content Studio identity migration refused the nonstandard staging database because dedicated CHALIN ONE isolation could not be verified: ${error.message}`
+      );
+    }
   }
 
   return Object.freeze({ environment, databaseName, production: environment === "production" });
@@ -174,6 +197,7 @@ module.exports = {
   RELEASE_CONFIRMATION,
   SAFE_NON_PRODUCTION_DATABASE,
   assertExecutionGates,
+  assertVerifiedStagingIsolation,
   connectionOptions,
   readMigrationFile,
   runChalinOneContentStudioIdentityMigration,
