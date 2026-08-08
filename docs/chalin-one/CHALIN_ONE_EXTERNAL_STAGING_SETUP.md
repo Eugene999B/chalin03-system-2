@@ -17,6 +17,15 @@ Deploy the `chalin-one` branch into a completely separate Railway + Cloudflare p
 - Portals, AI Actions and Scheduled AI remain disabled for the first external trial.
 - Production stays online and unchanged throughout acceptance.
 
+## Staging profiles
+
+Two staging profiles intentionally coexist:
+
+- `backend/.env.chalin-one-staging.example` preserves the earlier Release B Website/Content-Studio-only acceptance profile and keeps AI disabled.
+- `backend/.env.chalin-one-full-staging.example` is the external Website + AI trial profile and is the one used by this runbook.
+
+Do not mix the two profiles.
+
 ## 1. Railway project
 
 Create a separate Railway project named `CHALIN-ONE-STAGING`.
@@ -27,7 +36,7 @@ Add:
 2. A separate Railway MySQL service.
 3. Configure the Node service to use config-as-code path:
    `deploy/chalin-one/railway.staging.json`
-4. Copy variable names from `backend/.env.chalin-one-staging.example` and replace all placeholders with staging-only values.
+4. Copy variable names from `backend/.env.chalin-one-full-staging.example` and replace all placeholders with staging-only values.
 5. Set `DB_NAME=chalin_one_staging`.
 6. Set `CHALIN_ONE_STAGING_API_URL` to the Railway staging public domain once generated.
 7. Set `TRUSTED_API_HOSTS` to that staging Railway hostname.
