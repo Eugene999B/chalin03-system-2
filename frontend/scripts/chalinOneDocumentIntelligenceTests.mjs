@@ -11,6 +11,10 @@ const page = fs.readFileSync(
   path.join(repoRoot, "frontend/src/chalin-one/ai/DocumentIntelligencePage.jsx"),
   "utf8"
 );
+const workspace = fs.readFileSync(
+  path.join(repoRoot, "frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx"),
+  "utf8"
+);
 const launcher = fs.readFileSync(
   path.join(repoRoot, "frontend/src/chalin-one/ai/DocumentIntelligenceLauncher.jsx"),
   "utf8"
@@ -37,6 +41,21 @@ assert.match(page, /Raw binary storage: disabled/);
 assert.match(page, /listAiKnowledgeDocumentChunks/);
 assert.match(page, /lines \{chunk\.line_start/);
 assert.match(page, /vector_model_key/);
+assert.match(page, /useSearchParams/);
+assert.match(page, /searchParams\.get\("source"\)/);
+assert.match(page, /searchParams\.get\("document"\)/);
+assert.match(page, /searchParams\.get\("chunk"\)/);
+assert.match(page, /knowledge-chunk-\$\{chunk\.id\}/);
+assert.match(page, /is-citation-target/);
+assert.match(page, /scrollIntoView/);
+assert.match(page, /target\.focus/);
+assert.match(workspace, /function documentEvidenceLink/);
+assert.match(workspace, /new URLSearchParams/);
+assert.match(workspace, /source: sourceKey/);
+assert.match(workspace, /document: String\(documentId\)/);
+assert.match(workspace, /chunk: String\(chunkId\)/);
+assert.match(workspace, /\/intelligence\/documents\?\$\{params\.toString\(\)\}/);
+assert.match(workspace, /Open exact governed chunk/);
 assert.match(launcher, /permissions\.has\("ai\.knowledge\.view"\)/);
 assert.match(api, /ingestAiKnowledgeDocument/);
 assert.match(api, /listAiKnowledgeDocuments/);
