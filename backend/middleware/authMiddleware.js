@@ -7,6 +7,11 @@ const {
   validateUserCategoryAccess,
 } = require("../services/categoryIsolationService");
 const {
+  CONTENT_STUDIO_WORKSPACE_CODE,
+  contentStudioPathAllowedForSession,
+  hydrateContentStudioSession,
+} = require("../services/contentStudioAccessService");
+const {
   requireSparePartsBranchContext,
 } = require("./sparePartsBranchContextMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
@@ -72,6 +77,75 @@ function requiresExportStoreContext(req, user) {
   );
 }
 
+async function validateActiveServerSession(decoded) {
+  return validateSession({
+    userId: decoded.id,
+    sessionId: decoded.session_id,
+  });
+}
+
+function sendSessionFailure(res, req, sessionState) {
+  return res.status(sessionState.statusCode || 401).json({
+    status: "error",
+    code: sessionState.code || "SESSION_REVOKED",
+    message:
+      sessionState.message ||
+      "Your secure session is no longer active. Please login again.",
+    request_id: req.requestId || null,
+  });
+}
+
+async function attachContentStudioUser({ req, res, next, decoded, state, currentTokenVersion }) {
+  if (!contentStudioPathAllowedForSession(req.originalUrl || req.url || "")) {
+    return res.status(403).json({
+      status: "error",
+      code: "CONTENT_STUDIO_SESSION_BOUNDARY",
+      message:
+        "This Content Studio session cannot access operational business APIs. Sign in through the appropriate Staff workspace for operational work.",
+      request_id: req.requestId || null,
+    });
+  }
+
+  const sessionState = await validateActiveServerSession(decoded);
+  if (!sessionState.ok) return sendSessionFailure(res, req, sessionState);
+
+  const currentIdentity = {
+    ...decoded,
+    ...state,
+    id: state.id,
+    username: state.username,
+    role: state.role,
+    workspace_code: CONTENT_STUDIO_WORKSPACE_CODE,
+    token_version: currentTokenVersion,
+    session_id: sessionState.session.session_id,
+    is_original_system_administrator: isOriginalSystemAdministrator({
+      ...decoded,
+      ...state,
+    }),
+  };
+
+  const hydrated = await hydrateContentStudioSession(currentIdentity);
+  if (!hydrated.ok) {
+    return res.status(403).json({
+      status: "error",
+      code: hydrated.code || "CONTENT_STUDIO_ACCESS_DENIED",
+      message: hydrated.message || "Content Studio access is denied.",
+      request_id: req.requestId || null,
+    });
+  }
+
+  req.user = {
+    ...hydrated.user,
+    primary_workspace_code: state.primary_workspace_code || null,
+    category_assignment_status: state.category_assignment_status || null,
+    category_conflict_reason: state.category_conflict_reason || null,
+    token_version: currentTokenVersion,
+    session_id: sessionState.session.session_id,
+  };
+
+  return next();
+}
+
 async function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -128,6 +202,20 @@ async function requireAuth(req, res, next) {
       });
     }
 
+    if (
+      String(decoded.workspace_code || "").trim().toLowerCase() ===
+      CONTENT_STUDIO_WORKSPACE_CODE
+    ) {
+      return attachContentStudioUser({
+        req,
+        res,
+        next,
+        decoded,
+        state,
+        currentTokenVersion,
+      });
+    }
+
     const categoryAccess = await validateUserCategoryAccess({
       user: { ...decoded, ...state },
       workspaceCode: decoded.workspace_code,
@@ -142,21 +230,8 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    const sessionState = await validateSession({
-      userId: decoded.id,
-      sessionId: decoded.session_id,
-    });
-
-    if (!sessionState.ok) {
-      return res.status(sessionState.statusCode || 401).json({
-        status: "error",
-        code: sessionState.code || "SESSION_REVOKED",
-        message:
-          sessionState.message ||
-          "Your secure session is no longer active. Please login again.",
-        request_id: req.requestId || null,
-      });
-    }
+    const sessionState = await validateActiveServerSession(decoded);
+    if (!sessionState.ok) return sendSessionFailure(res, req, sessionState);
 
     req.user = {
       ...decoded,
@@ -193,6 +268,7 @@ async function requireAuth(req, res, next) {
 }
 
 module.exports = {
+  attachContentStudioUser,
   loadUserSecurityState,
   requireAuth,
   requiresExportStoreContext,
