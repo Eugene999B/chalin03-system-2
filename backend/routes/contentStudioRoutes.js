@@ -3,6 +3,10 @@
 const express = require("express");
 
 const { ContentStudioError } = require("../services/contentStudioPageService");
+const {
+  requireContentStudioRouteScope,
+} = require("../middleware/contentStudioAccessMiddleware");
+const contentStudioAccessRoutes = require("./contentStudioAccessRoutes");
 const contentStudioCompanyInfoRoutes = require("./contentStudioCompanyInfoRoutes");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
@@ -14,12 +18,14 @@ const contentStudioSettingsRoutes = require("./contentStudioSettingsRoutes");
 
 const router = express.Router();
 
-// Capability boundaries are enforced inside the mounted routers:
-// public_content.view, public_content.create, public_content.edit,
-// public_content.submit, public_content.review, public_content.approve,
-// public_content.publish, public_content.restore_version, public_content.archive,
-// public_media.view/manage and public_forms.view/manage.
+// Phase 2A adds a second boundary in front of capability permissions. The
+// authenticated Content Studio role must be allowed into the requested Studio
+// section before the existing public_content/public_media/etc permissions are
+// evaluated. This prevents a News Editor or Media Manager from wandering into
+// unrelated Studio managers even though all Studio users share one workspace.
+router.use(requireContentStudioRouteScope);
 
+router.use("/access", contentStudioAccessRoutes);
 router.use("/settings", contentStudioSettingsRoutes);
 router.use("/navigation", contentStudioNavigationRoutes);
 router.use("/media", contentStudioMediaRoutes);
