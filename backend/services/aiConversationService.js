@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { pool } = require("../config/db");
 const { normalizeAiPersona } = require("../security/aiPermissionCatalog");
 const { hashText } = require("./aiSafetyService");
+const { normalizeEvidenceList } = require("./aiEvidenceService");
 
 class AiConversationError extends Error {
   constructor(message, { code = "AI_CONVERSATION_ERROR", statusCode = 400, details = [] } = {}) {
@@ -38,6 +39,19 @@ function safeOffset(value) {
   return Number.isSafeInteger(number) && number >= 0 ? number : 0;
 }
 
+function parseJson(value, fallback = {}) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function schemaError(error) {
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
     return new AiConversationError(
@@ -65,7 +79,7 @@ function publicConversation(row) {
   });
 }
 
-function publicMessage(row) {
+function publicMessage(row, evidence = []) {
   return Object.freeze({
     key: row.message_key,
     role: row.message_role,
@@ -75,7 +89,22 @@ function publicMessage(row) {
     model_key: row.model_key || null,
     finish_reason: row.finish_reason || null,
     error_code: row.error_code || null,
+    evidence: normalizeEvidenceList(evidence),
     created_at: row.created_at,
+  });
+}
+
+function publicEvidence(row) {
+  return Object.freeze({
+    source_type: row.source_type,
+    source_ref: row.source_ref,
+    source_version: row.source_version || null,
+    label: row.label,
+    excerpt_text: row.excerpt_text || null,
+    as_of_at: row.as_of_at || null,
+    classification: row.classification,
+    workspace_code: row.workspace_code || null,
+    metadata: Object.freeze(parseJson(row.metadata_json, {})),
   });
 }
 
@@ -226,9 +255,30 @@ async function getConversationDetails({
        LIMIT ?`,
       [conversation.id, safeLimit(messageLimit, 100, 200)]
     );
+    const messageIds = rows.map((row) => Number(row.id)).filter(Boolean);
+    const evidenceByMessage = new Map();
+    if (messageIds.length > 0) {
+      const placeholders = messageIds.map(() => "?").join(", ");
+      const [evidenceRows] = await connection.query(
+        `SELECT message_id, source_type, source_ref, source_version, label,
+                excerpt_text, as_of_at, classification, workspace_code,
+                metadata_json
+         FROM ai_evidence_records
+         WHERE message_id IN (${placeholders})
+         ORDER BY message_id ASC, id ASC`,
+        messageIds
+      );
+      for (const row of evidenceRows) {
+        const messageId = Number(row.message_id);
+        if (!evidenceByMessage.has(messageId)) evidenceByMessage.set(messageId, []);
+        evidenceByMessage.get(messageId).push(publicEvidence(row));
+      }
+    }
     return Object.freeze({
       conversation: publicConversation(conversation),
-      messages: rows.map(publicMessage),
+      messages: rows.map((row) =>
+        publicMessage(row, evidenceByMessage.get(Number(row.id)) || [])
+      ),
     });
   } catch (error) {
     throw schemaError(error);
@@ -364,8 +414,10 @@ module.exports = {
   key,
   listConversations,
   loadOwnedConversation,
+  parseJson,
   positiveInteger,
   publicConversation,
+  publicEvidence,
   publicMessage,
   renameConversation,
   safeLimit,
