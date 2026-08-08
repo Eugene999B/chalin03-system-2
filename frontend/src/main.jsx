@@ -10,6 +10,7 @@ import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import ChalinOneGatewayLinks from "./components/ChalinOneGatewayLinks.jsx";
 import ChalinOneStandaloneEntry, {
   isChalinOneStandalonePath,
+  isPublicWebsitePath,
 } from "./chalin-one/ChalinOneStandaloneEntry.jsx";
 import { FeatureFlagProvider } from "./context/FeatureFlagContext.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
@@ -23,6 +24,7 @@ import "./styles/adminMobileHotfix.css";
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
 const APP_SHELL_RELEASE = `browser-cache-integrity-v35-${APP_BUILD_ID}`;
+const publicWebsiteSurface = isPublicWebsitePath(window.location.pathname);
 const standaloneChalinOne = isChalinOneStandalonePath(
   window.location.pathname
 );
@@ -112,14 +114,22 @@ if ("serviceWorker" in navigator) {
       const hadActiveController = Boolean(navigator.serviceWorker.controller);
       let reloadingForUpdate = false;
 
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (!hadActiveController || reloadingForUpdate) {
-          return;
-        }
+      // The operational application keeps its one-time reload on a service-worker
+      // handover because stale business-app chunks can be dangerous. The public
+      // CHALIN ONE website deliberately does not reload on controllerchange:
+      // visitors keep reading uninterrupted and receive the new release naturally
+      // on their next navigation/reopen/refresh. Genuine retired-asset failures
+      // are still handled by the page-owned asset recovery flow above.
+      if (!publicWebsiteSurface) {
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!hadActiveController || reloadingForUpdate) {
+            return;
+          }
 
-        reloadingForUpdate = true;
-        window.location.reload();
-      });
+          reloadingForUpdate = true;
+          window.location.reload();
+        });
+      }
 
       navigator.serviceWorker
         .register(
