@@ -24,6 +24,73 @@ const QUICK_PATHS = Object.freeze([
   ["Contact", "/contact"],
 ]);
 
+const COLLECTION_EXPLORERS = Object.freeze({
+  "/equipment": {
+    resource: "equipment",
+    eyebrow: "Equipment explorer",
+    title: "Find the right published machine.",
+    placeholder: "Search machine, manufacturer, model or category…",
+    empty: "No published equipment matches those filters.",
+    contactPath: "/contact?intent=hire",
+    contactLabel: "Equipment enquiry",
+    facets: [
+      ["category", "Category", (item) => item?.category?.name],
+      ["manufacturer", "Manufacturer", (item) => item?.manufacturer],
+      ["availability", "Availability", (item) => item?.availability],
+      ["division", "Business", (item) => item?.division?.name],
+    ],
+  },
+  "/projects": {
+    resource: "projects",
+    eyebrow: "Project explorer",
+    title: "Navigate the published field archive.",
+    placeholder: "Search project, business, status or location…",
+    empty: "No published project matches those filters.",
+    contactPath: "/contact",
+    contactLabel: "Project enquiry",
+    facets: [
+      ["division", "Business", (item) => item?.division?.name],
+      ["status", "Status", (item) => item?.status],
+      [
+        "location",
+        "Location",
+        (item) => item?.location?.name || item?.location || item?.location_text,
+      ],
+    ],
+  },
+  "/news": {
+    resource: "news",
+    eyebrow: "Newsroom explorer",
+    title: "Move through the company signal.",
+    placeholder: "Search story, category or business…",
+    empty: "No published newsroom story matches those filters.",
+    contactPath: "/contact",
+    contactLabel: "Media enquiry",
+    facets: [
+      ["category", "Category", (item) => item?.category?.name],
+      ["division", "Business", (item) => item?.division?.name],
+    ],
+  },
+  "/careers": {
+    resource: "vacancies",
+    eyebrow: "Career explorer",
+    title: "Find where your next role fits.",
+    placeholder: "Search role, business, type or location…",
+    empty: "No published vacancy matches those filters.",
+    contactPath: "/contact?intent=career",
+    contactLabel: "Career enquiry",
+    facets: [
+      ["division", "Business", (item) => item?.division?.name],
+      ["employment_type", "Employment type", (item) => item?.employment_type],
+      [
+        "location",
+        "Location",
+        (item) => item?.location?.name || item?.location || item?.location_text,
+      ],
+    ],
+  },
+});
+
 function itemTitle(item) {
   return (
     item?.title ||
@@ -55,6 +122,11 @@ function searchableText(item) {
     item?.model,
     item?.category?.name,
     item?.division?.name,
+    item?.status,
+    item?.availability,
+    item?.location?.name,
+    item?.location,
+    item?.location_text,
     item?.city,
     item?.region,
     item?.country,
@@ -63,6 +135,34 @@ function searchableText(item) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function formatFacetValue(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function mediaForItem(item) {
+  const media = item?.media || item?.portrait;
+  return media?.media_type === "image" && media?.url ? media : null;
+}
+
+function collectionExplorerForPath(pathname) {
+  return COLLECTION_EXPLORERS[pathname] || null;
+}
+
+function facetOptions(items, resolver) {
+  const values = new Map();
+  items.forEach((item) => {
+    const raw = resolver(item);
+    const value = String(raw || "").trim();
+    if (!value) return;
+    const key = value.toLowerCase();
+    if (!values.has(key)) values.set(key, value);
+  });
+  return Array.from(values.values()).sort((a, b) => a.localeCompare(b)).slice(0, 12);
 }
 
 function rememberPage(pathname) {
@@ -163,22 +263,164 @@ function syncPublicMetadata(pathname) {
   ensureMeta('meta[name="twitter:description"]', { name: "twitter:description", content: description });
 }
 
+function CollectionExplorer({
+  config,
+  items,
+  query,
+  setQuery,
+  filters,
+  setFilters,
+  go,
+}) {
+  const resourceConfig = SEARCH_RESOURCES.find((resource) => resource.key === config.resource);
+  const facetGroups = useMemo(
+    () =>
+      config.facets
+        .map(([key, label, resolver]) => ({
+          key,
+          label,
+          resolver,
+          options: facetOptions(items, resolver),
+        }))
+        .filter((facet) => facet.options.length > 1),
+    [config, items]
+  );
+
+  const filtered = useMemo(() => {
+    const cleaned = query.trim().toLowerCase();
+    return items.filter((item) => {
+      if (cleaned && !searchableText(item).includes(cleaned)) return false;
+      return config.facets.every(([key, , resolver]) => {
+        const selected = filters[key];
+        if (!selected) return true;
+        return String(resolver(item) || "").toLowerCase() === selected.toLowerCase();
+      });
+    });
+  }, [config, filters, items, query]);
+
+  const hasFilters = Object.values(filters).some(Boolean) || Boolean(query.trim());
+  const clearFilters = () => {
+    setQuery("");
+    setFilters({});
+  };
+
+  return (
+    <>
+      <div className="c1-explorer-summary">
+        <div>
+          <span>LIVE PUBLISHED SET</span>
+          <strong>{filtered.length}</strong>
+          <small>of {items.length} records</small>
+        </div>
+        {hasFilters ? (
+          <button type="button" onClick={clearFilters}>Clear filters</button>
+        ) : (
+          <span>Filters appear only from published metadata.</span>
+        )}
+      </div>
+
+      {facetGroups.length > 0 ? (
+        <div className="c1-explorer-facets">
+          {facetGroups.map((facet) => (
+            <section key={facet.key}>
+              <span>{facet.label}</span>
+              <div>
+                <button
+                  type="button"
+                  className={!filters[facet.key] ? "is-active" : ""}
+                  onClick={() => setFilters((current) => ({ ...current, [facet.key]: "" }))}
+                >
+                  All
+                </button>
+                {facet.options.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={filters[facet.key] === option ? "is-active" : ""}
+                    onClick={() =>
+                      setFilters((current) => ({
+                        ...current,
+                        [facet.key]: current[facet.key] === option ? "" : option,
+                      }))
+                    }
+                  >
+                    {formatFacetValue(option)}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="c1-explorer-results">
+        {filtered.length > 0 ? (
+          filtered.slice(0, 40).map((item, index) => {
+            const media = mediaForItem(item);
+            const metadata = [
+              item?.category?.name,
+              item?.manufacturer,
+              item?.model,
+              item?.division?.name,
+              item?.availability && formatFacetValue(item.availability),
+              item?.status && formatFacetValue(item.status),
+              item?.employment_type && formatFacetValue(item.employment_type),
+              item?.location?.name || item?.location || item?.location_text,
+            ].filter(Boolean).slice(0, 3);
+            return (
+              <button
+                type="button"
+                key={`${config.resource}-${item.slug || item.key || itemTitle(item)}-${index}`}
+                onClick={() => go(resourceConfig?.path(item) || "/")}
+              >
+                {media ? (
+                  <img src={media.url} alt={media.alt_text || ""} loading="lazy" decoding="async" />
+                ) : (
+                  <span className="c1-explorer-result-index">{String(index + 1).padStart(2, "0")}</span>
+                )}
+                <div>
+                  <small>{metadata.join(" · ") || resourceConfig?.label}</small>
+                  <strong>{itemTitle(item)}</strong>
+                  <p>{itemDescription(item)}</p>
+                </div>
+                <b>↗</b>
+              </button>
+            );
+          })
+        ) : (
+          <div className="c1-explorer-empty">
+            <strong>{config.empty}</strong>
+            <p>Try clearing a filter, or continue into the correct enquiry path.</p>
+            <button type="button" onClick={() => go(config.contactPath)}>{config.contactLabel} ↗</button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function PublicExperienceCompletion() {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("search");
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState({});
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [catalogue, setCatalogue] = useState([]);
   const [recent, setRecent] = useState(() => readRecentPages());
   const [routeAnnouncement, setRouteAnnouncement] = useState("CHALIN ONE public website");
+  const explorer = collectionExplorerForPath(location.pathname);
 
   useEffect(() => {
     rememberPage(location.pathname);
     setRecent(readRecentPages());
     setOpen(false);
+    setMode("search");
+    setQuery("");
+    setFilters({});
 
     const settle = window.setTimeout(() => {
       const main = document.querySelector(".c1-site main");
@@ -205,6 +447,9 @@ export default function PublicExperienceCompletion() {
         const tagName = document.activeElement?.tagName?.toLowerCase();
         if (["input", "textarea", "select"].includes(tagName)) return;
         event.preventDefault();
+        setMode("search");
+        setQuery("");
+        setFilters({});
         setOpen(true);
       }
       if (event.key === "Escape") setOpen(false);
@@ -276,11 +521,29 @@ export default function PublicExperienceCompletion() {
     })).filter((group) => group.items.length > 0);
   }, [matches]);
 
+  const collectionItems = useMemo(
+    () => (explorer ? catalogue.filter((item) => item.__resource === explorer.resource) : []),
+    [catalogue, explorer]
+  );
+
   const actions = contextualActions(location.pathname);
   const go = (path) => {
     setOpen(false);
     navigate(path);
   };
+  const openSearch = () => {
+    setMode("search");
+    setQuery("");
+    setFilters({});
+    setOpen(true);
+  };
+  const openExplorer = () => {
+    setMode("collection");
+    setQuery("");
+    setFilters({});
+    setOpen(true);
+  };
+  const collectionMode = mode === "collection" && explorer;
 
   return (
     <>
@@ -288,11 +551,18 @@ export default function PublicExperienceCompletion() {
       <div className="c1-route-announcer" aria-live="polite" aria-atomic="true">{routeAnnouncement}</div>
 
       <aside className="c1-completion-rail" aria-label="CHALIN ONE page actions">
-        <button type="button" onClick={() => setOpen(true)}>
+        <button type="button" onClick={openSearch}>
           <span>DISCOVER</span>
           <strong>Search CHALIN ONE</strong>
           <kbd>/</kbd>
         </button>
+        {explorer ? (
+          <button type="button" className="is-explorer" onClick={openExplorer}>
+            <span>REFINE</span>
+            <strong>{explorer.eyebrow}</strong>
+            <b>⌕</b>
+          </button>
+        ) : null}
         <div>
           <span>YOU ARE HERE</span>
           <strong>{humanPath(location.pathname)}</strong>
@@ -308,22 +578,22 @@ export default function PublicExperienceCompletion() {
 
       <button
         type="button"
-        className="c1-mobile-discovery-trigger"
-        onClick={() => setOpen(true)}
-        aria-label="Search CHALIN ONE"
+        className={`c1-mobile-discovery-trigger${explorer ? " has-explorer" : ""}`}
+        onClick={explorer ? openExplorer : openSearch}
+        aria-label={explorer ? `Open ${explorer.eyebrow}` : "Search CHALIN ONE"}
       >
         <span>⌕</span>
-        <strong>Search</strong>
+        <strong>{explorer ? "Refine" : "Search"}</strong>
       </button>
 
       {open ? (
-        <div className="c1-discovery" role="dialog" aria-modal="true" aria-label="Search CHALIN ONE">
+        <div className="c1-discovery" role="dialog" aria-modal="true" aria-label={collectionMode ? explorer.title : "Search CHALIN ONE"}>
           <button className="c1-discovery-backdrop" type="button" aria-label="Close search" onClick={() => setOpen(false)} />
-          <section className="c1-discovery-panel">
+          <section className={`c1-discovery-panel${collectionMode ? " is-collection-explorer" : ""}`}>
             <header>
               <div>
-                <span>CHALIN ONE / DISCOVERY</span>
-                <h2>Find anything published.</h2>
+                <span>{collectionMode ? `CHALIN ONE / ${explorer.eyebrow.toUpperCase()}` : "CHALIN ONE / DISCOVERY"}</span>
+                <h2>{collectionMode ? explorer.title : "Find anything published."}</h2>
               </div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close search">Close ×</button>
             </header>
@@ -334,13 +604,18 @@ export default function PublicExperienceCompletion() {
                 autoFocus
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search business, machine, project, story, career or location…"
+                placeholder={collectionMode ? explorer.placeholder : "Search business, machine, project, story, career or location…"}
               />
               <kbd>ESC</kbd>
             </label>
 
             <div className="c1-discovery-quick">
-              {QUICK_PATHS.map(([label, path]) => (
+              {collectionMode ? (
+                <>
+                  <button type="button" onClick={openSearch}>Search whole CHALIN ONE</button>
+                  <button type="button" onClick={() => go(explorer.contactPath)}>{explorer.contactLabel}</button>
+                </>
+              ) : QUICK_PATHS.map(([label, path]) => (
                 <button type="button" key={path} onClick={() => go(path)}>{label}</button>
               ))}
             </div>
@@ -348,14 +623,27 @@ export default function PublicExperienceCompletion() {
             <div className="c1-discovery-body">
               {loading ? <div className="c1-discovery-state">Building the published index…</div> : null}
               {!loading && error ? <div className="c1-discovery-state is-error">{error}</div> : null}
-              {!loading && loaded && grouped.length === 0 ? (
+
+              {!loading && loaded && collectionMode ? (
+                <CollectionExplorer
+                  config={explorer}
+                  items={collectionItems}
+                  query={query}
+                  setQuery={setQuery}
+                  filters={filters}
+                  setFilters={setFilters}
+                  go={go}
+                />
+              ) : null}
+
+              {!loading && loaded && !collectionMode && grouped.length === 0 ? (
                 <div className="c1-discovery-state">
                   <strong>No published result matches “{query}”.</strong>
                   <button type="button" onClick={() => go("/contact")}>Start a company enquiry ↗</button>
                 </div>
               ) : null}
 
-              {!loading && grouped.length > 0 ? (
+              {!loading && !collectionMode && grouped.length > 0 ? (
                 <div className="c1-discovery-groups">
                   {grouped.map((group) => (
                     <section key={group.key}>
