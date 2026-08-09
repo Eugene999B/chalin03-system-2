@@ -50,13 +50,15 @@ check("Website Control API uses authenticated Axios and exposes one read-only en
 });
 
 check("Website Control Center exposes SEO navigation orphan redirect and platform-capability views", () => {
-  for (const marker of ["Website Control Center", "SEO health", "Navigation", "Orphan pages", "Redirect intelligence", "Metadata capability coverage", "Read-only control plane"]) {
+  for (const marker of ["Website Control Center", "SEO health", "Navigation", "Orphan pages", "Redirect intelligence", "Metadata capability coverage", "Controlled handoff"]) {
     assert.match(component, new RegExp(marker));
   }
   assert.match(component, /getWebsiteControlIntelligence/);
   assert.match(component, /AbortController/);
   assert.match(component, /onOpenSection\?\.\("pages"\)/);
   assert.match(component, /onOpenSection\?\.\("navigation"\)/);
+  assert.match(component, /onOpenSection\?\.\("redirects"\)/);
+  assert.match(component, /Open Redirect Manager/);
   assert.doesNotMatch(component, /createPage|updatePage|publishPage|archivePage|createNavigation|updateNavigation|publishNavigation|archiveNavigation/);
   assert.doesNotMatch(component, /localStorage|sessionStorage|Bearer|dangerouslySetInnerHTML/);
 });

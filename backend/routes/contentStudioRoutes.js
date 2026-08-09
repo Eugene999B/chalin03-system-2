@@ -12,6 +12,7 @@ const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
 const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
 const contentStudioNavigationRoutes = require("./contentStudioNavigationRoutes");
+const contentStudioRedirectRoutes = require("./contentStudioRedirectRoutes");
 const contentStudioNewsroomRoutes = require("./contentStudioNewsroomRoutes");
 const contentStudioPortfolioRoutes = require("./contentStudioPortfolioRoutes");
 const contentStudioSettingsRoutes = require("./contentStudioSettingsRoutes");
@@ -27,6 +28,10 @@ router.use(requireContentStudioRouteScope);
 
 router.use("/access", contentStudioAccessRoutes);
 router.use("/settings", contentStudioSettingsRoutes);
+// Redirects live inside the existing Navigation scope but have their own
+// manager and lifecycle. Mount this before /navigation so the dedicated router
+// cannot be shadowed by navigation item IDs.
+router.use("/navigation/redirects", contentStudioRedirectRoutes);
 router.use("/navigation", contentStudioNavigationRoutes);
 router.use("/media", contentStudioMediaRoutes);
 router.use("/forms", contentStudioFormRoutes);
