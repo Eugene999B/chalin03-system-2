@@ -81,6 +81,7 @@ export default function ContentStudioMediaPickerField({
       const result = await listMediaPro(
         {
           media_type: mediaType,
+          visibility: "public",
           readiness: "public_ready",
           search,
           orientation,
@@ -178,7 +179,7 @@ export default function ContentStudioMediaPickerField({
               <div>
                 <span>GOVERNED MEDIA PICKER</span>
                 <h2 id="cs-media-picker-title">Choose publication-ready {acceptedLabel}</h2>
-                <p>Only assets that pass Media Library processing, HTTPS delivery and image accessibility checks are offered here.</p>
+                <p>Only public assets that pass Media Library processing, HTTPS delivery and image accessibility checks are offered here.</p>
               </div>
               <button ref={closeButtonRef} type="button" onClick={() => setOpen(false)}>Close ×</button>
             </header>

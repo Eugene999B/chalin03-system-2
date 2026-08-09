@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { contentStudioErrorMessage } from "./contentStudioApi";
+import ContentStudioMediaPickerField from "./ContentStudioMediaPickerField";
 import {
   archiveNewsCategory,
   archiveNewsroomEntity,
@@ -181,6 +182,19 @@ function StatusChip({ status }) {
 }
 
 function Field({ label, children, hint }) {
+  if (/media asset id/i.test(String(label || "")) && children?.props) {
+    return (
+      <ContentStudioMediaPickerField
+        label={String(label).replace(/\s+asset\s+id$/i, "")}
+        value={children.props.value}
+        disabled={children.props.disabled}
+        required={children.props.required}
+        accept="image"
+        hint={hint || "Choose a publication-ready image from Media Library Pro."}
+        onChange={(value) => children.props.onChange?.({ target: { value } })}
+      />
+    );
+  }
   return (
     <label className="cs-field">
       <span>{label}</span>
