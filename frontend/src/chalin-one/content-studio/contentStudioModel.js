@@ -144,6 +144,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "orange",
   }),
   Object.freeze({
+    key: "publisher-command",
+    label: "Publisher Command",
+    shortLabel: "Publisher",
+    badge: "PC",
+    description: "Control approved releases, scheduling visibility, collisions, expiries and review aging from one governed desk.",
+    permission: CONTENT_STUDIO_PERMISSIONS.publish,
+    endpoint: "/content-studio/pages",
+    group: "Governance",
+    tone: "orange",
+  }),
+  Object.freeze({
     key: "navigation",
     label: "Navigation",
     shortLabel: "Menus",
