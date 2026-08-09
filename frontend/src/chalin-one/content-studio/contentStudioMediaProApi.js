@@ -26,3 +26,15 @@ export async function getMediaLibraryIntelligence({ signal } = {}) {
     await axiosClient.get("/content-studio/media/intelligence", { signal })
   );
 }
+
+export async function bulkUpdateMediaPro(payload) {
+  return unwrap(
+    await axiosClient.post("/content-studio/media/bulk/update", payload)
+  );
+}
+
+export async function bulkArchiveMediaPro(payload) {
+  return unwrap(
+    await axiosClient.post("/content-studio/media/bulk/archive", payload)
+  );
+}
