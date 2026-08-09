@@ -2,6 +2,9 @@ import axios from "axios";
 import {
   applyPublishedPublicMetadata,
 } from "./publicMetadataRuntime";
+import {
+  installPublicRedirectRuntime,
+} from "./publicRedirectRuntime";
 
 const publicWebsiteClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
@@ -152,6 +155,10 @@ export function publicWebsiteErrorMessage(error) {
     error?.message ||
     "The public website information could not be loaded safely."
   );
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  installPublicRedirectRuntime(resolvePublicRedirect);
 }
 
 export { publicWebsiteClient };
