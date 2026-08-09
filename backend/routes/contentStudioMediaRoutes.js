@@ -8,6 +8,10 @@ const {
   getMediaAssetUsage,
 } = require("../services/contentStudioMediaArchiveService");
 const {
+  bulkArchiveMediaAssets,
+  bulkUpdateMediaAssets,
+} = require("../services/contentStudioMediaBulkService");
+const {
   archiveMediaFolder,
   createMediaFolder,
   listMediaFolders,
@@ -193,6 +197,31 @@ router.post(
       req,
       await registerExternalVideo({ input: req.body, user: req.user, req }),
       201
+    )
+  )
+);
+
+// Keep bulk routes before /:assetId so "bulk" can never be interpreted as an asset ID.
+router.post(
+  "/bulk/update",
+  requirePermission("public_media.manage"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await bulkUpdateMediaAssets({ input: req.body, user: req.user, req })
+    )
+  )
+);
+
+router.post(
+  "/bulk/archive",
+  requirePermission("public_media.manage"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await bulkArchiveMediaAssets({ input: req.body, user: req.user, req })
     )
   )
 );
