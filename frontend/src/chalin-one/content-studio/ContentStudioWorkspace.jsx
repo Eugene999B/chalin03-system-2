@@ -19,6 +19,7 @@ import {
   ContentStudioEquipmentManager,
   ContentStudioProjectManager,
 } from "./ContentStudioPortfolioManagers";
+import ContentStudioPublisherCommandCenter from "./ContentStudioPublisherCommandCenter";
 import ContentStudioVisualBuilder from "./ContentStudioVisualBuilderPro";
 import {
   CONTENT_STUDIO_PERMISSIONS,
@@ -59,6 +60,7 @@ const SECTION_SCOPES = Object.freeze({
   forms: "forms",
   submissions: "submissions",
   approvals: "pages",
+  "publisher-command": "pages",
   navigation: "navigation",
   settings: "settings",
 });
@@ -75,6 +77,7 @@ const MANAGERS = Object.freeze({
   forms: ContentStudioFormManager,
   submissions: ContentStudioEnquiryDesk,
   approvals: ContentStudioApprovalInbox,
+  "publisher-command": ContentStudioPublisherCommandCenter,
   navigation: ContentStudioNavigationManager,
   settings: ContentStudioSettingsManager,
   access: ContentStudioAccessManager,
@@ -283,7 +286,7 @@ export default function ContentStudioWorkspace() {
               onRetry={refreshDashboard}
             />
           ) : ActiveManager ? (
-            <ActiveManager />
+            <ActiveManager onOpenSection={openSection} />
           ) : (
             <AccessState
               title="Manager unavailable"
