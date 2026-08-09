@@ -74,6 +74,7 @@ function canonicalInfo(value) {
       return { configured: true, valid: false, normalized: null, path: null, host: null };
     }
     const pathname = normalizePublicPath(parsed.pathname) || "/";
+    parsed.pathname = pathname;
     parsed.hash = "";
     return {
       configured: true,
@@ -360,18 +361,18 @@ async function getWebsiteControlIntelligence() {
 
     const activePages = pageRows.filter((page) => page.publication_status !== "archived");
     const activeNavigation = navigationRows.filter((item) => item.publication_status !== "archived");
-    const pageMap = new Map(activePages.map((page) => [Number(page.id), page]));
+    const allPageMap = new Map(pageRows.map((page) => [Number(page.id), page]));
     const pathMap = new Map(
       activePages
         .map((page) => [pagePublicPath(page), page])
         .filter(([pathname]) => Boolean(pathname))
     );
-    const navigationMap = new Map(activeNavigation.map((item) => [Number(item.id), item]));
+    const allNavigationMap = new Map(navigationRows.map((item) => [Number(item.id), item]));
 
     const pages = activePages.map(evaluatePageSeo);
     const canonicalConflicts = addDuplicateCanonicalIssues(pages);
     const navigation = activeNavigation.map((item) =>
-      evaluateNavigationTarget(item, pageMap, pathMap, navigationMap)
+      evaluateNavigationTarget(item, allPageMap, pathMap, allNavigationMap)
     );
 
     const representedPageIds = new Set();
