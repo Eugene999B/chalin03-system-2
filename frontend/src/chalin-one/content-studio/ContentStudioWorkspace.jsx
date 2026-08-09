@@ -19,7 +19,7 @@ import {
   ContentStudioEquipmentManager,
   ContentStudioProjectManager,
 } from "./ContentStudioPortfolioManagers";
-import ContentStudioVisualBuilder from "./ContentStudioVisualBuilder";
+import ContentStudioVisualBuilder from "./ContentStudioVisualBuilderPro";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_SECTIONS,
