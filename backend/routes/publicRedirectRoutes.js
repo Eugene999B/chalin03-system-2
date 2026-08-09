@@ -6,6 +6,13 @@ const rateLimit = require("express-rate-limit");
 const {
   resolvePublicRedirect,
 } = require("../services/contentStudioRedirectService");
+const {
+  STATIC_PUBLIC_PATHS,
+} = require("../services/contentStudioWebsiteControlService");
+const {
+  cleanPath,
+  findPublishedRouteOwner,
+} = require("../services/publicRouteOccupancyService");
 
 const router = express.Router();
 
@@ -23,7 +30,12 @@ const resolverLimiter = rateLimit({
 
 router.get("/resolve", resolverLimiter, async (req, res, next) => {
   try {
-    const redirect = await resolvePublicRedirect(req.query.path);
+    const pathname = cleanPath(req.query.path);
+    let redirect = null;
+    if (pathname && !STATIC_PUBLIC_PATHS.has(pathname)) {
+      const owner = await findPublishedRouteOwner(pathname);
+      if (!owner) redirect = await resolvePublicRedirect(pathname);
+    }
     res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
     return res.json({
       status: "success",
