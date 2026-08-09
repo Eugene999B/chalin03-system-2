@@ -12,6 +12,13 @@ const component = fs.readFileSync(path.join(root, "ContentStudioMediaManagerPro.
 const api = fs.readFileSync(path.join(root, "contentStudioMediaProApi.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "contentStudioMediaPro.css"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "ContentStudioWorkspace.jsx"), "utf8");
+const picker = fs.readFileSync(path.join(root, "ContentStudioMediaPickerField.jsx"), "utf8");
+const pickerCss = fs.readFileSync(path.join(root, "contentStudioMediaPickerField.css"), "utf8");
+const governedManager = fs.readFileSync(path.join(root, "ContentStudioGovernedManager.jsx"), "utf8");
+const leadership = fs.readFileSync(path.join(root, "ContentStudioLeadershipManager.jsx"), "utf8");
+const newsroom = fs.readFileSync(path.join(root, "ContentStudioNewsroomManager.jsx"), "utf8");
+const visualBuilder = fs.readFileSync(path.join(root, "ContentStudioVisualBuilder.jsx"), "utf8");
+const portfolioManagers = fs.readFileSync(path.join(root, "ContentStudioPortfolioManagers.jsx"), "utf8");
 
 let passed = 0;
 function check(name, callback) {
@@ -115,4 +122,39 @@ check("Media Library Pro has responsive desktop tablet phone and reduced-motion 
   assert.match(css, /cs-media-pro-inspector/);
 });
 
-console.log(`\nMedia Library Pro: ${passed}/7 checks passed.`);
+check("governed media picker is permission scoped and only offers public publication-ready assets", () => {
+  assert.match(picker, /CONTENT_STUDIO_PERMISSIONS\.mediaView/);
+  assert.match(picker, /visibility:\s*"public"/);
+  assert.match(picker, /readiness:\s*"public_ready"/);
+  assert.match(picker, /listMediaPro/);
+  assert.match(picker, /AbortController/);
+  assert.match(picker, /event\.key !== "Escape"/);
+  assert.match(picker, /triggerRef\.current\?\.focus/);
+  assert.doesNotMatch(picker, /localStorage|sessionStorage|Bearer|dangerouslySetInnerHTML/);
+  assert.match(pickerCss, /@media\(max-width:680px\)/);
+  assert.match(pickerCss, /scroll-snap-type:x mandatory/);
+});
+
+check("Projects Equipment Newsroom and Leadership replace raw media-ID authoring with governed picker fields", () => {
+  assert.match(governedManager, /ContentStudioMediaPickerField/);
+  assert.match(governedManager, /mediaAcceptForLabel/);
+  assert.match(portfolioManagers, /Featured media asset ID/);
+  assert.match(portfolioManagers, /Media asset ID/);
+  assert.match(newsroom, /ContentStudioMediaPickerField/);
+  assert.match(newsroom, /Featured image asset ID/);
+  assert.match(leadership, /ContentStudioMediaPickerField/);
+  assert.match(leadership, /Portrait media asset ID/);
+  assert.match(leadership, /Signature media asset ID/);
+});
+
+check("Visual Builder retains visual media selection instead of exposing section media IDs as ordinary inputs", () => {
+  assert.match(visualBuilder, /function MediaPicker/);
+  assert.match(visualBuilder, /Choose approved media/);
+  assert.match(visualBuilder, /Choose primary media/);
+  assert.match(visualBuilder, /Choose background/);
+  assert.match(visualBuilder, /visibility:\s*"public"/);
+  assert.doesNotMatch(visualBuilder, /label="Primary media asset ID"/);
+  assert.doesNotMatch(visualBuilder, /label="Background media asset ID"/);
+});
+
+console.log(`\nMedia Library Pro: ${passed}/10 checks passed.`);
