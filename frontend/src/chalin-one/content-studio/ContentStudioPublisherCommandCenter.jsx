@@ -58,10 +58,34 @@ function sourceLabel(item) {
   return PUBLISHER_RELEASE_SOURCES.find((source) => source.key === item?.source)?.label || item?.source || "Release";
 }
 
+function scheduledPageVersion(details = {}) {
+  const versions = Array.isArray(details?.versions) ? details.versions : [];
+  return versions.find((version) => String(version?.version_status || "").toLowerCase() === "scheduled") || null;
+}
+
 async function loadReleaseSource(source, { signal } = {}) {
   if (source === "page") {
     const result = await listPages({ limit: 100, offset: 0 }, { signal });
-    return Array.isArray(result?.items) ? result.items : [];
+    const rows = Array.isArray(result?.items) ? result.items : [];
+    return Promise.all(rows.map(async (row) => {
+      if (String(row.latest_version_status || "").toLowerCase() !== "scheduled") return row;
+      try {
+        const details = await getPage(row.id, { signal });
+        if (signal?.aborted) return row;
+        const scheduledVersion = scheduledPageVersion(details);
+        if (!scheduledVersion) return row;
+        return {
+          ...row,
+          publish_at: scheduledVersion.publish_at || row.publish_at,
+          expires_at: scheduledVersion.expires_at || null,
+          scheduled_candidate_version_id: scheduledVersion.id,
+          scheduled_candidate_version_number: scheduledVersion.version_number,
+        };
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return row;
+      }
+    }));
   }
   if (source === "article" || source === "announcement") {
     const result = await listNewsroomEntities(source, { limit: 100, offset: 0 }, { signal });
@@ -125,7 +149,7 @@ function Timeline({ days, collisions }) {
             </div>
           </article>
         ))}
-        {!days.length ? <div className="cs-pc-empty"><strong>No scheduled release events in the next 21 days.</strong><span>Approved first-publication pages can be scheduled from this command centre.</span></div> : null}
+        {!days.length ? <div className="cs-pc-empty"><strong>No scheduled release events in the next 21 days.</strong><span>Approved Pages can be scheduled from this command centre.</span></div> : null}
       </div>
     </section>
   );
@@ -169,11 +193,9 @@ export default function ContentStudioPublisherCommandCenter({ onOpenSection }) {
   const scheduleSupported = Boolean(
     selected &&
     selected.source === "page" &&
-    selected.status !== "published" &&
     selected.status !== "scheduled" &&
     approvedVersion
   );
-  const replacementScheduleBlocked = Boolean(selected?.source === "page" && selected?.status === "published" && approvedVersion);
   const futureScheduleUnavailable = Boolean(selected && selected.source !== "page" && approvedVersion);
 
   const load = useCallback(async ({ signal } = {}) => {
@@ -260,13 +282,21 @@ export default function ContentStudioPublisherCommandCenter({ onOpenSection }) {
       setError(schedule.error);
       return;
     }
-    if (!window.confirm(`Schedule “${selected.title}” for ${displayDate(schedule.payload.publish_at)}?`)) return;
+    const replacingLivePage = selected.liveStatus === "published";
+    const prompt = replacingLivePage
+      ? `Schedule the approved replacement for “${selected.title}” at ${displayDate(schedule.payload.publish_at)} while keeping the current version live until handover?`
+      : `Schedule “${selected.title}” for ${displayDate(schedule.payload.publish_at)}?`;
+    if (!window.confirm(prompt)) return;
     setSaving(true);
     setError("");
     setNotice("");
     try {
       await executePublish(selected, approvedVersion.id, schedule.payload);
-      setNotice(`${selected.title} is scheduled. The public-content scheduler will promote the exact approved version when it becomes due.`);
+      setNotice(
+        replacingLivePage
+          ? `${selected.title} replacement is scheduled. The current published version stays live until the scheduler atomically promotes the approved replacement.`
+          : `${selected.title} is scheduled. The public-content scheduler will promote the exact approved version when it becomes due.`
+      );
       setDetails(null);
       await load();
     } catch (requestError) {
@@ -324,7 +354,7 @@ export default function ContentStudioPublisherCommandCenter({ onOpenSection }) {
               <button type="button" key={item.key} className={selectedKey === item.key ? "is-active" : ""} onClick={() => openRelease(item)}>
                 <span className="cs-pc-record-badge">{item.badge}</span>
                 <span className="cs-pc-record-copy"><strong>{item.title}</strong><small>{item.subtitle || item.label}</small></span>
-                <span className={`cs-pc-status is-${item.status}`}>{item.latestVersionStatus === "approved" && item.status === "published" ? "published + approved candidate" : statusLabel(item.status)}</span>
+                <span className={`cs-pc-status is-${item.status}`}>{item.scheduledReplacement ? "scheduled replacement · live preserved" : item.latestVersionStatus === "approved" && item.status === "published" ? "published + approved candidate" : statusLabel(item.status)}</span>
                 {item.publishAt ? <small className="cs-pc-record-date">{displayDate(item.publishAt)}</small> : null}
                 {summary.collisionMap.has(item.key) ? <b className="cs-pc-collision">COLLISION</b> : null}
               </button>
@@ -339,7 +369,7 @@ export default function ContentStudioPublisherCommandCenter({ onOpenSection }) {
           ) : (
             <>
               <div className="cs-pc-selected-head">
-                <div><span>{selected.label.toUpperCase()} / #{selected.id}</span><h3>{selected.title}</h3><small>Record status: {statusLabel(selected.status)} · candidate: {approvedVersion ? `v${approvedVersion.version_number || "?"} approved` : "no approved version"}</small></div>
+                <div><span>{selected.label.toUpperCase()} / #{selected.id}</span><h3>{selected.title}</h3><small>Release status: {statusLabel(selected.status)} · live record: {statusLabel(selected.liveStatus)} · candidate: {approvedVersion ? `v${approvedVersion.version_number || "?"} approved` : selected.latestVersionStatus === "scheduled" ? `v${selected.latestVersionNumber || "?"} scheduled` : "no approved version"}</small></div>
                 <button type="button" onClick={() => onOpenSection?.(selected.manager)}>Open manager ↗</button>
               </div>
 
@@ -361,17 +391,16 @@ export default function ContentStudioPublisherCommandCenter({ onOpenSection }) {
 
               {scheduleSupported ? (
                 <section className="cs-pc-scheduler-form">
-                  <header><span>SAFE PAGE SCHEDULING</span><strong>First publication</strong></header>
+                  <header><span>SAFE PAGE SCHEDULING</span><strong>{selected.liveStatus === "published" ? "Atomic scheduled replacement" : "First publication"}</strong></header>
                   <label><span>Go live</span><input type="datetime-local" value={publishAt} min={inputDateTime(new Date(Date.now() + 60000))} onChange={(event) => setPublishAt(event.target.value)} /></label>
                   <label><span>Automatic expiry <small>optional</small></span><input type="datetime-local" value={expiresAt} min={publishAt || inputDateTime(new Date(Date.now() + 60000))} onChange={(event) => setExpiresAt(event.target.value)} /></label>
                   <button type="button" onClick={scheduleRelease} disabled={!canPublish || saving || !publishAt}>Schedule approved version →</button>
-                  <p>The current server scheduler checks due public content every minute. Only the exact human-approved version is scheduled.</p>
+                  <p>{selected.liveStatus === "published" ? "The current published Page stays live. At the due minute, the locked scheduler supersedes it and atomically promotes this exact approved replacement." : "The current server scheduler checks due public content every minute. Only the exact human-approved version is scheduled."}</p>
                 </section>
               ) : null}
 
-              {replacementScheduleBlocked ? <div className="cs-pc-guidance is-warning"><strong>Future replacement scheduling is intentionally blocked here.</strong><span>This page is already live. The current backend needs an atomic version-handover upgrade before a future replacement can be scheduled without risking temporary removal of the live page. Immediate approved publication remains available.</span></div> : null}
-              {futureScheduleUnavailable ? <div className="cs-pc-guidance is-warning"><strong>Future scheduling is not enabled for this release family yet.</strong><span>The backend explicitly protects Newsroom and Portfolio from future scheduling until their version-aware scheduler is accepted. You can publish the exact approved version now.</span></div> : null}
-              {selected.status === "scheduled" ? <div className="cs-pc-guidance"><strong>This release is already scheduled.</strong><span>The command centre is monitoring it on the timeline. Reschedule/cancel controls will only be added when the backend can preserve the currently live version during handover.</span></div> : null}
+              {futureScheduleUnavailable ? <div className="cs-pc-guidance is-warning"><strong>Future scheduling is not enabled for this release family yet.</strong><span>Newsroom and Portfolio workflows explicitly reject future scheduling until their version-aware handover is accepted. You can publish the exact approved version now.</span></div> : null}
+              {selected.status === "scheduled" ? <div className="cs-pc-guidance"><strong>{selected.scheduledReplacement ? "Scheduled replacement is preserving the current live Page." : "This release is already scheduled."}</strong><span>{selected.scheduledReplacement ? "The candidate’s future timestamp is shown in this command centre while the public resolver continues serving the existing published version until atomic handover." : "The command centre is monitoring it on the timeline. Reschedule/cancel controls remain disabled until their lifecycle is separately governed."}</span></div> : null}
             </>
           )}
         </section>
