@@ -14,8 +14,11 @@ const {
   updateMediaFolder,
 } = require("../services/contentStudioMediaFolderService");
 const {
+  getMediaLibraryIntelligence,
+  listMediaLibraryAssets,
+} = require("../services/contentStudioMediaLibraryService");
+const {
   MAX_IMAGE_BYTES,
-  listMediaAssets,
   registerExternalVideo,
   updateMediaAsset,
   uploadImage,
@@ -125,17 +128,36 @@ router.post(
 );
 
 router.get(
+  "/intelligence",
+  requirePermission("public_media.view"),
+  asyncHandler(async (req, res) =>
+    success(res, req, await getMediaLibraryIntelligence())
+  )
+);
+
+router.get(
   "/",
   requirePermission("public_media.view"),
   asyncHandler(async (req, res) =>
     success(
       res,
       req,
-      await listMediaAssets({
+      await listMediaLibraryAssets({
         mediaType: req.query.media_type,
         visibility: req.query.visibility,
+        processingStatus: req.query.processing_status,
         folderId: req.query.folder_id,
         search: req.query.search,
+        orientation: req.query.orientation,
+        usage: req.query.usage,
+        altStatus: req.query.alt_status,
+        readiness: req.query.readiness,
+        duplicate: req.query.duplicate,
+        minWidth: req.query.min_width,
+        maxWidth: req.query.max_width,
+        minHeight: req.query.min_height,
+        maxHeight: req.query.max_height,
+        sort: req.query.sort,
         limit: req.query.limit,
         offset: req.query.offset,
       })
