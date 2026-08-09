@@ -31,6 +31,10 @@ test("website-control public paths and canonical URLs normalize safely", () => {
   assert.equal(pagePublicPath({ slug: "home", is_homepage: 1 }), "/");
   assert.equal(canonicalInfo("http://example.com/about").valid, false);
   assert.equal(canonicalInfo("https://example.com/about").valid, true);
+  assert.equal(
+    canonicalInfo("https://example.com/about/").normalized,
+    canonicalInfo("https://example.com/about").normalized
+  );
 });
 
 test("page SEO diagnostics separate record problems and indexing conflicts", () => {
@@ -87,6 +91,42 @@ test("navigation audit detects ambiguous and unknown governed targets", () => {
   assert.ok(codes.includes("NAVIGATION_DUAL_TARGET"));
   assert.ok(codes.includes("NAVIGATION_PAGE_NOT_PUBLISHED"));
   assert.ok(codes.includes("NAVIGATION_INTERNAL_TARGET_UNKNOWN"));
+});
+
+test("navigation audit distinguishes archived page targets and archived parents", () => {
+  const archivedPage = {
+    id: 4,
+    page_key: "old_page",
+    slug: "old-page",
+    title: "Old page",
+    publication_status: "archived",
+    is_homepage: 0,
+  };
+  const archivedParent = {
+    id: 20,
+    navigation_key: "old_parent",
+    label: "Old parent",
+    publication_status: "archived",
+  };
+  const result = evaluateNavigationTarget(
+    {
+      id: 21,
+      navigation_key: "child",
+      label: "Child",
+      navigation_location: "footer",
+      publication_status: "published",
+      page_id: 4,
+      parent_id: 20,
+    },
+    new Map([[4, archivedPage]]),
+    new Map(),
+    new Map([[20, archivedParent]])
+  );
+  const codes = result.issues.map((item) => item.code);
+  assert.ok(codes.includes("NAVIGATION_PAGE_ARCHIVED"));
+  assert.ok(codes.includes("NAVIGATION_PARENT_ARCHIVED"));
+  assert.equal(codes.includes("NAVIGATION_PAGE_MISSING"), false);
+  assert.equal(codes.includes("NAVIGATION_PARENT_MISSING"), false);
 });
 
 test("health score penalizes critical issues more than warnings and stays bounded", () => {
