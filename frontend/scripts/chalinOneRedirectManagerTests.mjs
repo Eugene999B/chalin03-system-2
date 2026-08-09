@@ -87,6 +87,13 @@ check("Cloudflare edge middleware emits the exact governed HTTP redirect status 
   assert.equal(edgeRedirect.isApprovedStagingHost("chalin03.com"), false);
   assert.equal(edgeRedirect.shouldBypass("/api/public/content/bootstrap", "GET"), true);
   assert.equal(edgeRedirect.shouldBypass("/assets/index.js", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/login", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/content-studio/login", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/intelligence", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/mining/sites", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/equipment-hire-operations/contracts", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/equipment-installment-finance/applications", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/group-executive-control", "GET"), true);
   assert.equal(edgeRedirect.shouldBypass("/old-company-page", "POST"), true);
   assert.equal(edgeRedirect.shouldBypass("/old-company-page", "GET"), false);
   assert.equal(edgeRedirect.safeRedirectDestination("http://example.com/x"), "");
@@ -103,6 +110,7 @@ check("Cloudflare edge middleware emits the exact governed HTTP redirect status 
   assert.equal(response.status, 308);
   assert.equal(response.headers.get("Location"), "/about");
   assert.equal(response.headers.get("X-Chalin-One-Redirect"), "governed-edge-v1");
+  assert.equal(edgeRedirect.governedRedirectResponse({ source_path: "/login", destination_url: "/about", redirect_status: 301 }, "/login"), null);
   assert.equal(edgeRedirect.governedRedirectResponse({ source_path: "/old-company-page", destination_url: "/about", redirect_status: 305 }, "/old-company-page"), null);
 });
 
@@ -111,6 +119,7 @@ check("edge redirect function is staging-only and fails open to Pages assets/rou
   assert.match(edgeSource, /chalin03-system-2-staging\.up\.railway\.app/);
   assert.match(edgeSource, /\/api\/public\/redirects\/resolve/);
   assert.match(edgeSource, /new Set\(\[301, 302, 307, 308\]\)/);
+  assert.match(edgeSource, /RESERVED_PLATFORM_PREFIXES/);
   assert.match(edgeSource, /return context\.next\(\)/);
   assert.match(edgeSource, /catch \{/);
   assert.match(edgeSource, /"GET", "HEAD"/);
