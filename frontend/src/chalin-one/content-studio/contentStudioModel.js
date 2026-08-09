@@ -122,6 +122,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "green",
   }),
   Object.freeze({
+    key: "media-reference",
+    label: "Media Reference Desk",
+    shortLabel: "References",
+    badge: "DR",
+    description: "Resolve duplicate files by auditing exact references and retiring only unused copies.",
+    permission: CONTENT_STUDIO_PERMISSIONS.mediaManage,
+    endpoint: "/content-studio/media",
+    group: "Assets",
+    tone: "green",
+  }),
+  Object.freeze({
     key: "forms",
     label: "Form Builder",
     shortLabel: "Forms",

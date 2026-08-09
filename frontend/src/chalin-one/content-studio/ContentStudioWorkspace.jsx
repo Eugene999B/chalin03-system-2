@@ -8,6 +8,7 @@ import ContentStudioFormManager from "./ContentStudioFormManager";
 import ContentStudioLeadershipManager from "./ContentStudioLeadershipManager";
 import ContentStudioMediaCleanupManager from "./ContentStudioMediaCleanupManager";
 import ContentStudioMediaManager from "./ContentStudioMediaManagerPro";
+import ContentStudioMediaReferenceDesk from "./ContentStudioMediaReferenceDesk";
 import ContentStudioNewsroomManager from "./ContentStudioNewsroomManager";
 import {
   ContentStudioApprovalInbox,
@@ -59,6 +60,7 @@ const SECTION_SCOPES = Object.freeze({
   "company-info": "company",
   media: "media",
   "media-cleanup": "media",
+  "media-reference": "media",
   forms: "forms",
   submissions: "submissions",
   approvals: "pages",
@@ -77,6 +79,7 @@ const MANAGERS = Object.freeze({
   "company-info": ContentStudioCompanyInfoManager,
   media: ContentStudioMediaManager,
   "media-cleanup": ContentStudioMediaCleanupManager,
+  "media-reference": ContentStudioMediaReferenceDesk,
   forms: ContentStudioFormManager,
   submissions: ContentStudioEnquiryDesk,
   approvals: ContentStudioApprovalInbox,
