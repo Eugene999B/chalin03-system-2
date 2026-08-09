@@ -15,11 +15,13 @@ const {
   getPageDetails,
   listPages,
   listPendingApprovals,
-  publishPageVersion,
   restorePageVersion,
   submitPageVersion,
   updateDraftVersion,
 } = require("../services/contentStudioPageService");
+const {
+  publishPageVersion,
+} = require("../services/contentStudioPagePublishWorkflow");
 const {
   addSubmissionReview,
   assignSubmission,
