@@ -51,6 +51,16 @@ export function normalizePublisherRelease(source, record = {}) {
   if (!definition) return null;
   const id = Number(record.id);
   if (!Number.isInteger(id) || id <= 0) return null;
+  const recordStatus = safeStatus(record.publication_status);
+  const latestVersionStatus = clean(record.latest_version_status).toLowerCase() || null;
+  const scheduledReplacement = Boolean(
+    source === "page" &&
+    recordStatus === "published" &&
+    latestVersionStatus === "scheduled"
+  );
+  const releaseStatus = source === "page" && latestVersionStatus === "scheduled"
+    ? "scheduled"
+    : recordStatus;
   return {
     key: `${source}:${id}`,
     source,
@@ -61,14 +71,16 @@ export function normalizePublisherRelease(source, record = {}) {
     id,
     title: titleFor(source, record),
     subtitle: clean(record.slug ? `/${record.slug}` : record.role_title || record.model || record.reference_code || ""),
-    status: safeStatus(record.publication_status),
+    status: releaseStatus,
+    liveStatus: recordStatus,
+    scheduledReplacement,
     publishAt: validDate(record.publish_at),
     expiresAt: validDate(record.expires_at),
     publishedAt: validDate(record.published_at),
     updatedAt: validDate(record.updated_at),
     latestVersionId: Number(record.latest_version_id) || null,
     latestVersionNumber: Number(record.latest_version_number) || null,
-    latestVersionStatus: clean(record.latest_version_status).toLowerCase() || null,
+    latestVersionStatus,
     raw: record,
   };
 }
