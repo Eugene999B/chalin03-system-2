@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { contentStudioErrorMessage } from "./contentStudioApi";
+import ContentStudioMediaPickerField from "./ContentStudioMediaPickerField";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   contentStudioStatusTone,
@@ -21,7 +22,33 @@ function displayStatus(value) {
   return String(value || "draft").replaceAll("_", " ");
 }
 
+function mediaAcceptForLabel(label) {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("document")) return "document";
+  if (normalized.includes("video")) return "video";
+  if (normalized === "media asset id" || normalized.includes("gallery")) {
+    return ["image", "video"];
+  }
+  return "image";
+}
+
 export function GovernedField({ label, children, hint }) {
+  const mediaField = /media asset id/i.test(String(label || ""));
+  if (mediaField && children?.props) {
+    return (
+      <ContentStudioMediaPickerField
+        label={String(label).replace(/\s+asset\s+id$/i, "")}
+        value={children.props.value}
+        disabled={children.props.disabled}
+        required={children.props.required}
+        accept={mediaAcceptForLabel(label)}
+        hint={hint || "Choose a publication-ready asset from Media Library Pro."}
+        onChange={(value) =>
+          children.props.onChange?.({ target: { value } })
+        }
+      />
+    );
+  }
   return (
     <label className="cs-field">
       <span>{label}</span>
