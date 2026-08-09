@@ -1,0 +1,431 @@
+.cs-pc-shell {
+  --pc-night: #071521;
+  --pc-ink: #10283a;
+  --pc-blue: #176b9d;
+  --pc-gold: #d5aa39;
+  --pc-paper: #f4f7f9;
+  --pc-line: #d5e0e7;
+  --pc-muted: #687b88;
+  --pc-danger: #9d342f;
+  --pc-warn: #9a6a16;
+  min-width: 0;
+}
+
+.cs-pc-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 22px;
+  border: 1px solid #18384d;
+  border-radius: 20px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 88% 0, rgba(46, 132, 184, .22), transparent 35%),
+    linear-gradient(135deg, #071521, #0c2638 70%, #0d3147);
+  box-shadow: 0 20px 48px rgba(6, 25, 39, .14);
+}
+
+.cs-pc-mark {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 16px;
+  color: #f5d16b;
+  background: rgba(255,255,255,.06);
+  font-size: .72rem;
+  font-weight: 950;
+  letter-spacing: .1em;
+}
+
+.cs-pc-hero > div:nth-child(2) > span,
+.cs-pc-release-list header span,
+.cs-pc-control-desk span,
+.cs-pc-timeline-panel header span,
+.cs-pc-overdue header span,
+.cs-pc-approved-card header span,
+.cs-pc-scheduler-form header span {
+  display: block;
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.cs-pc-hero > div:nth-child(2) > span { color: #78b8dd; }
+.cs-pc-hero h2 { margin: 4px 0 6px; font-size: clamp(1.4rem, 2.2vw, 2.1rem); }
+.cs-pc-hero p { max-width: 820px; margin: 0; color: #b7c9d5; font-size: .8rem; line-height: 1.55; }
+
+.cs-pc-authority {
+  min-width: 158px;
+  padding: 13px 14px;
+  border: 1px solid rgba(245, 209, 107, .3);
+  border-radius: 14px;
+  text-align: right;
+  background: rgba(245, 209, 107, .08);
+}
+.cs-pc-authority strong { display: block; color: #f5d16b; font-size: .68rem; letter-spacing: .1em; }
+.cs-pc-authority small { color: #b7c9d5; font-size: .65rem; }
+
+.cs-pc-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #bcdcc8;
+  border-radius: 14px;
+  background: #effaf3;
+}
+.cs-pc-alert.is-error { border-color: #e6c3c0; background: #fff4f3; }
+.cs-pc-alert.is-warning { border-color: #ead9aa; background: #fff9e9; }
+.cs-pc-alert > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cs-pc-alert strong { color: var(--pc-ink); font-size: .76rem; }
+.cs-pc-alert span { color: var(--pc-muted); font-size: .69rem; line-height: 1.45; }
+.cs-pc-alert button { min-height: 38px; border: 1px solid var(--pc-line); border-radius: 10px; background: #fff; cursor: pointer; }
+
+.cs-pc-scores {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.cs-pc-score {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--pc-line);
+  border-radius: 16px;
+  background: #fff;
+}
+.cs-pc-score span { color: var(--pc-muted); font-size: .58rem; font-weight: 950; letter-spacing: .12em; }
+.cs-pc-score strong { display: block; margin: 5px 0 3px; color: var(--pc-ink); font-size: 1.55rem; line-height: 1; }
+.cs-pc-score small { color: var(--pc-muted); font-size: .62rem; }
+.cs-pc-score.is-ready { border-color: #b9d9c4; background: #f5fbf7; }
+.cs-pc-score.is-warning { border-color: #ead9aa; background: #fffaf0; }
+.cs-pc-score.is-danger { border-color: #e6c3c0; background: #fff5f4; }
+
+.cs-pc-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, .82fr) minmax(0, 1.18fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.cs-pc-release-list,
+.cs-pc-control-desk,
+.cs-pc-timeline-panel,
+.cs-pc-overdue {
+  min-width: 0;
+  border: 1px solid var(--pc-line);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cs-pc-release-list > header,
+.cs-pc-timeline-panel > header,
+.cs-pc-overdue > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 17px;
+  border-bottom: 1px solid var(--pc-line);
+  background: #f8fbfc;
+}
+.cs-pc-release-list header span,
+.cs-pc-timeline-panel header span,
+.cs-pc-overdue header span { color: var(--pc-blue); }
+.cs-pc-release-list header strong,
+.cs-pc-timeline-panel header strong,
+.cs-pc-overdue header strong { display: block; margin-top: 3px; color: var(--pc-ink); font-size: .84rem; }
+.cs-pc-release-list header button,
+.cs-pc-open-approvals,
+.cs-pc-selected-head button {
+  min-height: 38px;
+  border: 1px solid #c8d6de;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: .68rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cs-pc-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(130px, .8fr) minmax(125px, .75fr);
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cs-pc-filters input,
+.cs-pc-filters select,
+.cs-pc-scheduler-form input {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #cbd8df;
+  border-radius: 10px;
+  padding: 0 11px;
+  background: #fff;
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: .72rem;
+}
+
+.cs-pc-records {
+  max-height: 690px;
+  overflow: auto;
+}
+.cs-pc-records > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "badge copy status"
+    "badge copy date";
+  gap: 3px 10px;
+  align-items: center;
+  padding: 12px 13px;
+  border: 0;
+  border-bottom: 1px solid #edf1f3;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.cs-pc-records > button:hover,
+.cs-pc-records > button.is-active { background: #f0f7fb; }
+.cs-pc-record-badge {
+  grid-area: badge;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--pc-night);
+  color: #f3c95f;
+  font-size: .6rem;
+  font-weight: 950;
+}
+.cs-pc-record-copy { grid-area: copy; min-width: 0; }
+.cs-pc-record-copy strong { display: block; overflow: hidden; color: var(--pc-ink); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+.cs-pc-record-copy small { color: var(--pc-muted); font-size: .63rem; }
+.cs-pc-status {
+  grid-area: status;
+  justify-self: end;
+  max-width: 150px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #6d581d;
+  background: #fff3c9;
+  font-size: .54rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+.cs-pc-status.is-published { color: #2f6542; background: #e8f6ed; }
+.cs-pc-status.is-archived,
+.cs-pc-status.is-expired { color: #7a3935; background: #fae8e6; }
+.cs-pc-record-date { grid-area: date; justify-self: end; color: var(--pc-muted); font-size: .57rem; }
+.cs-pc-collision { grid-column: 2 / -1; color: var(--pc-danger); font-size: .55rem; letter-spacing: .08em; }
+
+.cs-pc-control-desk { padding: 18px; }
+.cs-pc-zero,
+.cs-pc-empty {
+  display: grid;
+  place-items: start;
+  gap: 5px;
+  padding: 22px;
+  color: var(--pc-muted);
+}
+.cs-pc-zero { min-height: 280px; align-content: center; }
+.cs-pc-zero span { color: var(--pc-blue); font-size: .62rem; font-weight: 950; letter-spacing: .12em; }
+.cs-pc-zero strong,
+.cs-pc-empty strong { color: var(--pc-ink); }
+.cs-pc-zero p,
+.cs-pc-empty span { margin: 0; font-size: .72rem; line-height: 1.5; }
+
+.cs-pc-selected-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--pc-line);
+}
+.cs-pc-selected-head > div { min-width: 0; }
+.cs-pc-selected-head > div > span { color: var(--pc-blue); }
+.cs-pc-selected-head h3 { margin: 4px 0 4px; color: var(--pc-ink); font-size: 1.25rem; }
+.cs-pc-selected-head small { color: var(--pc-muted); font-size: .67rem; }
+
+.cs-pc-live-window {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.cs-pc-live-window > div { padding: 12px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-paper); }
+.cs-pc-live-window span { color: var(--pc-muted); }
+.cs-pc-live-window strong { display: block; margin-top: 4px; color: var(--pc-ink); font-size: .7rem; }
+
+.cs-pc-approved-card,
+.cs-pc-scheduler-form,
+.cs-pc-guidance {
+  margin-top: 12px;
+  padding: 15px;
+  border: 1px solid var(--pc-line);
+  border-radius: 14px;
+  background: #fbfdfe;
+}
+.cs-pc-approved-card header,
+.cs-pc-scheduler-form header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.cs-pc-approved-card header span,
+.cs-pc-scheduler-form header span { color: var(--pc-blue); }
+.cs-pc-approved-card header strong,
+.cs-pc-scheduler-form header strong { color: var(--pc-ink); }
+.cs-pc-approved-card p,
+.cs-pc-scheduler-form p,
+.cs-pc-guidance span { color: var(--pc-muted); font-size: .69rem; line-height: 1.5; }
+.cs-pc-publish-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.cs-pc-publish-actions button,
+.cs-pc-scheduler-form > button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 14px;
+  background: var(--pc-night);
+  color: #fff;
+  font: inherit;
+  font-size: .7rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+.cs-pc-publish-actions .is-live { background: #1f6f45; }
+.cs-pc-publish-actions button:disabled,
+.cs-pc-scheduler-form > button:disabled { opacity: .5; cursor: not-allowed; }
+
+.cs-pc-scheduler-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f2f8fb; }
+.cs-pc-scheduler-form header,
+.cs-pc-scheduler-form p { grid-column: 1 / -1; }
+.cs-pc-scheduler-form label { display: grid; gap: 5px; }
+.cs-pc-scheduler-form label > span { color: var(--pc-ink); font-size: .65rem; font-weight: 900; }
+.cs-pc-scheduler-form label small { font-weight: 500; color: var(--pc-muted); }
+.cs-pc-scheduler-form > button { grid-column: 1 / -1; justify-self: end; }
+.cs-pc-guidance strong { display: block; margin-bottom: 3px; color: var(--pc-ink); font-size: .72rem; }
+.cs-pc-guidance.is-warning { border-color: #e7d59e; background: #fff9e9; }
+
+.cs-pc-timeline-panel { margin-bottom: 16px; }
+.cs-pc-timeline-panel > header small,
+.cs-pc-overdue > header small { color: var(--pc-muted); font-size: .63rem; }
+.cs-pc-timeline { display: grid; gap: 0; }
+.cs-pc-day { display: grid; grid-template-columns: 150px minmax(0, 1fr); border-bottom: 1px solid #edf1f3; }
+.cs-pc-day:last-child { border-bottom: 0; }
+.cs-pc-day-label { padding: 14px 16px; background: #f8fbfc; border-right: 1px solid #edf1f3; }
+.cs-pc-day-label strong { display: block; color: var(--pc-ink); font-size: .72rem; }
+.cs-pc-day-label span { color: var(--pc-muted); font-size: .6rem; }
+.cs-pc-day-events { display: flex; gap: 8px; overflow-x: auto; padding: 10px; scroll-snap-type: x proximity; }
+.cs-pc-event { min-width: 220px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--pc-line); border-radius: 11px; scroll-snap-align: start; }
+.cs-pc-event > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: #2f6542; background: #e7f5eb; font-size: .54rem; font-weight: 950; }
+.cs-pc-event.is-expire > span { color: #7b5720; background: #fff1cf; }
+.cs-pc-event strong { display: block; color: var(--pc-ink); font-size: .68rem; }
+.cs-pc-event small { color: var(--pc-muted); font-size: .58rem; }
+.cs-pc-event b { grid-column: 2; color: var(--pc-danger); font-size: .53rem; }
+.cs-pc-event.has-collision { border-color: #e4b2ae; background: #fff7f6; }
+
+.cs-pc-overdue { margin-bottom: 8px; }
+.cs-pc-overdue-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+.cs-pc-overdue-list article { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 11px; border: 1px solid #ead9aa; border-radius: 12px; background: #fffaf0; }
+.cs-pc-overdue-list article.is-critical { border-color: #e2b7b3; background: #fff5f4; }
+.cs-pc-overdue-list article > span { padding: 5px 7px; border-radius: 8px; color: var(--pc-warn); background: #fff0bd; font-size: .55rem; font-weight: 950; }
+.cs-pc-overdue-list article.is-critical > span { color: var(--pc-danger); background: #fae2df; }
+.cs-pc-overdue-list strong { display: block; overflow: hidden; color: var(--pc-ink); font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
+.cs-pc-overdue-list small { color: var(--pc-muted); font-size: .58rem; }
+.cs-pc-overdue-list b { color: var(--pc-warn); font-size: .7rem; }
+.cs-pc-open-approvals { margin: 0 12px 12px auto; display: block; background: var(--pc-night); color: #fff; border-color: var(--pc-night); }
+
+@media (max-width: 1180px) {
+  .cs-pc-scores { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cs-pc-grid { grid-template-columns: 1fr; }
+  .cs-pc-records { max-height: 500px; }
+}
+
+@media (max-width: 900px) {
+  .cs-pc-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .cs-pc-authority { grid-column: 1 / -1; text-align: left; }
+  .cs-pc-filters { grid-template-columns: 1fr 1fr; }
+  .cs-pc-filters input { grid-column: 1 / -1; }
+  .cs-pc-overdue-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .cs-pc-hero { grid-template-columns: 1fr; padding: 17px; border-radius: 16px; }
+  .cs-pc-mark { width: 46px; height: 46px; }
+  .cs-pc-scores {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+  }
+  .cs-pc-score { min-width: 145px; scroll-snap-align: start; }
+  .cs-pc-grid { gap: 12px; }
+  .cs-pc-release-list,
+  .cs-pc-control-desk,
+  .cs-pc-timeline-panel,
+  .cs-pc-overdue { border-radius: 14px; }
+  .cs-pc-filters { grid-template-columns: 1fr; }
+  .cs-pc-filters input { grid-column: auto; }
+  .cs-pc-records { max-height: 430px; }
+  .cs-pc-records > button { grid-template-columns: auto minmax(0,1fr); grid-template-areas: "badge copy" "badge status" "badge date"; }
+  .cs-pc-status,
+  .cs-pc-record-date { justify-self: start; }
+  .cs-pc-control-desk { padding: 13px; }
+  .cs-pc-selected-head { display: grid; }
+  .cs-pc-selected-head button { justify-self: start; }
+  .cs-pc-live-window { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; }
+  .cs-pc-live-window > div { min-width: 190px; scroll-snap-align: start; }
+  .cs-pc-scheduler-form { grid-template-columns: 1fr; }
+  .cs-pc-scheduler-form header,
+  .cs-pc-scheduler-form p,
+  .cs-pc-scheduler-form > button { grid-column: auto; }
+  .cs-pc-scheduler-form > button { width: 100%; }
+  .cs-pc-day { grid-template-columns: 1fr; }
+  .cs-pc-day-label { border-right: 0; border-bottom: 1px solid #edf1f3; }
+  .cs-pc-day-events { scroll-snap-type: x mandatory; }
+  .cs-pc-event { min-width: min(82vw, 260px); }
+  .cs-pc-overdue > header { align-items: flex-start; flex-direction: column; }
+  .cs-pc-open-approvals { width: calc(100% - 24px); }
+}
+
+@media (max-width: 390px) {
+  .cs-pc-hero h2 { font-size: 1.32rem; }
+  .cs-pc-score { min-width: 132px; }
+  .cs-pc-event { min-width: 84vw; }
+}
+
+@media (pointer: coarse) {
+  .cs-pc-records > button,
+  .cs-pc-release-list header button,
+  .cs-pc-selected-head button,
+  .cs-pc-open-approvals,
+  .cs-pc-publish-actions button,
+  .cs-pc-scheduler-form > button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-pc-shell *,
+  .cs-pc-shell *::before,
+  .cs-pc-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
