@@ -51,6 +51,7 @@ check("model contains every governed Content Studio manager", () => {
     "approvals",
     "publisher-command",
     "website-control",
+    "redirects",
     "navigation",
     "settings",
   ]);
@@ -80,6 +81,12 @@ check("model contains every governed Content Studio manager", () => {
   assert.equal(websiteControl.permission, "public_content.view");
   assert.equal(websiteControl.endpoint, "/content-studio/pages/website-control");
   assert.equal(websiteControl.group, "Website");
+  const redirects = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "redirects"
+  );
+  assert.equal(redirects.permission, "public_navigation.view");
+  assert.equal(redirects.endpoint, "/content-studio/navigation/redirects");
+  assert.equal(redirects.group, "Website");
 });
 
 check("access helpers fail closed and filter by backend permission", () => {
@@ -104,6 +111,10 @@ check("access helpers fail closed and filter by backend permission", () => {
     (permission) => permission === "public_content.publish"
   );
   assert.deepEqual(publishOnly.map((section) => section.key), ["publisher-command"]);
+  const navigationView = model.getAccessibleContentStudioSections(
+    (permission) => permission === "public_navigation.view"
+  );
+  assert.deepEqual(navigationView.map((section) => section.key), ["redirects", "navigation"]);
 });
 
 check("dashboard normalization converts SQL values to safe non-negative numbers", () => {
@@ -150,6 +161,7 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /"media-reference": "media"/);
   assert.match(workspaceSource, /"publisher-command": "pages"/);
   assert.match(workspaceSource, /"website-control": "pages"/);
+  assert.match(workspaceSource, /redirects: "navigation"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
   assert.match(modelSource, /public_content\.view/);
   assert.match(modelSource, /permission: CONTENT_STUDIO_PERMISSIONS\.mediaManage/);
@@ -184,6 +196,7 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioApprovalInbox",
     "ContentStudioPublisherCommandCenter",
     "ContentStudioWebsiteControlCenter",
+    "ContentStudioRedirectManager",
     "ContentStudioNavigationManager",
     "ContentStudioSettingsManager",
     "ContentStudioAccessManager",
