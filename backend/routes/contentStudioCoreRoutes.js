@@ -23,6 +23,9 @@ const {
   publishPageVersion,
 } = require("../services/contentStudioPagePublishWorkflow");
 const {
+  getWebsiteControlIntelligence,
+} = require("../services/contentStudioWebsiteControlService");
+const {
   addSubmissionReview,
   assignSubmission,
   changeSubmissionStatus,
@@ -57,6 +60,14 @@ router.get(
   requirePermission("public_content.view"),
   asyncHandler(async (req, res) =>
     success(res, req, await getContentStudioDashboard())
+  )
+);
+
+router.get(
+  "/website-control",
+  requirePermission("public_content.view"),
+  asyncHandler(async (req, res) =>
+    success(res, req, await getWebsiteControlIntelligence())
   )
 );
 
