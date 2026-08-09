@@ -5,6 +5,8 @@ export const PUBLIC_METADATA_CAPABILITIES = Object.freeze([
   Object.freeze({ key: "robots", label: "Robots directive", status: "active", note: "Published governed robots directives are rendered, while a staging noindex baseline remains hard-locked." }),
   Object.freeze({ key: "open_graph", label: "Open Graph", status: "active", note: "Route title, description, canonical URL, type and approved social image are synchronized into Open Graph metadata." }),
   Object.freeze({ key: "twitter", label: "Twitter / X cards", status: "active", note: "Route title, description and approved image are synchronized into Twitter/X card metadata." }),
+  Object.freeze({ key: "sitemap", label: "XML sitemap", status: "active", note: "The staging edge generates sitemap.xml from published governed public routes, sitemap visibility and page robots policy." }),
+  Object.freeze({ key: "robots_txt", label: "robots.txt", status: "active", note: "Staging serves a hard Disallow-all robots.txt. Any future production indexing activation remains a separate explicitly approved release step." }),
 ]);
 
 function numberValue(value) {
