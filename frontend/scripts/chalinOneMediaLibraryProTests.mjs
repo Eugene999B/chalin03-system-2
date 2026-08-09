@@ -17,6 +17,7 @@ const pickerCss = fs.readFileSync(path.join(root, "contentStudioMediaPickerField
 const governedManager = fs.readFileSync(path.join(root, "ContentStudioGovernedManager.jsx"), "utf8");
 const leadership = fs.readFileSync(path.join(root, "ContentStudioLeadershipManager.jsx"), "utf8");
 const newsroom = fs.readFileSync(path.join(root, "ContentStudioNewsroomManager.jsx"), "utf8");
+const pageManager = fs.readFileSync(path.join(root, "ContentStudioPageManager.jsx"), "utf8");
 const visualBuilder = fs.readFileSync(path.join(root, "ContentStudioVisualBuilder.jsx"), "utf8");
 const portfolioManagers = fs.readFileSync(path.join(root, "ContentStudioPortfolioManagers.jsx"), "utf8");
 
@@ -147,6 +148,16 @@ check("Projects Equipment Newsroom and Leadership replace raw media-ID authoring
   assert.match(leadership, /Signature media asset ID/);
 });
 
+check("advanced Pages Manager routes its primary media field through the governed picker without changing payload semantics", () => {
+  assert.match(pageManager, /import ContentStudioMediaPickerField from "\.\/ContentStudioMediaPickerField"/);
+  assert.match(pageManager, /\/media asset id\/i/);
+  assert.match(pageManager, /<ContentStudioMediaPickerField/);
+  assert.match(pageManager, /label="Primary media asset ID"/);
+  assert.match(pageManager, /primary_media_asset_id:\s*cleanId\(form\.primary_media_asset_id\)/);
+  assert.match(pageManager, /onChange=\{\(value\) => children\.props\.onChange\?\.\(\{ target: \{ value \} \}\)\}/);
+  assert.doesNotMatch(pageManager, /localStorage|sessionStorage|Bearer|dangerouslySetInnerHTML/);
+});
+
 check("Visual Builder retains visual media selection instead of exposing section media IDs as ordinary inputs", () => {
   assert.match(visualBuilder, /function MediaPicker/);
   assert.match(visualBuilder, /Choose approved media/);
@@ -157,4 +168,4 @@ check("Visual Builder retains visual media selection instead of exposing section
   assert.doesNotMatch(visualBuilder, /label="Background media asset ID"/);
 });
 
-console.log(`\nMedia Library Pro: ${passed}/10 checks passed.`);
+console.log(`\nMedia Library Pro: ${passed}/11 checks passed.`);
