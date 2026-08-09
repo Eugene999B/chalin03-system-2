@@ -14,7 +14,9 @@ const css = fs.readFileSync(path.join(studioRoot, "contentStudioPublisherCommand
 const studioModel = fs.readFileSync(path.join(studioRoot, "contentStudioModel.js"), "utf8");
 const workspace = fs.readFileSync(path.join(studioRoot, "ContentStudioWorkspace.jsx"), "utf8");
 const scheduler = fs.readFileSync(path.resolve(frontendRoot, "../backend/services/publicContentPublishingScheduler.js"), "utf8");
+const pagePublishWorkflow = fs.readFileSync(path.resolve(frontendRoot, "../backend/services/contentStudioPagePublishWorkflow.js"), "utf8");
 const newsroomPublish = fs.readFileSync(path.resolve(frontendRoot, "../backend/services/contentStudioNewsroomPublishWorkflow.js"), "utf8");
+const portfolioPublish = fs.readFileSync(path.resolve(frontendRoot, "../backend/services/contentStudioPortfolioPublishWorkflow.js"), "utf8");
 
 const NOW = new Date("2026-08-09T07:00:00.000Z");
 
@@ -36,8 +38,23 @@ const scheduledPage = model.normalizePublisherRelease("page", {
 });
 assert.equal(scheduledPage.key, "page:4");
 assert.equal(scheduledPage.status, "scheduled");
+assert.equal(scheduledPage.liveStatus, "scheduled");
 assert.equal(scheduledPage.title, "Company Profile");
 assert.equal(scheduledPage.publishAt.toISOString(), "2026-08-10T09:00:00.000Z");
+
+const replacementPage = model.normalizePublisherRelease("page", {
+  id: 5,
+  slug: "about",
+  latest_title: "About",
+  publication_status: "published",
+  publish_at: "2026-08-11T10:00:00.000Z",
+  latest_version_id: 22,
+  latest_version_number: 4,
+  latest_version_status: "scheduled",
+});
+assert.equal(replacementPage.status, "scheduled");
+assert.equal(replacementPage.liveStatus, "published");
+assert.equal(replacementPage.scheduledReplacement, true);
 
 const validSchedule = model.releaseSchedulePayload(
   "2026-08-10T09:00:00.000Z",
@@ -56,6 +73,7 @@ assert.equal(
 
 const collisionItems = [
   scheduledPage,
+  replacementPage,
   model.normalizePublisherRelease("article", {
     id: 8,
     title: "Field update",
@@ -77,6 +95,7 @@ assert.equal(collisions.has("project:9"), false);
 const timeline = model.buildPublisherTimeline(collisionItems, NOW, 21);
 assert.equal(timeline.some((day) => day.events.some((event) => event.type === "publish" && event.item.key === "page:4")), true);
 assert.equal(timeline.some((day) => day.events.some((event) => event.type === "expire" && event.item.key === "page:4")), true);
+assert.equal(timeline.some((day) => day.events.some((event) => event.type === "publish" && event.item.scheduledReplacement)), true);
 
 const approvals = model.normalizePublisherApprovals([
   { id: 1, approval_source: "page", requested_at: "2026-08-08T06:00:00.000Z" },
@@ -89,8 +108,7 @@ assert.equal(approvals[1].severelyOverdue, true);
 assert.equal(approvals[2].overdue, false);
 
 const summary = model.publisherCommandSummary(collisionItems, approvals, NOW);
-assert.equal(summary.scheduled, 3);
-assert.equal(summary.collisions, 2);
+assert.equal(summary.scheduled, 4);
 assert.equal(summary.overdueReviews, 2);
 assert.equal(summary.severelyOverdueReviews, 1);
 
@@ -106,6 +124,8 @@ assert.equal(
 
 for (const contract of [
   /listPages/,
+  /getPage/,
+  /scheduledPageVersion/,
   /listNewsroomEntities/,
   /listPortfolioEntities/,
   /listAllApprovals/,
@@ -113,17 +133,20 @@ for (const contract of [
   /Publish now/,
   /Schedule approved version/,
   /selected\.source === "page"/,
-  /selected\.status !== "published"/,
-  /replacementScheduleBlocked/,
+  /selected\.status !== "scheduled"/,
+  /Atomic scheduled replacement/,
+  /current published Page stays live/i,
+  /atomically promotes this exact approved replacement/i,
+  /scheduled replacement · live preserved/,
   /futureScheduleUnavailable/,
-  /version-handover upgrade/i,
-  /version-aware scheduler/i,
+  /version-aware handover/i,
   /Open Approval Inbox/,
   /COLLISION/,
   /24H\+/,
   /72H\+/,
 ]) assert.match(component, contract);
 
+assert.doesNotMatch(component, /replacementScheduleBlocked/);
 assert.doesNotMatch(component, /decideApproval/);
 assert.doesNotMatch(component, /submitPageVersion|submitNewsroomVersion|submitPortfolioVersion/);
 assert.doesNotMatch(component, /dangerouslySetInnerHTML/);
@@ -147,11 +170,16 @@ for (const contract of [
   /prefers-reduced-motion: reduce/,
 ]) assert.match(css, contract);
 
+assert.match(pagePublishWorkflow, /scheduled_replacement/);
+assert.match(pagePublishWorkflow, /preservePageWindow/);
 assert.match(scheduler, /SCHEDULER_LOCK_NAME/);
 assert.match(scheduler, /UTC_TIMESTAMP\(\)/);
 assert.match(scheduler, /scheduled_page_published/);
+assert.match(scheduler, /scheduled_replacement/);
 assert.match(scheduler, /scheduled_content_published/);
 assert.match(newsroomPublish, /NEWSROOM_SCHEDULING_NOT_READY/);
 assert.match(newsroomPublish, /version-aware scheduler/);
+assert.match(portfolioPublish, /PORTFOLIO_SCHEDULING_NOT_READY/);
+assert.match(portfolioPublish, /version-aware scheduler/);
 
-console.log("✅ CHALIN ONE Phase 2F Publisher Command contracts passed: exact approved-version publishing, safe first-publication page scheduling, collision/timeline intelligence, overdue-review aging, unsupported future-scheduling boundaries and responsive command UX remain protected.");
+console.log("✅ CHALIN ONE Phase 2F Publisher Command contracts passed: exact approved-version publishing, atomic Page replacement scheduling, version-aware Page timeline visibility, collision intelligence, overdue-review aging, unsupported Newsroom/Portfolio future-scheduling boundaries and responsive command UX remain protected.");
