@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { contentStudioErrorMessage } from "./contentStudioApi";
 import { createPage } from "./contentStudioPageApi";
+import ContentStudioRevisionIntelligence from "./ContentStudioRevisionIntelligence";
 import ContentStudioVisualBuilder from "./ContentStudioVisualBuilder";
 import { CONTENT_STUDIO_PERMISSIONS } from "./contentStudioModel";
 import { visualSectionForSave } from "./contentStudioVisualBuilderModel";
@@ -210,6 +211,11 @@ export default function ContentStudioVisualBuilderPro() {
     setNotice(`${template.label} draft created${page?.slug ? ` at /${page.slug}` : ""}. Open it from the Visual Builder page library to edit, preview and send it through review.`);
   }
 
+  function handleRevisionCommitted() {
+    setBuilderKey((value) => value + 1);
+    setNotice("Revision Intelligence committed the staged structure to its governed draft. Visual Builder has refreshed against the latest draft state.");
+  }
+
   return (
     <div className="cs-vbt-shell">
       <section className="cs-vbt-command">
@@ -222,9 +228,11 @@ export default function ContentStudioVisualBuilderPro() {
         <button type="button" onClick={() => setTemplatesOpen(true)}>Template library <b>↗</b></button>
       </section>
 
-      {notice ? <div className="cs-vbt-notice" role="status"><div><strong>Template draft ready</strong><span>{notice}</span></div><button type="button" onClick={() => setNotice("")}>Close</button></div> : null}
+      {notice ? <div className="cs-vbt-notice" role="status"><div><strong>Template workspace updated</strong><span>{notice}</span></div><button type="button" onClick={() => setNotice("")}>Close</button></div> : null}
 
       <HomepageOrchestration />
+
+      <ContentStudioRevisionIntelligence onCommitted={handleRevisionCommitted} />
 
       <section className="cs-vbt-template-strip" aria-label="Visual Builder page templates">
         <header><span>QUICK START</span><strong>Choose a composition before opening an empty canvas.</strong></header>
