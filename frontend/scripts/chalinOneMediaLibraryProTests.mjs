@@ -12,6 +12,9 @@ const component = fs.readFileSync(path.join(root, "ContentStudioMediaManagerPro.
 const api = fs.readFileSync(path.join(root, "contentStudioMediaProApi.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "contentStudioMediaPro.css"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "ContentStudioWorkspace.jsx"), "utf8");
+const studioModel = fs.readFileSync(path.join(root, "contentStudioModel.js"), "utf8");
+const cleanup = fs.readFileSync(path.join(root, "ContentStudioMediaCleanupManager.jsx"), "utf8");
+const cleanupCss = fs.readFileSync(path.join(root, "contentStudioMediaCleanup.css"), "utf8");
 const picker = fs.readFileSync(path.join(root, "ContentStudioMediaPickerField.jsx"), "utf8");
 const pickerCss = fs.readFileSync(path.join(root, "contentStudioMediaPickerField.css"), "utf8");
 const governedManager = fs.readFileSync(path.join(root, "ContentStudioGovernedManager.jsx"), "utf8");
@@ -158,6 +161,30 @@ check("advanced Pages Manager routes its primary media field through the governe
   assert.doesNotMatch(pageManager, /localStorage|sessionStorage|Bearer|dangerouslySetInnerHTML/);
 });
 
+check("Media Cleanup is management-only and uses governed atomic bulk endpoints", () => {
+  assert.match(studioModel, /key:\s*"media-cleanup"/);
+  assert.match(studioModel, /permission:\s*CONTENT_STUDIO_PERMISSIONS\.mediaManage/);
+  assert.match(workspace, /ContentStudioMediaCleanupManager/);
+  assert.match(workspace, /"media-cleanup":\s*"media"/);
+  assert.match(api, /\/content-studio\/media\/bulk\/update/);
+  assert.match(api, /\/content-studio\/media\/bulk\/archive/);
+  assert.match(cleanup, /MAX_SELECTION = 50/);
+  assert.match(cleanup, /selectedUsed\.length/);
+  assert.match(cleanup, /selectedNotPublicReady\.length/);
+  assert.match(cleanup, /backend will re-check every website reference first/i);
+  assert.doesNotMatch(cleanup, /localStorage|sessionStorage|Bearer|dangerouslySetInnerHTML/);
+});
+
+check("Media Cleanup remains responsive and keeps destructive controls explicit", () => {
+  assert.match(cleanup, /Apply atomic metadata change/);
+  assert.match(cleanup, /Archive selected unused assets/);
+  assert.match(cleanup, /window\.confirm/);
+  assert.match(cleanupCss, /@media\(max-width:1100px\)/);
+  assert.match(cleanupCss, /@media\(max-width:760px\)/);
+  assert.match(cleanupCss, /@media\(max-width:480px\)/);
+  assert.match(cleanupCss, /prefers-reduced-motion/);
+});
+
 check("Visual Builder retains visual media selection instead of exposing section media IDs as ordinary inputs", () => {
   assert.match(visualBuilder, /function MediaPicker/);
   assert.match(visualBuilder, /Choose approved media/);
@@ -168,4 +195,4 @@ check("Visual Builder retains visual media selection instead of exposing section
   assert.doesNotMatch(visualBuilder, /label="Background media asset ID"/);
 });
 
-console.log(`\nMedia Library Pro: ${passed}/11 checks passed.`);
+console.log(`\nMedia Library Pro: ${passed}/13 checks passed.`);
