@@ -6,7 +6,7 @@ import ContentStudioCompanyInfoManager from "./ContentStudioCompanyInfoManager";
 import ContentStudioDashboard from "./ContentStudioDashboard";
 import ContentStudioFormManager from "./ContentStudioFormManager";
 import ContentStudioLeadershipManager from "./ContentStudioLeadershipManager";
-import ContentStudioMediaManager from "./ContentStudioMediaManager";
+import ContentStudioMediaManager from "./ContentStudioMediaManagerPro";
 import ContentStudioNewsroomManager from "./ContentStudioNewsroomManager";
 import {
   ContentStudioApprovalInbox,
