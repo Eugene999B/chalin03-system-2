@@ -188,6 +188,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "slate",
   }),
   Object.freeze({
+    key: "redirects",
+    label: "Redirect Manager",
+    shortLabel: "Redirects",
+    badge: "RD",
+    description: "Prepare, publish and retire exact public URL redirects with collision, chain and loop protection.",
+    permission: CONTENT_STUDIO_PERMISSIONS.navigationView,
+    endpoint: "/content-studio/navigation/redirects",
+    group: "Website",
+    tone: "slate",
+  }),
+  Object.freeze({
     key: "navigation",
     label: "Navigation",
     shortLabel: "Menus",
