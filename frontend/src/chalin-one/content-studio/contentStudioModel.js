@@ -177,6 +177,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "orange",
   }),
   Object.freeze({
+    key: "website-control",
+    label: "Website Control Center",
+    shortLabel: "Web Control",
+    badge: "WC",
+    description: "Audit SEO, indexing, navigation, orphan pages and redirect candidates without changing published content.",
+    permission: CONTENT_STUDIO_PERMISSIONS.view,
+    endpoint: "/content-studio/pages/website-control",
+    group: "Website",
+    tone: "slate",
+  }),
+  Object.freeze({
     key: "navigation",
     label: "Navigation",
     shortLabel: "Menus",
