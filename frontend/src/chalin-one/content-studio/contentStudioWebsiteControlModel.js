@@ -1,10 +1,10 @@
 export const PUBLIC_METADATA_CAPABILITIES = Object.freeze([
-  Object.freeze({ key: "title", label: "Document title", status: "active", note: "Route titles are currently rendered." }),
-  Object.freeze({ key: "description", label: "Meta description", status: "active", note: "Route descriptions are currently rendered." }),
-  Object.freeze({ key: "canonical", label: "Canonical URL", status: "pending", note: "Stored in Content Studio, but the public renderer does not emit canonical tags yet." }),
-  Object.freeze({ key: "robots", label: "Robots directive", status: "pending", note: "Stored in Content Studio, but route-level robots tags are not rendered yet." }),
-  Object.freeze({ key: "open_graph", label: "Open Graph", status: "pending", note: "Per-route social metadata is not rendered yet." }),
-  Object.freeze({ key: "twitter", label: "Twitter / X cards", status: "pending", note: "Per-route social card metadata is not rendered yet." }),
+  Object.freeze({ key: "title", label: "Document title", status: "active", note: "Route titles are rendered and synchronized with social metadata." }),
+  Object.freeze({ key: "description", label: "Meta description", status: "active", note: "Route descriptions are rendered and synchronized with social metadata." }),
+  Object.freeze({ key: "canonical", label: "Canonical URL", status: "active", note: "Published governed canonicals are rendered when safe; other routes receive the safe current HTTPS route canonical." }),
+  Object.freeze({ key: "robots", label: "Robots directive", status: "active", note: "Published governed robots directives are rendered, while a staging noindex baseline remains hard-locked." }),
+  Object.freeze({ key: "open_graph", label: "Open Graph", status: "active", note: "Route title, description, canonical URL, type and approved social image are synchronized into Open Graph metadata." }),
+  Object.freeze({ key: "twitter", label: "Twitter / X cards", status: "active", note: "Route title, description and approved image are synchronized into Twitter/X card metadata." }),
 ]);
 
 function numberValue(value) {

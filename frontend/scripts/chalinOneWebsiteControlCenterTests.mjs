@@ -11,7 +11,7 @@ const component = fs.readFileSync(path.join(root, "ContentStudioWebsiteControlCe
 const api = fs.readFileSync(path.join(root, "contentStudioWebsiteControlApi.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "contentStudioWebsiteControlCenter.css"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "ContentStudioWorkspace.jsx"), "utf8");
-const publicApp = fs.readFileSync(path.join(frontendRoot, "src/chalin-one/public-site/PublicCorporateWebsiteApp.jsx"), "utf8");
+const metadataRuntime = fs.readFileSync(path.join(frontendRoot, "src/chalin-one/public-site/publicMetadataRuntime.js"), "utf8");
 
 let passed = 0;
 function check(name, callback) {
@@ -39,8 +39,8 @@ check("website-control search severity and renderer capability models are determ
   assert.equal(model.matchesWebsiteControlQuery(row, "equipment"), false);
   assert.equal(model.rowHasSeverity(row, "warning"), true);
   assert.equal(model.rowHasSeverity(row, "critical"), false);
-  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.filter((item) => item.status === "active").length, 2);
-  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "canonical").status, "pending");
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.length, 6);
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.every((item) => item.status === "active"), true);
 });
 
 check("Website Control API uses authenticated Axios and exposes one read-only endpoint", () => {
@@ -80,12 +80,13 @@ check("Control Center has responsive desktop tablet phone and reduced-motion tre
   assert.match(css, /scroll-snap-type:x mandatory/);
 });
 
-check("platform capability card matches the current public metadata renderer before Phase 2H renderer upgrade", () => {
-  assert.match(publicApp, /function useMetadata\(title, description = ""\)/);
-  assert.match(publicApp, /document\.title = title/);
-  assert.match(publicApp, /meta\[name="description"\]/);
-  assert.doesNotMatch(publicApp, /rel=["']canonical["']/);
-  assert.doesNotMatch(publicApp, /property=["']og:title["']/);
+check("platform capability card matches the active public metadata runtime", () => {
+  assert.match(metadataRuntime, /link\[rel="canonical"\]/);
+  assert.match(metadataRuntime, /meta\[property="og:title"\]/);
+  assert.match(metadataRuntime, /meta\[name="twitter:title"\]/);
+  assert.match(metadataRuntime, /meta\[name="robots"\]/);
+  assert.match(metadataRuntime, /robotsLocked/);
+  assert.match(metadataRuntime, /safeHttpsMetadataUrl/);
 });
 
 console.log(`\nWebsite Control Center: ${passed}/7 checks passed.`);
