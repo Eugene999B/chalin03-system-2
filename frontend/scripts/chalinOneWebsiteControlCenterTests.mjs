@@ -39,8 +39,10 @@ check("website-control search severity and renderer capability models are determ
   assert.equal(model.matchesWebsiteControlQuery(row, "equipment"), false);
   assert.equal(model.rowHasSeverity(row, "warning"), true);
   assert.equal(model.rowHasSeverity(row, "critical"), false);
-  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.length, 6);
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.length, 8);
   assert.equal(model.PUBLIC_METADATA_CAPABILITIES.every((item) => item.status === "active"), true);
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "sitemap")?.label, "XML sitemap");
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "robots_txt")?.label, "robots.txt");
 });
 
 check("Website Control API uses authenticated Axios and exposes one read-only endpoint", () => {
