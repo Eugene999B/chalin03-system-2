@@ -1,4 +1,7 @@
 import axios from "axios";
+import {
+  applyPublishedPublicMetadata,
+} from "./publicMetadataRuntime";
 
 const publicWebsiteClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
@@ -28,9 +31,11 @@ export async function getPublicBootstrap({ signal } = {}) {
 
 export async function getPublicHomepage({ signal } = {}) {
   try {
-    return unwrap(
+    const page = unwrap(
       await publicWebsiteClient.get("/public/content/homepage", { signal })
     );
+    if (page) applyPublishedPublicMetadata(page);
+    return page;
   } catch (error) {
     if (error?.response?.status === 404) return null;
     throw error;
@@ -38,12 +43,14 @@ export async function getPublicHomepage({ signal } = {}) {
 }
 
 export async function getPublicPage(slug, { signal } = {}) {
-  return unwrap(
+  const page = unwrap(
     await publicWebsiteClient.get(
       `/public/content/pages/${encodeURIComponent(slug)}`,
       { signal }
     )
   );
+  if (page) applyPublishedPublicMetadata(page);
+  return page;
 }
 
 export async function listPublicResource(resource, params = {}, { signal } = {}) {
@@ -82,21 +89,29 @@ export async function getPublicResource(resource, slug, { signal } = {}) {
   if (!supported.has(resource)) {
     throw new Error("Unsupported public website detail resource.");
   }
-  return unwrap(
+  const item = unwrap(
     await publicWebsiteClient.get(
       `/public/content/${resource}/${encodeURIComponent(slug)}`,
       { signal }
     )
   );
+  if (item) {
+    applyPublishedPublicMetadata(item, {
+      type: resource === "news" ? "article" : "website",
+    });
+  }
+  return item;
 }
 
 export async function getPublicForm(slug, { signal } = {}) {
-  return unwrap(
+  const form = unwrap(
     await publicWebsiteClient.get(
       `/public/content/forms/${encodeURIComponent(slug)}`,
       { signal }
     )
   );
+  if (form) applyPublishedPublicMetadata(form);
+  return form;
 }
 
 export async function submitPublicForm(slug, payload) {
