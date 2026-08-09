@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = path.join(frontendRoot, "src/chalin-one/content-studio");
+const model = await import(
+  pathToFileURL(path.join(root, "contentStudioMediaProModel.js")).href
+);
+const component = fs.readFileSync(path.join(root, "ContentStudioMediaManagerPro.jsx"), "utf8");
+const api = fs.readFileSync(path.join(root, "contentStudioMediaProApi.js"), "utf8");
+const css = fs.readFileSync(path.join(root, "contentStudioMediaPro.css"), "utf8");
+const workspace = fs.readFileSync(path.join(root, "ContentStudioWorkspace.jsx"), "utf8");
+
+let passed = 0;
+function check(name, callback) {
+  callback();
+  passed += 1;
+  console.log(`✓ ${name}`);
+}
+
+check("media helpers format storage dimensions readiness and variants safely", () => {
+  assert.equal(model.formatMediaBytes(1024), "1.0 KB");
+  assert.equal(model.mediaDimensions({ width: 1600, height: 900 }), "1600 × 900");
+  assert.equal(model.mediaDimensions({}), "No dimensions");
+  assert.deepEqual(
+    model.mediaReadinessIssues({
+      media_type: "image",
+      processing_status: "ready",
+      public_url: "https://media.example.com/x.webp",
+      alt_text: "Excavator",
+    }),
+    []
+  );
+  assert.equal(
+    model.mediaReadinessIssues({ media_type: "image", processing_status: "pending", public_url: "", alt_text: "" }).length,
+    3
+  );
+  assert.deepEqual(
+    model.mediaVariantList({ metadata: { variants: [{ name: "w480", width: 480, height: 270, size: 1234 }] } }),
+    [{ key: "w480", name: "w480", width: 480, height: 270, size: 1234, public_url: "" }]
+  );
+});
+
+check("intelligence normalization fails closed to empty queues and numeric counts", () => {
+  const result = model.normalizeMediaIntelligence({
+    summary: { total: "9", public_ready: "5", missing_alt: "2", total_bytes: "1000" },
+    queues: { missing_alt: [{ id: 1 }] },
+  });
+  assert.equal(result.summary.total, 9);
+  assert.equal(result.summary.publicReady, 5);
+  assert.equal(result.summary.missingAlt, 2);
+  assert.equal(result.summary.totalBytes, 1000);
+  assert.equal(result.queues.missingAlt.length, 1);
+  assert.deepEqual(result.queues.duplicates, []);
+});
+
+check("Media Library Pro API reuses authenticated Axios and exposes no direct token transport", () => {
+  assert.match(api, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
+  assert.match(api, /\/content-studio\/media\/intelligence/);
+  assert.match(api, /\/content-studio\/media/);
+  assert.doesNotMatch(api, /localStorage|sessionStorage|Bearer|fetch\(/);
+});
+
+check("workspace switches the media section to Media Library Pro without changing its permission scope", () => {
+  assert.match(workspace, /ContentStudioMediaManager from "\.\/ContentStudioMediaManagerPro"/);
+  assert.match(workspace, /media: "media"/);
+  assert.match(workspace, /media: ContentStudioMediaManager/);
+});
+
+check("Media Library Pro exposes grid table advanced filters and intelligence queues", () => {
+  for (const marker of [
+    "Grid",
+    "Table",
+    "Public ready",
+    "Needs attention",
+    "Unused",
+    "Duplicates",
+    "Any orientation",
+    "Missing alternative text",
+    "Largest assets",
+    "Duplicate checksums",
+    "Exact website usage",
+    "Generated image variants",
+  ]) assert.match(component, new RegExp(marker));
+  assert.match(component, /listMediaPro/);
+  assert.match(component, /getMediaLibraryIntelligence/);
+  assert.match(component, /usage\.length > 0/);
+  assert.match(component, /backend will re-check all references/);
+});
+
+check("Media Library Pro preserves governed uploads folders metadata and permission separation", () => {
+  for (const marker of [
+    "uploadMediaImage",
+    "registerMediaVideo",
+    "createMediaFolder",
+    "updateMediaFolder",
+    "archiveMediaFolder",
+    "updateMediaAsset",
+    "archiveMediaAsset",
+    "CONTENT_STUDIO_PERMISSIONS.mediaManage",
+  ]) assert.match(component, new RegExp(marker.replace(".", "\\.")));
+  assert.match(component, /image\/jpeg,image\/png,image\/webp/);
+  assert.doesNotMatch(component, /dangerouslySetInnerHTML|localStorage|sessionStorage|Bearer/);
+});
+
+check("Media Library Pro has responsive desktop tablet phone and reduced-motion layouts", () => {
+  assert.match(css, /@media \(max-width:1280px\)/);
+  assert.match(css, /@media \(max-width:980px\)/);
+  assert.match(css, /@media \(max-width:680px\)/);
+  assert.match(css, /@media \(max-width:430px\)/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /scroll-snap-type/);
+  assert.match(css, /cs-media-pro-inspector/);
+});
+
+console.log(`\nMedia Library Pro: ${passed}/7 checks passed.`);
