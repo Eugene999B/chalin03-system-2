@@ -155,20 +155,35 @@ async function publishDuePages(connection) {
        p.publication_status AS page_status,
        v.id AS version_id,
        v.version_number,
-       v.version_status
+       v.version_status,
+       v.publish_at,
+       v.expires_at,
+       v.published_by
      FROM public_pages p
      JOIN public_page_versions v
        ON v.page_id = p.id
       AND v.version_status = 'scheduled'
       AND v.publish_at IS NOT NULL
       AND v.publish_at <= UTC_TIMESTAMP()
-     WHERE p.publication_status = 'scheduled'
+     WHERE p.publication_status IN ('scheduled', 'published', 'expired')
      ORDER BY v.publish_at, v.id
      LIMIT ${MAX_BATCH_SIZE}
      FOR UPDATE`
   );
 
   for (const row of rows) {
+    const [publishedRows] = await connection.query(
+      `SELECT id, version_number
+       FROM public_page_versions
+       WHERE page_id = ?
+         AND id <> ?
+         AND version_status = 'published'
+       ORDER BY version_number DESC, id DESC
+       LIMIT 1 FOR UPDATE`,
+      [row.page_id, row.version_id]
+    );
+    const replacedVersion = publishedRows[0] || null;
+
     await connection.query(
       `UPDATE public_page_versions
        SET version_status = 'superseded'
@@ -180,17 +195,36 @@ async function publishDuePages(connection) {
     await connection.query(
       `UPDATE public_page_versions
        SET version_status = 'published',
-           published_at = COALESCE(published_at, UTC_TIMESTAMP())
+           published_at = UTC_TIMESTAMP()
        WHERE id = ?`,
       [row.version_id]
     );
     await connection.query(
       `UPDATE public_pages
        SET publication_status = 'published',
-           published_at = COALESCE(published_at, UTC_TIMESTAMP()),
+           publish_at = ?,
+           expires_at = ?,
+           published_at = UTC_TIMESTAMP(),
+           published_by = COALESCE(?, published_by),
+           updated_by = COALESCE(?, updated_by),
            updated_at = UTC_TIMESTAMP()
        WHERE id = ?`,
-      [row.page_id]
+      [
+        row.publish_at,
+        row.expires_at,
+        row.published_by,
+        row.published_by,
+        row.page_id,
+      ]
+    );
+    await connection.query(
+      `UPDATE public_content_approvals
+       SET executed_at = COALESCE(executed_at, UTC_TIMESTAMP())
+       WHERE entity_type = 'page'
+         AND entity_id = ?
+         AND page_version_id = ?
+         AND approval_status = 'approved'`,
+      [row.page_id, row.version_id]
     );
     await insertSchedulerAudit(connection, {
       entityType: "page",
@@ -199,14 +233,23 @@ async function publishDuePages(connection) {
       before: {
         page_status: row.page_status,
         version_status: row.version_status,
+        published_version_id: replacedVersion?.id || null,
       },
       after: {
         page_status: "published",
         version_status: "published",
         version_id: row.version_id,
         version_number: row.version_number,
+        publish_at: row.publish_at,
+        expires_at: row.expires_at,
       },
-      metadata: { source: "public_content_scheduler" },
+      metadata: {
+        source: "public_content_scheduler",
+        handover_mode: replacedVersion
+          ? "scheduled_replacement"
+          : "scheduled_first_publication",
+        superseded_version_id: replacedVersion?.id || null,
+      },
     });
   }
 
@@ -217,7 +260,7 @@ async function expireDuePages(connection) {
   const [rows] = await connection.query(
     `SELECT id, publication_status
      FROM public_pages
-     WHERE publication_status IN ('published', 'scheduled')
+     WHERE publication_status = 'published'
        AND expires_at IS NOT NULL
        AND expires_at <= UTC_TIMESTAMP()
      ORDER BY expires_at, id
@@ -237,7 +280,7 @@ async function expireDuePages(connection) {
       `UPDATE public_page_versions
        SET version_status = 'archived'
        WHERE page_id = ?
-         AND version_status IN ('published', 'scheduled')`,
+         AND version_status = 'published'`,
       [row.id]
     );
     await insertSchedulerAudit(connection, {
@@ -246,7 +289,10 @@ async function expireDuePages(connection) {
       actionKey: "page_expired",
       before: { publication_status: row.publication_status },
       after: { publication_status: "expired" },
-      metadata: { source: "public_content_scheduler" },
+      metadata: {
+        source: "public_content_scheduler",
+        scheduled_replacements_preserved: true,
+      },
     });
   }
 
