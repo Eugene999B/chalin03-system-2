@@ -50,6 +50,7 @@ check("model contains every governed Content Studio manager", () => {
     "submissions",
     "approvals",
     "publisher-command",
+    "website-control",
     "navigation",
     "settings",
   ]);
@@ -73,6 +74,12 @@ check("model contains every governed Content Studio manager", () => {
   );
   assert.equal(publisher.permission, "public_content.publish");
   assert.equal(publisher.group, "Governance");
+  const websiteControl = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "website-control"
+  );
+  assert.equal(websiteControl.permission, "public_content.view");
+  assert.equal(websiteControl.endpoint, "/content-studio/pages/website-control");
+  assert.equal(websiteControl.group, "Website");
 });
 
 check("access helpers fail closed and filter by backend permission", () => {
@@ -142,6 +149,7 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /"media-cleanup": "media"/);
   assert.match(workspaceSource, /"media-reference": "media"/);
   assert.match(workspaceSource, /"publisher-command": "pages"/);
+  assert.match(workspaceSource, /"website-control": "pages"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
   assert.match(modelSource, /public_content\.view/);
   assert.match(modelSource, /permission: CONTENT_STUDIO_PERMISSIONS\.mediaManage/);
@@ -175,6 +183,7 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioEnquiryDesk",
     "ContentStudioApprovalInbox",
     "ContentStudioPublisherCommandCenter",
+    "ContentStudioWebsiteControlCenter",
     "ContentStudioNavigationManager",
     "ContentStudioSettingsManager",
     "ContentStudioAccessManager",
