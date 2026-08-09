@@ -114,6 +114,17 @@ export async function getPublicForm(slug, { signal } = {}) {
   return form;
 }
 
+export async function resolvePublicRedirect(pathname, { signal } = {}) {
+  const path = String(pathname || "").trim();
+  if (!/^\/(?!\/)/.test(path)) return null;
+  return unwrap(
+    await publicWebsiteClient.get("/public/redirects/resolve", {
+      params: { path },
+      signal,
+    })
+  );
+}
+
 export async function submitPublicForm(slug, payload) {
   return unwrap(
     await publicWebsiteClient.post(
