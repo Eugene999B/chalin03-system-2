@@ -11,10 +11,17 @@ const {
   normalizeSourcePath,
   sanitizeRedirectInput,
 } = require("../services/contentStudioRedirectService");
+const {
+  detailRoute,
+} = require("../services/publicRouteOccupancyService");
 
 const repoRoot = path.resolve(__dirname, "../..");
 const serviceSource = fs.readFileSync(
   path.join(repoRoot, "backend/services/contentStudioRedirectService.js"),
+  "utf8"
+);
+const occupancySource = fs.readFileSync(
+  path.join(repoRoot, "backend/services/publicRouteOccupancyService.js"),
   "utf8"
 );
 const studioRoutes = fs.readFileSync(
@@ -35,6 +42,14 @@ const systemRoutes = fs.readFileSync(
 );
 const migrationSource = fs.readFileSync(
   path.join(repoRoot, "database/migrations/20260809_chalin_one_public_redirects.sql"),
+  "utf8"
+);
+const stagingConfig = fs.readFileSync(
+  path.join(repoRoot, "deploy/chalin-one/railway.staging.json"),
+  "utf8"
+);
+const stagingWrapper = fs.readFileSync(
+  path.join(repoRoot, "backend/scripts/bootstrapChalinOnePublicRedirectStaging.js"),
   "utf8"
 );
 
@@ -97,6 +112,41 @@ test("redirect draft validation blocks self loops bad windows and unsafe status 
   );
 });
 
+test("published detail routes are recognized before redirect activation", () => {
+  assert.deepEqual(detailRoute("/news/company-update"), {
+    kind: "news",
+    slug: "company-update",
+    section: null,
+  });
+  assert.deepEqual(detailRoute("/projects/mine-expansion"), {
+    kind: "project",
+    slug: "mine-expansion",
+    section: null,
+  });
+  assert.deepEqual(detailRoute("/businesses/spare-parts/gallery"), {
+    kind: "business",
+    slug: "spare-parts",
+    section: "gallery",
+  });
+  assert.equal(detailRoute("/news"), null);
+  assert.equal(detailRoute("/projects/a/b"), null);
+  for (const table of [
+    "public_pages",
+    "public_news_articles",
+    "public_projects",
+    "public_equipment_catalogue",
+    "public_business_divisions",
+    "public_job_vacancies",
+    "public_tenders",
+    "public_forms",
+  ]) assert.match(occupancySource, new RegExp(table));
+  assert.match(occupancySource, /PUBLIC_REDIRECT_PUBLISHED_ROUTE_COLLISION/);
+  assert.match(studioRoutes, /assertRedirectSourceUnoccupied/);
+  assert.match(studioRoutes, /assertStoredRuleSourceUnoccupied/);
+  assert.match(publicRoutes, /findPublishedRouteOwner/);
+  assert.match(publicRoutes, /STATIC_PUBLIC_PATHS\.has\(pathname\)/);
+});
+
 test("redirect safety service checks occupied routes and bidirectional chains", () => {
   assert.match(serviceSource, /STATIC_PUBLIC_PATHS\.has\(snapshot\.source_path\)/);
   assert.match(serviceSource, /PUBLIC_REDIRECT_STATIC_ROUTE_COLLISION/);
@@ -135,4 +185,15 @@ test("redirect migration is additive and seeds no redirect rules", () => {
   assert.match(migrationSource, /CHECK \(redirect_status IN \(301,302,307,308\)\)/);
   assert.doesNotMatch(migrationSource, /INSERT\s+INTO\s+public_redirect_rules/i);
   assert.doesNotMatch(migrationSource, /\b(?:DROP|TRUNCATE)\b/i);
+});
+
+test("staging opens the redirect migration gate only after the full isolated bootstrap", () => {
+  const config = JSON.parse(stagingConfig);
+  const command = config.deploy.startCommand;
+  assert.ok(command.indexOf("verifyChalinOneFullStagingEnvironment.js") < command.indexOf("bootstrapChalinOneStaging.js"));
+  assert.ok(command.indexOf("bootstrapChalinOneStaging.js") < command.indexOf("bootstrapChalinOnePublicRedirectStaging.js"));
+  assert.ok(command.indexOf("bootstrapChalinOnePublicRedirectStaging.js") < command.indexOf("server.js"));
+  assert.match(stagingWrapper, /validateFullStagingEnvironment\(env, \{ mode: "runtime" \}\)/);
+  assert.match(stagingWrapper, /CHALIN_ONE_ALLOW_PUBLIC_REDIRECT_MIGRATION: "true"/);
+  assert.doesNotMatch(stagingConfig, /CHALIN_ONE_ALLOW_PUBLIC_REDIRECT_MIGRATION/);
 });
