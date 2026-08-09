@@ -13,6 +13,7 @@ const {
   cleanPath,
   findPublishedRouteOwner,
 } = require("../services/publicRouteOccupancyService");
+const publicSeoRoutes = require("./publicSeoRoutes");
 
 const router = express.Router();
 
@@ -27,6 +28,10 @@ const resolverLimiter = rateLimit({
     message: "Too many public route lookups. Please wait briefly and try again.",
   },
 });
+
+// Edge-support SEO inventory is anonymous, read-only and inherits the same
+// publicWebsite feature gate as this router's parent mount in systemRoutes.
+router.use("/seo", publicSeoRoutes);
 
 router.get("/resolve", resolverLimiter, async (req, res, next) => {
   try {
