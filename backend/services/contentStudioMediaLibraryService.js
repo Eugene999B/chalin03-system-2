@@ -143,6 +143,7 @@ function numericFilter(value) {
 }
 
 function normalizeLibraryFilters(options = {}) {
+  const rawFolder = cleanText(options.folderId, 40).toLowerCase();
   return {
     mediaType: enumValue(options.mediaType, ALLOWED_MEDIA_TYPES),
     visibility: enumValue(options.visibility, ALLOWED_VISIBILITY),
@@ -157,7 +158,7 @@ function normalizeLibraryFilters(options = {}) {
     duplicate: enumValue(options.duplicate, ALLOWED_DUPLICATE_FILTERS),
     sort: enumValue(options.sort, ALLOWED_SORTS) || "newest",
     search: cleanText(options.search, 180),
-    folderId: positiveInteger(options.folderId),
+    folderId: rawFolder === "uncategorized" ? "uncategorized" : positiveInteger(options.folderId),
     minWidth: numericFilter(options.minWidth),
     maxWidth: numericFilter(options.maxWidth),
     minHeight: numericFilter(options.minHeight),
@@ -332,7 +333,9 @@ async function loadCandidateRows(filters, connection = pool) {
     where.push("a.processing_status = ?");
     values.push(filters.processingStatus);
   }
-  if (filters.folderId) {
+  if (filters.folderId === "uncategorized") {
+    where.push("a.folder_id IS NULL");
+  } else if (filters.folderId) {
     where.push("a.folder_id = ?");
     values.push(filters.folderId);
   }
