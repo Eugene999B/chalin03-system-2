@@ -111,6 +111,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "green",
   }),
   Object.freeze({
+    key: "media-cleanup",
+    label: "Media Cleanup",
+    shortLabel: "Cleanup",
+    badge: "MC",
+    description: "Apply atomic bulk metadata changes and safely archive only unused website assets.",
+    permission: CONTENT_STUDIO_PERMISSIONS.mediaManage,
+    endpoint: "/content-studio/media/bulk/update",
+    group: "Assets",
+    tone: "green",
+  }),
+  Object.freeze({
     key: "forms",
     label: "Form Builder",
     shortLabel: "Forms",
