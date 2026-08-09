@@ -26,6 +26,7 @@ const aiRoutes = require("./aiRoutes");
 const contentStudioAuthRoutes = require("./contentStudioAuthRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
+const publicRedirectRoutes = require("./publicRedirectRoutes");
 
 const router = express.Router();
 const startedAt = Date.now();
@@ -70,6 +71,7 @@ const EXPECTED_TABLES = Object.freeze([
   "content_studio_role_permissions",
   "content_studio_role_scopes",
   "content_studio_user_access",
+  "public_redirect_rules",
 ]);
 
 function appVersion() {
@@ -283,6 +285,12 @@ router.get("/features/staff", requireAuth, (req, res) => {
     request_id: req.requestId || null,
   });
 });
+
+router.use(
+  "/public/redirects",
+  requireFeature("publicWebsite"),
+  publicRedirectRoutes
+);
 
 router.use(
   "/public/content",
