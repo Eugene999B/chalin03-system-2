@@ -23,6 +23,7 @@ import {
 } from "./ContentStudioPortfolioManagers";
 import ContentStudioPublisherCommandCenter from "./ContentStudioPublisherCommandCenter";
 import ContentStudioVisualBuilder from "./ContentStudioVisualBuilderPro";
+import ContentStudioWebsiteControlCenter from "./ContentStudioWebsiteControlCenter";
 import {
   CONTENT_STUDIO_PERMISSIONS,
   CONTENT_STUDIO_SECTIONS,
@@ -65,6 +66,7 @@ const SECTION_SCOPES = Object.freeze({
   submissions: "submissions",
   approvals: "pages",
   "publisher-command": "pages",
+  "website-control": "pages",
   navigation: "navigation",
   settings: "settings",
 });
@@ -84,6 +86,7 @@ const MANAGERS = Object.freeze({
   submissions: ContentStudioEnquiryDesk,
   approvals: ContentStudioApprovalInbox,
   "publisher-command": ContentStudioPublisherCommandCenter,
+  "website-control": ContentStudioWebsiteControlCenter,
   navigation: ContentStudioNavigationManager,
   settings: ContentStudioSettingsManager,
   access: ContentStudioAccessManager,
