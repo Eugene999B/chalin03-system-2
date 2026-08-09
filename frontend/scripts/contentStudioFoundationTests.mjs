@@ -47,6 +47,7 @@ check("model contains every governed Content Studio manager", () => {
     "forms",
     "submissions",
     "approvals",
+    "publisher-command",
     "navigation",
     "settings",
   ]);
@@ -55,6 +56,11 @@ check("model contains every governed Content Studio manager", () => {
   );
   assert.equal(visualBuilder.permission, "public_content.view");
   assert.equal(visualBuilder.endpoint, "/content-studio/pages");
+  const publisher = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "publisher-command"
+  );
+  assert.equal(publisher.permission, "public_content.publish");
+  assert.equal(publisher.group, "Governance");
 });
 
 check("access helpers fail closed and filter by backend permission", () => {
@@ -67,6 +73,10 @@ check("access helpers fail closed and filter by backend permission", () => {
     (permission) => permission === "public_media.view"
   );
   assert.deepEqual(accessible.map((section) => section.key), ["media"]);
+  const publishOnly = model.getAccessibleContentStudioSections(
+    (permission) => permission === "public_content.publish"
+  );
+  assert.deepEqual(publishOnly.map((section) => section.key), ["publisher-command"]);
 });
 
 check("dashboard normalization converts SQL values to safe non-negative numbers", () => {
@@ -109,8 +119,10 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /contentStudioScopes/);
   assert.match(workspaceSource, /SECTION_SCOPES/);
   assert.match(workspaceSource, /"visual-builder": "pages"/);
+  assert.match(workspaceSource, /"publisher-command": "pages"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
   assert.match(modelSource, /public_content\.view/);
+  assert.match(modelSource, /permission: CONTENT_STUDIO_PERMISSIONS\.publish/);
   assert.match(workspaceSource, /CONTENT_STUDIO_PERMISSIONS\.view/);
   assert.match(workspaceSource, /Content Studio sign-in required/);
   assert.match(workspaceSource, /Studio role required/);
@@ -137,11 +149,13 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioFormManager",
     "ContentStudioEnquiryDesk",
     "ContentStudioApprovalInbox",
+    "ContentStudioPublisherCommandCenter",
     "ContentStudioNavigationManager",
     "ContentStudioSettingsManager",
     "ContentStudioAccessManager",
   ]) assert.match(workspaceSource, new RegExp(manager));
   assert.match(workspaceSource, /const MANAGERS/);
+  assert.match(workspaceSource, /<ActiveManager onOpenSection=\{openSection\} \/>/);
   assert.doesNotMatch(workspaceSource, /window\.location\.href|localStorage|Bearer/);
 });
 
