@@ -64,7 +64,7 @@ router.get(
 );
 
 router.get(
-  "/website-control",
+  "/pages/website-control",
   requirePermission("public_content.view"),
   asyncHandler(async (req, res) =>
     success(res, req, await getWebsiteControlIntelligence())
