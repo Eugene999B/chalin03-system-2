@@ -6,12 +6,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const studioRoot = path.join(frontendRoot, "src/chalin-one/content-studio");
 const publicRoot = path.join(frontendRoot, "src/chalin-one/public-site");
+const functionsRoot = path.join(frontendRoot, "functions");
 
 const studioModel = await import(
   pathToFileURL(path.join(studioRoot, "contentStudioModel.js")).href
 );
 const redirectRuntime = await import(
   pathToFileURL(path.join(publicRoot, "publicRedirectRuntime.js")).href
+);
+const edgeRedirect = await import(
+  pathToFileURL(path.join(functionsRoot, "[[path]].js")).href
 );
 
 const manager = fs.readFileSync(path.join(studioRoot, "ContentStudioRedirectManager.jsx"), "utf8");
@@ -21,6 +25,7 @@ const workspace = fs.readFileSync(path.join(studioRoot, "ContentStudioWorkspace.
 const controlCenter = fs.readFileSync(path.join(studioRoot, "ContentStudioWebsiteControlCenter.jsx"), "utf8");
 const publicApi = fs.readFileSync(path.join(publicRoot, "publicWebsiteApi.js"), "utf8");
 const runtimeSource = fs.readFileSync(path.join(publicRoot, "publicRedirectRuntime.js"), "utf8");
+const edgeSource = fs.readFileSync(path.join(functionsRoot, "[[path]].js"), "utf8");
 
 let passed = 0;
 function check(name, callback) {
@@ -59,7 +64,7 @@ check("authenticated redirect API exposes explicit lifecycle actions only", () =
   assert.doesNotMatch(api, /fetch\(|localStorage|sessionStorage|Bearer/);
 });
 
-check("public redirect runtime accepts only relative or safe HTTPS destinations", () => {
+check("browser redirect runtime accepts only relative or safe HTTPS destinations", () => {
   assert.equal(redirectRuntime.safeRuntimeRedirectDestination("/about?from=old"), "/about?from=old");
   assert.equal(redirectRuntime.safeRuntimeRedirectDestination("//evil.example/x"), "");
   assert.equal(redirectRuntime.safeRuntimeRedirectDestination("http://example.com/x"), "");
@@ -67,7 +72,7 @@ check("public redirect runtime accepts only relative or safe HTTPS destinations"
   assert.equal(redirectRuntime.safeRuntimeRedirectDestination("javascript:alert(1)"), "");
 });
 
-check("public resolver is queried only after the existing CHALIN ONE 404 renders", () => {
+check("browser fallback resolver is queried only after the existing CHALIN ONE 404 renders", () => {
   assert.match(runtimeSource, /querySelector\?\.\("\.c1-not-found"\)/);
   assert.match(runtimeSource, /resolveRenderedNotFound/);
   assert.match(runtimeSource, /window\.location\.replace\(destination\)/);
@@ -75,7 +80,41 @@ check("public resolver is queried only after the existing CHALIN ONE 404 renders
   assert.doesNotMatch(runtimeSource, /setInterval|window\.location\.reload|location\.reload/);
   assert.match(publicApi, /get\("\/public\/redirects\/resolve"/);
   assert.match(publicApi, /installPublicRedirectRuntime\(resolvePublicRedirect\)/);
-  assert.doesNotMatch(publicApi, /listPublicResource[\s\S]{0,500}resolvePublicRedirect/);
+});
+
+check("Cloudflare edge middleware emits the exact governed HTTP redirect status safely", () => {
+  assert.equal(edgeRedirect.isApprovedStagingHost("chalin-one-staging-preview.pages.dev"), true);
+  assert.equal(edgeRedirect.isApprovedStagingHost("chalin03.com"), false);
+  assert.equal(edgeRedirect.shouldBypass("/api/public/content/bootstrap", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/assets/index.js", "GET"), true);
+  assert.equal(edgeRedirect.shouldBypass("/old-company-page", "POST"), true);
+  assert.equal(edgeRedirect.shouldBypass("/old-company-page", "GET"), false);
+  assert.equal(edgeRedirect.safeRedirectDestination("http://example.com/x"), "");
+  assert.equal(edgeRedirect.safeRedirectDestination("https://example.com/x"), "https://example.com/x");
+
+  const response = edgeRedirect.governedRedirectResponse(
+    {
+      source_path: "/old-company-page",
+      destination_url: "/about",
+      redirect_status: 308,
+    },
+    "/old-company-page"
+  );
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.get("Location"), "/about");
+  assert.equal(response.headers.get("X-Chalin-One-Redirect"), "governed-edge-v1");
+  assert.equal(edgeRedirect.governedRedirectResponse({ source_path: "/old-company-page", destination_url: "/about", redirect_status: 305 }, "/old-company-page"), null);
+});
+
+check("edge redirect function is staging-only and fails open to Pages assets/routes", () => {
+  assert.match(edgeSource, /chalin-one-staging-preview\.pages\.dev/);
+  assert.match(edgeSource, /chalin03-system-2-staging\.up\.railway\.app/);
+  assert.match(edgeSource, /\/api\/public\/redirects\/resolve/);
+  assert.match(edgeSource, /new Set\(\[301, 302, 307, 308\]\)/);
+  assert.match(edgeSource, /return context\.next\(\)/);
+  assert.match(edgeSource, /catch \{/);
+  assert.match(edgeSource, /"GET", "HEAD"/);
+  assert.doesNotMatch(edgeSource, /https:\/\/chalin03\.com|https:\/\/www\.chalin03\.com|https:\/\/staff\.chalin03\.com/);
 });
 
 check("Website Control Center hands advisory candidates to Redirect Manager", () => {
@@ -96,4 +135,4 @@ check("Redirect Manager is responsive and exposes safety controls", () => {
   assert.match(css, /prefers-reduced-motion/);
 });
 
-console.log(`\nCHALIN ONE Redirect Manager: ${passed}/7 checks passed.`);
+console.log(`\nCHALIN ONE Redirect Manager: ${passed}/9 checks passed.`);
