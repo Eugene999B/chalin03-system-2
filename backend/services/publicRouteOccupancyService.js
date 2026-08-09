@@ -14,6 +14,60 @@ const BUILT_IN_BUSINESS_SLUGS = Object.freeze(
   new Set(["spare-parts", "mining-operations", "equipment-business"])
 );
 
+const RESERVED_PLATFORM_PREFIXES = Object.freeze(
+  new Set([
+    "api",
+    "login",
+    "owner-recovery",
+    "content-studio",
+    "intelligence",
+    "staff",
+    "products",
+    "new-sale",
+    "sales-history",
+    "installments",
+    "debts",
+    "change-password",
+    "help",
+    "notifications",
+    "shared-controls",
+    "customer-statement",
+    "reports",
+    "audit-accounting",
+    "audit-signoffs",
+    "advanced-accounting-intelligence",
+    "exports",
+    "audit-unlock-requests",
+    "low-stock",
+    "stock-transfers",
+    "expenses",
+    "purchases",
+    "returns",
+    "daily-closing",
+    "sms",
+    "users-settings",
+    "user-permissions",
+    "activity-log",
+    "backup",
+    "security-centre",
+    "professional-backups",
+    "workers",
+    "employment-documents",
+    "document-signature-settings",
+    "system-operations",
+    "backup-restore",
+    "maintenance",
+    "mining",
+    "mining-operations",
+    "equipment-hire",
+    "equipment-hire-operations",
+    "equipment-installment-finance",
+    "group-executive-control",
+    "fleet-assets",
+    "operations-documents-accounting",
+  ])
+);
+
 function cleanPath(value) {
   const raw = String(value || "").trim();
   if (!/^\/(?!\/)/.test(raw)) return "";
@@ -28,9 +82,17 @@ function cleanPath(value) {
   }
 }
 
+function firstPathSegment(pathname) {
+  return cleanPath(pathname).replace(/^\/+/, "").split("/")[0] || "";
+}
+
+function isReservedPlatformPath(pathname) {
+  return RESERVED_PLATFORM_PREFIXES.has(firstPathSegment(pathname));
+}
+
 function detailRoute(pathname) {
   const path = cleanPath(pathname);
-  if (!path) return null;
+  if (!path || isReservedPlatformPath(path)) return null;
   const segments = path.split("/").filter(Boolean);
   if (segments.length < 2 || segments.length > 3) return null;
 
@@ -61,12 +123,22 @@ async function exists(connection, sql, values) {
 }
 
 async function findPublishedRouteOwner(pathname, connection = pool) {
-  const route = detailRoute(pathname);
+  const path = cleanPath(pathname);
+  if (!path) return null;
+  if (isReservedPlatformPath(path)) {
+    return {
+      kind: "reserved_platform",
+      slug: firstPathSegment(path),
+      path,
+    };
+  }
+
+  const route = detailRoute(path);
   if (!route) return null;
 
   try {
     if (route.kind === "business" && BUILT_IN_BUSINESS_SLUGS.has(route.slug)) {
-      return { kind: "built_in_business", slug: route.slug, path: cleanPath(pathname) };
+      return { kind: "built_in_business", slug: route.slug, path };
     }
 
     const definitions = {
@@ -126,9 +198,7 @@ async function findPublishedRouteOwner(pathname, connection = pool) {
         LIMIT 1`,
       [route.slug]
     );
-    return occupied
-      ? { kind: route.kind, slug: route.slug, path: cleanPath(pathname) }
-      : null;
+    return occupied ? { kind: route.kind, slug: route.slug, path } : null;
   } catch (error) {
     throw schemaNotReadyError(error);
   }
@@ -139,9 +209,12 @@ async function assertRedirectSourceUnoccupied(pathname, connection = pool) {
   if (!owner) return true;
 
   throw new ContentStudioError(
-    `Redirect source ${owner.path} is already owned by a published CHALIN ONE ${owner.kind.replaceAll("_", " ")} route.`,
+    `Redirect source ${owner.path} is already owned by a CHALIN ONE ${owner.kind.replaceAll("_", " ")} route.`,
     {
-      code: "PUBLIC_REDIRECT_PUBLISHED_ROUTE_COLLISION",
+      code:
+        owner.kind === "reserved_platform"
+          ? "PUBLIC_REDIRECT_PLATFORM_ROUTE_RESERVED"
+          : "PUBLIC_REDIRECT_PUBLISHED_ROUTE_COLLISION",
       statusCode: 409,
       details: [owner.kind, owner.slug],
     }
@@ -150,8 +223,11 @@ async function assertRedirectSourceUnoccupied(pathname, connection = pool) {
 
 module.exports = {
   BUILT_IN_BUSINESS_SLUGS,
+  RESERVED_PLATFORM_PREFIXES,
   assertRedirectSourceUnoccupied,
   cleanPath,
   detailRoute,
   findPublishedRouteOwner,
+  firstPathSegment,
+  isReservedPlatformPath,
 };
