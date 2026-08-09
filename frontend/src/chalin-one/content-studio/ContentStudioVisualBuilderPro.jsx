@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { contentStudioErrorMessage } from "./contentStudioApi";
 import { createPage } from "./contentStudioPageApi";
+import ContentStudioReleaseReadiness from "./ContentStudioReleaseReadiness";
 import ContentStudioRevisionIntelligence from "./ContentStudioRevisionIntelligence";
 import ContentStudioVisualBuilder from "./ContentStudioVisualBuilder";
 import { CONTENT_STUDIO_PERMISSIONS } from "./contentStudioModel";
@@ -233,6 +234,8 @@ export default function ContentStudioVisualBuilderPro() {
       <HomepageOrchestration />
 
       <ContentStudioRevisionIntelligence onCommitted={handleRevisionCommitted} />
+
+      <ContentStudioReleaseReadiness />
 
       <section className="cs-vbt-template-strip" aria-label="Visual Builder page templates">
         <header><span>QUICK START</span><strong>Choose a composition before opening an empty canvas.</strong></header>
