@@ -9,68 +9,13 @@ import {
   formatMediaBytes,
   mediaDimensions,
 } from "./contentStudioMediaProModel";
+import {
+  assetName,
+  checksumLabel,
+  duplicateResolutionPlan,
+  groupDuplicates,
+} from "./contentStudioMediaReferenceModel";
 import "./contentStudioMediaReferenceDesk.css";
-
-const USAGE_DESTINATIONS = Object.freeze([
-  Object.freeze({ pattern: /^page_/, manager: "pages", label: "Pages" }),
-  Object.freeze({ pattern: /^news_/, manager: "newsroom", label: "Newsroom" }),
-  Object.freeze({ pattern: /^project_/, manager: "projects", label: "Projects" }),
-  Object.freeze({ pattern: /^equipment_/, manager: "equipment", label: "Public Equipment" }),
-  Object.freeze({ pattern: /^leadership_/, manager: "leadership", label: "Leadership" }),
-  Object.freeze({ pattern: /^(business_division|location|testimonial|job_vacancy|tender)/, manager: "company-info", label: "Company Information" }),
-]);
-
-function assetName(asset = {}) {
-  return asset.display_name || asset.original_filename || asset.asset_key || `Asset #${asset.id || ""}`;
-}
-
-function checksumLabel(value) {
-  const checksum = String(value || "");
-  return checksum ? `${checksum.slice(0, 12)}…${checksum.slice(-6)}` : "No checksum";
-}
-
-function groupDuplicates(items = []) {
-  const groups = new Map();
-  for (const asset of items) {
-    const checksum = String(asset?.checksum_sha256 || "");
-    if (!checksum) continue;
-    if (!groups.has(checksum)) groups.set(checksum, []);
-    groups.get(checksum).push(asset);
-  }
-  return [...groups.entries()]
-    .filter(([, assets]) => assets.length > 1)
-    .map(([checksum, assets]) => ({
-      checksum,
-      assets: [...assets].sort((left, right) => {
-        const score = (asset) =>
-          (asset.visibility === "public" ? 1000 : 0) +
-          (asset.public_ready ? 500 : 0) +
-          Number(asset.usage_count || 0) * 10 -
-          Number(asset.id || 0) / 1000000;
-        return score(right) - score(left);
-      }),
-    }))
-    .sort((left, right) => right.assets.length - left.assets.length);
-}
-
-function usageDestination(type) {
-  const value = String(type || "");
-  const match = USAGE_DESTINATIONS.find((entry) => entry.pattern.test(value));
-  return match || { manager: "media", label: "Media Library" };
-}
-
-function groupUsage(items = []) {
-  const groups = new Map();
-  for (const item of items) {
-    const destination = usageDestination(item.type);
-    const key = destination.manager;
-    if (!groups.has(key)) {
-      groups.set(key, { ...destination, items: [] });
-    }
-    groups.get(key).items.push(item);
-  }
-  return [...groups.values()];
-}
 
 function AssetThumb({ asset }) {
   if (asset.media_type === "image" && asset.public_url) {
@@ -100,23 +45,10 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
     () => selectedGroup?.assets.find((asset) => Number(asset.id) === Number(canonicalId)) || null,
     [canonicalId, selectedGroup]
   );
-
-  const exactRows = useMemo(() => {
-    if (!selectedGroup) return [];
-    return selectedGroup.assets.map((asset) => {
-      const usage = usageByAsset[asset.id] || [];
-      return {
-        asset,
-        usage,
-        usageGroups: groupUsage(usage),
-        exactCount: usage.length,
-        isCanonical: Number(asset.id) === Number(canonicalId),
-      };
-    });
-  }, [canonicalId, selectedGroup, usageByAsset]);
-
-  const removable = exactRows.filter((row) => !row.isCanonical && row.exactCount === 0);
-  const migrationNeeded = exactRows.filter((row) => !row.isCanonical && row.exactCount > 0);
+  const resolution = useMemo(
+    () => duplicateResolutionPlan(selectedGroup, canonicalId, usageByAsset),
+    [canonicalId, selectedGroup, usageByAsset]
+  );
   const exactAuditReady = Boolean(selectedGroup) && usageLoadedFor === selectedGroup.checksum && !usageLoading;
 
   const loadDuplicates = useCallback(async ({ signal } = {}) => {
@@ -156,12 +88,14 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
       setUsageLoadedFor("");
       return;
     }
-    if (!selectedGroup.assets.some((asset) => Number(asset.id) === Number(canonicalId))) {
-      setCanonicalId(selectedGroup.assets[0]?.id || null);
-    }
+    setCanonicalId((current) =>
+      selectedGroup.assets.some((asset) => Number(asset.id) === Number(current))
+        ? current
+        : selectedGroup.assets[0]?.id || null
+    );
     setUsageByAsset({});
     setUsageLoadedFor("");
-  }, [canonicalId, selectedGroup]);
+  }, [selectedGroup]);
 
   async function loadExactUsage() {
     if (!selectedGroup || usageLoading) return;
@@ -185,17 +119,17 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
   }
 
   async function archiveUnusedCopies() {
-    if (!canonical || !exactAuditReady || !removable.length || saving) return;
-    if (!window.confirm(`Archive ${removable.length} exact unused duplicate ${removable.length === 1 ? "copy" : "copies"}? The canonical asset remains active and the backend will re-check every reference before committing.`)) return;
+    if (!canonical || !exactAuditReady || !resolution.removable.length || saving) return;
+    if (!window.confirm(`Archive ${resolution.removable.length} exact unused duplicate ${resolution.removable.length === 1 ? "copy" : "copies"}? The canonical asset remains active and the backend will re-check every reference before committing.`)) return;
     setSaving(true);
     setError("");
     setNotice("");
     try {
       const result = await bulkArchiveMediaPro({
-        asset_ids: removable.map((row) => row.asset.id),
+        asset_ids: resolution.removable.map((row) => row.asset.id),
         reason: `Duplicate cleanup; canonical asset ${canonical.asset_key || canonical.id}`,
       });
-      setNotice(`${Number(result?.archived || removable.length)} unused duplicate ${removable.length === 1 ? "copy was" : "copies were"} archived. Historical content versions were not rewritten.`);
+      setNotice(`${Number(result?.archived || resolution.removable.length)} unused duplicate ${resolution.removable.length === 1 ? "copy was" : "copies were"} archived. Historical content versions were not rewritten.`);
       setUsageByAsset({});
       setUsageLoadedFor("");
       await loadDuplicates();
@@ -267,11 +201,11 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
               </div>
 
               <section className="cs-media-ref-audit" data-ready={exactAuditReady ? "true" : "false"}>
-                <header><div><span>EXACT REFERENCE AUDIT</span><h3>{exactAuditReady ? `${exactRows.reduce((sum, row) => sum + row.exactCount, 0)} references inspected` : "Audit required before cleanup"}</h3></div><div><strong>{migrationNeeded.length}</strong><span>referenced non-canonical copies</span></div><div><strong>{removable.length}</strong><span>unused non-canonical copies</span></div></header>
+                <header><div><span>EXACT REFERENCE AUDIT</span><h3>{exactAuditReady ? `${resolution.totalReferences} references inspected` : "Audit required before cleanup"}</h3></div><div><strong>{resolution.migrationNeeded.length}</strong><span>referenced non-canonical copies</span></div><div><strong>{resolution.removable.length}</strong><span>unused non-canonical copies</span></div></header>
 
                 {!exactAuditReady ? <div className="cs-media-ref-callout"><strong>No destructive action is available yet.</strong><span>Run the exact reference audit. Indexed usage is useful for discovery, but cleanup decisions use the stricter per-asset archive reference service.</span></div> : null}
 
-                {exactAuditReady ? exactRows.map((row) => (
+                {exactAuditReady ? resolution.rows.map((row) => (
                   <article key={row.asset.id} className={row.isCanonical ? "is-canonical" : row.exactCount ? "is-migrate" : "is-unused"}>
                     <header><div><span>{row.isCanonical ? "CANONICAL" : row.exactCount ? "MIGRATION REQUIRED" : "UNUSED COPY"}</span><strong>{assetName(row.asset)}</strong><small>Asset #{row.asset.id} · {row.exactCount} exact reference{row.exactCount === 1 ? "" : "s"}</small></div></header>
                     {row.usageGroups.length ? (
@@ -289,8 +223,8 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
               </section>
 
               <section className="cs-media-ref-resolution">
-                <div><span>RESOLUTION PLAN</span><h3>{canonical ? `Keep ${assetName(canonical)} as canonical` : "Choose a canonical asset"}</h3><p>{migrationNeeded.length ? `${migrationNeeded.length} duplicate ${migrationNeeded.length === 1 ? "copy still has" : "copies still have"} governed references. Open the listed managers, create/edit drafts, choose the canonical asset, then review and publish those changes. Re-run this audit afterward.` : exactAuditReady ? "No non-canonical referenced copies remain in this group." : "Run the exact audit to calculate the safe resolution plan."}</p></div>
-                <button type="button" className="cs-button cs-button-danger" onClick={archiveUnusedCopies} disabled={saving || !canonical || !exactAuditReady || !removable.length}>{saving ? "Archiving safely…" : removable.length ? `Archive ${removable.length} unused duplicate${removable.length === 1 ? "" : "s"}` : "No unused duplicates to archive"}</button>
+                <div><span>RESOLUTION PLAN</span><h3>{canonical ? `Keep ${assetName(canonical)} as canonical` : "Choose a canonical asset"}</h3><p>{resolution.migrationNeeded.length ? `${resolution.migrationNeeded.length} duplicate ${resolution.migrationNeeded.length === 1 ? "copy still has" : "copies still have"} governed references. Open the listed managers, create/edit drafts, choose the canonical asset, then review and publish those changes. Re-run this audit afterward.` : exactAuditReady ? "No non-canonical referenced copies remain in this group." : "Run the exact audit to calculate the safe resolution plan."}</p></div>
+                <button type="button" className="cs-button cs-button-danger" onClick={archiveUnusedCopies} disabled={saving || !canonical || !exactAuditReady || !resolution.removable.length}>{saving ? "Archiving safely…" : resolution.removable.length ? `Archive ${resolution.removable.length} unused duplicate${resolution.removable.length === 1 ? "" : "s"}` : "No unused duplicates to archive"}</button>
               </section>
             </>
           )}
@@ -299,5 +233,3 @@ export default function ContentStudioMediaReferenceDesk({ onOpenSection }) {
     </div>
   );
 }
-
-export { groupDuplicates, groupUsage, usageDestination };
