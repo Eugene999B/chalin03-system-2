@@ -7,6 +7,11 @@ const { normalizeAiPersona } = require("../security/aiPermissionCatalog");
 const { hashText } = require("./aiSafetyService");
 const { normalizeEvidenceList } = require("./aiEvidenceService");
 
+const GENERIC_TITLES = new Set(["", "New conversation", "General Conversation"]);
+const SOCIAL_ONLY_PATTERN = /^(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening)|how\s+(?:are|r)\s+you(?:\s+doing)?|what(?:'s|\s+is)\s+up|thanks|thank\s+you|okay|ok|cool|great|nice|bye|goodbye|see\s+you)[\s!.?,'-]*$/i;
+const LEADING_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening))[,!?.\s-]*)+/i;
+const TITLE_FILLER_PATTERN = /^(?:(?:please|can\s+you|could\s+you|would\s+you|tell\s+me|show\s+me|explain|help\s+me|i\s+want\s+to\s+know|i\s+need\s+to\s+know|what\s+is|what\s+are|how\s+is|how\s+are|why\s+is|why\s+are)\s+)+/i;
+
 class AiConversationError extends Error {
   constructor(message, { code = "AI_CONVERSATION_ERROR", statusCode = 400, details = [] } = {}) {
     super(message);
@@ -60,6 +65,39 @@ function schemaError(error) {
     );
   }
   return error;
+}
+
+function titleCase(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (/^[A-Z0-9]{2,}$/.test(word)) return word;
+      return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+    })
+    .join(" ");
+}
+
+function deriveConversationTitle(value, maximum = 72) {
+  const original = String(value ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!original || SOCIAL_ONLY_PATTERN.test(original)) return "General Conversation";
+
+  let text = original
+    .replace(LEADING_SOCIAL_PATTERN, "")
+    .replace(TITLE_FILLER_PATTERN, "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[?!.]+$/g, "")
+    .replace(/^[\s,;:—–-]+|[\s,;:—–-]+$/g, "")
+    .trim();
+  if (!text) return "General Conversation";
+
+  const words = text.split(/\s+/).filter(Boolean).slice(0, 10);
+  text = words.join(" ").slice(0, maximum).trim();
+  if (!text) return "General Conversation";
+  return titleCase(text);
 }
 
 function publicConversation(row) {
@@ -240,7 +278,7 @@ async function getConversationDetails({
   connection = pool,
   conversationKey,
   userId,
-  messageLimit = 100,
+  messageLimit = 200,
 } = {}) {
   const conversation = await loadOwnedConversation({
     connection,
@@ -253,7 +291,7 @@ async function getConversationDetails({
        WHERE conversation_id = ? AND message_role <> 'system'
        ORDER BY id ASC
        LIMIT ?`,
-      [conversation.id, safeLimit(messageLimit, 100, 200)]
+      [conversation.id, safeLimit(messageLimit, 200, 500)]
     );
     const messageIds = rows.map((row) => Number(row.id)).filter(Boolean);
     const evidenceByMessage = new Map();
@@ -342,12 +380,29 @@ async function addMessage({
         positiveInteger(createdBy),
       ]
     );
-    await connection.query(
-      `UPDATE ai_conversations
-       SET last_message_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-       WHERE id = ?`,
-      [conversation]
-    );
+
+    if (messageRole === "user" && text.trim()) {
+      const title = deriveConversationTitle(text);
+      await connection.query(
+        `UPDATE ai_conversations
+         SET title = CASE
+               WHEN title IS NULL OR title IN ('New conversation', 'General Conversation')
+                 THEN ?
+               ELSE title
+             END,
+             last_message_at = UTC_TIMESTAMP(),
+             updated_at = UTC_TIMESTAMP()
+         WHERE id = ?`,
+        [title, conversation]
+      );
+    } else {
+      await connection.query(
+        `UPDATE ai_conversations
+         SET last_message_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+         WHERE id = ?`,
+        [conversation]
+      );
+    }
     return Object.freeze({ id: Number(result.insertId), key: messageKey });
   } catch (error) {
     throw schemaError(error);
@@ -405,11 +460,35 @@ async function archiveConversation({
   }
 }
 
+async function deleteConversation({
+  connection = pool,
+  conversationKey,
+  userId,
+} = {}) {
+  const conversation = await loadOwnedConversation({
+    connection,
+    conversationKey,
+    userId,
+  });
+  try {
+    await connection.query(
+      "DELETE FROM ai_conversations WHERE id = ? AND user_id = ?",
+      [conversation.id, positiveInteger(userId)]
+    );
+    return true;
+  } catch (error) {
+    throw schemaError(error);
+  }
+}
+
 module.exports = {
   AiConversationError,
+  GENERIC_TITLES,
   addMessage,
   archiveConversation,
   createConversation,
+  deleteConversation,
+  deriveConversationTitle,
   getConversationDetails,
   key,
   listConversations,
