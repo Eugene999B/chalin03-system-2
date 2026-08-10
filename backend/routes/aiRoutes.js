@@ -18,7 +18,7 @@ const {
 const { hasEveryPermission } = require("../security/permissionCatalog");
 const { hasEquipmentDivisionAccess } = require("../security/equipmentDivisionAccess");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
-const { cleanProviderKey } = require("../services/aiProviderService");
+const { getAiProviderReadiness } = require("../services/aiProviderReadinessService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   archiveConversation,
@@ -236,16 +236,10 @@ router.get(
   requireAiPermission("ai.use"),
   asyncHandler(async (req, res) => {
     const flags = getFeatureSnapshot();
-    const providerKey =
-      cleanProviderKey(process.env.AI_PROVIDER || "disabled") || "disabled";
+    const provider = getAiProviderReadiness(process.env);
     return success(res, req, {
       flags,
-      provider: {
-        key: providerKey,
-        configured: providerKey !== "disabled",
-        provider_side_storage_enabled: false,
-        secret_values_exposed: false,
-      },
+      provider,
       permissions: getAiPermissionSnapshot(req.user),
       execution_authority: flags.aiActions
         ? "approved_low_risk_actions_only"

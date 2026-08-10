@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useFeatureFlags } from "../context/FeatureFlagContext.jsx";
 
 const USER_KEY = "chalin03_user";
 
@@ -10,10 +11,18 @@ function storedUser() {
   }
 }
 
+function permissionSet(user) {
+  return new Set(
+    Array.isArray(user?.effective_permissions) ? user.effective_permissions : []
+  );
+}
+
 export default function ChalinOneGatewayLinks() {
   const [user, setUser] = useState(() => storedUser());
+  const { flags } = useFeatureFlags();
   const pathname = window.location.pathname;
   const isLogin = pathname === "/login";
+  const permissions = useMemo(() => permissionSet(user), [user]);
 
   useEffect(() => {
     function refresh() {
@@ -32,13 +41,20 @@ export default function ChalinOneGatewayLinks() {
     pathname === "/website" ||
     pathname.startsWith("/website/") ||
     pathname === "/content-studio" ||
-    pathname.startsWith("/content-studio/")
+    pathname.startsWith("/content-studio/") ||
+    pathname === "/intelligence" ||
+    pathname.startsWith("/intelligence/")
   ) {
     return null;
   }
 
   const canShowStudio =
     isLogin || String(user?.role || "").toLowerCase() === "admin";
+  const canShowIntelligence =
+    !isLogin &&
+    Boolean(user) &&
+    flags?.aiEnabled === true &&
+    permissions.has("workspace.view");
 
   return (
     <nav
@@ -77,6 +93,24 @@ export default function ChalinOneGatewayLinks() {
       >
         CHALIN ONE Website
       </a>
+      {canShowIntelligence && (
+        <a
+          href="/intelligence"
+          title="Open CHALIN ONE Intelligence"
+          style={{
+            textDecoration: "none",
+            color: "#07182c",
+            background: "#9ee7ff",
+            borderRadius: "10px",
+            padding: "10px 13px",
+            fontWeight: 900,
+            fontSize: "12px",
+            letterSpacing: ".02em",
+          }}
+        >
+          CHALIN AI
+        </a>
+      )}
       {canShowStudio && (
         <a
           href="/content-studio"
