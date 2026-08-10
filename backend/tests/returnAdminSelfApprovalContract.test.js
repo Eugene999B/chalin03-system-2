@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+// Regression contract for the live Returns approval path.
 const source = fs.readFileSync(
   path.resolve(__dirname, "..", "routes", "returnRoutes.js"),
   "utf8"
