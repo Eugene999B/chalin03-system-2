@@ -925,9 +925,12 @@ export default function ChalinIntelligenceWorkspace() {
       const conversationKey = result.conversation_key;
       const now = new Date().toISOString();
       const assistant = { key: result.message_key, role: "assistant", content: result.answer, safety_status: "allowed", model_key: result.provider?.model, evidence: result.evidence || [], created_at: now, resultMeta: result };
-      const nextTitle = conversation?.title && conversation.title !== "General Conversation"
-        ? conversation.title
-        : deriveConversationTitle(message);
+      const nextTitle = result?.conversation?.title || (
+        conversation?.title && conversation.title !== "General Conversation"
+          ? conversation.title
+          : deriveConversationTitle(message)
+      );
+      const rolledOver = result?.conversation_rollover?.occurred === true;
 
       setConversations((current) => {
         const existing = current.find((item) => item.key === conversationKey);
@@ -948,7 +951,22 @@ export default function ChalinIntelligenceWorkspace() {
         setConversation((current) => current
           ? { ...current, key: conversationKey, title: nextTitle }
           : { key: conversationKey, title: nextTitle, persona, workspace_code: workspaceCode });
-        setMessages((current) => [...current, assistant]);
+
+        if (rolledOver) {
+          try {
+            const details = await getAiConversation(persona, conversationKey);
+            if (activeChatEpochRef.current === epoch) {
+              setConversation(details?.conversation || { key: conversationKey, title: nextTitle, persona, workspace_code: workspaceCode });
+              setMessages(details?.messages || [optimisticUser, assistant]);
+            }
+          } catch {
+            if (activeChatEpochRef.current === epoch) {
+              setMessages([optimisticUser, assistant]);
+            }
+          }
+        } else {
+          setMessages((current) => [...current, assistant]);
+        }
       }
 
       loadConversations(undefined, { silent: true, force: true });
