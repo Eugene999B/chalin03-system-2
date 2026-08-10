@@ -125,16 +125,25 @@ function requireOriginalAdministrator(req, res, next) {
   });
 }
 
+function conversationRolloverNotice(rollover) {
+  if (!rollover?.rolled_over) return "";
+  const title = String(rollover.title || "the continuation chat").trim();
+  return `This conversation reached its reasoning limit, so I started a fresh continuation: “${title}”. I carried forward only a small continuity capsule to keep the discussion accurate. Any earlier live figures are historical context and will be re-checked before I treat them as current.`;
+}
+
 function withConversationRollover(result, rollover) {
   if (!rollover?.rolled_over) return result;
+  const notice = conversationRolloverNotice(rollover);
   return Object.freeze({
     ...result,
+    answer: notice ? `${notice}\n\n${result.answer || ""}`.trim() : result.answer,
     conversation_rollover: Object.freeze({
       occurred: true,
       reason: rollover.reason,
       previous_conversation_key: rollover.previous_conversation_key,
       conversation_key: rollover.conversation_key,
       title: rollover.title,
+      notice,
       previous_message_count: rollover.usage?.message_count || 0,
       previous_character_count: rollover.usage?.character_count || 0,
     }),
