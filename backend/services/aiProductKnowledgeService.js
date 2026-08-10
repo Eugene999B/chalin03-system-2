@@ -78,20 +78,26 @@ function productKnowledgeInstruction() {
   ].join("\n\n");
 }
 
-function productKnowledgeMessages(messages = []) {
-  const safeHistory = [];
-  for (const message of Array.isArray(messages) ? messages : []) {
-    const role = String(message?.role || "").toLowerCase();
-    if (!["user", "assistant"].includes(role)) continue;
-    const content = clean(message?.content, 12000);
-    if (!isSafePublicContinuityText(content)) continue;
-    safeHistory.push(Object.freeze({ role, content }));
+function latestUserPrompt(messages = []) {
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (String(message?.role || "").toLowerCase() !== "user") continue;
+    const content = clean(message?.content, PUBLIC_SYSTEM_MAX_LENGTH);
+    if (content) return content;
   }
+  return "";
+}
 
-  const limitedHistory = safeHistory.slice(-16);
+function productKnowledgeMessages(messages = []) {
+  const prompt = latestUserPrompt(messages);
+  if (!prompt) return Object.freeze([]);
+
+  // This lane is intentionally lossy. Product/advisory questions may use an
+  // external reasoning model, so no prior user/assistant history, live evidence,
+  // tool output or private system context is allowed to cross this boundary.
   return Object.freeze([
     Object.freeze({ role: "system", content: productKnowledgeInstruction() }),
-    ...limitedHistory,
+    Object.freeze({ role: "user", content: prompt }),
   ]);
 }
 
