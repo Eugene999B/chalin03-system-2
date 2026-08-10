@@ -1,9 +1,16 @@
 "use strict";
 
 const GEMINI_API_ORIGIN = "https://generativelanguage.googleapis.com";
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 const MODEL_KEY_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,159}$/i;
 const TOOL_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const GEMINI_MAX_OUTPUT_TOKENS = 32768;
+const DEEP_REASONING_INTENTS = new Set([
+  "compare",
+  "diagnose",
+  "forecast",
+  "decision_support",
+]);
 
 class GeminiGenerateContentProviderError extends Error {
   constructor(message, { code = "AI_GEMINI_PROVIDER_ERROR", statusCode = 502, details = [] } = {}) {
@@ -58,6 +65,16 @@ function modelForContext(env = process.env, providerContext = {}) {
   return safeModelKey(
     env.GEMINI_AI_COPILOT_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
   );
+}
+
+function thinkingLevelForContext(providerContext = {}, model = DEFAULT_GEMINI_MODEL) {
+  if (!/^gemini-3(?:\.|-|$)/i.test(clean(model, 160))) return null;
+  if (providerContext?.public_safe_social_turn === true) return "low";
+  const persona = clean(providerContext?.persona, 30).toLowerCase();
+  const intent = clean(providerContext?.intent, 40).toLowerCase();
+  if (persona === "executive" || DEEP_REASONING_INTENTS.has(intent)) return "high";
+  if (providerContext?.live_data_required === true) return "medium";
+  return "medium";
 }
 
 function geminiToolName(toolKey) {
@@ -118,7 +135,7 @@ function mapMessages(messages = []) {
 
   for (const message of Array.isArray(messages) ? messages : []) {
     const role = clean(message?.role, 20).toLowerCase();
-    const content = clean(message?.content, 8000);
+    const content = clean(message?.content, 32000);
     if (!content) continue;
     if (["system", "developer"].includes(role)) {
       systemParts.push({ text: content });
@@ -144,7 +161,8 @@ function extractText(payload = {}) {
   const parts = payload?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) return "";
   return parts
-    .map((part) => clean(part?.text, 24000))
+    .filter((part) => part?.thought !== true)
+    .map((part) => clean(part?.text, 120000))
     .filter(Boolean)
     .join("\n\n")
     .trim();
@@ -214,7 +232,7 @@ class GeminiGenerateContentProvider {
   async generate({
     messages,
     tools = [],
-    max_output_tokens = 1200,
+    max_output_tokens = 4000,
     provider_context = {},
     signal = undefined,
   } = {}) {
@@ -222,12 +240,19 @@ class GeminiGenerateContentProvider {
     const model = modelForContext(this.env, provider_context);
     const mappedMessages = mapMessages(messages);
     const mappedTools = mapTools(tools);
+    const thinkingLevel = thinkingLevelForContext(provider_context, model);
     const body = {
       contents: mappedMessages.contents,
       generationConfig: {
-        maxOutputTokens: Math.max(1, Math.min(8000, Number(max_output_tokens) || 1200)),
+        maxOutputTokens: Math.max(
+          1,
+          Math.min(GEMINI_MAX_OUTPUT_TOKENS, Number(max_output_tokens) || 4000)
+        ),
       },
     };
+    if (thinkingLevel) {
+      body.generationConfig.thinkingConfig = { thinkingLevel };
+    }
     if (mappedMessages.systemInstruction) {
       body.systemInstruction = mappedMessages.systemInstruction;
     }
@@ -297,7 +322,7 @@ class GeminiGenerateContentProvider {
       finish_reason: clean(candidate.finishReason, 80) || "STOP",
       tool_calls: toolCalls,
       provider_response_id: clean(payload.responseId, 180) || null,
-      reasoning_effort: null,
+      reasoning_effort: thinkingLevel,
       provider_store_enabled: false,
     };
   }
@@ -305,7 +330,9 @@ class GeminiGenerateContentProvider {
 
 module.exports = {
   DEFAULT_GEMINI_MODEL,
+  DEEP_REASONING_INTENTS,
   GEMINI_API_ORIGIN,
+  GEMINI_MAX_OUTPUT_TOKENS,
   GeminiGenerateContentProvider,
   GeminiGenerateContentProviderError,
   MODEL_KEY_PATTERN,
@@ -320,5 +347,6 @@ module.exports = {
   requireApiKey,
   safeModelKey,
   sanitizeSchema,
+  thinkingLevelForContext,
   tokenUsage,
 };
