@@ -3,24 +3,15 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const PRODUCTION_BACKUP_API_ROOT = "https://api.chalin03.com/api/backups";
 const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;
 const BACKUP_VALIDATE_TIMEOUT_MS = 180000;
 const BACKUP_RESTORE_TIMEOUT_MS = 600000;
-
-function isOfficialProductionHost() {
-  if (typeof window === "undefined") return false;
-  const hostname = String(window.location?.hostname || "").trim().toLowerCase();
-  return hostname === "chalin03.com" || hostname === "www.chalin03.com";
-}
 
 function backupRequestUrl(pathname) {
   const suffix = String(pathname || "").startsWith("/")
     ? String(pathname || "")
     : `/${String(pathname || "")}`;
-  return isOfficialProductionHost()
-    ? `${PRODUCTION_BACKUP_API_ROOT}${suffix}`
-    : `/backups${suffix}`;
+  return `/backups${suffix}`;
 }
 
 function formatNumber(value) {
