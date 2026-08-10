@@ -1,9 +1,11 @@
 "use strict";
 
+const { CHALIN_PRODUCT_CONTEXT } = require("../services/aiProductKnowledgeService");
+
 const MAX_EVIDENCE_ITEMS = 5;
 const MAX_EXCERPT_LENGTH = 1200;
 const MAX_READABLE_FACTS = 14;
-const LOCAL_MODEL_KEY = "chalin-local-governed-v1";
+const LOCAL_MODEL_KEY = "chalin-local-governed-v2";
 
 const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
   "spare_parts.operations_snapshot",
@@ -139,7 +141,13 @@ function offeredReadOnlyToolMap(tools = []) {
 }
 
 function chooseLocalReadTool({ messages = [], tools = [], providerContext = {} } = {}) {
-  if (providerContext?.public_safe_social_turn === true) return null;
+  if (
+    providerContext?.public_safe_social_turn === true ||
+    providerContext?.public_safe_system_turn === true ||
+    providerContext?.public_safe_general_turn === true
+  ) {
+    return null;
+  }
   if (evidenceFromMessages(messages).length > 0) return null;
 
   const offered = offeredReadOnlyToolMap(tools);
@@ -218,7 +226,7 @@ function readableExcerpt(excerpt) {
 function composeEvidenceAnswer(messages = []) {
   const evidence = evidenceFromMessages(messages);
   if (evidence.length === 0) {
-    return "I do not have enough approved CHALIN evidence to answer that reliably in zero-cost local mode. Please use the governed enquiry path or try a question covered by published or approved system information.";
+    return "I do not have enough approved live CHALIN evidence to answer that reliably in local fallback mode. I will not guess or substitute an unrelated workspace snapshot.";
   }
 
   const lines = evidence.map((item) => {
@@ -226,11 +234,11 @@ function composeEvidenceAnswer(messages = []) {
     return `- ${item.heading}: ${excerpt}${excerpt.endsWith(".") ? "" : "."} [${item.citation}]`;
   });
   return [
-    "Based on the CHALIN evidence available to this conversation:",
+    "Here is what the approved CHALIN evidence shows:",
     "",
     ...lines,
     "",
-    "Zero-cost local mode used only approved CHALIN evidence. It did not invent missing facts or execute a business change.",
+    "This is the local governed fallback. It used only the supplied evidence and did not execute a business change.",
   ].join("\n");
 }
 
@@ -243,12 +251,44 @@ function composePublicSafeSocialAnswer(messages = []) {
     return "Goodbye. I’ll be here when you need me.";
   }
   if (/\bwho are you\b/.test(question)) {
-    return "I’m CHALIN Copilot, your governed assistant for the CHALIN ONE system. I can chat normally, explain things, and help with approved business information when your permissions allow it.";
+    return "I’m CHALIN Copilot, your governed assistant for the CHALIN system. I can explain the product, help think through IT, marketing and business questions, and investigate approved live business information when your permissions allow it.";
   }
   if (/\b(?:what can you do|how can you help|can you help)\b/.test(question)) {
-    return "I can chat with you normally, explain CHALIN workflows, and answer approved business questions using the information and read-only tools your account is allowed to access.";
+    return "I can explain CHALIN workflows, help with IT and marketing ideas, reason through business problems, and answer approved live business questions using the information and read-only tools your account is allowed to access.";
   }
-  return "Hi! I’m doing well and ready to help. What would you like to work on?";
+  return "Hi! I’m ready to help. You can ask about CHALIN, IT, marketing, business decisions or your authorized operational information.";
+}
+
+function composePublicSafeSystemAnswer(messages = []) {
+  const question = latestUserQuestion(messages).toLowerCase();
+
+  if (/\baudit(?:\s+|-)intelligence\b|\badvanced accounting intelligence\b/.test(question)) {
+    return [
+      "Audit Intelligence is CHALIN’s management and audit observatory. It is meant to help you understand whether the business records make sense and where management should investigate.",
+      "",
+      "It brings together signals from sales and collections, unpaid balances and debts, expenses and purchases, returns/refunds, stock adjustments and transfers, SMS delivery, sensitive system events, backup/restore and maintenance activity, audit unlocks and sign-off controls. It then presents items such as an audit score/status, an audit review checklist, profit-and-loss intelligence, management ledger and debt/aging intelligence.",
+      "",
+      "So the purpose is not simply to display numbers. It should help answer questions such as: what looks unusual, where controls are weak, what is not reconciling, what risk needs attention, and what management should review next.",
+    ].join("\n");
+  }
+
+  if (/\bpayroll\b|\bworker profile\b|\bsalary\b/.test(question)) {
+    return "In CHALIN, People & Employment should be the source of worker identity and compensation. A worker’s effective salary/pay-frequency record should flow into Monthly Payroll so the salary is not retyped every month. Payroll then previews the workers and authoritative salaries for the period before approval, payment and payslip generation.";
+  }
+
+  if (/\bmarketing\b|\badvertis|\bbrand|\bcampaign|\bpositioning\b/.test(question)) {
+    return "For CHALIN marketing, position the product around operational control rather than a long feature list: one governed system for sales, stock, people, payroll, mining, equipment operations, finance, audit and management intelligence. Build separate messages for each buyer type, show concrete before/after workflows, use demonstrations and proof points, and measure qualified leads, demo-to-trial conversion, activation and retained business use. A full external reasoning provider can develop campaigns, copy and channel strategy in much more depth.";
+  }
+
+  if (/\barchitecture\b|\bsoftware\b|\bit\b|\btechnical\b|\bdatabase\b|\bsecurity\b|\bcyber/.test(question)) {
+    return "CHALIN should be treated as a multi-workspace business platform with server-enforced permissions, scoped business services, audit evidence and a separate AI tool boundary. For IT decisions, prioritize reliability, explicit workspace/data boundaries, least privilege, transactional business operations, observable deployments, recoverability and APIs that the AI can use through governed tools instead of direct database access.";
+  }
+
+  return `I can explain this from CHALIN’s product model and help reason about it. The local fallback has the following static system context available: ${clean(CHALIN_PRODUCT_CONTEXT, 900)}… A configured external reasoning model is preferred for a deeper, more conversational answer.`;
+}
+
+function composePublicSafeGeneralAnswer() {
+  return "This question does not require private CHALIN records. A configured external reasoning provider should answer it normally. CHALIN Local is only the governed fallback, so I will not pretend it has broad world knowledge that it does not have.";
 }
 
 function localToolCall(tool) {
@@ -268,6 +308,34 @@ class LocalGovernedProvider {
   async generate({ messages = [], tools = [], provider_context = {} } = {}) {
     if (provider_context?.public_safe_social_turn === true) {
       const text = composePublicSafeSocialAnswer(messages);
+      return {
+        text,
+        model_key: LOCAL_MODEL_KEY,
+        input_tokens: Math.ceil(JSON.stringify(messages).length / 4),
+        output_tokens: Math.ceil(text.length / 4),
+        cost_micros: 0,
+        finish_reason: "stop",
+        tool_calls: [],
+        provider_store_enabled: false,
+      };
+    }
+
+    if (provider_context?.public_safe_system_turn === true) {
+      const text = composePublicSafeSystemAnswer(messages);
+      return {
+        text,
+        model_key: LOCAL_MODEL_KEY,
+        input_tokens: Math.ceil(JSON.stringify(messages).length / 4),
+        output_tokens: Math.ceil(text.length / 4),
+        cost_micros: 0,
+        finish_reason: "stop",
+        tool_calls: [],
+        provider_store_enabled: false,
+      };
+    }
+
+    if (provider_context?.public_safe_general_turn === true) {
+      const text = composePublicSafeGeneralAnswer(messages);
       return {
         text,
         model_key: LOCAL_MODEL_KEY,
@@ -323,7 +391,9 @@ module.exports = {
   chooseLocalReadTool,
   collectReadableFacts,
   composeEvidenceAnswer,
+  composePublicSafeGeneralAnswer,
   composePublicSafeSocialAnswer,
+  composePublicSafeSystemAnswer,
   evidenceFromMessages,
   latestUserQuestion,
   localToolCall,
