@@ -266,6 +266,7 @@ app.use("/api/user-permissions", sensitiveAdminLimiter);
 app.use("/api/delegated-administration", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
+app.use("/api/payroll", sensitiveAdminLimiter);
 
 app.use(
   "/api/release2-final/backups/history",
