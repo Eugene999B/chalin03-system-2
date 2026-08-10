@@ -12,6 +12,8 @@ function read(relativePath) {
 }
 
 const entry = read("src/chalin-one/ChalinOneStandaloneEntry.jsx");
+const pathModel = read("src/chalin-one/chalinOnePathModel.js");
+const protectedRoot = read("src/chalin-one/ProtectedChalinOneEntry.jsx");
 const workspace = read(
   "src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx"
 );
@@ -27,14 +29,16 @@ function check(name, callback) {
 }
 
 check("intelligence is a standalone authenticated feature-gated surface", () => {
-  assert.match(entry, /path === "\/intelligence"/);
-  assert.match(entry, /path\.startsWith\("\/intelligence\/"\)/);
+  assert.match(pathModel, /path === "\/intelligence"/);
+  assert.match(pathModel, /path\.startsWith\("\/intelligence\/"\)/);
   assert.match(entry, /routePath="\/intelligence\/\*"/);
   assert.match(entry, /feature="aiEnabled"/);
   assert.match(entry, /permission="workspace\.view"/);
   assert.match(entry, /ProtectedRoute/);
   assert.match(entry, /PermissionRoute/);
+  assert.match(protectedRoot, /ChalinOneStandaloneEntry/);
   assert.match(main, /isChalinOneStandalonePath/);
+  assert.match(main, /ProtectedChalinOneEntry/);
 });
 
 check("client uses only protected backend AI endpoints", () => {
