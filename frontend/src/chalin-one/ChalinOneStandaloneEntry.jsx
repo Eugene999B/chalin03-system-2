@@ -6,6 +6,11 @@ import PermissionRoute from "../components/PermissionRoute";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
+import {
+  isChalinOneStandalonePath,
+  isPublicWebsitePath,
+  PUBLIC_TOP_LEVEL_PATHS,
+} from "./chalinOnePathModel.js";
 import PublicAnalyticsRuntime from "./public-site/PublicAnalyticsRuntime";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
@@ -13,6 +18,12 @@ import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion
 import PublicInteractionSafety from "./public-site/PublicInteractionSafety";
 import PublicTechnicalFinish from "./public-site/PublicTechnicalFinish";
 import PublicWorldEnhancements from "./public-site/PublicWorldEnhancements";
+
+export {
+  isChalinOneStandalonePath,
+  isPublicWebsitePath,
+  PUBLIC_TOP_LEVEL_PATHS,
+};
 
 const ContentStudioWorkspace = lazy(() =>
   import("./content-studio/ContentStudioWorkspace")
@@ -49,43 +60,6 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
     default: module.PublicCorporateWebsiteUnavailable,
   }))
 );
-
-const PUBLIC_TOP_LEVEL_PATHS = new Set([
-  "about",
-  "businesses",
-  "projects",
-  "equipment",
-  "news",
-  "leadership",
-  "media",
-  "careers",
-  "locations",
-  "contact",
-  "faqs",
-  "tenders",
-  "testimonials",
-  "forms",
-  "pages",
-  "website",
-]);
-
-export function isPublicWebsitePath(pathname) {
-  const path = String(pathname || "").split(/[?#]/)[0] || "/";
-  if (path === "/") return true;
-  const firstSegment = path.replace(/^\/+/, "").split("/")[0];
-  return PUBLIC_TOP_LEVEL_PATHS.has(firstSegment);
-}
-
-export function isChalinOneStandalonePath(pathname) {
-  const path = String(pathname || "");
-  return (
-    isPublicWebsitePath(path) ||
-    path === "/content-studio" ||
-    path.startsWith("/content-studio/") ||
-    path === "/intelligence" ||
-    path.startsWith("/intelligence/")
-  );
-}
 
 function StandaloneLoading() {
   return (
