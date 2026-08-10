@@ -25,6 +25,7 @@ const corporateApp = read("src/chalin-one/public-site/PublicCorporateWebsiteApp.
 const headers = read("public/_headers");
 const viteConfig = read("vite.config.js");
 const packageJson = read("package.json");
+const postbuildFinalizer = read("scripts/applyChalinOneStagingHeaders.mjs");
 const buildGate = read("scripts/verifyChalinOnePerformanceBudgets.mjs");
 const launchDesk = read("src/chalin-one/content-studio/ContentStudioLaunchReadiness.jsx");
 const launchApi = read("src/chalin-one/content-studio/contentStudioLaunchReadinessApi.js");
@@ -96,7 +97,11 @@ assert.match(headers, /\/assets\/\*\s+Cache-Control: public, max-age=31536000, i
 assert.match(headers, /\/index\.html\s+Cache-Control: no-store, max-age=0, must-revalidate/);
 
 assert.match(viteConfig, /manifest: true/);
-assert.match(packageJson, /verifyChalinOnePerformanceBudgets\.mjs/);
+assert.match(packageJson, /"postbuild": "node scripts\/applyChalinOneStagingHeaders\.mjs"/);
+assert.match(packageJson, /chalinOneStructuredSeoLinkIntegrityTests\.mjs/);
+assert.match(postbuildFinalizer, /runPostbuildGate\("chalinOnePublicPerformanceReadinessTests\.mjs"\)/);
+assert.match(postbuildFinalizer, /runPostbuildGate\("verifyChalinOnePerformanceBudgets\.mjs"\)/);
+assert.match(postbuildFinalizer, /spawnSync\(process\.execPath/);
 assert.match(buildGate, /\.vite.*manifest\.json/s);
 assert.match(buildGate, /findHtmlEntryKey/);
 assert.match(buildGate, /OperationalAppRoot must remain outside the initial public entry graph/);
@@ -138,4 +143,4 @@ assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable postbuild byte budgets, failure states and read-only launch controls remain protected.");
