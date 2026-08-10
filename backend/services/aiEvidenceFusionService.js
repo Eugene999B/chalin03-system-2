@@ -103,7 +103,10 @@ function fuseGovernedEvidence({
   limit = MAX_FUSION_RESULTS,
   now = Date.now(),
 } = {}) {
-  const safeLimit = Math.max(1, Math.min(MAX_FUSION_RESULTS, Number(limit) || MAX_FUSION_RESULTS));
+  const safeLimit = Math.max(
+    1,
+    Math.min(MAX_FUSION_RESULTS, Number(limit) || MAX_FUSION_RESULTS)
+  );
   const normalized = normalizeEvidenceList(evidence, {
     maximum: MAX_FUSION_CANDIDATES,
   });
@@ -147,6 +150,7 @@ function fuseGovernedEvidence({
       }
     }
     if (!best) break;
+
     const source = scored.find(
       (candidate) =>
         candidate.item.source_type === best.item.source_type &&
@@ -160,15 +164,6 @@ function fuseGovernedEvidence({
 
     selected.push(best);
     familyCounts.set(best.family, (familyCounts.get(best.family) || 0) + 1);
-  }
-
-  if (selected.length < safeLimit) {
-    for (const candidate of scored) {
-      if (selected.length >= safeLimit) break;
-      if (candidate.selected) continue;
-      candidate.selected = true;
-      selected.push({ ...candidate, adjusted: candidate.score, redundancy: 0 });
-    }
   }
 
   return normalizeEvidenceList(
