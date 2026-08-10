@@ -26,6 +26,15 @@ function findKey(sourceSuffix) {
   return found[0];
 }
 
+function findHtmlEntryKey() {
+  const found = entries.find(([key, item]) =>
+    item?.isEntry === true &&
+    (key === "index.html" || String(item?.src || "") === "index.html")
+  ) || entries.find(([, item]) => item?.isEntry === true);
+  assert.ok(found, "Build manifest is missing the Vite HTML application entry.");
+  return found[0];
+}
+
 function fileSize(relativePath) {
   const absolutePath = path.join(distRoot, relativePath);
   assert.ok(fs.existsSync(absolutePath), `Built asset is missing: ${relativePath}`);
@@ -69,7 +78,10 @@ function unionSets(...sets) {
   return new Set(sets.flatMap((set) => Array.from(set)));
 }
 
-const mainKey = findKey("src/main.jsx");
+// Vite represents the browser entry by index.html in the manifest even though
+// the module script inside that document is src/main.jsx. Dynamic application
+// roots retain source-path manifest keys, so resolve those separately.
+const mainKey = findHtmlEntryKey();
 const publicEntryKey = findKey("src/chalin-one/PublicChalinOneEntry.jsx");
 const publicAppKey = findKey("src/chalin-one/public-site/PublicCorporateWebsiteApp.jsx");
 const operationalRootKey = findKey("src/OperationalAppRoot.jsx");
