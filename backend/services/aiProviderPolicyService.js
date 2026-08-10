@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("crypto");
 const { pool } = require("../config/db");
 
 const AI_PROVIDER_PERSONAS = Object.freeze(["guide", "copilot", "executive"]);
@@ -51,6 +52,15 @@ function parseConfiguration(value) {
   } catch {
     return Object.freeze({});
   }
+}
+
+function safetyIdentifierForUser(userId) {
+  const actorId = Number(userId);
+  if (!Number.isSafeInteger(actorId) || actorId <= 0) return null;
+  return crypto
+    .createHash("sha256")
+    .update(`chalin-one-ai-user:${actorId}`, "utf8")
+    .digest("hex");
 }
 
 function strictPersona(value) {
@@ -115,11 +125,21 @@ function profileRequestsFullContext(profile = {}) {
   return profile?.configuration?.system_admin_full_context === true;
 }
 
+function profileFullContextIdentity(profile = {}) {
+  const identifier = clean(
+    profile?.configuration?.full_context_safety_identifier,
+    128
+  ).toLowerCase();
+  return /^[a-f0-9]{64}$/.test(identifier) ? identifier : null;
+}
+
 function fullContextActive(profile, { persona, providerContext = {}, env = process.env } = {}) {
   if (!["copilot", "executive"].includes(persona)) return false;
   if (normalizeProviderKey(profile?.provider_key, "local") !== "gemini") return false;
   if (!profileRequestsFullContext(profile)) return false;
-  if (providerContext?.original_system_administrator !== true) return false;
+  const boundIdentity = profileFullContextIdentity(profile);
+  const requestIdentity = clean(providerContext?.safety_identifier, 128).toLowerCase();
+  if (!boundIdentity || requestIdentity !== boundIdentity) return false;
   return geminiPaidTier(env);
 }
 
@@ -135,8 +155,6 @@ function externalPrivateDataAllowed(
     return true;
   }
 
-  // Preserve the existing explicit server override for controlled paid/private
-  // provider deployments. It never overrides Gemini's paid-tier requirement.
   if (!booleanValue(env.AI_ALLOW_EXTERNAL_PRIVATE_DATA)) return false;
   if (providerKey === "gemini") return geminiPaidTier(env);
   return providerKey === "openai";
@@ -303,22 +321,37 @@ async function resolveAiProviderSelection({
   return effectiveSelection(profile, { persona, providerContext, env });
 }
 
+function publicProviderProfile(profile, selection) {
+  return Object.freeze({
+    profile_key: profile.profile_key,
+    provider_key: profile.provider_key,
+    model_key: profile.model_key,
+    profile_status: profile.profile_status,
+    is_default: profile.is_default === true,
+    per_request_token_limit: profile.per_request_token_limit || 0,
+    daily_token_limit: profile.daily_token_limit || 0,
+    monthly_cost_limit_micros: profile.monthly_cost_limit_micros || 0,
+    updated_at: profile.updated_at || null,
+    source: profile.source || "unknown",
+    full_context_requested: profileRequestsFullContext(profile),
+    selection,
+  });
+}
+
 async function getProviderControlSnapshot({ env = process.env, connection = pool } = {}) {
   const profiles = {};
   for (const persona of AI_PROVIDER_PERSONAS) {
     const profile = await loadProviderProfile(persona, { connection, env, useCache: false });
-    const adminPreviewContext = {
-      original_system_administrator: true,
+    const previewContext = {
+      safety_identifier: profileFullContextIdentity(profile),
       data_classification: persona === "guide" ? "public" : "internal",
     };
-    profiles[persona] = Object.freeze({
-      ...profile,
-      selection: effectiveSelection(profile, {
-        persona,
-        providerContext: adminPreviewContext,
-        env,
-      }),
+    const selection = effectiveSelection(profile, {
+      persona,
+      providerContext: previewContext,
+      env,
     });
+    profiles[persona] = publicProviderProfile(profile, selection);
   }
   return Object.freeze({
     providers: Object.freeze({
@@ -357,6 +390,7 @@ async function getProviderControlSnapshot({ env = process.env, connection = pool
       unpaid_gemini_public_only: true,
       confidential_external_default: "blocked_to_local",
       system_admin_full_context_available_on_paid_gemini: true,
+      full_context_bound_to_enabling_administrator: true,
       provider_secrets_stored_in_database: false,
       secrets_exposed: false,
     }),
@@ -398,6 +432,9 @@ async function updateProviderProfile({
     secret_storage: "environment_only",
     privacy_fallback: "local",
     system_admin_full_context: wantsFullContext,
+    full_context_safety_identifier: wantsFullContext
+      ? safetyIdentifierForUser(actorId)
+      : null,
   });
 
   await connection.query(
@@ -451,8 +488,11 @@ module.exports = {
   normalizePersona,
   normalizeProviderKey,
   parseConfiguration,
+  profileFullContextIdentity,
   profileRequestsFullContext,
+  publicProviderProfile,
   resolveAiProviderSelection,
+  safetyIdentifierForUser,
   strictPersona,
   updateProviderProfile,
 };
