@@ -55,7 +55,7 @@ test("ordinary equipment login destination redirects to gateway unless Hire is e
   assert.match(hireLayout, /get\("division"\) === "hire"/);
   assert.match(hireLayout, /Navigate to="\/equipment-hire"/);
   assert.match(hireLayout, /path: "\/equipment-hire-operations\?division=hire"/);
-  assert.match(hireLayout, /Back to Equipment Divisions/);
+  assert.match(hireLayout, /Switch Equipment Division/);
 });
 
 test("Hire and Installment Finance keep separate navigation and staff identities", () => {
@@ -85,8 +85,8 @@ test("Hire and Installment Finance keep separate navigation and staff identities
   assert.doesNotMatch(financeLayout, /Independent Finance staff division/);
   assert.doesNotMatch(financeLayout, /A complete excavator installment lifecycle/);
   assert.match(financeLayout, /No access to Hire jobs or contracts/);
-  assert.match(financeLayout, /Staff & Workforce/);
-  assert.match(financeLayout, /Back to Equipment Divisions/);
+  assert.match(financeLayout, /People & Employment/);
+  assert.match(financeLayout, /Switch Equipment Division/);
   assert.match(financeLayout, /useLocation/);
   assert.match(
     financeLayout,

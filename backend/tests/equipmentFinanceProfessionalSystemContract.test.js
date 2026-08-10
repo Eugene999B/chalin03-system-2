@@ -30,10 +30,15 @@ test("professional Finance is exposed through simple daily navigation", () => {
     "Customers",
     "Excavators",
     "Applications & Approvals",
+    "Work Inbox",
+    "Customer Case",
     "Active Installments",
-    "Payments & Arrears",
+    "Payments & Collections",
+    "Arrears & Follow-up",
     "Documents & Reports",
+    "Reports & Statements",
     "Finance Settings",
+    "Completion & Reset Checks",
     "Help & Guide",
   ]) {
     assert.match(layout, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
