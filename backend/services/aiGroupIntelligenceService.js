@@ -59,7 +59,7 @@ function errorSummary(error) {
 async function scopeDirectory(connection = pool) {
   const [[branches], [miningSites], [hireLocations]] = await Promise.all([
     connection.query(
-      `SELECT id, COALESCE(NULLIF(code, ''), branch_code) AS code, name
+      `SELECT id, code, name
        FROM branches
        WHERE is_active = TRUE
        ORDER BY id ASC
