@@ -6,7 +6,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
+  isPublicSafeGeneralTurn,
   isPublicSafeSocialTurn,
+  publicSafeMessages,
   publicSafeSocialMessages,
 } = require("../services/aiProviderService");
 const {
@@ -54,6 +56,28 @@ test("plain and imperfect greetings are public-safe social turns", () => {
   }
 });
 
+test("ordinary non-private reasoning may use Gemini after stripping CHALIN context", () => {
+  for (const prompt of [
+    "Explain compound interest simply.",
+    "Help me improve this paragraph about leadership.",
+    "Compare centralized and decentralized decision making.",
+  ]) {
+    assert.equal(
+      isPublicSafeGeneralTurn({ messages: messages(prompt), providerContext: context() }),
+      true,
+      prompt
+    );
+  }
+
+  const safe = publicSafeMessages(messages("Explain compound interest simply.", [
+    { role: "assistant", content: "PRIVATE SALES SNAPSHOT [E1]" },
+  ]));
+  assert.equal(safe.length, 2);
+  assert.equal(safe[1].content, "Explain compound interest simply.");
+  assert.doesNotMatch(JSON.stringify(safe), /PRIVATE SALES SNAPSHOT/);
+  assert.match(safe[0].content, /public-safe general reasoning turn/i);
+});
+
 test("business, payroll, sensitive and live questions never enter public-safe routing", () => {
   const prompts = [
     "hi, what are today's sales?",
@@ -70,27 +94,32 @@ test("business, payroll, sensitive and live questions never enter public-safe ro
     assert.equal(
       isPublicSafeSocialTurn({ messages: messages(prompt), providerContext: context() }),
       false,
-      prompt
+      `social ${prompt}`
+    );
+    assert.equal(
+      isPublicSafeGeneralTurn({ messages: messages(prompt), providerContext: context() }),
+      false,
+      `general ${prompt}`
     );
   }
 
   assert.equal(
-    isPublicSafeSocialTurn({
-      messages: messages("hi"),
+    isPublicSafeGeneralTurn({
+      messages: messages("Explain something"),
       providerContext: context({ live_data_required: true }),
     }),
     false
   );
   assert.equal(
-    isPublicSafeSocialTurn({
-      messages: messages("hi"),
+    isPublicSafeGeneralTurn({
+      messages: messages("Explain something"),
       providerContext: context({ data_classification: "confidential" }),
     }),
     false
   );
 });
 
-test("public-safe provider payload drops prior history, evidence and tools by construction", () => {
+test("public-safe social provider payload drops prior history, evidence and tools by construction", () => {
   const prior = [
     { role: "user", content: "PRIVATE: what are our sales?" },
     { role: "assistant", content: "PRIVATE SALES SNAPSHOT [E1]" },
@@ -107,12 +136,12 @@ test("public-safe provider payload drops prior history, evidence and tools by co
   assert.match(safe[0].content, /Do not introduce, infer, summarize, request, or expose/i);
 });
 
-test("Gemini Free is eligible for an explicitly public Copilot social turn", () => {
+test("Gemini Free is eligible for an explicitly public Copilot turn", () => {
   const selection = effectiveSelection(
     {
       profile_key: "chalin-copilot",
       provider_key: "gemini",
-      model_key: "gemini-2.5-flash",
+      model_key: "gemini-3.6-flash",
       source: "test",
     },
     {
@@ -127,6 +156,7 @@ test("Gemini Free is eligible for an explicitly public Copilot social turn", () 
 
   assert.equal(selection.selected_provider, "gemini");
   assert.equal(selection.effective_provider, "gemini");
+  assert.equal(selection.effective_model, "gemini-3.6-flash");
   assert.equal(selection.data_classification, "public");
   assert.equal(selection.external_network_used, true);
 });
@@ -136,7 +166,7 @@ test("Gemini Free still falls back to Local for internal Copilot evidence", () =
     {
       profile_key: "chalin-copilot",
       provider_key: "gemini",
-      model_key: "gemini-2.5-flash",
+      model_key: "gemini-3.6-flash",
       source: "test",
     },
     {
@@ -185,13 +215,14 @@ test("provider service applies the lossy privacy boundary before external provid
     path.resolve(__dirname, "../services/aiProviderService.js"),
     "utf8"
   );
-  const publicBoundary = source.indexOf("if (publicSafeSocialTurn)");
+  const publicBoundary = source.indexOf("if (publicSafeSocialTurn || publicSafeGeneralTurn)");
   const policyResolution = source.indexOf("selection = await resolveAiProviderSelection");
 
   assert.ok(publicBoundary >= 0);
   assert.ok(policyResolution > publicBoundary);
-  assert.match(source, /effectiveMessages = publicSafeSocialMessages\(effectiveMessages\)/);
+  assert.match(source, /publicSafeSocialTurn\s*\? publicSafeSocialMessages\(effectiveMessages\)/);
+  assert.match(source, /: publicSafeMessages\(effectiveMessages\)/);
   assert.match(source, /effectiveTools = \[\]/);
   assert.match(source, /data_classification: "public"/);
-  assert.match(source, /public_safe_social_turn: true/);
+  assert.match(source, /public_safe_general_turn: publicSafeGeneralTurn/);
 });
