@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "environments": {
+    "production": {
+      "deploy": {
+        "preDeployCommand": [
+          "CHALIN03_PAYROLL_FOUNDATION_MIGRATION_ENABLED=true CHALIN03_SIGNED_BACKUP_CONFIRMED=true CHALIN03_PAYROLL_MIGRATION_RELEASE=20260810_PAYROLL_FOUNDATION npm run migrate:payroll-foundation:production"
+        ],
+        "startCommand": "npm start"
+      }
+    }
+  }
+}
