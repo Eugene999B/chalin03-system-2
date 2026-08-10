@@ -27,11 +27,16 @@ const documentService = fs.readFileSync(
   "utf8"
 );
 
-test("Copilot and Executive automatically retrieve deeper governed candidates then fuse evidence", () => {
+test("Copilot and Executive automatically retrieve deep governed evidence and scoped conversation continuity", () => {
   assert.match(orchestrator, /searchGovernedKnowledge/);
   assert.match(orchestrator, /async function retrieveAutomaticEvidence/);
-  assert.match(orchestrator, /const knowledgeEvidence = await retrieveAutomaticEvidence/);
+  assert.match(orchestrator, /loadScopedUserMemory/);
+  assert.match(orchestrator, /const \[knowledgeEvidence, continuityMemory\] = await Promise\.all/);
+  assert.match(orchestrator, /limit: 24/);
+  assert.match(orchestrator, /limit: 32/);
   assert.match(orchestrator, /rankEvidence/);
+  assert.match(orchestrator, /continuityMemory/);
+  assert.match(orchestrator, /evidence_authority: false/);
 
   assert.match(retrievalService, /searchPublishedDocumentChunks/);
   assert.match(retrievalService, /searchApprovedKnowledge/);
