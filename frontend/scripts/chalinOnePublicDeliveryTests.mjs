@@ -270,7 +270,9 @@ check("main entry dynamically isolates public, protected and operational applica
   assert.doesNotMatch(main, /import App from|<App \/>|installCriticalFinanceWorkspacePreload/);
   assert.match(operationalRoot, /<App \/>/);
   assert.match(operationalRoot, /installCriticalFinanceWorkspacePreload/);
-  assert.match(main, /browser-cache-integrity-v35/);
+  assert.match(main, /browser-cache-integrity-v36/);
+  assert.match(main, /installNoAutomaticRefreshPolicy/);
+  assert.doesNotMatch(main, /serviceWorker\.register\(|controllerchange|window\.location\.reload\(/);
 });
 
 check("corporate renderer is responsive and reduced-motion safe", () => {
