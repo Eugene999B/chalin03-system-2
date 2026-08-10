@@ -8,6 +8,8 @@ import EmergencyCommandOverlay from "./components/EmergencyCommandOverlay.jsx";
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { FeatureFlagProvider } from "./context/FeatureFlagContext.jsx";
+import { AppearanceProvider } from "./appearance/AppearanceContext.jsx";
+import AppearanceToggle from "./appearance/AppearanceToggle.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
@@ -15,6 +17,7 @@ import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
+import "./styles/appearance.css";
 
 const ContextualAiSidecar = lazy(() =>
   import("./chalin-one/ai/ContextualAiSidecar.jsx")
@@ -25,20 +28,25 @@ installCriticalFinanceWorkspacePreload();
 
 export default function OperationalAppRoot() {
   return (
-    <FeatureFlagProvider>
-      <>
-        <App />
-        <ChalinOneGatewayLinks />
-        <Suspense fallback={null}>
-          <ContextualAiSidecar />
-        </Suspense>
-        <ProductsPageShellRepair />
-        <OperationalApprovalLauncher />
-        <ApprovalCentreLiveAttention />
-        <AdvancedAccountingExpenseFundingEvidence />
-        <EmergencyCommandOverlay />
-        <CommandArrivalBanner />
-      </>
-    </FeatureFlagProvider>
+    <AppearanceProvider>
+      <FeatureFlagProvider>
+        <>
+          <App />
+          <div className="chalin-global-appearance">
+            <AppearanceToggle compact />
+          </div>
+          <ChalinOneGatewayLinks />
+          <Suspense fallback={null}>
+            <ContextualAiSidecar />
+          </Suspense>
+          <ProductsPageShellRepair />
+          <OperationalApprovalLauncher />
+          <ApprovalCentreLiveAttention />
+          <AdvancedAccountingExpenseFundingEvidence />
+          <EmergencyCommandOverlay />
+          <CommandArrivalBanner />
+        </>
+      </FeatureFlagProvider>
+    </AppearanceProvider>
   );
 }
