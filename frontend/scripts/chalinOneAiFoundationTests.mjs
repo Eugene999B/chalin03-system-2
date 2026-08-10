@@ -103,11 +103,13 @@ check("conversation lifecycle is persistent, titled, row-menu managed and silent
 check("background conversation refresh does not blindly clear the active chat", () => {
   assert.match(workspace, /activePersonaRef/);
   assert.match(workspace, /activeChatEpochRef/);
-  assert.match(workspace, /if \(activePersonaRef\.current !== persona\)/);
-  assert.doesNotMatch(
-    workspace,
-    /useEffect\(\(\) => \{[\s\S]{0,180}setConversation\(null\);\s*setMessages\(\[\]\);[\s\S]{0,180}loadConversations\(controller\.signal\)/
-  );
+  const personaGuard = workspace.indexOf("if (activePersonaRef.current !== persona) {");
+  const guardedConversationReset = workspace.indexOf("setConversation(null);", personaGuard);
+  const guardedMessageReset = workspace.indexOf("setMessages([]);", guardedConversationReset);
+  assert.ok(personaGuard >= 0);
+  assert.ok(guardedConversationReset > personaGuard);
+  assert.ok(guardedMessageReset > guardedConversationReset);
+  assert.equal((workspace.match(/setConversation\(null\)/g) || []).length, 2);
   assert.match(workspace, /loadConversations\(undefined, \{ silent: true, force: true \}\)/);
 });
 
@@ -159,4 +161,4 @@ check("rendering avoids unsafe HTML and dynamic code execution", () => {
   assert.doesNotMatch(workspace, /<iframe|<script/i);
 });
 
-console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/12 checks passed.`);
+console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/11 checks passed.`);
