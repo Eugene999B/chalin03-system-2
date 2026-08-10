@@ -1,0 +1,42 @@
+name: Production Runtime Transport Probe
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/production-runtime-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe production routes without credentials
+        shell: bash
+        run: |
+          set -u
+          probe() {
+            name="$1"
+            url="$2"
+            shift 2
+            echo "=== ${name} ==="
+            rm -f /tmp/probe-headers /tmp/probe-body
+            code=$(curl --connect-timeout 10 --max-time 25 -sS -D /tmp/probe-headers -o /tmp/probe-body -w '%{http_code}' "$@" "$url" || true)
+            echo "STATUS=${code}"
+            grep -Ei '^(HTTP/|content-type:|access-control-|x-chalin03-|server:|cf-ray:|cache-control:)' /tmp/probe-headers || true
+            echo "BODY_BEGIN"
+            head -c 1200 /tmp/probe-body 2>/dev/null || true
+            echo
+            echo "BODY_END"
+          }
+
+          probe same_origin_health https://chalin03.com/api/health
+          probe direct_health https://api.chalin03.com/api/health -H 'Origin: https://chalin03.com'
+          probe same_origin_backup https://chalin03.com/api/backups/download
+          probe direct_backup https://api.chalin03.com/api/backups/download -H 'Origin: https://chalin03.com'
+          probe same_origin_payroll https://chalin03.com/api/payroll/periods
+          probe direct_payroll https://api.chalin03.com/api/payroll/periods -H 'Origin: https://chalin03.com'
