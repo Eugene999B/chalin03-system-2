@@ -12,6 +12,7 @@ const api = fs.readFileSync(path.join(root, "contentStudioWebsiteControlApi.js")
 const css = fs.readFileSync(path.join(root, "contentStudioWebsiteControlCenter.css"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "ContentStudioWorkspace.jsx"), "utf8");
 const metadataRuntime = fs.readFileSync(path.join(frontendRoot, "src/chalin-one/public-site/publicMetadataRuntime.js"), "utf8");
+const structuredRuntime = fs.readFileSync(path.join(frontendRoot, "src/chalin-one/public-site/publicStructuredDataRuntime.js"), "utf8");
 
 let passed = 0;
 function check(name, callback) {
@@ -39,23 +40,26 @@ check("website-control search severity and renderer capability models are determ
   assert.equal(model.matchesWebsiteControlQuery(row, "equipment"), false);
   assert.equal(model.rowHasSeverity(row, "warning"), true);
   assert.equal(model.rowHasSeverity(row, "critical"), false);
-  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.length, 8);
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.length, 9);
   assert.equal(model.PUBLIC_METADATA_CAPABILITIES.every((item) => item.status === "active"), true);
+  assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "structured_data")?.label, "Structured data");
   assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "sitemap")?.label, "XML sitemap");
   assert.equal(model.PUBLIC_METADATA_CAPABILITIES.find((item) => item.key === "robots_txt")?.label, "robots.txt");
 });
 
-check("Website Control API uses authenticated Axios and exposes one read-only endpoint", () => {
+check("Website Control API uses authenticated Axios and exposes read-only intelligence endpoints", () => {
   assert.match(api, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
   assert.match(api, /axiosClient\.get\("\/content-studio\/pages\/website-control"/);
+  assert.match(api, /axiosClient\.get\("\/content-studio\/pages\/link-integrity"/);
   assert.doesNotMatch(api, /axiosClient\.(?:post|put|patch|delete)|fetch\(|localStorage|sessionStorage|Bearer/);
 });
 
-check("Website Control Center exposes SEO navigation orphan redirect and platform-capability views", () => {
-  for (const marker of ["Website Control Center", "SEO health", "Navigation", "Orphan pages", "Redirect intelligence", "Metadata capability coverage", "Controlled handoff"]) {
+check("Website Control Center exposes SEO navigation link orphan redirect and platform-capability views", () => {
+  for (const marker of ["Website Control Center", "SEO health", "Navigation", "Internal links", "Orphan pages", "Redirect intelligence", "Metadata capability coverage", "Controlled handoff"]) {
     assert.match(component, new RegExp(marker));
   }
   assert.match(component, /getWebsiteControlIntelligence/);
+  assert.match(component, /getWebsiteLinkIntegrity/);
   assert.match(component, /AbortController/);
   assert.match(component, /onOpenSection\?\.\("pages"\)/);
   assert.match(component, /onOpenSection\?\.\("navigation"\)/);
@@ -82,15 +86,20 @@ check("Control Center has responsive desktop tablet phone and reduced-motion tre
   assert.match(css, /@media\(max-width:540px\)/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /scroll-snap-type:x mandatory/);
+  assert.match(css, /cs-wcc-source-list/);
 });
 
-check("platform capability card matches the active public metadata runtime", () => {
+check("platform capability card matches active metadata and structured-data runtimes", () => {
   assert.match(metadataRuntime, /link\[rel="canonical"\]/);
   assert.match(metadataRuntime, /meta\[property="og:title"\]/);
   assert.match(metadataRuntime, /meta\[name="twitter:title"\]/);
   assert.match(metadataRuntime, /meta\[name="robots"\]/);
   assert.match(metadataRuntime, /robotsLocked/);
   assert.match(metadataRuntime, /safeHttpsMetadataUrl/);
+  assert.match(structuredRuntime, /NewsArticle/);
+  assert.match(structuredRuntime, /WebPage/);
+  assert.match(structuredRuntime, /BreadcrumbList/);
+  assert.match(structuredRuntime, /application\/ld\+json/);
 });
 
 console.log(`\nWebsite Control Center: ${passed}/7 checks passed.`);
