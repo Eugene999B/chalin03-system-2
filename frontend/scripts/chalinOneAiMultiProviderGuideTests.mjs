@@ -12,6 +12,7 @@ function read(relativePath, root = frontendRoot) {
 }
 
 const publicEntry = read("src/chalin-one/PublicChalinOneEntry.jsx");
+const guideRuntime = read("src/chalin-one/public-site/PublicGuideRuntime.jsx");
 const guideApi = read("src/chalin-one/public-site/publicGuideApi.js");
 const guideWidget = read("src/chalin-one/public-site/PublicGuideWidget.jsx");
 const guideCss = read("src/chalin-one/public-site/publicGuide.css");
@@ -23,14 +24,18 @@ const aiRoutes = read("backend/routes/aiRoutes.js", repoRoot);
 const providerPolicy = read("backend/services/aiProviderPolicyService.js", repoRoot);
 const providerRegistry = read("backend/ai-providers/registerAiProviders.js", repoRoot);
 
-assert.match(publicEntry, /lazy\(\(\)\s*=>\s*import\("\.\/public-site\/PublicGuideWidget"\)/);
-assert.match(publicEntry, /DeferredPublicGuideWidget/);
-assert.match(publicEntry, /<DeferredPublicGuideWidget\s*\/>/);
+assert.match(publicEntry, /lazy\(\(\)\s*=>\s*import\("\.\/public-site\/PublicGuideRuntime"\)/);
+assert.match(publicEntry, /DeferredPublicGuideRuntime/);
+assert.match(publicEntry, /<DeferredPublicGuideRuntime\s*\/>/);
 assert.match(publicEntry, /requestIdleCallback/);
+assert.match(guideRuntime, /getPublicGuideAvailability/);
+assert.match(guideRuntime, /return enabled \? <PublicGuideWidget \/> : null/);
+assert.match(guideRuntime, /visibilitychange/);
 
 assert.doesNotMatch(guideApi, /from\s+["']axios["']|axios\.create|axiosClient/);
 assert.doesNotMatch(guideApi, /localStorage|sessionStorage|Authorization|Bearer/);
 assert.match(guideApi, /publicWebsiteClient/);
+assert.match(guideApi, /getPublicGuideAvailability/);
 assert.match(guideApi, /\/public\/guide\/sessions/);
 assert.match(guideApi, /x-chalin-guide-session/);
 
@@ -70,7 +75,15 @@ assert.match(providerRegistry, /register\("local"/);
 assert.match(providerRegistry, /register\("gemini"/);
 assert.match(providerRegistry, /register\("openai"/);
 
-for (const source of [guideApi, guideWidget, providerControl, aiApi, publicEntry, protectedEntry]) {
+for (const source of [
+  guideRuntime,
+  guideApi,
+  guideWidget,
+  providerControl,
+  aiApi,
+  publicEntry,
+  protectedEntry,
+]) {
   assert.doesNotMatch(source, /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
 }
 
