@@ -16,6 +16,11 @@ test("one active financial return request reserves a sale item across users and 
   assert.match(approvalService, /approval_kind = 'return_refund'/);
   assert.match(approvalService, /status IN \('pending', 'approved'\)/);
   assert.match(approvalService, /execution_status IN \('pending', 'executing', 'failed'\)/);
+  const reservationFunction = approvalService.slice(
+    approvalService.indexOf("async function listActiveReturnReservations"),
+    approvalService.indexOf("async function createOperationalRequest")
+  );
+  assert.doesNotMatch(reservationFunction, /requested_by\s*=/);
   assert.match(approvalRoutes, /ACTIVE_RETURN_REQUEST_EXISTS/);
   assert.match(approvalRoutes, /Approve\/retry it or reject it before creating another return request/);
 });
