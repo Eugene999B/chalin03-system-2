@@ -177,6 +177,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "orange",
   }),
   Object.freeze({
+    key: "public-analytics",
+    label: "Public Analytics",
+    shortLabel: "Analytics",
+    badge: "PA",
+    description: "Read aggregate public page-view signals without visitor profiles, staff activity or form contents.",
+    permission: CONTENT_STUDIO_PERMISSIONS.view,
+    endpoint: "/content-studio/dashboard/analytics/summary",
+    group: "Website",
+    tone: "slate",
+  }),
+  Object.freeze({
     key: "website-control",
     label: "Website Control Center",
     shortLabel: "Web Control",
