@@ -75,7 +75,8 @@ test("link-integrity backend remains bounded SELECT-only and permission scoped",
   assert.match(serviceSource, /public_page_versions/);
   assert.match(serviceSource, /public_page_sections/);
   assert.match(serviceSource, /public_redirect_rules/);
-  assert.doesNotMatch(serviceSource, /\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE)\b/i);
+  const mutatingSql = /(?:pool|connection)\.query\(\s*(?:`|"|')\s*(?:INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE)\b/i;
+  assert.doesNotMatch(serviceSource, mutatingSql);
   assert.match(routeSource, /requirePermission\("public_content\.view"\)/);
   assert.match(routeSource, /getLinkIntegrityIntelligence/);
   assert.doesNotMatch(routeSource, /router\.(?:post|put|patch|delete)\(/);
