@@ -31,10 +31,12 @@ test("feature API is branch-isolated and mounted only in Spare Parts workspace",
   assert.match(routes, /requireRole\("admin", "manager"\)/);
 });
 
-test("tracking is backward compatible and never auto-enforces during label activation", () => {
+test("tracking is backward compatible and checkout enforcement is impossible before Phase 3", () => {
   assert.match(migration, /inventory_tracking_mode` VARCHAR\(20\) NOT NULL DEFAULT ''quantity''/);
   assert.match(migration, /inventory_traceability_state` VARCHAR\(20\) NOT NULL DEFAULT ''off''/);
   assert.match(repository, /ready_for_serialized_enforcement/);
+  assert.match(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);
+  assert.match(primitives, /Sales & Scanning phase is enabled server-side/);
   assert.doesNotMatch(repository, /inventory_traceability_state\s*=\s*'enforced'/);
   assert.match(routes, /an administrator may enable enforcement separately/);
 });
