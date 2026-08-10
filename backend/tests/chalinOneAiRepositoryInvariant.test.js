@@ -111,16 +111,27 @@ test("AI migrations remain additive and excluded from ordinary startup", () => {
   );
 });
 
-test("frontend AI source contains no provider SDK, secret storage or unsafe rendering", () => {
+test("frontend AI source may display provider names but contains no provider networking, secret access, storage or unsafe rendering", () => {
   const frontendFiles = [
     "frontend/src/chalin-one/ai/aiApi.js",
     "frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx",
+    "frontend/src/chalin-one/ai/AiProviderControlLauncher.jsx",
   ];
   for (const file of frontendFiles) {
     const source = read(file);
     assert.doesNotMatch(
       source,
-      /OpenAI|Anthropic|Gemini|api[_-]?key|localStorage|sessionStorage|dangerouslySetInnerHTML|\beval\s*\(|new Function/i,
+      /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY)/i,
+      file
+    );
+    assert.doesNotMatch(
+      source,
+      /api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com|Authorization\s*:|Bearer\s+|\bfetch\s*\(/i,
+      file
+    );
+    assert.doesNotMatch(
+      source,
+      /localStorage|sessionStorage|dangerouslySetInnerHTML|\beval\s*\(|new Function/i,
       file
     );
   }
