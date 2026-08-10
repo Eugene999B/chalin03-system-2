@@ -6,6 +6,7 @@ require("dotenv").config();
 const MIGRATION_FILE = "20260810_payroll_financial_foundation.sql";
 const VERIFY_FILE = "20260810_payroll_financial_foundation_verify.sql";
 const MIGRATION_LOCK = "chalin03:payroll-financial-foundation:20260810";
+const PACKAGED_MIGRATION_DIR = path.resolve(__dirname, "../migrations");
 
 function enabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -46,8 +47,27 @@ function splitSql(sqlText) {
     .filter(Boolean);
 }
 
+function migrationPath(filename) {
+  const resolved = path.resolve(PACKAGED_MIGRATION_DIR, filename);
+  if (!resolved.startsWith(`${PACKAGED_MIGRATION_DIR}${path.sep}`)) {
+    throw new Error("Payroll migration filename escaped the packaged migration directory.");
+  }
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Packaged payroll migration file is missing: ${resolved}`);
+  }
+  return resolved;
+}
+
+function assertPackagedMigrationReady() {
+  for (const filename of [MIGRATION_FILE, VERIFY_FILE]) {
+    const resolved = migrationPath(filename);
+    const sql = fs.readFileSync(resolved, "utf8");
+    if (!sql.trim()) throw new Error(`Packaged payroll migration file is empty: ${resolved}`);
+  }
+}
+
 async function execute(connection, filename) {
-  const sql = fs.readFileSync(path.resolve(__dirname, "../../database/migrations", filename), "utf8");
+  const sql = fs.readFileSync(migrationPath(filename), "utf8");
   const resultSets = [];
   for (const statement of splitSql(sql)) {
     const [rows] = await connection.query(statement);
@@ -58,6 +78,7 @@ async function execute(connection, filename) {
 
 async function run() {
   assertAuthorization();
+  assertPackagedMigrationReady();
   const connection = await mysql.createConnection({
     host: requiredEnv("DB_HOST", "MYSQLHOST"),
     port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
@@ -100,4 +121,13 @@ if (require.main === module) {
   });
 }
 
-module.exports = { assertAuthorization, splitSql, run };
+module.exports = {
+  MIGRATION_FILE,
+  PACKAGED_MIGRATION_DIR,
+  VERIFY_FILE,
+  assertAuthorization,
+  assertPackagedMigrationReady,
+  migrationPath,
+  splitSql,
+  run,
+};
