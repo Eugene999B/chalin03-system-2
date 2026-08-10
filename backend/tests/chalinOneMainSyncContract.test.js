@@ -45,6 +45,18 @@ const frontendMain = fs.readFileSync(
   path.join(repoRoot, "frontend/src/main.jsx"),
   "utf8"
 );
+const publicRoot = fs.readFileSync(
+  path.join(repoRoot, "frontend/src/chalin-one/PublicChalinOneEntry.jsx"),
+  "utf8"
+);
+const protectedRoot = fs.readFileSync(
+  path.join(repoRoot, "frontend/src/chalin-one/ProtectedChalinOneEntry.jsx"),
+  "utf8"
+);
+const operationalRoot = fs.readFileSync(
+  path.join(repoRoot, "frontend/src/OperationalAppRoot.jsx"),
+  "utf8"
+);
 
 test("synchronized backend start retains every verified production recovery script", () => {
   const start = backendPackage.scripts.start;
@@ -153,11 +165,18 @@ test("system routes preserve fail-closed CHALIN ONE feature and content gates", 
   assert.match(systemRoutes, /contentStudioRoutes/);
 });
 
-test("frontend boot retains cache recovery v35 and the feature flag provider", () => {
+test("frontend boot retains cache recovery v35 and isolates feature providers by application root", () => {
   assert.match(frontendMain, /browser-cache-integrity-v35/);
-  assert.match(frontendMain, /FeatureFlagProvider/);
-  assert.match(frontendMain, /<FeatureFlagProvider>/);
-  assert.match(frontendMain, /<App \/>/);
   assert.match(frontendMain, /__chalin03MarkBootHealthy/);
   assert.match(frontendMain, /CHALIN03_ASSET_MISMATCH/);
+  assert.match(frontendMain, /import\("\.\/chalin-one\/PublicChalinOneEntry\.jsx"\)/);
+  assert.match(frontendMain, /import\("\.\/chalin-one\/ProtectedChalinOneEntry\.jsx"\)/);
+  assert.match(frontendMain, /import\("\.\/OperationalAppRoot\.jsx"\)/);
+  assert.doesNotMatch(frontendMain, /FeatureFlagProvider|<App \/>/);
+
+  for (const source of [publicRoot, protectedRoot, operationalRoot]) {
+    assert.match(source, /FeatureFlagProvider/);
+    assert.match(source, /<FeatureFlagProvider>/);
+  }
+  assert.match(operationalRoot, /<App \/>/);
 });
