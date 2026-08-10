@@ -47,3 +47,5 @@ jobs:
           name: payroll-hotfix-backend-diagnostic
           path: /tmp/payroll-hotfix-backend.log
           retention-days: 1
+
+# Triggered after API-only startup restoration.
