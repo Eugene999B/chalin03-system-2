@@ -154,10 +154,11 @@ check("knowledge interface follows draft review publish governance", () => {
   assert.match(workspace, /Publish approved version/);
 });
 
-check("foundation UI contains no direct sensitive business execution", () => {
+check("foundation UI contains no direct sensitive business execution or credential-handling mechanism", () => {
+  assert.doesNotMatch(workspace, /restore database|mass sms|direct sql/i);
   assert.doesNotMatch(
     workspace,
-    /restore database|mass sms|direct sql|api key|provider secret/i
+    /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY)|api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com|Authorization\s*:|Bearer\s+/i
   );
   assert.match(workspace, /permission-scoped tool/);
 });
