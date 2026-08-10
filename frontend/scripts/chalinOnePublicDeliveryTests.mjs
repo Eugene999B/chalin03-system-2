@@ -14,7 +14,10 @@ const corporateApp = read("frontend/src/chalin-one/public-site/PublicCorporateWe
 const corporateCss = read("frontend/src/chalin-one/public-site/publicCorporateWebsite.css");
 const legacyPublicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
 const standalone = read("frontend/src/chalin-one/ChalinOneStandaloneEntry.jsx");
+const publicEntry = read("frontend/src/chalin-one/PublicChalinOneEntry.jsx");
+const pathModelSource = read("frontend/src/chalin-one/chalinOnePathModel.js");
 const main = read("frontend/src/main.jsx");
+const operationalRoot = read("frontend/src/OperationalAppRoot.jsx");
 const operationalApp = read("frontend/src/App.jsx");
 const loginPage = read("frontend/src/pages/LoginPageGroupOperations.jsx");
 const businessWorkspaces = read("frontend/src/data/businessWorkspaces.js");
@@ -142,10 +145,9 @@ check("corporate experience exposes real business newsroom media careers and con
 });
 
 check("public root is permanent and Spare Parts uses an explicit staff dashboard", () => {
-  assert.match(standalone, /isPublicWebsitePath/);
-  assert.match(standalone, /if \(path === "\/"\) return true/);
-  assert.doesNotMatch(standalone, /hasOperationalBrowserSession/);
-  assert.match(standalone, /PUBLIC_TOP_LEVEL_PATHS/);
+  assert.match(standalone, /chalinOnePathModel\.js/);
+  assert.match(pathModelSource, /if \(path === "\/"\) return true/);
+  assert.match(pathModelSource, /PUBLIC_TOP_LEVEL_PATHS/);
   for (const pathName of [
     "about",
     "businesses",
@@ -157,7 +159,7 @@ check("public root is permanent and Spare Parts uses an explicit staff dashboard
     "careers",
     "contact",
   ]) {
-    assert.match(standalone, new RegExp(`"${pathName}"`));
+    assert.match(pathModelSource, new RegExp(`"${pathName}"`));
   }
 
   assert.match(operationalApp, /path="staff" element=\{<SparePartsHomePage \/>\}/);
@@ -168,12 +170,14 @@ check("public root is permanent and Spare Parts uses an explicit staff dashboard
   assert.match(commandGate, /PUBLIC_TOP_LEVEL_PATHS/);
 });
 
-check("standalone entry renders the corporate root behind the public feature flag", () => {
-  assert.match(standalone, /public-site\/PublicCorporateWebsiteApp/);
-  assert.match(standalone, /PublicCorporateWebsiteUnavailable/);
-  assert.match(standalone, /path="\/\*"/);
-  assert.match(standalone, /feature="publicWebsite"/);
-  assert.match(standalone, /<PublicCorporateWebsiteApp \/>/);
+check("public entry renders the corporate root behind the public feature flag", () => {
+  for (const source of [standalone, publicEntry]) {
+    assert.match(source, /public-site\/PublicCorporateWebsiteApp/);
+    assert.match(source, /PublicCorporateWebsiteUnavailable/);
+    assert.match(source, /path="\/\*"/);
+    assert.match(source, /feature="publicWebsite"/);
+    assert.match(source, /<PublicCorporateWebsiteApp \/>/);
+  }
 });
 
 check("Content Studio uses isolated auth while Intelligence remains staff-protected", () => {
@@ -243,11 +247,14 @@ check("legacy /website route remains a compatibility bridge instead of a second 
   assert.match(legacyPublicApp, /PUBLIC_ROOT = "\/website"/);
 });
 
-check("main entry isolates public Content Studio and intelligence surfaces from operational overlays", () => {
+check("main entry dynamically isolates public, protected and operational application roots", () => {
   assert.match(main, /isChalinOneStandalonePath/);
-  assert.match(main, /standaloneChalinOne \?/);
-  assert.match(main, /<ChalinOneStandaloneEntry \/>/);
-  assert.match(main, /<App \/>/);
+  assert.match(main, /import\("\.\/chalin-one\/PublicChalinOneEntry\.jsx"\)/);
+  assert.match(main, /import\("\.\/chalin-one\/ProtectedChalinOneEntry\.jsx"\)/);
+  assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
+  assert.doesNotMatch(main, /import App from|<App \/>|installCriticalFinanceWorkspacePreload/);
+  assert.match(operationalRoot, /<App \/>/);
+  assert.match(operationalRoot, /installCriticalFinanceWorkspacePreload/);
   assert.match(main, /browser-cache-integrity-v35/);
 });
 
