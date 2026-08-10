@@ -16,6 +16,7 @@ const budgets = await import(
 
 const main = read("src/main.jsx");
 const publicEntry = read("src/chalin-one/PublicChalinOneEntry.jsx");
+const publicBootCss = read("src/chalin-one/public-site/publicBootPolish.css");
 const protectedEntry = read("src/chalin-one/ProtectedChalinOneEntry.jsx");
 const operationalRoot = read("src/OperationalAppRoot.jsx");
 const standalone = read("src/chalin-one/ChalinOneStandaloneEntry.jsx");
@@ -37,6 +38,8 @@ assert.doesNotMatch(main, /import App from|EmergencyCommandOverlay|ApprovalCentr
 assert.match(main, /loadApplicationRoot\(\)/);
 assert.match(main, /publicWebsiteSurface/);
 assert.match(main, /standaloneChalinOne/);
+assert.match(main, /\.catch\(\(error\)/);
+assert.match(main, /role="alert"/);
 
 assert.match(operationalRoot, /import App from "\.\/App\.jsx"/);
 assert.match(operationalRoot, /installCommandGateHistoryTracker/);
@@ -54,6 +57,8 @@ assert.match(publicEntry, /PublicTechnicalFinish/);
 assert.match(publicEntry, /PublicCorporateWebsiteApp/);
 assert.match(publicEntry, /publicBootPolish\.css/);
 assert.doesNotMatch(publicEntry, /AuthProvider|WorkspaceContextProvider|OperationalAppRoot|App\.jsx|index\.css|installCriticalFinanceWorkspacePreload/);
+assert.match(publicBootCss, /html,\s*body,\s*#root\s*\{\s*min-height: 100%/s);
+assert.match(publicBootCss, /body\s*\{\s*margin: 0;/s);
 assert.match(standalone, /chalinOnePathModel\.js/);
 
 for (const route of pathModel.PUBLIC_RELEASE_SMOKE_PATHS) {
@@ -94,8 +99,17 @@ assert.match(launchDesk, /GitHub CI/);
 assert.match(launchDesk, /protected Railway/);
 assert.match(launchDesk, /PUBLIC_RELEASE_SMOKE_PATHS/);
 assert.match(launchDesk, /PUBLIC_PERFORMANCE_BUDGETS/);
+assert.match(launchDesk, /Protected Content Studio surface/);
+assert.match(launchDesk, /signals\.studioDashboard\.ok/);
+assert.doesNotMatch(launchDesk, /featureEnabled\(signals\.publicFeatures, "contentStudio"\)/);
 assert.doesNotMatch(launchDesk, /publishPageVersion|submitPageVersion|decidePageApproval|axiosClient\.(?:post|put|patch|delete)/);
-for (const route of ["/readiness", "/features/public", "/public/content/bootstrap", "/public/analytics/disclosure"]) {
+for (const route of [
+  "/readiness",
+  "/features/public",
+  "/content-studio/dashboard",
+  "/public/content/bootstrap",
+  "/public/analytics/disclosure",
+]) {
   assert.match(launchApi, new RegExp(route.replaceAll("/", "\\/")));
 }
 assert.doesNotMatch(launchApi, /axiosClient\.(?:post|put|patch|delete)/);
@@ -104,4 +118,4 @@ assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, route smoke inventory, immutable asset caching, media loading, enforceable build budgets and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
