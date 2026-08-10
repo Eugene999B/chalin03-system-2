@@ -7,27 +7,30 @@ const frontendRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".."
 );
-const chalinOneRoot = path.join(frontendRoot, "src/chalin-one");
 const jsxFiles = [
-  "content-studio/ContentStudioDashboard.jsx",
-  "content-studio/ContentStudioWorkspace.jsx",
-  "content-studio/ContentStudioPageManager.jsx",
-  "content-studio/ContentStudioNewsroomManager.jsx",
-  "content-studio/ContentStudioLeadershipManager.jsx",
-  "content-studio/ContentStudioGovernedManager.jsx",
-  "content-studio/ContentStudioPortfolioManagers.jsx",
-  "content-studio/ContentStudioCompanyInfoManager.jsx",
-  "content-studio/ContentStudioMediaManager.jsx",
-  "content-studio/ContentStudioFormManager.jsx",
-  "content-studio/ContentStudioOperationalManagers.jsx",
-  "ChalinOneStandaloneEntry.jsx",
-  "public-site/PublicWebsiteApp.jsx",
-  "public-site/PublicWebsiteStandaloneApp.jsx",
-  "public-site/PublicNavigation.jsx",
-];
+  "src/chalin-one/content-studio/ContentStudioDashboard.jsx",
+  "src/chalin-one/content-studio/ContentStudioWorkspace.jsx",
+  "src/chalin-one/content-studio/ContentStudioPageManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioNewsroomManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioLeadershipManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioGovernedManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioPortfolioManagers.jsx",
+  "src/chalin-one/content-studio/ContentStudioCompanyInfoManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioMediaManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioFormManager.jsx",
+  "src/chalin-one/content-studio/ContentStudioOperationalManagers.jsx",
+  "src/chalin-one/content-studio/ContentStudioLaunchReadiness.jsx",
+  "src/chalin-one/ChalinOneStandaloneEntry.jsx",
+  "src/chalin-one/PublicChalinOneEntry.jsx",
+  "src/chalin-one/ProtectedChalinOneEntry.jsx",
+  "src/OperationalAppRoot.jsx",
+  "src/public-site/PublicWebsiteApp.jsx",
+  "src/chalin-one/public-site/PublicWebsiteStandaloneApp.jsx",
+  "src/chalin-one/public-site/PublicNavigation.jsx",
+].map((fileName) => fileName.replace("src/public-site/", "src/chalin-one/public-site/"));
 
 for (const fileName of jsxFiles) {
-  const source = fs.readFileSync(path.join(chalinOneRoot, fileName), "utf8");
+  const source = fs.readFileSync(path.join(frontendRoot, fileName), "utf8");
   parse(source, {
     sourceType: "module",
     plugins: ["jsx"],
