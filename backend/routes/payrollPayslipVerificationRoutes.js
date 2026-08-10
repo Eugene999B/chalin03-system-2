@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -6,6 +7,20 @@ const { publicPayslipVerification } = require("../services/payrollPayslipService
 
 const router = express.Router();
 const LOGO_PATH = path.resolve(__dirname, "..", "assets", "chalin03-logo.png");
+
+const verificationLimiter = rateLimit({
+  windowMs: Math.max(1, Number(process.env.VERIFICATION_RATE_LIMIT_WINDOW_MINUTES) || 15) * 60 * 1000,
+  max: Math.max(20, Number(process.env.VERIFICATION_RATE_LIMIT_MAX) || 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    code: "VERIFICATION_RATE_LIMITED",
+    message: "Too many verification requests. Please wait briefly and try again.",
+  },
+});
+
+router.use(verificationLimiter);
 
 function cleanText(value, maxLength = 1000) {
   return String(value ?? "").trim().slice(0, maxLength);
@@ -131,6 +146,10 @@ router.get("/payroll-payslip/:reference", async (req, res, next) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    );
     return res.status(result.found ? 200 : 404).send(renderPage(result));
   } catch (error) {
     return next(error);
