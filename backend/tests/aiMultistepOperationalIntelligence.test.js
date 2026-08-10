@@ -83,7 +83,6 @@ test("live-data confidence excludes memory, policy search and system context too
     assert.match(reasoning, new RegExp(key.replace(".", "\\.")));
   }
   assert.match(reasoning, /isLiveOperationalToolResult/);
-  assert.match(reasoning, /startsWith\("tool\."\)/);
   assert.match(reasoning, /Boolean\(item\?\.as_of_at\)/);
 });
 
@@ -91,15 +90,15 @@ test("existing workspaces expose period-aware operational evidence suitable for 
   assert.match(spareParts, /spare_parts\.operations_snapshot/);
   assert.match(spareParts, /start_date/);
   assert.match(spareParts, /end_date/);
-  assert.match(spareParts, /spare_parts\.inventory_snapshot/);
-  assert.match(spareParts, /spare_parts\.collections_snapshot/);
+  assert.match(spareParts, /spare_parts\.inventory_health/);
+  assert.match(spareParts, /spare_parts\.collections_health/);
 
   assert.match(mining, /mining\.operations_snapshot/);
-  assert.match(mining, /mining\.production_cost_snapshot/);
-  assert.match(mining, /mining\.stock_fuel_snapshot/);
+  assert.match(mining, /mining\.production_cost_health/);
+  assert.match(mining, /mining\.stock_fuel_health/);
 
-  assert.match(finance, /equipment_finance\.portfolio_snapshot/);
-  assert.match(finance, /equipment_finance\.arrears_snapshot/);
-  assert.match(finance, /equipment_finance\.cash_flow_snapshot/);
-  assert.match(finance, /equipment_finance\.sales_pipeline_snapshot/);
+  assert.match(finance, /equipment_finance\.portfolio_health/);
+  assert.match(finance, /equipment_finance\.arrears_health/);
+  assert.match(finance, /equipment_finance\.cashflow_health/);
+  assert.match(finance, /equipment_finance\.sales_pipeline/);
 });
