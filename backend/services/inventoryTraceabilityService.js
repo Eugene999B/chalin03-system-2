@@ -189,15 +189,22 @@ function generateBatchCode(branchCode, now = new Date(), tokenFactory = () => se
 function assertTrackingConfiguration({ trackingMode, traceabilityState, productCode }) {
   const mode = normalizeTrackingMode(trackingMode);
   const state = normalizeTraceabilityState(traceabilityState);
+
+  // Phase 1/2 deliberately cannot claim checkout protection. Server-side Sales
+  // enforcement is introduced only in Phase 3; until then every configured
+  // serialized/batch product remains in setup mode.
+  if (state === TRACEABILITY_STATES.ENFORCED) {
+    const error = new Error(
+      "Serialized enforcement is not available until the Sales & Scanning phase is enabled server-side. Keep this product in setup for now."
+    );
+    error.statusCode = 409;
+    error.code = "TRACEABILITY_ENFORCEMENT_NOT_RELEASED";
+    throw error;
+  }
+
   const code = mode === TRACKING_MODES.QUANTITY && !cleanText(productCode)
     ? null
     : normalizeProductCode(productCode);
-
-  if (mode === TRACKING_MODES.QUANTITY && state === TRACEABILITY_STATES.ENFORCED) {
-    const error = new Error("Quantity-tracked products cannot use enforced unit traceability.");
-    error.code = "INVALID_TRACEABILITY_CONFIGURATION";
-    throw error;
-  }
 
   if (mode !== TRACKING_MODES.QUANTITY && !code) {
     const error = new Error("Batch/serialized products require a product traceability code.");
