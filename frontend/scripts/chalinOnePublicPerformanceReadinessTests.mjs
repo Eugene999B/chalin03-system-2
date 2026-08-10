@@ -56,6 +56,12 @@ assert.match(publicEntry, /PublicExperienceCompletion/);
 assert.match(publicEntry, /PublicTechnicalFinish/);
 assert.match(publicEntry, /PublicCorporateWebsiteApp/);
 assert.match(publicEntry, /publicBootPolish\.css/);
+assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicWorldEnhancements"\)/s);
+assert.match(publicEntry, /function DeferredPublicWorldEnhancements/);
+assert.match(publicEntry, /requestIdleCallback/);
+assert.match(publicEntry, /timeout: 1800/);
+assert.match(publicEntry, /<DeferredPublicWorldEnhancements \/>/);
+assert.doesNotMatch(publicEntry, /import PublicWorldEnhancements from/);
 assert.doesNotMatch(publicEntry, /AuthProvider|WorkspaceContextProvider|OperationalAppRoot|App\.jsx|index\.css|installCriticalFinanceWorkspacePreload/);
 assert.match(publicBootCss, /html,\s*body,\s*#root\s*\{\s*min-height: 100%/s);
 assert.match(publicBootCss, /body\s*\{\s*margin: 0;/s);
@@ -80,6 +86,7 @@ assert.match(headers, /\/index\.html\s+Cache-Control: no-store, max-age=0, must-
 assert.match(viteConfig, /manifest: true/);
 assert.match(packageJson, /verifyChalinOnePerformanceBudgets\.mjs/);
 assert.match(buildGate, /\.vite.*manifest\.json/s);
+assert.match(buildGate, /findHtmlEntryKey/);
 assert.match(buildGate, /OperationalAppRoot must remain outside the initial public entry graph/);
 assert.match(buildGate, /ProtectedChalinOneEntry must remain outside the initial public entry graph/);
 assert.match(buildGate, /entryReduction >= 60/);
@@ -118,4 +125,4 @@ assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, idle-loaded non-critical enhancements, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
