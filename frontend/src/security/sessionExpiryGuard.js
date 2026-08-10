@@ -97,7 +97,11 @@ export function clearStoredSession() {
   localStorage.removeItem("chalin03_active_context_equipment_hire");
 }
 
-export function installSessionExpiryGuard({ token, onExpire } = {}) {
+export function installSessionExpiryGuard({
+  token,
+  onExpire,
+  onSessionChanged,
+} = {}) {
   if (!token || typeof window === "undefined") {
     return () => {};
   }
@@ -119,8 +123,6 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
 
     if (window.location.pathname !== "/login") {
       window.location.replace("/login");
-    } else {
-      window.location.reload();
     }
   };
 
@@ -134,7 +136,7 @@ export function installSessionExpiryGuard({ token, onExpire } = {}) {
 
     if (storedToken !== token) {
       completed = true;
-      window.location.reload();
+      onSessionChanged?.({ token: storedToken });
       return true;
     }
 
