@@ -12,6 +12,7 @@ const {
   isChalinProductKnowledgeTurn,
   isLikelyLiveRecordRequest,
   productKnowledgeMessages,
+  safePublicContinuityMessages,
 } = require("./aiProductKnowledgeService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
@@ -20,12 +21,12 @@ const PUBLIC_SAFE_SOCIAL_MAX_LENGTH = 240;
 const PUBLIC_SAFE_GENERAL_MAX_LENGTH = 12000;
 const PUBLIC_SAFE_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|good\s+(?:morning|afternoon|evening)|greetings)\b|(?:how\s+(?:are|r)\s+you|how(?:'s|\s+is)\s+it\s+going|how\s+are\s+you\s+doing|what(?:'s|\s+is)\s+up)\b|(?:thanks|thank\s+you|thank\s+you\s+very\s+much|okay|ok|cool|great|nice|bye|goodbye|see\s+you)\b|(?:who\s+are\s+you|what\s+can\s+you\s+do|how\s+can\s+you\s+help(?:\s+me)?|can\s+you\s+help(?:\s+me)?)\b)[\s!.?,'-]*$/i;
 const PUBLIC_SAFE_GREETING_PREFIX = /^(?:hi|hello|hey|hiya|good\s+(?:morning|afternoon|evening)|greetings)\b/i;
-const PRIVATE_BUSINESS_MARKERS = /\b(?:account|applicant|approval|arrears|audit|balance|bank|branch|cash|collection|contract|credit|customer|database|debt|debtor|deduction|employee|equipment|expense|finance|hire|inventory|invoice|loan|mining|payment|payroll|profit|quotation|receipt|revenue|salary|sale|sales|security|site|staff|stock|supplier|transaction|worker|wage)\b/i;
+const PRIVATE_BUSINESS_MARKERS = /\b(?:account|applicant|approval|arrears|audit|balance|bank|branch|cash|collection|contract|credit|customer|database|debt|debtor|deduction|employee|equipment|expense|finance|hire|inventory|invoice|loan|mining|payment|payroll|profit|quotation|receipt|revenue|salary|sale|sales|security|site|staff|stock|store|supplier|transaction|worker|wage)\b/i;
 const SENSITIVE_LITERAL_MARKERS = /(?:https?:\/\/|www\.|@|\b(?:ghs|gh¢|usd|eur|gbp)\b|\d{3,})/i;
 const PUBLIC_SAFE_COPILOT_INSTRUCTION =
-  "This is a public-safe social conversation turn. Respond naturally and briefly as CHALIN Copilot. You may greet the user, acknowledge thanks, explain your general role, or offer help. Do not introduce, infer, summarize, request, or expose any CHALIN business, customer, staff, payroll, financial, operational, security, or other private facts. No company evidence is supplied or required for this social turn.";
+  "This is a public-safe social conversation turn. Respond naturally and briefly as CHALIN Copilot. Preserve the immediately relevant public-safe conversation thread when supplied. Do not introduce, infer, summarize, request, or expose any CHALIN business, customer, staff, payroll, financial, operational, security, or other private facts. No company evidence is supplied or required for this social turn.";
 const PUBLIC_SAFE_GENERAL_INSTRUCTION =
-  "This is a public-safe general reasoning turn. Respond as a highly capable CHALIN Copilot using general knowledge, clear reasoning, creativity and useful judgment. Answer the actual question directly and deeply enough to be useful. You have intentionally not been given prior private CHALIN evidence, private records or business tools for this turn. Do not imply access to private CHALIN facts and do not invent company-specific live data.";
+  "This is a public-safe general reasoning turn. Respond as a highly capable CHALIN Copilot using general knowledge, clear reasoning, creativity and useful judgment. Preserve the immediately relevant public-safe conversation thread when supplied, answer the actual question directly, and do not restart the discussion just because the newest sentence is short. You have intentionally not been given private CHALIN evidence, private records or business tools for this turn. Do not imply access to private CHALIN facts and do not invent company-specific live data.";
 
 class AiProviderError extends Error {
   constructor(message, { code = "AI_PROVIDER_ERROR", statusCode = 503, details = [] } = {}) {
@@ -128,6 +129,7 @@ function publicSafeMessages(messages = [], instruction = PUBLIC_SAFE_GENERAL_INS
   if (!prompt) return Object.freeze([]);
   return Object.freeze([
     Object.freeze({ role: "system", content: instruction }),
+    ...safePublicContinuityMessages(messages),
     Object.freeze({ role: "user", content: prompt }),
   ]);
 }
