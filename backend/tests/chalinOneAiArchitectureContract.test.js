@@ -88,7 +88,10 @@ test("OpenAI Responses adapter preserves CHALIN governance and privacy boundarie
   assert.match(openAiProvider, /stableSafetyIdentifier/);
   assert.match(openAiProvider, /Authorization: `Bearer \$\{apiKey\}`/);
   assert.match(openAiProvider, /AI_OPENAI_API_KEY_REQUIRED/);
-  assert.doesNotMatch(openAiProvider, /process\.env\s*\)|JSON\.stringify\(.*env|console\.log\(.*apiKey/s);
+  assert.match(openAiProvider, /const body = \{[\s\S]*?model,[\s\S]*?input: mapMessages\(messages\)[\s\S]*?store: false/);
+  assert.doesNotMatch(openAiProvider, /JSON\.stringify\(\s*(?:this\.)?env\s*\)/);
+  assert.doesNotMatch(openAiProvider, /body\.(?:env|OPENAI_API_KEY)|OPENAI_API_KEY\s*:/);
+  assert.doesNotMatch(openAiProvider, /console\.(?:log|info|warn|error)\([^\n]*apiKey/i);
   assert.match(openAiProvider, /GOVERNED TOOL RESULT DATA/);
   assert.match(openAiProvider, /aliases\.get\(alias\)/);
   assert.match(openAiProvider, /provider_store_enabled: false/);
