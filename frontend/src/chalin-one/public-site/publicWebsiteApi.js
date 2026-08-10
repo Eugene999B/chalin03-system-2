@@ -3,6 +3,9 @@ import {
   applyPublishedPublicMetadata,
 } from "./publicMetadataRuntime";
 import {
+  applyPublishedPublicStructuredData,
+} from "./publicStructuredDataRuntime";
+import {
   installPublicRedirectRuntime,
 } from "./publicRedirectRuntime";
 
@@ -26,6 +29,13 @@ function cleanParams(params = {}) {
   );
 }
 
+function applyPublishedRouteSeo(data, options = {}) {
+  if (!data) return data;
+  applyPublishedPublicMetadata(data, options);
+  applyPublishedPublicStructuredData(data, options);
+  return data;
+}
+
 export async function getPublicBootstrap({ signal } = {}) {
   return unwrap(
     await publicWebsiteClient.get("/public/content/bootstrap", { signal })
@@ -37,8 +47,7 @@ export async function getPublicHomepage({ signal } = {}) {
     const page = unwrap(
       await publicWebsiteClient.get("/public/content/homepage", { signal })
     );
-    if (page) applyPublishedPublicMetadata(page);
-    return page;
+    return applyPublishedRouteSeo(page);
   } catch (error) {
     if (error?.response?.status === 404) return null;
     throw error;
@@ -52,8 +61,7 @@ export async function getPublicPage(slug, { signal } = {}) {
       { signal }
     )
   );
-  if (page) applyPublishedPublicMetadata(page);
-  return page;
+  return applyPublishedRouteSeo(page);
 }
 
 export async function listPublicResource(resource, params = {}, { signal } = {}) {
@@ -98,12 +106,9 @@ export async function getPublicResource(resource, slug, { signal } = {}) {
       { signal }
     )
   );
-  if (item) {
-    applyPublishedPublicMetadata(item, {
-      type: resource === "news" ? "article" : "website",
-    });
-  }
-  return item;
+  return applyPublishedRouteSeo(item, {
+    type: resource === "news" ? "article" : "website",
+  });
 }
 
 export async function getPublicForm(slug, { signal } = {}) {
