@@ -52,14 +52,17 @@ test("stored requests are tamper checked and cannot contain administrator passwo
   );
 });
 
-test("only another active administrator may approve and their password is verified", () => {
+test("administrator may self-approve only return refunds and password verification remains mandatory", () => {
   const service = read("backend/services/operationalApprovalService.js");
 
   assert.match(service, /getRole\(req\) !== "admin"/);
-  assert.match(service, /request\.requested_by.*getUserId\(req\)/s);
-  assert.match(service, /bcrypt\.compare/);
+  assert.match(service, /const selfApproval =[\s\S]*request\.requested_by[\s\S]*getUserId\(req\)/);
+  assert.match(service, /const adminReturnSelfApproval =[\s\S]*getRole\(req\) === "admin"[\s\S]*request\.approval_kind === "return_refund"/);
+  assert.match(service, /if \(selfApproval && !adminReturnSelfApproval\)/);
   assert.match(service, /SELF_APPROVAL_FORBIDDEN/);
+  assert.match(service, /bcrypt\.compare/);
   assert.match(service, /userCanAccessBranch/);
+  assert.match(service, /administrator self-approved return\/refund/);
 });
 
 test("approved actions reuse the established sale and return transaction routes", () => {
