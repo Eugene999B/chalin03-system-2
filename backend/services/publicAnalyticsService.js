@@ -88,7 +88,7 @@ async function getPublicAnalyticsSummary({ days } = {}, connection = pool) {
   const safeDays = clampSummaryDays(days);
   const intervalDays = safeDays - 1;
 
-  const [[totals], [topRows], [trendRows]] = await Promise.all([
+  const [totalsResult, topResult, trendResult] = await Promise.all([
     connection.query(
       `SELECT
          COALESCE(SUM(page_views), 0) AS total_page_views,
@@ -121,6 +121,10 @@ async function getPublicAnalyticsSummary({ days } = {}, connection = pool) {
       [intervalDays]
     ),
   ]);
+
+  const totals = totalsResult?.[0]?.[0] || {};
+  const topRows = Array.isArray(topResult?.[0]) ? topResult[0] : [];
+  const trendRows = Array.isArray(trendResult?.[0]) ? trendResult[0] : [];
 
   return {
     days: safeDays,
