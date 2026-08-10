@@ -55,11 +55,16 @@ async function verifyIndependentReturnApprover(
   if (!approver || Number(approver.is_active) !== 1) {
     return { error: "Independent refund approver was not found or is inactive." };
   }
-  if (!["admin", "manager"].includes(String(approver.role || "").toLowerCase())) {
+  const approverRole = String(approver.role || "").toLowerCase();
+  if (!["admin", "manager"].includes(approverRole)) {
     return { error: "Refund approver must be an active administrator or manager." };
   }
-  if (Number(approver.id) === Number(currentUserId)) {
-    return { error: "The person recording the return cannot approve the same financial refund." };
+
+  const samePerson = Number(approver.id) === Number(currentUserId);
+  if (samePerson && approverRole !== "admin") {
+    return {
+      error: "Only a System Administrator can approve their own financial refund.",
+    };
   }
 
   if (
