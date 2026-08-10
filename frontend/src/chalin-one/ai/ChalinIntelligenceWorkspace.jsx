@@ -7,6 +7,10 @@ import {
 } from "react";
 import { Link } from "react-router";
 import { useAppearance } from "../../appearance/AppearanceContext";
+import {
+  loadAiChatPreferences,
+  saveAiChatPreferences,
+} from "../../appearance/aiChatPreferences";
 import { useAuth } from "../../context/AuthContext";
 import {
   AI_PERSONAS,
@@ -28,12 +32,6 @@ import {
   submitAiKnowledgeVersion,
 } from "./aiApi";
 import "./chalinIntelligence.css";
-
-const CHAT_SETTINGS_KEY = "chalin03:ai-chat-settings";
-const DEFAULT_CHAT_SETTINGS = Object.freeze({
-  sendWithEnter: true,
-  showTechnicalDetails: false,
-});
 
 const CHAT_STARTERS = Object.freeze({
   copilot: Object.freeze([
@@ -61,26 +59,6 @@ const EMPTY_KNOWLEDGE_FORM = Object.freeze({
   effective_from: "",
   expires_at: "",
 });
-
-function loadChatSettings() {
-  try {
-    const parsed = JSON.parse(globalThis.localStorage?.getItem(CHAT_SETTINGS_KEY) || "{}");
-    return {
-      sendWithEnter: parsed?.sendWithEnter !== false,
-      showTechnicalDetails: parsed?.showTechnicalDetails === true,
-    };
-  } catch {
-    return { ...DEFAULT_CHAT_SETTINGS };
-  }
-}
-
-function saveChatSettings(settings) {
-  try {
-    globalThis.localStorage?.setItem(CHAT_SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    // Local chat preferences remain usable for the active session.
-  }
-}
 
 function humanize(value) {
   return String(value || "")
@@ -721,7 +699,7 @@ export default function ChalinIntelligenceWorkspace() {
   const [sendError, setSendError] = useState("");
   const [tools, setTools] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chatSettings, setChatSettings] = useState(loadChatSettings);
+  const [chatSettings, setChatSettings] = useState(loadAiChatPreferences);
   const [conversationAction, setConversationAction] = useState(null);
   const [conversationActionBusy, setConversationActionBusy] = useState(false);
   const activePersonaRef = useRef(persona);
@@ -734,7 +712,7 @@ export default function ChalinIntelligenceWorkspace() {
   const usageAvailable = permissions.has("ai.usage.view");
 
   useEffect(() => {
-    saveChatSettings(chatSettings);
+    saveAiChatPreferences(chatSettings);
   }, [chatSettings]);
 
   useEffect(() => {
@@ -849,8 +827,7 @@ export default function ChalinIntelligenceWorkspace() {
     } catch (error) {
       if (activeChatEpochRef.current === epoch) setSendError(aiErrorMessage(error));
     } finally {
-      if (activeChatEpochRef.current === epoch) setSending(false);
-      else setSending(false);
+      setSending(false);
     }
   }
 
