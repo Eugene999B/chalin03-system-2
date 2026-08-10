@@ -198,6 +198,13 @@ const navigationSections = [
         permissions: ["workers.view"],
       },
       {
+        title: "Payroll Processing",
+        description: "Validate, approve, pay and reconcile protected salary cycles",
+        path: "/equipment-installment-finance/payroll",
+        icon: "💵",
+        permissions: ["payroll.view"],
+      },
+      {
         title: "Finance Settings",
         description: "Payment rules, reminders, alerts, receipts, delivery and legal terms",
         path: "/equipment-installment-finance/applications?stage=settings",
