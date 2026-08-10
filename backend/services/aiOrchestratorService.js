@@ -24,12 +24,18 @@ const {
   evidencePromptBlock,
   normalizeEvidenceList,
 } = require("./aiEvidenceService");
-const { searchApprovedKnowledge } = require("./aiKnowledgeService");
-const {
-  searchPublishedDocumentChunks,
-} = require("./aiDocumentIntelligenceService");
+const { searchGovernedKnowledge } = require("./aiKnowledgeRetrievalService");
 const { resolveAiScope } = require("./aiPermissionService");
 const { generateProviderResponse } = require("./aiProviderService");
+const {
+  assessEvidenceConfidence,
+  buildReasoningPlan,
+  citationIntegrity,
+  detectEvidenceTensions,
+  rankEvidence,
+  reasoningPromptBlock,
+  selectRelevantHistory,
+} = require("./aiReasoningService");
 const {
   AiSafetyError,
   hashText,
@@ -55,9 +61,9 @@ const {
 
 const PERSONA_INSTRUCTIONS = Object.freeze({
   copilot:
-    "You are Chalin Copilot. Use only supplied approved evidence and registered tool results. Respect the active workspace and location. Cite evidence as [E1], [E2], and clearly state limitations. Never claim to execute a business change.",
+    "You are Chalin Copilot, a highly capable governed business intelligence partner. Use only supplied approved evidence and registered tool results. Respect the active workspace and location. For current operational facts, prefer governed live tools over static knowledge. Cite evidence as [E1], [E2], distinguish facts from inference and unknowns, and clearly state limitations. Never claim to execute a business change.",
   executive:
-    "You are Chalin Executive. Treat the conversation as private executive intelligence. Use only supplied approved evidence and registered tools. Cite evidence as [E1], [E2]. Separate facts, calculations, assumptions and scenarios. Never claim to approve or execute an operational change.",
+    "You are Chalin Executive, a rigorous private executive intelligence partner. Use only supplied approved evidence and registered tools. For current operational facts, prefer governed live tools over static knowledge. Cite evidence as [E1], [E2]. Separate facts, calculations, assumptions, scenarios, risks and unknowns. Compare competing explanations before making recommendations. Never claim to approve or execute an operational change.",
   guide:
     "You are Chalin Guide. Use only published public evidence and public tools. Do not request or expose customer, staff, financial, operational or security data. Cite evidence as [E1], [E2] and offer human handoff when evidence is insufficient. Never claim to execute, approve or complete a business action.",
 });
@@ -87,34 +93,46 @@ function availableTools({ persona, scope, user }) {
     );
 }
 
+function compactToolResults(toolResults = []) {
+  return toolResults.map((result) => ({
+    tool_key: result?.tool?.key || "unknown",
+    output: safeSummary(result?.output || {}, 2200),
+    evidence_count: Array.isArray(result?.evidence) ? result.evidence.length : 0,
+  }));
+}
+
 function providerMessages({
   persona,
   history = [],
   prompt,
   evidence,
   toolResults = [],
+  reasoningBrief = "",
 }) {
+  const relevantHistory = selectRelevantHistory(history, prompt);
   const messages = [
     { role: "system", content: PERSONA_INSTRUCTIONS[persona] },
-    {
-      role: "system",
-      content: `Approved evidence for this request:\n${evidencePromptBlock(
-        evidence
-      )}`,
-    },
   ];
-  for (const item of history.slice(-20)) {
+  if (reasoningBrief) {
+    messages.push({ role: "system", content: reasoningBrief });
+  }
+  messages.push({
+    role: "system",
+    content: `Approved evidence for this request:\n${evidencePromptBlock(evidence)}`,
+  });
+
+  for (const item of relevantHistory) {
     if (!["user", "assistant"].includes(item.role)) continue;
     messages.push({ role: item.role, content: item.content });
   }
   messages.push({ role: "user", content: prompt });
-  for (const result of toolResults) {
+
+  if (toolResults.length > 0) {
     messages.push({
       role: "tool",
       content: JSON.stringify({
-        tool_key: result.tool.key,
-        output: result.output,
-        evidence: result.evidence,
+        note: "Governed tool outputs. Detailed source excerpts are in the approved evidence block.",
+        results: compactToolResults(toolResults),
       }),
     });
   }
@@ -127,7 +145,7 @@ async function conversationHistory(connection, conversationId) {
      FROM ai_messages
      WHERE conversation_id = ?
        AND message_role IN ('user', 'assistant')
-     ORDER BY id DESC LIMIT 20`,
+     ORDER BY id DESC LIMIT 40`,
     [conversationId]
   );
   return rows.reverse().map((row) => ({
@@ -246,10 +264,8 @@ async function ensureConversation({
       existing.persona !== persona ||
       existing.workspace_code !== scope.workspace_code ||
       Number(existing.branch_id || 0) !== Number(scope.branch_id || 0) ||
-      Number(existing.mining_site_id || 0) !==
-        Number(scope.mining_site_id || 0) ||
-      Number(existing.hire_location_id || 0) !==
-        Number(scope.hire_location_id || 0)
+      Number(existing.mining_site_id || 0) !== Number(scope.mining_site_id || 0) ||
+      Number(existing.hire_location_id || 0) !== Number(scope.hire_location_id || 0)
     ) {
       throw new AiOrchestratorError(
         "The conversation belongs to a different intelligence scope.",
@@ -298,31 +314,30 @@ async function retrieveAutomaticEvidence({
   query,
   persona,
   workspaceCode = null,
-  limit = 8,
+  limit = 12,
+  history = [],
 } = {}) {
-  const safeLimit = Math.max(1, Math.min(20, Number(limit) || 8));
-  const documentEvidence = await searchPublishedDocumentChunks({
-    query,
+  const safeLimit = Math.max(1, Math.min(12, Number(limit) || 12));
+  const plan = buildReasoningPlan({
+    prompt: query,
+    history,
     persona,
-    workspaceCode,
+  });
+  const batches = await Promise.all(
+    plan.retrieval_queries.map((focusedQuery) =>
+      searchGovernedKnowledge({
+        query: focusedQuery,
+        persona,
+        workspaceCode,
+        limit: Math.min(8, safeLimit),
+      })
+    )
+  );
+  return rankEvidence({
+    evidence: batches.flat(),
+    queries: plan.retrieval_queries,
     limit: safeLimit,
   });
-  const coveredSources = new Set(
-    documentEvidence.map((item) => String(item.source_ref || "").split("#", 1)[0])
-  );
-  const textEvidence = await searchApprovedKnowledge({
-    query,
-    persona,
-    workspaceCode,
-    limit: safeLimit,
-  });
-  const fallback = textEvidence.filter(
-    (item) => !coveredSources.has(String(item.source_ref || ""))
-  );
-  return normalizeEvidenceList([...documentEvidence, ...fallback]).slice(
-    0,
-    safeLimit
-  );
 }
 
 async function auditBlockedPrompt({
@@ -342,8 +357,8 @@ async function auditBlockedPrompt({
       error?.code === "AI_PROMPT_INJECTION_BLOCKED"
         ? "prompt_injection"
         : error?.code === "AI_SECRET_REQUEST_BLOCKED"
-        ? "secret_request"
-        : "other",
+          ? "secret_request"
+          : "other",
     action: "blocked",
     patternKeys: error?.details || [],
     redactionCount: redacted.redaction_count,
@@ -364,6 +379,24 @@ async function auditBlockedPrompt({
       prompt_sha256: hashText(String(message || "")),
     },
   }).catch(() => null);
+}
+
+function confidenceWithCitationReview(confidence, citationReview) {
+  if (
+    confidence?.level === "high" &&
+    citationReview?.citation_required &&
+    !citationReview?.citation_present
+  ) {
+    return Object.freeze({
+      ...confidence,
+      level: "medium",
+      reasons: Object.freeze([
+        ...(confidence.reasons || []),
+        "the final answer did not cite the approved evidence inline",
+      ].slice(0, 5)),
+    });
+  }
+  return confidence;
 }
 
 async function runAiConversationTurn({
@@ -420,11 +453,25 @@ async function runAiConversationTurn({
       safeSummary: promptInspection.safe_summary,
     });
 
+    const reasoningPlan = buildReasoningPlan({
+      prompt: promptInspection.text,
+      history,
+      persona: normalizedPersona,
+    });
     const knowledgeEvidence = await retrieveAutomaticEvidence({
       query: promptInspection.text,
       persona: normalizedPersona,
       workspaceCode: scope.workspace_code,
-      limit: 8,
+      limit: 12,
+      history,
+    });
+    let finalEvidence = knowledgeEvidence;
+    let tensions = detectEvidenceTensions(finalEvidence);
+    let confidence = assessEvidenceConfidence({
+      evidence: finalEvidence,
+      tensions,
+      liveDataRequired: reasoningPlan.live_data_required,
+      toolResults: [],
     });
     const tools = availableTools({
       persona: normalizedPersona,
@@ -435,7 +482,12 @@ async function runAiConversationTurn({
       persona: normalizedPersona,
       history,
       prompt: promptInspection.text,
-      evidence: knowledgeEvidence,
+      evidence: finalEvidence,
+      reasoningBrief: reasoningPromptBlock({
+        plan: reasoningPlan,
+        confidence,
+        tensions,
+      }),
     });
     const budget = buildRequestBudget({
       messages: initialMessages,
@@ -494,18 +546,34 @@ async function runAiConversationTurn({
         assistantMessageId: assistantMessage.id,
         budget,
       });
-      const combinedEvidence = normalizeEvidenceList([
-        ...knowledgeEvidence,
-        ...toolResults.flatMap((result) => result.evidence || []),
-      ]);
+      finalEvidence = rankEvidence({
+        evidence: [
+          ...knowledgeEvidence,
+          ...toolResults.flatMap((result) => result.evidence || []),
+        ],
+        queries: reasoningPlan.retrieval_queries,
+        limit: 12,
+      });
+      tensions = detectEvidenceTensions(finalEvidence);
+      confidence = assessEvidenceConfidence({
+        evidence: finalEvidence,
+        tensions,
+        liveDataRequired: reasoningPlan.live_data_required,
+        toolResults,
+      });
       finalResult = await generateProviderResponse({
         provider,
         messages: providerMessages({
           persona: normalizedPersona,
           history,
           prompt: promptInspection.text,
-          evidence: combinedEvidence,
+          evidence: finalEvidence,
           toolResults,
+          reasoningBrief: reasoningPromptBlock({
+            plan: reasoningPlan,
+            confidence,
+            tensions,
+          }),
         }),
         tools: [],
         maxOutputTokens: budget.maximum_output_tokens,
@@ -533,10 +601,19 @@ async function runAiConversationTurn({
       );
     }
 
-    const finalEvidence = normalizeEvidenceList([
-      ...knowledgeEvidence,
-      ...toolResults.flatMap((result) => result.evidence || []),
-    ]);
+    const citationReview = citationIntegrity(finalResult.text, finalEvidence);
+    if (!citationReview.valid) {
+      throw new AiOrchestratorError(
+        "The AI provider cited evidence that was not supplied to the answer.",
+        {
+          code: "AI_CITATION_INTEGRITY_FAILED",
+          statusCode: 502,
+          details: citationReview.unsupported,
+        }
+      );
+    }
+    confidence = confidenceWithCitationReview(confidence, citationReview);
+
     await persistEvidence({
       messageId: assistantMessage.id,
       evidence: finalEvidence,
@@ -573,6 +650,12 @@ async function runAiConversationTurn({
         output_tokens: totalUsage.output_tokens,
         tool_count: toolResults.length,
         evidence_count: finalEvidence.length,
+        reasoning_intent: reasoningPlan.intent,
+        reasoning_confidence: confidence.level,
+        live_data_required: reasoningPlan.live_data_required,
+        live_tools_used: confidence.live_tools_used,
+        tension_count: tensions.length,
+        citation_present: citationReview.citation_present,
         prompt_sha256: promptInspection.input_sha256,
       },
     });
@@ -584,6 +667,15 @@ async function runAiConversationTurn({
       answer: finalResult.text,
       evidence: finalEvidence,
       citations: evidenceCitationMap(finalEvidence),
+      reasoning: Object.freeze({
+        intent: reasoningPlan.intent,
+        live_data_required: reasoningPlan.live_data_required,
+        retrieval_query_count: reasoningPlan.retrieval_queries.length,
+        evidence_confidence: confidence,
+        tensions,
+        citation_integrity: citationReview,
+        hidden_chain_of_thought_exposed: false,
+      }),
       provider: Object.freeze({
         key: finalResult.provider_key,
         model: finalResult.model_key,
@@ -645,6 +737,8 @@ module.exports = {
   PERSONA_INSTRUCTIONS,
   auditBlockedPrompt,
   availableTools,
+  compactToolResults,
+  confidenceWithCitationReview,
   conversationHistory,
   ensureConversation,
   executeRequestedTools,

@@ -48,12 +48,21 @@ test("provider message composition sends the current prompt exactly once", () =>
   assert.match(messages[1].content, /Inspection is required/);
 });
 
-test("tool result messages remain bounded to controlled output and evidence", () => {
+test("tool result messages remain bounded while governed evidence stays in the evidence block", () => {
   const messages = providerMessages({
     persona: "copilot",
     history: [],
     prompt: "Search the knowledge base.",
-    evidence: [],
+    evidence: [
+      {
+        source_type: "knowledge.policy",
+        source_ref: "policy",
+        source_version: "1",
+        label: "Policy",
+        excerpt_text: "Governed policy evidence.",
+        classification: "internal",
+      },
+    ],
     toolResults: [
       {
         tool: { key: "knowledge.search" },
@@ -69,12 +78,22 @@ test("tool result messages remain bounded to controlled output and evidence", ()
       },
     ],
   });
+  const evidenceMessage = messages.find(
+    (message) => message.role === "system" && /Approved evidence/.test(message.content)
+  );
+  assert.ok(evidenceMessage);
+  assert.match(evidenceMessage.content, /\[E1\]/);
+  assert.match(evidenceMessage.content, /Governed policy evidence/);
+
   const toolMessage = messages.find((message) => message.role === "tool");
   assert.ok(toolMessage);
   const parsed = JSON.parse(toolMessage.content);
-  assert.equal(parsed.tool_key, "knowledge.search");
-  assert.equal(parsed.output.result_count, 1);
-  assert.equal(parsed.evidence[0].source_ref, "policy");
+  assert.match(parsed.note, /Detailed source excerpts are in the approved evidence block/i);
+  assert.equal(parsed.results.length, 1);
+  assert.equal(parsed.results[0].tool_key, "knowledge.search");
+  assert.equal(parsed.results[0].output.result_count, 1);
+  assert.equal(parsed.results[0].evidence_count, 1);
+  assert.equal("evidence" in parsed.results[0], false);
   assert.equal("req" in parsed, false);
   assert.equal("pool" in parsed, false);
 });
