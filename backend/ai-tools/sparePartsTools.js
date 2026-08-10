@@ -23,6 +23,24 @@ const DATE_PROPERTIES = Object.freeze({
   },
 });
 
+function utcDateOnly(now = new Date()) {
+  return now.toISOString().slice(0, 10);
+}
+
+function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
+  const normalized = input && typeof input === "object" ? { ...input } : {};
+  if (
+    viewKey === "operations" &&
+    !String(normalized.start_date || "").trim() &&
+    !String(normalized.end_date || "").trim()
+  ) {
+    const today = utcDateOnly(now);
+    normalized.start_date = today;
+    normalized.end_date = today;
+  }
+  return normalized;
+}
+
 function evidenceExcerpt(viewKey, output) {
   if (viewKey === "inventory") {
     return JSON.stringify({
@@ -90,7 +108,8 @@ function buildAggregateEvidence(viewKey, output) {
 }
 
 async function executeView({ input, context, loader, projector, viewKey }) {
-  const { intelligence } = await loader({ context, input });
+  const effectiveInput = withOperationsDefaultWindow(viewKey, input);
+  const { intelligence } = await loader({ context, input: effectiveInput });
   const output = projector(intelligence, context);
   return {
     ...output,
@@ -129,7 +148,7 @@ function registerSparePartsAiTools(
     key: "spare_parts.operations_snapshot",
     title: "Spare Parts operations snapshot",
     description:
-      "Returns branch-scoped aggregate sales, collections, inventory, expense, purchase, return and audit health without customer identities or raw rows.",
+      "Returns branch-scoped aggregate sales, collections, inventory, expense, purchase, return and audit health without customer identities or raw rows. When no date window is supplied, the operations snapshot defaults to the current UTC business date so natural current/today questions do not accidentally return a 30-day range.",
     handler: async ({ input, context }) =>
       executeView({
         input,
@@ -183,4 +202,6 @@ module.exports = {
   evidenceExcerpt,
   executeView,
   registerSparePartsAiTools,
+  utcDateOnly,
+  withOperationsDefaultWindow,
 };
