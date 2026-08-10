@@ -9,7 +9,6 @@ import "../styles/commandGateExtensions.css";
 import "../styles/mobileExperience.css";
 import "../styles/adminMobileHotfix.css";
 import "../styles/appearance.css";
-import "./ai/intelligenceOverhaul.css";
 import "./ai/providerControlOverhaul.css";
 
 const AiProviderControlLauncher = lazy(() =>
