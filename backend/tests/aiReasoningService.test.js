@@ -227,6 +227,7 @@ test("reasoning prompt requires disciplined answers without exposing hidden chai
   const prompt = reasoningPromptBlock({ plan, confidence, tensions: [] });
 
   assert.match(prompt, /do not reveal hidden chain-of-thought/i);
-  assert.match(prompt, /facts from inference, assumptions and unknowns/i);
+  assert.match(prompt, /inference, assumptions, scenarios and unknowns/i);
+  assert.match(prompt, /do not present them as facts/i);
   assert.match(prompt, /Recommendations must state the evidence/i);
 });
