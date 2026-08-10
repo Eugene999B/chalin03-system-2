@@ -18,6 +18,8 @@ const knowledgeRoutes = read("backend/routes/aiKnowledgeRoutes.js");
 const featureFlags = read("backend/services/featureFlagService.js");
 const registry = read("backend/services/aiToolRegistry.js");
 const provider = read("backend/services/aiProviderService.js");
+const providerRegistration = read("backend/ai-providers/registerAiProviders.js");
+const openAiProvider = read("backend/ai-providers/openAiResponsesProvider.js");
 const orchestrator = read("backend/services/aiOrchestratorService.js");
 const reasoning = read("backend/services/aiReasoningService.js");
 const retrieval = read("backend/services/aiKnowledgeRetrievalService.js");
@@ -67,15 +69,35 @@ test("tool registry denies direct database access and hides risk-four execution"
   assert.doesNotMatch(foundationTools, /config\/db|mysql2|pool\.query|connection\.query/);
 });
 
-test("provider layer has no active network adapter by default", () => {
+test("provider service defaults disabled and keeps external networking isolated in explicit adapters", () => {
   assert.match(provider, /class DisabledAiProvider/);
   assert.match(provider, /AI_PROVIDER_DISABLED/);
   assert.match(provider, /AI_PROVIDER_NOT_REGISTERED/);
   assert.match(provider, /AI_MOCK_PROVIDER_BLOCKED/);
   assert.doesNotMatch(provider, /\bfetch\s*\(|axios|https\.request|http\.request/);
+  assert.match(providerRegistration, /registry\.register\("openai"/);
+  assert.match(aiRoutes, /registerBuiltInAiProviders\(\)/);
+  assert.match(aiRoutes, /process\.env\.AI_PROVIDER \|\| "disabled"/);
 });
 
-test("orchestrator composes safety, budgets, governed retrieval, reasoning, tools, evidence and audit", () => {
+test("OpenAI Responses adapter preserves CHALIN governance and privacy boundaries", () => {
+  assert.match(openAiProvider, /https:\/\/api\.openai\.com\/v1\/responses/);
+  assert.match(openAiProvider, /DEFAULT_OPENAI_MODEL = "gpt-5\.6"/);
+  assert.match(openAiProvider, /store: false/);
+  assert.match(openAiProvider, /strict: false/);
+  assert.match(openAiProvider, /stableSafetyIdentifier/);
+  assert.match(openAiProvider, /Authorization: `Bearer \$\{apiKey\}`/);
+  assert.match(openAiProvider, /AI_OPENAI_API_KEY_REQUIRED/);
+  assert.match(openAiProvider, /const body = \{[\s\S]*?model,[\s\S]*?input: mapMessages\(messages\)[\s\S]*?store: false/);
+  assert.doesNotMatch(openAiProvider, /JSON\.stringify\(\s*(?:this\.)?env\s*\)/);
+  assert.doesNotMatch(openAiProvider, /body\.(?:env|OPENAI_API_KEY)|OPENAI_API_KEY\s*:/);
+  assert.doesNotMatch(openAiProvider, /console\.(?:log|info|warn|error)\([^\n]*apiKey/i);
+  assert.match(openAiProvider, /GOVERNED TOOL RESULT DATA/);
+  assert.match(openAiProvider, /aliases\.get\(alias\)/);
+  assert.match(openAiProvider, /provider_store_enabled: false/);
+});
+
+test("orchestrator composes safety, budgets, governed retrieval, reasoning, tools, provider context, evidence and audit", () => {
   for (const marker of [
     "inspectPrompt",
     "buildRequestBudget",
@@ -86,6 +108,7 @@ test("orchestrator composes safety, budgets, governed retrieval, reasoning, tool
     "assessEvidenceConfidence",
     "citationIntegrity",
     "availableTools",
+    "providerContextForTurn",
     "generateProviderResponse",
     "executeRequestedTools",
     "persistEvidence",
@@ -95,6 +118,8 @@ test("orchestrator composes safety, budgets, governed retrieval, reasoning, tool
   ]) {
     assert.match(orchestrator, new RegExp(marker));
   }
+  assert.match(orchestrator, /costMicros: totalUsage\.cost_micros/);
+  assert.match(orchestrator, /provider_store_enabled/);
   assert.match(retrieval, /searchPublishedDocumentChunks/);
   assert.match(retrieval, /searchApprovedKnowledge/);
   assert.match(reasoning, /hidden chain-of-thought/i);

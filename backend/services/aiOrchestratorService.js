@@ -307,6 +307,20 @@ function sumProviderUsage(results) {
       (sum, result) => sum + Number(result?.latency_ms || 0),
       0
     ),
+    cost_micros: results.reduce(
+      (sum, result) => sum + Number(result?.cost_micros || 0),
+      0
+    ),
+  });
+}
+
+function providerContextForTurn({ req, persona, scope, reasoningPlan }) {
+  return Object.freeze({
+    persona,
+    intent: reasoningPlan?.intent || "lookup",
+    live_data_required: reasoningPlan?.live_data_required === true,
+    workspace_code: scope?.workspace_code || null,
+    safety_identifier: hashText(`chalin-one-ai-user:${req?.user?.id || "unknown"}`),
   });
 }
 
@@ -458,6 +472,12 @@ async function runAiConversationTurn({
       history,
       persona: normalizedPersona,
     });
+    const providerContext = providerContextForTurn({
+      req,
+      persona: normalizedPersona,
+      scope,
+      reasoningPlan,
+    });
     const knowledgeEvidence = await retrieveAutomaticEvidence({
       query: promptInspection.text,
       persona: normalizedPersona,
@@ -518,6 +538,7 @@ async function runAiConversationTurn({
       messages: initialMessages,
       tools,
       maxOutputTokens: budget.maximum_output_tokens,
+      providerContext,
       env,
     });
     providerRounds.push(initialResult);
@@ -577,6 +598,7 @@ async function runAiConversationTurn({
         }),
         tools: [],
         maxOutputTokens: budget.maximum_output_tokens,
+        providerContext,
         env,
       });
       providerRounds.push(finalResult);
@@ -629,7 +651,7 @@ async function runAiConversationTurn({
       workspaceCode: scope.workspace_code,
       inputTokens: totalUsage.input_tokens,
       outputTokens: totalUsage.output_tokens,
-      costMicros: 0,
+      costMicros: totalUsage.cost_micros,
       requestId: req.requestId,
     });
     await writeAiAuditEvent({
@@ -646,8 +668,12 @@ async function runAiConversationTurn({
         provider_key: finalResult.provider_key,
         model_key: finalResult.model_key,
         provider_round_count: providerRounds.length,
+        provider_response_id: finalResult.provider_response_id,
+        provider_reasoning_effort: finalResult.reasoning_effort,
+        provider_store_enabled: finalResult.provider_store_enabled,
         input_tokens: totalUsage.input_tokens,
         output_tokens: totalUsage.output_tokens,
+        cost_micros: totalUsage.cost_micros,
         tool_count: toolResults.length,
         evidence_count: finalEvidence.length,
         reasoning_intent: reasoningPlan.intent,
@@ -680,12 +706,14 @@ async function runAiConversationTurn({
         key: finalResult.provider_key,
         model: finalResult.model_key,
         finish_reason: finalResult.finish_reason,
+        reasoning_effort: finalResult.reasoning_effort,
+        provider_side_storage_enabled: finalResult.provider_store_enabled,
         rounds: providerRounds.length,
       }),
       usage: Object.freeze({
         input_tokens: totalUsage.input_tokens,
         output_tokens: totalUsage.output_tokens,
-        cost_micros: 0,
+        cost_micros: totalUsage.cost_micros,
       }),
     });
   } catch (error) {
@@ -743,6 +771,7 @@ module.exports = {
   ensureConversation,
   executeRequestedTools,
   persistEvidence,
+  providerContextForTurn,
   providerMessages,
   retrieveAutomaticEvidence,
   runAiConversationTurn,

@@ -43,8 +43,12 @@ const { registerHireAiTools } = require("../ai-tools/hireTools");
 const {
   registerEquipmentFinanceAiTools,
 } = require("../ai-tools/equipmentFinanceTools");
+const {
+  registerBuiltInAiProviders,
+} = require("../ai-providers/registerAiProviders");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
 
+registerBuiltInAiProviders();
 registerFoundationAiTools();
 registerSparePartsAiTools();
 registerCustomerIdentityAiTools();
@@ -232,12 +236,14 @@ router.get(
   requireAiPermission("ai.use"),
   asyncHandler(async (req, res) => {
     const flags = getFeatureSnapshot();
+    const providerKey =
+      cleanProviderKey(process.env.AI_PROVIDER || "disabled") || "disabled";
     return success(res, req, {
       flags,
       provider: {
-        key:
-          cleanProviderKey(process.env.AI_PROVIDER || "disabled") ||
-          "disabled",
+        key: providerKey,
+        configured: providerKey !== "disabled",
+        provider_side_storage_enabled: false,
         secret_values_exposed: false,
       },
       permissions: getAiPermissionSnapshot(req.user),
