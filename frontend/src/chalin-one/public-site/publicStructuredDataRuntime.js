@@ -1,4 +1,4 @@
-import { safeHttpsMetadataUrl } from "./publicMetadataRuntime";
+import { safeHttpsMetadataUrl } from "./publicMetadataRuntime.js";
 
 const SCRIPT_ID = "chalin-one-route-structured-data";
 const routeGraphs = new Map();
