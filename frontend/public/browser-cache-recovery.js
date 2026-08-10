@@ -1,155 +1,60 @@
 (() => {
-  const STATE_KEY = "chalin03:asset-recovery-state:v35";
-  const RECOVERY_PARAM = "__chalin03_recovery";
-  const RETURN_PARAM = "__chalin03_return";
-  const INTERNAL_PARAMS = [
-    RECOVERY_PARAM,
-    RETURN_PARAM,
-    "__chalin03_sw_recovery",
-    "__chalin03_sw_release",
-  ];
-  const WINDOW_MS = 2 * 60 * 1000;
-  const MAX_ATTEMPTS = 5;
+  const PANEL_ID = "chalin03-update-recovery";
   let recoveryStarted = false;
 
-  function removeInternalParams(url) {
-    INTERNAL_PARAMS.forEach((name) => url.searchParams.delete(name));
-    return url;
-  }
+  function showUpdateAvailable(reason = "new-release") {
+    let panel = document.getElementById(PANEL_ID);
+    if (panel) return panel;
 
-  function safeReturnTarget(value) {
-    if (!value) return "/";
+    panel = document.createElement("aside");
+    panel.id = PANEL_ID;
+    panel.setAttribute("role", "status");
+    panel.setAttribute("aria-live", "polite");
+    panel.style.cssText =
+      "position:fixed;right:18px;bottom:18px;z-index:2147483647;" +
+      "width:min(390px,calc(100vw - 36px));box-sizing:border-box;" +
+      "background:#07182c;color:#fff;border:1px solid rgba(255,255,255,.16);" +
+      "border-radius:16px;padding:16px 18px;box-shadow:0 18px 48px rgba(7,24,44,.28);" +
+      "font-family:Inter,Arial,sans-serif;line-height:1.45;";
 
-    try {
-      const url = removeInternalParams(
-        new URL(String(value), window.location.origin)
-      );
-      if (url.origin !== window.location.origin) return "/";
-      if (!url.pathname.startsWith("/") || url.pathname.startsWith("//")) {
-        return "/";
-      }
-      if (
-        url.pathname.startsWith("/assets/") ||
-        /\.(?:js|mjs|css|wasm)$/i.test(url.pathname)
-      ) {
-        return "/";
-      }
-      return `${url.pathname}${url.search}${url.hash}` || "/";
-    } catch {
-      return "/";
-    }
-  }
+    const heading = document.createElement("strong");
+    heading.textContent = "CHALIN update available";
+    heading.style.cssText = "display:block;font-size:15px;margin-bottom:6px";
 
-  function requestedReturnTarget() {
-    const current = new URL(window.location.href);
-    const supplied = current.searchParams.get(RETURN_PARAM);
-    if (supplied) return safeReturnTarget(supplied);
-    return safeReturnTarget(
-      `${current.pathname}${current.search}${current.hash}`
-    );
-  }
+    const copy = document.createElement("span");
+    copy.textContent =
+      "A newer application file is available. CHALIN will not refresh or interrupt your work automatically. Reload only when you are ready.";
+    copy.style.cssText = "display:block;font-size:13px;color:#d9e3ef";
 
-  function restoreReturnTarget() {
-    const current = new URL(window.location.href);
-    const supplied = current.searchParams.get(RETURN_PARAM);
-    if (!supplied) return;
+    const detail = document.createElement("small");
+    detail.textContent = `Detected: ${String(reason || "update")}`;
+    detail.style.cssText = "display:block;margin-top:7px;color:#9fb1c7";
 
-    const target = safeReturnTarget(supplied);
-    window.history.replaceState(window.history.state, "", target);
-  }
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;gap:8px;margin-top:12px;flex-wrap:wrap";
 
-  function readState() {
-    try {
-      const parsed = JSON.parse(sessionStorage.getItem(STATE_KEY) || "null");
-      if (
-        parsed &&
-        Date.now() - Number(parsed.startedAt || 0) < WINDOW_MS
-      ) {
-        return {
-          startedAt: Number(parsed.startedAt),
-          attempts: Number(parsed.attempts || 0),
-        };
-      }
-    } catch {
-      // Restricted browser storage must not block recovery.
-    }
+    const reload = document.createElement("button");
+    reload.type = "button";
+    reload.textContent = "Reload when ready";
+    reload.style.cssText =
+      "border:0;border-radius:9px;padding:9px 12px;background:#fff;color:#07182c;" +
+      "font:inherit;font-size:13px;font-weight:800;cursor:pointer";
+    reload.addEventListener("click", () => {
+      window.location.reload();
+    });
 
-    return { startedAt: Date.now(), attempts: 0 };
-  }
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.textContent = "Keep working";
+    dismiss.style.cssText =
+      "border:1px solid rgba(255,255,255,.24);border-radius:9px;padding:9px 12px;" +
+      "background:transparent;color:#fff;font:inherit;font-size:13px;font-weight:700;cursor:pointer";
+    dismiss.addEventListener("click", () => panel.remove());
 
-  function writeState(state) {
-    try {
-      sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
-    } catch {
-      // Recovery continues without session storage.
-    }
-  }
-
-  function clearState() {
-    try {
-      sessionStorage.removeItem(STATE_KEY);
-    } catch {
-      // Nothing else is required.
-    }
-
-    document.getElementById("chalin03-update-recovery")?.remove();
-  }
-
-  function recoveryUrl() {
-    const url = new URL("/", window.location.origin);
-    url.searchParams.set(RECOVERY_PARAM, String(Date.now()));
-    url.searchParams.set(RETURN_PARAM, requestedReturnTarget());
-    return url.toString();
-  }
-
-  function showStatus(message, allowRetry = false) {
-    let panel = document.getElementById("chalin03-update-recovery");
-
-    if (!panel) {
-      panel = document.createElement("main");
-      panel.id = "chalin03-update-recovery";
-      panel.setAttribute("role", "status");
-      panel.setAttribute("aria-live", "assertive");
-      panel.style.cssText =
-        "position:fixed;inset:0;z-index:2147483647;display:grid;" +
-        "place-items:center;padding:24px;box-sizing:border-box;" +
-        "background:#f5f7fb;color:#10213b;font-family:Arial,sans-serif;" +
-        "text-align:center;";
-      document.body.appendChild(panel);
-    }
-
-    panel.replaceChildren();
-    const section = document.createElement("section");
-    section.style.cssText =
-      "max-width:560px;background:#fff;border:1px solid #dbe3ef;" +
-      "border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(16,33,59,.14)";
-
-    const heading = document.createElement("h1");
-    heading.style.cssText = "margin:0 0 12px;font-size:1.55rem";
-    heading.textContent = "Updating Chalin 03";
-
-    const paragraph = document.createElement("p");
-    paragraph.style.cssText = "margin:0;line-height:1.6;color:#526178";
-    paragraph.textContent = message;
-
-    section.append(heading, paragraph);
-
-    if (allowRetry) {
-      const button = document.createElement("button");
-      button.id = "chalin03-update-retry";
-      button.type = "button";
-      button.style.cssText =
-        "margin-top:18px;border:0;border-radius:10px;padding:11px 18px;" +
-        "background:#07182c;color:#fff;font:inherit;font-weight:700;cursor:pointer";
-      button.textContent = "Retry now";
-      button.addEventListener("click", () => {
-        clearState();
-        window.location.replace(recoveryUrl());
-      });
-      section.appendChild(button);
-    }
-
-    panel.appendChild(section);
+    actions.append(reload, dismiss);
+    panel.append(heading, copy, detail, actions);
+    document.body.appendChild(panel);
+    return panel;
   }
 
   async function clearRuntimeCaches() {
@@ -161,9 +66,7 @@
           .getRegistrations()
           .then((registrations) =>
             Promise.all(
-              registrations.map((registration) =>
-                registration.unregister()
-              )
+              registrations.map((registration) => registration.unregister())
             )
           )
           .catch(() => undefined)
@@ -204,37 +107,22 @@
   }
 
   async function recover(reason = "asset-mismatch") {
-    if (recoveryStarted) return;
-    recoveryStarted = true;
-
-    const state = readState();
-    state.attempts += 1;
-    writeState(state);
-
-    if (state.attempts > MAX_ATTEMPTS) {
-      showStatus(
-        "The latest files are still being published. Your business records are safe. Select Retry now after a moment.",
-        true
-      );
-      recoveryStarted = false;
+    if (recoveryStarted) {
+      showUpdateAvailable(reason);
       return;
     }
 
-    showStatus(
-      `A retired browser file was detected (${reason}). Loading the current release automatically without losing your page.`
-    );
-
+    recoveryStarted = true;
     await clearRuntimeCaches();
-
-    window.setTimeout(() => {
-      window.location.replace(recoveryUrl());
-    }, Math.min(600 * state.attempts, 3000));
+    showUpdateAvailable(reason);
+    recoveryStarted = false;
   }
 
-  restoreReturnTarget();
-
   window.__chalin03RecoverFromAssetMismatch = recover;
-  window.__chalin03MarkBootHealthy = clearState;
+  window.__chalin03MarkBootHealthy = () => {
+    // A healthy boot never forces navigation. Existing manual update notices
+    // may remain until the user dismisses them or chooses to reload.
+  };
 
   window.addEventListener(
     "error",

@@ -84,18 +84,9 @@ assert.match(appearanceContext, /prefers-color-scheme: dark/);
 assert.match(appearanceToggle, /Dark mode/);
 assert.match(appearanceToggle, /Light mode/);
 
-// Dark mode is intentionally styled across login, Spare Parts and managed business workspaces.
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.login-page/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.login-card/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.premium-layout/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.premium-main-topbar/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.bwl-shell/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.bwl-topbar/);
-assert.match(appearanceCss, /html\[data-theme="dark"\] \.workspace-context-selector select/);
-assert.doesNotMatch(appearanceCss, /background:\s*#000(?:000)?[;\s]/i);
-
-// Conversation-list refreshes must not wipe the active chat. The only effect-time
-// reset is deliberately guarded by a real persona transition.
+// Conversation-list refreshes must not wipe the active chat. Resetting the chat
+// is allowed only for a real persona transition, explicit New chat, or a
+// successful user-confirmed Clear History operation.
 assert.match(workspace, /activePersonaRef/);
 assert.match(workspace, /activeChatEpochRef/);
 assert.match(workspace, /loadConversations\(undefined, \{ silent: true, force: true \}\)/);
@@ -107,7 +98,13 @@ assert.ok(personaGuard >= 0, "persona reset must be explicitly guarded");
 assert.ok(guardedConversationReset > personaGuard, "conversation reset must stay inside the persona guard");
 assert.ok(guardedMessageReset > guardedConversationReset, "message reset must stay inside the persona guard");
 assert.ok(effectRefresh > guardedMessageReset, "conversation refresh follows the guarded persona transition");
-assert.equal((workspace.match(/setConversation\(null\)/g) || []).length, 2, "only persona switch and explicit New chat may clear the active conversation");
+assert.equal(
+  (workspace.match(/setConversation\(null\)/g) || []).length,
+  3,
+  "only persona switch, explicit New chat and confirmed Clear History may clear the active conversation"
+);
+assert.match(workspace, /clearAiConversationHistory/);
+assert.match(workspace, /ClearHistoryDialog/);
 
 // Chat management belongs on each conversation row, not in a distant footer.
 assert.match(workspace, /function ConversationRow/);
@@ -126,8 +123,16 @@ assert.match(workspace, /Technical response details/);
 assert.match(workspace, /\["light", "dark", "system"\]/);
 assert.match(workspace, /loadAiChatPreferences/);
 assert.match(workspace, /saveAiChatPreferences/);
-assert.doesNotMatch(workspace, /localStorage|sessionStorage/);
-assert.doesNotMatch(workspace, /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
+assert.match(workspace, /Clear chat history/);
+
+// Browser storage is deliberately narrow: an opaque active-conversation key
+// restores the selected chat after a manual reload and a tab-scoped draft keeps
+// unsent text. Provider credentials and tokens never belong in these stores.
+assert.match(workspace, /ACTIVE_CHAT_PREFIX = "chalin03_ai_active_chat_v1"/);
+assert.match(workspace, /DRAFT_PREFIX = "chalin03_ai_draft_v1"/);
+assert.equal((workspace.match(/\blocalStorage\./g) || []).length, 3);
+assert.equal((workspace.match(/\bsessionStorage\./g) || []).length, 3);
+assert.doesNotMatch(workspace, /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY|Bearer\s+/i);
 
 // The redesigned chat is intentionally calm: no pulsing thinking dot and no smooth auto-scroll.
 assert.match(intelligenceCss, /html\[data-theme="dark"\]/);

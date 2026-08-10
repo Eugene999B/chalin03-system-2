@@ -245,20 +245,29 @@ test("deep continuity may include prior assistant turns but never upgrades them 
   }
 });
 
-test("protected Intelligence surface no longer participates in automatic service-worker reloads", () => {
+test("CHALIN Intelligence and operational surfaces never auto-refresh an active session", () => {
   const main = source("frontend/src/main.jsx");
+  const serviceWorker = source("frontend/public/sw.js");
   const workspace = source("frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx");
   const api = source("frontend/src/chalin-one/ai/aiApi.js");
   const control = source("frontend/src/chalin-one/ai/AiProviderControlLauncher.jsx");
 
-  assert.match(main, /!publicWebsiteSurface && !standaloneChalinOne/);
-  assert.match(main, /publicWebsiteSurface \|\| standaloneChalinOne/);
+  assert.match(main, /browser-cache-integrity-v36/);
+  assert.match(main, /installNoAutomaticRefreshPolicy/);
+  assert.match(main, /removeChalinServiceWorkerCaches/);
+  assert.doesNotMatch(main, /serviceWorker\.register\(/);
+  assert.doesNotMatch(main, /controllerchange/);
+  assert.doesNotMatch(main, /window\.location\.reload\(/);
+  assert.doesNotMatch(serviceWorker, /self\.skipWaiting\(\)/);
+  assert.doesNotMatch(serviceWorker, /self\.clients\.claim\(\)/);
+  assert.doesNotMatch(serviceWorker, /CHALIN03_SKIP_WAITING/);
   assert.match(workspace, /silent: true, force: true/);
+  assert.match(workspace, /clearAiConversationHistory/);
   assert.match(workspace, /deleteAiConversation/);
   assert.match(workspace, />Delete<\/button>/);
   assert.match(workspace, /maxLength=\{32000\}/);
   assert.match(workspace, /CHALIN is thinking/);
-  assert.match(workspace, /Investigating the available context and evidence/);
+  assert.match(workspace, /Understanding the question, then using product knowledge or authorized evidence only when needed/);
   assert.doesNotMatch(workspace, />Archive<\/button>/);
   assert.match(api, /axiosClient\.delete/);
   assert.match(control, /Full Gemini Intelligence/);

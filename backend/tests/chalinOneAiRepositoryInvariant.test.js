@@ -111,7 +111,7 @@ test("AI migrations remain additive and excluded from ordinary startup", () => {
   );
 });
 
-test("frontend AI source may display provider names but contains no provider networking, secret access, storage or unsafe rendering", () => {
+test("frontend AI source has no provider networking, secret access or unsafe rendering; storage is limited to chat continuity", () => {
   const frontendFiles = [
     "frontend/src/chalin-one/ai/aiApi.js",
     "frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx",
@@ -131,8 +131,29 @@ test("frontend AI source may display provider names but contains no provider net
     );
     assert.doesNotMatch(
       source,
-      /localStorage|sessionStorage|dangerouslySetInnerHTML|\beval\s*\(|new Function/i,
+      /dangerouslySetInnerHTML|\beval\s*\(|new Function/i,
       file
     );
   }
+
+  const api = read("frontend/src/chalin-one/ai/aiApi.js");
+  const control = read("frontend/src/chalin-one/ai/AiProviderControlLauncher.jsx");
+  const workspace = read("frontend/src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx");
+
+  // Network/provider control code may never persist browser state.
+  assert.doesNotMatch(api, /localStorage|sessionStorage/);
+  assert.doesNotMatch(control, /localStorage|sessionStorage/);
+
+  // The chat workspace may persist only fixed continuity state: an opaque
+  // conversation key and a tab-scoped unsent draft. Never provider credentials.
+  assert.match(workspace, /ACTIVE_CHAT_PREFIX = "chalin03_ai_active_chat_v1"/);
+  assert.match(workspace, /DRAFT_PREFIX = "chalin03_ai_draft_v1"/);
+  assert.equal((workspace.match(/\blocalStorage\./g) || []).length, 3);
+  assert.equal((workspace.match(/\bsessionStorage\./g) || []).length, 3);
+  assert.match(workspace, /localStorage\.setItem\([\s\S]{0,120}activeChatStorageKey/);
+  assert.match(workspace, /sessionStorage\.setItem\(key, draft\)/);
+  assert.doesNotMatch(
+    workspace,
+    /(?:localStorage|sessionStorage)\.(?:setItem|getItem|removeItem)\(\s*["'`](?:token|password|secret|api[_-]?key|authorization|bearer)/i
+  );
 });

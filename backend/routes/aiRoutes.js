@@ -26,6 +26,9 @@ const {
 const {
   createContextualAiProvider,
 } = require("../services/aiContextualProviderService");
+const {
+  isChalinProductKnowledgeTurn,
+} = require("../services/aiProductKnowledgeService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   archiveConversation,
@@ -121,8 +124,16 @@ function requireOriginalAdministrator(req, res, next) {
 
 async function runPersonaChat({ req, persona }) {
   const contextKey = String(req.body.context_key || "").trim() || null;
+  const message = String(req.body.message || "");
+  const productKnowledgeTurn = isChalinProductKnowledgeTurn(message);
   let contextual = null;
-  if (contextKey) {
+
+  // Context buttons should supply live business evidence only when the question
+  // actually needs operational context. Product/system/IT/marketing/advisory
+  // questions must first reach the general reasoning route; otherwise a context
+  // card can force a random live snapshot before the assistant understands the
+  // question.
+  if (contextKey && !productKnowledgeTurn) {
     contextual = await createContextualAiProvider({
       contextKey,
       req,
@@ -134,11 +145,23 @@ async function runPersonaChat({ req, persona }) {
     req,
     persona,
     conversationKey: req.body.conversation_key || null,
-    message: req.body.message,
+    message,
     provider: contextual?.provider || null,
   });
 
-  if (!contextual) return result;
+  if (!contextual) {
+    return productKnowledgeTurn && contextKey
+      ? Object.freeze({
+          ...result,
+          context: Object.freeze({
+            key: contextKey,
+            server_owned_preload: false,
+            bypass_reason: "product_or_advisory_reasoning",
+          }),
+        })
+      : result;
+  }
+
   return Object.freeze({
     ...result,
     context: Object.freeze({

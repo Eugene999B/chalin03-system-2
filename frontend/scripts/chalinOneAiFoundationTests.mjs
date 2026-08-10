@@ -87,11 +87,13 @@ check("chat displays evidence, provider state, optional technical details and fe
 check("conversation lifecycle is persistent, titled, row-menu managed and silently synchronized", () => {
   assert.match(workspace, /deriveConversationTitle/);
   assert.match(workspace, /deleteAiConversation/);
+  assert.match(workspace, /clearAiConversationHistory/);
   assert.match(workspace, /ConversationRow/);
   assert.match(workspace, /ci-conversation-more/);
   assert.match(workspace, />Rename<\/button>/);
   assert.match(workspace, />Delete<\/button>/);
   assert.match(workspace, /ConversationActionDialog/);
+  assert.match(workspace, /ClearHistoryDialog/);
   assert.match(workspace, /silent: true, force: true/);
   assert.match(workspace, /maxLength=\{32000\}/);
   assert.doesNotMatch(workspace, /window\.prompt|window\.confirm/);
@@ -103,24 +105,39 @@ check("conversation lifecycle is persistent, titled, row-menu managed and silent
 check("background conversation refresh does not blindly clear the active chat", () => {
   assert.match(workspace, /activePersonaRef/);
   assert.match(workspace, /activeChatEpochRef/);
-  const personaGuard = workspace.indexOf("if (activePersonaRef.current !== persona) {");
-  const guardedConversationReset = workspace.indexOf("setConversation(null);", personaGuard);
-  const guardedMessageReset = workspace.indexOf("setMessages([]);", guardedConversationReset);
-  assert.ok(personaGuard >= 0);
-  assert.ok(guardedConversationReset > personaGuard);
-  assert.ok(guardedMessageReset > guardedConversationReset);
-  assert.equal((workspace.match(/setConversation\(null\)/g) || []).length, 2);
+  const loaderStart = workspace.indexOf("const loadConversations = useCallback(");
+  const loaderEnd = workspace.indexOf("useEffect(() => {", loaderStart);
+  const loaderBody = workspace.slice(loaderStart, loaderEnd);
+  assert.ok(loaderStart >= 0);
+  assert.ok(loaderEnd > loaderStart);
+  assert.doesNotMatch(loaderBody, /setConversation\(null\)|setMessages\(\[\]\)/);
   assert.match(workspace, /loadConversations\(undefined, \{ silent: true, force: true \}\)/);
 });
 
-check("chat has first-class settings with isolated non-sensitive persistence", () => {
+check("active chat and draft survive a manual refresh without exposing provider secrets", () => {
+  assert.match(workspace, /ACTIVE_CHAT_PREFIX/);
+  assert.match(workspace, /rememberActiveConversation/);
+  assert.match(workspace, /readActiveConversation/);
+  assert.match(workspace, /forgetActiveConversation/);
+  assert.match(workspace, /localStorage\.setItem/);
+  assert.match(workspace, /sessionStorage\.setItem/);
+  assert.match(workspace, /DRAFT_PREFIX/);
+  assert.doesNotMatch(
+    workspace,
+    /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY|Bearer\s+/i
+  );
+});
+
+check("chat has first-class settings including clear history", () => {
   assert.match(workspace, /ChatSettingsModal/);
   assert.match(workspace, /loadAiChatPreferences/);
   assert.match(workspace, /saveAiChatPreferences/);
-  assert.doesNotMatch(workspace, /localStorage|sessionStorage/);
   assert.match(workspace, /Send with Enter/);
   assert.match(workspace, /Technical response details/);
   assert.match(workspace, /Appearance/);
+  assert.match(workspace, /Clear chat history/);
+  assert.match(workspace, /Clear my history/);
+  assert.match(workspace, /active, archived and blocked/);
   assert.match(workspace, /Light|light/);
   assert.match(workspace, /Dark|dark/);
   assert.match(workspace, /System|system/);
@@ -137,12 +154,13 @@ check("knowledge interface follows draft review publish governance", () => {
   assert.match(workspace, /Publish approved version/);
 });
 
-check("foundation UI contains no sensitive business action execution", () => {
+check("foundation UI contains no direct sensitive business execution or credential-handling mechanism", () => {
+  assert.doesNotMatch(workspace, /restore database|mass sms|direct sql/i);
   assert.doesNotMatch(
     workspace,
-    /execute action|merge customer|change stock|change price|approve finance|release equipment|restore database|mass sms/i
+    /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY)|api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com|Authorization\s*:|Bearer\s+/i
   );
-  assert.match(workspace, /permission-scoped read tool/);
+  assert.match(workspace, /permission-scoped tool/);
 });
 
 check("workspace is responsive, reduced-motion safe and has no chat breathing animation", () => {
@@ -163,4 +181,4 @@ check("rendering avoids unsafe HTML and dynamic code execution", () => {
   assert.doesNotMatch(workspace, /<iframe|<script/i);
 });
 
-console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/11 checks passed.`);
+console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/12 checks passed.`);

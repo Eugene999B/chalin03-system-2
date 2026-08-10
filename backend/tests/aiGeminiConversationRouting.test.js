@@ -8,8 +8,10 @@ const path = require("node:path");
 const {
   isPublicSafeGeneralTurn,
   isPublicSafeSocialTurn,
+  isPublicSafeSystemTurn,
   publicSafeMessages,
   publicSafeSocialMessages,
+  publicSafeSystemMessages,
 } = require("../services/aiProviderService");
 const {
   DEFAULT_MODELS,
@@ -78,7 +80,22 @@ test("ordinary non-private reasoning may use Gemini after stripping CHALIN conte
   assert.match(safe[0].content, /public-safe general reasoning turn/i);
 });
 
-test("business, payroll, sensitive and live questions never enter public-safe routing", () => {
+test("CHALIN product and advisory reasoning may use Gemini with static product context", () => {
+  const prompt = "What does Audit Intelligence do in CHALIN 03?";
+  assert.equal(
+    isPublicSafeSystemTurn({ messages: messages(prompt), providerContext: context() }),
+    true
+  );
+  const safe = publicSafeSystemMessages(messages(prompt, [
+    { role: "assistant", content: "PRIVATE SALES SNAPSHOT [E1]" },
+  ]));
+  const serialized = JSON.stringify(safe);
+  assert.match(serialized, /Audit \/ Advanced Accounting Intelligence/i);
+  assert.match(serialized, /What does Audit Intelligence do/i);
+  assert.doesNotMatch(serialized, /PRIVATE SALES SNAPSHOT|PRIVATE SYSTEM CONTEXT/);
+});
+
+test("live payroll, sensitive and live business questions never enter public-safe routing", () => {
   const prompts = [
     "hi, what are today's sales?",
     "hello what is our stock balance",
@@ -95,6 +112,11 @@ test("business, payroll, sensitive and live questions never enter public-safe ro
       isPublicSafeSocialTurn({ messages: messages(prompt), providerContext: context() }),
       false,
       `social ${prompt}`
+    );
+    assert.equal(
+      isPublicSafeSystemTurn({ messages: messages(prompt), providerContext: context() }),
+      false,
+      `system ${prompt}`
     );
     assert.equal(
       isPublicSafeGeneralTurn({ messages: messages(prompt), providerContext: context() }),
@@ -215,14 +237,16 @@ test("provider service applies the lossy privacy boundary before external provid
     path.resolve(__dirname, "../services/aiProviderService.js"),
     "utf8"
   );
-  const publicBoundary = source.indexOf("if (publicSafeSocialTurn || publicSafeGeneralTurn)");
+  const publicBoundary = source.indexOf("if (publicSafeSocialTurn || publicSafeSystemTurn || publicSafeGeneralTurn)");
   const policyResolution = source.indexOf("selection = await resolveAiProviderSelection");
 
   assert.ok(publicBoundary >= 0);
   assert.ok(policyResolution > publicBoundary);
   assert.match(source, /publicSafeSocialTurn\s*\? publicSafeSocialMessages\(effectiveMessages\)/);
+  assert.match(source, /publicSafeSystemTurn[\s\S]*\? publicSafeSystemMessages\(effectiveMessages\)/);
   assert.match(source, /: publicSafeMessages\(effectiveMessages\)/);
   assert.match(source, /effectiveTools = \[\]/);
   assert.match(source, /data_classification: "public"/);
+  assert.match(source, /public_safe_system_turn: publicSafeSystemTurn/);
   assert.match(source, /public_safe_general_turn: publicSafeGeneralTurn/);
 });

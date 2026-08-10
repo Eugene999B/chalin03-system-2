@@ -155,5 +155,5 @@ test("Local preserves the safe limitation when neither evidence nor an approved 
     provider_context: { workspace_code: "spare_parts" },
   });
   assert.equal(result.tool_calls.length, 0);
-  assert.match(result.text, /do not have enough approved CHALIN evidence/i);
+  assert.match(result.text, /do not have enough approved (?:live )?CHALIN evidence/i);
 });

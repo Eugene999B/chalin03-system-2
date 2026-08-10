@@ -9,6 +9,9 @@ const {
 const {
   searchGovernedKnowledge,
 } = require("../services/aiKnowledgeRetrievalService");
+const {
+  loadGroupIntelligence,
+} = require("../services/aiGroupIntelligenceService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 
 let registered = false;
@@ -44,6 +47,64 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
       execution_authority: "read_only",
       evidence: [],
     }),
+  });
+
+  registry.register({
+    key: "system.group_intelligence",
+    title: "Whole-system group intelligence",
+    description:
+      "Original-System-Administrator-only aggregate intelligence across all active Spare Parts stores, Mining sites, Equipment Hire locations and the company-wide Installment Finance portfolio. Returns operational health without customer, worker or applicant identities.",
+    version: "1",
+    risk_level: 1,
+    personas: ["copilot", "executive"],
+    required_permissions: ["ai.use", "ai.read", "ai.executive.use"],
+    allowed_workspaces: [],
+    evidence_required: true,
+    max_input_bytes: 2000,
+    max_output_bytes: 240000,
+    timeout_ms: 30000,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        start_date: {
+          type: "string",
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+          description: "Optional inclusive start date in YYYY-MM-DD format.",
+        },
+        end_date: {
+          type: "string",
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+          description: "Optional inclusive end/as-of date in YYYY-MM-DD format.",
+        },
+      },
+    },
+    handler: async ({ input, context }) => {
+      const snapshot = await loadGroupIntelligence({ context, input });
+      return {
+        ...snapshot,
+        evidence: [
+          {
+            source_type: "system_snapshot",
+            source_ref: "chalin:group-intelligence:system-administrator",
+            source_version: "live-read-only-v1",
+            label: "CHALIN whole-system aggregate intelligence",
+            excerpt_text: JSON.stringify(snapshot).slice(0, 30000),
+            as_of_at: snapshot.generated_at,
+            classification: "confidential",
+            workspace_code: null,
+            metadata: {
+              aggregate_only: true,
+              system_administrator_only: true,
+              customer_rows_exposed: false,
+              worker_rows_exposed: false,
+              applicant_rows_exposed: false,
+              execution_authority: "read_only",
+            },
+          },
+        ],
+      };
+    },
   });
 
   registry.register({

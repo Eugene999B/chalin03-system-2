@@ -3,10 +3,10 @@ const BUILD_ASSET_PREFIX = "/assets/";
 const SHELL_KEY = "/__chalin03_app_shell__";
 const release =
   new URL(self.location.href).searchParams.get("release") ||
-  "browser-cache-integrity-v35";
+  "browser-cache-integrity-v36";
 const safeRelease =
   String(release).replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 96) ||
-  "browser-cache-integrity-v35";
+  "browser-cache-integrity-v36";
 const CACHE_NAME = `${CACHE_PREFIX}app-shell-${safeRelease}`;
 const CORE_ASSETS = [
   "/site.webmanifest",
@@ -212,55 +212,29 @@ async function networkCoreAsset(request) {
   );
 }
 
-function isTrustedClientMessage(event) {
-  if (event.origin !== self.location.origin) {
-    return false;
-  }
-
-  const sourceUrl = event.source?.url;
-  if (!sourceUrl) {
-    return false;
-  }
-
-  try {
-    return new URL(sourceUrl).origin === self.location.origin;
-  } catch {
-    return false;
-  }
-}
-
 self.addEventListener("install", (event) => {
+  // Do not call skipWaiting(). A retired registration must never replace the
+  // worker controlling an already-open CHALIN session. The current app also
+  // unregisters legacy workers, so this path exists only for old browsers.
   event.waitUntil(
     Promise.allSettled([cacheCurrentShell(), cacheCoreAssets()])
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
+  // Do not call clients.claim(). Existing tabs keep their current controller
+  // until a normal navigation, and the current app removes legacy registration.
   event.waitUntil(
-    Promise.all([
-      caches.keys().then((names) =>
-        Promise.all(
-          names
-            .filter(
-              (name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME
-            )
-            .map((name) => caches.delete(name))
-        )
-      ),
-      self.clients.claim(),
-    ])
+    caches.keys().then((names) =>
+      Promise.all(
+        names
+          .filter(
+            (name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME
+          )
+          .map((name) => caches.delete(name))
+      )
+    )
   );
-});
-
-self.addEventListener("message", (event) => {
-  if (!isTrustedClientMessage(event)) {
-    return;
-  }
-
-  if (event.data?.type === "CHALIN03_SKIP_WAITING") {
-    self.skipWaiting();
-  }
 });
 
 self.addEventListener("fetch", (event) => {

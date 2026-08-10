@@ -165,10 +165,14 @@ test("system routes preserve fail-closed CHALIN ONE feature and content gates", 
   assert.match(systemRoutes, /contentStudioRoutes/);
 });
 
-test("frontend boot retains cache recovery v35 and isolates feature gates by application audience", () => {
-  assert.match(frontendMain, /browser-cache-integrity-v35/);
+test("frontend boot uses cache recovery v36 without automatic refresh and isolates feature gates by audience", () => {
+  assert.match(frontendMain, /browser-cache-integrity-v36/);
   assert.match(frontendMain, /__chalin03MarkBootHealthy/);
-  assert.match(frontendMain, /CHALIN03_ASSET_MISMATCH/);
+  assert.match(frontendMain, /installNoAutomaticRefreshPolicy/);
+  assert.match(frontendMain, /removeChalinServiceWorkerCaches/);
+  assert.doesNotMatch(frontendMain, /serviceWorker\.register\(/);
+  assert.doesNotMatch(frontendMain, /controllerchange/);
+  assert.doesNotMatch(frontendMain, /window\.location\.reload\(/);
   assert.match(frontendMain, /import\("\.\/chalin-one\/PublicChalinOneEntry\.jsx"\)/);
   assert.match(frontendMain, /import\("\.\/chalin-one\/ProtectedChalinOneEntry\.jsx"\)/);
   assert.match(frontendMain, /import\("\.\/OperationalAppRoot\.jsx"\)/);

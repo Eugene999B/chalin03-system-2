@@ -230,6 +230,47 @@ export async function deleteAiConversation(persona, conversationKey) {
   return unwrap(response) || null;
 }
 
+export async function clearAiConversationHistory(persona) {
+  const statuses = ["active", "archived", "blocked"];
+  let deleted = 0;
+
+  for (const status of statuses) {
+    while (true) {
+      const rows = await listAiConversations(
+        persona,
+        { status, limit: 100, offset: 0 },
+        { force: true }
+      );
+      const keys = [
+        ...new Set(
+          rows
+            .map((row) => row?.key)
+            .filter(Boolean)
+        ),
+      ];
+      if (keys.length === 0) break;
+
+      for (let index = 0; index < keys.length; index += 8) {
+        await Promise.all(
+          keys
+            .slice(index, index + 8)
+            .map((conversationKey) =>
+              deleteAiConversation(persona, conversationKey)
+            )
+        );
+      }
+      deleted += keys.length;
+
+      // Re-read offset zero because deleting the first page pulls the next
+      // owned conversations into that page. This continues until none remain.
+      invalidateAiConversationCache(persona);
+    }
+  }
+
+  invalidateAiConversationCache(persona);
+  return Object.freeze({ deleted });
+}
+
 export function invalidateAiConversationCache(persona = null) {
   if (!persona) {
     conversationCache.clear();
