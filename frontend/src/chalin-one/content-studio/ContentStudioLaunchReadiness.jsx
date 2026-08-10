@@ -47,8 +47,7 @@ export default function ContentStudioLaunchReadiness() {
     const apiReady = signals.readiness.ok && signals.readiness.data?.ready === true;
     const publicWebsiteEnabled =
       signals.publicFeatures.ok && featureEnabled(signals.publicFeatures, "publicWebsite");
-    const contentStudioEnabled =
-      signals.publicFeatures.ok && featureEnabled(signals.publicFeatures, "contentStudio");
+    const studioProtectedSurfaceReady = signals.studioDashboard.ok;
 
     return [
       {
@@ -66,11 +65,11 @@ export default function ContentStudioLaunchReadiness() {
           : "The public website feature gate is disabled or could not be verified.",
       },
       {
-        label: "Content Studio feature gate",
-        ok: contentStudioEnabled,
-        detail: contentStudioEnabled
-          ? "The Content Studio feature gate is enabled for the current environment."
-          : "The Content Studio feature gate is disabled or could not be verified.",
+        label: "Protected Content Studio surface",
+        ok: studioProtectedSurfaceReady,
+        detail: studioProtectedSurfaceReady
+          ? "The authenticated Content Studio dashboard is reachable through the protected Studio route."
+          : signals.studioDashboard.error || "The protected Content Studio dashboard could not be verified.",
       },
       {
         label: "Published public bootstrap",
