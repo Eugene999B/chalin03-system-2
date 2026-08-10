@@ -1,0 +1,55 @@
+name: Temporary System Clarity Navigation Patch
+
+on:
+  push:
+    branches:
+      - feature/system-clarity-navigation-20260810
+
+permissions:
+  contents: write
+
+concurrency:
+  group: system-clarity-navigation-patch
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/system-clarity-navigation-20260810
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Apply navigation clarity patch
+        run: |
+          set -euo pipefail
+          python .github/tmp-system-clarity-navigation/patch_navigation.py
+          rm -rf .github/tmp-system-clarity-navigation
+          rm -f .github/workflows/tmp-system-clarity-navigation.yml
+
+      - name: Verify complete frontend suite
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Publish verified navigation changes
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Clarify navigation around business tasks"
+          git push origin HEAD:feature/system-clarity-navigation-20260810
