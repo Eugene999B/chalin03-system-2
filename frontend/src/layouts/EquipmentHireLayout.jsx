@@ -9,11 +9,11 @@ import {
 
 const navigationSections = [
   {
-    title: "Equipment Hire Operations",
+    title: "Hire Work",
     items: [
       {
-        title: "Hire Operations Dashboard",
-        description: "Hire contracts, dispatch, revenue, balances and equipment availability",
+        title: "Hire Overview",
+        description: "Contracts, dispatch, revenue, balances and equipment availability",
         path: "/equipment-hire-operations?division=hire",
         icon: "🏗️",
         end: true,
@@ -21,78 +21,78 @@ const navigationSections = [
         anyPermissions: HIRE_VIEW_PERMISSIONS,
       },
       {
-        title: "Hire Customers",
-        description: "Hire customer contacts, locations and commercial terms",
+        title: "Customers",
+        description: "Customer contacts, locations and commercial terms",
         path: "/equipment-hire-operations/customers",
         icon: "👥",
         permissions: ["hire.customers.view"],
       },
       {
-        title: "Hire Enquiries",
-        description: "Customer equipment Hire requests",
+        title: "Enquiries",
+        description: "Customer equipment hire requests",
         path: "/equipment-hire-operations/enquiries",
         icon: "✉️",
         permissions: ["hire.enquiries.view"],
       },
       {
-        title: "Hire Availability",
-        description: "Machines ready for Hire, assigned, unavailable or reference-locked",
+        title: "Equipment Availability",
+        description: "Machines ready for hire, assigned, unavailable or reference-locked",
         path: "/equipment-hire-operations/availability",
         icon: "🟢",
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Hire Quotations",
-        description: "Hire rates, mobilization and Hire commercial terms",
+        title: "Quotations",
+        description: "Hire rates, mobilization and commercial terms",
         path: "/equipment-hire-operations/quotations",
         icon: "🧾",
         permissions: ["hire.quotations.view"],
       },
       {
-        title: "Hire Contracts",
-        description: "Approved Hire jobs and machine assignments",
+        title: "Contracts",
+        description: "Approved hire jobs and machine assignments",
         path: "/equipment-hire-operations/contracts",
         icon: "🤝",
         permissions: ["hire.contracts.view"],
       },
       {
-        title: "Hire Commercial Control",
-        description: "Hire rate cards, amendments, deposits and damage settlement",
+        title: "Rates, Deposits & Amendments",
+        description: "Rate cards, contract changes, deposits and damage settlement",
         path: "/equipment-hire-operations/commercial-control",
         icon: "💼",
         permissions: ["hire.commercial.view"],
       },
       {
         title: "Dispatch & Job Cards",
-        description: "Hire mobilization, work logs and billable hours",
+        description: "Mobilization, work logs and billable hours",
         path: "/equipment-hire-operations/operations",
         icon: "🚚",
         anyPermissions: ["hire.dispatch.view", "hire.work_logs.view"],
       },
       {
-        title: "Hire Invoices & Payments",
-        description: "Hire billing, receipts, balances and debt",
+        title: "Invoices & Payments",
+        description: "Billing, receipts, balances and debt",
         path: "/equipment-hire-operations/finance",
         icon: "💰",
         anyPermissions: ["hire.invoices.view", "hire.payments.view"],
       },
       {
         title: "Return Inspections",
-        description: "Hire closing meters, condition and equipment release",
+        description: "Closing meters, condition and equipment release",
         path: "/equipment-hire-operations/returns",
         icon: "🔍",
         permissions: ["hire.returns.view"],
       },
       {
-        title: "Hire Reports",
-        description: "Hire balances, aging and equipment utilisation",
+        title: "Reports",
+        description: "Balances, aging and equipment utilisation",
         path: "/equipment-hire-operations/reports",
         icon: "📈",
         permissions: ["hire.reports.view"],
       },
       {
-        title: "Hire Notification Centre",
-        description: "Hire contract, dispatch, overdue invoice and return alerts",
+        title: "Notifications",
+        description: "Contract, dispatch, overdue invoice and return alerts",
         path: "/equipment-hire-operations/notifications",
         icon: "🔔",
         permissions: ["notifications.view"],
@@ -100,22 +100,22 @@ const navigationSections = [
     ],
   },
   {
-    title: "Division Control",
+    title: "Equipment Business",
     items: [
       {
-        title: "Back to Equipment Divisions",
-        description: "Return to the protected division gateway",
+        title: "Switch Equipment Division",
+        description: "Return to the protected Equipment Business division gateway",
         path: "/equipment-hire",
         icon: "◫",
       },
     ],
   },
   {
-    title: "Hire Resources",
+    title: "People, Equipment & Reports",
     items: [
       {
-        title: "Hire Equipment Register",
-        description: "Machine identity, pictures, condition, Hire rates and availability",
+        title: "Equipment Register",
+        description: "Machine identity, pictures, condition, hire rates and availability",
         path: "/equipment-hire-operations/fleet",
         icon: "🚜",
         permissions: ["fleet.assets.view"],
@@ -129,29 +129,29 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Hire Documents",
-        description: "Hire quotations, contracts, invoices and operational documents",
+        title: "Documents",
+        description: "Quotations, contracts, invoices and operational documents",
         path: "/equipment-hire-operations/documents",
         icon: "📄",
         permissions: ["operations.documents.view"],
       },
       {
-        title: "Hire Reports & Audit",
-        description: "Search Hire evidence, export Hire reports and review access records",
+        title: "Reports & Audit",
+        description: "Search evidence, export reports and review access records",
         path: "/equipment-hire-operations/shared-controls",
         icon: "📚",
         permissions: ["shared.control.view"],
       },
       {
-        title: "Staff & Workforce",
-        description: "Staff logins, roles, profiles, ID cards, documents and permission overrides",
+        title: "People & Employment",
+        description: "Staff accounts, worker profiles, ID cards, documents and access",
         path: "/equipment-hire-operations/workforce",
         icon: "👷",
         permissions: ["workers.view"],
       },
       {
-        title: "Payroll Processing",
-        description: "Validate, approve, pay and reconcile protected salary cycles",
+        title: "Monthly Payroll",
+        description: "Review workers and salaries, approve the month, record payments and issue payslips",
         path: "/equipment-hire-operations/payroll",
         icon: "💵",
         permissions: ["payroll.view"],
@@ -162,15 +162,15 @@ const navigationSections = [
     title: "Administration",
     items: [
       {
-        title: "Document Signature Settings",
-        description: "Boss signature for approved Hire and employment documents",
+        title: "Document Signatures",
+        description: "Boss signature for approved hire and employment documents",
         path: "/equipment-hire-operations/document-signature-settings",
         icon: "🖋️",
         permissions: ["security.admin"],
       },
       {
-        title: "Hire Locations",
-        description: "Create Equipment Hire bases, yards, depots and workshops",
+        title: "Locations & Access",
+        description: "Create hire bases, yards, depots and workshops and manage access",
         path: "/equipment-hire-operations/administration",
         icon: "⚙️",
         permissions: ["workspace.admin"],
@@ -181,8 +181,8 @@ const navigationSections = [
     title: "Account",
     items: [
       {
-        title: "Equipment Hire Help",
-        description: "Guide for Hire enquiries, contracts, dispatch, billing and returns",
+        title: "Help & Guide",
+        description: "Guide for enquiries, contracts, dispatch, billing and returns",
         path: "/equipment-hire-operations/help",
         icon: "❓",
       },
@@ -220,7 +220,7 @@ export default function EquipmentHireLayout() {
       contextHeading="Hire location context"
       workspaceEyebrow="Current staff division"
       separationBadge="No access to Finance applications or accounts"
-      description="Dedicated Equipment Hire operations for enquiries, Hire quotations, Hire contracts, dispatch, job cards, Hire invoicing and returns. Credit applications, installment accounts, collections and ownership work remain inside Equipment Installment Finance and cannot be opened from this division."
+      description="Dedicated Equipment Hire operations for enquiries, quotations, contracts, dispatch, job cards, invoicing and returns. Credit applications, installment accounts, collections and ownership work remain inside Equipment Installment Finance and cannot be opened from this division."
       navigationSections={navigationSections}
     />
   );
