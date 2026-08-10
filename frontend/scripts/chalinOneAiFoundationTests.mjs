@@ -19,6 +19,7 @@ const workspace = read(
 );
 const api = read("src/chalin-one/ai/aiApi.js");
 const css = read("src/chalin-one/ai/chalinIntelligence.css");
+const overhaulCss = read("src/chalin-one/ai/intelligenceOverhaul.css");
 const main = read("src/main.jsx");
 
 let passed = 0;
@@ -49,8 +50,6 @@ check("client uses only protected backend AI endpoints and never handles provide
   assert.match(api, /\/ai\/feedback/);
   assert.match(api, /\/ai\/usage/);
 
-  // Provider names and safe backend error codes may be displayed, but browser
-  // code must never read provider credentials or talk to providers directly.
   assert.doesNotMatch(
     api,
     /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY)/i
@@ -75,13 +74,26 @@ check("workspace obeys server-authoritative persona and permission state", () =>
   assert.match(workspace, /permissions\.has\("ai\.knowledge\.publish"\)/);
 });
 
-check("chat displays evidence, provider state, usage and feedback", () => {
+check("chat displays evidence, effective provider/model state, usage and feedback", () => {
   assert.match(workspace, /EvidenceList/);
   assert.match(workspace, /createAiFeedback/);
   assert.match(workspace, /resultMeta\?\.usage/);
   assert.match(workspace, /Provider:/);
+  assert.match(workspace, /status\.provider\.model_key/);
   assert.match(workspace, /Read \/ recommend \/ prepare only/);
-  assert.match(workspace, /provider is safely disabled/i);
+  assert.match(workspace, /No usable provider is active for Copilot/);
+  assert.match(workspace, /CHALIN is thinking and investigating/);
+});
+
+check("conversation lifecycle is persistent, titled, deletable and silently synchronized", () => {
+  assert.match(workspace, /deriveConversationTitle/);
+  assert.match(workspace, /deleteAiConversation/);
+  assert.match(workspace, />Delete<\/button>/);
+  assert.match(workspace, /silent: true, force: true/);
+  assert.match(workspace, /maxLength=\{32000\}/);
+  assert.doesNotMatch(workspace, />Archive<\/button>/);
+  assert.match(api, /axiosClient\.delete/);
+  assert.match(api, /conversationCache/);
 });
 
 check("knowledge interface follows draft review publish governance", () => {
@@ -99,16 +111,19 @@ check("foundation UI contains no sensitive business action execution", () => {
     workspace,
     /execute action|merge customer|change stock|change price|approve finance|release equipment|restore database|mass sms/i
   );
-  assert.match(workspace, /AI cannot approve or execute sensitive changes/);
+  assert.match(workspace, /sensitive business actions still require the normal CHALIN controls/i);
 });
 
-check("workspace is responsive at required mobile widths", () => {
+check("workspace is responsive and calm at required mobile widths", () => {
   assert.match(css, /@media \(max-width: 820px\)/);
   assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /@media \(max-width: 390px\)/);
   assert.match(css, /\.ci-composer/);
   assert.match(css, /\.ci-card-grid/);
   assert.match(css, /\.ci-persona-switch/);
+  assert.match(overhaulCss, /prefers-reduced-motion/);
+  assert.match(overhaulCss, /\.ci-thinking/);
+  assert.match(overhaulCss, /\.ci-sync-label/);
 });
 
 check("rendering avoids unsafe HTML and dynamic code execution", () => {
@@ -117,4 +132,4 @@ check("rendering avoids unsafe HTML and dynamic code execution", () => {
   assert.doesNotMatch(workspace, /<iframe|<script/i);
 });
 
-console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/8 checks passed.`);
+console.log(`\nCHALIN ONE AI frontend foundation: ${passed}/9 checks passed.`);
