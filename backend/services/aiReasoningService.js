@@ -121,6 +121,13 @@ const NON_OPERATIONAL_TOOL_KEYS = new Set([
   "system.ai_feature_status",
 ]);
 
+const LIVE_OPERATIONAL_EVIDENCE_TYPES = new Set([
+  "system_snapshot",
+  "mining_snapshot",
+  "equipment_finance_snapshot",
+  "hire_snapshot",
+]);
+
 const INTENT_PATTERNS = Object.freeze([
   ["compare", /\b(compare|comparison|versus|vs\.?|difference|better than|worse than)\b/i],
   ["diagnose", /\b(why|cause|caused|diagnose|problem|issue|wrong|drop|increase|decrease|variance|anomaly)\b/i],
@@ -356,15 +363,19 @@ function detectEvidenceTensions(evidence = []) {
   return Object.freeze(tensions);
 }
 
+function isLiveOperationalEvidence(item = {}) {
+  const sourceType = clean(item?.source_type, 160).toLowerCase();
+  return (
+    LIVE_OPERATIONAL_EVIDENCE_TYPES.has(sourceType) &&
+    Boolean(item?.as_of_at)
+  );
+}
+
 function isLiveOperationalToolResult(result = {}) {
   const key = clean(result?.tool?.key || result?.tool_key, 160);
   if (!key || NON_OPERATIONAL_TOOL_KEYS.has(key)) return false;
   const evidence = Array.isArray(result?.evidence) ? result.evidence : [];
-  return evidence.some(
-    (item) =>
-      String(item?.source_type || "").startsWith("tool.") &&
-      Boolean(item?.as_of_at)
-  );
+  return evidence.some(isLiveOperationalEvidence);
 }
 
 function assessEvidenceConfidence({
@@ -529,6 +540,7 @@ function citationIntegrity(answer, evidence = []) {
 
 module.exports = {
   INTENT_PATTERNS,
+  LIVE_OPERATIONAL_EVIDENCE_TYPES,
   MAX_HISTORY_MESSAGES,
   MAX_REASONING_EVIDENCE,
   MAX_RETRIEVAL_QUERIES,
@@ -547,6 +559,7 @@ module.exports = {
   detectEvidenceTensions,
   evidenceRoot,
   freshnessScore,
+  isLiveOperationalEvidence,
   isLiveOperationalToolResult,
   jaccard,
   meaningfulTokens,
