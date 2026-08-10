@@ -24,6 +24,14 @@ const {
   evidencePromptBlock,
   normalizeEvidenceList,
 } = require("./aiEvidenceService");
+const {
+  assertReadOnlyInvestigationTools,
+  assertToolRound,
+  filterReadOnlyInvestigationTools,
+  getInvestigationConfig,
+  investigationPromptBlock,
+  investigationSummary,
+} = require("./aiInvestigationLoopService");
 const { searchGovernedKnowledge } = require("./aiKnowledgeRetrievalService");
 const { resolveAiScope } = require("./aiPermissionService");
 const { generateProviderResponse } = require("./aiProviderService");
@@ -61,9 +69,9 @@ const {
 
 const PERSONA_INSTRUCTIONS = Object.freeze({
   copilot:
-    "You are Chalin Copilot, a highly capable governed business intelligence partner. Use only supplied approved evidence and registered tool results. Respect the active workspace and location. For current operational facts, prefer governed live tools over static knowledge. Cite evidence as [E1], [E2], distinguish facts from inference and unknowns, and clearly state limitations. Never claim to execute a business change.",
+    "You are Chalin Copilot, a highly capable governed business intelligence partner. Use only supplied approved evidence and registered tool results. Respect the active workspace and location. For current operational facts, prefer governed live tools over static knowledge. Investigate material unknowns with the available read-only tools, but stop when evidence is sufficient. Cite evidence as [E1], [E2], distinguish facts from inference and unknowns, and clearly state limitations. Never claim to execute a business change.",
   executive:
-    "You are Chalin Executive, a rigorous private executive intelligence partner. Use only supplied approved evidence and registered tools. For current operational facts, prefer governed live tools over static knowledge. Cite evidence as [E1], [E2]. Separate facts, calculations, assumptions, scenarios, risks and unknowns. Compare competing explanations before making recommendations. Never claim to approve or execute an operational change.",
+    "You are Chalin Executive, a rigorous private executive intelligence partner. Use only supplied approved evidence and registered tools. For current operational facts, prefer governed live tools over static knowledge. Investigate competing explanations and material unknowns with read-only tools before making high-impact recommendations, but stop when evidence is sufficient. Cite evidence as [E1], [E2]. Separate facts, calculations, assumptions, scenarios, risks and unknowns. Compare competing explanations before making recommendations. Never claim to approve or execute an operational change.",
   guide:
     "You are Chalin Guide. Use only published public evidence and public tools. Do not request or expose customer, staff, financial, operational or security data. Cite evidence as [E1], [E2] and offer human handoff when evidence is insufficient. Never claim to execute, approve or complete a business action.",
 });
@@ -108,6 +116,7 @@ function providerMessages({
   evidence,
   toolResults = [],
   reasoningBrief = "",
+  investigationBrief = "",
 }) {
   const relevantHistory = selectRelevantHistory(history, prompt);
   const messages = [
@@ -115,6 +124,9 @@ function providerMessages({
   ];
   if (reasoningBrief) {
     messages.push({ role: "system", content: reasoningBrief });
+  }
+  if (investigationBrief) {
+    messages.push({ role: "system", content: investigationBrief });
   }
   messages.push({
     role: "system",
@@ -196,6 +208,16 @@ async function executeRequestedTools({
 
   for (const call of toolCalls) {
     const tool = aiToolRegistry.get(call.tool_key);
+    if (Number(tool?.risk_level || 0) > 1) {
+      throw new AiOrchestratorError(
+        "Autonomous CHALIN investigation may execute read-only intelligence tools only.",
+        {
+          code: "AI_INVESTIGATION_WRITE_TOOL_BLOCKED",
+          statusCode: 403,
+          details: [String(tool?.key || call.tool_key || "unknown")],
+        }
+      );
+    }
     const invocation = await startToolInvocation({
       req,
       messageId: assistantMessageId,
@@ -236,7 +258,8 @@ async function executeRequestedTools({
         invocationId: invocation.id,
         status:
           String(error?.code || "").includes("DENIED") ||
-          String(error?.code || "").includes("DISABLED")
+          String(error?.code || "").includes("DISABLED") ||
+          String(error?.code || "").includes("BLOCKED")
             ? "blocked"
             : "failed",
         errorCode: error?.code || "AI_TOOL_FAILED",
@@ -312,6 +335,11 @@ function sumProviderUsage(results) {
       0
     ),
   });
+}
+
+function providerTokenTotal(results = []) {
+  const usage = sumProviderUsage(results);
+  return usage.input_tokens + usage.output_tokens;
 }
 
 function providerContextForTurn({ req, persona, scope, reasoningPlan }) {
@@ -413,6 +441,74 @@ function confidenceWithCitationReview(confidence, citationReview) {
   return confidence;
 }
 
+function updateEvidenceState({ knowledgeEvidence, toolResults, reasoningPlan }) {
+  const evidence = rankEvidence({
+    evidence: [
+      ...knowledgeEvidence,
+      ...toolResults.flatMap((result) => result.evidence || []),
+    ],
+    queries: reasoningPlan.retrieval_queries,
+    limit: 12,
+  });
+  const tensions = detectEvidenceTensions(evidence);
+  const confidence = assessEvidenceConfidence({
+    evidence,
+    tensions,
+    liveDataRequired: reasoningPlan.live_data_required,
+    toolResults,
+  });
+  return Object.freeze({ evidence, tensions, confidence });
+}
+
+function assertCanStartAnotherProviderRound({
+  dailyUsage,
+  monthlyCost,
+  providerRounds,
+  budget,
+}) {
+  const accruedTokens = providerTokenTotal(providerRounds);
+  const accruedUsage = sumProviderUsage(providerRounds);
+  assertDailyUsage({
+    userTokens: Number(dailyUsage?.user_tokens || 0) + accruedTokens,
+    workspaceTokens: Number(dailyUsage?.workspace_tokens || 0) + accruedTokens,
+    budget,
+  });
+  assertMonthlyCost({
+    usedMicros: monthlyCost,
+    additionalMicros: accruedUsage.cost_micros,
+    budget,
+  });
+  return true;
+}
+
+async function updateAssistantMessageFromRounds({
+  assistantMessageId,
+  finalResult,
+  providerRounds,
+}) {
+  if (!assistantMessageId || providerRounds.length <= 1) return;
+  const additionalUsage = sumProviderUsage(providerRounds.slice(1));
+  await pool.query(
+    `UPDATE ai_messages
+     SET content_text = ?, content_sha256 = ?, provider_key = ?,
+         model_key = ?, input_tokens = input_tokens + ?,
+         output_tokens = output_tokens + ?,
+         latency_ms = COALESCE(latency_ms, 0) + ?, finish_reason = ?
+     WHERE id = ?`,
+    [
+      finalResult.text,
+      hashText(finalResult.text),
+      finalResult.provider_key,
+      finalResult.model_key,
+      additionalUsage.input_tokens,
+      additionalUsage.output_tokens,
+      additionalUsage.latency_ms,
+      finalResult.finish_reason,
+      assistantMessageId,
+    ]
+  );
+}
+
 async function runAiConversationTurn({
   req,
   persona = "copilot",
@@ -478,6 +574,7 @@ async function runAiConversationTurn({
       scope,
       reasoningPlan,
     });
+    const investigationConfig = getInvestigationConfig(env);
     const knowledgeEvidence = await retrieveAutomaticEvidence({
       query: promptInspection.text,
       persona: normalizedPersona,
@@ -493,11 +590,14 @@ async function runAiConversationTurn({
       liveDataRequired: reasoningPlan.live_data_required,
       toolResults: [],
     });
-    const tools = availableTools({
+    const permittedTools = availableTools({
       persona: normalizedPersona,
       scope,
       user: req.user,
     });
+    const tools = filterReadOnlyInvestigationTools(permittedTools);
+    assertReadOnlyInvestigationTools(tools);
+
     const initialMessages = providerMessages({
       persona: normalizedPersona,
       history,
@@ -507,6 +607,11 @@ async function runAiConversationTurn({
         plan: reasoningPlan,
         confidence,
         tensions,
+      }),
+      investigationBrief: investigationPromptBlock({
+        config: investigationConfig,
+        toolRound: 0,
+        totalToolCalls: 0,
       }),
     });
     const budget = buildRequestBudget({
@@ -533,7 +638,7 @@ async function runAiConversationTurn({
     });
 
     const providerRounds = [];
-    const initialResult = await generateProviderResponse({
+    let finalResult = await generateProviderResponse({
       provider,
       messages: initialMessages,
       tools,
@@ -541,87 +646,130 @@ async function runAiConversationTurn({
       providerContext,
       env,
     });
-    providerRounds.push(initialResult);
+    providerRounds.push(finalResult);
 
     assistantMessage = await addMessage({
       conversationId: conversation.id,
       role: "assistant",
-      content: initialResult.text,
+      content: finalResult.text,
       safetyStatus: "allowed",
-      providerKey: initialResult.provider_key,
-      modelKey: initialResult.model_key,
-      inputTokens: initialResult.input_tokens,
-      outputTokens: initialResult.output_tokens,
-      latencyMs: initialResult.latency_ms,
-      finishReason: initialResult.finish_reason,
+      providerKey: finalResult.provider_key,
+      modelKey: finalResult.model_key,
+      inputTokens: finalResult.input_tokens,
+      outputTokens: finalResult.output_tokens,
+      latencyMs: finalResult.latency_ms,
+      finishReason: finalResult.finish_reason,
       createdBy: req.user.id,
     });
 
-    let finalResult = initialResult;
-    let toolResults = [];
-    if (initialResult.tool_calls.length > 0) {
-      toolResults = await executeRequestedTools({
+    const toolResults = [];
+    const seenToolCallIds = new Set();
+    let toolRound = 0;
+    let totalToolCalls = 0;
+    let pendingToolCalls = finalResult.tool_calls;
+
+    while (pendingToolCalls.length > 0) {
+      toolRound += 1;
+      const roundGuard = assertToolRound({
+        toolCalls: pendingToolCalls,
+        seenCallIds: seenToolCallIds,
+        totalToolCalls,
+        toolRound,
+        budget,
+        config: investigationConfig,
+      });
+      for (const identity of roundGuard.new_call_ids) {
+        seenToolCallIds.add(identity);
+      }
+      totalToolCalls = roundGuard.projected_total_tool_calls;
+
+      const roundResults = await executeRequestedTools({
         req,
         persona: normalizedPersona,
-        toolCalls: initialResult.tool_calls,
+        toolCalls: pendingToolCalls,
         assistantMessageId: assistantMessage.id,
         budget,
       });
-      finalEvidence = rankEvidence({
-        evidence: [
-          ...knowledgeEvidence,
-          ...toolResults.flatMap((result) => result.evidence || []),
-        ],
-        queries: reasoningPlan.retrieval_queries,
-        limit: 12,
-      });
-      tensions = detectEvidenceTensions(finalEvidence);
-      confidence = assessEvidenceConfidence({
-        evidence: finalEvidence,
-        tensions,
-        liveDataRequired: reasoningPlan.live_data_required,
+      toolResults.push(...roundResults);
+
+      const nextState = updateEvidenceState({
+        knowledgeEvidence,
         toolResults,
+        reasoningPlan,
       });
+      finalEvidence = nextState.evidence;
+      tensions = nextState.tensions;
+      confidence = nextState.confidence;
+
+      const finalSynthesisRound =
+        toolRound >= investigationConfig.max_tool_rounds;
+      const nextTools = finalSynthesisRound ? [] : tools;
+      const nextMessages = providerMessages({
+        persona: normalizedPersona,
+        history,
+        prompt: promptInspection.text,
+        evidence: finalEvidence,
+        toolResults,
+        reasoningBrief: reasoningPromptBlock({
+          plan: reasoningPlan,
+          confidence,
+          tensions,
+        }),
+        investigationBrief: investigationPromptBlock({
+          config: investigationConfig,
+          toolRound,
+          totalToolCalls,
+        }),
+      });
+      const nextBudget = buildRequestBudget({
+        messages: nextMessages,
+        tools: nextTools,
+        env,
+      });
+      assertCanStartAnotherProviderRound({
+        dailyUsage,
+        monthlyCost,
+        providerRounds,
+        budget: nextBudget,
+      });
+
       finalResult = await generateProviderResponse({
         provider,
-        messages: providerMessages({
-          persona: normalizedPersona,
-          history,
-          prompt: promptInspection.text,
-          evidence: finalEvidence,
-          toolResults,
-          reasoningBrief: reasoningPromptBlock({
-            plan: reasoningPlan,
-            confidence,
-            tensions,
-          }),
-        }),
-        tools: [],
-        maxOutputTokens: budget.maximum_output_tokens,
+        messages: nextMessages,
+        tools: nextTools,
+        maxOutputTokens: nextBudget.maximum_output_tokens,
         providerContext,
         env,
       });
       providerRounds.push(finalResult);
-      await pool.query(
-        `UPDATE ai_messages
-         SET content_text = ?, content_sha256 = ?, provider_key = ?,
-             model_key = ?, input_tokens = input_tokens + ?,
-             output_tokens = output_tokens + ?,
-             latency_ms = COALESCE(latency_ms, 0) + ?, finish_reason = ?
-         WHERE id = ?`,
-        [
-          finalResult.text,
-          hashText(finalResult.text),
-          finalResult.provider_key,
-          finalResult.model_key,
-          finalResult.input_tokens,
-          finalResult.output_tokens,
-          finalResult.latency_ms,
-          finalResult.finish_reason,
-          assistantMessage.id,
-        ]
-      );
+
+      if (providerRounds.length > investigationConfig.max_provider_rounds) {
+        throw new AiOrchestratorError(
+          "CHALIN exceeded the bounded provider investigation round limit.",
+          {
+            code: "AI_PROVIDER_ROUND_LIMIT_EXCEEDED",
+            statusCode: 409,
+            details: [investigationConfig.max_provider_rounds],
+          }
+        );
+      }
+      if (finalSynthesisRound && finalResult.tool_calls.length > 0) {
+        throw new AiOrchestratorError(
+          "CHALIN requested another tool after the final investigation round.",
+          {
+            code: "AI_FINAL_SYNTHESIS_TOOL_CALL_BLOCKED",
+            statusCode: 409,
+          }
+        );
+      }
+      pendingToolCalls = finalSynthesisRound ? [] : finalResult.tool_calls;
     }
+
+    await updateAssistantMessageFromRounds({
+      assistantMessageId: assistantMessage.id,
+      finalResult,
+      providerRounds,
+    });
 
     const citationReview = citationIntegrity(finalResult.text, finalEvidence);
     if (!citationReview.valid) {
@@ -642,6 +790,11 @@ async function runAiConversationTurn({
     });
 
     const totalUsage = sumProviderUsage(providerRounds);
+    const investigation = investigationSummary({
+      toolRounds: toolRound,
+      totalToolCalls,
+      providerRounds: providerRounds.length,
+    });
     await recordUsage({
       userId: req.user.id,
       conversationId: conversation.id,
@@ -674,7 +827,9 @@ async function runAiConversationTurn({
         input_tokens: totalUsage.input_tokens,
         output_tokens: totalUsage.output_tokens,
         cost_micros: totalUsage.cost_micros,
-        tool_count: toolResults.length,
+        tool_count: totalToolCalls,
+        tool_round_count: toolRound,
+        autonomous_write_authority: false,
         evidence_count: finalEvidence.length,
         reasoning_intent: reasoningPlan.intent,
         reasoning_confidence: confidence.level,
@@ -700,6 +855,7 @@ async function runAiConversationTurn({
         evidence_confidence: confidence,
         tensions,
         citation_integrity: citationReview,
+        investigation,
         hidden_chain_of_thought_exposed: false,
       }),
       provider: Object.freeze({
@@ -763,6 +919,7 @@ async function runAiConversationTurn({
 module.exports = {
   AiOrchestratorError,
   PERSONA_INSTRUCTIONS,
+  assertCanStartAnotherProviderRound,
   auditBlockedPrompt,
   availableTools,
   compactToolResults,
@@ -773,7 +930,10 @@ module.exports = {
   persistEvidence,
   providerContextForTurn,
   providerMessages,
+  providerTokenTotal,
   retrieveAutomaticEvidence,
   runAiConversationTurn,
   sumProviderUsage,
+  updateAssistantMessageFromRounds,
+  updateEvidenceState,
 };
