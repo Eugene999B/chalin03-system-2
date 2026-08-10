@@ -21,13 +21,17 @@ const redirects = read("public/_redirects");
 const notFound = read("public/404.html");
 
 // The retired service-worker file may remain deployable for browsers that still
-// have an old registration, but the current app must never register or promote
-// it automatically again.
+// have an old registration, but the current app must never register, promote or
+// let it take control of an already-open CHALIN session automatically again.
 assert.match(serviceWorker, /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/);
+assert.match(serviceWorker, /browser-cache-integrity-v36/);
 assert.match(serviceWorker, /const BUILD_ASSET_PREFIX = "\/assets\/"/);
 assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
 assert.match(serviceWorker, /networkBuildAsset\(request\)/);
 assert.doesNotMatch(serviceWorker, /client\.navigate\(/);
+assert.doesNotMatch(serviceWorker, /self\.skipWaiting\(\)/);
+assert.doesNotMatch(serviceWorker, /self\.clients\.claim\(\)/);
+assert.doesNotMatch(serviceWorker, /CHALIN03_SKIP_WAITING/);
 
 assert.match(recovery, /vite:preloadError/);
 assert.match(recovery, /__chalin03RecoverFromAssetMismatch/);
@@ -121,5 +125,5 @@ assert.match(notFound, /data-chalin03-static-404="true"/);
 assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser refresh contracts passed: CHALIN does not register a background service worker, deployment/asset events never auto-refresh an active workspace, session token changes never reload the document, and any update reload is explicitly user-controlled."
+  "✅ Browser refresh contracts passed: CHALIN does not register or auto-promote a background service worker, deployment/asset events never auto-refresh an active workspace, session token changes never reload the document, and any update reload is explicitly user-controlled."
 );
