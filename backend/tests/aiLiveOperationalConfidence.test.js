@@ -4,13 +4,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  LIVE_OPERATIONAL_EVIDENCE_TYPES,
   assessEvidenceConfidence,
   isLiveOperationalToolResult,
   rankEvidence,
 } = require("../services/aiReasoningService");
 
 function evidence({
-  sourceType = "tool.snapshot",
+  sourceType = "system_snapshot",
   ref = "snapshot",
   label = "Current operational snapshot",
   excerpt = "Current operational balance is 25.",
@@ -29,7 +30,7 @@ function evidence({
   };
 }
 
-test("memory, knowledge and system tools cannot satisfy live operational verification", () => {
+test("memory, knowledge and system context tools cannot satisfy live operational verification", () => {
   const contextResults = [
     {
       tool: { key: "conversation.memory" },
@@ -48,6 +49,10 @@ test("memory, knowledge and system tools cannot satisfy live operational verific
     },
     {
       tool: { key: "system.scope_summary" },
+      evidence: [],
+    },
+    {
+      tool: { key: "system.ai_feature_status" },
       evidence: [],
     },
   ];
@@ -70,16 +75,38 @@ test("memory, knowledge and system tools cannot satisfy live operational verific
   assert.ok(confidence.reasons.some((reason) => reason.includes("live operational data")));
 });
 
-test("a timestamped governed operational snapshot can satisfy live verification", () => {
+test("real CHALIN operational evidence families can satisfy live verification", () => {
+  const cases = [
+    ["spare_parts.operations_snapshot", "system_snapshot", "spare_parts:operations:branch:1"],
+    ["mining.operations_snapshot", "mining_snapshot", "mining:operations:site:2"],
+    ["equipment_hire.operations_snapshot", "hire_snapshot", "equipment_hire:operations:location:3"],
+    ["equipment_finance.portfolio_health", "equipment_finance_snapshot", "equipment_finance:portfolio:business:4"],
+  ];
+
+  assert.deepEqual(
+    [...LIVE_OPERATIONAL_EVIDENCE_TYPES].sort(),
+    ["equipment_finance_snapshot", "hire_snapshot", "mining_snapshot", "system_snapshot"]
+  );
+
+  for (const [toolKey, sourceType, ref] of cases) {
+    const operationalEvidence = evidence({ sourceType, ref });
+    const result = {
+      tool: { key: toolKey },
+      evidence: [operationalEvidence],
+    };
+    assert.equal(isLiveOperationalToolResult(result), true, toolKey);
+  }
+});
+
+test("timestamped Spare Parts operational snapshot upgrades live confidence", () => {
   const operationalEvidence = evidence({
-    sourceType: "tool.spare_parts_snapshot",
-    ref: "spare_parts.operations_snapshot",
+    sourceType: "system_snapshot",
+    ref: "spare_parts:operations:branch:1",
   });
   const result = {
     tool: { key: "spare_parts.operations_snapshot" },
     evidence: [operationalEvidence],
   };
-  assert.equal(isLiveOperationalToolResult(result), true);
 
   const ranked = rankEvidence({
     queries: ["current operational balance"],
@@ -94,14 +121,26 @@ test("a timestamped governed operational snapshot can satisfy live verification"
   assert.notEqual(confidence.level, "low");
 });
 
-test("an operational-looking tool without timestamped governed evidence does not count as live", () => {
+test("unknown or untimestamped evidence fails closed even behind an operational-looking tool key", () => {
   assert.equal(
     isLiveOperationalToolResult({
       tool: { key: "spare_parts.operations_snapshot" },
       evidence: [
         evidence({
-          sourceType: "tool.spare_parts_snapshot",
+          sourceType: "system_snapshot",
           asOf: null,
+        }),
+      ],
+    }),
+    false
+  );
+
+  assert.equal(
+    isLiveOperationalToolResult({
+      tool: { key: "spare_parts.operations_snapshot" },
+      evidence: [
+        evidence({
+          sourceType: "unregistered_snapshot_type",
         }),
       ],
     }),
