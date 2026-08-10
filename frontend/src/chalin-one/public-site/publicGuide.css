@@ -3,7 +3,7 @@
 .pg-guide-launcher {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  bottom: 92px;
   z-index: 70;
   min-width: 58px;
   min-height: 58px;
@@ -33,10 +33,10 @@
 .pg-guide-panel {
   position: fixed;
   right: 22px;
-  bottom: 92px;
+  bottom: 162px;
   z-index: 75;
   width: min(400px, calc(100vw - 28px));
-  height: min(650px, calc(100vh - 125px));
+  height: min(650px, calc(100vh - 195px));
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   overflow: hidden;
@@ -103,14 +103,14 @@
 .pg-guide-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 
 @media (max-width: 620px) {
-  .pg-guide-launcher { right: 13px; bottom: 13px; }
-  .pg-guide-panel { right: 8px; bottom: 80px; width: calc(100vw - 16px); height: min(720px, calc(100vh - 92px)); border-radius: 18px; }
+  .pg-guide-launcher { right: 13px; bottom: 84px; }
+  .pg-guide-panel { right: 8px; bottom: 151px; width: calc(100vw - 16px); height: min(650px, calc(100vh - 165px)); border-radius: 18px; }
 }
 
 @media (max-width: 390px) {
   .pg-guide-launcher { min-width: 52px; min-height: 52px; padding: 10px 13px; }
   .pg-guide-launcher span:last-child { display: none; }
-  .pg-guide-panel { inset: 8px; width: auto; height: auto; }
+  .pg-guide-panel { inset: 8px 8px 76px; width: auto; height: auto; }
   .pg-guide-composer { grid-template-columns: 1fr; }
   .pg-guide-button { width: 100%; }
 }
