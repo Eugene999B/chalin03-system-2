@@ -37,6 +37,14 @@ WHERE TABLE_SCHEMA = DATABASE()
   );
 
 SELECT
+    ABS(COUNT(DISTINCT INDEX_NAME) - 1) AS problem_count,
+    CASE WHEN COUNT(DISTINCT INDEX_NAME) = 1 THEN 'PASS' ELSE 'FAIL' END AS result
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'inventory_label_batches'
+  AND INDEX_NAME = 'uq_inventory_label_batch_source_item';
+
+SELECT
     COUNT(*) AS problem_count,
     CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
 FROM products
@@ -50,6 +58,13 @@ SELECT
 FROM products
 WHERE inventory_tracking_mode = 'quantity'
   AND inventory_traceability_state = 'enforced';
+
+-- Phase 1/2 safety: checkout enforcement has not been released yet.
+SELECT
+    COUNT(*) AS problem_count,
+    CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
+FROM products
+WHERE inventory_traceability_state = 'enforced';
 
 SELECT
     COUNT(*) AS problem_count,
@@ -79,6 +94,18 @@ SELECT
     CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
 FROM inventory_label_batches
 WHERE status NOT IN ('draft', 'generated', 'printed', 'verification', 'activated', 'cancelled');
+
+SELECT
+    COUNT(*) AS problem_count,
+    CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
+FROM (
+    SELECT branch_id, source_type, source_id, source_item_id
+    FROM inventory_label_batches
+    WHERE source_id IS NOT NULL
+      AND source_item_id IS NOT NULL
+    GROUP BY branch_id, source_type, source_id, source_item_id
+    HAVING COUNT(*) > 1
+) duplicate_source_item_batches;
 
 SELECT
     COUNT(*) AS problem_count,
@@ -115,7 +142,10 @@ LEFT JOIN products p ON p.id = u.product_id
 LEFT JOIN branches ob ON ob.id = u.origin_branch_id
 LEFT JOIN branches cb ON cb.id = u.current_branch_id
 LEFT JOIN inventory_label_batches b ON b.id = u.label_batch_id
-WHERE p.id IS NULL OR ob.id IS NULL OR cb.id IS NULL OR b.id IS NULL;
+WHERE p.id IS NULL
+   OR ob.id IS NULL
+   OR cb.id IS NULL
+   OR b.id IS NULL;
 
 SELECT
     COUNT(*) AS problem_count,
