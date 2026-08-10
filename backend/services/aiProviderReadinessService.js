@@ -28,9 +28,20 @@ function getAiProviderReadiness(env = process.env) {
   const selected = key !== "disabled";
   let credentialConfigured = false;
   let reasonCode = "AI_PROVIDER_DISABLED";
+  let ready = false;
+  let credentialRequired = false;
+  let externalNetwork = false;
+  let billingRequired = false;
 
-  if (key === "openai") {
+  if (key === "local") {
+    ready = true;
+    reasonCode = "AI_LOCAL_GOVERNED_PROVIDER_READY";
+  } else if (key === "openai") {
+    credentialRequired = true;
+    externalNetwork = true;
+    billingRequired = true;
     credentialConfigured = isConfiguredProviderSecret(env.OPENAI_API_KEY);
+    ready = credentialConfigured;
     reasonCode = credentialConfigured
       ? "AI_PROVIDER_READY"
       : "AI_OPENAI_API_KEY_REQUIRED";
@@ -40,13 +51,15 @@ function getAiProviderReadiness(env = process.env) {
     reasonCode = "AI_PROVIDER_READINESS_UNKNOWN";
   }
 
-  const ready = key === "openai" && credentialConfigured;
   return Object.freeze({
     key,
     selected,
     configured: ready,
     ready,
+    credential_required: credentialRequired,
     secret_configured: credentialConfigured,
+    external_network_required: externalNetwork,
+    billing_required: billingRequired,
     provider_side_storage_enabled: false,
     secret_values_exposed: false,
     reason_code: reasonCode,
