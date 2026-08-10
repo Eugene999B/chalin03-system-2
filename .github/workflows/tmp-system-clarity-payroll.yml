@@ -1,0 +1,78 @@
+name: Temporary System Clarity Payroll Patch
+
+on:
+  push:
+    branches:
+      - feature/system-clarity-payroll-simplification-20260810
+    paths:
+      - .github/workflows/tmp-system-clarity-payroll.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/system-clarity-payroll-simplification-20260810
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Apply deterministic system-clarity patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/tmp-system-clarity/patch_backend.py
+          python .github/tmp-system-clarity/patch_worker_page.py
+          python .github/tmp-system-clarity/patch_worker_panel.py
+          python .github/tmp-system-clarity/patch_processing_page.py
+          rm -rf .github/tmp-system-clarity
+          rm -f .github/workflows/tmp-system-clarity-payroll.yml
+
+      - name: Verify targeted backend contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend
+          npm ci
+          node --test tests/payrollWorkerOnboardingSimplification20260810.test.js
+          node --check routes/workerProfileExpansionRoutes.js
+          node --check services/payrollProcessingService.js
+
+      - name: Verify targeted frontend contracts and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          node scripts/payrollWorkerProfilePhaseThreeTests.mjs
+          node scripts/payrollProcessingPhaseFourTests.mjs
+          npm run lint
+          npm run build
+
+      - name: Publish verified feature changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            backend/routes/workerProfileExpansionRoutes.js \
+            backend/services/payrollProcessingService.js \
+            backend/tests/payrollWorkerOnboardingSimplification20260810.test.js \
+            frontend/src/pages/ExpandedWorkerProfilePage.jsx \
+            frontend/src/components/WorkerPayrollPanel.jsx \
+            frontend/src/styles/workerPayrollPanel.css \
+            frontend/src/pages/PayrollProcessingCentrePage.jsx \
+            frontend/scripts/payrollWorkerProfilePhaseThreeTests.mjs \
+            frontend/scripts/payrollProcessingPhaseFourTests.mjs \
+            .github/tmp-system-clarity \
+            .github/workflows/tmp-system-clarity-payroll.yml
+          git diff --cached --check
+          git commit -m "Simplify worker salary onboarding and monthly payroll"
+          git push origin HEAD:feature/system-clarity-payroll-simplification-20260810
