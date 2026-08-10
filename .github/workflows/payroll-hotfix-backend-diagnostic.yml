@@ -1,0 +1,49 @@
+name: Payroll Hotfix Backend Diagnostic
+
+on:
+  push:
+    branches:
+      - hotfix/payroll-migration-packaging-production-20260810
+    paths:
+      - .github/workflows/payroll-hotfix-backend-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/payroll-migration-packaging-production-20260810
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Capture complete backend TAP output
+        shell: bash
+        run: |
+          set +e
+          cd backend
+          npm test > /tmp/payroll-hotfix-backend.log 2>&1
+          status=$?
+          echo "TEST_EXIT_STATUS=${status}"
+          echo "===== FAILING TEST SUMMARY ====="
+          grep -nE '^(not ok|# Subtest:|# fail|# tests|# pass|# duration)|AssertionError|ERR_ASSERTION|failureType|error:' /tmp/payroll-hotfix-backend.log | tail -n 260 || true
+          echo "===== LOG TAIL ====="
+          tail -n 300 /tmp/payroll-hotfix-backend.log || true
+          exit "$status"
+      - name: Upload complete diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: payroll-hotfix-backend-diagnostic
+          path: /tmp/payroll-hotfix-backend.log
+          retention-days: 1
