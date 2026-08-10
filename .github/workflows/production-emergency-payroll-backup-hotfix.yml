@@ -1,0 +1,83 @@
+name: Production Emergency Backup and Payroll Applicator
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/production-emergency-payroll-backup-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: production
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply atomic production transport and payroll migration gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          page = Path('frontend/src/pages/BackupPage.jsx')
+          text = page.read_text()
+          old = '''const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";\nconst PRODUCTION_BACKUP_API_ROOT = "https://api.chalin03.com/api/backups";\nconst BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;\nconst BACKUP_VALIDATE_TIMEOUT_MS = 180000;\nconst BACKUP_RESTORE_TIMEOUT_MS = 600000;\n\nfunction isOfficialProductionHost() {\n  if (typeof window === "undefined") return false;\n  const hostname = String(window.location?.hostname || "").trim().toLowerCase();\n  return hostname === "chalin03.com" || hostname === "www.chalin03.com";\n}\n\nfunction backupRequestUrl(pathname) {\n  const suffix = String(pathname || "").startsWith("/")\n    ? String(pathname || "")\n    : `/${String(pathname || "")}`;\n  return isOfficialProductionHost()\n    ? `${PRODUCTION_BACKUP_API_ROOT}${suffix}`\n    : `/backups${suffix}`;\n}\n'''
+          new = '''const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";\nconst BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;\nconst BACKUP_VALIDATE_TIMEOUT_MS = 180000;\nconst BACKUP_RESTORE_TIMEOUT_MS = 600000;\n\nfunction backupRequestUrl(pathname) {\n  const suffix = String(pathname || "").startsWith("/")\n    ? String(pathname || "")\n    : `/${String(pathname || "")}`;\n  return `/backups${suffix}`;\n}\n'''
+          if text.count(old) != 1:
+              raise SystemExit('BackupPage direct-production block changed unexpectedly')
+          page.write_text(text.replace(old, new, 1))
+
+          contract = Path('frontend/scripts/backupRestoreDirectApiTests.mjs')
+          contract_text = contract.read_text()
+          contract_text = contract_text.replace(
+              'assert.match(source, /https:\\/\\/api\\.chalin03\\.com\\/api\\/backups/, "production backup operations should bypass the Cloudflare Pages API proxy");',
+              'assert.doesNotMatch(source, /https:\\/\\/api\\.chalin03\\.com\\/api\\/backups/, "production backup operations must remain on the trusted same-origin API path");\nassert.match(source, /return `\\/backups\\$\\{suffix\\}`;/, "backup operations should resolve through the same-origin /api client base");'
+          )
+          contract_text = contract_text.replace(
+              'assert.doesNotMatch(source, /axiosClient\\.get\\("\\/backups\\/download"/, "production download must not use the same-origin Pages proxy path");',
+              'assert.doesNotMatch(source, /PRODUCTION_BACKUP_API_ROOT/, "browser backup code must not bypass the trusted same-origin API boundary");'
+          )
+          contract_text = contract_text.replace(
+              'console.log("Backup & Restore direct API contracts passed.");',
+              'console.log("Backup & Restore same-origin transport contracts passed.");'
+          )
+          contract.write_text(contract_text)
+
+          package = Path('backend/package.json')
+          data = json.loads(package.read_text())
+          normal_start = 'node -r ./services/exportWorkbookSafetyBootstrap.js server.js'
+          if data['scripts']['start'] != normal_start:
+              raise SystemExit(f"Unexpected production start command: {data['scripts']['start']}")
+          data['scripts']['start'] = (
+              'CHALIN03_PAYROLL_FOUNDATION_MIGRATION_ENABLED=true '
+              'CHALIN03_SIGNED_BACKUP_CONFIRMED=true '
+              'CHALIN03_PAYROLL_MIGRATION_RELEASE=20260810_PAYROLL_FOUNDATION '
+              'node scripts/runPayrollFinancialFoundationMigration.js && '
+              + normal_start
+          )
+          package.write_text(json.dumps(data, indent=2) + '\n')
+          PY
+      - name: Verify exact emergency patch
+        shell: bash
+        run: |
+          node frontend/scripts/backupRestoreDirectApiTests.mjs
+          node --check backend/scripts/runPayrollFinancialFoundationMigration.js
+          node -e 'const p=require("./backend/package.json"); if(!p.scripts.start.includes("20260810_PAYROLL_FOUNDATION") || !p.scripts.start.endsWith("node -r ./services/exportWorkbookSafetyBootstrap.js server.js")) process.exit(1);'
+      - name: Publish one production emergency commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- frontend/src/pages/BackupPage.jsx frontend/scripts/backupRestoreDirectApiTests.mjs backend/package.json
+          git commit -m "Repair production backup transport and run payroll foundation gate"
+          git push origin HEAD:production
