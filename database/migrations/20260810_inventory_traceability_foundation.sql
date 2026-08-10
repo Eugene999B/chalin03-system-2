@@ -1,5 +1,7 @@
 -- CHALIN 03 INVENTORY LOSS PREVENTION & TRACEABILITY — FOUNDATION
--- Additive only. Existing products remain quantity-tracked by default.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: Before any production use, create and verify both a current Professional Backup and a separate SQL/database backup.
+-- Existing products remain quantity-tracked by default.
 -- Never run database/schema.sql against production for this feature.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
