@@ -25,13 +25,19 @@ export async function getContentStudioLaunchReadiness({ signal } = {}) {
     readiness,
     publicFeatures,
     studioDashboard,
+    studioPages,
+    websiteControl,
     publicBootstrap,
+    publicHomepage,
     analyticsDisclosure,
   ] = await Promise.allSettled([
     axiosClient.get("/readiness", config),
     axiosClient.get("/features/public", config),
     axiosClient.get("/content-studio/dashboard", config),
+    axiosClient.get("/content-studio/pages?limit=1", config),
+    axiosClient.get("/content-studio/pages/website-control", config),
     axiosClient.get("/public/content/bootstrap", config),
+    axiosClient.get("/public/content/homepage", config),
     axiosClient.get("/public/analytics/disclosure", config),
   ]);
 
@@ -39,7 +45,10 @@ export async function getContentStudioLaunchReadiness({ signal } = {}) {
     readiness: normalizeSettled(readiness),
     publicFeatures: normalizeSettled(publicFeatures),
     studioDashboard: normalizeSettled(studioDashboard),
+    studioPages: normalizeSettled(studioPages),
+    websiteControl: normalizeSettled(websiteControl),
     publicBootstrap: normalizeSettled(publicBootstrap),
+    publicHomepage: normalizeSettled(publicHomepage),
     analyticsDisclosure: normalizeSettled(analyticsDisclosure),
   };
 }
