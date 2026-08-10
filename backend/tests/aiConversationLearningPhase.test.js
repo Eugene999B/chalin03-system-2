@@ -15,6 +15,9 @@ const {
   publicSafeMessages,
 } = require("../services/aiProviderService");
 const {
+  requiresLiveData,
+} = require("../services/aiReasoningService");
+const {
   chooseLocalReadTool,
   composeSparePartsOperationsAnswer,
   inferredDateInput,
@@ -45,11 +48,14 @@ const operationsTool = Object.freeze({
   risk_level: 1,
 });
 
-test("reported sold-today wording is treated as live business data, not product help", () => {
+test("reported sold-today wording is treated as live business data through routing and deep reasoning", () => {
   const prompt = "how did the spare parts sold today";
   assert.equal(isLikelyLiveRecordRequest(prompt), true);
   assert.equal(isChalinProductKnowledgeTurn(prompt), false);
   assert.equal(hasPrivateBusinessSignal(prompt), true);
+  assert.equal(requiresLiveData(prompt), true);
+  assert.equal(requiresLiveData("what did we sell today"), true);
+  assert.equal(requiresLiveData("what payments were collected today"), true);
   assert.equal(
     isPublicSafeGeneralTurn({
       messages: [{ role: "user", content: prompt }],
@@ -109,19 +115,25 @@ test("safe general reasoning keeps a contiguous public-safe conversation tail", 
   assert.doesNotMatch(JSON.stringify(safe), /PRIVATE SYSTEM CONTEXT/);
 });
 
-test("public-safe continuity stops immediately at private live evidence", () => {
-  const safe = publicSafeMessages([
-    { role: "user", content: "How are sales doing?" },
-    {
-      role: "assistant",
-      content: "Total Sales GHS 5000, Branch Id 1",
-    },
-    { role: "user", content: "Explain compound interest simply." },
-  ]);
+test("public-safe continuity stops immediately at private live evidence or evidence markers", () => {
+  for (const privateAnswer of [
+    "Total Sales GHS 5000, Branch Id 1",
+    "PRIVATE SALES SNAPSHOT [E1]",
+    "Approved evidence for this request: [E1] internal operations",
+  ]) {
+    const safe = publicSafeMessages([
+      { role: "user", content: "How are sales doing?" },
+      { role: "assistant", content: privateAnswer },
+      { role: "user", content: "Explain compound interest simply." },
+    ]);
 
-  assert.equal(safe.length, 2);
-  assert.equal(safe[1].content, "Explain compound interest simply.");
-  assert.doesNotMatch(JSON.stringify(safe), /GHS 5000|Branch Id 1|How are sales doing/i);
+    assert.equal(safe.length, 2, privateAnswer);
+    assert.equal(safe[1].content, "Explain compound interest simply.");
+    assert.doesNotMatch(
+      JSON.stringify(safe),
+      /GHS 5000|Branch Id 1|PRIVATE SALES SNAPSHOT|Approved evidence|How are sales doing/i
+    );
+  }
 });
 
 test("local Spare Parts evidence answers directly instead of dumping raw fields", () => {
@@ -183,7 +195,7 @@ test("chat titles evolve from the actual topic and clarification", () => {
   );
 });
 
-test("conversation rollover has bounded message and character limits", () => {
+test("conversation rollover has bounded limits, a continuity warning and an immediate user notice", () => {
   assert.equal(
     conversationRolloverReason({
       message_count: CONVERSATION_ROLLOVER_MESSAGE_LIMIT,
@@ -215,6 +227,14 @@ test("conversation rollover has bounded message and character limits", () => {
   assert.match(note, /reached its conversation length limit/i);
   assert.match(note, /historical context only/i);
   assert.match(note, /re-checked/i);
+
+  const routeSource = fs.readFileSync(
+    path.resolve(__dirname, "../routes/aiRoutes.js"),
+    "utf8"
+  );
+  assert.match(routeSource, /function conversationRolloverNotice/);
+  assert.match(routeSource, /This conversation reached its reasoning limit/);
+  assert.match(routeSource, /answer:\s*notice \? `\$\{notice\}\\n\\n\$\{result\.answer/);
 });
 
 test("feature refreshes never put a loaded CHALIN screen back into global loading mode", () => {
