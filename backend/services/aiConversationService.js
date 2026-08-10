@@ -8,7 +8,7 @@ const { hashText } = require("./aiSafetyService");
 const { normalizeEvidenceList } = require("./aiEvidenceService");
 
 const GENERIC_TITLES = new Set(["", "New conversation", "General Conversation"]);
-const SOCIAL_ONLY_PATTERN = /^(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening)|how\s+(?:are|r)\s+you(?:\s+doing)?|what(?:'s|\s+is)\s+up|thanks|thank\s+you|okay|ok|cool|great|nice|bye|goodbye|see\s+you)[\s!.?,'-]*$/i;
+const SOCIAL_ONLY_PATTERN = /^(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening)|how\s+(?:are|r)\s+you(?:\s+doing)?|what(?:'s|\s+is)\s+up|how(?:'s|\s+is)\s+it\s+going|thanks|thank\s+you|okay|ok|cool|great|nice|bye|goodbye|see\s+you)[\s!.?,'-]*$/i;
 const LEADING_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening))[,!?.\s-]*)+/i;
 const TITLE_FILLER_PATTERN = /^(?:(?:please|can\s+you|could\s+you|would\s+you|tell\s+me|show\s+me|explain|help\s+me|i\s+want\s+to\s+know|i\s+need\s+to\s+know|what\s+is|what\s+are|how\s+is|how\s+are|why\s+is|why\s+are)\s+)+/i;
 
@@ -78,12 +78,20 @@ function titleCase(value) {
     .join(" ");
 }
 
+function isSocialOnly(value) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return true;
+  if (SOCIAL_ONLY_PATTERN.test(text)) return true;
+  const withoutGreeting = text.replace(LEADING_SOCIAL_PATTERN, "").trim();
+  return Boolean(withoutGreeting) && SOCIAL_ONLY_PATTERN.test(withoutGreeting);
+}
+
 function deriveConversationTitle(value, maximum = 72) {
   const original = String(value ?? "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (!original || SOCIAL_ONLY_PATTERN.test(original)) return "General Conversation";
+  if (!original || isSocialOnly(original)) return "General Conversation";
 
   let text = original
     .replace(LEADING_SOCIAL_PATTERN, "")
@@ -92,7 +100,7 @@ function deriveConversationTitle(value, maximum = 72) {
     .replace(/[?!.]+$/g, "")
     .replace(/^[\s,;:—–-]+|[\s,;:—–-]+$/g, "")
     .trim();
-  if (!text) return "General Conversation";
+  if (!text || isSocialOnly(text)) return "General Conversation";
 
   const words = text.split(/\s+/).filter(Boolean).slice(0, 10);
   text = words.join(" ").slice(0, maximum).trim();
@@ -490,6 +498,7 @@ module.exports = {
   deleteConversation,
   deriveConversationTitle,
   getConversationDetails,
+  isSocialOnly,
   key,
   listConversations,
   loadOwnedConversation,
