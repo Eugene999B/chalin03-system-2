@@ -10,10 +10,15 @@ const read = (relativePath) =>
 
 const evidence = read("src/components/AdvancedAccountingExpenseFundingEvidence.jsx");
 const main = read("src/main.jsx");
+const operationalRoot = read("src/OperationalAppRoot.jsx");
+const publicRoot = read("src/chalin-one/PublicChalinOneEntry.jsx");
 const accountingRoutes = read("../backend/routes/accountingIntelligenceRoutes.js");
 const evidenceService = read("../backend/services/expenseFundingEvidenceService.js");
 
-assert.match(main, /AdvancedAccountingExpenseFundingEvidence/);
+assert.match(operationalRoot, /AdvancedAccountingExpenseFundingEvidence/);
+assert.doesNotMatch(main, /AdvancedAccountingExpenseFundingEvidence/);
+assert.doesNotMatch(publicRoot, /AdvancedAccountingExpenseFundingEvidence/);
+assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
 assert.match(evidence, /\/accounting-intelligence\/expense-funding/);
 assert.match(evidence, /Daily Closing & Accounting Evidence/);
 assert.match(evidence, /All valid expenses reduce profit/);
