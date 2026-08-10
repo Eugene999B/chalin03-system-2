@@ -1,0 +1,27 @@
+/* Keep the compact appearance control visible without covering workspace actions. */
+@media (min-width: 921px) {
+  body:has(.premium-layout) .premium-main-topbar,
+  body:has(.bwl-shell) .bwl-topbar {
+    padding-right: 118px !important;
+  }
+}
+
+@media (max-width: 920px) {
+  body:has(.premium-layout) .chalin-global-appearance,
+  body:has(.bwl-shell) .chalin-global-appearance {
+    top: 64px;
+    right: 9px;
+  }
+
+  body:has(.premium-layout) .chalin-global-appearance .chalin-appearance-toggle-copy,
+  body:has(.bwl-shell) .chalin-global-appearance .chalin-appearance-toggle-copy {
+    display: none;
+  }
+
+  body:has(.premium-layout) .chalin-global-appearance .chalin-appearance-toggle,
+  body:has(.bwl-shell) .chalin-global-appearance .chalin-appearance-toggle {
+    width: 36px;
+    min-height: 36px;
+    padding: 5px;
+  }
+}

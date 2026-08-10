@@ -6,6 +6,11 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router";
+import { useAppearance } from "../../appearance/AppearanceContext";
+import {
+  loadAiChatPreferences,
+  saveAiChatPreferences,
+} from "../../appearance/aiChatPreferences";
 import { useAuth } from "../../context/AuthContext";
 import {
   AI_PERSONAS,
@@ -228,7 +233,7 @@ function FeedbackButtons({ conversationKey, messageKey, onFeedback }) {
   );
 }
 
-function ChatMessage({ message, persona, conversationKey, resultMeta = null }) {
+function ChatMessage({ message, persona, conversationKey, resultMeta = null, showTechnicalDetails = false }) {
   const assistant = message.role === "assistant";
   return (
     <article className={`ci-message ci-message-${assistant ? "assistant" : "user"}`}>
@@ -239,7 +244,7 @@ function ChatMessage({ message, persona, conversationKey, resultMeta = null }) {
         <strong>{assistant ? humanize(persona) : "You"}</strong>
         <div className="ci-message-text">{message.content || message.answer}</div>
         {assistant ? <EvidenceList evidence={message.evidence || resultMeta?.evidence} /> : null}
-        {assistant ? (
+        {assistant && showTechnicalDetails ? (
           <div className="ci-message-meta">
             {message.model_key || resultMeta?.provider?.model ? (
               <span>Model: {message.model_key || resultMeta.provider.model}</span>
@@ -262,16 +267,147 @@ function ChatMessage({ message, persona, conversationKey, resultMeta = null }) {
   );
 }
 
-function ChatPanel({ persona, conversation, messages, sending, error, onSend, onStarter }) {
+function ChatSettingsModal({ settings, setSettings, provider, onClose }) {
+  const { preference, resolved, setAppearance } = useAppearance();
+
+  function updateSetting(key, value) {
+    setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  return (
+    <div className="ci-modal-backdrop ci-settings-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="ci-settings-panel" role="dialog" aria-modal="true" aria-labelledby="ci-settings-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="ci-settings-head">
+          <div>
+            <span className="ci-eyebrow">Conversation preferences</span>
+            <h2 id="ci-settings-title">Settings</h2>
+          </div>
+          <button type="button" className="ci-plain-icon-button" aria-label="Close settings" onClick={onClose}>×</button>
+        </header>
+        <div className="ci-settings-body">
+          <section className="ci-setting-section">
+            <div className="ci-setting-copy">
+              <strong>Appearance</strong>
+              <span>Choose a calm workspace theme. Your choice is shared with staff login and workspaces.</span>
+            </div>
+            <div className="ci-appearance-options" role="group" aria-label="Appearance">
+              {["light", "dark", "system"].map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  aria-pressed={preference === option}
+                  onClick={() => setAppearance(option)}
+                >
+                  <span aria-hidden="true">{option === "light" ? "☀" : option === "dark" ? "☾" : "◐"}</span>
+                  {humanize(option)}
+                </button>
+              ))}
+            </div>
+            <small className="ci-setting-note">Currently using {resolved} mode.</small>
+          </section>
+
+          <section className="ci-setting-row">
+            <div className="ci-setting-copy">
+              <strong>Send with Enter</strong>
+              <span>Press Enter to send. Shift + Enter always creates a new line.</span>
+            </div>
+            <button
+              type="button"
+              className="ci-switch"
+              role="switch"
+              aria-checked={settings.sendWithEnter}
+              onClick={() => updateSetting("sendWithEnter", !settings.sendWithEnter)}
+            ><span /></button>
+          </section>
+
+          <section className="ci-setting-row">
+            <div className="ci-setting-copy">
+              <strong>Technical response details</strong>
+              <span>Show model, thinking level, safety state, timestamps and token totals under replies.</span>
+            </div>
+            <button
+              type="button"
+              className="ci-switch"
+              role="switch"
+              aria-checked={settings.showTechnicalDetails}
+              onClick={() => updateSetting("showTechnicalDetails", !settings.showTechnicalDetails)}
+            ><span /></button>
+          </section>
+
+          <section className="ci-settings-runtime">
+            <span className="ci-eyebrow">Runtime</span>
+            <strong>{provider?.key || "No provider"}{provider?.model_key ? ` · ${provider.model_key}` : ""}</strong>
+            <p>Conversation refreshes never intentionally clear your active chat. A new chat starts only when you request one, delete the active chat, or switch persona.</p>
+          </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ConversationActionDialog({ action, busy, onClose, onConfirm }) {
+  const [title, setTitle] = useState(action?.item?.title || "");
+  if (!action?.item) return null;
+  const deleting = action.mode === "delete";
+
+  return (
+    <div className="ci-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="ci-conversation-dialog" role="dialog" aria-modal="true" aria-labelledby="ci-conversation-action-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="ci-eyebrow">Conversation</span>
+            <h2 id="ci-conversation-action-title">{deleting ? "Delete conversation?" : "Rename conversation"}</h2>
+          </div>
+          <button type="button" className="ci-plain-icon-button" aria-label="Close" onClick={onClose}>×</button>
+        </header>
+        {deleting ? (
+          <p>“{action.item.title || "New conversation"}” and its chat messages will be permanently removed.</p>
+        ) : (
+          <label className="ci-dialog-field">
+            Conversation name
+            <input autoFocus maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+        )}
+        <div className="ci-dialog-actions">
+          <button type="button" className="ci-button ci-button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={deleting ? "ci-button ci-button-danger-solid" : "ci-button ci-button-primary"} onClick={() => onConfirm(title)} disabled={busy || (!deleting && !title.trim())}>
+            {busy ? "Working…" : deleting ? "Delete" : "Save name"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ConversationRow({ item, active, onOpen, onRename, onDelete }) {
+  return (
+    <div className="ci-conversation-row" data-active={active ? "true" : "false"}>
+      <button type="button" className="ci-conversation-open" aria-current={active ? "true" : undefined} onClick={() => onOpen(item)}>
+        <strong>{item.title || "New conversation"}</strong>
+        <small>{formatDate(item.last_message_at || item.updated_at, true)}</small>
+      </button>
+      <details className="ci-conversation-more">
+        <summary aria-label={`More options for ${item.title || "conversation"}`} title="Conversation options">•••</summary>
+        <div className="ci-conversation-menu">
+          <button type="button" onClick={() => onRename(item)}>Rename</button>
+          <button type="button" className="is-danger" onClick={() => onDelete(item)}>Delete</button>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function ChatPanel({ persona, conversation, messages, sending, error, onSend, onStarter, settings, onOpenSettings }) {
   const [draft, setDraft] = useState("");
   const streamRef = useRef(null);
 
   useEffect(() => {
-    streamRef.current?.scrollTo({
-      top: streamRef.current.scrollHeight,
-      behavior: sending ? "auto" : "smooth",
+    const element = streamRef.current;
+    if (!element) return;
+    requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight;
     });
-  }, [messages, sending]);
+  }, [messages.length, sending]);
 
   async function submit(event) {
     event.preventDefault();
@@ -283,19 +419,24 @@ function ChatPanel({ persona, conversation, messages, sending, error, onSend, on
 
   return (
     <section className="ci-chat-panel">
-      <div className="ci-panel ci-chat-stream" ref={streamRef}>
-        {conversation?.title ? (
-          <div className="ci-chat-title" aria-label="Conversation title">
-            <strong>{conversation.title}</strong>
-          </div>
-        ) : null}
+      <header className="ci-chat-head">
+        <div className="ci-chat-head-copy">
+          <span>{persona === "executive" ? "Executive" : "Copilot"}</span>
+          <strong>{conversation?.title || "New chat"}</strong>
+        </div>
+        <button type="button" className="ci-chat-settings-button" onClick={onOpenSettings} aria-label="Open chat settings">
+          <span aria-hidden="true">⚙</span>
+          Settings
+        </button>
+      </header>
+      <div className="ci-chat-stream" ref={streamRef}>
         {messages.length === 0 ? (
           <div className="ci-empty-chat">
             <div>
-              <span className="ci-eyebrow">Deep governed intelligence</span>
-              <h1>{persona === "executive" ? "Chalin Executive" : "Chalin Copilot"}</h1>
+              <span className="ci-eyebrow">CHALIN intelligence</span>
+              <h1>{persona === "executive" ? "What should we examine?" : "What can I help you work through?"}</h1>
               <p>
-                Ask naturally. CHALIN can reason, investigate approved live data, compare evidence, recall relevant prior conversations and explain what matters instead of dumping raw snapshots.
+                Ask naturally. CHALIN can investigate approved live data, reason across evidence and recall relevant earlier conversations without resetting the chat while background data refreshes.
               </p>
               <div className="ci-starter-grid">
                 {CHAT_STARTERS[persona].map((starter) => (
@@ -314,13 +455,14 @@ function ChatPanel({ persona, conversation, messages, sending, error, onSend, on
               persona={persona}
               conversationKey={conversation?.key}
               resultMeta={message.resultMeta}
+              showTechnicalDetails={settings.showTechnicalDetails}
             />
           ))
         )}
         {sending ? (
           <div className="ci-thinking" role="status" aria-live="polite">
-            <span className="ci-thinking-dot" aria-hidden="true" />
-            <strong>CHALIN is thinking and investigating…</strong>
+            <span className="ci-thinking-mark" aria-hidden="true">C1</span>
+            <div><strong>CHALIN is thinking</strong><small>Investigating the available context and evidence…</small></div>
           </div>
         ) : null}
         {error ? <div className="ci-banner ci-banner-danger" role="alert">{error}</div> : null}
@@ -335,18 +477,18 @@ function ChatPanel({ persona, conversation, messages, sending, error, onSend, on
             disabled={sending}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (settings.sendWithEnter && event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 event.currentTarget.form?.requestSubmit();
               }
             }}
           />
-          <button className="ci-button ci-button-primary" type="submit" disabled={sending || !draft.trim()}>
-            {sending ? "Thinking…" : "Send"}
+          <button className="ci-send-button" type="submit" aria-label="Send message" disabled={sending || !draft.trim()}>
+            {sending ? "…" : "↑"}
           </button>
         </form>
         <p className="ci-composer-note">
-          Conversation history is preserved for continuity. Credentials and unauthorized cross-user data remain excluded; sensitive business actions still require the normal CHALIN controls.
+          {settings.sendWithEnter ? "Enter sends · Shift + Enter adds a line" : "Use the send button · Enter adds a line"}
         </p>
       </div>
     </section>
@@ -556,12 +698,22 @@ export default function ChalinIntelligenceWorkspace() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [tools, setTools] = useState([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatSettings, setChatSettings] = useState(loadAiChatPreferences);
+  const [conversationAction, setConversationAction] = useState(null);
+  const [conversationActionBusy, setConversationActionBusy] = useState(false);
+  const activePersonaRef = useRef(persona);
+  const activeChatEpochRef = useRef(0);
 
   const permissions = useMemo(() => permissionSet(status), [status]);
   const providerActive = status?.provider?.key && status.provider.key !== "disabled";
   const personaAvailable = canUsePersona(status, persona);
   const knowledgeAvailable = permissions.has("ai.knowledge.view");
   const usageAvailable = permissions.has("ai.usage.view");
+
+  useEffect(() => {
+    saveAiChatPreferences(chatSettings);
+  }, [chatSettings]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -577,10 +729,7 @@ export default function ChalinIntelligenceWorkspace() {
 
   const loadConversations = useCallback(
     async (signal, { silent = false, force = false } = {}) => {
-      if (!status || !canUsePersona(status, persona)) {
-        setConversations([]);
-        return;
-      }
+      if (!status || !canUsePersona(status, persona)) return;
       if (!silent) setConversationLoading(true);
       setConversationError("");
       try {
@@ -601,119 +750,193 @@ export default function ChalinIntelligenceWorkspace() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setConversation(null); setMessages([]);
+    if (activePersonaRef.current !== persona) {
+      activePersonaRef.current = persona;
+      activeChatEpochRef.current += 1;
+      setConversation(null);
+      setMessages([]);
+      setSendError("");
+    }
     loadConversations(controller.signal);
     return () => controller.abort();
-  }, [loadConversations]);
+  }, [loadConversations, persona]);
 
   async function openConversation(item) {
+    const epoch = activeChatEpochRef.current + 1;
+    activeChatEpochRef.current = epoch;
     setConversationError("");
+    setSendError("");
     try {
       const details = await getAiConversation(persona, item.key);
-      setConversation(details.conversation); setMessages(details.messages || []); setTab("chat");
-    } catch (error) { setConversationError(aiErrorMessage(error)); }
+      if (activeChatEpochRef.current !== epoch) return;
+      setConversation(details.conversation);
+      setMessages(details.messages || []);
+      setTab("chat");
+    } catch (error) {
+      if (activeChatEpochRef.current === epoch) setConversationError(aiErrorMessage(error));
+    }
   }
 
   function newConversation() {
-    setConversation(null); setMessages([]); setSendError(""); setTab("chat");
+    activeChatEpochRef.current += 1;
+    setConversation(null);
+    setMessages([]);
+    setSendError("");
+    setTab("chat");
   }
 
   async function send(message) {
     if (!personaAvailable || sending) return;
-    setSending(true); setSendError("");
+    const epoch = activeChatEpochRef.current;
+    const startingConversationKey = conversation?.key || null;
+    setSending(true);
+    setSendError("");
     const optimisticUser = { key: `local-user-${Date.now()}`, role: "user", content: message, safety_status: "pending", created_at: new Date().toISOString() };
     setMessages((current) => [...current, optimisticUser]);
     try {
-      const result = await sendAiMessage(persona, { conversationKey: conversation?.key || null, message });
+      const result = await sendAiMessage(persona, { conversationKey: startingConversationKey, message });
       const conversationKey = result.conversation_key;
-      const assistant = { key: result.message_key, role: "assistant", content: result.answer, safety_status: "allowed", model_key: result.provider?.model, evidence: result.evidence || [], created_at: new Date().toISOString(), resultMeta: result };
-      setConversation((current) => current ? { ...current, title: current.title === "General Conversation" ? deriveConversationTitle(message) : current.title } : { key: conversationKey, title: deriveConversationTitle(message), persona, workspace_code: workspaceCode });
-      setMessages((current) => [...current, assistant]);
-      await loadConversations(undefined, { silent: true, force: true });
+      const now = new Date().toISOString();
+      const assistant = { key: result.message_key, role: "assistant", content: result.answer, safety_status: "allowed", model_key: result.provider?.model, evidence: result.evidence || [], created_at: now, resultMeta: result };
+      const nextTitle = conversation?.title && conversation.title !== "General Conversation"
+        ? conversation.title
+        : deriveConversationTitle(message);
+
+      setConversations((current) => {
+        const existing = current.find((item) => item.key === conversationKey);
+        const row = {
+          ...(existing || {}),
+          key: conversationKey,
+          title: nextTitle,
+          persona,
+          workspace_code: workspaceCode,
+          last_message_at: now,
+          updated_at: now,
+        };
+        return [row, ...current.filter((item) => item.key !== conversationKey)];
+      });
+
+      if (activeChatEpochRef.current === epoch) {
+        setConversation((current) => current
+          ? { ...current, key: conversationKey, title: nextTitle }
+          : { key: conversationKey, title: nextTitle, persona, workspace_code: workspaceCode });
+        setMessages((current) => [...current, assistant]);
+      }
+
+      loadConversations(undefined, { silent: true, force: true });
     } catch (error) {
-      setSendError(aiErrorMessage(error));
-    } finally { setSending(false); }
+      if (activeChatEpochRef.current === epoch) setSendError(aiErrorMessage(error));
+    } finally {
+      setSending(false);
+    }
   }
 
-  async function renameCurrent() {
-    if (!conversation?.key) return;
-    const title = window.prompt("Conversation title", conversation.title || "");
-    if (!title?.trim()) return;
+  async function confirmConversationAction(nextTitle) {
+    const action = conversationAction;
+    if (!action?.item?.key || conversationActionBusy) return;
+    setConversationActionBusy(true);
+    setConversationError("");
     try {
-      await renameAiConversation(persona, conversation.key, title.trim());
-      setConversation((current) => ({ ...current, title: title.trim() }));
-      setConversations((current) => current.map((item) => item.key === conversation.key ? { ...item, title: title.trim() } : item));
-      await loadConversations(undefined, { silent: true, force: true });
-    } catch (error) { setConversationError(aiErrorMessage(error)); }
+      if (action.mode === "rename") {
+        const title = String(nextTitle || "").trim();
+        if (!title) return;
+        await renameAiConversation(persona, action.item.key, title);
+        setConversations((current) => current.map((item) => item.key === action.item.key ? { ...item, title } : item));
+        if (conversation?.key === action.item.key) setConversation((current) => current ? { ...current, title } : current);
+      } else {
+        await deleteAiConversation(persona, action.item.key);
+        setConversations((current) => current.filter((item) => item.key !== action.item.key));
+        if (conversation?.key === action.item.key) newConversation();
+      }
+      setConversationAction(null);
+      loadConversations(undefined, { silent: true, force: true });
+    } catch (error) {
+      setConversationError(aiErrorMessage(error));
+    } finally {
+      setConversationActionBusy(false);
+    }
   }
 
-  async function deleteCurrent() {
-    if (!conversation?.key) return;
-    const title = conversation.title || "this conversation";
-    if (!window.confirm(`Delete “${title}” permanently? This removes the conversation and its chat messages.`)) return;
-    try {
-      const key = conversation.key;
-      await deleteAiConversation(persona, key);
-      setConversations((current) => current.filter((item) => item.key !== key));
-      newConversation();
-      await loadConversations(undefined, { silent: true, force: true });
-    } catch (error) { setConversationError(aiErrorMessage(error)); }
-  }
-
-  if (statusLoading) return <main className="ci-shell" style={{ display: "grid", placeItems: "center" }}><StatePanel loading /></main>;
-  if (statusError || !status) return <main className="ci-shell" style={{ display: "grid", placeItems: "center", padding: 20 }}><div><StatePanel error={statusError || "The intelligence status could not be verified."} /><p style={{ textAlign: "center" }}><Link to="/">Return to the staff system</Link></p></div></main>;
+  if (statusLoading) return <main className="ci-shell ci-shell-loading"><StatePanel loading /></main>;
+  if (statusError || !status) return <main className="ci-shell ci-shell-loading"><div><StatePanel error={statusError || "The intelligence status could not be verified."} /><p style={{ textAlign: "center" }}><Link to="/">Return to the staff system</Link></p></div></main>;
 
   return (
     <main className="ci-shell">
       <header className="ci-topbar">
-        <div className="ci-brand"><span className="ci-brand-mark" aria-hidden="true">C1</span><span className="ci-brand-copy"><strong>CHALIN ONE Intelligence</strong><small>{user?.full_name || user?.username || "Authorized staff"}</small></span></div>
+        <div className="ci-brand">
+          <span className="ci-brand-mark" aria-hidden="true">C1</span>
+          <span className="ci-brand-copy"><strong>CHALIN Intelligence</strong><small>{user?.full_name || user?.username || "Authorized staff"}</small></span>
+        </div>
         <div className="ci-topbar-actions">
           <span className="ci-scope-pill">{workspaceName || humanize(workspaceCode)}</span>
-          <span className="ci-provider-pill" data-active={providerActive ? "true" : "false"}>Provider: {status.provider?.key || "disabled"}{status.provider?.model_key ? ` · ${status.provider.model_key}` : ""}</span>
-          <span className="ci-status-pill" data-state={status.ai_actions_enabled ? "danger" : "success"}>{status.ai_actions_enabled ? "Approved actions enabled" : "Read / recommend / prepare only"}</span>
+          <span className="ci-provider-pill" data-active={providerActive ? "true" : "false"}>{status.provider?.key || "disabled"}{status.provider?.model_key ? ` · ${status.provider.model_key}` : ""}</span>
           <Link className="ci-button ci-button-secondary" to="/">Staff system</Link>
         </div>
       </header>
-      {!providerActive ? <div className="ci-banner" role="status" style={{ marginInline: 16 }}>No usable provider is active for Copilot. Open Provider Control to select CHALIN Local or a configured external provider.</div> : null}
+      {!providerActive ? <div className="ci-banner ci-provider-warning" role="status">No usable provider is active for Copilot. Open Provider Control to select CHALIN Local or a configured external provider.</div> : null}
       <div className="ci-workspace">
         <aside className="ci-sidebar">
           <div className="ci-sidebar-head">
-            <button type="button" className="ci-button ci-button-primary ci-new-chat" onClick={newConversation} disabled={!personaAvailable}>New chat</button>
+            <button type="button" className="ci-new-chat" onClick={newConversation} disabled={!personaAvailable}><span aria-hidden="true">＋</span> New chat</button>
             <div className="ci-persona-switch" aria-label="Intelligence persona">
               <button type="button" aria-pressed={persona === AI_PERSONAS.copilot} disabled={!canUsePersona(status, AI_PERSONAS.copilot)} onClick={() => setPersona(AI_PERSONAS.copilot)}>Copilot</button>
               <button type="button" aria-pressed={persona === AI_PERSONAS.executive} disabled={!canUsePersona(status, AI_PERSONAS.executive)} onClick={() => setPersona(AI_PERSONAS.executive)}>Executive</button>
             </div>
           </div>
           <div className="ci-sidebar-section">
-            <span className="ci-sidebar-label">Conversations</span>
+            <div className="ci-sidebar-section-head">
+              <span className="ci-sidebar-label">Chats</span>
+              {conversationLoading && conversations.length > 0 ? <small>Updating</small> : null}
+            </div>
             {conversationError ? <div className="ci-banner ci-banner-danger">{conversationError}</div> : null}
-            {conversationLoading && conversations.length === 0 ? <div className="ci-state">Loading conversations…</div> : (
+            {conversationLoading && conversations.length === 0 ? <div className="ci-sidebar-skeleton" aria-label="Loading conversations"><span /><span /><span /></div> : (
               <div className="ci-conversation-list">
-                {conversationLoading ? <small className="ci-sync-label">Syncing…</small> : null}
-                {conversations.map((item) => <button type="button" className="ci-conversation-item" key={item.key} aria-current={conversation?.key === item.key ? "true" : undefined} onClick={() => openConversation(item)}><strong>{item.title || "New conversation"}</strong><small>{formatDate(item.last_message_at || item.updated_at, true)}</small></button>)}
-                {conversations.length === 0 ? <div className="ci-state"><span>No saved conversations.</span></div> : null}
+                {conversations.map((item) => (
+                  <ConversationRow
+                    key={item.key}
+                    item={item}
+                    active={conversation?.key === item.key}
+                    onOpen={openConversation}
+                    onRename={(target) => setConversationAction({ mode: "rename", item: target })}
+                    onDelete={(target) => setConversationAction({ mode: "delete", item: target })}
+                  />
+                ))}
+                {conversations.length === 0 ? <div className="ci-sidebar-empty">No saved chats yet.</div> : null}
               </div>
             )}
           </div>
           <div className="ci-sidebar-footer">
-            <span className="ci-sidebar-label">Intelligence tools</span>
-            <p style={{ fontSize: ".72rem", color: "var(--ci-slate-700)" }}>{tools.length} permission-scoped read tool{tools.length === 1 ? "" : "s"} available.</p>
-            {conversation?.key ? <div className="ci-card-actions"><button type="button" className="ci-button ci-button-secondary" onClick={renameCurrent}>Rename</button><button type="button" className="ci-button ci-button-danger" onClick={deleteCurrent}>Delete</button></div> : null}
+            <div><span className="ci-sidebar-label">Available context</span><p>{tools.length} permission-scoped read tool{tools.length === 1 ? "" : "s"}</p></div>
+            <button type="button" className="ci-sidebar-settings" onClick={() => setSettingsOpen(true)}><span aria-hidden="true">⚙</span> Settings</button>
           </div>
         </aside>
         <section className="ci-main">
           <div className="ci-tabs" role="tablist" aria-label="Intelligence workspace">
-            <button type="button" role="tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>Conversation</button>
+            <button type="button" role="tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>Chat</button>
             <button type="button" role="tab" aria-selected={tab === "knowledge"} disabled={!knowledgeAvailable} onClick={() => setTab("knowledge")}>Knowledge</button>
             <button type="button" role="tab" aria-selected={tab === "usage"} disabled={!usageAvailable} onClick={() => setTab("usage")}>Usage</button>
           </div>
           <div className="ci-panel" role="tabpanel">
-            {tab === "chat" ? personaAvailable ? <ChatPanel persona={persona} conversation={conversation} messages={messages} sending={sending} error={sendError} onSend={send} onStarter={send} /> : <div className="ci-page"><StatePanel error={`The ${humanize(persona)} persona is disabled or not granted to this account.`} /></div> : null}
+            {tab === "chat" ? personaAvailable ? (
+              <ChatPanel
+                persona={persona}
+                conversation={conversation}
+                messages={messages}
+                sending={sending}
+                error={sendError}
+                onSend={send}
+                onStarter={send}
+                settings={chatSettings}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
+            ) : <div className="ci-page"><StatePanel error={`The ${humanize(persona)} persona is disabled or not granted to this account.`} /></div> : null}
             {tab === "knowledge" && knowledgeAvailable ? <KnowledgePanel permissions={permissions} /> : null}
             {tab === "usage" && usageAvailable ? <UsagePanel /> : null}
           </div>
         </section>
       </div>
+      {settingsOpen ? <ChatSettingsModal settings={chatSettings} setSettings={setChatSettings} provider={status.provider} onClose={() => setSettingsOpen(false)} /> : null}
+      {conversationAction ? <ConversationActionDialog action={conversationAction} busy={conversationActionBusy} onClose={() => !conversationActionBusy && setConversationAction(null)} onConfirm={confirmConversationAction} /> : null}
     </main>
   );
 }

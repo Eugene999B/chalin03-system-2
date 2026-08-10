@@ -257,7 +257,8 @@ test("protected Intelligence surface no longer participates in automatic service
   assert.match(workspace, /deleteAiConversation/);
   assert.match(workspace, />Delete<\/button>/);
   assert.match(workspace, /maxLength=\{32000\}/);
-  assert.match(workspace, /CHALIN is thinking and investigating/);
+  assert.match(workspace, /CHALIN is thinking/);
+  assert.match(workspace, /Investigating the available context and evidence/);
   assert.doesNotMatch(workspace, />Archive<\/button>/);
   assert.match(api, /axiosClient\.delete/);
   assert.match(control, /Full Gemini Intelligence/);
