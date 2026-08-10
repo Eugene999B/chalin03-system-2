@@ -2,10 +2,10 @@
 
 const crypto = require("crypto");
 
-const MAX_PROMPT_CHARACTERS = 8000;
-const MAX_PROVIDER_MESSAGES = 30;
-const MAX_PROVIDER_OUTPUT_CHARACTERS = 24000;
-const MAX_SAFE_SUMMARY_CHARACTERS = 500;
+const MAX_PROMPT_CHARACTERS = 32000;
+const MAX_PROVIDER_MESSAGES = 100;
+const MAX_PROVIDER_OUTPUT_CHARACTERS = 120000;
+const MAX_SAFE_SUMMARY_CHARACTERS = 800;
 
 const PROMPT_INJECTION_PATTERNS = Object.freeze([
   Object.freeze({ key: "ignore_instructions", pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?)/i }),
