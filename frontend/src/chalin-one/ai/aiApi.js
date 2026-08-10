@@ -230,6 +230,40 @@ export async function deleteAiConversation(persona, conversationKey) {
   return unwrap(response) || null;
 }
 
+export async function clearAiConversationHistory(persona) {
+  const statuses = ["active", "archived", "blocked"];
+  const groups = await Promise.all(
+    statuses.map((status) =>
+      listAiConversations(
+        persona,
+        { status, limit: 100 },
+        { force: true }
+      )
+    )
+  );
+  const keys = [
+    ...new Set(
+      groups
+        .flat()
+        .map((row) => row?.key)
+        .filter(Boolean)
+    ),
+  ];
+
+  for (let index = 0; index < keys.length; index += 8) {
+    await Promise.all(
+      keys
+        .slice(index, index + 8)
+        .map((conversationKey) =>
+          deleteAiConversation(persona, conversationKey)
+        )
+    );
+  }
+
+  invalidateAiConversationCache(persona);
+  return Object.freeze({ deleted: keys.length });
+}
+
 export function invalidateAiConversationCache(persona = null) {
   if (!persona) {
     conversationCache.clear();
