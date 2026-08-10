@@ -25,6 +25,7 @@ const {
 const aiRoutes = require("./aiRoutes");
 const contentStudioAuthRoutes = require("./contentStudioAuthRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
+const publicAnalyticsRoutes = require("./publicAnalyticsRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
 const publicRedirectRoutes = require("./publicRedirectRoutes");
 
@@ -290,6 +291,12 @@ router.use(
   "/public/redirects",
   requireFeature("publicWebsite"),
   publicRedirectRoutes
+);
+
+router.use(
+  "/public/analytics",
+  requireFeature("publicWebsite"),
+  publicAnalyticsRoutes
 );
 
 router.use(
