@@ -21,17 +21,24 @@ export async function getContentStudioLaunchReadiness({ signal } = {}) {
     headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
   };
 
-  const [readiness, publicFeatures, publicBootstrap, analyticsDisclosure] =
-    await Promise.allSettled([
-      axiosClient.get("/readiness", config),
-      axiosClient.get("/features/public", config),
-      axiosClient.get("/public/content/bootstrap", config),
-      axiosClient.get("/public/analytics/disclosure", config),
-    ]);
+  const [
+    readiness,
+    publicFeatures,
+    studioDashboard,
+    publicBootstrap,
+    analyticsDisclosure,
+  ] = await Promise.allSettled([
+    axiosClient.get("/readiness", config),
+    axiosClient.get("/features/public", config),
+    axiosClient.get("/content-studio/dashboard", config),
+    axiosClient.get("/public/content/bootstrap", config),
+    axiosClient.get("/public/analytics/disclosure", config),
+  ]);
 
   return {
     readiness: normalizeSettled(readiness),
     publicFeatures: normalizeSettled(publicFeatures),
+    studioDashboard: normalizeSettled(studioDashboard),
     publicBootstrap: normalizeSettled(publicBootstrap),
     analyticsDisclosure: normalizeSettled(analyticsDisclosure),
   };
