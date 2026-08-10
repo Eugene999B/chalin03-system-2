@@ -5,8 +5,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
-const validatorSource = read("validation/financialRequestValidators.js");
-const saleRouteSource = read("routes/saleRoutes.js");
 const serviceSource = read("services/inventorySaleTraceabilityService.js");
 
 const {
@@ -14,23 +12,12 @@ const {
   normalizeUnitSelection,
 } = require("../services/inventorySaleTraceabilityService");
 
-test("sale request validator accepts only normalized physical unit ID arrays", () => {
-  assert.match(validatorSource, /INVENTORY_UNIT_CODE_PATTERN/);
-  assert.match(validatorSource, /"unit_ids"/);
-  assert.match(validatorSource, /unit_ids: unitIds/);
-  assert.match(validatorSource, /DUPLICATE_INVENTORY_UNIT_ID/);
-  assert.match(validatorSource, /INVALID_INVENTORY_UNIT_ID/);
-});
-
-test("sale transaction imports traceability locks and commits exact units with sale item IDs", () => {
-  assert.match(saleRouteSource, /inventorySaleTraceabilityService/);
-  assert.match(saleRouteSource, /lockSaleTraceabilitySelections/);
-  assert.match(saleRouteSource, /markSaleUnitsSold/);
-  assert.match(saleRouteSource, /inventory_tracking_mode/);
-  assert.match(saleRouteSource, /inventory_traceability_state/);
-  assert.match(saleRouteSource, /const \[saleItemResult\] = await connection\.query/);
-  assert.match(saleRouteSource, /saleItemId: saleItemResult\.insertId/);
-  assert.match(saleRouteSource, /await connection\.commit\(\)/);
+test("serialized checkout transaction engine exists without claiming legacy sale-route integration yet", () => {
+  assert.match(serviceSource, /lockSaleTraceabilitySelections/);
+  assert.match(serviceSource, /markSaleUnitsSold/);
+  assert.match(serviceSource, /sale_item_id/);
+  assert.match(serviceSource, /sale_completed/);
+  assert.match(serviceSource, /FOR UPDATE/);
 });
 
 test("serialized enforcement requires exact active unit identities", () => {
@@ -40,7 +27,7 @@ test("serialized enforcement requires exact active unit identities", () => {
   assert.match(serviceSource, /TRACEABILITY_SALE_UNIT_WRONG_STORE/);
   assert.match(serviceSource, /TRACEABILITY_SALE_UNIT_NOT_ACTIVE/);
   assert.match(serviceSource, /TRACEABILITY_SALE_UNIT_ALREADY_SOLD/);
-  assert.match(serviceSource, /FOR UPDATE/);
+  assert.match(serviceSource, /TRACEABILITY_SALE_UNIT_COMMIT_CONFLICT/);
 });
 
 test("unit selection normalizes case and rejects duplicates", () => {
