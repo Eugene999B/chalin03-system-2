@@ -1,0 +1,547 @@
+.traceability-page {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1rem 0 2rem;
+}
+
+.traceability-loading {
+  min-height: 14rem;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.traceability-hero,
+.traceability-card,
+.traceability-lookup-card,
+.traceability-safety-banner,
+.traceability-message {
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 18px;
+  background: var(--surface-color, #fff);
+}
+
+.traceability-hero {
+  padding: 1.4rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.traceability-hero h1,
+.traceability-card h2,
+.traceability-lookup-card h2 {
+  margin: 0.15rem 0 0.4rem;
+}
+
+.traceability-hero p,
+.traceability-card p,
+.traceability-lookup-card p {
+  margin: 0;
+  color: var(--muted-text, #5f6b7a);
+  line-height: 1.55;
+}
+
+.traceability-eyebrow {
+  margin: 0 !important;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-color, #3157a4) !important;
+}
+
+.traceability-safety-banner {
+  padding: 0.95rem 1rem;
+  background: #fff8e6;
+  border-color: #e9c56b;
+  color: #5c460b;
+  line-height: 1.45;
+}
+
+.traceability-message {
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+}
+
+.traceability-message--error {
+  background: #fff1f1;
+  border-color: #e0a0a0;
+  color: #7b1d1d;
+}
+
+.traceability-message--success {
+  background: #effaf3;
+  border-color: #8cc99f;
+  color: #1b6334;
+}
+
+.traceability-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.traceability-metrics article {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 16px;
+  background: var(--surface-color, #fff);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.traceability-metrics span,
+.traceability-reconciliation span,
+.traceability-unit-summary span {
+  color: var(--muted-text, #667085);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.traceability-metrics strong {
+  font-size: 1.55rem;
+}
+
+.traceability-metric-danger {
+  border-color: #df9898 !important;
+  background: #fff6f6 !important;
+}
+
+.traceability-lookup-card,
+.traceability-card {
+  padding: 1.15rem;
+}
+
+.traceability-inline-form,
+.traceability-print-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.traceability-inline-form input {
+  flex: 1 1 18rem;
+}
+
+.traceability-page input,
+.traceability-page select,
+.traceability-page textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd3df;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2937;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+}
+
+.traceability-page input:focus,
+.traceability-page select:focus,
+.traceability-page textarea:focus {
+  outline: 2px solid rgba(49, 87, 164, 0.18);
+  border-color: #3157a4;
+}
+
+.traceability-page button {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.72rem 1rem;
+  background: #234b91;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.traceability-page button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.traceability-secondary {
+  background: #eef2f7 !important;
+  color: #263447 !important;
+}
+
+.traceability-danger-action {
+  background: #7f2d2d !important;
+}
+
+.traceability-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.6fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.traceability-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.traceability-search {
+  max-width: 19rem;
+}
+
+.traceability-product-rows {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 58rem;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.traceability-product-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem !important;
+  border: 1px solid #dce2ea !important;
+  background: #fff !important;
+  color: #1f2937 !important;
+  text-align: left;
+}
+
+.traceability-product-row:hover,
+.traceability-product-row.is-selected {
+  border-color: #3157a4 !important;
+  background: #f5f8ff !important;
+}
+
+.traceability-product-main,
+.traceability-product-meta {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.traceability-product-main small,
+.traceability-product-meta small,
+.traceability-batches small {
+  color: #697586;
+}
+
+.traceability-product-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+.traceability-empty,
+.traceability-complete {
+  min-height: 12rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 0.45rem;
+}
+
+.traceability-reconciliation,
+.traceability-unit-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.traceability-reconciliation > div,
+.traceability-unit-summary > div {
+  padding: 0.75rem;
+  border: 1px solid #e1e5eb;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.traceability-reconciliation .is-gap {
+  border-color: #d39f47;
+  background: #fff9ea;
+}
+
+.traceability-form-block {
+  border-top: 1px solid #e3e7ed;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.traceability-form-title h3,
+.traceability-batch-panel h3,
+.traceability-unit-result h3 {
+  margin: 0 0 0.3rem;
+}
+
+.traceability-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.traceability-page label {
+  display: grid;
+  gap: 0.35rem;
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.traceability-batches {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.traceability-batches button {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #f8fafc !important;
+  color: #1f2937 !important;
+  border: 1px solid #dce2ea !important;
+  text-align: left;
+}
+
+.traceability-batches button span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.traceability-batches button span:last-child {
+  text-align: right;
+}
+
+.traceability-muted {
+  color: #717d8c !important;
+  font-size: 0.86rem;
+}
+
+.traceability-grow {
+  flex: 1 1 auto;
+}
+
+.traceability-print-controls > label:first-child {
+  min-width: 13rem;
+}
+
+.traceability-attachment-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem 0 0.7rem;
+}
+
+.traceability-attachment-head > div:last-child {
+  display: grid;
+  justify-items: end;
+  color: #667085;
+  white-space: nowrap;
+}
+
+.traceability-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  max-height: 31rem;
+  overflow: auto;
+  padding: 0.2rem;
+  border: 1px solid #e0e5ec;
+  border-radius: 12px;
+}
+
+.traceability-unit-grid label {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  padding: 0.65rem;
+  border: 1px solid #dce3ea;
+  border-radius: 10px;
+  background: #f9fbfd;
+}
+
+.traceability-unit-grid label.is-void {
+  background: #fff0f0;
+  border-color: #d8a1a1;
+}
+
+.traceability-unit-grid input[type="checkbox"],
+.traceability-confirmation input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+}
+
+.traceability-unit-grid span {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.traceability-unit-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.traceability-unit-grid small {
+  color: #6b7280;
+}
+
+.traceability-confirmation {
+  grid-template-columns: auto 1fr !important;
+  align-items: start;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border-radius: 12px;
+  border: 1px solid #d5a94e;
+  background: #fff9ea;
+}
+
+.traceability-unit-result {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e7ee;
+}
+
+.traceability-unit-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.traceability-timeline {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.traceability-timeline li {
+  padding-left: 0.35rem;
+}
+
+.traceability-timeline li > span,
+.traceability-timeline li > small {
+  display: block;
+  color: #667085;
+  margin-top: 0.15rem;
+}
+
+.traceability-timeline li p {
+  margin-top: 0.3rem;
+}
+
+.traceability-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid #cdd5df;
+  background: #f4f6f8;
+  color: #344054;
+  font-size: 0.72rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.traceability-pill--setup,
+.traceability-pill--batch,
+.traceability-pill--elevated {
+  background: #fff8e5;
+  border-color: #dfc06a;
+  color: #6b5108;
+}
+
+.traceability-pill--serialized,
+.traceability-pill--high {
+  background: #edf3ff;
+  border-color: #8ba6dc;
+  color: #244a8d;
+}
+
+.traceability-pill--critical {
+  background: #fff0f0;
+  border-color: #d79595;
+  color: #7a2525;
+}
+
+.traceability-pill--quantity,
+.traceability-pill--standard {
+  background: #f4f6f8;
+  border-color: #ccd4df;
+  color: #465467;
+}
+
+@media (max-width: 1100px) {
+  .traceability-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .traceability-unit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .traceability-page {
+    gap: 0.85rem;
+  }
+
+  .traceability-hero,
+  .traceability-card-head,
+  .traceability-attachment-head,
+  .traceability-inline-form,
+  .traceability-print-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .traceability-metrics,
+  .traceability-reconciliation,
+  .traceability-unit-summary,
+  .traceability-form-grid,
+  .traceability-unit-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .traceability-search {
+    max-width: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .traceability-metrics,
+  .traceability-reconciliation,
+  .traceability-unit-summary,
+  .traceability-form-grid,
+  .traceability-unit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .traceability-hero,
+  .traceability-card,
+  .traceability-lookup-card {
+    padding: 0.9rem;
+    border-radius: 14px;
+  }
+
+  .traceability-product-row,
+  .traceability-batches button {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .traceability-product-meta,
+  .traceability-batches button span:last-child {
+    justify-items: start;
+    text-align: left;
+  }
+}
