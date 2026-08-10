@@ -99,7 +99,15 @@ function externalPrivateDataAllowed(providerKey, env = process.env) {
 }
 
 function fallbackProfile(persona, env = process.env) {
-  const configured = normalizeProviderKey(env.AI_PROVIDER, "local");
+  // Governing rule: no environment value may silently activate a paid/external
+  // provider. Until the System Administrator writes an ai_provider_profiles
+  // policy, CHALIN Local is the default. AI_PROVIDER_POLICY_DEFAULT exists only
+  // for controlled non-UI bootstrap/testing and itself still passes privacy and
+  // credential checks below.
+  const configured = normalizeProviderKey(
+    env.AI_PROVIDER_POLICY_DEFAULT || "local",
+    "local"
+  );
   const providerKey = configured === "openai" && !credentialConfigured("openai", env)
     ? "local"
     : configured === "gemini" && !credentialConfigured("gemini", env)
@@ -110,7 +118,7 @@ function fallbackProfile(persona, env = process.env) {
     provider_key: providerKey,
     model_key: normalizeModelKey(null, providerKey),
     profile_status: "fallback",
-    source: "environment_fallback",
+    source: "governed_local_default",
   });
 }
 
@@ -352,6 +360,7 @@ module.exports = {
   dataClassification,
   effectiveSelection,
   externalPrivateDataAllowed,
+  fallbackProfile,
   getProviderControlSnapshot,
   loadProviderProfile,
   normalizeModelKey,
