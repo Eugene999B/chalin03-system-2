@@ -90,16 +90,18 @@ test("repair cannot mutate sales, stock, payments, closings or other customer de
   assert.match(source, /debt_payments_changed: false/);
 });
 
-test("Railway runs exact repair after visibility repair and before the API", () => {
-  const start = packageJson.scripts.start;
-  const visibility = start.indexOf(
+test("controlled maintenance runs exact repair after visibility repair", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const visibility = maintenance.indexOf(
     "runZeroPaymentCreditDebtVisibilityRepair20260805.js"
   );
-  const exact = start.indexOf("runMasterMickeyJuly31ExactDebtRepair20260805.js");
-  const server = start.indexOf("server.js");
+  const exact = maintenance.indexOf("runMasterMickeyJuly31ExactDebtRepair20260805.js");
   assert.ok(visibility >= 0);
   assert.ok(exact > visibility);
-  assert.ok(server > exact);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts[
       "repair:master-mickey-july31-exact-debt:20260805:production"

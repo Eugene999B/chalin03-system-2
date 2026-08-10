@@ -169,8 +169,12 @@ test("Phase 3 migration is additive and startup verified", () => {
   assert.match(verifier, /missing_phase3_indexes/);
   assert.match(verifier, /phase3_migration_record_missing/);
   assert.match(
-    packageJson.scripts.start,
+    packageJson.scripts["maintenance:legacy-startup-repairs"],
     /runEquipmentFinanceOperationalPolishStartup\.js/
+  );
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
   );
   assert.doesNotMatch(
     packageJson.scripts.start,

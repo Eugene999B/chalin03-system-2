@@ -116,10 +116,10 @@ function drawWatermark(doc, document) {
   const centreX = doc.page.width / 2;
   const centreY = doc.page.height / 2 + 28;
 
-  drawOfficialLogo(doc, centreX - 140, centreY - 145, 280, 280, 0.055);
+  drawOfficialLogo(doc, centreX - 145, centreY - 145, 290, 290, 0.038);
 
   doc.save();
-  doc.strokeColor(template.accent).opacity(0.055).lineWidth(2.2);
+  doc.strokeColor(template.accent).opacity(0.035).lineWidth(2.2);
   doc.moveTo(centreX, centreY - 168)
     .lineTo(centreX + 168, centreY)
     .lineTo(centreX, centreY + 168)
@@ -135,7 +135,7 @@ function drawWatermark(doc, document) {
   doc.restore();
 
   doc.save();
-  doc.fillColor(template.accent).fillOpacity(0.082);
+  doc.fillColor(template.accent).fillOpacity(0.048);
   doc.font("Times-Bold").fontSize(template.family === "certificate" ? 55 : 41);
   safeAbsoluteText(doc, template.watermark, centreX - 255, centreY + 116, {
     width: 510,

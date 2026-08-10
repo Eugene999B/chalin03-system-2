@@ -298,7 +298,7 @@ test("Phase 5C authorization layer does not itself create or confirm delivery", 
   );
 });
 
-test("Phase 5C Railway gate runs after 5B and fails closed", () => {
+test("Phase 5C controlled maintenance gate runs after 5B and fails closed", () => {
   assert.match(
     runnerSource,
     /chalin03:equipment-finance:phase5c-delivery-authorization/
@@ -311,15 +311,18 @@ test("Phase 5C Railway gate runs after 5B and fails closed", () => {
   assert.match(verifier, /invalid_authorization_records/);
   assert.match(verifier, /decided_by = requested_by/);
 
-  const start = packageJson.scripts.start;
-  const phaseFiveB = start.indexOf(
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseFiveB = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js"
   );
-  const phaseFiveC = start.indexOf(
+  const phaseFiveC = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js"
   );
-  const server = start.indexOf("server.js");
-  assert.ok(phaseFiveB >= 0 && phaseFiveC > phaseFiveB && server > phaseFiveC);
+  assert.ok(phaseFiveB >= 0 && phaseFiveC > phaseFiveB);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase5c:production"],
     "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js"

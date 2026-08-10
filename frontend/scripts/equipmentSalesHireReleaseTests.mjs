@@ -129,7 +129,7 @@ assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
 assert.match(collections, /\/collections/);
-assert.match(collections, /backend after committed payments/i);
+assert.match(collections, /backend (?:after committed payments|from committed receipts)/i);
 
 assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
 assert.match(applications, /\/readiness/);

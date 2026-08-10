@@ -152,12 +152,15 @@ test("financial and paid-record guards fail closed", () => {
   );
 });
 
-test("Railway runs isolation after the exact Mickey repair and before the API", () => {
-  const start = packageJson.scripts.start;
-  const exactIndex = start.indexOf("runMasterMickeyJuly31ExactDebtRepair20260805.js");
-  const isolationIndex = start.indexOf("runUnpaidReceiptIdentityIsolation20260805.js");
-  const serverIndex = start.indexOf("server.js");
-  assert.ok(exactIndex >= 0 && isolationIndex > exactIndex && serverIndex > isolationIndex);
+test("controlled maintenance runs isolation after the exact Mickey repair", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const exactIndex = maintenance.indexOf("runMasterMickeyJuly31ExactDebtRepair20260805.js");
+  const isolationIndex = maintenance.indexOf("runUnpaidReceiptIdentityIsolation20260805.js");
+  assert.ok(exactIndex >= 0 && isolationIndex > exactIndex);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(REPAIR_RECORD, "20260805_unpaid_receipt_identity_isolation");
   assert.equal(REQUIRED_EXACT_REPAIR, "20260805_master_mickey_july31_exact_debt_repair");
   assert.equal(

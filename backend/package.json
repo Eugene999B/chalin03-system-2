@@ -39,7 +39,8 @@
     "repair:unpaid-receipt-identity-isolation:20260805:production": "node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
   },
   "engines": {
     "node": ">=20"
