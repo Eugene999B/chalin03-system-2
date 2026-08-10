@@ -9,3 +9,9 @@ export async function getWebsiteControlIntelligence({ signal } = {}) {
     await axiosClient.get("/content-studio/pages/website-control", { signal })
   );
 }
+
+export async function getWebsiteLinkIntegrity({ signal } = {}) {
+  return unwrap(
+    await axiosClient.get("/content-studio/pages/link-integrity", { signal })
+  );
+}
