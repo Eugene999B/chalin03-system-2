@@ -38,6 +38,16 @@ function booleanValue(value) {
   );
 }
 
+function strictPersona(value) {
+  const persona = clean(value, 30).toLowerCase();
+  if (!AI_PROVIDER_PERSONAS.includes(persona)) {
+    throw new AiProviderPolicyError("Unsupported CHALIN AI provider persona.", {
+      code: "AI_PROVIDER_PERSONA_INVALID",
+    });
+  }
+  return persona;
+}
+
 function normalizePersona(value, messages = []) {
   const direct = clean(value, 30).toLowerCase();
   if (AI_PROVIDER_PERSONAS.includes(direct)) return direct;
@@ -119,7 +129,7 @@ function cacheProfile(persona, value) {
 }
 
 function clearProviderPolicyCache(persona = null) {
-  if (persona) profileCache.delete(normalizePersona(persona));
+  if (persona) profileCache.delete(strictPersona(persona));
   else profileCache.clear();
 }
 
@@ -133,7 +143,7 @@ async function loadProviderProfile(persona, { connection = pool, env = process.e
   try {
     const [rows] = await connection.query(
       `SELECT profile_key, provider_key, model_key, profile_status, is_default,
-              configuration_json, per_request_token_limit, daily_token_limit,
+              per_request_token_limit, daily_token_limit,
               monthly_cost_limit_micros, updated_at
          FROM ai_provider_profiles
         WHERE profile_key = ?
@@ -153,7 +163,6 @@ async function loadProviderProfile(persona, { connection = pool, env = process.e
         model_key: normalizeModelKey(row.model_key, providerKey),
         profile_status: row.profile_status,
         is_default: Boolean(Number(row.is_default || 0)),
-        configuration: row.configuration_json || null,
         per_request_token_limit: Number(row.per_request_token_limit || 0),
         daily_token_limit: Number(row.daily_token_limit || 0),
         monthly_cost_limit_micros: Number(row.monthly_cost_limit_micros || 0),
@@ -266,7 +275,7 @@ async function getProviderControlSnapshot({ env = process.env, connection = pool
     privacy: Object.freeze({
       unpaid_gemini_public_only: true,
       confidential_external_default: "blocked_to_local",
-      provider_keys_stored_in_database: false,
+      provider_secrets_stored_in_database: false,
       secrets_exposed: false,
     }),
   });
@@ -280,12 +289,7 @@ async function updateProviderProfile({
   env = process.env,
   connection = pool,
 } = {}) {
-  const normalizedPersona = normalizePersona(persona);
-  if (!AI_PROVIDER_PERSONAS.includes(normalizedPersona)) {
-    throw new AiProviderPolicyError("Unsupported CHALIN AI provider persona.", {
-      code: "AI_PROVIDER_PERSONA_INVALID",
-    });
-  }
+  const normalizedPersona = strictPersona(persona);
   const normalizedProvider = normalizeProviderKey(providerKey, "");
   if (!AI_PROVIDER_KEYS.includes(normalizedProvider)) {
     throw new AiProviderPolicyError("Unsupported CHALIN AI provider.", {
@@ -354,5 +358,6 @@ module.exports = {
   normalizePersona,
   normalizeProviderKey,
   resolveAiProviderSelection,
+  strictPersona,
   updateProviderProfile,
 };
