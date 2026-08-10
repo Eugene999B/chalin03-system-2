@@ -56,7 +56,7 @@ function buildPayslipVerificationUrl(reference) {
   if (!token) {
     throw new PayrollFoundationError(500, "Payslip verification reference is unavailable.", "PAYROLL_PAYSLIP_VERIFICATION_REFERENCE_MISSING");
   }
-  return `${publicBaseUrl()}/api/verification/payroll-payslip/${encodeURIComponent(token)}`;
+  return `${publicBaseUrl()}/api/release2-final/verification/payroll-payslip/${encodeURIComponent(token)}`;
 }
 
 async function createPayslipVerificationQr(reference) {
@@ -284,12 +284,14 @@ async function issuePayslip({ entryId, workspaceCode, actorId }) {
     const payslipNumber = latest?.payslip_number || await nextPayslipNumber(actorId);
     const verificationReference = await uniqueVerificationReference(connection);
     const issuedAt = new Date().toISOString();
+    const compensationSnapshot = parseJson(entry.compensation_snapshot_json, {});
     const snapshot = {
       document_type: "chalin03_payroll_payslip",
       document_schema_version: 1,
       company: {
         name: "Chalin 03 Company Limited",
         workspace_code: entry.workspace_code,
+        currency_code: cleanText(compensationSnapshot.currency_code || "GHS", 3).toUpperCase() || "GHS",
       },
       payslip: {
         payslip_number: payslipNumber,
@@ -345,13 +347,6 @@ async function issuePayslip({ entryId, workspaceCode, actorId }) {
         JSON.stringify(snapshot), checksum, verificationReference, latest?.id || null, actorId,
         issuedAt.slice(0, 19).replace("T", " ")]
     );
-
-    if (latest && latest.issue_status !== "superseded") {
-      await connection.query(
-        "UPDATE payroll_payslips SET issue_status = 'superseded' WHERE id = ?",
-        [latest.id]
-      );
-    }
 
     const [createdRows] = await connection.query("SELECT * FROM payroll_payslips WHERE id = ? LIMIT 1", [result.insertId]);
     await connection.commit();
@@ -441,6 +436,23 @@ async function revokePayslip({ payslipId, workspaceCode, actorId, reason }) {
   }
 }
 
+async function revokeCurrentPayslipsForEntry({ entryId, actorId, reason, connection = pool }) {
+  await assertSchemaReady(connection);
+  const id = positiveId(entryId, "Payroll entry ID");
+  const revocationReason = cleanText(reason, 1000);
+  if (revocationReason.length < 8) {
+    throw new PayrollFoundationError(400, "A detailed payslip revocation reason is required.", "PAYROLL_PAYSLIP_REVOCATION_REASON_REQUIRED");
+  }
+  const [result] = await connection.query(
+    `UPDATE payroll_payslips
+     SET issue_status = 'revoked', revoked_by = ?, revoked_at = CURRENT_TIMESTAMP,
+         revocation_reason = ?
+     WHERE payroll_entry_id = ? AND issue_status = 'current'`,
+    [actorId || null, revocationReason, id]
+  );
+  return { payroll_entry_id: id, revoked_count: Number(result?.affectedRows || 0) };
+}
+
 async function publicPayslipVerification(reference, connection = pool) {
   await assertSchemaReady(connection);
   const token = cleanText(reference, 191);
@@ -448,11 +460,25 @@ async function publicPayslipVerification(reference, connection = pool) {
     return { found: false, valid: false, state: "invalid" };
   }
   const [rows] = await connection.query(
-    `SELECT id, payslip_number, issue_version, issue_status, snapshot_json,
-            checksum_sha256, issued_at, revoked_at, revocation_reason
-     FROM payroll_payslips
-     WHERE verification_reference = ?
-     ORDER BY id DESC
+    `SELECT payslip.id, payslip.payslip_number, payslip.issue_version,
+            payslip.issue_status, payslip.snapshot_json, payslip.checksum_sha256,
+            payslip.issued_at, payslip.revoked_at, payslip.revocation_reason,
+            entry.entry_status, entry.remaining_balance, entry.net_salary,
+            entry.amount_paid, period.status AS period_status,
+            (SELECT COALESCE(SUM(payment.amount), 0)
+             FROM payroll_salary_payments payment
+             WHERE payment.payroll_entry_id = entry.id
+               AND payment.reversal_of_payment_id IS NULL
+               AND payment.payment_status = 'posted') AS active_paid,
+            (SELECT COUNT(*)
+             FROM payroll_adjustment_requests request
+             WHERE request.payroll_entry_id = entry.id
+               AND request.request_status = 'pending') AS pending_adjustments
+     FROM payroll_payslips payslip
+     INNER JOIN payroll_entries entry ON entry.id = payslip.payroll_entry_id
+     INNER JOIN payroll_periods period ON period.id = entry.payroll_period_id
+     WHERE payslip.verification_reference = ?
+     ORDER BY payslip.id DESC
      LIMIT 1`,
     [token]
   );
@@ -463,7 +489,17 @@ async function publicPayslipVerification(reference, connection = pool) {
   if (!checksumValid) {
     return { found: true, valid: false, state: "invalid", integrity_error: true };
   }
-  const state = ["current", "revoked", "superseded"].includes(row.issue_status) ? row.issue_status : "invalid";
+
+  const underlyingCurrent =
+    String(row.entry_status || "").toLowerCase() === "paid" &&
+    money(row.remaining_balance) <= 0.01 &&
+    ["reconciled", "closed"].includes(String(row.period_status || "").toLowerCase()) &&
+    Math.abs(money(row.active_paid) - money(row.net_salary)) <= 0.01 &&
+    Math.abs(money(row.active_paid) - money(row.amount_paid)) <= 0.01 &&
+    Number(row.pending_adjustments || 0) === 0;
+
+  const storedState = ["current", "revoked", "superseded"].includes(row.issue_status) ? row.issue_status : "invalid";
+  const state = storedState === "current" && !underlyingCurrent ? "revoked" : storedState;
   return {
     found: true,
     valid: state === "current",
@@ -481,11 +517,13 @@ async function publicPayslipVerification(reference, connection = pool) {
     revoked_at: row.revoked_at || null,
     message: state === "current"
       ? "Record matches Chalin 03 payroll system."
-      : state === "revoked"
-        ? "This preserved payslip was revoked and must not be treated as the current payroll document."
-        : state === "superseded"
-          ? "This preserved payslip version has been superseded by a later issued version."
-          : "This payslip could not be verified.",
+      : state === "revoked" && storedState === "current"
+        ? "This preserved payslip is no longer current because its underlying reconciled salary-payment evidence changed."
+        : state === "revoked"
+          ? "This preserved payslip was revoked and must not be treated as the current payroll document."
+          : state === "superseded"
+            ? "This preserved payslip version has been superseded by a later issued version."
+            : "This payslip could not be verified.",
   };
 }
 
@@ -498,5 +536,6 @@ module.exports = {
   maskEmployeeName,
   maskEmployeeNumber,
   publicPayslipVerification,
+  revokeCurrentPayslipsForEntry,
   revokePayslip,
 };
