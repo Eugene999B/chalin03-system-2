@@ -19,16 +19,17 @@ const {
 
 const TEST_SECRET = "inventory-traceability-test-secret-20260810-strong-enough";
 
-test("product traceability codes are normalized and reject ambiguous characters", () => {
+test("product traceability codes remain human readable while random unit suffixes avoid ambiguity", () => {
   assert.equal(normalizeProductCode(" so4l "), "SO4L");
-  assert.throws(() => normalizeProductCode("SOIL"), /0, 1, I or O/);
+  assert.equal(normalizeProductCode("oil01"), "OIL01");
   assert.throws(() => normalizeProductCode("AB"), /3-12/);
+  assert.throws(() => normalizeProductCode("STAR-OIL"), /letters\/numbers/);
 });
 
 test("unit codes are product-prefixed but use non-sequential random tokens", () => {
-  assert.equal(generateUnitCode("ST4L", () => "K7M4Q9XD"), "ST4L-K7M4Q9XD");
+  assert.equal(generateUnitCode("SO4L", () => "K7M4Q9XD"), "SO4L-K7M4Q9XD");
   assert.throws(
-    () => generateUnitCode("ST4L", () => "00000001"),
+    () => generateUnitCode("SO4L", () => "00000001"),
     /unit token is invalid/
   );
 });
@@ -39,7 +40,7 @@ test("label batch codes include store/date plus unpredictable token", () => {
     new Date("2026-08-10T12:00:00Z"),
     () => "K7M4Q9"
   );
-  assert.equal(batch, "LBL-MA2N-20260810-K7M4Q9");
+  assert.equal(batch, "LBL-MAIN-20260810-K7M4Q9");
 });
 
 test("tracking configuration keeps quantity mode backward compatible", () => {
@@ -60,12 +61,12 @@ test("tracking configuration keeps quantity mode backward compatible", () => {
     assertTrackingConfiguration({
       trackingMode: TRACKING_MODES.SERIALIZED,
       traceabilityState: TRACEABILITY_STATES.SETUP,
-      productCode: "ST4L",
+      productCode: "SO4L",
     }),
     {
       trackingMode: "serialized",
       traceabilityState: "setup",
-      productCode: "ST4L",
+      productCode: "SO4L",
     }
   );
 
@@ -74,7 +75,7 @@ test("tracking configuration keeps quantity mode backward compatible", () => {
       assertTrackingConfiguration({
         trackingMode: TRACKING_MODES.QUANTITY,
         traceabilityState: TRACEABILITY_STATES.ENFORCED,
-        productCode: "ST4L",
+        productCode: "SO4L",
       }),
     /cannot use enforced/
   );
@@ -96,18 +97,18 @@ test("serialized lifecycle prevents sold/voided/written-off identities from sile
 });
 
 test("signed QR payload detects tampering and copied payload remains the same identity", () => {
-  const payload = buildSignedLabelPayload("ST4L-K7M4Q9XD", TEST_SECRET);
-  assert.match(payload, /^C03U1\|ST4L-K7M4Q9XD\|/);
+  const payload = buildSignedLabelPayload("SO4L-K7M4Q9XD", TEST_SECRET);
+  assert.match(payload, /^C03U1\|SO4L-K7M4Q9XD\|/);
 
   const valid = verifySignedLabelPayload(payload, TEST_SECRET);
   assert.deepEqual(valid, {
     valid: true,
-    unitCode: "ST4L-K7M4Q9XD",
+    unitCode: "SO4L-K7M4Q9XD",
     reason: null,
   });
 
   const tampered = verifySignedLabelPayload(
-    payload.replace("ST4L-K7M4Q9XD", "ST4L-K7M4Q9XE"),
+    payload.replace("SO4L-K7M4Q9XD", "SO4L-K7M4Q9XE"),
     TEST_SECRET
   );
   assert.equal(tampered.valid, false);
@@ -125,7 +126,7 @@ test("unit event hash is deterministic and chained to the previous event", () =>
     eventType: "label_generated",
     toStatus: UNIT_STATUSES.LABEL_PENDING,
     actorUserId: 3,
-    metadata: { batch: "LBL-MA2N-20260810-K7M4Q9", product: "ST4L" },
+    metadata: { batch: "LBL-MAIN-20260810-K7M4Q9", product: "SO4L" },
   });
   const firstAgain = buildUnitEventHash({
     unitId: 11,
@@ -134,7 +135,7 @@ test("unit event hash is deterministic and chained to the previous event", () =>
     eventType: "label_generated",
     toStatus: UNIT_STATUSES.LABEL_PENDING,
     actorUserId: 3,
-    metadata: { product: "ST4L", batch: "LBL-MA2N-20260810-K7M4Q9" },
+    metadata: { product: "SO4L", batch: "LBL-MAIN-20260810-K7M4Q9" },
   });
   assert.equal(first, firstAgain);
   assert.match(first, /^[a-f0-9]{64}$/);
