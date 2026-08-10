@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS payroll_recurring_components (
 
     UNIQUE KEY uq_payroll_component_profile_code (compensation_profile_id, component_code),
     INDEX idx_payroll_component_profile_type (compensation_profile_id, component_type, display_order),
-    CONSTRAINT fk_payroll_component_profile FOREIGN KEY (compensation_profile_id) REFERENCES payroll_compensation_profiles(id) ON DELETE CASCADE
+    CONSTRAINT fk_payroll_component_profile FOREIGN KEY (compensation_profile_id) REFERENCES payroll_compensation_profiles(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS payroll_periods (

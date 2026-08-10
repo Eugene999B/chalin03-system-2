@@ -13,6 +13,8 @@ const routes = read("backend/routes/payrollFoundationRoutes.js");
 const permissions = read("backend/security/permissionCatalog.js");
 const server = read("backend/server.js");
 const backup = read("backend/routes/release2FinalRoutes.js");
+const resetDatabase = read("backend/scripts/resetDatabaseFromBackup.js");
+const restoredDatabase = read("backend/scripts/verifyRestoredDatabase.js");
 const packageJson = JSON.parse(read("backend/package.json"));
 
 const payrollTables = [
@@ -94,9 +96,18 @@ test("payroll tables are protected by selective workforce/category backup scopes
   assert.match(backup, /equipment_hire: \[[\s\S]*\.\.\.PAYROLL_WORKFORCE_TABLES/);
 });
 
+test("restore inventories preserve every payroll foundation table", () => {
+  for (const table of payrollTables) {
+    assert.match(resetDatabase, new RegExp(table));
+    assert.match(restoredDatabase, new RegExp(table));
+  }
+  assert.match(migration, /fk_payroll_component_profile[\s\S]*ON DELETE RESTRICT/);
+});
+
 test("payroll API is explicit and production startup remains API-only", () => {
   assert.match(server, /const payrollFoundationRoutes = require\("\.\/routes\/payrollFoundationRoutes"\)/);
   assert.match(server, /app\.use\("\/api\/payroll"/);
+  assert.match(server, /app\.use\("\/api\/payroll", sensitiveAdminLimiter\)/);
   assert.equal(packageJson.scripts.start, "node -r ./services/exportWorkbookSafetyBootstrap.js server.js");
   assert.equal(
     packageJson.scripts["migrate:payroll-foundation:production"],
