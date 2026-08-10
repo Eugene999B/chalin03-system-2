@@ -3,6 +3,25 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
+const PRODUCTION_BACKUP_API_ROOT = "https://api.chalin03.com/api/backups";
+const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;
+const BACKUP_VALIDATE_TIMEOUT_MS = 180000;
+const BACKUP_RESTORE_TIMEOUT_MS = 600000;
+
+function isOfficialProductionHost() {
+  if (typeof window === "undefined") return false;
+  const hostname = String(window.location?.hostname || "").trim().toLowerCase();
+  return hostname === "chalin03.com" || hostname === "www.chalin03.com";
+}
+
+function backupRequestUrl(pathname) {
+  const suffix = String(pathname || "").startsWith("/")
+    ? String(pathname || "")
+    : `/${String(pathname || "")}`;
+  return isOfficialProductionHost()
+    ? `${PRODUCTION_BACKUP_API_ROOT}${suffix}`
+    : `/backups${suffix}`;
+}
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("en-GH");
@@ -101,9 +120,10 @@ export default function BackupPage() {
     setError("");
     setMessage("");
     try {
-      const response = await axiosClient.get("/backups/download", {
+      const response = await axiosClient.get(backupRequestUrl("/download"), {
         responseType: "blob",
         headers: protectedHeaders,
+        timeout: BACKUP_DOWNLOAD_TIMEOUT_MS,
       });
       const fileUrl = window.URL.createObjectURL(
         new Blob([response.data], { type: "application/json" })
@@ -168,9 +188,12 @@ export default function BackupPage() {
     }
     const backup = JSON.parse(await selectedFile.text());
     const response = await axiosClient.post(
-      "/backups/restore/dry-run",
+      backupRequestUrl("/restore/dry-run"),
       { backup },
-      { headers: protectedHeaders }
+      {
+        headers: protectedHeaders,
+        timeout: BACKUP_VALIDATE_TIMEOUT_MS,
+      }
     );
     setDryRunReport(response.data);
     return { backup, report: response.data };
@@ -214,12 +237,15 @@ export default function BackupPage() {
       const validation = await validateSelectedBackup();
       if (!validation?.report?.valid) return;
       const response = await axiosClient.post(
-        "/backups/restore",
+        backupRequestUrl("/restore"),
         {
           confirmation: RESTORE_CONFIRMATION_TEXT,
           backup: validation.backup,
         },
-        { headers: protectedHeaders }
+        {
+          headers: protectedHeaders,
+          timeout: BACKUP_RESTORE_TIMEOUT_MS,
+        }
       );
       setMessage(response.data.message || "Full-system restore completed.");
       setSelectedFile(null);
