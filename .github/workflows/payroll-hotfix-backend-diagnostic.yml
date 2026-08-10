@@ -6,6 +6,9 @@ on:
       - hotfix/payroll-migration-packaging-production-20260810
     paths:
       - .github/workflows/payroll-hotfix-backend-diagnostic.yml
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -17,8 +20,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: hotfix/payroll-migration-packaging-production-20260810
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -47,5 +48,3 @@ jobs:
           name: payroll-hotfix-backend-diagnostic
           path: /tmp/payroll-hotfix-backend.log
           retention-days: 1
-
-# Triggered after API-only startup restoration.
