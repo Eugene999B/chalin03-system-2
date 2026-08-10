@@ -15,6 +15,7 @@ const {
   openAiToolName,
   reasoningEffortForContext,
   stableSafetyIdentifier,
+  supportsMaxReasoning,
 } = require("../ai-providers/openAiResponsesProvider");
 const { AiProviderRegistry } = require("../services/aiProviderService");
 const {
@@ -32,7 +33,11 @@ function jsonResponse(payload, { status = 200 } = {}) {
 }
 
 test("model and reasoning routing are persona and intent aware but configuration remains authoritative", () => {
+  assert.equal(DEFAULT_OPENAI_MODEL, "gpt-5.6");
   assert.equal(modelForContext({}, { persona: "copilot" }), DEFAULT_OPENAI_MODEL);
+  assert.equal(supportsMaxReasoning("gpt-5.6"), true);
+  assert.equal(supportsMaxReasoning("gpt-5.6-sol"), true);
+  assert.equal(supportsMaxReasoning("gpt-5.2"), false);
   assert.equal(
     modelForContext(
       {
@@ -45,7 +50,7 @@ test("model and reasoning routing are persona and intent aware but configuration
   );
   assert.equal(
     reasoningEffortForContext({}, { persona: "executive", intent: "lookup" }),
-    "high"
+    "max"
   );
   assert.equal(
     reasoningEffortForContext({}, { persona: "copilot", intent: "lookup" }),
@@ -53,6 +58,13 @@ test("model and reasoning routing are persona and intent aware but configuration
   );
   assert.equal(
     reasoningEffortForContext({}, { persona: "copilot", intent: "diagnose" }),
+    "xhigh"
+  );
+  assert.equal(
+    reasoningEffortForContext(
+      { OPENAI_AI_MODEL: "gpt-5.2" },
+      { persona: "executive", intent: "diagnose" }
+    ),
     "high"
   );
   assert.equal(
@@ -64,7 +76,7 @@ test("model and reasoning routing are persona and intent aware but configuration
   );
 });
 
-test("CHALIN tool keys are mapped to provider-safe aliases without losing identity", () => {
+test("CHALIN tool keys are mapped to provider-safe aliases without losing identity or changing optional-field semantics", () => {
   assert.equal(openAiToolName("knowledge.search"), "knowledge__search");
   const mapped = mapTools([
     {
@@ -74,13 +86,18 @@ test("CHALIN tool keys are mapped to provider-safe aliases without losing identi
         type: "object",
         additionalProperties: false,
         required: ["query"],
-        properties: { query: { type: "string" } },
+        properties: {
+          query: { type: "string" },
+          limit: { type: "integer" },
+        },
       },
     },
   ]);
   assert.equal(mapped.definitions[0].name, "knowledge__search");
   assert.equal(mapped.aliases.get("knowledge__search"), "knowledge.search");
   assert.equal(mapped.definitions[0].type, "function");
+  assert.equal(mapped.definitions[0].strict, false);
+  assert.deepEqual(mapped.definitions[0].parameters.required, ["query"]);
   assert.equal(mapped.definitions[0].parameters.additionalProperties, false);
 });
 
@@ -102,7 +119,7 @@ test("OpenAI adapter sends store=false and parses governed function calls withou
     return jsonResponse({
       id: "resp_test_123",
       status: "completed",
-      model: "gpt-test-model",
+      model: "gpt-5.6",
       output: [
         {
           type: "function_call",
@@ -117,7 +134,7 @@ test("OpenAI adapter sends store=false and parses governed function calls withou
   const provider = new OpenAiResponsesProvider({
     env: {
       OPENAI_API_KEY: "sk-test-never-log",
-      OPENAI_AI_COPILOT_MODEL: "gpt-test-model",
+      OPENAI_AI_COPILOT_MODEL: "gpt-5.6",
       OPENAI_INPUT_COST_MICROS_PER_MILLION_TOKENS: "1000000",
       OPENAI_OUTPUT_COST_MICROS_PER_MILLION_TOKENS: "2000000",
     },
@@ -156,9 +173,10 @@ test("OpenAI adapter sends store=false and parses governed function calls withou
   assert.equal(request.options.method, "POST");
   assert.match(request.options.headers.Authorization, /^Bearer /);
   assert.equal(request.body.store, false);
-  assert.equal(request.body.model, "gpt-test-model");
+  assert.equal(request.body.model, "gpt-5.6");
   assert.equal(request.body.reasoning.effort, "low");
   assert.equal(request.body.tools[0].name, "knowledge__search");
+  assert.equal(request.body.tools[0].strict, false);
   assert.equal(request.body.tool_choice, "auto");
   assert.equal(request.body.safety_identifier.length, 64);
   assert.doesNotMatch(JSON.stringify(request.body), /sk-test-never-log/);
@@ -177,17 +195,19 @@ test("OpenAI adapter sends store=false and parses governed function calls withou
   assert.equal(result.provider_store_enabled, false);
 });
 
-test("OpenAI adapter extracts answer text and preserves no-store contract", async () => {
+test("OpenAI adapter gives GPT-5.6 Executive the strongest normal reasoning tier and preserves no-store", async () => {
+  let body = null;
   const provider = new OpenAiResponsesProvider({
     env: {
       OPENAI_API_KEY: "sk-test",
-      OPENAI_AI_EXECUTIVE_MODEL: "gpt-exec-test",
+      OPENAI_AI_EXECUTIVE_MODEL: "gpt-5.6",
     },
-    fetchImpl: async () =>
-      jsonResponse({
+    fetchImpl: async (_url, options) => {
+      body = JSON.parse(options.body);
+      return jsonResponse({
         id: "resp_text",
         status: "completed",
-        model: "gpt-exec-test",
+        model: "gpt-5.6",
         output: [
           {
             type: "message",
@@ -197,14 +217,17 @@ test("OpenAI adapter extracts answer text and preserves no-store contract", asyn
           },
         ],
         usage: { input_tokens: 44, output_tokens: 11 },
-      }),
+      });
+    },
   });
   const result = await provider.generate({
     messages: [{ role: "user", content: "What changed?" }],
     provider_context: { persona: "executive", intent: "diagnose" },
   });
   assert.equal(result.text, "Revenue is supported by [E1].");
-  assert.equal(result.reasoning_effort, "high");
+  assert.equal(result.reasoning_effort, "max");
+  assert.equal(body.reasoning.effort, "max");
+  assert.equal(body.store, false);
   assert.equal(result.provider_store_enabled, false);
 });
 
