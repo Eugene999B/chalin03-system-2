@@ -37,12 +37,16 @@ function check(name, callback) {
   console.log(`✓ ${name}`);
 }
 
-check("public renderer uses a separate anonymous Axios client", () => {
-  assert.match(publicApi, /axios\.create/);
+check("public renderer uses a separate anonymous native request client", () => {
+  assert.match(publicApi, /fetch\(publicRequestUrl\(pathname, params\)/);
+  assert.match(publicApi, /PUBLIC_REQUEST_TIMEOUT_MS = 20000/);
+  assert.match(publicApi, /credentials: "omit"/);
+  assert.match(publicApi, /cache: "no-store"/);
   assert.match(publicApi, /\/public\/content\/bootstrap/);
+  assert.match(publicApi, /publicWebsiteClient/);
   assert.doesNotMatch(
     publicApi,
-    /axiosClient|localStorage|sessionStorage|Bearer|Authorization/
+    /import axios|axios\.create|axiosClient|localStorage|sessionStorage|Bearer|Authorization/
   );
 });
 
