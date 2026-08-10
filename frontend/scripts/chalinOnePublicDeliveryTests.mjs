@@ -10,6 +10,7 @@ function read(relativePath) {
 }
 
 const publicApi = read("frontend/src/chalin-one/public-site/publicWebsiteApi.js");
+const publicGate = read("frontend/src/chalin-one/public-site/PublicWebsiteFeatureGate.jsx");
 const corporateApp = read("frontend/src/chalin-one/public-site/PublicCorporateWebsiteApp.jsx");
 const corporateCss = read("frontend/src/chalin-one/public-site/publicCorporateWebsite.css");
 const legacyPublicApp = read("frontend/src/chalin-one/public-site/PublicWebsiteApp.jsx");
@@ -170,14 +171,24 @@ check("public root is permanent and Spare Parts uses an explicit staff dashboard
   assert.match(commandGate, /PUBLIC_TOP_LEVEL_PATHS/);
 });
 
-check("public entry renders the corporate root behind the public feature flag", () => {
-  for (const source of [standalone, publicEntry]) {
-    assert.match(source, /public-site\/PublicCorporateWebsiteApp/);
-    assert.match(source, /PublicCorporateWebsiteUnavailable/);
-    assert.match(source, /path="\/\*"/);
-    assert.match(source, /feature="publicWebsite"/);
-    assert.match(source, /<PublicCorporateWebsiteApp \/>/);
-  }
+check("public entry renders the corporate root behind a fail-closed public website gate", () => {
+  assert.match(standalone, /public-site\/PublicCorporateWebsiteApp/);
+  assert.match(standalone, /PublicCorporateWebsiteUnavailable/);
+  assert.match(standalone, /path="\/\*"/);
+  assert.match(standalone, /feature="publicWebsite"/);
+  assert.match(standalone, /<PublicCorporateWebsiteApp \/>/);
+
+  assert.match(publicEntry, /public-site\/PublicCorporateWebsiteApp/);
+  assert.match(publicEntry, /PublicCorporateWebsiteUnavailable/);
+  assert.match(publicEntry, /path="\/\*"/);
+  assert.match(publicEntry, /PublicWebsiteFeatureGate/);
+  assert.match(publicEntry, /<PublicWebsiteFeatureGate/);
+  assert.match(publicEntry, /<PublicCorporateWebsiteApp \/>/);
+  assert.doesNotMatch(publicEntry, /FeatureFlagProvider|FeatureFlagRoute/);
+  assert.match(publicGate, /\/features\/public/);
+  assert.match(publicGate, /payload\?\.flags\?\.publicWebsite === true/);
+  assert.match(publicGate, /setEnabled\(false\)/);
+  assert.doesNotMatch(publicGate, /axios|axiosClient|localStorage|sessionStorage|Authorization|Bearer/);
 });
 
 check("Content Studio uses isolated auth while Intelligence remains staff-protected", () => {
