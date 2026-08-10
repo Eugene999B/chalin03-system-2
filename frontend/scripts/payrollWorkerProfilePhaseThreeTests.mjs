@@ -25,7 +25,14 @@ assert.match(payroll, /Payroll timeline/);
 assert.match(payroll, /Salary changes/);
 assert.match(payroll, /Salary payment history/);
 assert.match(payroll, /Loans & salary advances/);
-assert.doesNotMatch(payroll, /axiosClient\.(post|put|delete|patch)/);
+
+// Phase 3 remains read-only for worker/payroll profile data. Phase 5 adds one
+// narrowly scoped mutation: issuing an immutable payslip from a reconciled,
+// fully paid payroll entry. Keep every other mutation method forbidden here.
+const postCalls = [...payroll.matchAll(/axiosClient\.post\(/g)];
+assert.equal(postCalls.length, 1, "worker payroll panel should expose only the Phase 5 payslip issuance POST");
+assert.match(payroll, /axiosClient\.post\(`\/payroll\/payslips\/entries\/\$\{entry\.id\}\/issue`/);
+assert.doesNotMatch(payroll, /axiosClient\.(put|delete|patch)\(/);
 
 assert.match(styles, /worker-payroll__metrics/);
 assert.match(styles, /@media \(max-width: 720px\)/);
