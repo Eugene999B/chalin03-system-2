@@ -170,3 +170,7 @@ test("governed conversation memory is user, persona, status and exact-scope isol
   });
   assert.deepEqual(wrongPersona, []);
 });
+
+test.after(async () => {
+  await pool.end();
+});
