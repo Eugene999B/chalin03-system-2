@@ -71,7 +71,8 @@ test("continuity memory is injected separately and explicitly has no evidence au
     (message) => message.role === "system" && /continuity context/i.test(message.content)
   );
   assert.ok(continuity);
-  assert.match(continuity.content, /never governed evidence/i);
+  assert.match(continuity.content, /not governed evidence or proof/i);
+  assert.match(continuity.content, /Never cite memory as \[E#\]/i);
   assert.match(continuity.content, /may be wrong/i);
   assert.match(continuity.content, /Inventory Plan/);
 });
