@@ -5,6 +5,7 @@ import ContentStudioAccessManager from "./ContentStudioAccessManager";
 import ContentStudioCompanyInfoManager from "./ContentStudioCompanyInfoManager";
 import ContentStudioDashboard from "./ContentStudioDashboard";
 import ContentStudioFormManager from "./ContentStudioFormManager";
+import ContentStudioLaunchReadiness from "./ContentStudioLaunchReadiness";
 import ContentStudioLeadershipManager from "./ContentStudioLeadershipManager";
 import ContentStudioMediaCleanupManager from "./ContentStudioMediaCleanupManager";
 import ContentStudioMediaManager from "./ContentStudioMediaManagerPro";
@@ -69,6 +70,7 @@ const SECTION_SCOPES = Object.freeze({
   approvals: "pages",
   "publisher-command": "pages",
   "public-analytics": "dashboard",
+  "launch-readiness": "dashboard",
   "website-control": "pages",
   redirects: "navigation",
   navigation: "navigation",
@@ -91,6 +93,7 @@ const MANAGERS = Object.freeze({
   approvals: ContentStudioApprovalInbox,
   "publisher-command": ContentStudioPublisherCommandCenter,
   "public-analytics": ContentStudioPublicAnalytics,
+  "launch-readiness": ContentStudioLaunchReadiness,
   "website-control": ContentStudioWebsiteControlCenter,
   redirects: ContentStudioRedirectManager,
   navigation: ContentStudioNavigationManager,
