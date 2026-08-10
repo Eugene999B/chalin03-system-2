@@ -12,6 +12,9 @@ const {
   normalizeEvidenceList,
 } = require("./aiEvidenceService");
 const { generateProviderResponse } = require("./aiProviderService");
+const {
+  resolveAiProviderSelection,
+} = require("./aiProviderPolicyService");
 const { inspectPrompt } = require("./aiSafetyService");
 const { citationIntegrity } = require("./aiReasoningService");
 
@@ -172,12 +175,23 @@ function studioAiMessages({ question, evidence }) {
   ]);
 }
 
+function studioProviderContext(intent = "decision_support") {
+  return Object.freeze({
+    persona: "copilot",
+    workspace_code: CONTENT_STUDIO_AI_MODEL_SCOPE,
+    data_classification: CONTENT_STUDIO_AI_CLASSIFICATION,
+    intent,
+    live_data_required: true,
+  });
+}
+
 function safeProviderSummary(result = {}) {
-  const selection = result.provider_selection || {};
+  const selection = result.provider_selection ||
+    (result.selected_provider ? result : {});
   return Object.freeze({
     selected: selection.selected_provider || result.provider_key || "local",
     effective: selection.effective_provider || result.provider_key || "local",
-    model: result.model_key || null,
+    model: selection.effective_model || result.model_key || null,
     reason_code: selection.reason_code || null,
     external_network_used: selection.external_network_used === true,
     data_classification:
@@ -199,13 +213,7 @@ async function answerContentStudioAi({ user, question, env = process.env } = {})
     messages: studioAiMessages({ question: inspection.text, evidence }),
     tools: [],
     maxOutputTokens: 1000,
-    providerContext: Object.freeze({
-      persona: "copilot",
-      workspace_code: CONTENT_STUDIO_AI_MODEL_SCOPE,
-      data_classification: CONTENT_STUDIO_AI_CLASSIFICATION,
-      intent: "decision_support",
-      live_data_required: true,
-    }),
+    providerContext: studioProviderContext("decision_support"),
     env,
   });
 
@@ -238,28 +246,18 @@ async function answerContentStudioAi({ user, question, env = process.env } = {})
 
 async function getContentStudioAiStatus({ user, env = process.env } = {}) {
   const evidence = await buildContentStudioAiEvidence({ user });
-  const probe = await generateProviderResponse({
-    messages: studioAiMessages({
-      question: "Summarize the available Content Studio evidence in one short sentence.",
-      evidence,
-    }),
-    tools: [],
-    maxOutputTokens: 180,
-    providerContext: Object.freeze({
-      persona: "copilot",
-      workspace_code: CONTENT_STUDIO_AI_MODEL_SCOPE,
-      data_classification: CONTENT_STUDIO_AI_CLASSIFICATION,
-      intent: "summarize",
-      live_data_required: true,
-    }),
+  const selection = await resolveAiProviderSelection({
+    providerContext: studioProviderContext("status"),
+    messages: [],
     env,
   });
   return Object.freeze({
     ready: true,
     evidence_count: evidence.length,
     pages_scope: hasStudioScope(user, "pages"),
-    provider: safeProviderSummary(probe),
+    provider: safeProviderSummary(selection),
     execution_authority: "read_only",
+    provider_call_performed: false,
   });
 }
 
@@ -277,5 +275,6 @@ module.exports = {
   hasStudioScope,
   safeProviderSummary,
   studioAiMessages,
+  studioProviderContext,
   websiteControlEvidence,
 };
