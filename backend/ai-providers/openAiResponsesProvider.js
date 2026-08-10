@@ -3,7 +3,7 @@
 const crypto = require("crypto");
 
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
-const DEFAULT_OPENAI_MODEL = "gpt-5.2";
+const DEFAULT_OPENAI_MODEL = "gpt-5.6";
 const MODEL_KEY_PATTERN = /^[a-z0-9][a-z0-9._:-]{1,159}$/i;
 const REASONING_EFFORTS = Object.freeze([
   "none",
@@ -12,6 +12,7 @@ const REASONING_EFFORTS = Object.freeze([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -83,15 +84,24 @@ function configuredReasoningEffort(env = process.env, persona = "") {
   return REASONING_EFFORTS.includes(configured) ? configured : null;
 }
 
-function reasoningEffortForContext(env = process.env, providerContext = {}) {
+function supportsMaxReasoning(model) {
+  return /^gpt-5\.6(?:$|[-.:])/i.test(clean(model, 160));
+}
+
+function reasoningEffortForContext(env = process.env, providerContext = {}, model = null) {
   const persona = clean(providerContext.persona, 30).toLowerCase();
   const configured = configuredReasoningEffort(env, persona);
   if (configured) return configured;
 
+  const selectedModel = safeModelKey(model || modelForContext(env, providerContext));
+  const frontier56 = supportsMaxReasoning(selectedModel);
   const intent = clean(providerContext.intent, 40).toLowerCase();
-  if (persona === "executive") return "high";
-  if (["diagnose", "forecast", "decision_support"].includes(intent)) return "high";
-  if (intent === "compare") return "medium";
+
+  if (persona === "executive") return frontier56 ? "max" : "high";
+  if (["diagnose", "forecast", "decision_support"].includes(intent)) {
+    return frontier56 ? "xhigh" : "high";
+  }
+  if (intent === "compare") return frontier56 ? "high" : "medium";
   if (intent === "lookup") return "low";
   return "medium";
 }
@@ -132,7 +142,11 @@ function mapTools(tools = []) {
         tool?.input_schema && typeof tool.input_schema === "object"
           ? tool.input_schema
           : { type: "object", properties: {}, additionalProperties: false },
-      strict: true,
+      // CHALIN's registry remains the authoritative permission/scope/input boundary.
+      // Some existing governed tool schemas intentionally contain optional fields,
+      // so provider-side strict Structured Outputs would make valid CHALIN contracts
+      // unrepresentable without silently changing their semantics.
+      strict: false,
     });
   }
   return Object.freeze({
@@ -293,7 +307,11 @@ class OpenAiResponsesProvider {
     const apiKey = requireApiKey(this.env);
     assertPricingIfCostLimitEnabled(this.env);
     const model = modelForContext(this.env, provider_context);
-    const reasoningEffort = reasoningEffortForContext(this.env, provider_context);
+    const reasoningEffort = reasoningEffortForContext(
+      this.env,
+      provider_context,
+      model
+    );
     const mappedTools = mapTools(tools);
     const body = {
       model,
@@ -414,5 +432,6 @@ module.exports = {
   requireApiKey,
   safeModelKey,
   stableSafetyIdentifier,
+  supportsMaxReasoning,
   tokenUsage,
 };
