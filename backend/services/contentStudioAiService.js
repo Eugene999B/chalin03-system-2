@@ -100,8 +100,8 @@ function dashboardEvidence(dashboard = {}) {
 
 function websiteControlEvidence(control = {}) {
   const summary = control.summary || {};
-  const pageIssues = control.issue_counts?.pages || control.page_issue_counts || {};
-  const navigationIssues = control.issue_counts?.navigation || control.navigation_issue_counts || {};
+  const pageIssues = summary.page_issues || {};
+  const navigationIssues = summary.navigation_issues || {};
   const snapshot = Object.freeze({
     health_score: numberValue(summary.health_score),
     total_pages: numberValue(summary.total_pages),
@@ -109,13 +109,10 @@ function websiteControlEvidence(control = {}) {
     healthy_pages: numberValue(summary.healthy_pages),
     attention_pages: numberValue(summary.attention_pages),
     indexable_published_pages: numberValue(summary.indexable_published_pages),
-    orphan_page_count: numberValue(summary.orphan_page_count ?? control.orphans?.length),
-    canonical_conflict_count: numberValue(
-      summary.canonical_conflict_count ?? control.canonical_conflicts?.length
-    ),
-    redirect_candidate_count: numberValue(
-      summary.redirect_candidate_count ?? control.redirect_candidates?.length
-    ),
+    navigation_items: numberValue(summary.navigation_items),
+    orphan_page_count: numberValue(summary.orphan_pages),
+    canonical_conflict_count: numberValue(summary.canonical_conflicts),
+    redirect_candidate_count: numberValue(summary.redirect_candidates),
     page_issues: Object.freeze({
       critical: numberValue(pageIssues.critical),
       warning: numberValue(pageIssues.warning),
