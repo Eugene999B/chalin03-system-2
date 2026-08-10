@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import FeatureFlagRoute from "../components/FeatureFlagRoute";
 import PageErrorBoundary from "../components/PageErrorBoundary";
@@ -9,7 +9,6 @@ import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
 import PublicInteractionSafety from "./public-site/PublicInteractionSafety";
 import PublicTechnicalFinish from "./public-site/PublicTechnicalFinish";
-import PublicWorldEnhancements from "./public-site/PublicWorldEnhancements";
 import "./public-site/publicBootPolish.css";
 
 const PublicCorporateWebsiteApp = lazy(() =>
@@ -20,6 +19,33 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
     default: module.PublicCorporateWebsiteUnavailable,
   }))
 );
+const PublicWorldEnhancements = lazy(() =>
+  import("./public-site/PublicWorldEnhancements")
+);
+
+function DeferredPublicWorldEnhancements() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(() => setReady(true), {
+        timeout: 1800,
+      });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timerId = window.setTimeout(() => setReady(true), 900);
+    return () => window.clearTimeout(timerId);
+  }, []);
+
+  if (!ready) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <PublicWorldEnhancements />
+    </Suspense>
+  );
+}
 
 function PublicStandaloneLoading() {
   return (
@@ -67,7 +93,7 @@ export default function PublicChalinOneEntry() {
                   <PublicAnalyticsRuntime />
                   <PublicExperienceCompletion />
                   <PublicDetailCompanion />
-                  <PublicWorldEnhancements />
+                  <DeferredPublicWorldEnhancements />
                   <PublicEditorialFinish />
                   <PublicTechnicalFinish />
                   <SafePublic fallback={quietFallback}>
