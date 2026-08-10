@@ -21,10 +21,24 @@ function cleanParams(params = {}) {
   );
 }
 
+function resolvePublicApiBase() {
+  if (/^https?:\/\//i.test(PUBLIC_API_BASE)) {
+    return PUBLIC_API_BASE.endsWith("/") ? PUBLIC_API_BASE : `${PUBLIC_API_BASE}/`;
+  }
+
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "http://localhost";
+  const relativeBase = PUBLIC_API_BASE.startsWith("/")
+    ? PUBLIC_API_BASE
+    : `/${PUBLIC_API_BASE}`;
+  return new URL(`${relativeBase.replace(/\/+$/, "")}/`, origin).toString();
+}
+
 function publicRequestUrl(pathname, params = {}) {
-  const base = PUBLIC_API_BASE.endsWith("/") ? PUBLIC_API_BASE : `${PUBLIC_API_BASE}/`;
   const relativePath = String(pathname || "").replace(/^\/+/, "");
-  const url = new URL(relativePath, base);
+  const url = new URL(relativePath, resolvePublicApiBase());
   for (const [key, value] of Object.entries(cleanParams(params))) {
     url.searchParams.set(key, String(value));
   }
@@ -281,4 +295,5 @@ export {
   publicRequestUrl,
   publicWebsiteClient,
   publicWebsiteRequest,
+  resolvePublicApiBase,
 };
