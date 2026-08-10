@@ -29,6 +29,7 @@ const {
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   archiveConversation,
+  deleteConversation,
   getConversationDetails,
   listConversations,
   renameConversation,
@@ -148,9 +149,26 @@ async function runPersonaChat({ req, persona }) {
       provider_selected: contextual.selection.selected_provider,
       provider_effective: contextual.selection.effective_provider,
       provider_reason_code: contextual.selection.reason_code,
+      full_context_active: contextual.selection.full_context_active === true,
       server_owned_preload: true,
     }),
   });
+}
+
+async function assertOwnedPersonaConversation(req, persona, messageLimit = 1) {
+  const details = await getConversationDetails({
+    conversationKey: req.params.conversationKey,
+    userId: req.user.id,
+    messageLimit,
+  });
+  if (details.conversation.persona !== persona) {
+    const error = new Error("AI conversation not found.");
+    error.name = "AiConversationError";
+    error.code = "AI_CONVERSATION_NOT_FOUND";
+    error.statusCode = 404;
+    throw error;
+  }
+  return details;
 }
 
 function personaRouter(persona, featureKey) {
@@ -197,18 +215,7 @@ function personaRouter(persona, featureKey) {
     "/conversations/:conversationKey",
     requireAiPermission("ai.conversations.view"),
     asyncHandler(async (req, res) => {
-      const details = await getConversationDetails({
-        conversationKey: req.params.conversationKey,
-        userId: req.user.id,
-      });
-      if (details.conversation.persona !== persona) {
-        return res.status(404).json({
-          status: "error",
-          code: "AI_CONVERSATION_NOT_FOUND",
-          message: "AI conversation not found.",
-          request_id: req.requestId || null,
-        });
-      }
+      const details = await assertOwnedPersonaConversation(req, persona, 500);
       return success(res, req, details);
     })
   );
@@ -217,25 +224,21 @@ function personaRouter(persona, featureKey) {
     "/conversations/:conversationKey",
     requireAiPermission("ai.conversations.manage"),
     asyncHandler(async (req, res) => {
-      const details = await getConversationDetails({
-        conversationKey: req.params.conversationKey,
-        userId: req.user.id,
-        messageLimit: 1,
-      });
-      if (details.conversation.persona !== persona) {
-        return res.status(404).json({
-          status: "error",
-          code: "AI_CONVERSATION_NOT_FOUND",
-          message: "AI conversation not found.",
-          request_id: req.requestId || null,
-        });
-      }
+      await assertOwnedPersonaConversation(req, persona, 1);
       await renameConversation({
         conversationKey: req.params.conversationKey,
         userId: req.user.id,
         title: req.body.title,
       });
-      return success(res, req, { updated: true });
+      const details = await getConversationDetails({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+        messageLimit: 1,
+      });
+      return success(res, req, {
+        updated: true,
+        conversation: details.conversation,
+      });
     })
   );
 
@@ -243,24 +246,25 @@ function personaRouter(persona, featureKey) {
     "/conversations/:conversationKey/archive",
     requireAiPermission("ai.conversations.manage"),
     asyncHandler(async (req, res) => {
-      const details = await getConversationDetails({
-        conversationKey: req.params.conversationKey,
-        userId: req.user.id,
-        messageLimit: 1,
-      });
-      if (details.conversation.persona !== persona) {
-        return res.status(404).json({
-          status: "error",
-          code: "AI_CONVERSATION_NOT_FOUND",
-          message: "AI conversation not found.",
-          request_id: req.requestId || null,
-        });
-      }
+      await assertOwnedPersonaConversation(req, persona, 1);
       await archiveConversation({
         conversationKey: req.params.conversationKey,
         userId: req.user.id,
       });
       return success(res, req, { archived: true });
+    })
+  );
+
+  personaRoutes.delete(
+    "/conversations/:conversationKey",
+    requireAiPermission("ai.conversations.manage"),
+    asyncHandler(async (req, res) => {
+      await assertOwnedPersonaConversation(req, persona, 1);
+      await deleteConversation({
+        conversationKey: req.params.conversationKey,
+        userId: req.user.id,
+      });
+      return success(res, req, { deleted: true });
     })
   );
 
@@ -280,8 +284,20 @@ router.get(
   requireAiPermission("ai.use"),
   asyncHandler(async (req, res) => {
     const flags = getFeatureSnapshot();
-    const provider = getAiProviderReadiness(process.env);
     const providerControl = await getProviderControlSnapshot();
+    const copilotSelection = providerControl?.profiles?.copilot?.selection || {};
+    const provider = {
+      ...getAiProviderReadiness(
+        process.env,
+        copilotSelection.effective_provider || copilotSelection.selected_provider || null
+      ),
+      model_key: copilotSelection.effective_model || null,
+      selected_key: copilotSelection.selected_provider || null,
+      selected_model: copilotSelection.selected_model || null,
+      policy_reason_code: copilotSelection.reason_code || null,
+      full_context_requested: copilotSelection.full_context_requested === true,
+      full_context_active: copilotSelection.full_context_active === true,
+    };
     return success(res, req, {
       flags,
       provider,
@@ -318,11 +334,19 @@ router.put(
       persona: req.params.persona,
       providerKey: req.body.provider_key,
       modelKey: req.body.model_key,
+      fullContextAccess: req.body.full_context_access === true,
       userId: req.user.id,
     });
     return success(res, req, {
       updated: true,
-      profile,
+      profile: {
+        profile_key: profile.profile_key,
+        provider_key: profile.provider_key,
+        model_key: profile.model_key,
+        profile_status: profile.profile_status,
+        full_context_requested:
+          profile.configuration?.system_admin_full_context === true,
+      },
       control: await getProviderControlSnapshot(),
     });
   })
