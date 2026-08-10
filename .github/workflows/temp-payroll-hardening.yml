@@ -1,0 +1,99 @@
+name: Temporary Payroll Hardening
+
+on:
+  pull_request:
+    branches:
+      - feature/equipment-finance-phase1-integrity-verification-20260807
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.event.pull_request.head.ref == 'feature/payroll-financial-foundation-phase2-20260810'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/payroll-financial-foundation-phase2-20260810
+          fetch-depth: 1
+      - name: Apply deterministic payroll hardening
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          payroll_tables = [
+              'payroll_statutory_rule_versions',
+              'payroll_compensation_profiles',
+              'payroll_recurring_components',
+              'payroll_periods',
+              'payroll_entries',
+              'payroll_entry_lines',
+              'payroll_salary_payments',
+              'payroll_adjustment_requests',
+              'payroll_worker_loans',
+              'payroll_loan_transactions',
+              'payroll_payslips',
+          ]
+          insertion = ''.join(f'  "{name}",\n' for name in payroll_tables)
+          marker = '  "document_signature_settings",\n'
+
+          for filename in [
+              'backend/scripts/resetDatabaseFromBackup.js',
+              'backend/scripts/verifyRestoredDatabase.js',
+          ]:
+              path = Path(filename)
+              text = path.read_text()
+              if payroll_tables[0] not in text:
+                  if text.count(marker) != 1:
+                      raise SystemExit(f'Unexpected restore inventory marker in {filename}')
+                  text = text.replace(marker, marker + insertion)
+                  path.write_text(text)
+
+          migration_path = Path('database/migrations/20260810_payroll_financial_foundation.sql')
+          migration = migration_path.read_text()
+          migration = migration.replace(
+              'CONSTRAINT fk_payroll_component_profile FOREIGN KEY (compensation_profile_id) REFERENCES payroll_compensation_profiles(id) ON DELETE CASCADE',
+              'CONSTRAINT fk_payroll_component_profile FOREIGN KEY (compensation_profile_id) REFERENCES payroll_compensation_profiles(id) ON DELETE RESTRICT',
+          )
+          migration_path.write_text(migration)
+
+          test_path = Path('backend/tests/payrollFinancialFoundation20260810.test.js')
+          test = test_path.read_text()
+          if 'resetDatabaseFromBackup.js' not in test:
+              test = test.replace(
+                  'const backup = read("backend/routes/release2FinalRoutes.js");\n',
+                  'const backup = read("backend/routes/release2FinalRoutes.js");\nconst resetDatabase = read("backend/scripts/resetDatabaseFromBackup.js");\nconst restoredDatabase = read("backend/scripts/verifyRestoredDatabase.js");\n',
+              )
+          if 'restore inventories preserve every payroll foundation table' not in test:
+              anchor = 'test("payroll API is explicit and production startup remains API-only", () => {\n'
+              block = '''test("restore inventories preserve every payroll foundation table", () => {\n  for (const table of payrollTables) {\n    assert.match(resetDatabase, new RegExp(table));\n    assert.match(restoredDatabase, new RegExp(table));\n  }\n  assert.match(migration, /fk_payroll_component_profile[\\s\\S]*ON DELETE RESTRICT/);\n});\n\n'''
+              if anchor not in test:
+                  raise SystemExit('Payroll contract insertion point moved')
+              test = test.replace(anchor, block + anchor)
+          if 'sensitiveAdminLimiter' not in test.split('test("payroll API is explicit and production startup remains API-only"',1)[1]:
+              needle = '  assert.match(server, /app\\.use\\("\\/api\\/payroll"/);\n'
+              replacement = needle + '  assert.match(server, /app\\.use\\("\\/api\\/payroll", sensitiveAdminLimiter\\)/);\n'
+              if needle not in test:
+                  raise SystemExit('Payroll server assertion moved')
+              test = test.replace(needle, replacement)
+          test_path.write_text(test)
+          PY
+
+          node --check backend/scripts/resetDatabaseFromBackup.js
+          node --check backend/scripts/verifyRestoredDatabase.js
+          node --check backend/server.js
+          node --check backend/services/payrollFoundationService.js
+          node --check backend/routes/payrollFoundationRoutes.js
+          node --test backend/tests/payrollFinancialFoundation20260810.test.js
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- backend/scripts/resetDatabaseFromBackup.js backend/scripts/verifyRestoredDatabase.js backend/tests/payrollFinancialFoundation20260810.test.js database/migrations/20260810_payroll_financial_foundation.sql
+          if git diff --cached --quiet; then
+            echo 'No hardening changes required.'
+            exit 0
+          fi
+          git commit -m 'Harden payroll restore and immutable history controls'
+          git push origin HEAD:feature/payroll-financial-foundation-phase2-20260810
