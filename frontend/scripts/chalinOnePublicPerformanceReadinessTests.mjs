@@ -60,7 +60,6 @@ assert.match(publicGate, /STATUS_REFRESH_INTERVAL_MS = 30000/);
 assert.doesNotMatch(publicGate, /axios|axiosClient|localStorage|sessionStorage|Authorization|Bearer/);
 
 assert.match(publicEntry, /PublicExperienceCompletion/);
-assert.match(publicEntry, /PublicTechnicalFinish/);
 assert.match(publicEntry, /PublicCorporateWebsiteApp/);
 assert.match(publicEntry, /publicBootPolish\.css/);
 assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicAnalyticsRuntime"\)/s);
@@ -69,6 +68,12 @@ assert.match(publicEntry, /timeout: 900/);
 assert.match(publicEntry, /setTimeout\(\(\) => setReady\(true\), 450\)/);
 assert.match(publicEntry, /<DeferredPublicAnalyticsRuntime \/>/);
 assert.doesNotMatch(publicEntry, /import PublicAnalyticsRuntime from/);
+assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicTechnicalFinish"\)/s);
+assert.match(publicEntry, /function DeferredPublicTechnicalFinish/);
+assert.match(publicEntry, /timeout: 320/);
+assert.match(publicEntry, /setTimeout\(\(\) => setReady\(true\), 140\)/);
+assert.match(publicEntry, /<DeferredPublicTechnicalFinish \/>/);
+assert.doesNotMatch(publicEntry, /import PublicTechnicalFinish from/);
 assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicWorldEnhancements"\)/s);
 assert.match(publicEntry, /function DeferredPublicWorldEnhancements/);
 assert.match(publicEntry, /requestIdleCallback/);
@@ -143,4 +148,4 @@ assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable postbuild byte budgets, failure states and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/technical finish/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable postbuild byte budgets, failure states and read-only launch controls remain protected.");
