@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   AI_PERSONAS,
   aiErrorMessage,
+  clearAiConversationHistory,
   createAiFeedback,
   createAiKnowledgeDraft,
   decideAiKnowledgeApproval,
@@ -35,10 +36,10 @@ import "./chalinIntelligence.css";
 
 const CHAT_STARTERS = Object.freeze({
   copilot: Object.freeze([
-    "What needs my attention in this workspace today? Investigate before answering.",
-    "Analyze sales, collections and inventory signals and tell me what matters most.",
-    "Look for unusual operational patterns or risks I may be missing.",
-    "Continue the most relevant work we discussed previously and remind me where we left off.",
+    "Explain any part of CHALIN 03 I ask about and tell me how it should work.",
+    "Help me think through an IT, product or security improvement for CHALIN.",
+    "Help me create a marketing or business strategy for CHALIN.",
+    "Investigate my authorized live business data when I ask for current figures.",
   ]),
   executive: Object.freeze([
     "Give me an executive brief: performance, risks, opportunities and what needs a decision.",
@@ -59,6 +60,71 @@ const EMPTY_KNOWLEDGE_FORM = Object.freeze({
   effective_from: "",
   expires_at: "",
 });
+
+const ACTIVE_CHAT_PREFIX = "chalin03_ai_active_chat_v1";
+const DRAFT_PREFIX = "chalin03_ai_draft_v1";
+
+function storagePart(value) {
+  return String(value || "unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .slice(0, 80) || "unknown";
+}
+
+function activeChatStorageKey(persona, workspaceCode) {
+  return `${ACTIVE_CHAT_PREFIX}:${storagePart(workspaceCode)}:${storagePart(persona)}`;
+}
+
+function rememberActiveConversation(persona, workspaceCode, conversationKey) {
+  if (!conversationKey) return;
+  try {
+    localStorage.setItem(
+      activeChatStorageKey(persona, workspaceCode),
+      String(conversationKey)
+    );
+  } catch {
+    // Persistence is helpful but never required for chat operation.
+  }
+}
+
+function readActiveConversation(persona, workspaceCode) {
+  try {
+    return localStorage.getItem(activeChatStorageKey(persona, workspaceCode)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetActiveConversation(persona, workspaceCode) {
+  try {
+    localStorage.removeItem(activeChatStorageKey(persona, workspaceCode));
+  } catch {
+    // Nothing else is required.
+  }
+}
+
+function draftStorageKey(value) {
+  return `${DRAFT_PREFIX}:${storagePart(value)}`;
+}
+
+function readDraft(value) {
+  try {
+    return sessionStorage.getItem(draftStorageKey(value)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveDraft(value, draft) {
+  try {
+    const key = draftStorageKey(value);
+    if (draft) sessionStorage.setItem(key, draft);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // Draft persistence is best-effort only.
+  }
+}
 
 function humanize(value) {
   return String(value || "")
@@ -267,7 +333,7 @@ function ChatMessage({ message, persona, conversationKey, resultMeta = null, sho
   );
 }
 
-function ChatSettingsModal({ settings, setSettings, provider, onClose }) {
+function ChatSettingsModal({ settings, setSettings, provider, historyCount, onRequestClearHistory, onClose }) {
   const { preference, resolved, setAppearance } = useAppearance();
 
   function updateSetting(key, value) {
@@ -334,11 +400,44 @@ function ChatSettingsModal({ settings, setSettings, provider, onClose }) {
             ><span /></button>
           </section>
 
+          <section className="ci-setting-section">
+            <div className="ci-setting-copy">
+              <strong>Clear chat history</strong>
+              <span>Permanently delete your Copilot/Executive conversations for the current persona, including archived history. This never deletes business records or another user’s chats.</span>
+            </div>
+            <button type="button" className="ci-button ci-button-danger-solid" onClick={onRequestClearHistory}>
+              Clear history{historyCount ? ` (${historyCount} active)` : ""}
+            </button>
+          </section>
+
           <section className="ci-settings-runtime">
             <span className="ci-eyebrow">Runtime</span>
             <strong>{provider?.key || "No provider"}{provider?.model_key ? ` · ${provider.model_key}` : ""}</strong>
-            <p>Conversation refreshes never intentionally clear your active chat. A new chat starts only when you request one, delete the active chat, or switch persona.</p>
+            <p>CHALIN no longer participates in automatic service-worker reloads. Your active chat is also remembered so a manual refresh can reopen it.</p>
           </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ClearHistoryDialog({ persona, busy, onClose, onConfirm }) {
+  return (
+    <div className="ci-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="ci-conversation-dialog" role="dialog" aria-modal="true" aria-labelledby="ci-clear-history-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="ci-eyebrow">History</span>
+            <h2 id="ci-clear-history-title">Clear {humanize(persona)} history?</h2>
+          </div>
+          <button type="button" className="ci-plain-icon-button" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
+        </header>
+        <p>This permanently removes your active, archived and blocked {humanize(persona)} conversations and their chat evidence. It does not delete CHALIN business records, audit records belonging to the business, or another user’s conversations.</p>
+        <div className="ci-dialog-actions">
+          <button type="button" className="ci-button ci-button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="ci-button ci-button-danger-solid" onClick={onConfirm} disabled={busy}>
+            {busy ? "Clearing…" : "Clear my history"}
+          </button>
         </div>
       </section>
     </div>
@@ -397,9 +496,17 @@ function ConversationRow({ item, active, onOpen, onRename, onDelete }) {
   );
 }
 
-function ChatPanel({ persona, conversation, messages, sending, error, onSend, onStarter, settings, onOpenSettings }) {
-  const [draft, setDraft] = useState("");
+function ChatPanel({ persona, conversation, messages, sending, error, onSend, onStarter, settings, onOpenSettings, draftKey }) {
+  const [draft, setDraft] = useState(() => readDraft(draftKey));
   const streamRef = useRef(null);
+
+  useEffect(() => {
+    setDraft(readDraft(draftKey));
+  }, [draftKey]);
+
+  useEffect(() => {
+    saveDraft(draftKey, draft);
+  }, [draft, draftKey]);
 
   useEffect(() => {
     const element = streamRef.current;
@@ -436,7 +543,7 @@ function ChatPanel({ persona, conversation, messages, sending, error, onSend, on
               <span className="ci-eyebrow">CHALIN intelligence</span>
               <h1>{persona === "executive" ? "What should we examine?" : "What can I help you work through?"}</h1>
               <p>
-                Ask naturally. CHALIN can investigate approved live data, reason across evidence and recall relevant earlier conversations without resetting the chat while background data refreshes.
+                Ask naturally about CHALIN itself, IT, marketing, strategy, business advice or your authorized live records. Product questions no longer trigger unrelated operational snapshots.
               </p>
               <div className="ci-starter-grid">
                 {CHAT_STARTERS[persona].map((starter) => (
@@ -462,7 +569,7 @@ function ChatPanel({ persona, conversation, messages, sending, error, onSend, on
         {sending ? (
           <div className="ci-thinking" role="status" aria-live="polite">
             <span className="ci-thinking-mark" aria-hidden="true">C1</span>
-            <div><strong>CHALIN is thinking</strong><small>Investigating the available context and evidence…</small></div>
+            <div><strong>CHALIN is thinking</strong><small>Understanding the question, then using product knowledge or authorized evidence only when needed…</small></div>
           </div>
         ) : null}
         {error ? <div className="ci-banner ci-banner-danger" role="alert">{error}</div> : null}
@@ -702,6 +809,8 @@ export default function ChalinIntelligenceWorkspace() {
   const [chatSettings, setChatSettings] = useState(loadAiChatPreferences);
   const [conversationAction, setConversationAction] = useState(null);
   const [conversationActionBusy, setConversationActionBusy] = useState(false);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  const [clearHistoryBusy, setClearHistoryBusy] = useState(false);
   const activePersonaRef = useRef(persona);
   const activeChatEpochRef = useRef(0);
 
@@ -761,7 +870,8 @@ export default function ChalinIntelligenceWorkspace() {
     return () => controller.abort();
   }, [loadConversations, persona]);
 
-  async function openConversation(item) {
+  const openConversation = useCallback(async (item) => {
+    if (!item?.key) return;
     const epoch = activeChatEpochRef.current + 1;
     activeChatEpochRef.current = epoch;
     setConversationError("");
@@ -771,14 +881,31 @@ export default function ChalinIntelligenceWorkspace() {
       if (activeChatEpochRef.current !== epoch) return;
       setConversation(details.conversation);
       setMessages(details.messages || []);
+      rememberActiveConversation(persona, workspaceCode, item.key);
       setTab("chat");
     } catch (error) {
-      if (activeChatEpochRef.current === epoch) setConversationError(aiErrorMessage(error));
+      if (activeChatEpochRef.current === epoch) {
+        forgetActiveConversation(persona, workspaceCode);
+        setConversationError(aiErrorMessage(error));
+      }
     }
-  }
+  }, [persona, workspaceCode]);
+
+  useEffect(() => {
+    if (!personaAvailable || conversation || conversationLoading) return;
+    const savedKey = readActiveConversation(persona, workspaceCode);
+    if (!savedKey) return;
+    const savedConversation = conversations.find((item) => item?.key === savedKey);
+    if (!savedConversation) {
+      if (conversations.length > 0) forgetActiveConversation(persona, workspaceCode);
+      return;
+    }
+    openConversation(savedConversation);
+  }, [conversation, conversationLoading, conversations, openConversation, persona, personaAvailable, workspaceCode]);
 
   function newConversation() {
     activeChatEpochRef.current += 1;
+    forgetActiveConversation(persona, workspaceCode);
     setConversation(null);
     setMessages([]);
     setSendError("");
@@ -817,6 +944,7 @@ export default function ChalinIntelligenceWorkspace() {
       });
 
       if (activeChatEpochRef.current === epoch) {
+        rememberActiveConversation(persona, workspaceCode, conversationKey);
         setConversation((current) => current
           ? { ...current, key: conversationKey, title: nextTitle }
           : { key: conversationKey, title: nextTitle, persona, workspace_code: workspaceCode });
@@ -854,6 +982,29 @@ export default function ChalinIntelligenceWorkspace() {
       setConversationError(aiErrorMessage(error));
     } finally {
       setConversationActionBusy(false);
+    }
+  }
+
+  async function confirmClearHistory() {
+    if (clearHistoryBusy) return;
+    setClearHistoryBusy(true);
+    setConversationError("");
+    try {
+      await clearAiConversationHistory(persona);
+      activeChatEpochRef.current += 1;
+      forgetActiveConversation(persona, workspaceCode);
+      setConversations([]);
+      setConversation(null);
+      setMessages([]);
+      setSendError("");
+      setClearHistoryOpen(false);
+      setSettingsOpen(false);
+      await loadConversations(undefined, { silent: true, force: true });
+    } catch (error) {
+      setConversationError(aiErrorMessage(error));
+      setClearHistoryOpen(false);
+    } finally {
+      setClearHistoryBusy(false);
     }
   }
 
@@ -906,7 +1057,7 @@ export default function ChalinIntelligenceWorkspace() {
             )}
           </div>
           <div className="ci-sidebar-footer">
-            <div><span className="ci-sidebar-label">Available context</span><p>{tools.length} permission-scoped read tool{tools.length === 1 ? "" : "s"}</p></div>
+            <div><span className="ci-sidebar-label">Available context</span><p>{tools.length} permission-scoped tool{tools.length === 1 ? "" : "s"}</p></div>
             <button type="button" className="ci-sidebar-settings" onClick={() => setSettingsOpen(true)}><span aria-hidden="true">⚙</span> Settings</button>
           </div>
         </aside>
@@ -928,6 +1079,7 @@ export default function ChalinIntelligenceWorkspace() {
                 onStarter={send}
                 settings={chatSettings}
                 onOpenSettings={() => setSettingsOpen(true)}
+                draftKey={`${workspaceCode}:${persona}:${conversation?.key || "new"}`}
               />
             ) : <div className="ci-page"><StatePanel error={`The ${humanize(persona)} persona is disabled or not granted to this account.`} /></div> : null}
             {tab === "knowledge" && knowledgeAvailable ? <KnowledgePanel permissions={permissions} /> : null}
@@ -935,7 +1087,8 @@ export default function ChalinIntelligenceWorkspace() {
           </div>
         </section>
       </div>
-      {settingsOpen ? <ChatSettingsModal settings={chatSettings} setSettings={setChatSettings} provider={status.provider} onClose={() => setSettingsOpen(false)} /> : null}
+      {settingsOpen ? <ChatSettingsModal settings={chatSettings} setSettings={setChatSettings} provider={status.provider} historyCount={conversations.length} onRequestClearHistory={() => setClearHistoryOpen(true)} onClose={() => setSettingsOpen(false)} /> : null}
+      {clearHistoryOpen ? <ClearHistoryDialog persona={persona} busy={clearHistoryBusy} onClose={() => !clearHistoryBusy && setClearHistoryOpen(false)} onConfirm={confirmClearHistory} /> : null}
       {conversationAction ? <ConversationActionDialog action={conversationAction} busy={conversationActionBusy} onClose={() => !conversationActionBusy && setConversationAction(null)} onConfirm={confirmConversationAction} /> : null}
     </main>
   );
