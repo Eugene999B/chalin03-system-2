@@ -141,15 +141,24 @@ test("Finance bootstrap falls back to the completed operational reset cutoff", (
   );
 });
 
-test("cleanup is attempted without ever blocking normal Railway startup", () => {
-  const start = packageJson.scripts.start;
+test("cleanup remains best-effort maintenance without ever blocking normal API startup", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.doesNotMatch(
-    start,
+    packageJson.scripts.start,
     /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
-    "The fail-closed one-time command must not directly block Railway startup"
+    "The fail-closed one-time command must not directly block API startup"
+  );
+  assert.doesNotMatch(
+    maintenance,
+    /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
+    "The fail-closed one-time command must not block controlled maintenance"
   );
   assert.match(
-    start,
+    maintenance,
     /node scripts\/runInstallmentExcavatorCleanupBestEffortStartup20260805\.js/
   );
   assert.match(cleanupStartupSource, /try \{/);

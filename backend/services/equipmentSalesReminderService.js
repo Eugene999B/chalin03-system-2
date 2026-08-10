@@ -2,6 +2,12 @@ const equipmentSalesRoutes = require("../routes/equipmentSalesRoutes");
 const installmentCommandRoutes = require("../routes/equipmentInstallmentCommandRoutes");
 const equipmentFinanceFinalLifecycleRoutes = require("../routes/equipmentFinanceFinalLifecycleRoutes");
 const {
+  equipmentFinanceLifecycleIntegrityGuard,
+} = require("../middleware/equipmentFinanceLifecycleIntegrityGuard");
+const {
+  equipmentFinanceActivationIntegrityGuard,
+} = require("../middleware/equipmentFinanceActivationIntegrityGuard");
+const {
   buildInstallmentReminderMessage,
   defaultInstallmentReminderSettings,
   refreshEquipmentInstallmentStatuses,
@@ -46,7 +52,34 @@ if (!equipmentSalesRoutes.__chalin03InstallmentCommandMounted) {
   });
 }
 
+if (!equipmentSalesRoutes.__chalin03FinanceActivationIntegrityMounted) {
+  // This guard is registered before equipmentSalesSchemaService mounts the
+  // agreement-activation router. It performs a current KYC/affordability/date
+  // recheck but leaves previously activated replay handling to the established route.
+  equipmentSalesRoutes.use(
+    "/agreement-activations",
+    equipmentFinanceActivationIntegrityGuard
+  );
+  Object.defineProperty(
+    equipmentSalesRoutes,
+    "__chalin03FinanceActivationIntegrityMounted",
+    {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    }
+  );
+}
+
 if (!equipmentSalesRoutes.__chalin03FinanceFinalLifecycleMounted) {
+  // The guard is deliberately mounted immediately before the established
+  // lifecycle router. It validates replay keys and ownership date sequencing
+  // without changing the existing payment/delivery/ownership transaction code.
+  equipmentSalesRoutes.use(
+    "/finance-lifecycle",
+    equipmentFinanceLifecycleIntegrityGuard
+  );
   equipmentSalesRoutes.use(
     "/finance-lifecycle",
     equipmentFinanceFinalLifecycleRoutes

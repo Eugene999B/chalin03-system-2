@@ -197,7 +197,7 @@ test("Phase 5B verifier and Railway gate fail closed on invalid independent deci
   assert.match(runner, /process\.exit\(1\)/);
 });
 
-test("Phase 5B review layer mounts after the encrypted vault and contains no delivery logic", () => {
+test("Phase 5B review layer mounts after the encrypted vault and remains ordered in controlled maintenance", () => {
   assert.match(
     independentRoutes,
     /router\.use\("\/private-documents", equipmentFinancePrivateDocumentsRoutes\);[\s\S]*router\.use\("\/private-documents", equipmentFinanceDocumentReviewRoutes\);/
@@ -215,15 +215,18 @@ test("Phase 5B review layer mounts after the encrypted vault and contains no del
     /equipment_finance_delivery_confirmations/
   );
 
-  const start = packageJson.scripts.start;
-  const phaseFiveA = start.indexOf(
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseFiveA = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js"
   );
-  const phaseFiveB = start.indexOf(
+  const phaseFiveB = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveBDocumentReviewStartup.js"
   );
-  const server = start.indexOf("server.js");
-  assert.ok(phaseFiveA >= 0 && phaseFiveB > phaseFiveA && server > phaseFiveB);
+  assert.ok(phaseFiveA >= 0 && phaseFiveB > phaseFiveA);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase5b:production"],
     "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js"

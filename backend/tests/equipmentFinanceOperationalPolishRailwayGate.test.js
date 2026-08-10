@@ -8,17 +8,20 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(backendDir, "package.js
 const startupSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishStartup.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(backendDir, "scripts", "runEquipmentFinanceOperationalPolishMigration.js"), "utf8");
 const cleanupStartupSource = fs.readFileSync(path.join(backendDir, "scripts", "runInstallmentExcavatorCleanupBestEffortStartup20260805.js"), "utf8");
-const EXPECTED_START = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const API_START = "node -r ./services/exportWorkbookSafetyBootstrap.js server.js";
+const EXPECTED_MAINTENANCE = "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js";
 
-test("Railway runs every reviewed recurring startup gate before API traffic", () => {
-  assert.equal(packageJson.scripts.start, EXPECTED_START);
+test("controlled maintenance keeps every reviewed recurring gate while API startup stays independent", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  assert.equal(packageJson.scripts.start, API_START);
+  assert.equal(maintenance, EXPECTED_MAINTENANCE);
   assert.doesNotMatch(
-    packageJson.scripts.start,
+    maintenance,
     /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/,
-    "the fail-closed one-time cleanup must not block recurring Railway startup"
+    "the fail-closed one-time cleanup must not block the controlled maintenance plan"
   );
   assert.doesNotMatch(
-    packageJson.scripts.start,
+    maintenance,
     /runPostRollbackDebtAccountReconciliation20260805\.js/,
     "the unsafe broad customer regrouping must never run again"
   );
@@ -53,11 +56,10 @@ test("Railway runs every reviewed recurring startup gate before API traffic", ()
     "runZeroPaymentCreditDebtVisibilityRepair20260805.js",
     "runMasterMickeyJuly31ExactDebtRepair20260805.js",
     "runUnpaidReceiptIdentityIsolation20260805.js",
-    "server.js",
   ];
   let previous = -1;
   for (const phase of phases) {
-    const current = packageJson.scripts.start.indexOf(phase);
+    const current = maintenance.indexOf(phase);
     assert.ok(current > previous, `${phase} must run in reviewed order.`);
     previous = current;
   }
