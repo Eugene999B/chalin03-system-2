@@ -86,19 +86,29 @@ test("live and personal business record questions remain private and governed", 
   }
 });
 
-test("system reasoning receives static CHALIN knowledge and drops unsafe prior records", () => {
+test("system reasoning receives static CHALIN knowledge and drops all prior conversation records", () => {
+  const currentPrompt = "What does Audit Intelligence do?";
   const safe = publicSafeSystemMessages(
-    messages("What does Audit Intelligence do?", [
+    messages(currentPrompt, [
       { role: "user", content: "How should we position CHALIN for business owners?" },
       { role: "assistant", content: "Focus on operational control and management visibility." },
       { role: "assistant", content: "PRIVATE: Total Sales GHS 5000, Branch Id 1" },
     ])
   );
 
+  assert.equal(safe.length, 2);
+  assert.equal(safe[0]?.role, "system");
+  assert.equal(safe[1]?.role, "user");
+  assert.equal(safe[1]?.content, currentPrompt);
+
   const serialized = JSON.stringify(safe);
+  assert.match(serialized, /CHALIN 03 \/ CHALIN ONE is an integrated business operating system/i);
   assert.match(serialized, /Audit \/ Advanced Accounting Intelligence/i);
-  assert.match(serialized, /operational control and management visibility/i);
-  assert.doesNotMatch(serialized, /GHS 5000|Branch Id 1|PRIVATE SYSTEM CONTEXT/);
+  assert.match(serialized, /management and audit observatory/i);
+  assert.doesNotMatch(
+    serialized,
+    /position CHALIN for business owners|operational control and management visibility|GHS 5000|Branch Id 1|PRIVATE SYSTEM CONTEXT/
+  );
 });
 
 test("the exact reported Audit Intelligence question never triggers a Spare Parts live snapshot in local fallback", async () => {
