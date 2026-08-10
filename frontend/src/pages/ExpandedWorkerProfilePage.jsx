@@ -10,6 +10,7 @@ import {
 } from "../context/AuthContext";
 
 import WorkerHrLettersPanel from "../components/WorkerHrLettersPanel";
+import WorkerPayrollPanel from "../components/WorkerPayrollPanel";
 
 import "../styles/expandedWorkerProfile.css";
 
@@ -395,6 +396,10 @@ export default function ExpandedWorkerProfilePage() {
 
   const canDeactivate = auth.hasPermission(
     "workers.deactivate"
+  );
+
+  const canPayrollView = auth.hasPermission(
+    "payroll.view"
   );
 
   const [workers, setWorkers] =
@@ -1828,7 +1833,10 @@ export default function ExpandedWorkerProfilePage() {
               </article>
 
               <nav className="worker-profile-tabs">
-                {tabItems.map(([key, label]) => (
+                {[
+                  ...tabItems,
+                  ...(canPayrollView ? [["payroll", "Salary & Payroll"]] : []),
+                ].map(([key, label]) => (
                   <button
                     type="button"
                     key={key}
@@ -1956,6 +1964,14 @@ export default function ExpandedWorkerProfilePage() {
                     )}
                   </section>
                 </div>
+              ) : null}
+
+              {activeTab === "payroll" && canPayrollView ? (
+                <WorkerPayrollPanel
+                  workerId={selectedId}
+                  worker={selectedProfile}
+                  workspaceLabel={activeWorkspaceLabel}
+                />
               ) : null}
 
               {activeTab === "personal" ? (

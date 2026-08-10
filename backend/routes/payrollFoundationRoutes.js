@@ -16,6 +16,7 @@ const {
   schemaStatus,
   submitCompensationProfile,
 } = require("../services/payrollFoundationService");
+const { workerPayrollProfile } = require("../services/payrollWorkerProfileService");
 
 const router = express.Router();
 
@@ -87,6 +88,18 @@ router.get(
         runtime_schema_mutation: false,
       },
     });
+  })
+);
+
+router.get(
+  "/workers/:workerId/profile",
+  requirePermission("payroll.view"),
+  asyncHandler(async (req, res) => {
+    const profile = await workerPayrollProfile({
+      workerId: req.params.workerId,
+      workspaceCode: requirePayrollWorkspace(req),
+    });
+    return res.json({ status: "success", ...profile });
   })
 );
 
