@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
 
 import "../styles/workerPayrollPanel.css";
 
@@ -71,9 +72,15 @@ function SectionHeader({ eyebrow, title, note }) {
 }
 
 export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel }) {
+  const auth = useAuth();
+  const canIssuePayslip = auth.hasPermission("payroll.payslip.issue");
+  const systemAdministrator = Boolean(auth.user?.is_original_system_administrator);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState("");
+  const [payslipNotice, setPayslipNotice] = useState("");
+  const [payslipBusy, setPayslipBusy] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -99,7 +106,7 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
     return () => {
       active = false;
     };
-  }, [workerId]);
+  }, [workerId, reloadKey]);
 
   const summary = profile?.summary || {};
   const currentCompensation = profile?.current_compensation || null;
@@ -116,12 +123,95 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
     () => components.filter((component) => component.component_type === "employer_contribution"),
     [components]
   );
+  const payslips = profile?.payslips || [];
+  const currentPayslipByPeriod = useMemo(() => {
+    const map = new Map();
+    for (const payslip of payslips) {
+      if (payslip.issue_status !== "current") continue;
+      const key = String(payslip.payroll_period_id || "");
+      if (key && !map.has(key)) map.set(key, payslip);
+    }
+    return map;
+  }, [payslips]);
+  const eligiblePayslipEntries = useMemo(
+    () => (profile?.payroll_timeline || []).filter(
+      (entry) => entry.entry_status === "paid" && ["reconciled", "closed"].includes(entry.period_status)
+    ),
+    [profile?.payroll_timeline]
+  );
+
+  function payrollParams() {
+    return systemAdministrator && worker?.workspace_code
+      ? { workspace_code: worker.workspace_code }
+      : {};
+  }
+
+  async function issuePayslip(entry) {
+    setPayslipBusy(`issue:${entry.id}`);
+    setProblem("");
+    setPayslipNotice("");
+    try {
+      const response = await axiosClient.post(`/payroll/payslips/entries/${entry.id}/issue`, payrollParams());
+      setPayslipNotice(response.data?.message || "Professional payslip issued.");
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setProblem(errorMessage(error, "Professional payslip could not be issued."));
+    } finally {
+      setPayslipBusy("");
+    }
+  }
+
+  async function openPayslipPdf(payslip) {
+    setPayslipBusy(`pdf:${payslip.id}`);
+    setProblem("");
+    try {
+      const response = await axiosClient.get(`/payroll/payslips/${payslip.id}/pdf`, {
+        params: payrollParams(),
+        responseType: "blob",
+      });
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+      globalThis.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      setProblem(errorMessage(error, "Payslip PDF could not be opened."));
+    } finally {
+      setPayslipBusy("");
+    }
+  }
+
+  async function openVerification(payslip) {
+    setPayslipBusy(`verify:${payslip.id}`);
+    setProblem("");
+    try {
+      const response = await axiosClient.get(`/payroll/payslips/${payslip.id}`, {
+        params: payrollParams(),
+      });
+      const verificationUrl = response.data?.payslip?.verification_url;
+      if (!verificationUrl) throw new Error("Verification URL is unavailable for this payslip.");
+      const link = document.createElement("a");
+      link.href = verificationUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+    } catch (error) {
+      setProblem(errorMessage(error, "Payslip verification could not be opened."));
+    } finally {
+      setPayslipBusy("");
+    }
+  }
 
   if (loading) {
     return <div className="worker-payroll__loading">Loading confidential payroll history…</div>;
   }
 
-  if (problem) {
+  if (problem && !profile) {
     return (
       <section className="worker-payroll">
         <div className="worker-payroll__notice is-error" role="alert">{problem}</div>
@@ -137,6 +227,8 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
           Visible only through explicit Payroll View permission. Salary history remains separate from the general worker profile and is scoped to {workspaceLabel || worker?.workspace_code || "this business category"}.
         </span>
       </div>
+      {payslipNotice ? <div className="worker-payroll__notice is-success">{payslipNotice}</div> : null}
+      {problem ? <div className="worker-payroll__notice is-error" role="alert">{problem}</div> : null}
 
       <section className="worker-payroll__metrics">
         <Metric
@@ -240,6 +332,75 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      <section className="worker-payroll__card" data-testid="worker-professional-payslips">
+        <SectionHeader
+          eyebrow="Professional documents"
+          title="Payslips & verification"
+          note={`${payslips.length} preserved version(s)`}
+        />
+        <div className="worker-payroll__notice is-neutral">
+          Payslips are issued only after the worker is fully paid and the payroll period is reconciled. Each PDF contains an immutable checksum and a QR link to the public Chalin 03 Verification Centre.
+        </div>
+        {canIssuePayslip && eligiblePayslipEntries.some((entry) => !currentPayslipByPeriod.has(String(entry.payroll_period_id))) ? (
+          <div className="worker-payroll__payslip-issue-list">
+            {eligiblePayslipEntries
+              .filter((entry) => !currentPayslipByPeriod.has(String(entry.payroll_period_id)))
+              .map((entry) => (
+                <article key={entry.id}>
+                  <div>
+                    <strong>{entry.period_code}</strong>
+                    <span>{money(entry.net_salary)} net · reconciled</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="worker-payroll__button is-primary"
+                    disabled={payslipBusy === `issue:${entry.id}`}
+                    onClick={() => issuePayslip(entry)}
+                  >
+                    {payslipBusy === `issue:${entry.id}` ? "Issuing…" : "Issue Payslip"}
+                  </button>
+                </article>
+              ))}
+          </div>
+        ) : null}
+        {!payslips.length ? (
+          <Empty>No professional payslip has been issued for this worker yet.</Empty>
+        ) : (
+          <div className="worker-payroll__payslip-grid">
+            {payslips.map((payslip) => (
+              <article key={payslip.id}>
+                <div className="worker-payroll__payslip-head">
+                  <div>
+                    <small>{payslip.period_code}</small>
+                    <strong>{payslip.payslip_number}</strong>
+                    <span>Version {payslip.issue_version} · issued {dateLabel(payslip.issued_at)}</span>
+                  </div>
+                  <b className={`worker-payroll__status is-${payslip.issue_status}`}>{label(payslip.issue_status)}</b>
+                </div>
+                <div className="worker-payroll__payslip-actions">
+                  <button
+                    type="button"
+                    className="worker-payroll__button"
+                    disabled={Boolean(payslipBusy)}
+                    onClick={() => openPayslipPdf(payslip)}
+                  >
+                    {payslipBusy === `pdf:${payslip.id}` ? "Opening…" : "View PDF"}
+                  </button>
+                  <button
+                    type="button"
+                    className="worker-payroll__button"
+                    disabled={Boolean(payslipBusy)}
+                    onClick={() => openVerification(payslip)}
+                  >
+                    {payslipBusy === `verify:${payslip.id}` ? "Opening…" : "Verify QR Record"}
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>

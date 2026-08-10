@@ -30,6 +30,21 @@
   color: #9f1c1c;
 }
 
+.worker-payroll__notice.is-success {
+  border-color: #a7d9b6;
+  background: #f1fbf4;
+  color: #176b36;
+}
+
+.worker-payroll__notice.is-neutral {
+  margin-bottom: 14px;
+  border-color: #dce3eb;
+  background: #f8fafc;
+  color: #52657b;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
 .worker-payroll__metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -190,15 +205,104 @@
   font-weight: 700;
 }
 
-.worker-payroll__status.is-paid {
+.worker-payroll__status.is-paid,
+.worker-payroll__status.is-current {
   background: #e7f7ec;
   color: #18743a;
 }
 
 .worker-payroll__status.is-part_paid,
-.worker-payroll__status.is-due {
+.worker-payroll__status.is-due,
+.worker-payroll__status.is-superseded {
   background: #fff2cf;
   color: #855f00;
+}
+
+.worker-payroll__status.is-revoked {
+  background: #fde8e8;
+  color: #a61b1b;
+}
+
+.worker-payroll__payslip-issue-list,
+.worker-payroll__payslip-grid {
+  display: grid;
+  gap: 11px;
+}
+
+.worker-payroll__payslip-issue-list {
+  margin-bottom: 14px;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-grid article {
+  border: 1px solid #dfe5ec;
+  border-radius: 13px;
+  background: #fbfcfe;
+  padding: 13px;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-head,
+.worker-payroll__payslip-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-head {
+  justify-content: space-between;
+}
+
+.worker-payroll__payslip-issue-list article > div,
+.worker-payroll__payslip-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.worker-payroll__payslip-issue-list span,
+.worker-payroll__payslip-head span,
+.worker-payroll__payslip-head small {
+  color: #65758a;
+}
+
+.worker-payroll__payslip-head strong {
+  overflow-wrap: anywhere;
+  color: #17263a;
+}
+
+.worker-payroll__payslip-actions {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.worker-payroll__button {
+  border: 1px solid #c8d2de;
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 8px 11px;
+  color: #17314f;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.worker-payroll__button:hover:not(:disabled) {
+  border-color: #8ea6be;
+  background: #f3f7fb;
+}
+
+.worker-payroll__button.is-primary {
+  border-color: #17314f;
+  background: #17314f;
+  color: #ffffff;
+}
+
+.worker-payroll__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .worker-payroll__two-column {
@@ -280,7 +384,9 @@
     grid-template-columns: 1fr;
   }
 
-  .worker-payroll__section-head {
+  .worker-payroll__section-head,
+  .worker-payroll__payslip-issue-list article,
+  .worker-payroll__payslip-head {
     display: grid;
   }
 
