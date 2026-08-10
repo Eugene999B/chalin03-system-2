@@ -15,6 +15,7 @@ const intelligenceCss = read("src/chalin-one/ai/chalinIntelligence.css");
 const appearanceCss = read("src/styles/appearance.css");
 const appearanceContext = read("src/appearance/AppearanceContext.jsx");
 const appearanceToggle = read("src/appearance/AppearanceToggle.jsx");
+const chatPreferences = read("src/appearance/aiChatPreferences.js");
 const operationalRoot = read("src/OperationalAppRoot.jsx");
 const protectedRoot = read("src/chalin-one/ProtectedChalinOneEntry.jsx");
 const main = read("src/main.jsx");
@@ -22,12 +23,20 @@ const main = read("src/main.jsx");
 const themeModule = await import(
   pathToFileURL(path.join(frontendRoot, "src/appearance/appearanceTheme.js")).href
 );
+const preferenceModule = await import(
+  pathToFileURL(path.join(frontendRoot, "src/appearance/aiChatPreferences.js")).href
+);
 const {
   APPEARANCE_STORAGE_KEY,
   applyAppearance,
   normalizeAppearance,
   resolvedAppearance,
 } = themeModule;
+const {
+  AI_CHAT_PREFERENCES_STORAGE_KEY,
+  loadAiChatPreferences,
+  saveAiChatPreferences,
+} = preferenceModule;
 
 assert.equal(APPEARANCE_STORAGE_KEY, "chalin03:appearance");
 assert.equal(normalizeAppearance("dark"), "dark");
@@ -41,6 +50,22 @@ assert.equal(applyAppearance("dark", fakeDocument, () => ({ matches: false })), 
 assert.equal(fakeDocument.documentElement.dataset.theme, "dark");
 assert.equal(fakeDocument.documentElement.dataset.themePreference, "dark");
 assert.equal(fakeDocument.documentElement.style.colorScheme, "dark");
+
+const storedValues = new Map();
+const fakeStorage = {
+  getItem(key) { return storedValues.get(key) ?? null; },
+  setItem(key, value) { storedValues.set(key, value); },
+};
+assert.equal(AI_CHAT_PREFERENCES_STORAGE_KEY, "chalin03:ai-chat-settings");
+assert.deepEqual(
+  saveAiChatPreferences({ sendWithEnter: false, showTechnicalDetails: true }, fakeStorage),
+  { sendWithEnter: false, showTechnicalDetails: true }
+);
+assert.deepEqual(loadAiChatPreferences(fakeStorage), {
+  sendWithEnter: false,
+  showTechnicalDetails: true,
+});
+assert.doesNotMatch(chatPreferences, /token|password|secret|conversation_key|message_key/i);
 
 // Theme is applied before the application root renders, avoiding a bright boot flash.
 assert.match(main, /initializeAppearance\(\)/);
@@ -99,7 +124,9 @@ assert.match(workspace, /Conversation preferences/);
 assert.match(workspace, /Send with Enter/);
 assert.match(workspace, /Technical response details/);
 assert.match(workspace, /\["light", "dark", "system"\]/);
-assert.match(workspace, /CHAT_SETTINGS_KEY = "chalin03:ai-chat-settings"/);
+assert.match(workspace, /loadAiChatPreferences/);
+assert.match(workspace, /saveAiChatPreferences/);
+assert.doesNotMatch(workspace, /localStorage|sessionStorage/);
 assert.doesNotMatch(workspace, /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
 
 // The redesigned chat is intentionally calm: no pulsing thinking dot and no smooth auto-scroll.
