@@ -41,14 +41,28 @@ check("intelligence is a standalone authenticated feature-gated surface", () => 
   assert.match(main, /ProtectedChalinOneEntry/);
 });
 
-check("client uses only protected backend AI endpoints", () => {
+check("client uses only protected backend AI endpoints and never handles provider secrets", () => {
   assert.match(api, /"\/ai\/status"/);
   assert.match(api, /`\/ai\/\$\{persona\}`/);
+  assert.match(api, /\/ai\/provider-control/);
   assert.match(api, /\/ai\/knowledge/);
   assert.match(api, /\/ai\/feedback/);
   assert.match(api, /\/ai\/usage/);
-  assert.doesNotMatch(api, /OpenAI|Anthropic|Gemini|api[_-]?key|Bearer\s+/i);
+
+  // Provider names may now be shown in the System Administrator control UI,
+  // but credentials and provider networking remain strictly server-side.
+  assert.doesNotMatch(
+    api,
+    /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY/i
+  );
+  assert.doesNotMatch(
+    api,
+    /api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com/i
+  );
+  assert.doesNotMatch(api, /Authorization\s*:|Bearer\s+/i);
+  assert.doesNotMatch(api, /\bfetch\s*\(/);
   assert.doesNotMatch(api, /localStorage|sessionStorage/);
+  assert.match(api, /axiosClient/);
 });
 
 check("workspace obeys server-authoritative persona and permission state", () => {
