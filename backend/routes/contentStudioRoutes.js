@@ -10,6 +10,7 @@ const contentStudioAccessRoutes = require("./contentStudioAccessRoutes");
 const contentStudioCompanyInfoRoutes = require("./contentStudioCompanyInfoRoutes");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
+const contentStudioLinkIntegrityRoutes = require("./contentStudioLinkIntegrityRoutes");
 const contentStudioMediaRoutes = require("./contentStudioMediaRoutes");
 const contentStudioNavigationRoutes = require("./contentStudioNavigationRoutes");
 const contentStudioRedirectRoutes = require("./contentStudioRedirectRoutes");
@@ -38,6 +39,9 @@ router.use("/forms", contentStudioFormRoutes);
 router.use("/newsroom", contentStudioNewsroomRoutes);
 router.use("/company-info", contentStudioCompanyInfoRoutes);
 router.use("/portfolio", contentStudioPortfolioRoutes);
+// Link integrity belongs to the existing Pages scope and is deliberately
+// mounted before the generic /pages/:pageId routes in contentStudioCoreRoutes.
+router.use("/pages/link-integrity", contentStudioLinkIntegrityRoutes);
 router.use("/", contentStudioCoreRoutes);
 
 router.use((error, req, res, next) => {
