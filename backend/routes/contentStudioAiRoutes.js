@@ -3,6 +3,7 @@
 const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { requireFeature } = require("../services/featureFlagService");
 const {
   answerContentStudioAi,
   ContentStudioAiError,
@@ -10,6 +11,8 @@ const {
 } = require("../services/contentStudioAiService");
 
 const router = express.Router();
+
+router.use(requireFeature("aiEnabled"), requireFeature("chalinCopilot"));
 
 function asyncHandler(handler) {
   return function wrappedContentStudioAiHandler(req, res, next) {
