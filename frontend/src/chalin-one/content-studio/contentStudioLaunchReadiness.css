@@ -1,0 +1,257 @@
+.cs-lr-shell {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.cs-lr-hero,
+.cs-lr-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid #d9e1e8;
+  background: #fff;
+}
+
+.cs-lr-hero > div:first-child,
+.cs-lr-gate > div:first-child {
+  max-width: 860px;
+}
+
+.cs-lr-hero span,
+.cs-lr-panel header span,
+.cs-lr-gate span,
+.cs-lr-budget-grid span,
+.cs-lr-check > span {
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #596a79;
+}
+
+.cs-lr-hero h1 {
+  margin: 0.45rem 0 0.7rem;
+  font-size: clamp(1.7rem, 3.4vw, 3rem);
+  line-height: 1.05;
+}
+
+.cs-lr-hero p,
+.cs-lr-panel p,
+.cs-lr-gate p,
+.cs-lr-check p {
+  color: #697887;
+  line-height: 1.65;
+}
+
+.cs-lr-score {
+  display: grid;
+  align-content: center;
+  justify-items: end;
+  min-width: 180px;
+  padding: 1rem;
+  border-left: 4px solid #b8c4cf;
+  background: #f5f7f9;
+}
+
+.cs-lr-score strong {
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1;
+}
+
+.cs-lr-score.is-ready {
+  border-color: #2b7a4b;
+  background: #f0f8f3;
+}
+
+.cs-lr-score.is-attention {
+  border-color: #c78216;
+  background: #fff8ec;
+}
+
+.cs-lr-checks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.cs-lr-check,
+.cs-lr-loading {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #d9e1e8;
+  background: #fff;
+}
+
+.cs-lr-loading {
+  grid-column: 1 / -1;
+}
+
+.cs-lr-check {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+}
+
+.cs-lr-check > span {
+  width: max-content;
+  padding: 0.22rem 0.4rem;
+}
+
+.cs-lr-check.is-ready > span {
+  background: #e7f4eb;
+  color: #1f6b3d;
+}
+
+.cs-lr-check.is-attention > span {
+  background: #fff0dd;
+  color: #905c12;
+}
+
+.cs-lr-check p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.cs-lr-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 1rem;
+}
+
+.cs-lr-panel {
+  min-width: 0;
+  border: 1px solid #d9e1e8;
+  background: #fff;
+}
+
+.cs-lr-panel > header {
+  padding: 1.2rem;
+  border-bottom: 1px solid #e8edf2;
+}
+
+.cs-lr-panel h2,
+.cs-lr-gate h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.18rem;
+}
+
+.cs-lr-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #e5ebf0;
+}
+
+.cs-lr-budget-grid article {
+  display: grid;
+  gap: 0.45rem;
+  min-height: 110px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.cs-lr-budget-grid strong {
+  font-size: 1.2rem;
+}
+
+.cs-lr-baseline {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  border-top: 1px solid #e8edf2;
+}
+
+.cs-lr-routes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding: 1.2rem;
+}
+
+.cs-lr-routes code {
+  overflow: hidden;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #e0e6ec;
+  background: #f6f8fa;
+  color: #132334;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-lr-gate {
+  background: #07131f;
+  color: #fff;
+  border-color: #07131f;
+}
+
+.cs-lr-gate p,
+.cs-lr-gate span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.cs-lr-gate > div:last-child {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 1fr);
+  gap: 0.55rem 0.8rem;
+  align-content: center;
+}
+
+.cs-lr-gate > div:last-child strong {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+}
+
+@media (max-width: 1100px) {
+  .cs-lr-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cs-lr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .cs-lr-hero,
+  .cs-lr-gate {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-lr-score {
+    justify-items: start;
+    border-left-width: 1px;
+    border-top: 4px solid #b8c4cf;
+  }
+
+  .cs-lr-checks,
+  .cs-lr-budget-grid,
+  .cs-lr-routes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 390px) {
+  .cs-lr-shell {
+    gap: 0.8rem;
+  }
+
+  .cs-lr-hero,
+  .cs-lr-gate,
+  .cs-lr-panel > header,
+  .cs-lr-routes {
+    padding-inline: 0.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-lr-shell *,
+  .cs-lr-shell *::before,
+  .cs-lr-shell *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

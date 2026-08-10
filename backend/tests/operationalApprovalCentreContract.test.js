@@ -100,13 +100,19 @@ test("the floating centre supports sale edit, sale void, approve and reject", ()
     "frontend/src/components/OperationalApprovalLauncher.jsx"
   );
   const main = read("frontend/src/main.jsx");
+  const operationalRoot = read("frontend/src/OperationalAppRoot.jsx");
+  const publicRoot = read("frontend/src/chalin-one/PublicChalinOneEntry.jsx");
 
   assert.match(launcher, /operational\/sale-edit/);
   assert.match(launcher, /operational\/sale-void/);
   assert.match(launcher, /Approve and Execute Now/);
   assert.match(launcher, /Reject Without Changes/);
   assert.match(launcher, /Your administrator password/);
-  assert.match(main, /OperationalApprovalLauncher/);
+  assert.match(operationalRoot, /OperationalApprovalLauncher/);
+  assert.match(operationalRoot, /<OperationalApprovalLauncher \/>/);
+  assert.doesNotMatch(main, /OperationalApprovalLauncher/);
+  assert.doesNotMatch(publicRoot, /OperationalApprovalLauncher/);
+  assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
   assert.match(main, /browser-cache-integrity-v35/);
   assert.match(main, /CHALIN03_ASSET_MISMATCH/);

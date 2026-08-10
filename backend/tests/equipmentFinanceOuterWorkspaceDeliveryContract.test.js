@@ -8,6 +8,8 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const main = read("frontend/src/main.jsx");
+const operationalRoot = read("frontend/src/OperationalAppRoot.jsx");
+const publicRoot = read("frontend/src/chalin-one/PublicChalinOneEntry.jsx");
 const preload = read("frontend/src/utils/criticalFinanceWorkspacePreload.js");
 const app = read("frontend/src/App.jsx");
 const applications = read(
@@ -16,12 +18,15 @@ const applications = read(
 const serviceWorker = read("frontend/public/sw.js");
 const headers = read("frontend/public/_headers");
 
-test("critical Finance workspace is retained in the entry bundle", () => {
+test("critical Finance workspace is retained in the operational entry bundle", () => {
   assert.match(
-    main,
+    operationalRoot,
     /import \{ installCriticalFinanceWorkspacePreload \} from "\.\/utils\/criticalFinanceWorkspacePreload\.js"/
   );
-  assert.match(main, /installCriticalFinanceWorkspacePreload\(\)/);
+  assert.match(operationalRoot, /installCriticalFinanceWorkspacePreload\(\)/);
+  assert.doesNotMatch(main, /installCriticalFinanceWorkspacePreload/);
+  assert.doesNotMatch(publicRoot, /installCriticalFinanceWorkspacePreload/);
+  assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
   assert.match(
     preload,
     /import EquipmentSalesWorkspacePage from "\.\.\/pages\/EquipmentSalesWorkspacePage\.jsx"/

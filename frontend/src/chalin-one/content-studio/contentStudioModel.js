@@ -188,6 +188,17 @@ export const CONTENT_STUDIO_SECTIONS = Object.freeze([
     tone: "slate",
   }),
   Object.freeze({
+    key: "launch-readiness",
+    label: "Launch Readiness",
+    shortLabel: "Launch",
+    badge: "LR",
+    description: "Review live staging signals, public route smoke coverage and enforced build-time performance budgets before promotion.",
+    permission: CONTENT_STUDIO_PERMISSIONS.view,
+    endpoint: "/readiness",
+    group: "Website",
+    tone: "slate",
+  }),
+  Object.freeze({
     key: "website-control",
     label: "Website Control Center",
     shortLabel: "Web Control",

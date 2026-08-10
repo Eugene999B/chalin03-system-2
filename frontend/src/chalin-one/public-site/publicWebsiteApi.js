@@ -1,4 +1,3 @@
-import axios from "axios";
 import {
   applyPublishedPublicMetadata,
 } from "./publicMetadataRuntime";
@@ -9,17 +8,10 @@ import {
   installPublicRedirectRuntime,
 } from "./publicRedirectRuntime";
 
-const publicWebsiteClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-  timeout: 20000,
-  headers: {
-    Accept: "application/json",
-  },
-});
-
-function unwrap(response) {
-  return response?.data?.data ?? response?.data ?? null;
-}
+const PUBLIC_API_BASE = String(
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/+$/, "");
+const PUBLIC_REQUEST_TIMEOUT_MS = 20000;
 
 function cleanParams(params = {}) {
   return Object.fromEntries(
@@ -27,6 +19,133 @@ function cleanParams(params = {}) {
       ([, value]) => value !== undefined && value !== null && value !== ""
     )
   );
+}
+
+function resolvePublicApiBase() {
+  if (/^https?:\/\//i.test(PUBLIC_API_BASE)) {
+    return PUBLIC_API_BASE.endsWith("/") ? PUBLIC_API_BASE : `${PUBLIC_API_BASE}/`;
+  }
+
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "http://localhost";
+  const relativeBase = PUBLIC_API_BASE.startsWith("/")
+    ? PUBLIC_API_BASE
+    : `/${PUBLIC_API_BASE}`;
+  return new URL(`${relativeBase.replace(/\/+$/, "")}/`, origin).toString();
+}
+
+function publicRequestUrl(pathname, params = {}) {
+  const relativePath = String(pathname || "").replace(/^\/+/, "");
+  const url = new URL(relativePath, resolvePublicApiBase());
+  for (const [key, value] of Object.entries(cleanParams(params))) {
+    url.searchParams.set(key, String(value));
+  }
+  return url.toString();
+}
+
+function createPublicRequestError(response, payload) {
+  const message =
+    payload?.message ||
+    `Public website request failed with status ${response.status}.`;
+  const error = new Error(message);
+  error.name = "PublicWebsiteRequestError";
+  error.response = {
+    status: response.status,
+    data: payload,
+  };
+  return error;
+}
+
+async function parsePublicResponse(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+async function publicWebsiteRequest(
+  pathname,
+  {
+    method = "GET",
+    params,
+    signal,
+    body,
+    headers = {},
+    timeoutMs = PUBLIC_REQUEST_TIMEOUT_MS,
+  } = {}
+) {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const forwardAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) {
+    controller.abort(signal.reason);
+  } else if (signal) {
+    signal.addEventListener("abort", forwardAbort, { once: true });
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(publicRequestUrl(pathname, params), {
+      method,
+      signal: controller.signal,
+      cache: "no-store",
+      credentials: "omit",
+      headers: {
+        Accept: "application/json",
+        ...headers,
+      },
+      body:
+        body === undefined || body === null
+          ? undefined
+          : typeof body === "string"
+            ? body
+            : JSON.stringify(body),
+    });
+
+    const payload = await parsePublicResponse(response);
+    if (!response.ok) throw createPublicRequestError(response, payload);
+    return { data: payload };
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new Error("The public website request timed out.");
+      timeoutError.name = "TimeoutError";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    signal?.removeEventListener?.("abort", forwardAbort);
+  }
+}
+
+const publicWebsiteClient = Object.freeze({
+  get(pathname, options = {}) {
+    return publicWebsiteRequest(pathname, {
+      ...options,
+      method: "GET",
+    });
+  },
+  post(pathname, body, options = {}) {
+    return publicWebsiteRequest(pathname, {
+      ...options,
+      method: "POST",
+      body,
+    });
+  },
+});
+
+function unwrap(response) {
+  return response?.data?.data ?? response?.data ?? null;
 }
 
 function applyPublishedRouteSeo(data, options = {}) {
@@ -148,7 +267,11 @@ export async function submitPublicForm(slug, payload) {
 }
 
 export function publicWebsiteErrorMessage(error) {
-  if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+  if (
+    error?.name === "AbortError" ||
+    error?.name === "CanceledError" ||
+    error?.code === "ERR_CANCELED"
+  ) {
     return "";
   }
   const details = error?.response?.data?.details;
@@ -166,4 +289,11 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
   installPublicRedirectRuntime(resolvePublicRedirect);
 }
 
-export { publicWebsiteClient };
+export {
+  PUBLIC_API_BASE,
+  PUBLIC_REQUEST_TIMEOUT_MS,
+  publicRequestUrl,
+  publicWebsiteClient,
+  publicWebsiteRequest,
+  resolvePublicApiBase,
+};

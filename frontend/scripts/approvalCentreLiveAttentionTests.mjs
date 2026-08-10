@@ -10,6 +10,8 @@ const read = (relativePath) =>
 
 const attention = read("src/components/ApprovalCentreLiveAttention.jsx");
 const main = read("src/main.jsx");
+const operationalRoot = read("src/OperationalAppRoot.jsx");
+const publicRoot = read("src/chalin-one/PublicChalinOneEntry.jsx");
 const packageJson = read("package.json");
 
 assert.match(attention, /const POLL_INTERVAL_MS = 12000/);
@@ -31,8 +33,11 @@ assert.match(attention, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 assert.match(attention, /font-size: 16px !important/);
 assert.match(attention, /approval-review-modal/);
 
-assert.match(main, /import ApprovalCentreLiveAttention/);
-assert.match(main, /<ApprovalCentreLiveAttention \/>/);
+assert.match(operationalRoot, /import ApprovalCentreLiveAttention/);
+assert.match(operationalRoot, /<ApprovalCentreLiveAttention \/>/);
+assert.doesNotMatch(main, /ApprovalCentreLiveAttention/);
+assert.doesNotMatch(publicRoot, /ApprovalCentreLiveAttention/);
+assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
 assert.match(packageJson, /approvalCentreLiveAttentionTests\.mjs/);
 
 console.log("Approval Centre live attention and mobile contracts passed.");

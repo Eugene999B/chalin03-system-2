@@ -13,7 +13,11 @@ function read(relativePath) {
 const context = read("src/context/FeatureFlagContext.jsx");
 const featureRoute = read("src/components/FeatureFlagRoute.jsx");
 const featureVisible = read("src/components/FeatureFlagVisible.jsx");
+const publicGate = read("src/chalin-one/public-site/PublicWebsiteFeatureGate.jsx");
 const main = read("src/main.jsx");
+const publicRoot = read("src/chalin-one/PublicChalinOneEntry.jsx");
+const protectedRoot = read("src/chalin-one/ProtectedChalinOneEntry.jsx");
+const operationalRoot = read("src/OperationalAppRoot.jsx");
 
 assert.match(context, /CHALIN_ONE_FEATURE_DEFAULTS/);
 assert.match(context, /aiEnabled:\s*false/);
@@ -41,8 +45,27 @@ assert.match(featureRoute, /<Navigate to=\{fallbackPath\} replace/);
 assert.match(featureVisible, /useFeatureFlags/);
 assert.match(featureVisible, /loading \|\| !isFeatureEnabled\(feature\)/);
 
-assert.match(main, /FeatureFlagProvider/);
-assert.match(main, /<FeatureFlagProvider>/);
-assert.match(main, /<App \/>/);
+// Protected and operational applications retain the complete staff feature
+// provider. The anonymous public site has a smaller fail-closed gate so it does
+// not pull the authenticated Axios context into the visitor critical path.
+assert.doesNotMatch(main, /FeatureFlagProvider|<App \/>/);
+assert.match(main, /import\("\.\/chalin-one\/PublicChalinOneEntry\.jsx"\)/);
+assert.match(main, /import\("\.\/chalin-one\/ProtectedChalinOneEntry\.jsx"\)/);
+assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
+
+for (const source of [protectedRoot, operationalRoot]) {
+  assert.match(source, /FeatureFlagProvider/);
+  assert.match(source, /<FeatureFlagProvider>/);
+}
+assert.doesNotMatch(publicRoot, /FeatureFlagProvider|FeatureFlagRoute/);
+assert.match(publicRoot, /PublicWebsiteFeatureGate/);
+assert.match(publicRoot, /<PublicWebsiteFeatureGate/);
+assert.match(publicGate, /fetch\(PUBLIC_FEATURE_ENDPOINT/);
+assert.match(publicGate, /\/features\/public/);
+assert.match(publicGate, /payload\?\.flags\?\.publicWebsite === true/);
+assert.match(publicGate, /setEnabled\(false\)/);
+assert.match(publicGate, /STATUS_REFRESH_INTERVAL_MS = 30000/);
+assert.doesNotMatch(publicGate, /axios|axiosClient|localStorage|sessionStorage|Authorization|Bearer/);
+assert.match(operationalRoot, /<App \/>/);
 
 console.log("CHALIN ONE frontend feature-flag foundation tests passed.");

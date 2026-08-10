@@ -56,9 +56,12 @@ assert.match(renderer, /listPublicResource/);
 assert.match(renderer, /new AbortController\(\)/);
 assert.match(renderer, /controller\.abort\(\)/);
 assert.match(renderer, /Promise\.allSettled/);
-assert.match(api, /const publicWebsiteClient = axios\.create/);
-assert.match(api, /export \{ publicWebsiteClient \}/);
-assert.doesNotMatch(api, /Authorization|Bearer|localStorage|sessionStorage/);
+assert.match(api, /const publicWebsiteClient = Object\.freeze/);
+assert.match(api, /fetch\(publicRequestUrl\(pathname, params\)/);
+assert.match(api, /PUBLIC_REQUEST_TIMEOUT_MS = 20000/);
+assert.match(api, /credentials: "omit"/);
+assert.match(api, /export \{[\s\S]*publicWebsiteClient/);
+assert.doesNotMatch(api, /import axios|axios\.create|axiosClient|Authorization|Bearer|localStorage|sessionStorage/);
 
 assert.match(app, /import PublicVisualSections from "\.\/PublicVisualSectionRenderer"/);
 assert.match(app, /<PublicVisualSections sections=\{page\?\.sections \|\| \[\]\} excludeTypes=\{\["hero"\]\}/);
@@ -82,4 +85,4 @@ assert.match(css, /scroll-snap-type: x mandatory/);
 assert.match(css, /pointer: coarse/);
 assert.match(css, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE public Visual Section Renderer contracts passed: governed section semantics, safe actions, anonymous collection loading, responsive publication layouts and CMS-to-public integration remain protected.");
+console.log("✅ CHALIN ONE public Visual Section Renderer contracts passed: governed section semantics, safe actions, native anonymous collection loading, responsive publication layouts and CMS-to-public integration remain protected.");

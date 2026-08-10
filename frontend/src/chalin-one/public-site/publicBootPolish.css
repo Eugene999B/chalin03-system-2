@@ -2,6 +2,17 @@
    The public website must never feel like an operational app repeatedly booting.
    Keep the shell stable while governed bootstrap data hydrates in the background. */
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #05080d;
+}
+
 .c1-page-loading {
   min-height: calc(100svh - 84px);
   opacity: 0;

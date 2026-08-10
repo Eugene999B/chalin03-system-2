@@ -13,6 +13,8 @@ const loginPage = read("src/pages/LoginPageGroupOperations.jsx");
 const biometricClient = read("src/utils/biometricAccess.js");
 const security = read("src/pages/ChangePasswordPage.jsx");
 const main = read("src/main.jsx");
+const operationalRoot = read("src/OperationalAppRoot.jsx");
+const publicRoot = read("src/chalin-one/PublicChalinOneEntry.jsx");
 const passkeyRoutes = read("../backend/routes/passkeyRoutes.js");
 const biometricRoutes = read("../backend/routes/biometricRoutes.js");
 
@@ -50,8 +52,18 @@ assert.match(security, /clearStoredBiometricBinding/);
 assert.doesNotMatch(security, /auth\/biometrics\/devices/);
 assert.doesNotMatch(security, /isBiometricAccessAvailable|registerBiometricDevice/);
 
-assert.match(main, /AdvancedAccountingExpenseFundingEvidence/);
-assert.match(main, /EmergencyCommandOverlay/);
-assert.match(main, /CommandArrivalBanner/);
+// Phase 2J moves operational command overlays behind the dynamically loaded
+// operational root. They remain mandatory for Staff workflows but are forbidden
+// from the lightweight public document bootstrap.
+for (const marker of [
+  "AdvancedAccountingExpenseFundingEvidence",
+  "EmergencyCommandOverlay",
+  "CommandArrivalBanner",
+]) {
+  assert.match(operationalRoot, new RegExp(marker));
+  assert.doesNotMatch(main, new RegExp(marker));
+  assert.doesNotMatch(publicRoot, new RegExp(marker));
+}
+assert.match(main, /import\("\.\/OperationalAppRoot\.jsx"\)/);
 
 console.log("Password-only Command Gate contract passed.");

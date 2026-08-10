@@ -85,6 +85,11 @@ export default defineConfig({
       chalin03BuildId
     ),
   },
+  build: {
+    // Phase 2J reads this manifest during postbuild to measure the exact public
+    // static dependency graph, then removes it before deployment.
+    manifest: true,
+  },
 });
 
 export { isChalinOneCloudflareStagingBuild, resolveBuildId };

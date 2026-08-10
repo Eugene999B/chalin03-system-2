@@ -1,26 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App.jsx";
-import EmergencyCommandOverlay from "./components/EmergencyCommandOverlay.jsx";
-import CommandArrivalBanner from "./components/CommandArrivalBanner.jsx";
-import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccountingExpenseFundingEvidence.jsx";
-import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
-import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
-import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
-import ChalinOneGatewayLinks from "./components/ChalinOneGatewayLinks.jsx";
-import ChalinOneStandaloneEntry, {
+import {
   isChalinOneStandalonePath,
   isPublicWebsitePath,
-} from "./chalin-one/ChalinOneStandaloneEntry.jsx";
-import { FeatureFlagProvider } from "./context/FeatureFlagContext.jsx";
-import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
-import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
-import "./index.css";
-import "./styles/userPermissionManager.mobile.css";
-import "./styles/commandGateExtensions.css";
-import "./styles/mobileExperience.css";
-import "./styles/adminMobileHotfix.css";
-import "./chalin-one/public-site/publicBootPolish.css";
+} from "./chalin-one/chalinOnePathModel.js";
 
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
@@ -35,32 +18,52 @@ const PUBLIC_APP_HANDOFF_PATHS = new Set([
   "/intelligence",
 ]);
 
-// Dedicated mobile experience release entry point.
-installCommandGateHistoryTracker();
-installCriticalFinanceWorkspacePreload();
+async function loadApplicationRoot() {
+  if (publicWebsiteSurface) {
+    return import("./chalin-one/PublicChalinOneEntry.jsx");
+  }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <FeatureFlagProvider>
-      {standaloneChalinOne ? (
-        <ChalinOneStandaloneEntry />
-      ) : (
-        <>
-          <App />
-          <ChalinOneGatewayLinks />
-          <ProductsPageShellRepair />
-          <OperationalApprovalLauncher />
-          <ApprovalCentreLiveAttention />
-          <AdvancedAccountingExpenseFundingEvidence />
-          <EmergencyCommandOverlay />
-          <CommandArrivalBanner />
-        </>
-      )}
-    </FeatureFlagProvider>
-  </React.StrictMode>
-);
+  if (standaloneChalinOne) {
+    return import("./chalin-one/ProtectedChalinOneEntry.jsx");
+  }
 
-window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
+  return import("./OperationalAppRoot.jsx");
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+
+loadApplicationRoot()
+  .then(({ default: ApplicationRoot }) => {
+    root.render(
+      <React.StrictMode>
+        <ApplicationRoot />
+      </React.StrictMode>
+    );
+    window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
+  })
+  .catch((error) => {
+    console.error("CHALIN application root failed to load:", error);
+    root.render(
+      <main
+        role="alert"
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          padding: "2rem",
+          background: "#07131f",
+          color: "#ffffff",
+          fontFamily: "Inter, system-ui, sans-serif",
+          textAlign: "center",
+        }}
+      >
+        <div>
+          <strong>CHALIN 03 could not open this application surface.</strong>
+          <p>Reload the page. If the problem continues, use the normal support channel.</p>
+        </div>
+      </main>
+    );
+  });
 
 function installPublicApplicationBoundaryHandoffs() {
   if (!publicWebsiteSurface) return;
@@ -92,8 +95,7 @@ function installPublicApplicationBoundaryHandoffs() {
       // Public CHALIN ONE and the protected staff applications use different
       // router roots. Stop React Router from seeing this click at all and let
       // the browser perform a genuine document navigation. The new document
-      // then boots App, Content Studio or Intelligence from the destination
-      // pathname instead of leaving the public router mounted at that URL.
+      // then boots the protected or operational application from its own root.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();

@@ -19,6 +19,10 @@ const analyticsApiSource = fs.readFileSync(
   path.join(moduleRoot, "contentStudioAnalyticsApi.js"),
   "utf8"
 );
+const launchReadinessApiSource = fs.readFileSync(
+  path.join(moduleRoot, "contentStudioLaunchReadinessApi.js"),
+  "utf8"
+);
 const workspaceSource = fs.readFileSync(
   path.join(moduleRoot, "ContentStudioWorkspace.jsx"),
   "utf8"
@@ -55,6 +59,7 @@ check("model contains every governed Content Studio manager", () => {
     "approvals",
     "publisher-command",
     "public-analytics",
+    "launch-readiness",
     "website-control",
     "redirects",
     "navigation",
@@ -86,6 +91,12 @@ check("model contains every governed Content Studio manager", () => {
   assert.equal(publicAnalytics.permission, "public_content.view");
   assert.equal(publicAnalytics.endpoint, "/content-studio/dashboard/analytics/summary");
   assert.equal(publicAnalytics.group, "Website");
+  const launchReadiness = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "launch-readiness"
+  );
+  assert.equal(launchReadiness.permission, "public_content.view");
+  assert.equal(launchReadiness.endpoint, "/readiness");
+  assert.equal(launchReadiness.group, "Website");
   const websiteControl = model.CONTENT_STUDIO_SECTIONS.find(
     (section) => section.key === "website-control"
   );
@@ -163,6 +174,9 @@ check("foundation APIs reuse authenticated Axios and have no token or raw fetch 
   assert.match(analyticsApiSource, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
   assert.match(analyticsApiSource, /\/content-studio\/dashboard\/analytics\/summary/);
   assert.doesNotMatch(analyticsApiSource, /localStorage|sessionStorage|Bearer|fetch\(/);
+  assert.match(launchReadinessApiSource, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
+  assert.match(launchReadinessApiSource, /\/readiness/);
+  assert.doesNotMatch(launchReadinessApiSource, /axiosClient\.(?:post|put|patch|delete)|localStorage|sessionStorage|Bearer|fetch\(/);
 });
 
 check("workspace enforces isolated Studio session, role permission and scoped managers", () => {
@@ -175,6 +189,7 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /"media-reference": "media"/);
   assert.match(workspaceSource, /"publisher-command": "pages"/);
   assert.match(workspaceSource, /"public-analytics": "dashboard"/);
+  assert.match(workspaceSource, /"launch-readiness": "dashboard"/);
   assert.match(workspaceSource, /"website-control": "pages"/);
   assert.match(workspaceSource, /redirects: "navigation"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
@@ -211,6 +226,7 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioApprovalInbox",
     "ContentStudioPublisherCommandCenter",
     "ContentStudioPublicAnalytics",
+    "ContentStudioLaunchReadiness",
     "ContentStudioWebsiteControlCenter",
     "ContentStudioRedirectManager",
     "ContentStudioNavigationManager",
