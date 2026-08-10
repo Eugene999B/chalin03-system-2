@@ -1,6 +1,7 @@
 name: Payroll Payslip Phase 5 Integration Helper
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/payroll-professional-payslips-phase5-20260810
