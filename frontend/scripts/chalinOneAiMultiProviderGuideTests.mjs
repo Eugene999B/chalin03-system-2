@@ -84,7 +84,14 @@ for (const source of [
   publicEntry,
   protectedEntry,
 ]) {
-  assert.doesNotMatch(source, /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
+  assert.doesNotMatch(
+    source,
+    /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)/i
+  );
+  assert.doesNotMatch(
+    source,
+    /api\.openai\.com|generativelanguage\.googleapis\.com|Authorization\s*:|Bearer\s+/i
+  );
 }
 
 console.log("CHALIN ONE AI Phase 3G multi-provider + public Guide source contract passed.");
