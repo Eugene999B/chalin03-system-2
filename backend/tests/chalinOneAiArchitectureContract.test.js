@@ -19,6 +19,8 @@ const featureFlags = read("backend/services/featureFlagService.js");
 const registry = read("backend/services/aiToolRegistry.js");
 const provider = read("backend/services/aiProviderService.js");
 const orchestrator = read("backend/services/aiOrchestratorService.js");
+const reasoning = read("backend/services/aiReasoningService.js");
+const retrieval = read("backend/services/aiKnowledgeRetrievalService.js");
 const foundationTools = read("backend/ai-tools/foundationTools.js");
 const aiMigration = read(
   "database/migrations/20260806_chalin_one_ai_foundation.sql"
@@ -73,11 +75,16 @@ test("provider layer has no active network adapter by default", () => {
   assert.doesNotMatch(provider, /\bfetch\s*\(|axios|https\.request|http\.request/);
 });
 
-test("orchestrator composes safety, budgets, approved knowledge, tools, evidence and audit", () => {
+test("orchestrator composes safety, budgets, governed retrieval, reasoning, tools, evidence and audit", () => {
   for (const marker of [
     "inspectPrompt",
     "buildRequestBudget",
-    "searchApprovedKnowledge",
+    "searchGovernedKnowledge",
+    "buildReasoningPlan",
+    "rankEvidence",
+    "detectEvidenceTensions",
+    "assessEvidenceConfidence",
+    "citationIntegrity",
     "availableTools",
     "generateProviderResponse",
     "executeRequestedTools",
@@ -88,6 +95,9 @@ test("orchestrator composes safety, budgets, approved knowledge, tools, evidence
   ]) {
     assert.match(orchestrator, new RegExp(marker));
   }
+  assert.match(retrieval, /searchPublishedDocumentChunks/);
+  assert.match(retrieval, /searchApprovedKnowledge/);
+  assert.match(reasoning, /hidden chain-of-thought/i);
   assert.match(orchestrator, /sumProviderUsage/);
   assert.match(orchestrator, /AI_PROMPT_BLOCKED/);
   assert.match(orchestrator, /Ordinary system operations are unaffected/);
