@@ -114,6 +114,13 @@ const OPERATIONAL_WORDS = new Set([
   "transactions",
 ]);
 
+const NON_OPERATIONAL_TOOL_KEYS = new Set([
+  "knowledge.search",
+  "conversation.memory",
+  "system.scope_summary",
+  "system.ai_feature_status",
+]);
+
 const INTENT_PATTERNS = Object.freeze([
   ["compare", /\b(compare|comparison|versus|vs\.?|difference|better than|worse than)\b/i],
   ["diagnose", /\b(why|cause|caused|diagnose|problem|issue|wrong|drop|increase|decrease|variance|anomaly)\b/i],
@@ -349,6 +356,17 @@ function detectEvidenceTensions(evidence = []) {
   return Object.freeze(tensions);
 }
 
+function isLiveOperationalToolResult(result = {}) {
+  const key = clean(result?.tool?.key || result?.tool_key, 160);
+  if (!key || NON_OPERATIONAL_TOOL_KEYS.has(key)) return false;
+  const evidence = Array.isArray(result?.evidence) ? result.evidence : [];
+  return evidence.some(
+    (item) =>
+      String(item?.source_type || "").startsWith("tool.") &&
+      Boolean(item?.as_of_at)
+  );
+}
+
 function assessEvidenceConfidence({
   evidence = [],
   tensions = [],
@@ -361,7 +379,8 @@ function assessEvidenceConfidence({
     ? normalized.reduce((sum, item) => sum + Number(item?.metadata?.reasoning_score || item?.metadata?.retrieval_score || 0), 0) /
       normalized.length
     : 0;
-  const liveToolsUsed = Array.isArray(toolResults) && toolResults.length > 0;
+  const liveToolsUsed =
+    Array.isArray(toolResults) && toolResults.some(isLiveOperationalToolResult);
   let points = 0;
   const reasons = [];
 
@@ -513,6 +532,7 @@ module.exports = {
   MAX_HISTORY_MESSAGES,
   MAX_REASONING_EVIDENCE,
   MAX_RETRIEVAL_QUERIES,
+  NON_OPERATIONAL_TOOL_KEYS,
   OPERATIONAL_WORDS,
   STOP_WORDS,
   TIME_WORDS,
@@ -527,6 +547,7 @@ module.exports = {
   detectEvidenceTensions,
   evidenceRoot,
   freshnessScore,
+  isLiveOperationalToolResult,
   jaccard,
   meaningfulTokens,
   numericSignature,
