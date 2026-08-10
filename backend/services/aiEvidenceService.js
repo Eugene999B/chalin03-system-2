@@ -31,6 +31,16 @@ function normalizeDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function promptAsOf(value) {
+  return normalizeDate(value);
+}
+
+function promptCorroboration(item = {}) {
+  const count = Number(item?.metadata?.corroborating_source_count || 0);
+  if (!Number.isSafeInteger(count) || count <= 0) return 0;
+  return Math.min(20, count);
+}
+
 function normalizeEvidence(item = {}, index = 0) {
   const sourceType = clean(item.source_type, 80).toLowerCase();
   const sourceRef = clean(item.source_ref, 180);
@@ -118,15 +128,25 @@ function assertEvidenceRequired(tool, evidence) {
 function evidencePromptBlock(items) {
   const evidence = normalizeEvidenceList(items);
   if (evidence.length === 0) {
-    return "No approved evidence was available. State this limitation clearly.";
+    return "No approved evidence was available. State the limitation instead of guessing.";
   }
   return evidence
-    .map(
-      (item) =>
-        `[${item.citation}] ${item.label} (${item.source_type}:${item.source_ref}${
-          item.source_version ? `@${item.source_version}` : ""
-        })${item.excerpt_text ? `\n${item.excerpt_text}` : ""}`
-    )
+    .map((item) => {
+      const asOf = promptAsOf(item.as_of_at);
+      const corroboration = promptCorroboration(item);
+      const source = `${item.source_type}${
+        item.source_version ? `@${item.source_version}` : ""
+      }:${item.source_ref}`;
+      const quality = [
+        asOf ? `as-of ${asOf}` : null,
+        corroboration
+          ? `${corroboration} independent corroborating source${corroboration === 1 ? "" : "s"}`
+          : null,
+      ].filter(Boolean);
+      return `[${item.citation}] ${item.label} (${source}${
+        quality.length ? `; ${quality.join("; ")}` : ""
+      })${item.excerpt_text ? `\n${item.excerpt_text}` : ""}`;
+    })
     .join("\n\n");
 }
 
@@ -140,4 +160,6 @@ module.exports = {
   normalizeDate,
   normalizeEvidence,
   normalizeEvidenceList,
+  promptAsOf,
+  promptCorroboration,
 };
