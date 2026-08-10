@@ -49,8 +49,8 @@ const PRINT_FORMATS = Object.freeze({
 });
 
 const RANDOM_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-const PRODUCT_CODE_PATTERN = /^[A-Z2-9]{3,12}$/;
-const UNIT_CODE_PATTERN = /^[A-Z2-9]{3,12}-[A-Z2-9]{8}$/;
+const PRODUCT_CODE_PATTERN = /^[A-Z0-9]{3,12}$/;
+const UNIT_CODE_PATTERN = /^[A-Z0-9]{3,12}-[A-HJ-NP-Z2-9]{8}$/;
 const QR_PREFIX = "C03U1";
 
 const TRANSITIONS = Object.freeze({
@@ -129,7 +129,7 @@ function normalizeProductCode(value) {
   const code = cleanText(value).toUpperCase().replace(/\s+/g, "");
   if (!PRODUCT_CODE_PATTERN.test(code)) {
     const error = new Error(
-      "Product traceability code must contain 3-12 uppercase letters/numbers and cannot use 0, 1, I or O."
+      "Product traceability code must contain 3-12 uppercase letters/numbers."
     );
     error.code = "INVALID_INVENTORY_PRODUCT_CODE";
     throw error;
@@ -174,7 +174,7 @@ function normalizeUnitCode(value) {
 function generateBatchCode(branchCode, now = new Date(), tokenFactory = () => secureRandomToken(6)) {
   const cleanBranch = cleanText(branchCode)
     .toUpperCase()
-    .replace(/[^A-Z2-9]/g, "")
+    .replace(/[^A-Z0-9]/g, "")
     .slice(0, 8) || "STORE";
   const date = now instanceof Date && !Number.isNaN(now.getTime())
     ? now.toISOString().slice(0, 10).replace(/-/g, "")
