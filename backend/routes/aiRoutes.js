@@ -19,6 +19,10 @@ const { hasEveryPermission } = require("../security/permissionCatalog");
 const { hasEquipmentDivisionAccess } = require("../security/equipmentDivisionAccess");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { getAiProviderReadiness } = require("../services/aiProviderReadinessService");
+const {
+  getProviderControlSnapshot,
+  updateProviderProfile,
+} = require("../services/aiProviderPolicyService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   archiveConversation,
@@ -98,6 +102,17 @@ function hasToolDivisionAccess(user, tool) {
     !tool.required_equipment_division ||
     hasEquipmentDivisionAccess(user, tool.required_equipment_division)
   );
+}
+
+function requireOriginalAdministrator(req, res, next) {
+  if (isOriginalSystemAdministrator(req.user)) return next();
+  noStore(res);
+  return res.status(403).json({
+    status: "error",
+    code: "AI_PROVIDER_POLICY_SYSTEM_ADMIN_REQUIRED",
+    message: "Only the original System Administrator can change AI provider policy.",
+    request_id: req.requestId || null,
+  });
 }
 
 function personaRouter(persona, featureKey) {
@@ -237,14 +252,49 @@ router.get(
   asyncHandler(async (req, res) => {
     const flags = getFeatureSnapshot();
     const provider = getAiProviderReadiness(process.env);
+    const providerControl = await getProviderControlSnapshot();
     return success(res, req, {
       flags,
       provider,
+      provider_control: {
+        ...providerControl,
+        can_manage: isOriginalSystemAdministrator(req.user),
+      },
       permissions: getAiPermissionSnapshot(req.user),
       execution_authority: flags.aiActions
         ? "approved_low_risk_actions_only"
         : "read_recommend_prepare_only",
       ai_actions_enabled: flags.aiActions === true,
+    });
+  })
+);
+
+router.get(
+  "/provider-control",
+  requireAiPermission("ai.use"),
+  asyncHandler(async (req, res) =>
+    success(res, req, {
+      ...(await getProviderControlSnapshot()),
+      can_manage: isOriginalSystemAdministrator(req.user),
+    })
+  )
+);
+
+router.put(
+  "/provider-control/:persona",
+  requireAiPermission("ai.use"),
+  requireOriginalAdministrator,
+  asyncHandler(async (req, res) => {
+    const profile = await updateProviderProfile({
+      persona: req.params.persona,
+      providerKey: req.body.provider_key,
+      modelKey: req.body.model_key,
+      userId: req.user.id,
+    });
+    return success(res, req, {
+      updated: true,
+      profile,
+      control: await getProviderControlSnapshot(),
     });
   })
 );
