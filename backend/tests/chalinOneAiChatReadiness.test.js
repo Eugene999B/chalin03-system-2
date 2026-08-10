@@ -90,8 +90,8 @@ test("staging chat readiness accepts configured Gemini Free without treating it 
   assert.equal(result.external_network_required, true);
   assert.equal(result.provider_secret_configured, true);
   assert.equal(result.provider_secret_exposed, false);
-  assert.equal(result.copilot_model, "gemini-2.5-flash");
-  assert.equal(result.executive_model, "gemini-2.5-flash");
+  assert.equal(result.copilot_model, "gemini-3.6-flash");
+  assert.equal(result.executive_model, "gemini-3.6-flash");
   assert.equal(result.copilot_reasoning_effort, "provider_managed");
 
   const serialized = JSON.stringify(result);
@@ -163,6 +163,7 @@ test("AI status, provider control and staff gateway keep governed access boundar
   assert.match(routes, /updateProviderProfile/);
   assert.match(routes, /isOriginalSystemAdministrator/);
   assert.match(routes, /\/provider-control\/\:persona/);
+  assert.match(routes, /fullContextAccess: req\.body\.full_context_access === true/);
   assert.doesNotMatch(routes, /OPENAI_API_KEY\s*=|GEMINI_API_KEY\s*=/);
   assert.match(gateway, /useFeatureFlags/);
   assert.match(gateway, /flags\?\.aiEnabled === true/);
