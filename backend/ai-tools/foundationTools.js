@@ -2,6 +2,11 @@
 
 const { getFeatureSnapshot } = require("../services/featureFlagService");
 const {
+  loadScopedUserMemory,
+  memoryPolicyPrompt,
+  memorySummary,
+} = require("../services/aiConversationMemoryService");
+const {
   searchGovernedKnowledge,
 } = require("../services/aiKnowledgeRetrievalService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
@@ -77,6 +82,48 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
         result_count: evidence.length,
         retrieval_authority: "published_governed_knowledge_only",
         evidence,
+      };
+    },
+  });
+
+  registry.register({
+    key: "conversation.memory",
+    title: "Recall prior user context",
+    description:
+      "Use when the user refers to an earlier discussion, prior decision, preference, named case, project or continuing goal. Searches only this same user's prior active conversations in the exact current persona/workspace/location scope. Results are continuity context only, never governed evidence or current operational truth.",
+    version: "1",
+    risk_level: 1,
+    personas: ["copilot", "executive"],
+    required_permissions: ["ai.use", "ai.conversations.view"],
+    allowed_workspaces: ["spare_parts", "mining", "equipment_hire"],
+    evidence_required: false,
+    max_input_bytes: 2000,
+    max_output_bytes: 5000,
+    timeout_ms: 3000,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["query"],
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: 240 },
+        limit: { type: "integer", minimum: 1, maximum: 4 },
+      },
+    },
+    handler: async ({ input, context }) => {
+      const query = String(input.query || "").trim().slice(0, 240);
+      const memories = await loadScopedUserMemory({
+        userId: context.actor.id,
+        persona: context.scope.persona,
+        scope: context.scope,
+        query,
+        limit: Math.max(1, Math.min(4, Number(input.limit) || 4)),
+      });
+      return {
+        query,
+        memory_policy: memoryPolicyPrompt(),
+        summary: memorySummary(memories),
+        memories,
+        evidence: [],
       };
     },
   });
