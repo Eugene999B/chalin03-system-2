@@ -4,6 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  MAX_HISTORY_MESSAGES,
+  MAX_REASONING_EVIDENCE,
+  MAX_RETRIEVAL_QUERIES,
   assessEvidenceConfidence,
   buildReasoningPlan,
   citationIntegrity,
@@ -47,7 +50,8 @@ test("reasoning plan decomposes comparison and live operational questions", () =
   assert.equal(plan.intent, "compare");
   assert.equal(plan.live_data_required, true);
   assert.ok(plan.retrieval_queries.length >= 2);
-  assert.ok(plan.retrieval_queries.length <= 6);
+  assert.ok(plan.retrieval_queries.length <= MAX_RETRIEVAL_QUERIES);
+  assert.ok(MAX_RETRIEVAL_QUERIES >= 10);
   assert.ok(plan.answer_shape.includes("trade-offs"));
 });
 
@@ -61,10 +65,10 @@ test("reasoning plan does not mark ordinary policy explanation as live operation
   assert.equal(plan.live_data_required, false);
 });
 
-test("evidence ranking rewards relevance while preserving source diversity", () => {
+test("deeper evidence ranking preserves independent corroboration in the production-sized context", () => {
   const ranked = rankEvidence({
     queries: ["customer debt outstanding balance"],
-    limit: 3,
+    limit: 4,
     now: new Date("2026-08-10T12:00:00.000Z").getTime(),
     evidence: [
       evidence({
@@ -94,12 +98,13 @@ test("evidence ranking rewards relevance while preserving source diversity", () 
     ],
   });
 
-  assert.equal(ranked.length, 3);
+  assert.equal(ranked.length, 4);
   assert.ok(
     ranked.some((item) => item.source_ref.startsWith("collections_report")),
-    "a strong second source family should survive ranking"
+    "an independent strong source family must survive the deeper answer context"
   );
   assert.ok(ranked.every((item) => Number(item.metadata.reasoning_score) >= 0));
+  assert.ok(MAX_REASONING_EVIDENCE >= 32);
 });
 
 test("evidence tension detection flags similar claims with incompatible numeric facts", () => {
@@ -178,15 +183,15 @@ test("confidence records governed tool use for live questions", () => {
   assert.notEqual(confidence.level, "low");
 });
 
-test("relevant history stays bounded and always retains the newest context", () => {
-  const history = Array.from({ length: 30 }, (_, index) => ({
+test("relevant history stays deeply bounded and always retains the newest context", () => {
+  const history = Array.from({ length: 90 }, (_, index) => ({
     role: index % 2 ? "assistant" : "user",
     content:
       index === 2
         ? "Excavator finance arrears were discussed here."
         : `Unrelated historical conversation turn ${index}.`,
   }));
-  history[29] = {
+  history[89] = {
     role: "user",
     content: "Now compare those excavator finance arrears with payments.",
   };
@@ -196,9 +201,11 @@ test("relevant history stays bounded and always retains the newest context", () 
     "Why are excavator finance arrears increasing?"
   );
 
-  assert.ok(selected.length <= 12);
+  assert.ok(MAX_HISTORY_MESSAGES >= 48);
+  assert.ok(selected.length <= MAX_HISTORY_MESSAGES);
   assert.equal(selected.at(-1).content, history.at(-1).content);
   assert.ok(selected.some((item) => item.content.includes("Excavator finance arrears")));
+  assert.ok(selected.length > 12, "deep history should no longer be artificially capped at 12 turns");
 });
 
 test("citation integrity rejects invented evidence references", () => {
@@ -221,18 +228,18 @@ test("citation integrity rejects invented evidence references", () => {
   assert.deepEqual(invalid.unsupported, [3]);
 });
 
-test("reasoning prompt requires disciplined answers without exposing hidden chain of thought", () => {
+test("reasoning prompt requires deep synthesis without exposing hidden chain of thought", () => {
   const plan = buildReasoningPlan({
     persona: "executive",
     prompt: "Should we prioritize debt recovery or new sales this month?",
   });
-  const confidence = {
-    level: "medium",
-  };
+  const confidence = { level: "medium" };
   const prompt = reasoningPromptBlock({ plan, confidence, tensions: [] });
 
-  assert.match(prompt, /do not reveal hidden chain-of-thought/i);
-  assert.match(prompt, /inference, assumptions, scenarios and unknowns/i);
-  assert.match(prompt, /do not present them as facts/i);
-  assert.match(prompt, /Recommendations must state the evidence/i);
+  assert.match(prompt, /never reveal hidden chain-of-thought/i);
+  assert.match(prompt, /distinguish fact, inference, scenario and unknown/i);
+  assert.match(prompt, /test alternative explanations/i);
+  assert.match(prompt, /Recommendations must explain the strongest reason/i);
+  assert.match(prompt, /what new evidence would change the recommendation/i);
+  assert.match(prompt, /Do not lead with a mechanical evidence dump/i);
 });
