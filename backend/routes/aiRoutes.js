@@ -23,6 +23,9 @@ const {
   getProviderControlSnapshot,
   updateProviderProfile,
 } = require("../services/aiProviderPolicyService");
+const {
+  createContextualAiProvider,
+} = require("../services/aiContextualProviderService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   archiveConversation,
@@ -112,6 +115,41 @@ function requireOriginalAdministrator(req, res, next) {
     code: "AI_PROVIDER_POLICY_SYSTEM_ADMIN_REQUIRED",
     message: "Only the original System Administrator can change AI provider policy.",
     request_id: req.requestId || null,
+  });
+}
+
+async function runPersonaChat({ req, persona }) {
+  const contextKey = String(req.body.context_key || "").trim() || null;
+  let contextual = null;
+  if (contextKey) {
+    contextual = await createContextualAiProvider({
+      contextKey,
+      req,
+      persona,
+    });
+  }
+
+  const result = await runAiConversationTurn({
+    req,
+    persona,
+    conversationKey: req.body.conversation_key || null,
+    message: req.body.message,
+    provider: contextual?.provider || null,
+  });
+
+  if (!contextual) return result;
+  return Object.freeze({
+    ...result,
+    context: Object.freeze({
+      key: contextual.profile.key,
+      title: contextual.profile.title,
+      purpose: contextual.profile.purpose,
+      classification: contextual.profile.classification,
+      provider_selected: contextual.selection.selected_provider,
+      provider_effective: contextual.selection.effective_provider,
+      provider_reason_code: contextual.selection.reason_code,
+      server_owned_preload: true,
+    }),
   });
 }
 
@@ -230,16 +268,7 @@ function personaRouter(persona, featureKey) {
     "/chat",
     requireAiPermission("ai.use", "ai.conversations.manage"),
     asyncHandler(async (req, res) =>
-      success(
-        res,
-        req,
-        await runAiConversationTurn({
-          req,
-          persona,
-          conversationKey: req.body.conversation_key || null,
-          message: req.body.message,
-        })
-      )
+      success(res, req, await runPersonaChat({ req, persona }))
     )
   );
 
