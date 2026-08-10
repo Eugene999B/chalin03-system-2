@@ -15,7 +15,8 @@ test("CHALIN Local live planning remains provider-local, allowlisted and read-on
   assert.match(source, /LOCAL_LIVE_TOOL_KEYS/);
   assert.match(source, /Number\(tool\?\.risk_level \|\| 0\) !== 1/);
   assert.match(source, /chooseLocalReadTool/);
-  assert.match(source, /tool_calls:\s*\[localToolCall\(selectedTool\)\]/);
+  assert.match(source, /tool_calls:\s*\[localToolCall\(selectedTool, messages\)\]/);
+  assert.match(source, /input:\s*inferredDateInput\(messages\)/);
   assert.doesNotMatch(source, /config\/db|mysql2|pool\.|connection\.|\.query\s*\(/i);
   assert.doesNotMatch(source, /\bfetch\s*\(|axios|https\.request|http\.request/i);
   assert.doesNotMatch(source, /INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM/i);
