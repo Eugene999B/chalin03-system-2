@@ -11,7 +11,7 @@ const PROFILE_KEYS = Object.freeze({
 });
 const DEFAULT_MODELS = Object.freeze({
   local: "chalin-local-governed-v1",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.6-flash",
   openai: "gpt-5.6",
 });
 const CACHE_TTL_MS = 15_000;
@@ -36,6 +36,21 @@ function booleanValue(value) {
   return ["1", "true", "yes", "on", "enabled"].includes(
     clean(value, 20).toLowerCase()
   );
+}
+
+function parseConfiguration(value) {
+  if (!value) return Object.freeze({});
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return Object.freeze({ ...value });
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? Object.freeze(parsed)
+      : Object.freeze({});
+  } catch {
+    return Object.freeze({});
+  }
 }
 
 function strictPersona(value) {
@@ -90,20 +105,44 @@ function dataClassification({ persona, providerContext = {} } = {}) {
   return persona === "guide" ? "public" : "internal";
 }
 
-function externalPrivateDataAllowed(providerKey, env = process.env) {
-  if (!booleanValue(env.AI_ALLOW_EXTERNAL_PRIVATE_DATA)) return false;
-  if (providerKey === "gemini") {
-    return clean(env.GEMINI_SERVICE_TIER || "free", 20).toLowerCase() === "paid";
+function geminiPaidTier(env = process.env) {
+  return ["paid", "billing", "billing_enabled", "tier1", "tier2", "tier3"].includes(
+    clean(env.GEMINI_SERVICE_TIER || "free", 30).toLowerCase()
+  );
+}
+
+function profileRequestsFullContext(profile = {}) {
+  return profile?.configuration?.system_admin_full_context === true;
+}
+
+function fullContextActive(profile, { persona, providerContext = {}, env = process.env } = {}) {
+  if (!["copilot", "executive"].includes(persona)) return false;
+  if (normalizeProviderKey(profile?.provider_key, "local") !== "gemini") return false;
+  if (!profileRequestsFullContext(profile)) return false;
+  if (providerContext?.original_system_administrator !== true) return false;
+  return geminiPaidTier(env);
+}
+
+function externalPrivateDataAllowed(
+  providerKey,
+  env = process.env,
+  { profile = null, persona = "copilot", providerContext = {} } = {}
+) {
+  if (
+    providerKey === "gemini" &&
+    fullContextActive(profile, { persona, providerContext, env })
+  ) {
+    return true;
   }
+
+  // Preserve the existing explicit server override for controlled paid/private
+  // provider deployments. It never overrides Gemini's paid-tier requirement.
+  if (!booleanValue(env.AI_ALLOW_EXTERNAL_PRIVATE_DATA)) return false;
+  if (providerKey === "gemini") return geminiPaidTier(env);
   return providerKey === "openai";
 }
 
 function fallbackProfile(persona, env = process.env) {
-  // Governing rule: no environment value may silently activate a paid/external
-  // provider. Until the System Administrator writes an ai_provider_profiles
-  // policy, CHALIN Local is the default. AI_PROVIDER_POLICY_DEFAULT exists only
-  // for controlled non-UI bootstrap/testing and itself still passes privacy and
-  // credential checks below.
   const configured = normalizeProviderKey(
     env.AI_PROVIDER_POLICY_DEFAULT || "local",
     "local"
@@ -118,6 +157,7 @@ function fallbackProfile(persona, env = process.env) {
     provider_key: providerKey,
     model_key: normalizeModelKey(null, providerKey),
     profile_status: "fallback",
+    configuration: Object.freeze({ system_admin_full_context: false }),
     source: "governed_local_default",
   });
 }
@@ -151,7 +191,7 @@ async function loadProviderProfile(persona, { connection = pool, env = process.e
   try {
     const [rows] = await connection.query(
       `SELECT profile_key, provider_key, model_key, profile_status, is_default,
-              per_request_token_limit, daily_token_limit,
+              configuration_json, per_request_token_limit, daily_token_limit,
               monthly_cost_limit_micros, updated_at
          FROM ai_provider_profiles
         WHERE profile_key = ?
@@ -171,6 +211,7 @@ async function loadProviderProfile(persona, { connection = pool, env = process.e
         model_key: normalizeModelKey(row.model_key, providerKey),
         profile_status: row.profile_status,
         is_default: Boolean(Number(row.is_default || 0)),
+        configuration: parseConfiguration(row.configuration_json),
         per_request_token_limit: Number(row.per_request_token_limit || 0),
         daily_token_limit: Number(row.daily_token_limit || 0),
         monthly_cost_limit_micros: Number(row.monthly_cost_limit_micros || 0),
@@ -190,9 +231,17 @@ function effectiveSelection(profile, { persona, providerContext = {}, env = proc
   const classification = dataClassification({ persona, providerContext });
   const selectedProvider = normalizeProviderKey(profile?.provider_key, "local");
   const selectedModel = normalizeModelKey(profile?.model_key, selectedProvider);
+  const fullContextRequested = profileRequestsFullContext(profile);
+  const fullContextEnabled = fullContextActive(profile, {
+    persona,
+    providerContext,
+    env,
+  });
   let effectiveProvider = selectedProvider;
   let effectiveModel = selectedModel;
-  let reasonCode = "AI_PROVIDER_POLICY_SELECTED";
+  let reasonCode = fullContextEnabled
+    ? "AI_GEMINI_SYSTEM_ADMIN_FULL_CONTEXT"
+    : "AI_PROVIDER_POLICY_SELECTED";
 
   if (selectedProvider !== "local" && !credentialConfigured(selectedProvider, env)) {
     effectiveProvider = "local";
@@ -201,12 +250,18 @@ function effectiveSelection(profile, { persona, providerContext = {}, env = proc
   } else if (
     selectedProvider !== "local" &&
     classification !== "public" &&
-    !externalPrivateDataAllowed(selectedProvider, env)
+    !externalPrivateDataAllowed(selectedProvider, env, {
+      profile,
+      persona,
+      providerContext,
+    })
   ) {
     effectiveProvider = "local";
     effectiveModel = DEFAULT_MODELS.local;
     reasonCode = selectedProvider === "gemini"
-      ? "AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK"
+      ? fullContextRequested && !geminiPaidTier(env)
+        ? "AI_GEMINI_FULL_CONTEXT_REQUIRES_PAID_TIER"
+        : "AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK"
       : "AI_EXTERNAL_PRIVATE_DATA_LOCAL_FALLBACK";
   }
 
@@ -222,9 +277,18 @@ function effectiveSelection(profile, { persona, providerContext = {}, env = proc
     reason_code: reasonCode,
     external_network_used: effectiveProvider !== "local",
     zero_cost_local_available: true,
-    gemini_service_tier: clean(env.GEMINI_SERVICE_TIER || "free", 20).toLowerCase(),
+    gemini_service_tier: clean(env.GEMINI_SERVICE_TIER || "free", 30).toLowerCase(),
     external_private_data_allowed:
-      effectiveProvider !== "local" && externalPrivateDataAllowed(effectiveProvider, env),
+      effectiveProvider !== "local" &&
+      externalPrivateDataAllowed(effectiveProvider, env, {
+        profile,
+        persona,
+        providerContext,
+      }),
+    full_context_requested: fullContextRequested,
+    full_context_active: fullContextEnabled && effectiveProvider === "gemini",
+    full_context_requires_paid_tier:
+      selectedProvider === "gemini" && fullContextRequested && !geminiPaidTier(env),
   });
 }
 
@@ -243,9 +307,17 @@ async function getProviderControlSnapshot({ env = process.env, connection = pool
   const profiles = {};
   for (const persona of AI_PROVIDER_PERSONAS) {
     const profile = await loadProviderProfile(persona, { connection, env, useCache: false });
+    const adminPreviewContext = {
+      original_system_administrator: true,
+      data_classification: persona === "guide" ? "public" : "internal",
+    };
     profiles[persona] = Object.freeze({
       ...profile,
-      selection: effectiveSelection(profile, { persona, providerContext: {}, env }),
+      selection: effectiveSelection(profile, {
+        persona,
+        providerContext: adminPreviewContext,
+        env,
+      }),
     });
   }
   return Object.freeze({
@@ -265,9 +337,10 @@ async function getProviderControlSnapshot({ env = process.env, connection = pool
         credential_required: true,
         credential_configured: credentialConfigured("gemini", env),
         external_network: true,
-        zero_cost: clean(env.GEMINI_SERVICE_TIER || "free", 20).toLowerCase() === "free",
-        service_tier: clean(env.GEMINI_SERVICE_TIER || "free", 20).toLowerCase(),
-        private_data_supported: externalPrivateDataAllowed("gemini", env),
+        zero_cost: !geminiPaidTier(env),
+        service_tier: clean(env.GEMINI_SERVICE_TIER || "free", 30).toLowerCase(),
+        private_data_supported: geminiPaidTier(env),
+        full_context_capable: geminiPaidTier(env),
       }),
       openai: Object.freeze({
         key: "openai",
@@ -276,13 +349,14 @@ async function getProviderControlSnapshot({ env = process.env, connection = pool
         credential_configured: credentialConfigured("openai", env),
         external_network: true,
         zero_cost: false,
-        private_data_supported: externalPrivateDataAllowed("openai", env),
+        private_data_supported: booleanValue(env.AI_ALLOW_EXTERNAL_PRIVATE_DATA),
       }),
     }),
     profiles: Object.freeze(profiles),
     privacy: Object.freeze({
       unpaid_gemini_public_only: true,
       confidential_external_default: "blocked_to_local",
+      system_admin_full_context_available_on_paid_gemini: true,
       provider_secrets_stored_in_database: false,
       secrets_exposed: false,
     }),
@@ -293,6 +367,7 @@ async function updateProviderProfile({
   persona,
   providerKey,
   modelKey = null,
+  fullContextAccess = false,
   userId,
   env = process.env,
   connection = pool,
@@ -314,10 +389,15 @@ async function updateProviderProfile({
 
   const selectedModel = normalizeModelKey(modelKey, normalizedProvider);
   const profileStatus = clean(env.NODE_ENV, 20).toLowerCase() === "staging" ? "staging" : "active";
+  const wantsFullContext =
+    normalizedProvider === "gemini" &&
+    ["copilot", "executive"].includes(normalizedPersona) &&
+    fullContextAccess === true;
   const config = JSON.stringify({
     managed_by: "system_administrator",
     secret_storage: "environment_only",
     privacy_fallback: "local",
+    system_admin_full_context: wantsFullContext,
   });
 
   await connection.query(
@@ -325,12 +405,14 @@ async function updateProviderProfile({
        profile_key, provider_key, model_key, profile_status, is_default,
        configuration_json, per_request_token_limit, daily_token_limit,
        monthly_cost_limit_micros, created_by, updated_by
-     ) VALUES (?, ?, ?, ?, 0, ?, 4000, 100000, 0, ?, ?)
+     ) VALUES (?, ?, ?, ?, 0, ?, 262144, 10000000, 0, ?, ?)
      ON DUPLICATE KEY UPDATE
        provider_key = VALUES(provider_key),
        model_key = VALUES(model_key),
        profile_status = VALUES(profile_status),
        configuration_json = VALUES(configuration_json),
+       per_request_token_limit = VALUES(per_request_token_limit),
+       daily_token_limit = VALUES(daily_token_limit),
        updated_by = VALUES(updated_by),
        updated_at = CURRENT_TIMESTAMP`,
     [
@@ -361,11 +443,15 @@ module.exports = {
   effectiveSelection,
   externalPrivateDataAllowed,
   fallbackProfile,
+  fullContextActive,
+  geminiPaidTier,
   getProviderControlSnapshot,
   loadProviderProfile,
   normalizeModelKey,
   normalizePersona,
   normalizeProviderKey,
+  parseConfiguration,
+  profileRequestsFullContext,
   resolveAiProviderSelection,
   strictPersona,
   updateProviderProfile,
