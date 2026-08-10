@@ -35,6 +35,32 @@ export async function getAiStatus({ signal } = {}) {
   return unwrap(response) || {};
 }
 
+export async function getAiProviderControl({ signal } = {}) {
+  const response = await axiosClient.get(
+    "/ai/provider-control",
+    noCacheConfig({ signal })
+  );
+  return unwrap(response) || {};
+}
+
+export async function updateAiProviderControl(
+  persona,
+  { providerKey, modelKey = null }
+) {
+  const supportedPersonas = new Set(["guide", "copilot", "executive"]);
+  if (!supportedPersonas.has(persona)) {
+    throw new Error("Unsupported CHALIN AI provider persona.");
+  }
+  const response = await axiosClient.put(
+    `/ai/provider-control/${encodeURIComponent(persona)}`,
+    {
+      provider_key: providerKey,
+      model_key: modelKey || null,
+    }
+  );
+  return unwrap(response) || {};
+}
+
 export async function listAiTools(persona, { signal } = {}) {
   const response = await axiosClient.get(
     `${personaPath(persona)}/tools`,
@@ -251,6 +277,12 @@ export function aiErrorMessage(error) {
   const code = error?.response?.data?.code;
   if (code === "AI_PROVIDER_DISABLED") {
     return "The intelligence provider is safely disabled in this environment.";
+  }
+  if (code === "AI_PROVIDER_POLICY_SYSTEM_ADMIN_REQUIRED") {
+    return "Only the original System Administrator can change CHALIN AI provider policy.";
+  }
+  if (code === "AI_GEMINI_API_KEY_REQUIRED") {
+    return "Gemini is selected but its protected server-side key is not configured. Select CHALIN Local or configure the staging key in Railway.";
   }
   if (code === "AI_SCHEMA_NOT_READY") {
     return "The intelligence database foundation has not been prepared in this environment.";
