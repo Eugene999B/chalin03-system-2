@@ -8,6 +8,7 @@ export { default as ContentStudioGovernedManager } from "./ContentStudioGoverned
 export { default as ContentStudioCompanyInfoManager } from "./ContentStudioCompanyInfoManager";
 export { default as ContentStudioMediaManager } from "./ContentStudioMediaManager";
 export { default as ContentStudioFormManager } from "./ContentStudioFormManager";
+export { default as ContentStudioLaunchReadiness } from "./ContentStudioLaunchReadiness";
 export {
   ContentStudioProjectManager,
   ContentStudioEquipmentManager,
@@ -24,5 +25,6 @@ export * from "./contentStudioNewsroomApi";
 export * from "./contentStudioPortfolioApi";
 export * from "./contentStudioCompanyInfoApi";
 export * from "./contentStudioOperationsApi";
+export * from "./contentStudioLaunchReadinessApi";
 export * from "./contentStudioVisualBuilderModel";
 export * from "./contentStudioModel";
