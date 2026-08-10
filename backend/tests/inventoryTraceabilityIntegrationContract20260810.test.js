@@ -9,6 +9,8 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const server = read("server.js");
 const routes = read("routes/inventoryTraceabilityRoutes.js");
 const repository = read("services/inventoryTraceabilityRepositoryService.js");
+const labels = read("services/inventoryLabelDocumentService.js");
+const primitives = read("services/inventoryTraceabilityService.js");
 const migration = fs.readFileSync(
   path.resolve(root, "../database/migrations/20260810_inventory_traceability_foundation.sql"),
   "utf8"
@@ -60,13 +62,36 @@ test("unit event history is append-only through the feature API", () => {
   assert.match(migration, /event_hash CHAR\(64\) NOT NULL/);
 });
 
-test("printed QR labels are signed by a dedicated inventory secret", () => {
-  assert.match(routes, /buildSignedLabelPayload\(row\.unit_code\)/);
+test("signed QR payloads are generated only inside the controlled PDF path", () => {
+  assert.match(labels, /buildSignedLabelPayload\(units\[index\]\.unit_code, signingSecret\)/);
+  assert.match(routes, /buildInventoryLabelPdf/);
   assert.match(routes, /verifySignedLabelPayload\(input\)/);
-  const primitives = read("services/inventoryTraceabilityService.js");
+  assert.doesNotMatch(routes, /qr_payload\s*:/);
+  assert.match(routes, /Signed QR payloads are not exposed through the API/);
   assert.match(primitives, /INVENTORY_LABEL_SIGNING_SECRET/);
   assert.doesNotMatch(primitives, /BACKUP_SIGNING_SECRET/);
   assert.doesNotMatch(primitives, /JWT_SECRET/);
+});
+
+test("label reprints are administrator-controlled and cannot be silently acknowledged", () => {
+  assert.match(routes, /TRACEABILITY_REPRINT_ADMIN_REQUIRED/);
+  assert.match(routes, /TRACEABILITY_REPRINT_REASON_REQUIRED/);
+  assert.match(routes, /REPRINT_INVENTORY_LABEL_BATCH/);
+  assert.match(routes, /TRACEABILITY_USE_CONTROLLED_PRINT/);
+  assert.match(routes, /prior_print_count/);
+});
+
+test("activation requires physical labels to have been printed and manager verification is independent", () => {
+  assert.match(routes, /TRACEABILITY_PRINT_REQUIRED_BEFORE_ACTIVATION/);
+  assert.match(routes, /TRACEABILITY_INDEPENDENT_VERIFICATION_REQUIRED/);
+  assert.match(routes, /control\.created_by/);
+  assert.match(routes, /control\.printed_by/);
+  assert.match(routes, /roleOf\(req\) !== "admin"/);
+});
+
+test("foundation migration carries explicit additive and backup-required markers", () => {
+  assert.match(migration, /ADDITIVE MIGRATION ONLY/);
+  assert.match(migration, /BACKUP REQUIRED/);
 });
 
 test("foundation migration is additive and verifier checks all new tables", () => {
