@@ -10,11 +10,18 @@ import "../styles/adminMobileHotfix.css";
 const AiProviderControlLauncher = lazy(() =>
   import("./ai/AiProviderControlLauncher")
 );
+const ContentStudioAiLauncher = lazy(() =>
+  import("./content-studio/ContentStudioAiLauncher")
+);
 
 export default function ProtectedChalinOneEntry() {
+  const pathname = window.location.pathname;
   const showProviderControl =
-    window.location.pathname === "/intelligence" ||
-    window.location.pathname.startsWith("/intelligence/");
+    pathname === "/intelligence" ||
+    pathname.startsWith("/intelligence/");
+  const showContentStudioAi =
+    pathname === "/content-studio" ||
+    pathname.startsWith("/content-studio/");
 
   return (
     <FeatureFlagProvider>
@@ -22,6 +29,11 @@ export default function ProtectedChalinOneEntry() {
       {showProviderControl ? (
         <Suspense fallback={null}>
           <AiProviderControlLauncher />
+        </Suspense>
+      ) : null}
+      {showContentStudioAi ? (
+        <Suspense fallback={null}>
+          <ContentStudioAiLauncher />
         </Suspense>
       ) : null}
     </FeatureFlagProvider>

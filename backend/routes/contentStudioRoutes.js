@@ -7,6 +7,7 @@ const {
   requireContentStudioRouteScope,
 } = require("../middleware/contentStudioAccessMiddleware");
 const contentStudioAccessRoutes = require("./contentStudioAccessRoutes");
+const contentStudioAiRoutes = require("./contentStudioAiRoutes");
 const contentStudioAnalyticsRoutes = require("./contentStudioAnalyticsRoutes");
 const contentStudioCompanyInfoRoutes = require("./contentStudioCompanyInfoRoutes");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
@@ -30,6 +31,10 @@ router.use(requireContentStudioRouteScope);
 
 router.use("/access", contentStudioAccessRoutes);
 router.use("/settings", contentStudioSettingsRoutes);
+// Aggregate Content Studio intelligence belongs to Dashboard scope and remains
+// read-only. Page/SEO evidence is added only when the hydrated Studio identity
+// also carries the Pages scope.
+router.use("/dashboard/intelligence", contentStudioAiRoutes);
 // Aggregate public analytics belongs to the existing Dashboard scope. It is
 // read-only and contains no visitor identifiers, form contents or staff data.
 router.use("/dashboard/analytics", contentStudioAnalyticsRoutes);

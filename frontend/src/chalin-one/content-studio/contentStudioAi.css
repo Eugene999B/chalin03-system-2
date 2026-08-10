@@ -1,0 +1,310 @@
+.cs-ai-shell {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10020;
+  width: min(410px, calc(100vw - 28px));
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.cs-ai-launcher {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 10px 15px 10px 10px;
+  background: rgba(5, 22, 42, 0.96);
+  color: #fff;
+  box-shadow: 0 15px 38px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+.cs-ai-launcher span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f8c43a;
+  color: #07182c;
+  font-weight: 950;
+  font-size: 11px;
+}
+
+.cs-ai-launcher strong {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.cs-ai-panel {
+  margin-bottom: 10px;
+  max-height: min(720px, calc(100vh - 90px));
+  overflow: auto;
+  border: 1px solid rgba(8, 39, 72, 0.16);
+  border-radius: 20px;
+  background: #fff;
+  color: #0a2038;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.cs-ai-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 17px;
+  background: #071b31;
+  color: #fff;
+}
+
+.cs-ai-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.cs-ai-header span {
+  color: #f8c43a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.cs-ai-header strong {
+  font-size: 15px;
+}
+
+.cs-ai-header button {
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cs-ai-provider-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px;
+  background: #f2f7fb;
+  border-bottom: 1px solid #e1eaf1;
+}
+
+.cs-ai-provider-note span {
+  font-size: 11px;
+  font-weight: 900;
+  color: #0c456e;
+}
+
+.cs-ai-provider-note small {
+  text-align: right;
+  color: #52687a;
+  font-size: 10px;
+}
+
+.cs-ai-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 14px 15px 4px;
+}
+
+.cs-ai-quick button {
+  border: 1px solid #d7e2eb;
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: #f8fbfd;
+  color: #173a58;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.cs-ai-quick button:hover:not(:disabled),
+.cs-ai-quick button:focus-visible:not(:disabled) {
+  border-color: #7db1d4;
+  background: #eef8ff;
+}
+
+.cs-ai-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px 15px 15px;
+}
+
+.cs-ai-form label {
+  font-size: 11px;
+  font-weight: 850;
+  color: #36536b;
+}
+
+.cs-ai-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 78px;
+  box-sizing: border-box;
+  border: 1px solid #ccd9e3;
+  border-radius: 12px;
+  padding: 11px 12px;
+  color: #0b2238;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.cs-ai-form button[type="submit"] {
+  border: 0;
+  border-radius: 11px;
+  padding: 11px 14px;
+  background: #0b4f7a;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cs-ai-form button:disabled,
+.cs-ai-quick button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.cs-ai-answer,
+.cs-ai-empty,
+.cs-ai-error {
+  margin: 0 15px 15px;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.cs-ai-answer {
+  background: #f5faf7;
+  border: 1px solid #cfe4d6;
+}
+
+.cs-ai-answer > span {
+  color: #2d6a45;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.cs-ai-answer p {
+  white-space: pre-wrap;
+  margin: 8px 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cs-ai-answer > small {
+  display: block;
+  margin-top: 10px;
+  color: #536b5c;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.cs-ai-empty {
+  background: #f8fafc;
+  border: 1px dashed #cad7e1;
+}
+
+.cs-ai-empty strong {
+  font-size: 13px;
+}
+
+.cs-ai-empty p {
+  margin: 6px 0 0;
+  color: #5a6d7c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.cs-ai-error {
+  background: #fff3f3;
+  border: 1px solid #f0c8c8;
+  color: #8a2f2f;
+  font-size: 12px;
+}
+
+.cs-ai-evidence {
+  margin-top: 10px;
+  border-top: 1px solid #d7e7db;
+  padding-top: 10px;
+}
+
+.cs-ai-evidence summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 850;
+  color: #315f43;
+}
+
+.cs-ai-evidence div {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.cs-ai-evidence article {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.cs-ai-evidence strong,
+.cs-ai-evidence span {
+  font-size: 10px;
+}
+
+.cs-ai-evidence span {
+  color: #687d6e;
+}
+
+@media (max-width: 640px) {
+  .cs-ai-shell {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100vw - 20px);
+  }
+
+  .cs-ai-panel {
+    max-height: calc(100vh - 76px);
+    border-radius: 16px;
+  }
+
+  .cs-ai-launcher {
+    padding-right: 13px;
+  }
+
+  .cs-ai-provider-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cs-ai-provider-note small {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-ai-launcher,
+  .cs-ai-panel,
+  .cs-ai-quick button {
+    transition: none !important;
+  }
+}
