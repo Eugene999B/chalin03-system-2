@@ -1,5 +1,9 @@
 "use strict";
 
+const {
+  renderSystemKnowledgeManifest,
+} = require("./aiSystemKnowledgeManifestService");
+
 const PUBLIC_SYSTEM_MAX_LENGTH = 16000;
 const MAX_PUBLIC_CONTINUITY_MESSAGES = 6;
 const SYSTEM_KNOWLEDGE_VERSION = "2026-08-10-conversation-learning-v1";
@@ -44,6 +48,8 @@ How CHALIN Copilot should behave:
 - Prefer a direct answer first. Do not bury a simple answer under a long menu tutorial or unrelated explanation.
 - Never expose passwords, API keys, secrets, authentication tokens or another user's private conversation.
 - Product knowledge may be discussed across all CHALIN workspaces. Live records remain permission-scoped and should only be fetched when the user actually asks for current/private business data.
+
+${renderSystemKnowledgeManifest()}
 `;
 
 function clean(value, maximum = PUBLIC_SYSTEM_MAX_LENGTH) {
