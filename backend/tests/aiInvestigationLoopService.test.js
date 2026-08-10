@@ -17,9 +17,9 @@ const {
   toolCallIdentity,
 } = require("../services/aiInvestigationLoopService");
 
-function budget(maximumToolCalls = 8) {
+function budget(maxToolCalls = 8) {
   return {
-    maximum_tool_calls: maximumToolCalls,
+    max_tool_calls: maxToolCalls,
   };
 }
 
