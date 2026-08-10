@@ -2,9 +2,11 @@
 
 const GEMINI_API_ORIGIN = "https://generativelanguage.googleapis.com";
 const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+const LEGACY_DEFAULT_GEMINI_MODELS = new Set(["gemini-2.5-flash"]);
 const MODEL_KEY_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,159}$/i;
 const TOOL_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const GEMINI_MAX_OUTPUT_TOKENS = 32768;
+const GEMINI_MAX_ATTEMPTS = 2;
 const DEEP_REASONING_INTENTS = new Set([
   "compare",
   "diagnose",
@@ -24,6 +26,10 @@ class GeminiGenerateContentProviderError extends Error {
 
 function clean(value, maximum = 1000) {
   return String(value ?? "").trim().slice(0, maximum);
+}
+
+function booleanValue(value) {
+  return ["1", "true", "yes", "on", "enabled"].includes(clean(value, 20).toLowerCase());
 }
 
 function requireApiKey(env = process.env) {
@@ -48,22 +54,36 @@ function safeModelKey(value, fallback = DEFAULT_GEMINI_MODEL) {
   return candidate;
 }
 
+function upgradeLegacyModel(value, env = process.env) {
+  const model = safeModelKey(value || DEFAULT_GEMINI_MODEL);
+  if (
+    LEGACY_DEFAULT_GEMINI_MODELS.has(model.toLowerCase()) &&
+    !booleanValue(env.GEMINI_AI_ALLOW_LEGACY_MODEL)
+  ) {
+    return DEFAULT_GEMINI_MODEL;
+  }
+  return model;
+}
+
 function modelForContext(env = process.env, providerContext = {}) {
   const override = clean(providerContext.provider_model_override, 160);
-  if (override) return safeModelKey(override);
+  if (override) return upgradeLegacyModel(override, env);
   const persona = clean(providerContext.persona, 30).toLowerCase();
   if (persona === "guide") {
-    return safeModelKey(
-      env.GEMINI_AI_GUIDE_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
+    return upgradeLegacyModel(
+      env.GEMINI_AI_GUIDE_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      env
     );
   }
   if (persona === "executive") {
-    return safeModelKey(
-      env.GEMINI_AI_EXECUTIVE_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
+    return upgradeLegacyModel(
+      env.GEMINI_AI_EXECUTIVE_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      env
     );
   }
-  return safeModelKey(
-    env.GEMINI_AI_COPILOT_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
+  return upgradeLegacyModel(
+    env.GEMINI_AI_COPILOT_MODEL || env.GEMINI_AI_MODEL || env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+    env
   );
 }
 
@@ -216,6 +236,34 @@ function safeErrorCode(payload, response) {
   );
 }
 
+function retryableResponse(response) {
+  const status = Number(response?.status || 0);
+  return status === 429 || status >= 500;
+}
+
+function retryDelay(attempt, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const error = new Error("Aborted");
+      error.name = "AbortError";
+      reject(error);
+      return;
+    }
+    const timer = setTimeout(resolve, Math.min(1000, 250 * attempt));
+    timer.unref?.();
+    signal?.addEventListener?.(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        const error = new Error("Aborted");
+        error.name = "AbortError";
+        reject(error);
+      },
+      { once: true }
+    );
+  });
+}
+
 class GeminiGenerateContentProvider {
   constructor({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
     if (typeof fetchImpl !== "function") {
@@ -253,49 +301,62 @@ class GeminiGenerateContentProvider {
     if (thinkingLevel) {
       body.generationConfig.thinkingConfig = { thinkingLevel };
     }
-    if (mappedMessages.systemInstruction) {
-      body.systemInstruction = mappedMessages.systemInstruction;
-    }
+    if (mappedMessages.systemInstruction) body.systemInstruction = mappedMessages.systemInstruction;
     if (mappedTools.definitions.length) {
       body.tools = mappedTools.definitions;
       body.toolConfig = { functionCallingConfig: { mode: "AUTO" } };
     }
 
-    let response;
-    try {
-      response = await this.fetchImpl(endpointForModel(model), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify(body),
-        signal,
-      });
-    } catch (error) {
-      if (error?.name === "AbortError") {
-        throw new GeminiGenerateContentProviderError(
-          "The Gemini request was cancelled safely.",
-          { code: "AI_GEMINI_REQUEST_ABORTED", statusCode: 504 }
-        );
+    let response = null;
+    let payload = {};
+    let lastNetworkError = null;
+
+    for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        response = await this.fetchImpl(endpointForModel(model), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
+        payload = {};
+        try {
+          payload = await response.json();
+        } catch {
+          payload = {};
+        }
+        if ((response.ok && !payload?.error) || !retryableResponse(response) || attempt >= GEMINI_MAX_ATTEMPTS) {
+          break;
+        }
+        await retryDelay(attempt, signal);
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new GeminiGenerateContentProviderError(
+            "The Gemini request was cancelled safely.",
+            { code: "AI_GEMINI_REQUEST_ABORTED", statusCode: 504 }
+          );
+        }
+        lastNetworkError = error;
+        if (attempt >= GEMINI_MAX_ATTEMPTS) break;
+        await retryDelay(attempt, signal);
       }
+    }
+
+    if (!response) {
       throw new GeminiGenerateContentProviderError(
         "The Gemini request failed safely.",
         {
           code: "AI_GEMINI_NETWORK_FAILED",
           statusCode: 502,
-          details: [clean(error?.code || error?.name || "network_error", 100)],
+          details: [clean(lastNetworkError?.code || lastNetworkError?.name || "network_error", 100)],
         }
       );
     }
 
-    let payload = {};
-    try {
-      payload = await response.json();
-    } catch {
-      payload = {};
-    }
     if (!response.ok || payload?.error) {
       throw new GeminiGenerateContentProviderError(
         "Gemini could not complete the intelligence request.",
@@ -332,11 +393,14 @@ module.exports = {
   DEFAULT_GEMINI_MODEL,
   DEEP_REASONING_INTENTS,
   GEMINI_API_ORIGIN,
+  GEMINI_MAX_ATTEMPTS,
   GEMINI_MAX_OUTPUT_TOKENS,
+  LEGACY_DEFAULT_GEMINI_MODELS,
   GeminiGenerateContentProvider,
   GeminiGenerateContentProviderError,
   MODEL_KEY_PATTERN,
   TOOL_NAME_PATTERN,
+  booleanValue,
   endpointForModel,
   extractText,
   extractToolCalls,
@@ -345,8 +409,11 @@ module.exports = {
   mapTools,
   modelForContext,
   requireApiKey,
+  retryDelay,
+  retryableResponse,
   safeModelKey,
   sanitizeSchema,
   thinkingLevelForContext,
   tokenUsage,
+  upgradeLegacyModel,
 };
