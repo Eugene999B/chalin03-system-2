@@ -92,10 +92,6 @@ function installPublicApplicationBoundaryHandoffs() {
       );
       if (!handoffPath) return;
 
-      // Public CHALIN ONE and the protected staff applications use different
-      // router roots. Stop React Router from seeing this click at all and let
-      // the browser perform a genuine document navigation. The new document
-      // then boots the protected or operational application from its own root.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
@@ -152,10 +148,11 @@ function requestAssetRecovery(reason) {
 }
 
 if ("serviceWorker" in navigator) {
-  // The public company website is deliberately outside the aggressive business-
-  // app cache-recovery loop. It must never jump, reload, or interrupt a visitor
-  // merely because another staging release has been deployed.
-  if (!publicWebsiteSurface) {
+  // Public and protected standalone CHALIN ONE surfaces deliberately stay out
+  // of the aggressive operational cache-recovery loop. A provider response,
+  // long reasoning turn, draft or chat must not be interrupted merely because
+  // a new staging bundle has been deployed in the background.
+  if (!publicWebsiteSurface && !standaloneChalinOne) {
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
         requestAssetRecovery("service-worker-asset-mismatch");
@@ -165,10 +162,11 @@ if ("serviceWorker" in navigator) {
 
   window.addEventListener("load", () => {
     if (import.meta.env.PROD) {
-      if (publicWebsiteSurface) {
+      if (publicWebsiteSurface || standaloneChalinOne) {
         removeChalinServiceWorkerCaches({
-          logMessage:
-            "✅ CHALIN ONE public website is running without automatic service-worker refreshes",
+          logMessage: publicWebsiteSurface
+            ? "✅ CHALIN ONE public website is running without automatic service-worker refreshes"
+            : "✅ CHALIN ONE protected standalone workspace is running without automatic service-worker refreshes",
         });
         return;
       }
@@ -176,9 +174,9 @@ if ("serviceWorker" in navigator) {
       const hadActiveController = Boolean(navigator.serviceWorker.controller);
       let reloadingForUpdate = false;
 
-      // Operational workspaces retain their one-time handover reload because
+      // Operational workspaces keep their one-time handover reload because
       // stale cashier/finance/operations code is materially riskier than a
-      // public website interruption.
+      // controlled reload during an explicit operational application session.
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         if (!hadActiveController || reloadingForUpdate) {
           return;

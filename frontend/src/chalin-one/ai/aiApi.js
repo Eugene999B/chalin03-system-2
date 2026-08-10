@@ -5,6 +5,9 @@ export const AI_PERSONAS = Object.freeze({
   executive: "executive",
 });
 
+const conversationCache = new Map();
+const toolCache = new Map();
+
 function unwrap(response) {
   return response?.data?.data ?? response?.data ?? null;
 }
@@ -27,6 +30,74 @@ function noCacheConfig(config = {}) {
   };
 }
 
+function paramsIdentity(params = {}) {
+  return JSON.stringify(
+    Object.entries(params || {})
+      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function conversationCacheKey(persona, params = {}) {
+  return `${persona}:${paramsIdentity(params)}`;
+}
+
+function derivedConversationTitle(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "New conversation";
+  if (/^(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening)|how\s+(?:are|r)\s+you(?:\s+doing)?|thanks|thank\s+you|okay|ok|cool|great|nice|bye|goodbye)[\s!.?,'-]*$/i.test(text)) {
+    return "General Conversation";
+  }
+  const cleaned = text
+    .replace(/^(?:(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening))[,!?.\s-]*)+/i, "")
+    .replace(/^(?:(?:please|can\s+you|could\s+you|would\s+you|tell\s+me|show\s+me|explain|help\s+me|what\s+is|what\s+are|how\s+is|how\s+are)\s+)+/i, "")
+    .replace(/[?!.]+$/g, "")
+    .trim();
+  if (!cleaned) return "General Conversation";
+  return cleaned
+    .split(/\s+/)
+    .slice(0, 10)
+    .join(" ")
+    .slice(0, 72)
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function updateConversationCaches(persona, updater) {
+  for (const [key, rows] of conversationCache.entries()) {
+    if (!key.startsWith(`${persona}:`) || !Array.isArray(rows)) continue;
+    conversationCache.set(key, updater(rows));
+  }
+}
+
+function upsertConversationCache(persona, conversationKey, message, explicitTitle = null) {
+  if (!conversationKey) return;
+  const now = new Date().toISOString();
+  updateConversationCaches(persona, (rows) => {
+    const existing = rows.find((row) => row?.key === conversationKey) || null;
+    const nextTitle =
+      explicitTitle ||
+      (existing?.title && !["New conversation", "General Conversation"].includes(existing.title)
+        ? existing.title
+        : derivedConversationTitle(message));
+    const next = {
+      ...(existing || {}),
+      key: conversationKey,
+      persona,
+      title: nextTitle,
+      last_message_at: now,
+      updated_at: now,
+      status: "active",
+    };
+    return [next, ...rows.filter((row) => row?.key !== conversationKey)];
+  });
+}
+
+function removeConversationFromCache(persona, conversationKey) {
+  updateConversationCaches(persona, (rows) =>
+    rows.filter((row) => row?.key !== conversationKey)
+  );
+}
+
 export async function getAiStatus({ signal } = {}) {
   const response = await axiosClient.get(
     "/ai/status",
@@ -45,7 +116,7 @@ export async function getAiProviderControl({ signal } = {}) {
 
 export async function updateAiProviderControl(
   persona,
-  { providerKey, modelKey = null }
+  { providerKey, modelKey = null, fullContextAccess = false }
 ) {
   const supportedPersonas = new Set(["guide", "copilot", "executive"]);
   if (!supportedPersonas.has(persona)) {
@@ -56,29 +127,37 @@ export async function updateAiProviderControl(
     {
       provider_key: providerKey,
       model_key: modelKey || null,
+      full_context_access: fullContextAccess === true,
     }
   );
   return unwrap(response) || {};
 }
 
-export async function listAiTools(persona, { signal } = {}) {
+export async function listAiTools(persona, { signal, force = false } = {}) {
+  if (!force && toolCache.has(persona)) return toolCache.get(persona);
   const response = await axiosClient.get(
     `${personaPath(persona)}/tools`,
     noCacheConfig({ signal })
   );
-  return unwrap(response) || [];
+  const rows = unwrap(response) || [];
+  toolCache.set(persona, rows);
+  return rows;
 }
 
 export async function listAiConversations(
   persona,
   params = {},
-  { signal } = {}
+  { signal, force = false } = {}
 ) {
+  const key = conversationCacheKey(persona, params);
+  if (!force && conversationCache.has(key)) return conversationCache.get(key);
   const response = await axiosClient.get(
     `${personaPath(persona)}/conversations`,
     noCacheConfig({ params, signal })
   );
-  return unwrap(response) || [];
+  const rows = unwrap(response) || [];
+  conversationCache.set(key, rows);
+  return rows;
 }
 
 export async function getAiConversation(persona, conversationKey, { signal } = {}) {
@@ -104,7 +183,16 @@ export async function sendAiMessage(
     },
     { signal }
   );
-  return unwrap(response) || null;
+  const result = unwrap(response) || null;
+  if (result?.conversation_key) {
+    upsertConversationCache(
+      persona,
+      result.conversation_key,
+      message,
+      result?.conversation?.title || null
+    );
+  }
+  return result;
 }
 
 export async function renameAiConversation(persona, conversationKey, title) {
@@ -113,6 +201,11 @@ export async function renameAiConversation(persona, conversationKey, title) {
       conversationKey
     )}`,
     { title }
+  );
+  updateConversationCaches(persona, (rows) =>
+    rows.map((row) =>
+      row?.key === conversationKey ? { ...row, title } : row
+    )
   );
   return unwrap(response) || null;
 }
@@ -123,7 +216,30 @@ export async function archiveAiConversation(persona, conversationKey) {
       conversationKey
     )}/archive`
   );
+  removeConversationFromCache(persona, conversationKey);
   return unwrap(response) || null;
+}
+
+export async function deleteAiConversation(persona, conversationKey) {
+  const response = await axiosClient.delete(
+    `${personaPath(persona)}/conversations/${encodeURIComponent(
+      conversationKey
+    )}`
+  );
+  removeConversationFromCache(persona, conversationKey);
+  return unwrap(response) || null;
+}
+
+export function invalidateAiConversationCache(persona = null) {
+  if (!persona) {
+    conversationCache.clear();
+    toolCache.clear();
+    return;
+  }
+  for (const key of conversationCache.keys()) {
+    if (key.startsWith(`${persona}:`)) conversationCache.delete(key);
+  }
+  toolCache.delete(persona);
 }
 
 export async function createAiFeedback(input) {
@@ -275,14 +391,23 @@ export function aiErrorMessage(error) {
     return "";
   }
   const code = error?.response?.data?.code;
+  const details = Array.isArray(error?.response?.data?.details)
+    ? error.response.data.details.filter(Boolean).slice(0, 3)
+    : [];
   if (code === "AI_PROVIDER_DISABLED") {
-    return "The intelligence provider is safely disabled in this environment.";
+    return "The intelligence provider is not active for this request.";
   }
   if (code === "AI_PROVIDER_POLICY_SYSTEM_ADMIN_REQUIRED") {
     return "Only the original System Administrator can change CHALIN AI provider policy.";
   }
   if (code === "AI_GEMINI_API_KEY_REQUIRED") {
-    return "Gemini is selected but its protected server-side key is not configured. Select CHALIN Local or configure the staging key in Railway.";
+    return "Gemini is selected but its protected server-side key is not configured in this Railway service.";
+  }
+  if (code === "AI_GEMINI_FULL_CONTEXT_REQUIRES_PAID_TIER") {
+    return "Full private-data Gemini mode is requested, but the configured Gemini service tier is unpaid. CHALIN kept private data on Local.";
+  }
+  if (["AI_GEMINI_RESPONSE_FAILED", "AI_GEMINI_NETWORK_FAILED", "AI_PROVIDER_TIMEOUT"].includes(code)) {
+    return `Gemini could not complete this request${details.length ? ` (${details.join(", ")})` : ""}. CHALIN preserved the conversation; retry when the provider connection is available.`;
   }
   if (code === "AI_SCHEMA_NOT_READY") {
     return "The intelligence database foundation has not been prepared in this environment.";

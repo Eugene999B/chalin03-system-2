@@ -22,11 +22,13 @@ function row({
   conversation = "conv_prior",
   title = "Prior work",
   content,
+  role = "user",
   createdAt = "2026-08-09T08:00:00.000Z",
   sha = null,
 } = {}) {
   return {
     message_id: id,
+    message_role: role,
     conversation_key: conversation,
     conversation_title: title,
     content_text: content,
@@ -35,7 +37,7 @@ function row({
   };
 }
 
-test("memory ranking recalls relevant user context and deduplicates repeated content", () => {
+test("memory ranking recalls relevant scoped conversation context and deduplicates repeated content", () => {
   const memories = rankMemoryCandidates({
     query: "Atlas excavator finance decision",
     now: NOW,
@@ -60,6 +62,7 @@ test("memory ranking recalls relevant user context and deduplicates repeated con
 
   assert.equal(memories.length, 1);
   assert.equal(memories[0].memory_id, "M1");
+  assert.equal(memories[0].memory_role, "user");
   assert.equal(memories[0].verified_fact, false);
   assert.equal(memories[0].authority, "continuity_only");
   assert.match(memories[0].content, /Atlas excavator finance case/);
@@ -81,7 +84,8 @@ test("continuity wording allows recent-context fallback without pretending it is
   const policy = memoryPolicyPrompt();
   assert.match(policy, /not governed evidence or proof/i);
   assert.match(policy, /Never cite memory as \[E#\]/i);
-  assert.match(policy, /governed source wins/i);
+  assert.match(policy, /governed .* source wins/i);
+  assert.match(policy, /prior assistant messages.*may be wrong/i);
 });
 
 test("non-continuity queries with no lexical relationship do not inject random old context", () => {
@@ -95,21 +99,17 @@ test("non-continuity queries with no lexical relationship do not inject random o
   assert.deepEqual(memories, []);
 });
 
-test("memory summary never grants evidence authority", () => {
+test("memory summary never grants evidence authority and reports history roles", () => {
   const summary = memorySummary([
-    {
-      conversation_key: "conv_one",
-    },
-    {
-      conversation_key: "conv_one",
-    },
-    {
-      conversation_key: "conv_two",
-    },
+    { conversation_key: "conv_one", memory_role: "user" },
+    { conversation_key: "conv_one", memory_role: "assistant" },
+    { conversation_key: "conv_two", memory_role: "user" },
   ]);
   assert.deepEqual(summary, {
     recalled_count: 3,
     source_conversation_count: 2,
+    user_turn_count: 2,
+    assistant_turn_count: 1,
     continuity_only: true,
     evidence_authority: false,
     exact_scope_required: true,
@@ -147,7 +147,7 @@ test("current conversation resolution is exact-user persona and scope locked", a
   assert.deepEqual(calls[0].params, [7, "copilot", "spare_parts", 3, null, null]);
 });
 
-test("memory retrieval SQL excludes current conversation, assistant output, blocked content and archived conversations", async () => {
+test("memory retrieval excludes current/archived/blocked scope while allowing user and assistant continuity", async () => {
   const calls = [];
   const connection = {
     async query(sql, params) {
@@ -155,6 +155,7 @@ test("memory retrieval SQL excludes current conversation, assistant output, bloc
       return [[
         row({
           id: 8,
+          role: "assistant",
           content: "Atlas excavator decision from the prior conversation.",
         }),
       ]];
@@ -178,12 +179,14 @@ test("memory retrieval SQL excludes current conversation, assistant output, bloc
   assert.match(calls[0].sql, /conversation\.user_id = \?/);
   assert.match(calls[0].sql, /conversation\.persona = \?/);
   assert.match(calls[0].sql, /conversation\.conversation_status = 'active'/);
-  assert.match(calls[0].sql, /message\.message_role = 'user'/);
+  assert.match(calls[0].sql, /message\.message_role IN \('user', 'assistant'\)/);
   assert.match(calls[0].sql, /message\.safety_status IN \('allowed', 'redacted'\)/);
   assert.match(calls[0].sql, /conversation\.id <> \?/);
   assert.equal(calls[0].params[6], 99);
   assert.equal(calls[0].params[7], 99);
   assert.equal(memories.length, 1);
+  assert.equal(memories[0].memory_role, "assistant");
+  assert.equal(memories[0].authority, "continuity_only");
   assert.equal(memories[0].verified_fact, false);
 });
 
@@ -217,4 +220,5 @@ test("foundation registry exposes memory as a read-only continuity tool with no 
   assert.deepEqual(memory.required_permissions, ["ai.use", "ai.conversations.view"]);
   assert.match(memory.description, /same user's prior active conversations/i);
   assert.match(memory.description, /never governed evidence/i);
+  assert.equal(memory.input_schema.properties.limit.maximum, 24);
 });

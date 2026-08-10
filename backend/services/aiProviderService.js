@@ -9,15 +9,18 @@ const {
   validateProviderOutput,
 } = require("./aiSafetyService");
 
-const DEFAULT_PROVIDER_TIMEOUT_MS = 20000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
 const PUBLIC_SAFE_SOCIAL_MAX_LENGTH = 240;
+const PUBLIC_SAFE_GENERAL_MAX_LENGTH = 12000;
 const PUBLIC_SAFE_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|good\s+(?:morning|afternoon|evening)|greetings)\b|(?:how\s+(?:are|r)\s+you|how(?:'s|\s+is)\s+it\s+going|how\s+are\s+you\s+doing|what(?:'s|\s+is)\s+up)\b|(?:thanks|thank\s+you|thank\s+you\s+very\s+much|okay|ok|cool|great|nice|bye|goodbye|see\s+you)\b|(?:who\s+are\s+you|what\s+can\s+you\s+do|how\s+can\s+you\s+help(?:\s+me)?|can\s+you\s+help(?:\s+me)?)\b)[\s!.?,'-]*$/i;
 const PUBLIC_SAFE_GREETING_PREFIX = /^(?:hi|hello|hey|hiya|good\s+(?:morning|afternoon|evening)|greetings)\b/i;
 const PRIVATE_BUSINESS_MARKERS = /\b(?:account|applicant|approval|arrears|audit|balance|bank|branch|cash|collection|contract|credit|customer|database|debt|debtor|deduction|employee|equipment|expense|finance|hire|inventory|invoice|loan|mining|payment|payroll|profit|quotation|receipt|revenue|salary|sale|sales|security|site|staff|stock|supplier|transaction|worker|wage)\b/i;
 const SENSITIVE_LITERAL_MARKERS = /(?:https?:\/\/|www\.|@|\b(?:ghs|gh¢|usd|eur|gbp)\b|\d{3,})/i;
 const PUBLIC_SAFE_COPILOT_INSTRUCTION =
   "This is a public-safe social conversation turn. Respond naturally and briefly as CHALIN Copilot. You may greet the user, acknowledge thanks, explain your general role, or offer help. Do not introduce, infer, summarize, request, or expose any CHALIN business, customer, staff, payroll, financial, operational, security, or other private facts. No company evidence is supplied or required for this social turn.";
+const PUBLIC_SAFE_GENERAL_INSTRUCTION =
+  "This is a public-safe general reasoning turn. Respond as a highly capable CHALIN Copilot using general knowledge, clear reasoning, creativity and useful judgment. Answer the actual question directly and deeply enough to be useful. You have intentionally not been given prior CHALIN conversation history, company evidence, private records or business tools for this turn. Do not imply access to private CHALIN facts and do not invent company-specific data.";
 
 class AiProviderError extends Error {
   constructor(message, { code = "AI_PROVIDER_ERROR", statusCode = 503, details = [] } = {}) {
@@ -40,7 +43,7 @@ function safePositiveInteger(value, fallback, maximum) {
   return Math.min(number, maximum);
 }
 
-function cleanMessageContent(value, maximum = 8000) {
+function cleanMessageContent(value, maximum = 32000) {
   return String(value ?? "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
@@ -52,41 +55,60 @@ function latestUserMessage(messages = []) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (String(message?.role || "").toLowerCase() !== "user") continue;
-    const content = cleanMessageContent(message?.content, 2000);
+    const content = cleanMessageContent(message?.content, 16000);
     if (content) return content;
   }
   return "";
+}
+
+function safeExternalClassification(providerContext = {}) {
+  const explicitClassification = cleanMessageContent(
+    providerContext?.data_classification,
+    30
+  ).toLowerCase();
+  return !explicitClassification || explicitClassification === "public";
+}
+
+function hasPrivateBusinessSignal(prompt) {
+  return PRIVATE_BUSINESS_MARKERS.test(prompt) || SENSITIVE_LITERAL_MARKERS.test(prompt);
 }
 
 function isPublicSafeSocialTurn({ messages = [], providerContext = {} } = {}) {
   const persona = cleanMessageContent(providerContext?.persona, 30).toLowerCase();
   if (persona !== "copilot") return false;
   if (providerContext?.live_data_required === true) return false;
-  const explicitClassification = cleanMessageContent(
-    providerContext?.data_classification,
-    30
-  ).toLowerCase();
-  if (explicitClassification && explicitClassification !== "public") return false;
+  if (!safeExternalClassification(providerContext)) return false;
 
   const prompt = latestUserMessage(messages);
   if (!prompt || prompt.length > PUBLIC_SAFE_SOCIAL_MAX_LENGTH) return false;
-  if (PRIVATE_BUSINESS_MARKERS.test(prompt) || SENSITIVE_LITERAL_MARKERS.test(prompt)) {
-    return false;
-  }
+  if (hasPrivateBusinessSignal(prompt)) return false;
   if (PUBLIC_SAFE_SOCIAL_PATTERN.test(prompt)) return true;
 
-  // Tolerate short, imperfectly typed greetings such as "hi ow ae you doing"
-  // while still refusing the route whenever any private/business marker appears.
   return PUBLIC_SAFE_GREETING_PREFIX.test(prompt) && prompt.length <= 100;
 }
 
-function publicSafeSocialMessages(messages = []) {
+function isPublicSafeGeneralTurn({ messages = [], providerContext = {} } = {}) {
+  const persona = cleanMessageContent(providerContext?.persona, 30).toLowerCase();
+  if (persona !== "copilot") return false;
+  if (providerContext?.live_data_required === true) return false;
+  if (!safeExternalClassification(providerContext)) return false;
+  const prompt = latestUserMessage(messages);
+  if (!prompt || prompt.length > PUBLIC_SAFE_GENERAL_MAX_LENGTH) return false;
+  if (hasPrivateBusinessSignal(prompt)) return false;
+  return true;
+}
+
+function publicSafeMessages(messages = [], instruction = PUBLIC_SAFE_GENERAL_INSTRUCTION) {
   const prompt = latestUserMessage(messages);
   if (!prompt) return Object.freeze([]);
   return Object.freeze([
-    Object.freeze({ role: "system", content: PUBLIC_SAFE_COPILOT_INSTRUCTION }),
+    Object.freeze({ role: "system", content: instruction }),
     Object.freeze({ role: "user", content: prompt }),
   ]);
+}
+
+function publicSafeSocialMessages(messages = []) {
+  return publicSafeMessages(messages, PUBLIC_SAFE_COPILOT_INSTRUCTION);
 }
 
 function withProviderTimeout(promise, timeoutMs, providerKey, onTimeout = null) {
@@ -119,7 +141,7 @@ function normalizeProviderResult(result, providerKey) {
   }
 
   const toolCalls = Array.isArray(result.tool_calls)
-    ? result.tool_calls.slice(0, 10).map((call) => ({
+    ? result.tool_calls.slice(0, 20).map((call) => ({
         id: String(call?.id || "").slice(0, 120) || null,
         tool_key: String(call?.tool_key || call?.name || "").slice(0, 150),
         input: call?.input && typeof call.input === "object" ? call.input : {},
@@ -265,6 +287,8 @@ function safeProviderSelection(selection) {
     data_classification: selection.data_classification || null,
     reason_code: selection.reason_code || null,
     external_network_used: selection.external_network_used === true,
+    full_context_requested: selection.full_context_requested === true,
+    full_context_active: selection.full_context_active === true,
   });
 }
 
@@ -273,7 +297,7 @@ async function generateProviderResponse({
   providerKey = null,
   messages,
   tools = [],
-  maxOutputTokens = 1200,
+  maxOutputTokens = 4000,
   timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
   providerContext = {},
   env = process.env,
@@ -287,25 +311,32 @@ async function generateProviderResponse({
   let effectiveMessages = Array.isArray(messages) ? messages : [];
   let effectiveTools = Array.isArray(tools) ? tools : [];
 
+  const eligibleForPolicyRewrite = !selected && !providerKey;
   const publicSafeSocialTurn =
-    !selected &&
-    !providerKey &&
+    eligibleForPolicyRewrite &&
     isPublicSafeSocialTurn({
       messages: effectiveMessages,
       providerContext: effectiveProviderContext,
     });
+  const publicSafeGeneralTurn =
+    eligibleForPolicyRewrite &&
+    !publicSafeSocialTurn &&
+    isPublicSafeGeneralTurn({
+      messages: effectiveMessages,
+      providerContext: effectiveProviderContext,
+    });
 
-  if (publicSafeSocialTurn) {
-    // This privacy boundary is intentionally lossy: a harmless social turn may
-    // go to a public-capable external provider, but no prior conversation,
-    // approved business evidence, or CHALIN tool definition crosses with it.
-    effectiveMessages = publicSafeSocialMessages(effectiveMessages);
+  if (publicSafeSocialTurn || publicSafeGeneralTurn) {
+    effectiveMessages = publicSafeSocialTurn
+      ? publicSafeSocialMessages(effectiveMessages)
+      : publicSafeMessages(effectiveMessages);
     effectiveTools = [];
     effectiveProviderContext = {
       ...effectiveProviderContext,
       data_classification: "public",
       live_data_required: false,
-      public_safe_social_turn: true,
+      public_safe_social_turn: publicSafeSocialTurn,
+      public_safe_general_turn: publicSafeGeneralTurn,
     };
   }
 
@@ -322,6 +353,7 @@ async function generateProviderResponse({
       data_classification: selection.data_classification,
       provider_model_override: selection.effective_model,
       provider_selection_reason: selection.reason_code,
+      full_context_active: selection.full_context_active === true,
     };
   }
 
@@ -330,7 +362,7 @@ async function generateProviderResponse({
     aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
   const key = cleanProviderKey(selected.key || providerKey || "disabled") || "disabled";
   const safeMessages = sanitizeProviderMessages(effectiveMessages);
-  const safeTools = effectiveTools.slice(0, 50);
+  const safeTools = effectiveTools.slice(0, 80);
   const started = Date.now();
   const controller = new AbortController();
 
@@ -340,12 +372,12 @@ async function generateProviderResponse({
         selected.generate({
           messages: safeMessages,
           tools: safeTools,
-          max_output_tokens: safePositiveInteger(maxOutputTokens, 1200, 8000),
+          max_output_tokens: safePositiveInteger(maxOutputTokens, 4000, 32768),
           provider_context: Object.freeze(effectiveProviderContext),
           signal: controller.signal,
         })
       ),
-      safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 60000),
+      safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 90000),
       key,
       () => controller.abort()
     );
@@ -378,6 +410,8 @@ module.exports = {
   PRIVATE_BUSINESS_MARKERS,
   PROVIDER_KEY_PATTERN,
   PUBLIC_SAFE_COPILOT_INSTRUCTION,
+  PUBLIC_SAFE_GENERAL_INSTRUCTION,
+  PUBLIC_SAFE_GENERAL_MAX_LENGTH,
   PUBLIC_SAFE_GREETING_PREFIX,
   PUBLIC_SAFE_SOCIAL_MAX_LENGTH,
   PUBLIC_SAFE_SOCIAL_PATTERN,
@@ -385,10 +419,14 @@ module.exports = {
   aiProviderRegistry,
   cleanProviderKey,
   generateProviderResponse,
+  hasPrivateBusinessSignal,
+  isPublicSafeGeneralTurn,
   isPublicSafeSocialTurn,
   latestUserMessage,
   normalizeProviderResult,
+  publicSafeMessages,
   publicSafeSocialMessages,
+  safeExternalClassification,
   safePositiveInteger,
   safeProviderSelection,
   withProviderTimeout,

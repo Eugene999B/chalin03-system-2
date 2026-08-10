@@ -3,6 +3,7 @@
 const { aiProviderRegistry } = require("./aiProviderService");
 const {
   resolveAiProviderSelection,
+  safetyIdentifierForUser,
 } = require("./aiProviderPolicyService");
 const {
   resolveContextProfile,
@@ -45,7 +46,7 @@ class ContextualAiProvider {
   async generate({
     messages = [],
     tools = [],
-    max_output_tokens = 1200,
+    max_output_tokens = 4000,
     provider_context = {},
     signal = undefined,
   } = {}) {
@@ -89,6 +90,7 @@ class ContextualAiProvider {
         ...contextProviderBrief(this.profile),
         provider_model_override: this.selection.effective_model,
         provider_selection_reason: this.selection.reason_code,
+        full_context_active: this.selection.full_context_active === true,
       }),
       signal,
     });
@@ -109,6 +111,7 @@ async function createContextualAiProvider({
       persona: profile.persona,
       data_classification: profile.classification,
       context_key: profile.key,
+      safety_identifier: safetyIdentifierForUser(req?.user?.id),
     },
     messages: [],
     env,

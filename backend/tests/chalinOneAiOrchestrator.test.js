@@ -10,14 +10,16 @@ const {
   sumProviderUsage,
 } = require("../services/aiOrchestratorService");
 
-test("persona instructions prohibit operational execution and require evidence", () => {
+test("persona instructions require deep synthesis while preserving evidence and execution boundaries", () => {
   for (const persona of ["copilot", "executive", "guide"]) {
     assert.match(PERSONA_INSTRUCTIONS[persona], /evidence/i);
     assert.match(PERSONA_INSTRUCTIONS[persona], /never claim/i);
   }
-  assert.match(PERSONA_INSTRUCTIONS.copilot, /active workspace/i);
-  assert.match(PERSONA_INSTRUCTIONS.executive, /facts.*assumptions.*scenarios/i);
-  assert.match(PERSONA_INSTRUCTIONS.guide, /public evidence/i);
+  assert.match(PERSONA_INSTRUCTIONS.copilot, /business intelligence partner/i);
+  assert.match(PERSONA_INSTRUCTIONS.copilot, /raw operational snapshots into meaning/i);
+  assert.match(PERSONA_INSTRUCTIONS.executive, /challenge the first explanation/i);
+  assert.match(PERSONA_INSTRUCTIONS.executive, /risks, opportunities/i);
+  assert.match(PERSONA_INSTRUCTIONS.guide, /published public evidence/i);
 });
 
 test("provider message composition sends the current prompt exactly once", () => {
@@ -47,6 +49,32 @@ test("provider message composition sends the current prompt exactly once", () =>
   assert.equal(messages.filter((message) => message.role === "system").length, 2);
   assert.match(messages[1].content, /\[E1\]/);
   assert.match(messages[1].content, /Inspection is required/);
+});
+
+test("continuity memory is injected separately and explicitly has no evidence authority", () => {
+  const messages = providerMessages({
+    persona: "copilot",
+    history: [],
+    prompt: "Continue our inventory plan.",
+    evidence: [],
+    continuityMemory: [
+      {
+        memory_id: "M1",
+        memory_role: "assistant",
+        conversation_title: "Inventory Plan",
+        created_at: "2026-08-09T10:00:00Z",
+        content: "We discussed aging stock and reorder policy.",
+      },
+    ],
+  });
+  const continuity = messages.find(
+    (message) => message.role === "system" && /continuity context/i.test(message.content)
+  );
+  assert.ok(continuity);
+  assert.match(continuity.content, /not governed evidence or proof/i);
+  assert.match(continuity.content, /Never cite memory as \[E#\]/i);
+  assert.match(continuity.content, /may be wrong/i);
+  assert.match(continuity.content, /Inventory Plan/);
 });
 
 test("tool result messages remain bounded while governed evidence stays in the evidence block", () => {

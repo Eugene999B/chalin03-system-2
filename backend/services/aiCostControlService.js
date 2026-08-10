@@ -1,9 +1,13 @@
 "use strict";
 
-const DEFAULT_REQUEST_TOKEN_LIMIT = 6000;
-const DEFAULT_DAILY_USER_TOKEN_LIMIT = 100000;
-const DEFAULT_DAILY_WORKSPACE_TOKEN_LIMIT = 1000000;
-const DEFAULT_MAX_TOOL_CALLS = 6;
+// These are abuse/transport guardrails, not product allowances. CHALIN no longer
+// imposes the tiny 6k-request / 100k-daily limits that made long reasoning and
+// continuity feel artificially capped. Provider context/rate limits remain the
+// outer technical boundary and explicit monthly cost enforcement remains opt-in.
+const DEFAULT_REQUEST_TOKEN_LIMIT = 262144;
+const DEFAULT_DAILY_USER_TOKEN_LIMIT = 10000000;
+const DEFAULT_DAILY_WORKSPACE_TOKEN_LIMIT = 100000000;
+const DEFAULT_MAX_TOOL_CALLS = 20;
 const MAX_CONFIGURED_TOKEN_LIMIT = 10000000;
 
 class AiBudgetError extends Error {
@@ -61,7 +65,7 @@ function buildRequestBudget({ messages = [], tools = [], env = process.env } = {
   const estimatedInputTokens = estimateTokens({ messages, tools });
   if (estimatedInputTokens >= config.request_token_limit) {
     throw new AiBudgetError(
-      "This AI request is too large for the configured request budget.",
+      "This AI request is too large for the configured transport budget.",
       {
         code: "AI_REQUEST_TOKEN_LIMIT_EXCEEDED",
         statusCode: 413,
@@ -78,7 +82,7 @@ function buildRequestBudget({ messages = [], tools = [], env = process.env } = {
     estimated_input_tokens: estimatedInputTokens,
     maximum_output_tokens: Math.max(
       1,
-      config.request_token_limit - estimatedInputTokens
+      Math.min(32768, config.request_token_limit - estimatedInputTokens)
     ),
   });
 }
@@ -96,7 +100,7 @@ function assertToolCallBudget(toolCallCount, budget) {
 
 function assertDailyUsage({ userTokens = 0, workspaceTokens = 0, budget }) {
   if (Number(userTokens) >= budget.daily_user_token_limit) {
-    throw new AiBudgetError("The daily AI allowance for this account is exhausted.", {
+    throw new AiBudgetError("The technical daily AI guardrail for this account was reached.", {
       code: "AI_DAILY_USER_LIMIT_EXCEEDED",
       details: {
         used_tokens: Number(userTokens),
@@ -105,7 +109,7 @@ function assertDailyUsage({ userTokens = 0, workspaceTokens = 0, budget }) {
     });
   }
   if (Number(workspaceTokens) >= budget.daily_workspace_token_limit) {
-    throw new AiBudgetError("The daily AI allowance for this workspace is exhausted.", {
+    throw new AiBudgetError("The technical daily AI guardrail for this workspace was reached.", {
       code: "AI_DAILY_WORKSPACE_LIMIT_EXCEEDED",
       details: {
         used_tokens: Number(workspaceTokens),

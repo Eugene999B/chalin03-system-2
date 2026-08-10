@@ -1,0 +1,59 @@
+.ci-chat-title {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -10px 0 22px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ci-slate-200);
+  background: rgba(244, 247, 251, 0.96);
+  backdrop-filter: blur(10px);
+  color: var(--ci-navy-900);
+  font-size: .82rem;
+}
+
+.ci-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  margin: 2px 0 22px 50px;
+  padding: 9px 12px;
+  border: 1px solid var(--ci-slate-200);
+  border-radius: 999px;
+  background: var(--ci-white);
+  color: var(--ci-slate-700);
+  font-size: .72rem;
+  box-shadow: 0 6px 18px rgba(7, 26, 51, .04);
+}
+
+.ci-thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ci-blue-600);
+  animation: ciThinkingBreathe 1.8s ease-in-out infinite;
+}
+
+.ci-sync-label {
+  display: block;
+  min-height: 16px;
+  padding: 0 8px 3px;
+  color: var(--ci-slate-500);
+  font-size: .62rem;
+  font-weight: 700;
+}
+
+@keyframes ciThinkingBreathe {
+  0%, 100% { opacity: .48; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-thinking-dot { animation: none; }
+  .ci-chat-stream { scroll-behavior: auto; }
+}
+
+@media (max-width: 620px) {
+  .ci-thinking { margin-left: 41px; }
+  .ci-chat-title { margin-top: -4px; }
+}

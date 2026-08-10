@@ -5,128 +5,119 @@ const assert = require("node:assert/strict");
 
 const {
   DEFAULT_MODELS,
-  credentialConfigured,
   effectiveSelection,
-  externalPrivateDataAllowed,
+  fallbackProfile,
+  getProviderControlSnapshot,
+  normalizePersona,
+  safetyIdentifierForUser,
   strictPersona,
   updateProviderProfile,
 } = require("../services/aiProviderPolicyService");
 
-function profile(providerKey, modelKey = null) {
+function profile(provider, model = null, configuration = {}) {
   return {
-    profile_key: `test-${providerKey}`,
-    provider_key: providerKey,
-    model_key: modelKey || DEFAULT_MODELS[providerKey],
+    profile_key: "chalin-copilot",
+    provider_key: provider,
+    model_key: model || DEFAULT_MODELS[provider],
     source: "test",
+    configuration,
   };
 }
 
-test("CHALIN Local remains zero-network for private Copilot and Executive context", () => {
-  for (const persona of ["copilot", "executive"]) {
-    const selection = effectiveSelection(profile("local"), {
-      persona,
-      providerContext: {},
-      env: {},
-    });
-    assert.equal(selection.selected_provider, "local");
-    assert.equal(selection.effective_provider, "local");
-    assert.equal(selection.data_classification, "internal");
-    assert.equal(selection.external_network_used, false);
-  }
+test("provider policy defaults to CHALIN Local and ignores legacy AI_PROVIDER activation", () => {
+  const fallback = fallbackProfile("copilot", {
+    AI_PROVIDER: "openai",
+    OPENAI_API_KEY: "test-secret-that-must-not-activate-anything",
+  });
+  assert.equal(fallback.provider_key, "local");
+  assert.equal(fallback.model_key, DEFAULT_MODELS.local);
+  assert.equal(fallback.source, "governed_local_default");
 });
 
-test("Gemini Free may serve public Guide when its protected key is configured", () => {
-  const env = {
-    GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
-    GEMINI_SERVICE_TIER: "free",
-  };
+test("provider persona inference remains strict and deterministic", () => {
+  assert.equal(normalizePersona("guide"), "guide");
+  assert.equal(normalizePersona("executive"), "executive");
+  assert.equal(normalizePersona(null, [{ role: "system", content: "You are Chalin Guide." }]), "guide");
+  assert.equal(normalizePersona(null, [{ role: "system", content: "You are Chalin Executive." }]), "executive");
+  assert.equal(normalizePersona(null, []), "copilot");
+  assert.throws(() => strictPersona("unknown"), (error) => error.code === "AI_PROVIDER_PERSONA_INVALID");
+});
+
+test("missing Gemini key safely falls back to Local", () => {
   const selection = effectiveSelection(profile("gemini"), {
     persona: "guide",
-    providerContext: {},
-    env,
+    providerContext: { data_classification: "public" },
+    env: {},
   });
-  assert.equal(selection.data_classification, "public");
   assert.equal(selection.selected_provider, "gemini");
+  assert.equal(selection.effective_provider, "local");
+  assert.equal(selection.reason_code, "AI_PROVIDER_CREDENTIAL_MISSING_LOCAL_FALLBACK");
+});
+
+test("Gemini Free is allowed for public Guide content", () => {
+  const selection = effectiveSelection(profile("gemini"), {
+    persona: "guide",
+    providerContext: { data_classification: "public" },
+    env: {
+      GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "free",
+    },
+  });
   assert.equal(selection.effective_provider, "gemini");
+  assert.equal(selection.effective_model, "gemini-3.6-flash");
   assert.equal(selection.external_network_used, true);
-  assert.equal(selection.gemini_service_tier, "free");
+  assert.equal(selection.external_private_data_allowed, false);
 });
 
-test("Gemini Free can be selected for staff but private evidence is forced to Local", () => {
-  const env = {
-    GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
-    GEMINI_SERVICE_TIER: "free",
-    AI_ALLOW_EXTERNAL_PRIVATE_DATA: "true",
-  };
-  for (const persona of ["copilot", "executive"]) {
-    const selection = effectiveSelection(profile("gemini"), {
-      persona,
-      providerContext: {},
-      env,
-    });
-    assert.equal(selection.selected_provider, "gemini");
-    assert.equal(selection.effective_provider, "local");
-    assert.equal(selection.effective_model, DEFAULT_MODELS.local);
-    assert.equal(
-      selection.reason_code,
-      "AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK"
-    );
-    assert.equal(selection.external_network_used, false);
-  }
-});
-
-test("paid Gemini still requires an explicit private external-data policy", () => {
-  const base = {
-    GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
-    GEMINI_SERVICE_TIER: "paid",
-  };
-  const blocked = effectiveSelection(profile("gemini"), {
-    persona: "executive",
-    providerContext: { data_classification: "confidential" },
-    env: base,
+test("Gemini Free cannot receive staff private data and falls back to Local", () => {
+  const selection = effectiveSelection(profile("gemini"), {
+    persona: "copilot",
+    providerContext: { data_classification: "internal" },
+    env: {
+      GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "free",
+    },
   });
-  assert.equal(blocked.effective_provider, "local");
+  assert.equal(selection.effective_provider, "local");
+  assert.equal(selection.reason_code, "AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK");
+});
 
-  const allowed = effectiveSelection(profile("gemini"), {
-    persona: "executive",
-    providerContext: { data_classification: "confidential" },
-    env: { ...base, AI_ALLOW_EXTERNAL_PRIVATE_DATA: "true" },
+test("full Gemini context is paid-tier and enabling-account bound", () => {
+  const ownerId = safetyIdentifierForUser(1);
+  const fullProfile = profile("gemini", "gemini-3.6-flash", {
+    system_admin_full_context: true,
+    full_context_safety_identifier: ownerId,
   });
-  assert.equal(allowed.effective_provider, "gemini");
-  assert.equal(allowed.external_private_data_allowed, true);
+  const paid = effectiveSelection(fullProfile, {
+    persona: "copilot",
+    providerContext: {
+      data_classification: "confidential",
+      safety_identifier: ownerId,
+    },
+    env: {
+      GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "paid",
+    },
+  });
+  assert.equal(paid.effective_provider, "gemini");
+  assert.equal(paid.full_context_active, true);
+
+  const otherUser = effectiveSelection(fullProfile, {
+    persona: "copilot",
+    providerContext: {
+      data_classification: "confidential",
+      safety_identifier: safetyIdentifierForUser(2),
+    },
+    env: {
+      GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "paid",
+    },
+  });
+  assert.equal(otherUser.effective_provider, "local");
+  assert.equal(otherUser.full_context_active, false);
 });
 
-test("missing external credentials always fail closed to Local", () => {
-  for (const providerKey of ["gemini", "openai"]) {
-    const selection = effectiveSelection(profile(providerKey), {
-      persona: "guide",
-      providerContext: { data_classification: "public" },
-      env: {},
-    });
-    assert.equal(selection.effective_provider, "local");
-    assert.equal(
-      selection.reason_code,
-      "AI_PROVIDER_CREDENTIAL_MISSING_LOCAL_FALLBACK"
-    );
-  }
-});
-
-test("provider credential and private-data helpers never require storing a key in policy data", () => {
-  const env = {
-    GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
-    GEMINI_SERVICE_TIER: "free",
-    AI_ALLOW_EXTERNAL_PRIVATE_DATA: "true",
-  };
-  assert.equal(credentialConfigured("gemini", env), true);
-  assert.equal(externalPrivateDataAllowed("gemini", env), false);
-  assert.equal(externalPrivateDataAllowed("local", env), false);
-});
-
-test("provider-control writes reject unknown personas instead of silently targeting Copilot", async () => {
-  assert.throws(
-    () => strictPersona("garbage"),
-    (error) => error.code === "AI_PROVIDER_PERSONA_INVALID"
-  );
+test("invalid provider-control persona fails before database access", async () => {
   await assert.rejects(
     () =>
       updateProviderProfile({
@@ -152,11 +143,16 @@ test("provider-control persists provider/model policy without accepting or retur
         return [[{
           profile_key: "chalin-guide",
           provider_key: "gemini",
-          model_key: "gemini-2.5-flash",
+          model_key: "gemini-3.6-flash",
           profile_status: "staging",
           is_default: 0,
-          per_request_token_limit: 4000,
-          daily_token_limit: 100000,
+          configuration_json: JSON.stringify({
+            managed_by: "system_administrator",
+            secret_storage: "environment_only",
+            system_admin_full_context: false,
+          }),
+          per_request_token_limit: 262144,
+          daily_token_limit: 10000000,
           monthly_cost_limit_micros: 0,
           updated_at: new Date("2026-08-10T00:00:00Z"),
         }]];
@@ -173,8 +169,30 @@ test("provider-control persists provider/model policy without accepting or retur
     connection,
   });
   assert.equal(result.provider_key, "gemini");
-  assert.equal(result.model_key, "gemini-2.5-flash");
-  assert.equal(Object.hasOwn(result, "configuration"), false);
+  assert.equal(result.model_key, "gemini-3.6-flash");
+  assert.equal(result.configuration?.secret_storage, "environment_only");
+  assert.equal(result.configuration?.system_admin_full_context, false);
   assert.equal(statements.some((item) => /ai_provider_profiles/i.test(item.sql)), true);
-  assert.doesNotMatch(JSON.stringify(statements), /API_KEY|secret-[a-z0-9]/i);
+  assert.doesNotMatch(JSON.stringify(result), /GEMINI_API_KEY|GOOGLE_API_KEY|OPENAI_API_KEY/i);
+  assert.doesNotMatch(JSON.stringify(statements), /test-gemini-secret|secret-[a-z0-9]/i);
+});
+
+test("provider-control snapshot exposes readiness booleans, not secret values", async () => {
+  const connection = {
+    async query() {
+      return [[]];
+    },
+  };
+  const snapshot = await getProviderControlSnapshot({
+    env: {
+      GEMINI_API_KEY: "test-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "free",
+    },
+    connection,
+  });
+  assert.equal(snapshot.providers.gemini.credential_configured, true);
+  assert.equal(snapshot.providers.gemini.zero_cost, true);
+  assert.equal(snapshot.providers.gemini.private_data_supported, false);
+  assert.equal(snapshot.privacy.provider_secrets_stored_in_database, false);
+  assert.doesNotMatch(JSON.stringify(snapshot), /test-gemini-secret/);
 });

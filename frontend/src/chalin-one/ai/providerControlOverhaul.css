@@ -1,0 +1,40 @@
+.aipc-full-context {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px !important;
+  padding: 12px;
+  border: 1px solid rgba(158, 231, 255, .16);
+  border-radius: 12px;
+  background: rgba(158, 231, 255, .045);
+}
+
+.aipc-full-context input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: #9ee7ff;
+}
+
+.aipc-full-context span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aipc-full-context strong {
+  color: #f4f8fb;
+  font-size: .75rem;
+}
+
+.aipc-full-context small {
+  color: #9eb0bf;
+  font-size: .64rem;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.aipc-full-context:focus-within {
+  border-color: rgba(158, 231, 255, .48);
+  box-shadow: 0 0 0 3px rgba(158, 231, 255, .08);
+}

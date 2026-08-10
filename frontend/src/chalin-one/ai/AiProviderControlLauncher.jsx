@@ -10,17 +10,17 @@ const PERSONAS = Object.freeze([
   Object.freeze({
     key: "guide",
     title: "Public Chalin Guide",
-    description: "Anonymous public website assistant. Only published public evidence is permitted.",
+    description: "Anonymous public website assistant. Published public evidence only.",
   }),
   Object.freeze({
     key: "copilot",
     title: "Staff Copilot",
-    description: "Permission-scoped operational assistant. Private data stays Local unless an approved private external tier is enabled.",
+    description: "Your main CHALIN assistant for conversation, operational intelligence, tools and long-running work.",
   }),
   Object.freeze({
     key: "executive",
     title: "Chalin Executive",
-    description: "Executive intelligence. Confidential business evidence defaults to CHALIN Local under the current no-paid policy.",
+    description: "Deep executive reasoning across the governed business evidence available to the signed-in executive account.",
   }),
 ]);
 
@@ -33,23 +33,29 @@ function providerLabel(provider) {
 
 function selectionNote(selection) {
   const reason = String(selection?.reason_code || "");
+  if (reason === "AI_GEMINI_SYSTEM_ADMIN_FULL_CONTEXT") {
+    return "Full Gemini Intelligence is active for the administrator account that enabled it.";
+  }
+  if (reason === "AI_GEMINI_FULL_CONTEXT_REQUIRES_PAID_TIER") {
+    return "Full Gemini Intelligence is requested, but this Gemini project is still on an unpaid tier. Private/confidential data therefore remains on CHALIN Local.";
+  }
   if (reason === "AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK") {
-    return "Gemini Free is selected, but this private surface automatically uses CHALIN Local.";
+    return "Gemini handles public/general reasoning, while private business evidence stays on CHALIN Local on the unpaid tier.";
   }
   if (reason === "AI_EXTERNAL_PRIVATE_DATA_LOCAL_FALLBACK") {
-    return "The external provider is selected, but private data is blocked to CHALIN Local by policy.";
+    return "The external provider is selected, but private data is blocked to CHALIN Local by server policy.";
   }
   if (reason === "AI_PROVIDER_CREDENTIAL_MISSING_LOCAL_FALLBACK") {
-    return "The selected external provider has no protected server credential, so CHALIN Local is active.";
+    return "The selected external provider has no recognized server credential, so CHALIN Local is active.";
   }
-  return "The selected provider is active for this surface under the current privacy policy.";
+  return "The selected provider is active for this surface under the current account and data policy.";
 }
 
 function ProviderBadge({ provider }) {
   const ready = provider?.credential_required !== true || provider?.credential_configured === true;
   return (
     <span className="aipc-provider-badge" data-ready={ready ? "true" : "false"}>
-      {provider?.zero_cost ? "Zero-cost" : "Paid/optional"} · {ready ? "Ready" : "Key not configured"}
+      {provider?.zero_cost ? "Zero-cost" : "External"} · {ready ? "Ready" : "Key not configured"}
     </span>
   );
 }
@@ -91,7 +97,7 @@ export default function AiProviderControlLauncher() {
 
   if (!loading && !canManage) return null;
 
-  async function changeProvider(persona, providerKey) {
+  async function savePersona(persona, providerKey, fullContextAccess) {
     if (!canManage || saving) return;
     setSaving(persona);
     setSaved("");
@@ -100,6 +106,7 @@ export default function AiProviderControlLauncher() {
       const result = await updateAiProviderControl(persona, {
         providerKey,
         modelKey: null,
+        fullContextAccess,
       });
       setControl({
         ...(result?.control || control || {}),
@@ -112,6 +119,19 @@ export default function AiProviderControlLauncher() {
     } finally {
       setSaving("");
     }
+  }
+
+  async function changeProvider(persona, providerKey) {
+    const profile = control?.profiles?.[persona] || {};
+    const keepFullContext =
+      providerKey === "gemini" && profile.full_context_requested === true;
+    await savePersona(persona, providerKey, keepFullContext);
+  }
+
+  async function changeFullContext(persona, enabled) {
+    const profile = control?.profiles?.[persona] || {};
+    const selected = profile?.selection?.selected_provider || profile.provider_key || "gemini";
+    await savePersona(persona, selected === "gemini" ? selected : "gemini", enabled);
   }
 
   return (
@@ -139,17 +159,17 @@ export default function AiProviderControlLauncher() {
             <div>
               <span className="aipc-eyebrow">System Administrator</span>
               <h2 id="ai-provider-control-title">CHALIN AI Provider Control</h2>
-              <p>Choose the preferred engine for each intelligence surface. Privacy routing can override an unsafe selection.</p>
+              <p>Choose the reasoning engine and, where permitted by the provider tier, bind full private business context to your administrator account.</p>
             </div>
             <button type="button" aria-label="Close AI Provider Control" onClick={() => setOpen(false)}>×</button>
           </header>
 
           <div className="aipc-notice">
-            API keys are never entered or stored here. External provider secrets stay server-side in the protected Railway environment. Under the current no-paid policy, Gemini Free is public-only and private business data falls back to CHALIN Local.
+            API keys never enter this page. Gemini can be the primary conversational/reasoning engine. Full private/confidential context is account-bound and activates only on a Gemini tier that permits private-data processing; credentials and cross-user data are never exposed.
           </div>
 
           {error ? <div className="aipc-error" role="alert">{error}</div> : null}
-          {loading ? <div className="aipc-state" role="status">Loading governed provider policy…</div> : null}
+          {loading ? <div className="aipc-state" role="status">Loading provider policy…</div> : null}
 
           {!loading && canManage ? (
             <div className="aipc-personas">
@@ -158,6 +178,8 @@ export default function AiProviderControlLauncher() {
                 const selection = profile.selection || {};
                 const selected = selection.selected_provider || profile.provider_key || "local";
                 const effective = selection.effective_provider || selected;
+                const fullContextRequested = profile.full_context_requested === true;
+                const supportsFullContext = persona.key !== "guide";
                 return (
                   <article className="aipc-card" key={persona.key}>
                     <div className="aipc-card-head">
@@ -183,12 +205,32 @@ export default function AiProviderControlLauncher() {
                       </select>
                     </label>
 
+                    {supportsFullContext ? (
+                      <label className="aipc-full-context">
+                        <input
+                          type="checkbox"
+                          checked={fullContextRequested}
+                          disabled={saving === persona.key}
+                          onChange={(event) => changeFullContext(persona.key, event.target.checked)}
+                        />
+                        <span>
+                          <strong>Full Gemini Intelligence</strong>
+                          <small>
+                            Bind Gemini private/internal business context to the administrator account that enables this setting. Current status: {selection.full_context_active ? "active" : selection.full_context_requires_paid_tier ? "waiting for paid/private Gemini tier" : fullContextRequested ? "requested" : "off"}.
+                          </small>
+                        </span>
+                      </label>
+                    ) : null}
+
                     <div className="aipc-route">
                       <span>Selected <strong>{providerLabel(providers[selected])}</strong></span>
                       <span aria-hidden="true">→</span>
                       <span>Effective <strong>{providerLabel(providers[effective])}</strong></span>
                     </div>
                     <p className="aipc-reason">{selectionNote(selection)}</p>
+                    <p className="aipc-reason">
+                      Model: <strong>{selection.effective_model || profile.model_key || "provider default"}</strong>
+                    </p>
 
                     <div className="aipc-provider-status">
                       {providerOptions.map((provider) => (
@@ -197,7 +239,7 @@ export default function AiProviderControlLauncher() {
                           <ProviderBadge provider={provider} />
                           {provider.key === "gemini" ? (
                             <small>
-                              Tier: {provider.service_tier || "free"}. Private external data: {provider.private_data_supported ? "allowed by server policy" : "blocked"}.
+                              Tier: {provider.service_tier || "free"}. Full private context: {provider.full_context_capable ? "provider tier capable" : "not permitted on this tier"}.
                             </small>
                           ) : null}
                         </div>
@@ -210,8 +252,8 @@ export default function AiProviderControlLauncher() {
           ) : null}
 
           <footer className="aipc-footer">
-            <span>Local remains available as the fail-safe provider.</span>
-            <button type="button" onClick={() => load()} disabled={loading || Boolean(saving)}>Refresh</button>
+            <span>CHALIN Local remains available as an offline/privacy fallback when an external provider cannot be used.</span>
+            <button type="button" onClick={() => load()} disabled={loading || Boolean(saving)}>Refresh status</button>
           </footer>
         </section>
       ) : null}
