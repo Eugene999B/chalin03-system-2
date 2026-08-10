@@ -30,10 +30,15 @@ function safePositiveInteger(value, fallback, maximum) {
   return Math.min(number, maximum);
 }
 
-function withProviderTimeout(promise, timeoutMs, providerKey) {
+function withProviderTimeout(promise, timeoutMs, providerKey, onTimeout = null) {
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
+      try {
+        onTimeout?.();
+      } catch {
+        // Timeout cleanup is best-effort and must not replace the controlled error.
+      }
       reject(
         new AiProviderError(`AI provider ${providerKey} timed out.`, {
           code: "AI_PROVIDER_TIMEOUT",
@@ -54,9 +59,6 @@ function normalizeProviderResult(result, providerKey) {
     });
   }
 
-  const validated = validateProviderOutput(result.text);
-  const inputTokens = Math.max(0, Number(result.input_tokens || 0));
-  const outputTokens = Math.max(0, Number(result.output_tokens || 0));
   const toolCalls = Array.isArray(result.tool_calls)
     ? result.tool_calls.slice(0, 10).map((call) => ({
         id: String(call?.id || "").slice(0, 120) || null,
@@ -64,6 +66,13 @@ function normalizeProviderResult(result, providerKey) {
         input: call?.input && typeof call.input === "object" ? call.input : {},
       }))
     : [];
+  const rawText =
+    String(result.text || "").trim() ||
+    (toolCalls.length ? "Consulting governed CHALIN ONE tools." : "");
+  const validated = validateProviderOutput(rawText);
+  const inputTokens = Math.max(0, Number(result.input_tokens || 0));
+  const outputTokens = Math.max(0, Number(result.output_tokens || 0));
+  const costMicros = Math.max(0, Number(result.cost_micros || 0));
 
   return Object.freeze({
     text: validated.text,
@@ -73,8 +82,14 @@ function normalizeProviderResult(result, providerKey) {
     model_key: String(result.model_key || result.model || "unknown").slice(0, 160),
     input_tokens: Number.isFinite(inputTokens) ? Math.floor(inputTokens) : 0,
     output_tokens: Number.isFinite(outputTokens) ? Math.floor(outputTokens) : 0,
+    cost_micros: Number.isFinite(costMicros) ? Math.ceil(costMicros) : 0,
     finish_reason: String(result.finish_reason || "stop").slice(0, 80),
     tool_calls: Object.freeze(toolCalls),
+    provider_response_id:
+      String(result.provider_response_id || "").slice(0, 180) || null,
+    reasoning_effort:
+      String(result.reasoning_effort || "").slice(0, 20) || null,
+    provider_store_enabled: result.provider_store_enabled === true,
   });
 }
 
@@ -107,8 +122,10 @@ class MockAiProvider {
       model_key: this.modelKey,
       input_tokens: Math.ceil(JSON.stringify(messages).length / 4),
       output_tokens: Math.ceil(this.responseText.length / 4),
+      cost_micros: 0,
       finish_reason: "stop",
       tool_calls: [],
+      provider_store_enabled: false,
     };
   }
 }
@@ -184,6 +201,7 @@ async function generateProviderResponse({
   tools = [],
   maxOutputTokens = 1200,
   timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
+  providerContext = {},
   env = process.env,
 } = {}) {
   const selected =
@@ -192,6 +210,7 @@ async function generateProviderResponse({
   const safeMessages = sanitizeProviderMessages(messages);
   const safeTools = Array.isArray(tools) ? tools.slice(0, 50) : [];
   const started = Date.now();
+  const controller = new AbortController();
 
   try {
     const raw = await withProviderTimeout(
@@ -200,10 +219,16 @@ async function generateProviderResponse({
           messages: safeMessages,
           tools: safeTools,
           max_output_tokens: safePositiveInteger(maxOutputTokens, 1200, 8000),
+          provider_context:
+            providerContext && typeof providerContext === "object"
+              ? Object.freeze({ ...providerContext })
+              : Object.freeze({}),
+          signal: controller.signal,
         })
       ),
       safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 60000),
-      key
+      key,
+      () => controller.abort()
     );
     return Object.freeze({
       ...normalizeProviderResult(raw, key),
@@ -211,6 +236,9 @@ async function generateProviderResponse({
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSafetyError) {
+      throw error;
+    }
+    if (String(error?.code || "").startsWith("AI_")) {
       throw error;
     }
     throw new AiProviderError("The AI provider request failed safely.", {
