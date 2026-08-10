@@ -9,8 +9,8 @@ import {
 initializeAppearance();
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v35-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v36";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v36-${APP_BUILD_ID}`;
 const publicWebsiteSurface = isPublicWebsitePath(window.location.pathname);
 const standaloneChalinOne = isChalinOneStandalonePath(
   window.location.pathname
@@ -62,7 +62,10 @@ loadApplicationRoot()
       >
         <div>
           <strong>CHALIN 03 could not open this application surface.</strong>
-          <p>Reload the page. If the problem continues, use the normal support channel.</p>
+          <p>
+            Your open session will not refresh itself. Reload manually when you
+            are ready, or use the normal support channel if the problem continues.
+          </p>
         </div>
       </main>
     );
@@ -141,85 +144,15 @@ async function removeChalinServiceWorkerCaches({ logMessage = "" } = {}) {
   }
 }
 
-function requestAssetRecovery(reason) {
-  if (typeof window.__chalin03RecoverFromAssetMismatch === "function") {
-    window.__chalin03RecoverFromAssetMismatch(reason);
-    return;
-  }
-
-  window.location.reload();
-}
-
-if ("serviceWorker" in navigator) {
-  // Public and protected standalone CHALIN ONE surfaces deliberately stay out
-  // of the aggressive operational cache-recovery loop. A provider response,
-  // long reasoning turn, draft or chat must not be interrupted merely because
-  // a new staging bundle has been deployed in the background.
-  if (!publicWebsiteSurface && !standaloneChalinOne) {
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
-        requestAssetRecovery("service-worker-asset-mismatch");
-      }
-    });
-  }
+function installNoAutomaticRefreshPolicy() {
+  if (!("serviceWorker" in navigator)) return;
 
   window.addEventListener("load", () => {
-    if (import.meta.env.PROD) {
-      if (publicWebsiteSurface || standaloneChalinOne) {
-        removeChalinServiceWorkerCaches({
-          logMessage: publicWebsiteSurface
-            ? "✅ CHALIN ONE public website is running without automatic service-worker refreshes"
-            : "✅ CHALIN ONE protected standalone workspace is running without automatic service-worker refreshes",
-        });
-        return;
-      }
-
-      const hadActiveController = Boolean(navigator.serviceWorker.controller);
-      let reloadingForUpdate = false;
-
-      // Operational workspaces keep their one-time handover reload because
-      // stale cashier/finance/operations code is materially riskier than a
-      // controlled reload during an explicit operational application session.
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (!hadActiveController || reloadingForUpdate) {
-          return;
-        }
-
-        reloadingForUpdate = true;
-        window.location.reload();
-      });
-
-      navigator.serviceWorker
-        .register(
-          `/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`,
-          {
-            scope: "/",
-            updateViaCache: "none",
-          }
-        )
-        .then((registration) => {
-          registration.waiting?.postMessage({
-            type: "CHALIN03_SKIP_WAITING",
-          });
-
-          registration.update().catch(() => {
-            // The active worker remains available if an update check is offline.
-          });
-
-          console.log(
-            `✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`
-          );
-        })
-        .catch((error) => {
-          console.error("❌ Service worker registration failed:", error);
-        });
-
-      return;
-    }
-
     removeChalinServiceWorkerCaches({
       logMessage:
-        "✅ Development service workers and old local caches were removed",
+        "✅ CHALIN automatic service-worker refreshes are disabled system-wide",
     });
   });
 }
+
+installNoAutomaticRefreshPolicy();
