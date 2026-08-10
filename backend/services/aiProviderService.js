@@ -9,7 +9,7 @@ const {
   validateProviderOutput,
 } = require("./aiSafetyService");
 
-const DEFAULT_PROVIDER_TIMEOUT_MS = 20000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
 const PUBLIC_SAFE_SOCIAL_MAX_LENGTH = 240;
 const PUBLIC_SAFE_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|good\s+(?:morning|afternoon|evening)|greetings)\b|(?:how\s+(?:are|r)\s+you|how(?:'s|\s+is)\s+it\s+going|how\s+are\s+you\s+doing|what(?:'s|\s+is)\s+up)\b|(?:thanks|thank\s+you|thank\s+you\s+very\s+much|okay|ok|cool|great|nice|bye|goodbye|see\s+you)\b|(?:who\s+are\s+you|what\s+can\s+you\s+do|how\s+can\s+you\s+help(?:\s+me)?|can\s+you\s+help(?:\s+me)?)\b)[\s!.?,'-]*$/i;
@@ -40,7 +40,7 @@ function safePositiveInteger(value, fallback, maximum) {
   return Math.min(number, maximum);
 }
 
-function cleanMessageContent(value, maximum = 8000) {
+function cleanMessageContent(value, maximum = 32000) {
   return String(value ?? "")
     .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
@@ -52,7 +52,7 @@ function latestUserMessage(messages = []) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (String(message?.role || "").toLowerCase() !== "user") continue;
-    const content = cleanMessageContent(message?.content, 2000);
+    const content = cleanMessageContent(message?.content, 4000);
     if (content) return content;
   }
   return "";
@@ -75,8 +75,6 @@ function isPublicSafeSocialTurn({ messages = [], providerContext = {} } = {}) {
   }
   if (PUBLIC_SAFE_SOCIAL_PATTERN.test(prompt)) return true;
 
-  // Tolerate short, imperfectly typed greetings such as "hi ow ae you doing"
-  // while still refusing the route whenever any private/business marker appears.
   return PUBLIC_SAFE_GREETING_PREFIX.test(prompt) && prompt.length <= 100;
 }
 
@@ -119,7 +117,7 @@ function normalizeProviderResult(result, providerKey) {
   }
 
   const toolCalls = Array.isArray(result.tool_calls)
-    ? result.tool_calls.slice(0, 10).map((call) => ({
+    ? result.tool_calls.slice(0, 20).map((call) => ({
         id: String(call?.id || "").slice(0, 120) || null,
         tool_key: String(call?.tool_key || call?.name || "").slice(0, 150),
         input: call?.input && typeof call.input === "object" ? call.input : {},
@@ -265,6 +263,8 @@ function safeProviderSelection(selection) {
     data_classification: selection.data_classification || null,
     reason_code: selection.reason_code || null,
     external_network_used: selection.external_network_used === true,
+    full_context_requested: selection.full_context_requested === true,
+    full_context_active: selection.full_context_active === true,
   });
 }
 
@@ -273,7 +273,7 @@ async function generateProviderResponse({
   providerKey = null,
   messages,
   tools = [],
-  maxOutputTokens = 1200,
+  maxOutputTokens = 4000,
   timeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
   providerContext = {},
   env = process.env,
@@ -296,9 +296,6 @@ async function generateProviderResponse({
     });
 
   if (publicSafeSocialTurn) {
-    // This privacy boundary is intentionally lossy: a harmless social turn may
-    // go to a public-capable external provider, but no prior conversation,
-    // approved business evidence, or CHALIN tool definition crosses with it.
     effectiveMessages = publicSafeSocialMessages(effectiveMessages);
     effectiveTools = [];
     effectiveProviderContext = {
@@ -322,6 +319,7 @@ async function generateProviderResponse({
       data_classification: selection.data_classification,
       provider_model_override: selection.effective_model,
       provider_selection_reason: selection.reason_code,
+      full_context_active: selection.full_context_active === true,
     };
   }
 
@@ -330,7 +328,7 @@ async function generateProviderResponse({
     aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
   const key = cleanProviderKey(selected.key || providerKey || "disabled") || "disabled";
   const safeMessages = sanitizeProviderMessages(effectiveMessages);
-  const safeTools = effectiveTools.slice(0, 50);
+  const safeTools = effectiveTools.slice(0, 80);
   const started = Date.now();
   const controller = new AbortController();
 
@@ -340,12 +338,12 @@ async function generateProviderResponse({
         selected.generate({
           messages: safeMessages,
           tools: safeTools,
-          max_output_tokens: safePositiveInteger(maxOutputTokens, 1200, 8000),
+          max_output_tokens: safePositiveInteger(maxOutputTokens, 4000, 32768),
           provider_context: Object.freeze(effectiveProviderContext),
           signal: controller.signal,
         })
       ),
-      safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 60000),
+      safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 90000),
       key,
       () => controller.abort()
     );
