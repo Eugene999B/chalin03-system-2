@@ -1,0 +1,66 @@
+name: Temporary Returns Integrity Patch
+
+on:
+  push:
+    branches:
+      - hotfix/returns-integrity-20260810
+
+permissions:
+  contents: write
+
+concurrency:
+  group: returns-integrity-patch
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/returns-integrity-20260810
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Apply Returns integrity patch
+        run: |
+          set -euo pipefail
+          python .github/tmp-returns-integrity/patch.py
+          rm -rf .github/tmp-returns-integrity
+          rm -f .github/workflows/tmp-returns-integrity.yml
+
+      - name: Verify backend
+        run: |
+          set -euo pipefail
+          cd backend
+          npm ci
+          node --check services/operationalApprovalService.js
+          node --check routes/operationalApprovalRoutes.js
+          node --check routes/returnRoutes.js
+          node --check services/accountingIntelligenceService.js
+          node --test tests/returnIntegrityContract.test.js tests/returnAdminSelfApprovalContract.test.js tests/operationalApprovalCentreContract.test.js tests/cashControlSecurity.test.js tests/internalApprovalOriginContract.test.js
+          npm test
+
+      - name: Verify frontend
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Publish verified Returns integrity change
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Harden Returns request and accounting integrity"
+          git push origin HEAD:hotfix/returns-integrity-20260810
