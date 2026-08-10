@@ -38,7 +38,11 @@ jobs:
           npm test
       - name: Additive migration safety
         working-directory: backend
-        run: npm run migration-safety
+        shell: bash
+        run: |
+          git fetch origin feature/payroll-worker-profile-phase3-20260810 --depth=1
+          base_sha="$(git merge-base HEAD origin/feature/payroll-worker-profile-phase3-20260810)"
+          node scripts/verifyMigrationSafety.js --repo-root .. --base "$base_sha" --head HEAD
       - uses: actions/setup-node@v4
         with:
           node-version: 20
