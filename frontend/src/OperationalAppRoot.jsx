@@ -18,6 +18,7 @@ import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 import "./styles/appearance.css";
+import "./styles/appearancePlacement.css";
 
 const ContextualAiSidecar = lazy(() =>
   import("./chalin-one/ai/ContextualAiSidecar.jsx")
