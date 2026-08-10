@@ -11,6 +11,10 @@ const GENERIC_TITLES = new Set(["", "New conversation", "General Conversation"])
 const SOCIAL_ONLY_PATTERN = /^(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening)|how\s+(?:are|r)\s+you(?:\s+doing)?|what(?:'s|\s+is)\s+up|how(?:'s|\s+is)\s+it\s+going|thanks|thank\s+you|okay|ok|cool|great|nice|bye|goodbye|see\s+you)[\s!.?,'-]*$/i;
 const LEADING_SOCIAL_PATTERN = /^(?:(?:hi|hello|hey|hiya|greetings|good\s+(?:morning|afternoon|evening))[,!?.\s-]*)+/i;
 const TITLE_FILLER_PATTERN = /^(?:(?:please|can\s+you|could\s+you|would\s+you|tell\s+me|show\s+me|explain|help\s+me|i\s+want\s+to\s+know|i\s+need\s+to\s+know|what\s+is|what\s+are|how\s+is|how\s+are|why\s+is|why\s+are)\s+)+/i;
+const CONVERSATION_ROLLOVER_MESSAGE_LIMIT = 80;
+const CONVERSATION_ROLLOVER_CHARACTER_LIMIT = 120000;
+const AUTO_TITLE_USER_TURN_LIMIT = 4;
+const CONTINUATION_CONTEXT_TURN_LIMIT = 6;
 
 class AiConversationError extends Error {
   constructor(message, { code = "AI_CONVERSATION_ERROR", statusCode = 400, details = [] } = {}) {
@@ -48,7 +52,7 @@ function parseJson(value, fallback = {}) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "object" && !Array.isArray(value)) return value;
   try {
-    const parsed = JSON.parse(value);
+    const parsed = JSON.parse(String(value));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? parsed
       : fallback;
@@ -106,6 +110,56 @@ function deriveConversationTitle(value, maximum = 72) {
   text = words.join(" ").slice(0, maximum).trim();
   if (!text) return "General Conversation";
   return titleCase(text);
+}
+
+function meaningfulTitleTurns(turns = []) {
+  return (Array.isArray(turns) ? turns : [])
+    .map((turn) => String(turn || "").replace(/\s+/g, " ").trim())
+    .filter((turn) => turn && !isSocialOnly(turn))
+    .slice(0, AUTO_TITLE_USER_TURN_LIMIT);
+}
+
+function locationTitle(text) {
+  const match = String(text || "").match(
+    /\b(?:at|in|from|for)\s+(?:the\s+)?([a-z0-9][a-z0-9 &'’-]{0,40}?(?:store|branch|site|location))\b/i
+  );
+  if (match?.[1]) return titleCase(match[1]);
+  const direct = String(text || "").match(/\b((?:main|head)\s+(?:store|branch))\b/i);
+  return direct?.[1] ? titleCase(direct[1]) : "";
+}
+
+function deriveConversationTitleFromTurns(turns = [], maximum = 72) {
+  const useful = meaningfulTitleTurns(turns);
+  if (useful.length === 0) return "General Conversation";
+  const joined = useful.join(" ");
+  const lower = joined.toLowerCase();
+  const location = locationTitle(joined);
+
+  let title = "";
+  if (/\bspare parts\b/.test(lower) && /\b(sale|sales|sold|selling|sell)\b/.test(lower)) {
+    title = /\btoday\b/.test(lower) ? "Today's Spare Parts Sales" : "Spare Parts Sales";
+  } else if (/\baudit(?:\s+|-)intelligence\b|\badvanced accounting intelligence\b/.test(lower)) {
+    title = "Audit Intelligence";
+  } else if (/\b(marketing|branding|campaign|positioning|advertising)\b/.test(lower)) {
+    title = "CHALIN Marketing Strategy";
+  } else if (/\b(architecture|cybersecurity|security design|database design|technical|\bit\b)\b/.test(lower)) {
+    title = "CHALIN IT & Security";
+  } else if (/\b(payroll|salary|wage|worker compensation)\b/.test(lower)) {
+    title = "Payroll & Worker Compensation";
+  } else if (/\b(mining|production|stockpile|fuel)\b/.test(lower)) {
+    title = "Mining Operations";
+  } else if (/\b(equipment hire|hire contract|fleet|utili[sz]ation)\b/.test(lower)) {
+    title = "Equipment Hire Operations";
+  } else if (/\b(installment finance|arrears|portfolio|credit application)\b/.test(lower)) {
+    title = "Installment Finance";
+  } else {
+    title = deriveConversationTitle(useful[0], maximum);
+  }
+
+  if (location && !title.toLowerCase().includes(location.toLowerCase())) {
+    title = `${title} — ${location}`;
+  }
+  return title.slice(0, maximum).trim() || "General Conversation";
 }
 
 function publicConversation(row) {
@@ -331,6 +385,50 @@ async function getConversationDetails({
   }
 }
 
+async function refreshAutomaticConversationTitle({ connection = pool, conversationId } = {}) {
+  const id = positiveInteger(conversationId);
+  if (!id) return null;
+  try {
+    const [conversationRows] = await connection.query(
+      "SELECT title, workspace_code FROM ai_conversations WHERE id = ? LIMIT 1",
+      [id]
+    );
+    const conversation = conversationRows[0];
+    if (!conversation) return null;
+    const [turnRows] = await connection.query(
+      `SELECT content_text
+         FROM ai_messages
+        WHERE conversation_id = ?
+          AND message_role = 'user'
+          AND content_text IS NOT NULL
+        ORDER BY id ASC
+        LIMIT ?`,
+      [id, AUTO_TITLE_USER_TURN_LIMIT]
+    );
+    const turns = turnRows.map((row) => row.content_text || "");
+    if (turns.length === 0) return conversation.title || "New conversation";
+
+    const prefixTitles = [];
+    for (let index = 1; index <= turns.length; index += 1) {
+      prefixTitles.push(deriveConversationTitleFromTurns(turns.slice(0, index)));
+    }
+    const currentTitle = String(conversation.title || "").trim();
+    const isAutoTitle = GENERIC_TITLES.has(currentTitle) || prefixTitles.includes(currentTitle);
+    if (!isAutoTitle) return currentTitle;
+
+    const nextTitle = prefixTitles[prefixTitles.length - 1] || "General Conversation";
+    if (nextTitle !== currentTitle) {
+      await connection.query(
+        "UPDATE ai_conversations SET title = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?",
+        [nextTitle, id]
+      );
+    }
+    return nextTitle;
+  } catch (error) {
+    throw schemaError(error);
+  }
+}
+
 async function addMessage({
   connection = pool,
   conversationId,
@@ -389,19 +487,15 @@ async function addMessage({
       ]
     );
 
+    let conversationTitle = null;
     if (messageRole === "user" && text.trim()) {
-      const title = deriveConversationTitle(text);
+      conversationTitle = await refreshAutomaticConversationTitle({
+        connection,
+        conversationId: conversation,
+      });
       await connection.query(
-        `UPDATE ai_conversations
-         SET title = CASE
-               WHEN title IS NULL OR title IN ('New conversation', 'General Conversation')
-                 THEN ?
-               ELSE title
-             END,
-             last_message_at = UTC_TIMESTAMP(),
-             updated_at = UTC_TIMESTAMP()
-         WHERE id = ?`,
-        [title, conversation]
+        "UPDATE ai_conversations SET last_message_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?",
+        [conversation]
       );
     } else {
       await connection.query(
@@ -411,10 +505,159 @@ async function addMessage({
         [conversation]
       );
     }
-    return Object.freeze({ id: Number(result.insertId), key: messageKey });
+    return Object.freeze({
+      id: Number(result.insertId),
+      key: messageKey,
+      conversation_title: conversationTitle,
+    });
   } catch (error) {
     throw schemaError(error);
   }
+}
+
+async function conversationUsage({ connection = pool, conversationId } = {}) {
+  const id = positiveInteger(conversationId);
+  if (!id) return Object.freeze({ message_count: 0, character_count: 0 });
+  try {
+    const [rows] = await connection.query(
+      `SELECT COUNT(*) AS message_count,
+              COALESCE(SUM(CHAR_LENGTH(content_text)), 0) AS character_count
+         FROM ai_messages
+        WHERE conversation_id = ?
+          AND message_role IN ('user', 'assistant')`,
+      [id]
+    );
+    return Object.freeze({
+      message_count: Number(rows[0]?.message_count || 0),
+      character_count: Number(rows[0]?.character_count || 0),
+    });
+  } catch (error) {
+    throw schemaError(error);
+  }
+}
+
+function conversationRolloverReason(usage = {}) {
+  if (Number(usage.message_count || 0) >= CONVERSATION_ROLLOVER_MESSAGE_LIMIT) {
+    return "message_limit";
+  }
+  if (Number(usage.character_count || 0) >= CONVERSATION_ROLLOVER_CHARACTER_LIMIT) {
+    return "context_size_limit";
+  }
+  return null;
+}
+
+function sameScope(conversation, scope = {}) {
+  return (
+    String(conversation?.workspace_code || "") === String(scope?.workspace_code || "") &&
+    Number(conversation?.branch_id || 0) === Number(scope?.branch_id || 0) &&
+    Number(conversation?.mining_site_id || 0) === Number(scope?.mining_site_id || 0) &&
+    Number(conversation?.hire_location_id || 0) === Number(scope?.hire_location_id || 0)
+  );
+}
+
+function continuedTitle(value) {
+  const base = String(value || "New conversation").replace(/\s+·\s+Continued(?:\s+\d+)?$/i, "").trim();
+  return `${base || "Conversation"} · Continued`.slice(0, 220);
+}
+
+function continuationMessage({ previousTitle, recentTurns = [], reason }) {
+  const context = recentTurns
+    .map((turn) => {
+      const role = turn.message_role === "user" ? "User" : "Copilot";
+      const text = String(turn.content_text || "").replace(/\s+/g, " ").trim().slice(0, 700);
+      return text ? `${role}: ${text}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+  return [
+    `This chat continues from “${String(previousTitle || "the previous conversation").slice(0, 180)}” because that chat reached its ${reason === "message_limit" ? "conversation length" : "reasoning context"} limit.`,
+    "I carried forward only a small recent continuity capsule so the discussion can continue without overloading the model.",
+    "Any old live figures in this capsule are historical context only and must be re-checked before being treated as current.",
+    context ? `\nRecent continuity:\n${context}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+async function rolloverConversationIfNeeded({
+  connection = pool,
+  conversationKey,
+  userId,
+  persona,
+  scope,
+} = {}) {
+  if (!conversationKey) {
+    return Object.freeze({ conversation_key: null, rolled_over: false });
+  }
+  const conversation = await loadOwnedConversation({
+    connection,
+    conversationKey,
+    userId,
+  });
+  const normalizedPersona = normalizeAiPersona(persona);
+  if (
+    conversation.persona !== normalizedPersona ||
+    !sameScope(conversation, scope) ||
+    conversation.conversation_status !== "active"
+  ) {
+    return Object.freeze({
+      conversation_key: conversationKey,
+      rolled_over: false,
+    });
+  }
+
+  const usage = await conversationUsage({
+    connection,
+    conversationId: conversation.id,
+  });
+  const reason = conversationRolloverReason(usage);
+  if (!reason) {
+    return Object.freeze({
+      conversation_key: conversationKey,
+      rolled_over: false,
+      usage,
+    });
+  }
+
+  const [recentRows] = await connection.query(
+    `SELECT message_role, content_text
+       FROM ai_messages
+      WHERE conversation_id = ?
+        AND message_role IN ('user', 'assistant')
+        AND content_text IS NOT NULL
+      ORDER BY id DESC
+      LIMIT ?`,
+    [conversation.id, CONTINUATION_CONTEXT_TURN_LIMIT]
+  );
+  const created = await createConversation({
+    connection,
+    persona: normalizedPersona,
+    userId,
+    scope,
+    title: continuedTitle(conversation.title),
+  });
+  await addMessage({
+    connection,
+    conversationId: created.id,
+    role: "assistant",
+    content: continuationMessage({
+      previousTitle: conversation.title,
+      recentTurns: recentRows.reverse(),
+      reason,
+    }),
+    safetyStatus: "allowed",
+    providerKey: "system",
+    modelKey: "conversation-rollover-v1",
+    finishReason: "conversation_rollover",
+    createdBy: userId,
+  });
+
+  return Object.freeze({
+    conversation_key: created.key,
+    previous_conversation_key: conversation.conversation_key,
+    rolled_over: true,
+    reason,
+    usage,
+    title: continuedTitle(conversation.title),
+  });
 }
 
 async function renameConversation({
@@ -490,25 +733,39 @@ async function deleteConversation({
 }
 
 module.exports = {
+  AUTO_TITLE_USER_TURN_LIMIT,
   AiConversationError,
+  CONVERSATION_ROLLOVER_CHARACTER_LIMIT,
+  CONVERSATION_ROLLOVER_MESSAGE_LIMIT,
+  CONTINUATION_CONTEXT_TURN_LIMIT,
   GENERIC_TITLES,
   addMessage,
   archiveConversation,
+  continuationMessage,
+  continuedTitle,
+  conversationRolloverReason,
+  conversationUsage,
   createConversation,
   deleteConversation,
   deriveConversationTitle,
+  deriveConversationTitleFromTurns,
   getConversationDetails,
   isSocialOnly,
   key,
   listConversations,
   loadOwnedConversation,
+  locationTitle,
+  meaningfulTitleTurns,
   parseJson,
   positiveInteger,
   publicConversation,
   publicEvidence,
   publicMessage,
+  refreshAutomaticConversationTitle,
   renameConversation,
+  rolloverConversationIfNeeded,
   safeLimit,
   safeOffset,
+  sameScope,
   schemaError,
 };
