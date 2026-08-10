@@ -16,6 +16,7 @@ const budgets = await import(
 
 const main = read("src/main.jsx");
 const publicEntry = read("src/chalin-one/PublicChalinOneEntry.jsx");
+const publicGate = read("src/chalin-one/public-site/PublicWebsiteFeatureGate.jsx");
 const publicBootCss = read("src/chalin-one/public-site/publicBootPolish.css");
 const protectedEntry = read("src/chalin-one/ProtectedChalinOneEntry.jsx");
 const operationalRoot = read("src/OperationalAppRoot.jsx");
@@ -50,12 +51,23 @@ assert.match(protectedEntry, /ChalinOneStandaloneEntry/);
 assert.match(protectedEntry, /FeatureFlagProvider/);
 assert.match(protectedEntry, /\.\.\/index\.css/);
 
-assert.match(publicEntry, /FeatureFlagProvider/);
-assert.match(publicEntry, /PublicAnalyticsRuntime/);
+assert.match(publicEntry, /PublicWebsiteFeatureGate/);
+assert.doesNotMatch(publicEntry, /FeatureFlagProvider|FeatureFlagRoute/);
+assert.match(publicGate, /fetch\(PUBLIC_FEATURE_ENDPOINT/);
+assert.match(publicGate, /payload\?\.flags\?\.publicWebsite === true/);
+assert.match(publicGate, /STATUS_REFRESH_INTERVAL_MS = 30000/);
+assert.doesNotMatch(publicGate, /axios|axiosClient|localStorage|sessionStorage|Authorization|Bearer/);
+
 assert.match(publicEntry, /PublicExperienceCompletion/);
 assert.match(publicEntry, /PublicTechnicalFinish/);
 assert.match(publicEntry, /PublicCorporateWebsiteApp/);
 assert.match(publicEntry, /publicBootPolish\.css/);
+assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicAnalyticsRuntime"\)/s);
+assert.match(publicEntry, /function DeferredPublicAnalyticsRuntime/);
+assert.match(publicEntry, /timeout: 900/);
+assert.match(publicEntry, /setTimeout\(\(\) => setReady\(true\), 450\)/);
+assert.match(publicEntry, /<DeferredPublicAnalyticsRuntime \/>/);
+assert.doesNotMatch(publicEntry, /import PublicAnalyticsRuntime from/);
 assert.match(publicEntry, /lazy\(\(\) =>\s*import\("\.\/public-site\/PublicWorldEnhancements"\)/s);
 assert.match(publicEntry, /function DeferredPublicWorldEnhancements/);
 assert.match(publicEntry, /requestIdleCallback/);
@@ -94,6 +106,7 @@ assert.match(buildGate, /PUBLIC_PERFORMANCE_BUDGETS/);
 assert.match(buildGate, /fs\.rmSync\(manifestPath/);
 assert.equal(budgets.PUBLIC_PERFORMANCE_BASELINE.previous_entry_js_bytes, 1399460);
 assert.ok(budgets.PUBLIC_PERFORMANCE_BUDGETS.entry_js_bytes <= 320 * 1024);
+assert.ok(budgets.PUBLIC_PERFORMANCE_BUDGETS.public_entry_js_bytes <= 300 * 1024);
 assert.ok(budgets.PUBLIC_PERFORMANCE_BUDGETS.public_critical_js_bytes <= 760 * 1024);
 assert.ok(budgets.PUBLIC_PERFORMANCE_BUDGETS.public_critical_css_bytes <= 190 * 1024);
 
@@ -125,4 +138,4 @@ assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, idle-loaded non-critical enhancements, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable build budgets, failure states and read-only launch controls remain protected.");
