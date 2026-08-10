@@ -66,6 +66,7 @@ test("live and personal business record questions remain private and governed", 
     "find the customer debt",
     "what is our current cash balance",
     "review this employee salary",
+    "show me the current whole-system performance across all businesses",
   ];
 
   for (const prompt of prompts) {
@@ -129,4 +130,26 @@ test("the exact reported Audit Intelligence question never triggers a Spare Part
   assert.match(result.text, /management and audit observatory/i);
   assert.match(result.text, /audit score/i);
   assert.doesNotMatch(result.text, /Sales Transaction Count|Zero-cost local mode|operations snapshot/i);
+});
+
+test("Local fallback chooses System Administrator group intelligence for whole-system live questions", () => {
+  const prompt = "show me the current whole-system performance across all businesses";
+  const groupTool = {
+    key: "system.group_intelligence",
+    title: "Whole-system group intelligence",
+    risk_level: 1,
+  };
+  const storeTool = {
+    key: "spare_parts.operations_snapshot",
+    title: "Spare Parts operations snapshot",
+    risk_level: 1,
+  };
+
+  const selected = chooseLocalReadTool({
+    messages: [{ role: "user", content: prompt }],
+    tools: [storeTool, groupTool],
+    providerContext: context({ data_classification: "internal" }),
+  });
+
+  assert.equal(selected?.key, "system.group_intelligence");
 });
