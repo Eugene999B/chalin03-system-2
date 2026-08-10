@@ -15,6 +15,10 @@ const model = await import(
 );
 const modelSource = fs.readFileSync(path.join(moduleRoot, "contentStudioModel.js"), "utf8");
 const apiSource = fs.readFileSync(path.join(moduleRoot, "contentStudioApi.js"), "utf8");
+const analyticsApiSource = fs.readFileSync(
+  path.join(moduleRoot, "contentStudioAnalyticsApi.js"),
+  "utf8"
+);
 const workspaceSource = fs.readFileSync(
   path.join(moduleRoot, "ContentStudioWorkspace.jsx"),
   "utf8"
@@ -50,6 +54,7 @@ check("model contains every governed Content Studio manager", () => {
     "submissions",
     "approvals",
     "publisher-command",
+    "public-analytics",
     "website-control",
     "redirects",
     "navigation",
@@ -75,6 +80,12 @@ check("model contains every governed Content Studio manager", () => {
   );
   assert.equal(publisher.permission, "public_content.publish");
   assert.equal(publisher.group, "Governance");
+  const publicAnalytics = model.CONTENT_STUDIO_SECTIONS.find(
+    (section) => section.key === "public-analytics"
+  );
+  assert.equal(publicAnalytics.permission, "public_content.view");
+  assert.equal(publicAnalytics.endpoint, "/content-studio/dashboard/analytics/summary");
+  assert.equal(publicAnalytics.group, "Website");
   const websiteControl = model.CONTENT_STUDIO_SECTIONS.find(
     (section) => section.key === "website-control"
   );
@@ -131,7 +142,7 @@ check("dashboard normalization converts SQL values to safe non-negative numbers"
   assert.equal(result.media.quarantined, 0);
 });
 
-check("foundation API reuses authenticated Axios and has no token or raw fetch logic", () => {
+check("foundation APIs reuse authenticated Axios and have no token or raw fetch logic", () => {
   assert.match(apiSource, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
   assert.doesNotMatch(apiSource, /localStorage|sessionStorage|Bearer|fetch\(/);
   assert.match(apiSource, /Unsupported Content Studio resource path/);
@@ -149,6 +160,9 @@ check("foundation API reuses authenticated Axios and has no token or raw fetch l
   ]) {
     assert.match(apiSource, new RegExp(pathValue.replaceAll("/", "\\/")));
   }
+  assert.match(analyticsApiSource, /import axiosClient from "\.\.\/\.\.\/api\/axiosClient"/);
+  assert.match(analyticsApiSource, /\/content-studio\/dashboard\/analytics\/summary/);
+  assert.doesNotMatch(analyticsApiSource, /localStorage|sessionStorage|Bearer|fetch\(/);
 });
 
 check("workspace enforces isolated Studio session, role permission and scoped managers", () => {
@@ -160,6 +174,7 @@ check("workspace enforces isolated Studio session, role permission and scoped ma
   assert.match(workspaceSource, /"media-cleanup": "media"/);
   assert.match(workspaceSource, /"media-reference": "media"/);
   assert.match(workspaceSource, /"publisher-command": "pages"/);
+  assert.match(workspaceSource, /"public-analytics": "dashboard"/);
   assert.match(workspaceSource, /"website-control": "pages"/);
   assert.match(workspaceSource, /redirects: "navigation"/);
   assert.match(workspaceSource, /isContentStudioOwner/);
@@ -195,6 +210,7 @@ check("workspace maps every manager without direct routing or token bypass", () 
     "ContentStudioEnquiryDesk",
     "ContentStudioApprovalInbox",
     "ContentStudioPublisherCommandCenter",
+    "ContentStudioPublicAnalytics",
     "ContentStudioWebsiteControlCenter",
     "ContentStudioRedirectManager",
     "ContentStudioNavigationManager",

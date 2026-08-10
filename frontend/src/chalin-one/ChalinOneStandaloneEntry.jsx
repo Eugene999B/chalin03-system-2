@@ -6,6 +6,7 @@ import PermissionRoute from "../components/PermissionRoute";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { WorkspaceContextProvider } from "../context/WorkspaceContext";
+import PublicAnalyticsRuntime from "./public-site/PublicAnalyticsRuntime";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
@@ -156,6 +157,7 @@ function PublicWebsiteEntry() {
             >
               <>
                 <PublicInteractionSafety />
+                <PublicAnalyticsRuntime />
                 <PublicExperienceCompletion />
                 <PublicDetailCompanion />
                 <PublicWorldEnhancements />

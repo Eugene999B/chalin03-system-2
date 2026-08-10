@@ -21,6 +21,7 @@ import {
   ContentStudioEquipmentManager,
   ContentStudioProjectManager,
 } from "./ContentStudioPortfolioManagers";
+import ContentStudioPublicAnalytics from "./ContentStudioPublicAnalytics";
 import ContentStudioPublisherCommandCenter from "./ContentStudioPublisherCommandCenter";
 import ContentStudioRedirectManager from "./ContentStudioRedirectManager";
 import ContentStudioVisualBuilder from "./ContentStudioVisualBuilderPro";
@@ -67,6 +68,7 @@ const SECTION_SCOPES = Object.freeze({
   submissions: "submissions",
   approvals: "pages",
   "publisher-command": "pages",
+  "public-analytics": "dashboard",
   "website-control": "pages",
   redirects: "navigation",
   navigation: "navigation",
@@ -88,6 +90,7 @@ const MANAGERS = Object.freeze({
   submissions: ContentStudioEnquiryDesk,
   approvals: ContentStudioApprovalInbox,
   "publisher-command": ContentStudioPublisherCommandCenter,
+  "public-analytics": ContentStudioPublicAnalytics,
   "website-control": ContentStudioWebsiteControlCenter,
   redirects: ContentStudioRedirectManager,
   navigation: ContentStudioNavigationManager,

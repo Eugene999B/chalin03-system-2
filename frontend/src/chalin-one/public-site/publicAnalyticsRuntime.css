@@ -1,0 +1,155 @@
+.c1-footer-bottom .c1-data-use-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.c1-footer-bottom .c1-data-use-link:focus-visible,
+.c1-data-use-panel button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+
+.c1-data-use-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.c1-data-use-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(1, 7, 12, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.c1-data-use-panel {
+  position: relative;
+  width: min(980px, 100%);
+  max-height: min(88dvh, 760px);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #07131f;
+  color: #f8fbff;
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.45);
+}
+
+.c1-data-use-panel > header,
+.c1-data-use-panel > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.c1-data-use-panel > footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 0;
+}
+
+.c1-data-use-panel header span,
+.c1-data-use-grid article > span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  color: #f0bd35;
+}
+
+.c1-data-use-panel h2 {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+}
+
+.c1-data-use-panel header button,
+.c1-data-use-panel footer button {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: inherit;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+}
+
+.c1-data-use-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.c1-data-use-grid article {
+  min-width: 0;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  background: #07131f;
+}
+
+.c1-data-use-grid h3 {
+  margin: 0.5rem 0 0.8rem;
+  font-size: 1.12rem;
+}
+
+.c1-data-use-grid p,
+.c1-data-use-grid li,
+.c1-data-use-panel > p,
+.c1-data-use-panel footer span {
+  color: rgba(248, 251, 255, 0.74);
+  line-height: 1.65;
+}
+
+.c1-data-use-grid strong {
+  display: block;
+  margin-top: 1rem;
+}
+
+.c1-data-use-grid ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.c1-data-use-panel > p {
+  margin: 0;
+  padding: 2rem;
+}
+
+@media (max-width: 760px) {
+  .c1-data-use-dialog {
+    align-items: end;
+    padding: 0;
+  }
+
+  .c1-data-use-panel {
+    width: 100%;
+    max-height: 92dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .c1-data-use-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .c1-data-use-panel > header,
+  .c1-data-use-panel > footer {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c1-data-use-dialog *,
+  .c1-data-use-dialog *::before,
+  .c1-data-use-dialog *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
