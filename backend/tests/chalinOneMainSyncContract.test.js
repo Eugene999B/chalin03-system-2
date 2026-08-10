@@ -165,7 +165,7 @@ test("system routes preserve fail-closed CHALIN ONE feature and content gates", 
   assert.match(systemRoutes, /contentStudioRoutes/);
 });
 
-test("frontend boot retains cache recovery v35 and isolates feature providers by application root", () => {
+test("frontend boot retains cache recovery v35 and isolates feature gates by application audience", () => {
   assert.match(frontendMain, /browser-cache-integrity-v35/);
   assert.match(frontendMain, /__chalin03MarkBootHealthy/);
   assert.match(frontendMain, /CHALIN03_ASSET_MISMATCH/);
@@ -174,9 +174,11 @@ test("frontend boot retains cache recovery v35 and isolates feature providers by
   assert.match(frontendMain, /import\("\.\/OperationalAppRoot\.jsx"\)/);
   assert.doesNotMatch(frontendMain, /FeatureFlagProvider|<App \/>/);
 
-  for (const source of [publicRoot, protectedRoot, operationalRoot]) {
+  for (const source of [protectedRoot, operationalRoot]) {
     assert.match(source, /FeatureFlagProvider/);
     assert.match(source, /<FeatureFlagProvider>/);
   }
+  assert.doesNotMatch(publicRoot, /FeatureFlagProvider|FeatureFlagRoute/);
+  assert.match(publicRoot, /PublicWebsiteFeatureGate/);
   assert.match(operationalRoot, /<App \/>/);
 });
