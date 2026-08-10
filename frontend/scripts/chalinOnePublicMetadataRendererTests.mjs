@@ -102,15 +102,17 @@ check("runtime creates canonical robots Open Graph and Twitter metadata without 
   assert.doesNotMatch(runtimeSource, /innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function|localStorage|sessionStorage/);
 });
 
-check("published detail APIs enrich metadata while list feeds remain metadata-neutral", () => {
-  assert.match(apiSource, /applyPublishedPublicMetadata/);
-  assert.match(apiSource, /getPublicHomepage[\s\S]*applyPublishedPublicMetadata\(page\)/);
-  assert.match(apiSource, /getPublicPage[\s\S]*applyPublishedPublicMetadata\(page\)/);
-  assert.match(apiSource, /getPublicResource[\s\S]*applyPublishedPublicMetadata\(item/);
+check("published detail APIs use combined route SEO enrichment while list feeds remain metadata-neutral", () => {
+  assert.match(apiSource, /function applyPublishedRouteSeo\(data, options = \{\}\)/);
+  assert.match(apiSource, /applyPublishedPublicMetadata\(data, options\)/);
+  assert.match(apiSource, /applyPublishedPublicStructuredData\(data, options\)/);
+  assert.match(apiSource, /getPublicHomepage[\s\S]*applyPublishedRouteSeo\(page\)/);
+  assert.match(apiSource, /getPublicPage[\s\S]*applyPublishedRouteSeo\(page\)/);
+  assert.match(apiSource, /getPublicResource[\s\S]*applyPublishedRouteSeo\(item/);
   assert.match(apiSource, /getPublicForm[\s\S]*applyPublishedPublicMetadata\(form\)/);
   const listBlock = apiSource.match(/export async function listPublicResource[\s\S]*?export async function getPublicResource/)?.[0] || "";
   assert.ok(listBlock);
-  assert.doesNotMatch(listBlock, /applyPublishedPublicMetadata/);
+  assert.doesNotMatch(listBlock, /applyPublishedRouteSeo|applyPublishedPublicMetadata|applyPublishedPublicStructuredData/);
 });
 
 check("staging HTML baseline remains noindex while default social metadata stays available before hydration", () => {
