@@ -1,0 +1,26 @@
+name: Temporary Phase 2 Source Snapshot
+
+on:
+  push:
+    branches:
+      - feature/payroll-financial-foundation-phase2-20260810
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Package source
+        run: |
+          git archive --format=zip --output=phase2-source.zip HEAD
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-source-snapshot
+          path: phase2-source.zip
+          retention-days: 1
