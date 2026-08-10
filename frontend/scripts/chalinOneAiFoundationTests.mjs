@@ -113,9 +113,11 @@ check("background conversation refresh does not blindly clear the active chat", 
   assert.match(workspace, /loadConversations\(undefined, \{ silent: true, force: true \}\)/);
 });
 
-check("chat has first-class settings and persisted non-sensitive preferences", () => {
+check("chat has first-class settings with isolated non-sensitive persistence", () => {
   assert.match(workspace, /ChatSettingsModal/);
-  assert.match(workspace, /CHAT_SETTINGS_KEY/);
+  assert.match(workspace, /loadAiChatPreferences/);
+  assert.match(workspace, /saveAiChatPreferences/);
+  assert.doesNotMatch(workspace, /localStorage|sessionStorage/);
   assert.match(workspace, /Send with Enter/);
   assert.match(workspace, /Technical response details/);
   assert.match(workspace, /Appearance/);
