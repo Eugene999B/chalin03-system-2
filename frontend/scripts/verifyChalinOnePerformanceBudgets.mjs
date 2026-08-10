@@ -74,6 +74,15 @@ function measureFiles(files) {
   return { js, css, details };
 }
 
+function measureRootChunk(rootKey) {
+  const item = manifest[rootKey];
+  assert.ok(item, `Build manifest root is missing: ${rootKey}`);
+  const files = new Set();
+  if (item.file) files.add(item.file);
+  for (const css of item.css || []) files.add(css);
+  return measureFiles(files);
+}
+
 function unionSets(...sets) {
   return new Set(sets.flatMap((set) => Array.from(set)));
 }
@@ -92,7 +101,10 @@ const publicEntryGraph = collectStaticGraph(publicEntryKey);
 const publicAppGraph = collectStaticGraph(publicAppKey);
 const mainMeasure = measureFiles(mainGraph.assetFiles);
 const publicEntryMeasure = measureFiles(publicEntryGraph.assetFiles);
-const publicAppMeasure = measureFiles(publicAppGraph.assetFiles);
+// The public-app budget is a chunk budget. Shared React/entry imports are
+// accounted for once in publicCriticalMeasure below; charging them again here
+// would make this per-app budget describe the whole graph instead of the app.
+const publicAppMeasure = measureRootChunk(publicAppKey);
 const publicCriticalMeasure = measureFiles(
   unionSets(mainGraph.assetFiles, publicEntryGraph.assetFiles, publicAppGraph.assetFiles)
 );
