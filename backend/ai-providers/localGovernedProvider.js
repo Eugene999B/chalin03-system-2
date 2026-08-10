@@ -139,6 +139,7 @@ function offeredReadOnlyToolMap(tools = []) {
 }
 
 function chooseLocalReadTool({ messages = [], tools = [], providerContext = {} } = {}) {
+  if (providerContext?.public_safe_social_turn === true) return null;
   if (evidenceFromMessages(messages).length > 0) return null;
 
   const offered = offeredReadOnlyToolMap(tools);
@@ -233,6 +234,23 @@ function composeEvidenceAnswer(messages = []) {
   ].join("\n");
 }
 
+function composePublicSafeSocialAnswer(messages = []) {
+  const question = latestUserQuestion(messages).toLowerCase();
+  if (/\b(?:thanks|thank you)\b/.test(question)) {
+    return "You’re welcome. I’m ready whenever you need help with CHALIN or a general question.";
+  }
+  if (/\b(?:bye|goodbye|see you)\b/.test(question)) {
+    return "Goodbye. I’ll be here when you need me.";
+  }
+  if (/\bwho are you\b/.test(question)) {
+    return "I’m CHALIN Copilot, your governed assistant for the CHALIN ONE system. I can chat normally, explain things, and help with approved business information when your permissions allow it.";
+  }
+  if (/\b(?:what can you do|how can you help|can you help)\b/.test(question)) {
+    return "I can chat with you normally, explain CHALIN workflows, and answer approved business questions using the information and read-only tools your account is allowed to access.";
+  }
+  return "Hi! I’m doing well and ready to help. What would you like to work on?";
+}
+
 function localToolCall(tool) {
   const key = clean(tool?.key, 150).toLowerCase();
   return Object.freeze({
@@ -248,6 +266,20 @@ class LocalGovernedProvider {
   }
 
   async generate({ messages = [], tools = [], provider_context = {} } = {}) {
+    if (provider_context?.public_safe_social_turn === true) {
+      const text = composePublicSafeSocialAnswer(messages);
+      return {
+        text,
+        model_key: LOCAL_MODEL_KEY,
+        input_tokens: Math.ceil(JSON.stringify(messages).length / 4),
+        output_tokens: Math.ceil(text.length / 4),
+        cost_micros: 0,
+        finish_reason: "stop",
+        tool_calls: [],
+        provider_store_enabled: false,
+      };
+    }
+
     const selectedTool = chooseLocalReadTool({
       messages,
       tools,
@@ -291,6 +323,7 @@ module.exports = {
   chooseLocalReadTool,
   collectReadableFacts,
   composeEvidenceAnswer,
+  composePublicSafeSocialAnswer,
   evidenceFromMessages,
   latestUserQuestion,
   localToolCall,
