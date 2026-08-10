@@ -31,6 +31,13 @@ test("Content Studio link-integrity audit executes read-only against migrated ac
   // migration here instead of relying on publicRedirectDatabaseAcceptance.test
   // running first alphabetically.
   await runChalinOnePublicRedirectMigration({ env: redirectMigrationEnv() });
+  const [[redirectFoundation]] = await pool.query(
+    `SELECT COUNT(*) AS present
+       FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'public_redirect_rules'`
+  );
+  assert.equal(Number(redirectFoundation?.present || 0), 1);
 
   const result = await getLinkIntegrityIntelligence();
   assert.ok(result);
