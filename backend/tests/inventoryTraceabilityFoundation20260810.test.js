@@ -45,7 +45,7 @@ test("label batch codes include store/date plus unpredictable token", () => {
   assert.equal(batch, "LBL-MAIN-20260810-K7M4Q9");
 });
 
-test("tracking configuration keeps quantity mode backward compatible", () => {
+test("tracking configuration keeps quantity mode backward compatible and blocks premature enforcement", () => {
   assert.deepEqual(
     assertTrackingConfiguration({
       trackingMode: TRACKING_MODES.QUANTITY,
@@ -75,11 +75,13 @@ test("tracking configuration keeps quantity mode backward compatible", () => {
   assert.throws(
     () =>
       assertTrackingConfiguration({
-        trackingMode: TRACKING_MODES.QUANTITY,
+        trackingMode: TRACKING_MODES.SERIALIZED,
         traceabilityState: TRACEABILITY_STATES.ENFORCED,
         productCode: "SO4L",
       }),
-    /cannot use enforced/
+    (error) =>
+      error.code === "TRACEABILITY_ENFORCEMENT_NOT_RELEASED" &&
+      /Sales & Scanning/.test(error.message)
   );
 });
 
