@@ -15,10 +15,21 @@ const {
   normalizeUnitCode,
 } = require("./inventoryTraceabilityService");
 
+const INVENTORY_BEARING_STATUSES = Object.freeze([
+  UNIT_STATUSES.LABEL_PENDING,
+  UNIT_STATUSES.ACTIVE,
+  UNIT_STATUSES.RESERVED_SALE,
+  UNIT_STATUSES.IN_TRANSIT,
+  UNIT_STATUSES.RETURNED_QUARANTINE,
+  UNIT_STATUSES.DAMAGED,
+  UNIT_STATUSES.MISSING,
+]);
+
 function positiveInt(value, fieldName = "value") {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) {
     const error = new Error(`${fieldName} must be a positive whole number.`);
+    error.statusCode = 400;
     error.code = "INVALID_TRACEABILITY_NUMBER";
     throw error;
   }
@@ -30,21 +41,36 @@ function cleanText(value, maxLength = 500) {
   return text ? text.slice(0, maxLength) : null;
 }
 
-async function appendUnitEvent(connection, {
-  unitId,
-  branchId,
-  eventType,
-  fromStatus = null,
-  toStatus = null,
-  sourceType = null,
-  sourceId = null,
-  actorUserId = null,
-  reason = null,
-  requestId = null,
-  metadata = null,
-}) {
+function nullableNumber(value) {
+  return value === null || value === undefined || value === "" ? null : Number(value);
+}
+
+async function appendUnitEvent(
+  connection,
+  {
+    unitId,
+    branchId,
+    eventType,
+    fromStatus = null,
+    toStatus = null,
+    sourceType = null,
+    sourceId = null,
+    actorUserId = null,
+    reason = null,
+    requestId = null,
+    metadata = null,
+  }
+) {
   const cleanUnitId = positiveInt(unitId, "unitId");
   const cleanBranchId = positiveInt(branchId, "branchId");
+  const cleanEventType = cleanText(eventType, 50);
+  if (!cleanEventType) {
+    const error = new Error("Inventory event type is required.");
+    error.statusCode = 400;
+    error.code = "TRACEABILITY_EVENT_TYPE_REQUIRED";
+    throw error;
+  }
+
   const [previousRows] = await connection.query(
     `SELECT event_sequence, event_hash
      FROM inventory_unit_events
@@ -62,7 +88,7 @@ async function appendUnitEvent(connection, {
     unitId: cleanUnitId,
     eventSequence,
     branchId: cleanBranchId,
-    eventType,
+    eventType: cleanEventType,
     fromStatus,
     toStatus,
     sourceType,
@@ -95,12 +121,12 @@ async function appendUnitEvent(connection, {
       cleanUnitId,
       eventSequence,
       cleanBranchId,
-      cleanText(eventType, 50),
+      cleanEventType,
       cleanText(fromStatus, 30),
       cleanText(toStatus, 30),
       cleanText(sourceType, 40),
-      sourceId === null || sourceId === undefined ? null : Number(sourceId),
-      actorUserId === null || actorUserId === undefined ? null : Number(actorUserId),
+      nullableNumber(sourceId),
+      nullableNumber(actorUserId),
       cleanText(reason, 500),
       cleanText(requestId, 100),
       metadata === null || metadata === undefined ? null : JSON.stringify(metadata),
@@ -118,7 +144,10 @@ async function appendUnitEvent(connection, {
   };
 }
 
-async function getProductTraceabilitySummary(connection, { branchId, productId, forUpdate = false }) {
+async function getProductTraceabilitySummary(
+  connection,
+  { branchId, productId, forUpdate = false }
+) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanProductId = positiveInt(productId, "productId");
   const [products] = await connection.query(
@@ -139,7 +168,9 @@ async function getProductTraceabilitySummary(connection, { branchId, productId, 
        b.name AS branch_name
      FROM products p
      INNER JOIN branches b ON b.id = p.branch_id
-     WHERE p.id = ? AND p.branch_id = ? AND p.is_active = TRUE
+     WHERE p.id = ?
+       AND p.branch_id = ?
+       AND p.is_active = TRUE
      LIMIT 1${forUpdate ? " FOR UPDATE" : ""}`,
     [cleanProductId, cleanBranchId]
   );
@@ -154,7 +185,8 @@ async function getProductTraceabilitySummary(connection, { branchId, productId, 
   const [statusRows] = await connection.query(
     `SELECT status, COUNT(*) AS unit_count
      FROM inventory_units
-     WHERE product_id = ? AND current_branch_id = ?
+     WHERE product_id = ?
+       AND current_branch_id = ?
      GROUP BY status`,
     [cleanProductId, cleanBranchId]
   );
@@ -162,33 +194,49 @@ async function getProductTraceabilitySummary(connection, { branchId, productId, 
   const counts = Object.fromEntries(
     Object.values(UNIT_STATUSES).map((status) => [status, 0])
   );
-  for (const row of statusRows) counts[row.status] = Number(row.unit_count || 0);
+  for (const row of statusRows) {
+    counts[row.status] = Number(row.unit_count || 0);
+  }
 
-  const activeIdentityCount = Number(counts.active || 0);
-  const pendingIdentityCount = Number(counts.label_pending || 0);
+  const systemQuantity = Number(products[0].quantity || 0);
+  const activeIdentityCount = Number(counts[UNIT_STATUSES.ACTIVE] || 0);
+  const pendingIdentityCount = Number(counts[UNIT_STATUSES.LABEL_PENDING] || 0);
+  const inventoryIdentityCount = INVENTORY_BEARING_STATUSES.reduce(
+    (sum, status) => sum + Number(counts[status] || 0),
+    0
+  );
+  const identityGap = systemQuantity - inventoryIdentityCount;
+
   return {
     ...products[0],
-    quantity: Number(products[0].quantity || 0),
+    quantity: systemQuantity,
     unit_counts: counts,
     active_identity_count: activeIdentityCount,
     pending_identity_count: pendingIdentityCount,
-    identity_gap: Number(products[0].quantity || 0) - activeIdentityCount,
+    inventory_identity_count: inventoryIdentityCount,
+    identity_gap: identityGap,
+    unidentified_quantity: Math.max(identityGap, 0),
+    identity_overage: Math.max(-identityGap, 0),
     ready_for_serialized_enforcement:
       products[0].inventory_tracking_mode === TRACKING_MODES.SERIALIZED &&
-      activeIdentityCount === Number(products[0].quantity || 0) &&
+      activeIdentityCount === systemQuantity &&
+      inventoryIdentityCount === systemQuantity &&
       pendingIdentityCount === 0,
   };
 }
 
-async function configureProductTraceability(connection, {
-  branchId,
-  productId,
-  trackingMode,
-  traceabilityState,
-  productCode,
-  riskTier = RISK_TIERS.STANDARD,
-  configuredBy,
-}) {
+async function configureProductTraceability(
+  connection,
+  {
+    branchId,
+    productId,
+    trackingMode,
+    traceabilityState,
+    productCode,
+    riskTier = RISK_TIERS.STANDARD,
+    configuredBy,
+  }
+) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanProductId = positiveInt(productId, "productId");
   const cleanConfiguredBy = positiveInt(configuredBy, "configuredBy");
@@ -235,18 +283,19 @@ async function configureProductTraceability(connection, {
     throw error;
   }
 
+  // Kept as the future Phase 3 invariant. The pure configuration service
+  // currently rejects ENFORCED before this point until checkout integration is released.
   if (
     configuration.traceabilityState === TRACEABILITY_STATES.ENFORCED &&
-    configuration.trackingMode === TRACKING_MODES.SERIALIZED
+    configuration.trackingMode === TRACKING_MODES.SERIALIZED &&
+    !current.ready_for_serialized_enforcement
   ) {
-    if (!current.ready_for_serialized_enforcement) {
-      const error = new Error(
-        `Serialized enforcement requires exactly ${current.quantity} active unit identities and zero pending labels. Current active identities: ${current.active_identity_count}; pending: ${current.pending_identity_count}.`
-      );
-      error.statusCode = 409;
-      error.code = "TRACEABILITY_IDENTITY_RECONCILIATION_REQUIRED";
-      throw error;
-    }
+    const error = new Error(
+      `Serialized enforcement requires exactly ${current.quantity} active unit identities and zero non-active stock identities.`
+    );
+    error.statusCode = 409;
+    error.code = "TRACEABILITY_IDENTITY_RECONCILIATION_REQUIRED";
+    throw error;
   }
 
   await connection.query(
@@ -257,7 +306,8 @@ async function configureProductTraceability(connection, {
          inventory_traceability_state = ?,
          inventory_traceability_configured_by = ?,
          inventory_traceability_configured_at = NOW()
-     WHERE id = ? AND branch_id = ?`,
+     WHERE id = ?
+       AND branch_id = ?`,
     [
       configuration.trackingMode,
       configuration.productCode,
@@ -275,17 +325,20 @@ async function configureProductTraceability(connection, {
   });
 }
 
-async function insertUniqueUnit(connection, {
-  branchId,
-  productId,
-  labelBatchId,
-  productCode,
-  actorUserId,
-  sourceType,
-  sourceId,
-  sourceItemId,
-  unitCodeFactory,
-}) {
+async function insertUniqueUnit(
+  connection,
+  {
+    branchId,
+    productId,
+    labelBatchId,
+    productCode,
+    actorUserId,
+    sourceType,
+    sourceId,
+    sourceItemId,
+    unitCodeFactory,
+  }
+) {
   const maxAttempts = 12;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const unitCode = generateUnitCode(productCode, unitCodeFactory);
@@ -327,28 +380,40 @@ async function insertUniqueUnit(connection, {
 
       return { id: result.insertId, unit_code: unitCode };
     } catch (error) {
-      if (error.code !== "ER_DUP_ENTRY" || attempt === maxAttempts - 1) throw error;
+      if (error.code !== "ER_DUP_ENTRY" || attempt === maxAttempts - 1) {
+        throw error;
+      }
     }
   }
-  throw new Error("Unable to generate a unique inventory unit identity.");
+
+  const error = new Error("Unable to generate a unique inventory unit identity.");
+  error.code = "TRACEABILITY_UNIT_CODE_GENERATION_FAILED";
+  throw error;
 }
 
-async function createSerializedLabelBatch(connection, {
-  branchId,
-  productId,
-  expectedQuantity,
-  sourceType = "opening_reconciliation",
-  sourceId = null,
-  sourceItemId = null,
-  createdBy,
-  notes = null,
-  batchCodeFactory,
-  unitCodeFactory,
-}) {
+async function createSerializedLabelBatch(
+  connection,
+  {
+    branchId,
+    productId,
+    expectedQuantity,
+    sourceType = "opening_reconciliation",
+    sourceId = null,
+    sourceItemId = null,
+    createdBy,
+    notes = null,
+    batchCodeFactory,
+    unitCodeFactory,
+  }
+) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanProductId = positiveInt(productId, "productId");
   const cleanCreatedBy = positiveInt(createdBy, "createdBy");
   const quantity = positiveInt(expectedQuantity, "expectedQuantity");
+  const cleanSourceType = cleanText(sourceType, 40) || "opening_reconciliation";
+  const cleanSourceId = nullableNumber(sourceId);
+  const cleanSourceItemId = nullableNumber(sourceItemId);
+
   if (quantity > 2000) {
     const error = new Error("A single label batch cannot exceed 2,000 physical units.");
     error.statusCode = 400;
@@ -356,22 +421,71 @@ async function createSerializedLabelBatch(connection, {
     throw error;
   }
 
+  // Lock the product row before calculating identity coverage. That serializes
+  // competing batch-generation requests for the same product.
   const product = await getProductTraceabilitySummary(connection, {
     branchId: cleanBranchId,
     productId: cleanProductId,
     forUpdate: true,
   });
+
   if (product.inventory_tracking_mode !== TRACKING_MODES.SERIALIZED) {
-    const error = new Error("Label-unit generation is only available for serialized products.");
+    const error = new Error(
+      "Label-unit generation is only available for serialized products."
+    );
     error.statusCode = 409;
     error.code = "SERIALIZED_TRACKING_REQUIRED";
     throw error;
   }
+
   if (product.inventory_traceability_state === TRACEABILITY_STATES.OFF) {
-    const error = new Error("Put the product into traceability setup before generating labels.");
+    const error = new Error(
+      "Put the product into traceability setup before generating labels."
+    );
     error.statusCode = 409;
     error.code = "TRACEABILITY_SETUP_REQUIRED";
     throw error;
+  }
+
+  if (product.identity_gap <= 0) {
+    const error = new Error(
+      "All current system stock is already covered by physical identity records. Resolve or void an existing identity before generating another label batch."
+    );
+    error.statusCode = 409;
+    error.code = "TRACEABILITY_NO_IDENTITY_GAP";
+    throw error;
+  }
+
+  if (quantity > product.identity_gap) {
+    const error = new Error(
+      `Cannot generate ${quantity} identities when only ${product.identity_gap} unit(s) of system stock remain without identity coverage.`
+    );
+    error.statusCode = 409;
+    error.code = "TRACEABILITY_BATCH_EXCEEDS_IDENTITY_GAP";
+    throw error;
+  }
+
+  if (cleanSourceId !== null && cleanSourceItemId !== null) {
+    const [existingSourceRows] = await connection.query(
+      `SELECT id, batch_code, status
+       FROM inventory_label_batches
+       WHERE branch_id = ?
+         AND source_type = ?
+         AND source_id = ?
+         AND source_item_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [cleanBranchId, cleanSourceType, cleanSourceId, cleanSourceItemId]
+    );
+    if (existingSourceRows.length > 0) {
+      const error = new Error(
+        `Source item already has controlled label batch ${existingSourceRows[0].batch_code}.`
+      );
+      error.statusCode = 409;
+      error.code = "TRACEABILITY_SOURCE_BATCH_EXISTS";
+      error.existingBatch = existingSourceRows[0];
+      throw error;
+    }
   }
 
   const batchCode = generateBatchCode(
@@ -397,9 +511,9 @@ async function createSerializedLabelBatch(connection, {
       batchCode,
       cleanBranchId,
       cleanProductId,
-      cleanText(sourceType, 40) || "opening_reconciliation",
-      sourceId === null || sourceId === undefined ? null : Number(sourceId),
-      sourceItemId === null || sourceItemId === undefined ? null : Number(sourceItemId),
+      cleanSourceType,
+      cleanSourceId,
+      cleanSourceItemId,
       quantity,
       quantity,
       LABEL_BATCH_STATUSES.GENERATED,
@@ -410,17 +524,19 @@ async function createSerializedLabelBatch(connection, {
 
   const units = [];
   for (let index = 0; index < quantity; index += 1) {
-    units.push(await insertUniqueUnit(connection, {
-      branchId: cleanBranchId,
-      productId: cleanProductId,
-      labelBatchId: batchResult.insertId,
-      productCode: product.inventory_product_code,
-      actorUserId: cleanCreatedBy,
-      sourceType: cleanText(sourceType, 40) || "opening_reconciliation",
-      sourceId,
-      sourceItemId,
-      unitCodeFactory,
-    }));
+    units.push(
+      await insertUniqueUnit(connection, {
+        branchId: cleanBranchId,
+        productId: cleanProductId,
+        labelBatchId: batchResult.insertId,
+        productCode: product.inventory_product_code,
+        actorUserId: cleanCreatedBy,
+        sourceType: cleanSourceType,
+        sourceId: cleanSourceId,
+        sourceItemId: cleanSourceItemId,
+        unitCodeFactory,
+      })
+    );
   }
 
   return {
@@ -430,45 +546,64 @@ async function createSerializedLabelBatch(connection, {
     expected_quantity: quantity,
     generated_quantity: units.length,
     status: LABEL_BATCH_STATUSES.GENERATED,
+    identity_gap_before: product.identity_gap,
+    identity_gap_after_generation: product.identity_gap - units.length,
     units,
   };
 }
 
-async function markLabelBatchPrinted(connection, {
-  branchId,
-  batchId,
-  printFormat,
-  copies = 1,
-  printedBy,
-  approvedBy = null,
-  reason = null,
-}) {
+async function markLabelBatchPrinted(
+  connection,
+  {
+    branchId,
+    batchId,
+    printFormat,
+    copies = 1,
+    printedBy,
+    approvedBy = null,
+    reason = null,
+  }
+) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanBatchId = positiveInt(batchId, "batchId");
   const cleanPrintedBy = positiveInt(printedBy, "printedBy");
   const cleanFormat = normalizePrintFormat(printFormat);
   const cleanCopies = positiveInt(copies, "copies");
+
   if (cleanCopies > 5) {
-    const error = new Error("Printing more than five copies requires a separate controlled request.");
+    const error = new Error(
+      "Printing more than five copies requires a separate controlled request."
+    );
     error.statusCode = 400;
     error.code = "TRACEABILITY_PRINT_COPY_LIMIT";
     throw error;
   }
 
   const [batchRows] = await connection.query(
-    `SELECT id, status FROM inventory_label_batches
-     WHERE id = ? AND branch_id = ?
-     LIMIT 1 FOR UPDATE`,
+    `SELECT id, status
+     FROM inventory_label_batches
+     WHERE id = ?
+       AND branch_id = ?
+     LIMIT 1
+     FOR UPDATE`,
     [cleanBatchId, cleanBranchId]
   );
+
   if (batchRows.length === 0) {
     const error = new Error("Label batch not found in the selected store.");
     error.statusCode = 404;
     error.code = "TRACEABILITY_BATCH_NOT_FOUND";
     throw error;
   }
-  if ([LABEL_BATCH_STATUSES.ACTIVATED, LABEL_BATCH_STATUSES.CANCELLED].includes(batchRows[0].status)) {
-    const error = new Error("This label batch can no longer be printed as an initial batch.");
+
+  if (
+    [LABEL_BATCH_STATUSES.ACTIVATED, LABEL_BATCH_STATUSES.CANCELLED].includes(
+      batchRows[0].status
+    )
+  ) {
+    const error = new Error(
+      "This label batch can no longer be printed as an initial batch."
+    );
     error.statusCode = 409;
     error.code = "TRACEABILITY_BATCH_PRINT_LOCKED";
     throw error;
@@ -476,8 +611,14 @@ async function markLabelBatchPrinted(connection, {
 
   await connection.query(
     `INSERT INTO inventory_label_print_events (
-       branch_id, label_batch_id, unit_id, print_format, copies,
-       print_reason, printed_by, approved_by
+       branch_id,
+       label_batch_id,
+       unit_id,
+       print_format,
+       copies,
+       print_reason,
+       printed_by,
+       approved_by
      ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)`,
     [
       cleanBranchId,
@@ -489,51 +630,80 @@ async function markLabelBatchPrinted(connection, {
       approvedBy ? positiveInt(approvedBy, "approvedBy") : null,
     ]
   );
+
   await connection.query(
     `UPDATE inventory_label_batches
-     SET status = ?, label_format = ?, printed_by = ?, printed_at = NOW()
-     WHERE id = ? AND branch_id = ?`,
-    [LABEL_BATCH_STATUSES.PRINTED, cleanFormat, cleanPrintedBy, cleanBatchId, cleanBranchId]
+     SET status = ?,
+         label_format = ?,
+         printed_by = ?,
+         printed_at = NOW()
+     WHERE id = ?
+       AND branch_id = ?`,
+    [
+      LABEL_BATCH_STATUSES.PRINTED,
+      cleanFormat,
+      cleanPrintedBy,
+      cleanBatchId,
+      cleanBranchId,
+    ]
   );
 
-  return { id: cleanBatchId, status: LABEL_BATCH_STATUSES.PRINTED, label_format: cleanFormat };
+  return {
+    id: cleanBatchId,
+    status: LABEL_BATCH_STATUSES.PRINTED,
+    label_format: cleanFormat,
+  };
 }
 
-async function activateLabelBatch(connection, {
-  branchId,
-  batchId,
-  activeUnitCodes,
-  voidUnitCodes = [],
-  verifiedBy,
-  notes = null,
-}) {
+async function activateLabelBatch(
+  connection,
+  {
+    branchId,
+    batchId,
+    activeUnitCodes,
+    voidUnitCodes = [],
+    verifiedBy,
+    notes = null,
+  }
+) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanBatchId = positiveInt(batchId, "batchId");
   const cleanVerifiedBy = positiveInt(verifiedBy, "verifiedBy");
   const activeCodes = [...new Set((activeUnitCodes || []).map(normalizeUnitCode))];
   const voidCodes = [...new Set((voidUnitCodes || []).map(normalizeUnitCode))];
   const overlap = activeCodes.filter((code) => voidCodes.includes(code));
+
   if (overlap.length > 0) {
-    const error = new Error("A unit identity cannot be both activated and voided.");
+    const error = new Error(
+      "A unit identity cannot be both activated and voided."
+    );
     error.statusCode = 400;
     error.code = "TRACEABILITY_ACTIVATION_OVERLAP";
     throw error;
   }
 
   const [batchRows] = await connection.query(
-    `SELECT * FROM inventory_label_batches
-     WHERE id = ? AND branch_id = ?
-     LIMIT 1 FOR UPDATE`,
+    `SELECT *
+     FROM inventory_label_batches
+     WHERE id = ?
+       AND branch_id = ?
+     LIMIT 1
+     FOR UPDATE`,
     [cleanBatchId, cleanBranchId]
   );
+
   if (batchRows.length === 0) {
     const error = new Error("Label batch not found in the selected store.");
     error.statusCode = 404;
     error.code = "TRACEABILITY_BATCH_NOT_FOUND";
     throw error;
   }
+
   const batch = batchRows[0];
-  if (batch.status === LABEL_BATCH_STATUSES.ACTIVATED || batch.status === LABEL_BATCH_STATUSES.CANCELLED) {
+  if (
+    batch.status === LABEL_BATCH_STATUSES.ACTIVATED ||
+    batch.status === LABEL_BATCH_STATUSES.CANCELLED
+  ) {
     const error = new Error("This label batch is already finalized.");
     error.statusCode = 409;
     error.code = "TRACEABILITY_BATCH_FINALIZED";
@@ -543,14 +713,19 @@ async function activateLabelBatch(connection, {
   const [units] = await connection.query(
     `SELECT id, unit_code, status
      FROM inventory_units
-     WHERE label_batch_id = ? AND current_branch_id = ?
+     WHERE label_batch_id = ?
+       AND current_branch_id = ?
      ORDER BY id ASC
      FOR UPDATE`,
     [cleanBatchId, cleanBranchId]
   );
+
   const generatedCodes = new Set(units.map((unit) => unit.unit_code));
   const suppliedCodes = new Set([...activeCodes, ...voidCodes]);
-  if (generatedCodes.size !== suppliedCodes.size || [...generatedCodes].some((code) => !suppliedCodes.has(code))) {
+  if (
+    generatedCodes.size !== suppliedCodes.size ||
+    [...generatedCodes].some((code) => !suppliedCodes.has(code))
+  ) {
     const error = new Error(
       "Every generated label identity must be explicitly confirmed as attached or voided before the batch can be finalized."
     );
@@ -561,15 +736,19 @@ async function activateLabelBatch(connection, {
 
   for (const unit of units) {
     if (unit.status !== UNIT_STATUSES.LABEL_PENDING) {
-      const error = new Error(`Unit ${unit.unit_code} is no longer pending label confirmation.`);
+      const error = new Error(
+        `Unit ${unit.unit_code} is no longer pending label confirmation.`
+      );
       error.statusCode = 409;
       error.code = "TRACEABILITY_UNIT_NOT_PENDING";
       throw error;
     }
+
     const target = activeCodes.includes(unit.unit_code)
       ? UNIT_STATUSES.ACTIVE
       : UNIT_STATUSES.VOIDED;
     assertUnitTransition(unit.status, target);
+
     await connection.query(
       `UPDATE inventory_units
        SET status = ?,
@@ -579,19 +758,31 @@ async function activateLabelBatch(connection, {
            last_verified_at = NOW(),
            status_changed_at = NOW()
        WHERE id = ?`,
-      [target, target, cleanVerifiedBy, target, cleanVerifiedBy, unit.id]
+      [
+        target,
+        target,
+        cleanVerifiedBy,
+        target,
+        cleanVerifiedBy,
+        unit.id,
+      ]
     );
+
     await appendUnitEvent(connection, {
       unitId: unit.id,
       branchId: cleanBranchId,
-      eventType: target === UNIT_STATUSES.ACTIVE ? "unit_activated" : "label_voided",
+      eventType:
+        target === UNIT_STATUSES.ACTIVE ? "unit_activated" : "label_voided",
       fromStatus: UNIT_STATUSES.LABEL_PENDING,
       toStatus: target,
       sourceType: "label_batch",
       sourceId: cleanBatchId,
       actorUserId: cleanVerifiedBy,
       reason: cleanText(notes, 500),
-      metadata: { batch_code: batch.batch_code, unit_code: unit.unit_code },
+      metadata: {
+        batch_code: batch.batch_code,
+        unit_code: unit.unit_code,
+      },
     });
   }
 
@@ -605,7 +796,8 @@ async function activateLabelBatch(connection, {
          activated_by = ?,
          activated_at = NOW(),
          notes = COALESCE(?, notes)
-     WHERE id = ? AND branch_id = ?`,
+     WHERE id = ?
+       AND branch_id = ?`,
     [
       LABEL_BATCH_STATUSES.ACTIVATED,
       activeCodes.length,
@@ -622,6 +814,7 @@ async function activateLabelBatch(connection, {
     branchId: cleanBranchId,
     productId: batch.product_id,
   });
+
   return {
     id: cleanBatchId,
     batch_code: batch.batch_code,
@@ -635,6 +828,7 @@ async function activateLabelBatch(connection, {
 async function getUnitTraceability(connection, { branchId, unitCode }) {
   const cleanBranchId = positiveInt(branchId, "branchId");
   const cleanUnitCode = normalizeUnitCode(unitCode);
+
   const [units] = await connection.query(
     `SELECT
        u.*,
@@ -665,8 +859,11 @@ async function getUnitTraceability(connection, { branchId, unitCode }) {
      LIMIT 1`,
     [cleanUnitCode, cleanBranchId, cleanBranchId]
   );
+
   if (units.length === 0) {
-    const error = new Error("Inventory unit identity was not found for this store.");
+    const error = new Error(
+      "Inventory unit identity was not found for this store."
+    );
     error.statusCode = 404;
     error.code = "TRACEABILITY_UNIT_NOT_FOUND";
     throw error;
@@ -719,6 +916,7 @@ async function withTransaction(work) {
 }
 
 module.exports = {
+  INVENTORY_BEARING_STATUSES,
   activateLabelBatch,
   appendUnitEvent,
   configureProductTraceability,
