@@ -149,11 +149,11 @@ test("confidence records governed tool use for live questions", () => {
     queries: ["current stock quantity"],
     evidence: [
       evidence({
-        ref: "inventory_live",
+        ref: "spare_parts:inventory:branch:1",
         label: "Current stock quantity",
         excerpt: "Current governed stock quantity is 44 units.",
         score: 0.95,
-        type: "tool.inventory",
+        type: "system_snapshot",
       }),
       evidence({
         ref: "inventory_policy",
@@ -166,7 +166,12 @@ test("confidence records governed tool use for live questions", () => {
   const confidence = assessEvidenceConfidence({
     evidence: ranked,
     liveDataRequired: true,
-    toolResults: [{ tool: { key: "inventory.read" }, evidence: [ranked[0]] }],
+    toolResults: [
+      {
+        tool: { key: "spare_parts.inventory_health" },
+        evidence: [ranked[0]],
+      },
+    ],
   });
 
   assert.equal(confidence.live_tools_used, true);
