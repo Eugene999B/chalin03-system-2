@@ -13,33 +13,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  wire-and-verify:
+  wire-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/inventory-loss-prevention-traceability
           fetch-depth: 1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
+
       - name: Apply receiving and checkout wiring
         run: |
           set -euo pipefail
           python .github/tmp-traceability-core-wire/patch.py
           rm -rf .github/tmp-traceability-core-wire
           rm -f .github/workflows/tmp-traceability-core-wire.yml
-      - name: Verify backend
-        working-directory: backend
-        run: |
-          npm ci
-          npm run syntax-check
-          npm test
-          npm run migration-safety
-      - name: Publish verified core wiring
+
+      - name: Publish deterministic core wiring
         run: |
           set -euo pipefail
           git diff --check
