@@ -1,4 +1,6 @@
 import { lazy, Suspense } from "react";
+import { AppearanceProvider } from "../appearance/AppearanceContext";
+import AppearanceToggle from "../appearance/AppearanceToggle";
 import { FeatureFlagProvider } from "../context/FeatureFlagContext";
 import ChalinOneStandaloneEntry from "./ChalinOneStandaloneEntry";
 import "../index.css";
@@ -6,6 +8,7 @@ import "../styles/userPermissionManager.mobile.css";
 import "../styles/commandGateExtensions.css";
 import "../styles/mobileExperience.css";
 import "../styles/adminMobileHotfix.css";
+import "../styles/appearance.css";
 import "./ai/intelligenceOverhaul.css";
 import "./ai/providerControlOverhaul.css";
 
@@ -26,18 +29,23 @@ export default function ProtectedChalinOneEntry() {
     pathname.startsWith("/content-studio/");
 
   return (
-    <FeatureFlagProvider>
-      <ChalinOneStandaloneEntry />
-      {showProviderControl ? (
-        <Suspense fallback={null}>
-          <AiProviderControlLauncher />
-        </Suspense>
-      ) : null}
-      {showContentStudioAi ? (
-        <Suspense fallback={null}>
-          <ContentStudioAiLauncher />
-        </Suspense>
-      ) : null}
-    </FeatureFlagProvider>
+    <AppearanceProvider>
+      <FeatureFlagProvider>
+        <ChalinOneStandaloneEntry />
+        <div className="chalin-global-appearance">
+          <AppearanceToggle compact />
+        </div>
+        {showProviderControl ? (
+          <Suspense fallback={null}>
+            <AiProviderControlLauncher />
+          </Suspense>
+        ) : null}
+        {showContentStudioAi ? (
+          <Suspense fallback={null}>
+            <ContentStudioAiLauncher />
+          </Suspense>
+        ) : null}
+      </FeatureFlagProvider>
+    </AppearanceProvider>
   );
 }
