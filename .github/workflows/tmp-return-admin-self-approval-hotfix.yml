@@ -1,0 +1,58 @@
+name: Temporary Return Admin Self-Approval Hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/return-admin-self-approval-20260810
+
+permissions:
+  contents: write
+
+concurrency:
+  group: return-admin-self-approval-hotfix
+  cancel-in-progress: false
+
+jobs:
+  apply-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/return-admin-self-approval-20260810
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply hotfix
+        run: |
+          set -euo pipefail
+          python .github/tmp-return-admin-hotfix/patch.py
+          rm -rf .github/tmp-return-admin-hotfix
+          rm -f .github/workflows/tmp-return-admin-self-approval-hotfix.yml
+
+      - name: Verify targeted backend contract
+        run: |
+          set -euo pipefail
+          node --test backend/tests/operationalApprovalCentreContract.test.js
+          node --check backend/services/operationalApprovalService.js
+
+      - name: Verify full backend suite
+        run: |
+          set -euo pipefail
+          cd backend
+          npm ci
+          npm test
+
+      - name: Publish verified hotfix
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Allow administrators to self-approve return refunds"
+          git push origin HEAD:hotfix/return-admin-self-approval-20260810
