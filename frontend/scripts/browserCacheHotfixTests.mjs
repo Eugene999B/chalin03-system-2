@@ -71,20 +71,31 @@ assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
 assert.match(mainEntry, /encodeURIComponent\(APP_SHELL_RELEASE\)/);
 assert.match(mainEntry, /isPublicWebsitePath/);
+assert.match(mainEntry, /isChalinOneStandalonePath/);
 assert.match(
   mainEntry,
   /const publicWebsiteSurface = isPublicWebsitePath\(window\.location\.pathname\)/
 );
+assert.match(
+  mainEntry,
+  /const standaloneChalinOne = isChalinOneStandalonePath/
+);
 
-// Public CHALIN ONE must never join the automatic service-worker refresh loop.
-assert.match(mainEntry, /if \(publicWebsiteSurface\) \{/);
+// Public CHALIN ONE and protected standalone AI/Studio surfaces must never join
+// the automatic service-worker refresh loop. A long reasoning turn or Studio
+// draft must not blink/reload because a new deployment takes control.
+assert.match(mainEntry, /if \(!publicWebsiteSurface && !standaloneChalinOne\) \{/);
+assert.match(mainEntry, /if \(publicWebsiteSurface \|\| standaloneChalinOne\) \{/);
 assert.match(mainEntry, /removeChalinServiceWorkerCaches/);
 assert.match(mainEntry, /registration\.unregister\(\)/);
 assert.match(
   mainEntry,
   /CHALIN ONE public website is running without automatic service-worker refreshes/
 );
-assert.match(mainEntry, /if \(!publicWebsiteSurface\) \{/);
+assert.match(
+  mainEntry,
+  /CHALIN ONE protected standalone workspace is running without automatic service-worker refreshes/
+);
 assert.match(
   mainEntry,
   /navigator\.serviceWorker\.addEventListener\("controllerchange"/
@@ -153,5 +164,5 @@ assert.match(
 assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser cache recovery contracts passed: public CHALIN ONE does not register or react to service-worker refresh events, secure links fully stop the public router before a native protected-app navigation, and operational pages retain stale-asset recovery."
+  "✅ Browser cache recovery contracts passed: public and protected standalone CHALIN ONE surfaces stay out of automatic service-worker refresh events, secure links fully stop the public router before native protected-app navigation, and operational pages retain stale-asset recovery."
 );
