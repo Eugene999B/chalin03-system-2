@@ -5,6 +5,7 @@ export const PUBLIC_METADATA_CAPABILITIES = Object.freeze([
   Object.freeze({ key: "robots", label: "Robots directive", status: "active", note: "Published governed robots directives are rendered, while a staging noindex baseline remains hard-locked." }),
   Object.freeze({ key: "open_graph", label: "Open Graph", status: "active", note: "Route title, description, canonical URL, type and approved social image are synchronized into Open Graph metadata." }),
   Object.freeze({ key: "twitter", label: "Twitter / X cards", status: "active", note: "Route title, description and approved image are synchronized into Twitter/X card metadata." }),
+  Object.freeze({ key: "structured_data", label: "Structured data", status: "active", note: "Published detail routes emit safe WebPage or NewsArticle schema plus BreadcrumbList JSON-LD without raw HTML injection." }),
   Object.freeze({ key: "sitemap", label: "XML sitemap", status: "active", note: "The staging edge generates sitemap.xml from published governed public routes, sitemap visibility and page robots policy." }),
   Object.freeze({ key: "robots_txt", label: "robots.txt", status: "active", note: "Staging serves a hard Disallow-all robots.txt. Any future production indexing activation remains a separate explicitly approved release step." }),
 ]);
@@ -54,6 +55,30 @@ export function normalizeWebsiteControl(raw = {}) {
   };
 }
 
+export function normalizeLinkIntegrity(raw = {}) {
+  const summary = raw.summary || {};
+  return {
+    generatedAt: raw.generated_at || null,
+    summary: {
+      pagesScanned: numberValue(summary.pages_scanned),
+      versionsScanned: numberValue(summary.versions_scanned),
+      referencesScanned: numberValue(summary.references_scanned),
+      uniqueTargets: numberValue(summary.unique_targets),
+      healthyTargets: numberValue(summary.healthy_targets),
+      brokenTargets: numberValue(summary.broken_targets),
+      privateRouteTargets: numberValue(summary.private_route_targets),
+      redirectedTargets: numberValue(summary.redirected_targets),
+      unpublishedPageTargets: numberValue(summary.unpublished_page_targets),
+      criticalTargets: numberValue(summary.critical_targets),
+      warningTargets: numberValue(summary.warning_targets),
+      truncated: summary.truncated === true,
+    },
+    issues: list(raw.issues),
+    targets: list(raw.targets),
+    policy: raw.policy && typeof raw.policy === "object" ? raw.policy : {},
+  };
+}
+
 export function websiteControlTone(severity) {
   const normalized = String(severity || "").toLowerCase();
   if (normalized === "critical") return "danger";
@@ -91,6 +116,19 @@ export function matchesWebsiteControlQuery(row = {}, query = "") {
     .join(" ")
     .toLowerCase();
   return haystack.includes(needle);
+}
+
+export function matchesLinkIntegrityQuery(target = {}, query = "") {
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return true;
+  const sourceText = list(target.sources)
+    .map((source) => `${source.page_title || ""} ${source.page_key || ""} ${source.location || ""}`)
+    .join(" ");
+  return [target.path, target.code, target.message, target.redirect_destination, sourceText]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(needle);
 }
 
 export function rowHasSeverity(row = {}, severity = "") {
