@@ -426,11 +426,11 @@ export default function PayrollProcessingCentrePage() {
     <main className="payroll-centre" data-testid="payroll-processing-centre">
       <header className="payroll-centre__hero">
         <div>
-          <p>Payroll command centre · {workspaceLabel(workspaceCode)}</p>
-          <h1>Payroll Processing &amp; Approval</h1>
+          <p>{workspaceLabel(workspaceCode)} · Simple monthly payroll</p>
+          <h1>Run Monthly Payroll</h1>
           <span>
-            Validate salary inputs, freeze exact calculation evidence, separate maker and checker duties,
-            post controlled salary payments and reconcile every remaining balance.
+            Workers and salaries come automatically from Worker Profiles. Start the month, preview everyone,
+            send the payroll for approval, record payments and reconcile when payment is complete.
           </span>
         </div>
         <div className="payroll-centre__hero-badge">
@@ -440,21 +440,21 @@ export default function PayrollProcessingCentrePage() {
       </header>
 
       <Notice>
-        <strong>No statutory rate is hard-coded here.</strong> Payroll calculations use only approved, effective-dated rule configurations and approved worker compensation records.
+        <strong>How monthly payroll works:</strong> Worker Profiles supply each employee and active salary → this page previews the month → approval confirms the calculation → payments and payslips are recorded from the approved payroll.
       </Notice>
       {notice ? <Notice type="success">{notice}</Notice> : null}
       {problem ? <Notice type="error">{problem}</Notice> : null}
 
       <nav className="payroll-centre__tabs" aria-label="Payroll centre sections">
-        <button type="button" className={tab === "periods" ? "is-active" : ""} onClick={() => setTab("periods")}>Payroll Periods</button>
-        <button type="button" className={tab === "rules" ? "is-active" : ""} onClick={() => setTab("rules")}>Statutory Rules</button>
-        <button type="button" className={tab === "approvals" ? "is-active" : ""} onClick={() => setTab("approvals")}>Correction Approvals ({pendingAdjustments.length})</button>
+        <button type="button" className={tab === "periods" ? "is-active" : ""} onClick={() => setTab("periods")}>Monthly Payroll</button>
+        {(canManage || canApprove) ? <button type="button" className={tab === "rules" ? "is-active" : ""} onClick={() => setTab("rules")}>Payroll Settings</button> : null}
+        <button type="button" className={tab === "approvals" ? "is-active" : ""} onClick={() => setTab("approvals")}>Corrections ({pendingAdjustments.length})</button>
       </nav>
 
       {tab === "rules" ? (
         <section className="payroll-centre__rule-layout">
           <div className="payroll-centre__card">
-            <div className="payroll-centre__section-head"><div><p>Versioned data</p><h2>Statutory rule register</h2></div><span>{rules.length} version(s)</span></div>
+            <div className="payroll-centre__section-head"><div><p>Payroll settings</p><h2>Statutory rules</h2></div><span>{rules.length} version(s)</span></div>
             {loading ? <Empty>Loading statutory rule versions…</Empty> : null}
             {!loading && !rules.length ? <Empty>No statutory rule version has been recorded.</Empty> : null}
             <div className="payroll-centre__rule-list">
@@ -511,7 +511,7 @@ export default function PayrollProcessingCentrePage() {
                 <label>Start<input type="date" required value={periodForm.period_start} onChange={(event) => setPeriodForm((current) => ({ ...current, period_start: event.target.value }))} /></label>
                 <label>End<input type="date" required value={periodForm.period_end} onChange={(event) => setPeriodForm((current) => ({ ...current, period_end: event.target.value }))} /></label>
                 <label>Scheduled pay date<input type="date" value={periodForm.scheduled_pay_date} onChange={(event) => setPeriodForm((current) => ({ ...current, scheduled_pay_date: event.target.value }))} /></label>
-                <button className="is-primary" type="submit" disabled={busy === "create-period"}>Create Draft Period</button>
+                <button className="is-primary" type="submit" disabled={busy === "create-period"}>Start This Month&apos;s Payroll</button>
               </form>
             ) : null}
 
@@ -541,8 +541,8 @@ export default function PayrollProcessingCentrePage() {
                   </div>
                   <WorkflowStrip status={period.status} />
                   <div className="payroll-centre__actions">
-                    {period.status === "draft" && canPrepare ? <button type="button" onClick={validatePeriod} disabled={busy === "validate"}>Validate</button> : null}
-                    {period.status === "draft" && canPrepare ? <button className="is-primary" type="button" onClick={() => periodAction("prepare", "Payroll prepared for review.")} disabled={busy === "prepare"}>Prepare for Review</button> : null}
+                    {period.status === "draft" && canPrepare ? <button type="button" onClick={validatePeriod} disabled={busy === "validate"}>Preview Workers &amp; Salaries</button> : null}
+                    {period.status === "draft" && canPrepare ? <button className="is-primary" type="button" onClick={() => periodAction("prepare", "Payroll sent for approval.")} disabled={busy === "prepare"}>Confirm &amp; Send for Approval</button> : null}
                     {period.status === "pending_approval" && canApprove ? <button className="is-primary" type="button" onClick={() => periodAction("approve", "Payroll approved.")} disabled={busy === "approve"}>Approve Payroll</button> : null}
                     {period.status === "approved" && canApprove ? <button className="is-primary" type="button" onClick={() => periodAction("lock", "Payroll locked.")} disabled={busy === "lock"}>Lock for Payment</button> : null}
                     {["locked", "paying", "reconciled"].includes(period.status) && canAudit ? <button type="button" onClick={() => periodAction("reconcile", "Payroll reconciled.")} disabled={busy === "reconcile"}>Reconcile Payments</button> : null}
@@ -554,6 +554,24 @@ export default function PayrollProcessingCentrePage() {
                     <div className="payroll-centre__section-head"><div><p>Pre-approval validation</p><h2>{validation.valid ? "Ready for review" : "Exceptions found"}</h2></div><span>{validation.issues?.length || 0} issue(s)</span></div>
                     {(validation.issues || []).length ? <div className="payroll-centre__issues">{validation.issues.map((issue, index) => <article key={`${issue.code}-${index}`}><b>{label(issue.code)}</b><span>{issue.worker_name ? `${issue.worker_name}: ` : ""}{issue.message}</span></article>)}</div> : <Notice type="success">Approved compensation and statutory inputs cover every payroll calculation.</Notice>}
                     <div className="payroll-centre__metrics is-four"><Metric label="Workers" value={validation.totals?.workers || 0} /><Metric label="Gross" value={money(validation.totals?.gross_earnings)} /><Metric label="Deductions" value={money(validation.totals?.deductions)} /><Metric label="Net payroll" value={money(validation.totals?.net_salary)} /></div>
+                    {(validation.previews || []).length ? (
+                      <div className="payroll-centre__table-wrap">
+                        <table>
+                          <thead><tr><th>Worker</th><th>Basic salary</th><th>Gross</th><th>Deductions</th><th>Net salary</th></tr></thead>
+                          <tbody>
+                            {validation.previews.map((worker) => (
+                              <tr key={worker.worker_id}>
+                                <td><strong>{worker.worker_name}</strong><small>{worker.employee_number} · {label(worker.pay_frequency)}</small></td>
+                                <td>{money(worker.basic_salary)}</td>
+                                <td>{money(worker.gross_earnings)}</td>
+                                <td>{money(worker.total_deductions)}</td>
+                                <td><strong>{money(worker.net_salary)}</strong></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
 

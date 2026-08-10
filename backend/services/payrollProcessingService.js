@@ -456,6 +456,8 @@ async function validatePayrollPeriod({ periodId, workspaceCode, connection = poo
       employee_number: worker.employee_number,
       worker_name: worker.full_name,
       compensation_profile_id: profiles[0].id,
+      basic_salary: money(profiles[0].basic_salary),
+      pay_frequency: profiles[0].pay_frequency,
       gross_earnings: calculation.gross_earnings,
       total_deductions: calculation.total_deductions,
       employer_contributions: calculation.employer_contributions,
