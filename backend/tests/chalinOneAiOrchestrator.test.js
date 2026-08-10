@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   PERSONA_INSTRUCTIONS,
+  providerContextForTurn,
   providerMessages,
   sumProviderUsage,
 } = require("../services/aiOrchestratorService");
@@ -98,14 +99,30 @@ test("tool result messages remain bounded while governed evidence stays in the e
   assert.equal("pool" in parsed, false);
 });
 
-test("provider usage sums every round instead of undercounting the final response", () => {
+test("provider context exposes only hashed user reference plus governed persona and intent", () => {
+  const context = providerContextForTurn({
+    req: { user: { id: 42 } },
+    persona: "executive",
+    scope: { workspace_code: "spare_parts" },
+    reasoningPlan: { intent: "diagnose", live_data_required: true },
+  });
+  assert.equal(context.persona, "executive");
+  assert.equal(context.intent, "diagnose");
+  assert.equal(context.live_data_required, true);
+  assert.equal(context.workspace_code, "spare_parts");
+  assert.equal(context.safety_identifier.length, 64);
+  assert.doesNotMatch(context.safety_identifier, /42/);
+});
+
+test("provider usage sums every round including metered cost", () => {
   const usage = sumProviderUsage([
-    { input_tokens: 120, output_tokens: 40, latency_ms: 300 },
-    { input_tokens: 180, output_tokens: 70, latency_ms: 450 },
+    { input_tokens: 120, output_tokens: 40, latency_ms: 300, cost_micros: 95 },
+    { input_tokens: 180, output_tokens: 70, latency_ms: 450, cost_micros: 155 },
   ]);
   assert.deepEqual(usage, {
     input_tokens: 300,
     output_tokens: 110,
     latency_ms: 750,
+    cost_micros: 250,
   });
 });
