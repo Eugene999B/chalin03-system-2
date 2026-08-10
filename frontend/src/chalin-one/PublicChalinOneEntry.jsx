@@ -19,8 +19,8 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
     default: module.PublicCorporateWebsiteUnavailable,
   }))
 );
-const PublicGuideWidget = lazy(() =>
-  import("./public-site/PublicGuideWidget")
+const PublicGuideRuntime = lazy(() =>
+  import("./public-site/PublicGuideRuntime")
 );
 const PublicTechnicalFinish = lazy(() =>
   import("./public-site/PublicTechnicalFinish")
@@ -53,7 +53,7 @@ function DeferredPublicAnalyticsRuntime() {
   );
 }
 
-function DeferredPublicGuideWidget() {
+function DeferredPublicGuideRuntime() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ function DeferredPublicGuideWidget() {
 
   return (
     <Suspense fallback={null}>
-      <PublicGuideWidget />
+      <PublicGuideRuntime />
     </Suspense>
   );
 }
@@ -172,7 +172,7 @@ export default function PublicChalinOneEntry() {
                 <DeferredPublicWorldEnhancements />
                 <PublicEditorialFinish />
                 <DeferredPublicTechnicalFinish />
-                <DeferredPublicGuideWidget />
+                <DeferredPublicGuideRuntime />
                 <SafePublic fallback={quietFallback}>
                   <PublicCorporateWebsiteApp />
                 </SafePublic>
