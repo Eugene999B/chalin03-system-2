@@ -104,23 +104,26 @@ test("the repair cannot change sales, stock, payments or daily-closing records",
   assert.doesNotMatch(source, /DELETE\s+FROM\s+(sales|debts|debt_payments|products|daily_closings)/i);
 });
 
-test("the one-time visibility repair runs after backfill and before the API", () => {
+test("the one-time visibility repair runs after backfill in controlled maintenance", () => {
   assert.equal(REPAIR_RECORD, "20260805_zero_payment_credit_debt_visibility_repair");
   assert.equal(REQUIRED_BACKFILL_RECORD, "20260805_missing_credit_debt_backfill");
   assert.equal(
     packageJson.scripts["repair:zero-payment-credit-debt-visibility:20260805:production"],
     "node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js"
   );
-  const backfillIndex = packageJson.scripts.start.indexOf(
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const backfillIndex = maintenance.indexOf(
     "runMissingCreditDebtBackfill20260805.js"
   );
-  const repairIndex = packageJson.scripts.start.indexOf(
+  const repairIndex = maintenance.indexOf(
     "runZeroPaymentCreditDebtVisibilityRepair20260805.js"
   );
-  const serverIndex = packageJson.scripts.start.indexOf("server.js");
   assert.ok(backfillIndex >= 0);
   assert.ok(repairIndex > backfillIndex);
-  assert.ok(serverIndex > repairIndex);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.match(source, /schema_migrations/);
   assert.match(source, /GET_LOCK/);
   assert.match(source, /beginTransaction/);

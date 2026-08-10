@@ -36,13 +36,15 @@ test("backfill identity, ordering and one-time production controls are fixed", (
   assert.match(source, /rollback/);
   assert.match(source, /schema_migrations/);
 
-  const start = packageJson.scripts.start;
-  const exactName = start.indexOf("runExactNameReceiptOwnerRecovery20260805.js");
-  const backfill = start.indexOf("runMissingCreditDebtBackfill20260805.js");
-  const server = start.indexOf("server.js");
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const exactName = maintenance.indexOf("runExactNameReceiptOwnerRecovery20260805.js");
+  const backfill = maintenance.indexOf("runMissingCreditDebtBackfill20260805.js");
   assert.ok(exactName >= 0);
   assert.ok(backfill > exactName);
-  assert.ok(server > backfill);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["repair:missing-credit-debts:20260805:production"],
     "node scripts/runMissingCreditDebtBackfill20260805.js"

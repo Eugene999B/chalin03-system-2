@@ -29,6 +29,14 @@ const reviewedBypassFiles = new Set([
   "backend/services/operationalApprovalService.js",
 ]);
 
+// This compatibility service composes reviewed Finance routers onto the
+// equipment-sales router. Requests still enter through the global /api limiter
+// asserted below, so CodeQL's router-mount finding is the same reviewed API
+// surface class as findings emitted directly from backend/routes/.
+const reviewedRateLimitCompositionFiles = new Set([
+  "backend/services/equipmentSalesReminderService.js",
+]);
+
 const counts = new Map();
 const violations = [];
 
@@ -94,7 +102,8 @@ for (const result of results) {
   if (ruleId === "js/missing-rate-limiting") {
     const isBackendRoute =
       location.uri === "backend/server.js" ||
-      location.uri.startsWith("backend/routes/");
+      location.uri.startsWith("backend/routes/") ||
+      reviewedRateLimitCompositionFiles.has(location.uri);
     if (!isBackendRoute) {
       violations.push(
         `Rate-limiting result appeared outside the reviewed API surface at ${location.uri}:${location.line}`
@@ -148,6 +157,10 @@ const operationalApprovalServiceSource = fs.readFileSync(
 );
 const operationalApprovalBootstrapSource = fs.readFileSync(
   path.join(root, "backend/services/operationalApprovalBootstrap.js"),
+  "utf8"
+);
+const equipmentSalesReminderServiceSource = fs.readFileSync(
+  path.join(root, "backend/services/equipmentSalesReminderService.js"),
   "utf8"
 );
 const equipmentCreditApplicationSource = fs.readFileSync(
@@ -247,6 +260,14 @@ assert.match(
 assert.match(
   operationalApprovalBootstrapSource,
   /protectedRouteExecutionLimiter[\s\S]*operationalApprovalExecutionMiddleware/
+);
+
+// Keep the reviewed service allowlist tied to the specific router composition
+// that CodeQL reports. If this service stops being a mount-only compatibility
+// layer, the policy should fail rather than silently broadening the exception.
+assert.match(
+  equipmentSalesReminderServiceSource,
+  /equipmentSalesRoutes\.use\(\s*"\/finance-lifecycle",\s*equipmentFinanceFinalLifecycleRoutes\s*\)/
 );
 
 // The legacy credit-application fallback creates a public, human-readable
