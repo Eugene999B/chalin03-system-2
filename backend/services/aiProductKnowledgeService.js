@@ -14,6 +14,8 @@ const LIVE_RECORD_REQUEST_PATTERN = /\b(?:show|list|find|lookup|pull|retrieve|fe
 
 const PRIVATE_RESULT_PATTERN = /\b(?:branch\s+id|site\s+id|location\s+id|worker\s+id|employee\s+id|customer\s+id|transaction\s+count|total\s+sales|total\s+paid|total\s+balance|collection\s+rate|account\s+number|phone\s+number|email\s+address|salary\s+amount)\b/i;
 
+const PRIVATE_CONTINUITY_MARKER_PATTERN = /(?:\b(?:private|confidential|restricted|internal)\b[\s\S]{0,80}\b(?:chalin|system context|sales snapshot|business data|business record|evidence|operational|financial|payroll|customer|worker|staff)\b|\b(?:approved|governed)\s+evidence\b|\[(?:E|M)\d+\]|\bconversation rollover\b|\bhistorical context only\b)/i;
+
 const SENSITIVE_LITERAL_PATTERN = /(?:\b(?:ghs|gh¢|usd|eur|gbp)\s*\d|\b\d{7,}\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:api[_-]?key|password|secret|token)\s*[:=])/i;
 
 const CHALIN_PRODUCT_CONTEXT = String.raw`
@@ -80,6 +82,7 @@ function isSafePublicContinuityText(value) {
   if (!text) return false;
   if (SENSITIVE_LITERAL_PATTERN.test(text)) return false;
   if (PRIVATE_RESULT_PATTERN.test(text)) return false;
+  if (PRIVATE_CONTINUITY_MARKER_PATTERN.test(text)) return false;
   if (isLikelyLiveRecordRequest(text) && !isChalinProductKnowledgeTurn(text)) return false;
   return true;
 }
@@ -143,6 +146,7 @@ module.exports = {
   CHALIN_PRODUCT_CONTEXT,
   LIVE_RECORD_REQUEST_PATTERN,
   MAX_PUBLIC_CONTINUITY_MESSAGES,
+  PRIVATE_CONTINUITY_MARKER_PATTERN,
   PRIVATE_RESULT_PATTERN,
   PUBLIC_SYSTEM_MAX_LENGTH,
   SENSITIVE_LITERAL_PATTERN,
