@@ -47,7 +47,6 @@ export default function ContentStudioLaunchReadiness() {
     const apiReady = signals.readiness.ok && signals.readiness.data?.ready === true;
     const publicWebsiteEnabled =
       signals.publicFeatures.ok && featureEnabled(signals.publicFeatures, "publicWebsite");
-    const studioProtectedSurfaceReady = signals.studioDashboard.ok;
 
     return [
       {
@@ -66,10 +65,24 @@ export default function ContentStudioLaunchReadiness() {
       },
       {
         label: "Protected Content Studio surface",
-        ok: studioProtectedSurfaceReady,
-        detail: studioProtectedSurfaceReady
+        ok: signals.studioDashboard.ok,
+        detail: signals.studioDashboard.ok
           ? "The authenticated Content Studio dashboard is reachable through the protected Studio route."
           : signals.studioDashboard.error || "The protected Content Studio dashboard could not be verified.",
+      },
+      {
+        label: "Governed Page Manager",
+        ok: signals.studioPages.ok,
+        detail: signals.studioPages.ok
+          ? "The protected governed Pages API is reachable for this Studio identity."
+          : signals.studioPages.error || "The governed Pages surface could not be verified.",
+      },
+      {
+        label: "Website Control Center",
+        ok: signals.websiteControl.ok,
+        detail: signals.websiteControl.ok
+          ? "The read-only Website Control intelligence surface is reachable."
+          : signals.websiteControl.error || "Website Control intelligence could not be verified.",
       },
       {
         label: "Published public bootstrap",
@@ -77,6 +90,13 @@ export default function ContentStudioLaunchReadiness() {
         detail: signals.publicBootstrap.ok
           ? "The anonymous governed bootstrap endpoint is reachable."
           : signals.publicBootstrap.error || "Public bootstrap could not be loaded.",
+      },
+      {
+        label: "Published homepage reflection",
+        ok: signals.publicHomepage.ok,
+        detail: signals.publicHomepage.ok
+          ? "The currently published governed homepage is visible through the anonymous public API."
+          : signals.publicHomepage.error || "The governed public homepage could not be loaded.",
       },
       {
         label: "Transparent data-use disclosure",
@@ -95,22 +115,23 @@ export default function ContentStudioLaunchReadiness() {
     <section className="cs-lr-shell">
       <header className="cs-lr-hero">
         <div>
-          <span>PHASE 2J / PUBLIC RELEASE CONTROL</span>
-          <h1>One final desk for public performance and launch readiness.</h1>
+          <span>PHASE 2K / CONTENT STUDIO COMPLETION CONTROL</span>
+          <h1>Final acceptance desk for the governed Content Studio.</h1>
           <p>
-            This surface is read-only. It combines live staging signals with the build-time
-            performance contract and route smoke inventory. GitHub CI and the protected Railway
-            deployment remain mandatory external release gates.
+            This desk is read-only. It combines live staging signals with the public build contract
+            while Phase 2K CI proves the complete Editor → Reviewer → Publisher lifecycle, blocks
+            self-approval, prevents draft content from leaking publicly and confirms that publishing
+            changes the anonymous website only after independent approval.
           </p>
         </div>
         <div className={`cs-lr-score ${allReady ? "is-ready" : "is-attention"}`}>
-          <strong>{loading ? "…" : `${readyCount}/${checks.length || 5}`}</strong>
-          <span>{allReady ? "LIVE SIGNALS READY" : "LIVE SIGNALS TO REVIEW"}</span>
+          <strong>{loading ? "…" : `${readyCount}/${checks.length || 8}`}</strong>
+          <span>{allReady ? "LIVE STUDIO SIGNALS READY" : "LIVE SIGNALS TO REVIEW"}</span>
         </div>
       </header>
 
       <div className="cs-lr-checks" aria-live="polite">
-        {loading ? <div className="cs-lr-loading">Reading staging readiness signals…</div> : null}
+        {loading ? <div className="cs-lr-loading">Reading final Studio readiness signals…</div> : null}
         {!loading ? checks.map((item) => <StatusCard key={item.label} {...item} />) : null}
       </div>
 
@@ -148,19 +169,24 @@ export default function ContentStudioLaunchReadiness() {
 
       <section className="cs-lr-gate">
         <div>
-          <span>FINAL PROMOTION RULE</span>
-          <h2>Do not launch from this dashboard alone.</h2>
+          <span>PHASE 2K COMPLETION RULE</span>
+          <h2>Content Studio is complete only when governance and staging agree.</h2>
           <p>
-            A release is promotable only after the exact commit passes CHALIN ONE CI and the
-            protected Railway staging environment. Production backup and production migration
-            gates remain separate and are not bypassed by this screen.
+            The automated Phase 2K database acceptance uses separate author, reviewer and publisher
+            identities. It proves that drafts and approved-but-unpublished replacements cannot replace
+            live content, then verifies that the exact independently approved version becomes public.
+            The aggregate CHALIN ONE CI summary is the machine-readable go/no-go record. The exact
+            merged commit must then pass protected Railway and Cloudflare Pages staging before Studio
+            is declared complete. Production backup and promotion remain separate later phases.
           </p>
         </div>
         <div>
-          <strong>1</strong><span>Build budgets green</span>
-          <strong>2</strong><span>Route/source contracts green</span>
-          <strong>3</strong><span>CHALIN ONE CI green</span>
-          <strong>4</strong><span>Protected Railway green</span>
+          <strong>1</strong><span>Editor → Reviewer → Publisher lifecycle green</span>
+          <strong>2</strong><span>Self-approval and wrong-reviewer paths blocked</span>
+          <strong>3</strong><span>Draft and approved replacements stay private</span>
+          <strong>4</strong><span>Published version reflected on the public API</span>
+          <strong>5</strong><span>Full frontend/backend/MySQL CI green</span>
+          <strong>6</strong><span>Railway + Cloudflare staging green</span>
         </div>
       </section>
     </section>

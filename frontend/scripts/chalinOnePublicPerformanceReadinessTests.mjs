@@ -124,8 +124,8 @@ assert.match(studioModel, /key: "launch-readiness"/);
 assert.match(studioModel, /label: "Launch Readiness"/);
 assert.match(studioWorkspace, /"launch-readiness": "dashboard"/);
 assert.match(studioWorkspace, /"launch-readiness": ContentStudioLaunchReadiness/);
-assert.match(launchDesk, /PHASE 2J \/ PUBLIC RELEASE CONTROL/);
-assert.match(launchDesk, /GitHub CI/);
+assert.match(launchDesk, /PHASE 2K \/ CONTENT STUDIO COMPLETION CONTROL/);
+assert.match(launchDesk, /aggregate CHALIN ONE CI summary/);
 assert.match(launchDesk, /protected Railway/);
 assert.match(launchDesk, /PUBLIC_RELEASE_SMOKE_PATHS/);
 assert.match(launchDesk, /PUBLIC_PERFORMANCE_BUDGETS/);
@@ -142,10 +142,13 @@ for (const route of [
 ]) {
   assert.match(launchApi, new RegExp(route.replaceAll("/", "\\/")));
 }
+assert.match(launchApi, /\/content-studio\/pages\?limit=1/);
+assert.match(launchApi, /\/content-studio\/pages\/website-control/);
+assert.match(launchApi, /\/public\/content\/homepage/);
 assert.doesNotMatch(launchApi, /axiosClient\.(?:post|put|patch|delete)/);
 assert.match(launchCss, /@media \(max-width: 1100px\)/);
 assert.match(launchCss, /@media \(max-width: 760px\)/);
 assert.match(launchCss, /@media \(max-width: 390px\)/);
 assert.match(launchCss, /prefers-reduced-motion: reduce/);
 
-console.log("✅ CHALIN ONE Phase 2J Public Performance & Final Release Readiness contracts passed: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/technical finish/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable postbuild byte budgets, failure states and read-only launch controls remain protected.");
+console.log("✅ CHALIN ONE Phase 2J performance and release-readiness contracts remain protected under the Phase 2K Content Studio completion desk: public/operational boot isolation, lightweight fail-closed public feature gating, deferred analytics/technical finish/enhancements, route smoke inventory, immutable asset caching, media loading, enforceable postbuild byte budgets, failure states and read-only launch controls remain protected.");
