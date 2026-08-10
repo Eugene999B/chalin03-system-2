@@ -1,9 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { initializeAppearance } from "./appearance/appearanceTheme.js";
 import {
   isChalinOneStandalonePath,
   isPublicWebsitePath,
 } from "./chalin-one/chalinOnePathModel.js";
+
+initializeAppearance();
 
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
