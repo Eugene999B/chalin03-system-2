@@ -91,8 +91,22 @@ rep(p,'''            <Notice type="info">
               Create the worker and starting salary together. Employee number and ID-card dates are generated automatically; the salary becomes active in Payroll from the employment start date.
             </Notice>
 ''')
-rep(p,'''                  required={key === "full_name"}
-''','''                  required={["full_name", "employment_start_date"].includes(key)}
+rep(p,'''                  value={createForm[key]}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      [key]: event.target.value,
+                    }))
+                  }
+                  required={key === "full_name"}
+''','''                  value={createForm[key]}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      [key]: event.target.value,
+                    }))
+                  }
+                  required={["full_name", "employment_start_date"].includes(key)}
 ''')
 rep(p,'''            <Field label="Employment type">
 ''','''            <Field label="Basic salary (GHS)">
