@@ -13,97 +13,60 @@ function read(relativePath) {
 const serviceWorker = read("public/sw.js");
 const recovery = read("public/browser-cache-recovery.js");
 const mainEntry = read("src/main.jsx");
+const sessionGuard = read("src/security/sessionExpiryGuard.js");
 const viteConfig = read("vite.config.js");
 const indexHtml = read("index.html");
 const headers = read("public/_headers");
 const redirects = read("public/_redirects");
 const notFound = read("public/404.html");
 
-assert.match(
-  serviceWorker,
-  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
-);
-assert.match(serviceWorker, /browser-cache-integrity-v35/);
+// The retired service-worker file may remain deployable for browsers that still
+// have an old registration, but the current app must never register or promote
+// it automatically again.
+assert.match(serviceWorker, /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/);
 assert.match(serviceWorker, /const BUILD_ASSET_PREFIX = "\/assets\/"/);
 assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
 assert.match(serviceWorker, /networkBuildAsset\(request\)/);
-assert.match(serviceWorker, /notifyClientsOfAssetMismatch/);
-assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
-assert.match(serviceWorker, /recoveryOwner: "page"/);
-assert.match(serviceWorker, /X-Chalin03-Recovery-Owner/);
-assert.match(serviceWorker, /isHtml\(response\)/);
-assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
-assert.match(serviceWorker, /cache: "no-store"/);
-assert.match(serviceWorker, /return await fetchCurrentShell\(\)/);
 assert.doesNotMatch(serviceWorker, /client\.navigate\(/);
-assert.doesNotMatch(serviceWorker, /__chalin03_sw_recovery/);
-assert.match(serviceWorker, /function isTrustedClientMessage\(event\)/);
-assert.match(serviceWorker, /event\.origin !== self\.location\.origin/);
-assert.match(serviceWorker, /event\.source\?\.url/);
-assert.match(
-  serviceWorker,
-  /new URL\(sourceUrl\)\.origin === self\.location\.origin/
-);
-assert.match(serviceWorker, /if \(!isTrustedClientMessage\(event\)\)/);
-assert.doesNotMatch(serviceWorker, /cache\.put\(request,\s*responseClone\)/);
 
 assert.match(recovery, /vite:preloadError/);
 assert.match(recovery, /__chalin03RecoverFromAssetMismatch/);
-assert.match(recovery, /__chalin03MarkBootHealthy/);
 assert.match(recovery, /navigator\.serviceWorker/);
 assert.match(recovery, /registration\.unregister\(\)/);
 assert.match(recovery, /caches\.delete\(name\)/);
-assert.match(recovery, /const RETURN_PARAM = "__chalin03_return"/);
-assert.match(recovery, /new URL\("\/", window\.location\.origin\)/);
-assert.match(
-  recovery,
-  /url\.searchParams\.set\(RETURN_PARAM, requestedReturnTarget\(\)\)/
-);
-assert.match(recovery, /window\.history\.replaceState/);
-assert.match(recovery, /restoreReturnTarget\(\)/);
-assert.match(recovery, /url\.pathname\.startsWith\("\/assets\/"\)/);
-assert.match(recovery, /Updating Chalin 03/);
+assert.match(recovery, /CHALIN update available/);
+assert.match(recovery, /Reload when ready/);
+assert.match(recovery, /Keep working/);
+assert.doesNotMatch(recovery, /window\.location\.replace\(/);
+assert.doesNotMatch(recovery, /window\.setTimeout\([\s\S]*window\.location/);
+assert.doesNotMatch(recovery, /MAX_ATTEMPTS|RECOVERY_PARAM|RETURN_PARAM/);
 
 assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
-assert.match(mainEntry, /browser-cache-integrity-v35/);
-assert.match(mainEntry, /updateViaCache: "none"/);
-assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
-assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
-assert.match(mainEntry, /encodeURIComponent\(APP_SHELL_RELEASE\)/);
+assert.match(mainEntry, /browser-cache-integrity-v36/);
 assert.match(mainEntry, /isPublicWebsitePath/);
 assert.match(mainEntry, /isChalinOneStandalonePath/);
-assert.match(
-  mainEntry,
-  /const publicWebsiteSurface = isPublicWebsitePath\(window\.location\.pathname\)/
-);
-assert.match(
-  mainEntry,
-  /const standaloneChalinOne = isChalinOneStandalonePath/
-);
-
-// Public CHALIN ONE and protected standalone AI/Studio surfaces must never join
-// the automatic service-worker refresh loop. A long reasoning turn or Studio
-// draft must not blink/reload because a new deployment takes control.
-assert.match(mainEntry, /if \(!publicWebsiteSurface && !standaloneChalinOne\) \{/);
-assert.match(mainEntry, /if \(publicWebsiteSurface \|\| standaloneChalinOne\) \{/);
+assert.match(mainEntry, /installNoAutomaticRefreshPolicy/);
 assert.match(mainEntry, /removeChalinServiceWorkerCaches/);
-assert.match(mainEntry, /registration\.unregister\(\)/);
 assert.match(
   mainEntry,
-  /CHALIN ONE public website is running without automatic service-worker refreshes/
+  /CHALIN automatic service-worker refreshes are disabled system-wide/
 );
-assert.match(
-  mainEntry,
-  /CHALIN ONE protected standalone workspace is running without automatic service-worker refreshes/
-);
-assert.match(
-  mainEntry,
-  /navigator\.serviceWorker\.addEventListener\("controllerchange"/
-);
-assert.match(mainEntry, /window\.location\.reload\(\)/);
+assert.doesNotMatch(mainEntry, /serviceWorker\.register\(/);
+assert.doesNotMatch(mainEntry, /controllerchange/);
+assert.doesNotMatch(mainEntry, /CHALIN03_SKIP_WAITING/);
+assert.doesNotMatch(mainEntry, /window\.location\.reload\(/);
+assert.doesNotMatch(mainEntry, /requestAssetRecovery/);
 
-// Secure/public app boundaries must perform a real document handoff rather than
-// being swallowed by the public React Router's wildcard route.
+// A token/session change is adopted by application state instead of reloading
+// the document. Real expiry may still navigate to /login because the secure
+// session has ended.
+assert.match(sessionGuard, /onSessionChanged/);
+assert.doesNotMatch(sessionGuard, /window\.location\.reload\(/);
+assert.match(sessionGuard, /window\.location\.replace\("\/login"\)/);
+
+// Secure/public app boundaries are deliberate user navigation, not background
+// refreshes. They still perform a real document handoff when the user clicks a
+// protected application link from the public site.
 assert.match(mainEntry, /PUBLIC_APP_HANDOFF_PATHS/);
 assert.match(mainEntry, /"\/login"/);
 assert.match(mainEntry, /"\/content-studio"/);
@@ -155,14 +118,8 @@ assert.match(
 );
 assert.match(headers, /\/404\.html/);
 assert.match(notFound, /data-chalin03-static-404="true"/);
-assert.match(notFound, /new URL\("\/", window\.location\.origin\)/);
-assert.match(notFound, /__chalin03_return/);
-assert.match(
-  notFound,
-  /window\.location\.replace\(recovery\.toString\(\)\)/
-);
 assert.match(notFound, /isRetiredBuildAsset/);
 
 console.log(
-  "✅ Browser cache recovery contracts passed: public and protected standalone CHALIN ONE surfaces stay out of automatic service-worker refresh events, secure links fully stop the public router before native protected-app navigation, and operational pages retain stale-asset recovery."
+  "✅ Browser refresh contracts passed: CHALIN does not register a background service worker, deployment/asset events never auto-refresh an active workspace, session token changes never reload the document, and any update reload is explicitly user-controlled."
 );
