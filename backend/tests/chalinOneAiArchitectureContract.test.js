@@ -84,13 +84,16 @@ test("provider service uses governed policy while external networking stays isol
   assert.match(providerRegistration, /registry\.register\("gemini"/);
   assert.match(providerRegistration, /registry\.register\("openai"/);
   assert.match(aiRoutes, /registerBuiltInAiProviders\(\)/);
-  assert.match(aiRoutes, /getAiProviderReadiness\(process\.env\)/);
+  assert.match(aiRoutes, /getProviderControlSnapshot\(\)/);
+  assert.match(aiRoutes, /copilotSelection\.effective_provider/);
+  assert.match(aiRoutes, /getAiProviderReadiness\([\s\S]*?copilotSelection\.effective_provider/);
   assert.doesNotMatch(aiRoutes, /process\.env\.AI_PROVIDER/);
 
   assert.match(providerPolicy, /AI_PROVIDER_POLICY_DEFAULT \|\| "local"/);
   assert.match(providerPolicy, /governed_local_default/);
   assert.match(providerPolicy, /AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK/);
-  assert.match(providerPolicy, /AI_ALLOW_EXTERNAL_PRIVATE_DATA/);
+  assert.match(providerPolicy, /AI_GEMINI_SYSTEM_ADMIN_FULL_CONTEXT/);
+  assert.match(providerPolicy, /full_context_safety_identifier/);
   assert.match(providerPolicy, /GEMINI_SERVICE_TIER/);
 
   assert.match(providerReadiness, /providerOverride \|\| env\.AI_PROVIDER \|\| "disabled"/);
@@ -101,7 +104,9 @@ test("provider service uses governed policy while external networking stays isol
   assert.doesNotMatch(providerReadiness, /\bfetch\s*\(|axios|https\.request|http\.request/);
 
   assert.match(geminiProvider, /generativelanguage\.googleapis\.com/);
+  assert.match(geminiProvider, /DEFAULT_GEMINI_MODEL = "gemini-3\.6-flash"/);
   assert.match(geminiProvider, /"x-goog-api-key": apiKey/);
+  assert.match(geminiProvider, /thinkingConfig/);
   assert.doesNotMatch(geminiProvider, /body\.(?:env|GEMINI_API_KEY|GOOGLE_API_KEY)|GEMINI_API_KEY\s*:/);
 });
 
@@ -122,11 +127,12 @@ test("OpenAI Responses adapter preserves CHALIN governance and privacy boundarie
   assert.match(openAiProvider, /provider_store_enabled: false/);
 });
 
-test("orchestrator composes safety, budgets, governed retrieval, reasoning, tools, provider context, evidence and audit", () => {
+test("orchestrator composes safety, budgets, governed retrieval, deep continuity, reasoning, tools, provider context, evidence and audit", () => {
   for (const marker of [
     "inspectPrompt",
     "buildRequestBudget",
     "searchGovernedKnowledge",
+    "loadScopedUserMemory",
     "buildReasoningPlan",
     "rankEvidence",
     "detectEvidenceTensions",
@@ -150,7 +156,7 @@ test("orchestrator composes safety, budgets, governed retrieval, reasoning, tool
   assert.match(reasoning, /hidden chain-of-thought/i);
   assert.match(orchestrator, /sumProviderUsage/);
   assert.match(orchestrator, /AI_PROMPT_BLOCKED/);
-  assert.match(orchestrator, /Ordinary system operations are unaffected/);
+  assert.match(orchestrator, /ordinary system operations are unaffected/i);
 });
 
 test("knowledge administration separates manage, review and publish permissions", () => {
