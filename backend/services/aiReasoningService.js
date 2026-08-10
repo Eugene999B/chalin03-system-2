@@ -2,116 +2,31 @@
 
 const { normalizeEvidenceList } = require("./aiEvidenceService");
 
-const MAX_RETRIEVAL_QUERIES = 6;
-const MAX_REASONING_EVIDENCE = 12;
-const MAX_HISTORY_MESSAGES = 12;
+const MAX_RETRIEVAL_QUERIES = 10;
+const MAX_REASONING_EVIDENCE = 32;
+const MAX_HISTORY_MESSAGES = 48;
 
 const STOP_WORDS = new Set([
-  "about",
-  "after",
-  "again",
-  "against",
-  "also",
-  "and",
-  "are",
-  "because",
-  "been",
-  "before",
-  "being",
-  "between",
-  "but",
-  "can",
-  "could",
-  "did",
-  "does",
-  "doing",
-  "for",
-  "from",
-  "had",
-  "has",
-  "have",
-  "how",
-  "into",
-  "its",
-  "may",
-  "might",
-  "more",
-  "most",
-  "not",
-  "now",
-  "our",
-  "please",
-  "should",
-  "show",
-  "than",
-  "that",
-  "the",
-  "their",
-  "them",
-  "then",
-  "there",
-  "these",
-  "they",
-  "this",
-  "those",
-  "through",
-  "today",
-  "under",
-  "very",
-  "was",
-  "what",
-  "when",
-  "where",
-  "which",
-  "while",
-  "who",
-  "why",
-  "will",
-  "with",
-  "would",
-  "you",
-  "your",
+  "about", "after", "again", "against", "also", "and", "are", "because",
+  "been", "before", "being", "between", "but", "can", "could", "did",
+  "does", "doing", "for", "from", "had", "has", "have", "how", "into",
+  "its", "may", "might", "more", "most", "not", "now", "our", "please",
+  "should", "show", "than", "that", "the", "their", "them", "then",
+  "there", "these", "they", "this", "those", "through", "today", "under",
+  "very", "was", "what", "when", "where", "which", "while", "who", "why",
+  "will", "with", "would", "you", "your",
 ]);
 
 const TIME_WORDS = new Set([
-  "active",
-  "currently",
-  "current",
-  "latest",
-  "live",
-  "now",
-  "outstanding",
-  "overdue",
-  "recent",
-  "status",
-  "today",
-  "tonight",
-  "yesterday",
+  "active", "currently", "current", "latest", "live", "now", "outstanding",
+  "overdue", "recent", "status", "today", "tonight", "yesterday",
 ]);
 
 const OPERATIONAL_WORDS = new Set([
-  "arrears",
-  "balance",
-  "cash",
-  "contract",
-  "contracts",
-  "customer",
-  "customers",
-  "debt",
-  "debts",
-  "equipment",
-  "finance",
-  "hire",
-  "inventory",
-  "payment",
-  "payments",
-  "quantity",
-  "revenue",
-  "sale",
-  "sales",
-  "stock",
-  "transaction",
-  "transactions",
+  "arrears", "balance", "cash", "contract", "contracts", "customer",
+  "customers", "debt", "debts", "equipment", "finance", "hire", "inventory",
+  "payment", "payments", "quantity", "revenue", "sale", "sales", "stock",
+  "transaction", "transactions",
 ]);
 
 const NON_OPERATIONAL_TOOL_KEYS = new Set([
@@ -137,7 +52,7 @@ const INTENT_PATTERNS = Object.freeze([
   ["explain", /\b(explain|how does|how do|meaning|procedure|process|policy|rule|steps)\b/i],
 ]);
 
-function clean(value, maxLength = 8000) {
+function clean(value, maxLength = 32000) {
   return String(value ?? "")
     .replace(/\u0000/g, "")
     .replace(/\r\n?/g, "\n")
@@ -160,7 +75,7 @@ function meaningfulTokens(value) {
 }
 
 function classifyIntent(prompt) {
-  const text = clean(prompt, 8000);
+  const text = clean(prompt, 32000);
   for (const [intent, pattern] of INTENT_PATTERNS) {
     if (pattern.test(text)) return intent;
   }
@@ -171,9 +86,7 @@ function requiresLiveData(prompt) {
   const tokens = new Set(tokenizeReasoning(prompt));
   const hasOperational = [...tokens].some((token) => OPERATIONAL_WORDS.has(token));
   const hasTimeSignal = [...tokens].some((token) => TIME_WORDS.has(token));
-  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|active (?:hire|finance|contract)|sales? today|payments? today|cash position|current status)\b/i.test(
-    clean(prompt)
-  );
+  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|active (?:hire|finance|contract)|sales? today|payments? today|cash position|current status)\b/i.test(clean(prompt));
   return intrinsicallyLive || (hasOperational && hasTimeSignal);
 }
 
@@ -181,22 +94,22 @@ function quotedPhrases(prompt) {
   const matches = [];
   const pattern = /["“”']([^"“”']{3,100})["“”']/g;
   let match;
-  while ((match = pattern.exec(clean(prompt, 8000)))) {
+  while ((match = pattern.exec(clean(prompt, 32000)))) {
     const phrase = clean(match[1], 100);
     if (phrase) matches.push(phrase);
   }
-  return [...new Set(matches)].slice(0, 3);
+  return [...new Set(matches)].slice(0, 5);
 }
 
 function comparisonSides(prompt) {
-  const text = clean(prompt, 8000);
-  const match = text.match(/(.{2,100}?)\s+(?:vs\.?|versus|compared? (?:with|to)|against)\s+(.{2,100})/i);
+  const text = clean(prompt, 32000);
+  const match = text.match(/(.{2,160}?)\s+(?:vs\.?|versus|compared? (?:with|to)|against)\s+(.{2,160})/i);
   if (!match) return [];
-  return [clean(match[1], 100), clean(match[2], 100)].filter(Boolean);
+  return [clean(match[1], 160), clean(match[2], 160)].filter(Boolean);
 }
 
 function addUniqueQuery(target, value) {
-  const query = clean(value, 240).replace(/\s+/g, " ");
+  const query = clean(value, 500).replace(/\s+/g, " ");
   if (!query || query.length < 2) return;
   const identity = query.toLowerCase();
   if (target.some((item) => item.toLowerCase() === identity)) return;
@@ -205,22 +118,23 @@ function addUniqueQuery(target, value) {
 
 function buildRetrievalQueries({ prompt, history = [] } = {}) {
   const queries = [];
-  const text = clean(prompt, 8000);
+  const text = clean(prompt, 32000);
   addUniqueQuery(queries, text);
 
   for (const phrase of quotedPhrases(text)) addUniqueQuery(queries, phrase);
   for (const side of comparisonSides(text)) addUniqueQuery(queries, side);
 
   const keywords = meaningfulTokens(text).filter((token) => token.length >= 3);
-  if (keywords.length) addUniqueQuery(queries, keywords.slice(0, 10).join(" "));
+  if (keywords.length) addUniqueQuery(queries, keywords.slice(0, 16).join(" "));
 
-  const priorUser = [...history]
+  const priorUserTurns = [...history]
     .reverse()
-    .find((item) => item?.role === "user" && clean(item?.content, 1200));
-  if (priorUser) {
+    .filter((item) => item?.role === "user" && clean(item?.content, 2000))
+    .slice(0, 3);
+  for (const priorUser of priorUserTurns) {
     const carry = meaningfulTokens(`${priorUser.content} ${text}`)
       .filter((token) => token.length >= 3)
-      .slice(0, 10)
+      .slice(0, 16)
       .join(" ");
     addUniqueQuery(queries, carry);
   }
@@ -250,50 +164,41 @@ function freshnessScore(value, now = Date.now()) {
   const time = new Date(value).getTime();
   if (!Number.isFinite(time)) return 0;
   const ageDays = Math.max(0, (now - time) / 86400000);
-  if (ageDays <= 7) return 1;
-  if (ageDays <= 30) return 0.8;
-  if (ageDays <= 180) return 0.55;
-  if (ageDays <= 365) return 0.35;
-  return 0.15;
+  if (ageDays <= 1) return 1;
+  if (ageDays <= 7) return 0.95;
+  if (ageDays <= 30) return 0.82;
+  if (ageDays <= 180) return 0.58;
+  if (ageDays <= 365) return 0.38;
+  return 0.16;
 }
 
 function scoreEvidence(item, queries, now = Date.now()) {
   const searchable = `${item?.label || ""} ${item?.source_ref || ""} ${item?.excerpt_text || ""}`;
-  const lexical = Math.max(
-    0,
-    ...queries.map((query) => overlapScore(query, searchable))
-  );
-  const retrieval = Math.max(
-    0,
-    Math.min(1, Number(item?.metadata?.retrieval_score || 0))
-  );
+  const lexical = Math.max(0, ...queries.map((query) => overlapScore(query, searchable)));
+  const retrieval = Math.max(0, Math.min(1, Number(item?.metadata?.retrieval_score || 0)));
   const freshness = freshnessScore(item?.as_of_at, now);
   const sourceAuthority = String(item?.source_type || "").startsWith("knowledge_document.")
     ? 1
     : String(item?.source_type || "").startsWith("knowledge.")
       ? 0.9
-      : 0.75;
-  const score = lexical * 0.55 + retrieval * 0.27 + freshness * 0.1 + sourceAuthority * 0.08;
+      : 0.8;
+  const score = lexical * 0.52 + retrieval * 0.27 + freshness * 0.12 + sourceAuthority * 0.09;
   return Number(Math.max(0, Math.min(1, score)).toFixed(6));
 }
 
 function rankEvidence({ evidence = [], queries = [], limit = MAX_REASONING_EVIDENCE, now = Date.now() } = {}) {
   const safeLimit = Math.max(1, Math.min(MAX_REASONING_EVIDENCE, Number(limit) || MAX_REASONING_EVIDENCE));
-  const normalized = normalizeEvidenceList(evidence, { maximum: 100 });
+  const normalized = normalizeEvidenceList(evidence, { maximum: 200 });
   const effectiveQueries = queries.length ? queries : [""];
   const scored = normalized
-    .map((item) => ({
-      item,
-      root: evidenceRoot(item),
-      score: scoreEvidence(item, effectiveQueries, now),
-    }))
+    .map((item) => ({ item, root: evidenceRoot(item), score: scoreEvidence(item, effectiveQueries, now) }))
     .sort((left, right) => right.score - left.score);
 
   const selected = [];
   const rootCounts = new Map();
   for (const candidate of scored) {
     const count = rootCounts.get(candidate.root) || 0;
-    if (count >= 2) continue;
+    if (count >= 4) continue;
     selected.push(candidate);
     rootCounts.set(candidate.root, count + 1);
     if (selected.length >= safeLimit) break;
@@ -312,18 +217,15 @@ function rankEvidence({ evidence = [], queries = [], limit = MAX_REASONING_EVIDE
   return normalizeEvidenceList(
     selected.map(({ item, score }) => ({
       ...item,
-      metadata: {
-        ...(item.metadata || {}),
-        reasoning_score: score,
-      },
+      metadata: { ...(item.metadata || {}), reasoning_score: score },
     })),
     { maximum: MAX_REASONING_EVIDENCE }
   );
 }
 
 function numericSignature(value) {
-  const matches = clean(value, 3000).match(/(?:ghs\s*|gh¢\s*|usd\s*|\$\s*)?\d[\d,]*(?:\.\d+)?%?/gi) || [];
-  return [...new Set(matches.map((item) => item.toLowerCase().replace(/\s+/g, "")))].slice(0, 12);
+  const matches = clean(value, 8000).match(/(?:ghs\s*|gh¢\s*|usd\s*|\$\s*)?\d[\d,]*(?:\.\d+)?%?/gi) || [];
+  return [...new Set(matches.map((item) => item.toLowerCase().replace(/\s+/g, "")))].slice(0, 24);
 }
 
 function jaccard(left, right) {
@@ -336,7 +238,7 @@ function jaccard(left, right) {
 }
 
 function detectEvidenceTensions(evidence = []) {
-  const normalized = normalizeEvidenceList(evidence);
+  const normalized = normalizeEvidenceList(evidence, { maximum: MAX_REASONING_EVIDENCE });
   const tensions = [];
   for (let leftIndex = 0; leftIndex < normalized.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < normalized.length; rightIndex += 1) {
@@ -349,15 +251,13 @@ function detectEvidenceTensions(evidence = []) {
       if (!leftNumbers.length || !rightNumbers.length) continue;
       const shared = leftNumbers.some((value) => rightNumbers.includes(value));
       if (shared) continue;
-      tensions.push(
-        Object.freeze({
-          left: left.citation,
-          right: right.citation,
-          topic: clean(left.label, 180),
-          reason: "similar evidence contains different numeric facts",
-        })
-      );
-      if (tensions.length >= 5) return Object.freeze(tensions);
+      tensions.push(Object.freeze({
+        left: left.citation,
+        right: right.citation,
+        topic: clean(left.label, 180),
+        reason: "similar evidence contains different numeric facts",
+      }));
+      if (tensions.length >= 8) return Object.freeze(tensions);
     }
   }
   return Object.freeze(tensions);
@@ -365,10 +265,7 @@ function detectEvidenceTensions(evidence = []) {
 
 function isLiveOperationalEvidence(item = {}) {
   const sourceType = clean(item?.source_type, 160).toLowerCase();
-  return (
-    LIVE_OPERATIONAL_EVIDENCE_TYPES.has(sourceType) &&
-    Boolean(item?.as_of_at)
-  );
+  return LIVE_OPERATIONAL_EVIDENCE_TYPES.has(sourceType) && Boolean(item?.as_of_at);
 }
 
 function isLiveOperationalToolResult(result = {}) {
@@ -378,29 +275,22 @@ function isLiveOperationalToolResult(result = {}) {
   return evidence.some(isLiveOperationalEvidence);
 }
 
-function assessEvidenceConfidence({
-  evidence = [],
-  tensions = [],
-  liveDataRequired = false,
-  toolResults = [],
-} = {}) {
-  const normalized = normalizeEvidenceList(evidence);
+function assessEvidenceConfidence({ evidence = [], tensions = [], liveDataRequired = false, toolResults = [] } = {}) {
+  const normalized = normalizeEvidenceList(evidence, { maximum: MAX_REASONING_EVIDENCE });
   const roots = new Set(normalized.map(evidenceRoot));
   const averageScore = normalized.length
-    ? normalized.reduce((sum, item) => sum + Number(item?.metadata?.reasoning_score || item?.metadata?.retrieval_score || 0), 0) /
-      normalized.length
+    ? normalized.reduce((sum, item) => sum + Number(item?.metadata?.reasoning_score || item?.metadata?.retrieval_score || 0), 0) / normalized.length
     : 0;
-  const liveToolsUsed =
-    Array.isArray(toolResults) && toolResults.some(isLiveOperationalToolResult);
+  const liveToolsUsed = Array.isArray(toolResults) && toolResults.some(isLiveOperationalToolResult);
   let points = 0;
   const reasons = [];
 
-  if (normalized.length >= 6) points += 3;
-  else if (normalized.length >= 3) points += 2;
+  if (normalized.length >= 10) points += 3;
+  else if (normalized.length >= 4) points += 2;
   else if (normalized.length >= 1) points += 1;
   else reasons.push("no approved evidence was retrieved");
 
-  if (roots.size >= 3) points += 2;
+  if (roots.size >= 4) points += 2;
   else if (roots.size >= 2) points += 1;
   else if (normalized.length) reasons.push("evidence comes from a single source family");
 
@@ -423,11 +313,7 @@ function assessEvidenceConfidence({
 
   const level = points >= 6 ? "high" : points >= 3 ? "medium" : "low";
   if (!reasons.length) {
-    reasons.push(
-      level === "high"
-        ? "multiple relevant governed sources support the answer"
-        : "approved evidence supports the answer with normal limitations"
-    );
+    reasons.push(level === "high" ? "multiple relevant governed sources support the answer" : "approved evidence supports the answer with normal limitations");
   }
 
   return Object.freeze({
@@ -439,44 +325,40 @@ function assessEvidenceConfidence({
     live_data_required: liveDataRequired,
     live_tools_used: liveToolsUsed,
     tension_count: tensions.length,
-    reasons: Object.freeze(reasons.slice(0, 5)),
+    reasons: Object.freeze(reasons.slice(0, 8)),
   });
 }
 
 function selectRelevantHistory(history = [], prompt = "", { maximum = MAX_HISTORY_MESSAGES } = {}) {
   const source = Array.isArray(history) ? history : [];
-  const safeMaximum = Math.max(4, Math.min(MAX_HISTORY_MESSAGES, Number(maximum) || MAX_HISTORY_MESSAGES));
+  const safeMaximum = Math.max(8, Math.min(MAX_HISTORY_MESSAGES, Number(maximum) || MAX_HISTORY_MESSAGES));
   if (source.length <= safeMaximum) return Object.freeze(source.map((item) => Object.freeze({ ...item })));
   const promptTokens = new Set(meaningfulTokens(prompt));
-  const lastAlways = new Set(source.slice(-4).map((_, index) => source.length - 4 + index));
+  const lastAlways = new Set(source.slice(-12).map((_, index) => source.length - 12 + index));
   const ranked = source.map((item, index) => {
     const tokens = meaningfulTokens(item?.content || "");
     const overlap = tokens.length
       ? tokens.filter((token) => promptTokens.has(token)).length / Math.max(1, promptTokens.size)
       : 0;
     const recency = (index + 1) / source.length;
-    return { index, item, score: overlap * 0.7 + recency * 0.3 };
+    return { index, item, score: overlap * 0.72 + recency * 0.28 };
   });
   const selectedIndexes = new Set(lastAlways);
   for (const candidate of ranked.sort((a, b) => b.score - a.score)) {
     selectedIndexes.add(candidate.index);
     if (selectedIndexes.size >= safeMaximum) break;
   }
-  return Object.freeze(
-    [...selectedIndexes]
-      .sort((a, b) => a - b)
-      .map((index) => Object.freeze({ ...source[index] }))
-  );
+  return Object.freeze([...selectedIndexes].sort((a, b) => a - b).map((index) => Object.freeze({ ...source[index] })));
 }
 
 function answerShapeForIntent(intent) {
-  if (intent === "compare") return ["bottom line", "comparison", "trade-offs", "unknowns"];
-  if (intent === "diagnose") return ["diagnosis", "supporting evidence", "alternative explanations", "next checks"];
-  if (intent === "forecast") return ["scenario", "assumptions", "evidence", "uncertainty"];
-  if (intent === "decision_support") return ["recommendation", "why", "risks", "what would change the recommendation"];
-  if (intent === "summarize") return ["summary", "important facts", "exceptions", "open items"];
-  if (intent === "explain") return ["direct explanation", "supporting evidence", "limits"];
-  return ["direct answer", "supporting evidence", "limits"];
+  if (intent === "compare") return ["bottom line", "comparison", "meaning", "trade-offs", "recommendation"];
+  if (intent === "diagnose") return ["diagnosis", "why it matters", "supporting evidence", "alternative explanations", "next checks"];
+  if (intent === "forecast") return ["most likely scenario", "upside/downside", "assumptions", "leading indicators", "uncertainty"];
+  if (intent === "decision_support") return ["recommendation", "why", "alternatives", "risks", "next move"];
+  if (intent === "summarize") return ["executive summary", "important facts", "implications", "exceptions", "open items"];
+  if (intent === "explain") return ["direct explanation", "why", "example or implication", "limits"];
+  return ["direct answer", "what matters", "supporting evidence", "next step if useful"];
 }
 
 function buildReasoningPlan({ prompt, history = [], persona = "copilot" } = {}) {
@@ -490,9 +372,13 @@ function buildReasoningPlan({ prompt, history = [], persona = "copilot" } = {}) 
     retrieval_queries: retrievalQueries,
     answer_shape: Object.freeze(answerShapeForIntent(intent)),
     directives: Object.freeze([
-      "Prefer governed live tool results for current operational facts.",
-      "Use approved knowledge for policy, procedure, historical and explanatory context.",
+      "Understand the user's actual question before reaching for a tool; casual conversation should remain natural.",
+      "For business questions, investigate the strongest relevant governed sources and live tools before concluding.",
+      "Synthesize evidence into meaning, implications, alternatives and recommended next steps instead of reciting raw fields.",
+      "Prefer governed live tool results for current operational facts and approved knowledge for policy/procedure context.",
+      "Use relevant conversation continuity to remember goals and prior work, but never treat old assistant text as current evidence.",
       "Separate supported facts from inference, assumptions and unknowns.",
+      "Challenge the first explanation when diagnosis or decision support is requested; consider plausible alternatives.",
       "Treat conflicting evidence explicitly instead of silently choosing a side.",
       "Never invent a figure, record, customer fact or operational state.",
     ]),
@@ -506,27 +392,31 @@ function reasoningPromptBlock({ plan, confidence, tensions = [] } = {}) {
     ? tensions.map((item) => `${item.left} vs ${item.right}: ${item.reason}`).join("; ")
     : "none detected";
   return [
-    "CHALIN reasoning contract:",
-    "- Think through the problem internally before answering, but do not reveal hidden chain-of-thought.",
+    "CHALIN deep-reasoning answer contract:",
+    "- Think deeply and privately before answering; never reveal hidden chain-of-thought.",
     `- Intent: ${safePlan.intent || "lookup"}.`,
     `- Live operational data required: ${safePlan.live_data_required === true ? "yes" : "no"}.`,
     `- Evidence confidence before final answer: ${safeConfidence.level || "low"}.`,
     `- Potential evidence tensions: ${tensionText}.`,
-    "- Give the conclusion first. Cite supported factual claims with [E#].",
-    "- Clearly label inference, assumptions, scenarios and unknowns; do not present them as facts.",
-    "- If the request needs live operational data and no governed live tool result is available, say that the live state is unverified rather than guessing.",
-    "- If evidence conflicts, explain the conflict and which source is newer or more authoritative when that is actually supported.",
-    "- Recommendations must state the evidence and the main risk or condition that could change the recommendation.",
+    "- Be conversational and answer the actual question first. Do not lead with a mechanical evidence dump.",
+    "- For analytical questions: state the bottom line, explain what is driving it, identify implications, test alternative explanations, and recommend the next useful move.",
+    "- Convert raw snapshots into interpretation. Mention only the figures that materially support the conclusion.",
+    "- Cite supported business factual claims with [E#], but do not attach citations to ordinary social conversation or generic reasoning that does not depend on CHALIN evidence.",
+    "- Clearly distinguish fact, inference, scenario and unknown when that distinction matters; do not clutter simple answers with labels unnecessarily.",
+    "- If the request needs live operational data and no governed live tool result is available, say exactly what is unverified and continue with any useful non-live reasoning that remains possible.",
+    "- If evidence conflicts, explain the conflict and which source is newer or more authoritative only when the evidence supports that judgment.",
+    "- Recommendations must explain the strongest reason, the main downside, and what new evidence would change the recommendation.",
+    "- Never answer a greeting, thanks or general conversation by dumping an operational snapshot unless the user actually asked for business data.",
   ].join("\n");
 }
 
 function citationIntegrity(answer, evidence = []) {
-  const normalized = normalizeEvidenceList(evidence);
+  const normalized = normalizeEvidenceList(evidence, { maximum: MAX_REASONING_EVIDENCE });
   const maximum = normalized.length;
   const cited = [];
   const pattern = /\[E(\d+)\]/g;
   let match;
-  while ((match = pattern.exec(clean(answer, 24000)))) cited.push(Number(match[1]));
+  while ((match = pattern.exec(clean(answer, 120000)))) cited.push(Number(match[1]));
   const unique = [...new Set(cited)];
   const unsupported = unique.filter((number) => number < 1 || number > maximum);
   return Object.freeze({
