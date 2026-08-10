@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import App from "./App.jsx";
 import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccountingExpenseFundingEvidence.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
@@ -15,6 +16,10 @@ import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 
+const ContextualAiSidecar = lazy(() =>
+  import("./chalin-one/ai/ContextualAiSidecar.jsx")
+);
+
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
 
@@ -24,6 +29,9 @@ export default function OperationalAppRoot() {
       <>
         <App />
         <ChalinOneGatewayLinks />
+        <Suspense fallback={null}>
+          <ContextualAiSidecar />
+        </Suspense>
         <ProductsPageShellRepair />
         <OperationalApprovalLauncher />
         <ApprovalCentreLiveAttention />

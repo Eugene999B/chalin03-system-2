@@ -1,0 +1,165 @@
+.cai-root,
+.cai-root * { box-sizing: border-box; }
+
+.cai-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 86px;
+  z-index: 10012;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 9px;
+  border: 1px solid rgba(243,194,63,.36);
+  border-radius: 16px;
+  background: rgba(6,20,31,.97);
+  color: #fff;
+  box-shadow: 0 18px 50px rgba(0,0,0,.32);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cai-launcher-mark {
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg,#f2bf36,#fff0a2);
+  color: #14210d;
+  font-size: .68rem;
+  font-weight: 950;
+}
+.cai-launcher > span:last-child { display: grid; gap: 1px; }
+.cai-launcher strong { font-size: .72rem; letter-spacing: .02em; }
+.cai-launcher small { color: #aebbc6; font-size: .61rem; }
+
+.cai-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 150px;
+  z-index: 10018;
+  width: min(430px, calc(100vw - 28px));
+  height: min(690px, calc(100vh - 168px));
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 22px;
+  background: #07121d;
+  color: #edf4f8;
+  box-shadow: 0 32px 100px rgba(0,0,0,.48);
+  font-family: Inter,system-ui,sans-serif;
+}
+.cai-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 17px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  background: linear-gradient(135deg,#071421,#102b3c);
+}
+.cai-head h2 { margin: 3px 0 5px; font-size: 1.04rem; }
+.cai-head p { margin: 0; color: #a8b9c5; font-size: .68rem; line-height: 1.5; }
+.cai-kicker { color: #efc752; font-size: .58rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.cai-head > button {
+  width: 35px;
+  height: 35px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.cai-safety-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 13px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: rgba(40,145,93,.08);
+}
+.cai-safety-bar span { padding: 4px 6px; border-radius: 999px; background: rgba(86,211,139,.09); color: #84e3ae; font-size: .56rem; font-weight: 800; }
+.cai-persona-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.cai-persona-row button,
+.cai-persona-row a {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px;
+  background: rgba(255,255,255,.04);
+  color: #c2d0d9;
+  font: inherit;
+  font-size: .62rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cai-persona-row button.is-active { border-color: rgba(239,199,82,.42); background: rgba(239,199,82,.12); color: #ffe89e; }
+.cai-persona-row a { margin-left: auto; }
+.cai-stream { overflow-y: auto; padding: 13px; }
+.cai-empty { min-height: 100%; display: grid; align-content: center; gap: 10px; text-align: center; }
+.cai-empty > strong { font-size: .9rem; }
+.cai-empty > p { margin: 0; color: #9aacb9; font-size: .69rem; line-height: 1.55; }
+.cai-starters { display: grid; gap: 7px; margin-top: 5px; }
+.cai-starters button {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: rgba(255,255,255,.045);
+  color: #e5eef3;
+  font: inherit;
+  font-size: .66rem;
+  text-align: left;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.cai-message { display: grid; gap: 6px; margin-bottom: 13px; }
+.cai-message > strong { color: #efc752; font-size: .61rem; }
+.cai-message-user > strong { color: #8acbed; text-align: right; }
+.cai-bubble { padding: 10px 11px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.05); color: #edf4f8; font-size: .7rem; line-height: 1.58; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cai-message-user .cai-bubble { margin-left: 38px; background: rgba(36,129,179,.13); border-color: rgba(74,164,211,.2); }
+.cai-provider-line { display: flex; flex-wrap: wrap; gap: 6px; color: #7f94a3; font-size: .57rem; }
+.cai-provider-line strong { color: #8de0b1; }
+.cai-evidence { display: grid; gap: 5px; margin-top: 2px; }
+.cai-evidence > span { color: #91a6b4; font-size: .57rem; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; }
+.cai-evidence details { border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: rgba(0,0,0,.16); }
+.cai-evidence summary { padding: 7px 8px; color: #b9d7e8; font-size: .61rem; cursor: pointer; }
+.cai-evidence p { margin: 0; padding: 0 8px 8px; color: #9aacb9; font-size: .61rem; line-height: 1.45; }
+.cai-thinking,
+.cai-error { margin-top: 8px; padding: 9px 10px; border-radius: 9px; font-size: .65rem; line-height: 1.45; }
+.cai-thinking { background: rgba(239,199,82,.08); color: #f0d67b; }
+.cai-error { background: rgba(194,52,65,.12); color: #ffb8c0; border: 1px solid rgba(238,99,112,.2); }
+.cai-composer { display: grid; grid-template-columns: 1fr auto; gap: 7px; padding: 10px; border-top: 1px solid rgba(255,255,255,.09); background: #091722; }
+.cai-composer textarea { min-height: 44px; max-height: 110px; resize: vertical; padding: 9px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: #0d2130; color: #fff; font: inherit; font-size: .69rem; line-height: 1.45; }
+.cai-composer button { min-width: 66px; border: 0; border-radius: 10px; background: #efc752; color: #17200d; font: inherit; font-size: .68rem; font-weight: 900; cursor: pointer; }
+.cai-composer button:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 620px) {
+  .cai-launcher { right: 12px; bottom: 78px; min-height: 48px; }
+  .cai-panel { right: 8px; bottom: 138px; width: calc(100vw - 16px); height: min(680px, calc(100vh - 150px)); border-radius: 18px; }
+}
+
+@media (max-width: 390px) {
+  .cai-launcher { padding: 7px 9px; }
+  .cai-launcher > span:last-child small { display: none; }
+  .cai-panel { inset: 8px 8px 72px; width: auto; height: auto; }
+  .cai-persona-row { flex-wrap: wrap; }
+  .cai-persona-row a { width: 100%; margin-left: 0; justify-content: center; }
+  .cai-composer { grid-template-columns: 1fr; }
+  .cai-composer button { min-height: 40px; }
+}
