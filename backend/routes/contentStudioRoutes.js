@@ -7,6 +7,7 @@ const {
   requireContentStudioRouteScope,
 } = require("../middleware/contentStudioAccessMiddleware");
 const contentStudioAccessRoutes = require("./contentStudioAccessRoutes");
+const contentStudioAnalyticsRoutes = require("./contentStudioAnalyticsRoutes");
 const contentStudioCompanyInfoRoutes = require("./contentStudioCompanyInfoRoutes");
 const contentStudioCoreRoutes = require("./contentStudioCoreRoutes");
 const contentStudioFormRoutes = require("./contentStudioFormRoutes");
@@ -29,6 +30,9 @@ router.use(requireContentStudioRouteScope);
 
 router.use("/access", contentStudioAccessRoutes);
 router.use("/settings", contentStudioSettingsRoutes);
+// Aggregate public analytics belongs to the existing Dashboard scope. It is
+// read-only and contains no visitor identifiers, form contents or staff data.
+router.use("/dashboard/analytics", contentStudioAnalyticsRoutes);
 // Redirects live inside the existing Navigation scope but have their own
 // manager and lifecycle. Mount this before /navigation so the dedicated router
 // cannot be shadowed by navigation item IDs.
