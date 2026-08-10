@@ -110,8 +110,9 @@ test("provider context exposes only hashed user reference plus governed persona 
   assert.equal(context.intent, "diagnose");
   assert.equal(context.live_data_required, true);
   assert.equal(context.workspace_code, "spare_parts");
-  assert.equal(context.safety_identifier.length, 64);
-  assert.doesNotMatch(context.safety_identifier, /42/);
+  assert.match(context.safety_identifier, /^[a-f0-9]{64}$/);
+  assert.notEqual(context.safety_identifier, "42");
+  assert.notEqual(context.safety_identifier, String(42));
 });
 
 test("provider usage sums every round including metered cost", () => {
