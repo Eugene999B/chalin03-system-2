@@ -10,6 +10,10 @@ const orchestrator = fs.readFileSync(
   path.join(root, "backend/services/aiOrchestratorService.js"),
   "utf8"
 );
+const retrievalService = fs.readFileSync(
+  path.join(root, "backend/services/aiKnowledgeRetrievalService.js"),
+  "utf8"
+);
 const conversations = fs.readFileSync(
   path.join(root, "backend/services/aiConversationService.js"),
   "utf8"
@@ -19,18 +23,23 @@ const documentService = fs.readFileSync(
   "utf8"
 );
 
-test("Copilot and Executive automatically retrieve published document chunks before legacy text evidence", () => {
-  assert.match(orchestrator, /searchPublishedDocumentChunks/);
+test("Copilot and Executive automatically retrieve governed document and legacy evidence through the document-first retrieval layer", () => {
+  assert.match(orchestrator, /searchGovernedKnowledge/);
   assert.match(orchestrator, /async function retrieveAutomaticEvidence/);
+  assert.match(orchestrator, /const knowledgeEvidence = await retrieveAutomaticEvidence/);
+  assert.match(orchestrator, /rankEvidence/);
+
+  assert.match(retrievalService, /searchPublishedDocumentChunks/);
+  assert.match(retrievalService, /searchApprovedKnowledge/);
   assert.match(
-    orchestrator,
-    /const documentEvidence = await searchPublishedDocumentChunks[\s\S]*const textEvidence = await searchApprovedKnowledge/
+    retrievalService,
+    /const \[documentEvidence, legacyEvidence\] = await Promise\.all/
   );
   assert.match(
-    orchestrator,
-    /const knowledgeEvidence = await retrieveAutomaticEvidence/
+    retrievalService,
+    /for \(const item of \[\.\.\.documentEvidence, \.\.\.legacyEvidence\]\)/
   );
-  assert.match(orchestrator, /coveredSources/);
+  assert.match(retrievalService, /normalizeEvidenceList\(merged\)/);
 });
 
 test("document retrieval evidence carries precise governed citation metadata", () => {
