@@ -5,6 +5,7 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const { normalizeCategory } = require("../services/categoryIsolationService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { PayrollFoundationError } = require("../services/payrollFoundationService");
+const payrollPayslipRoutes = require("./payrollPayslipRoutes");
 const {
   approvePayrollPeriod,
   approveStatutoryRule,
@@ -323,6 +324,8 @@ router.post(
     return res.json({ status: "success", message: "Statutory rule approved. Future payroll validation will use the effective version as data.", rule: result });
   })
 );
+
+router.use(payrollPayslipRoutes);
 
 module.exports = router;
 module.exports.activeWorkspace = activeWorkspace;
