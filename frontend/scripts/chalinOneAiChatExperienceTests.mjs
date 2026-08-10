@@ -69,15 +69,20 @@ assert.match(appearanceCss, /html\[data-theme="dark"\] \.bwl-topbar/);
 assert.match(appearanceCss, /html\[data-theme="dark"\] \.workspace-context-selector select/);
 assert.doesNotMatch(appearanceCss, /background:\s*#000(?:000)?[;\s]/i);
 
-// Conversation-list refreshes must not wipe the active chat.
+// Conversation-list refreshes must not wipe the active chat. The only effect-time
+// reset is deliberately guarded by a real persona transition.
 assert.match(workspace, /activePersonaRef/);
 assert.match(workspace, /activeChatEpochRef/);
-assert.match(workspace, /if \(activePersonaRef\.current !== persona\)/);
 assert.match(workspace, /loadConversations\(undefined, \{ silent: true, force: true \}\)/);
-assert.doesNotMatch(
-  workspace,
-  /useEffect\(\(\) => \{[\s\S]{0,220}setConversation\(null\);\s*setMessages\(\[\]\);[\s\S]{0,220}loadConversations\(controller\.signal\)/
-);
+const personaGuard = workspace.indexOf("if (activePersonaRef.current !== persona) {");
+const guardedConversationReset = workspace.indexOf("setConversation(null);", personaGuard);
+const guardedMessageReset = workspace.indexOf("setMessages([]);", guardedConversationReset);
+const effectRefresh = workspace.indexOf("loadConversations(controller.signal);", guardedMessageReset);
+assert.ok(personaGuard >= 0, "persona reset must be explicitly guarded");
+assert.ok(guardedConversationReset > personaGuard, "conversation reset must stay inside the persona guard");
+assert.ok(guardedMessageReset > guardedConversationReset, "message reset must stay inside the persona guard");
+assert.ok(effectRefresh > guardedMessageReset, "conversation refresh follows the guarded persona transition");
+assert.equal((workspace.match(/setConversation\(null\)/g) || []).length, 2, "only persona switch and explicit New chat may clear the active conversation");
 
 // Chat management belongs on each conversation row, not in a distant footer.
 assert.match(workspace, /function ConversationRow/);
