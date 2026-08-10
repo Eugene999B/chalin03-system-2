@@ -102,6 +102,7 @@ const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
+const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const { startDebtReminderScheduler } = require("./services/debtReminderService");
 const {
@@ -115,6 +116,7 @@ const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
 const miningBoundary = requireWorkspaceCategory("mining");
 const hireBoundary = requireWorkspaceCategory("equipment_hire");
 const fleetBoundary = requireWorkspaceCategory("mining", "equipment_hire");
+const payrollBoundary = requireWorkspaceCategory("spare_parts", "mining", "equipment_hire");
 
 const app = express();
 
@@ -237,6 +239,7 @@ app.get("/api", (req, res) => {
       "/api/release2-final/standalone-hr",
       "/api/release2-final/document-signature",
       "/api/workspace-admin",
+      "/api/payroll",
     ],
   });
 });
@@ -291,6 +294,7 @@ app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);
 app.use(
   "/api/debts",
   requireAuth,
