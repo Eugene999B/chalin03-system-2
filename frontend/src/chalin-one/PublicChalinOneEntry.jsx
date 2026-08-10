@@ -5,7 +5,6 @@ import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
 import PublicInteractionSafety from "./public-site/PublicInteractionSafety";
-import PublicTechnicalFinish from "./public-site/PublicTechnicalFinish";
 import PublicWebsiteFeatureGate from "./public-site/PublicWebsiteFeatureGate";
 import "./public-site/publicBootPolish.css";
 
@@ -19,6 +18,9 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
   import("./public-site/PublicCorporateWebsiteApp").then((module) => ({
     default: module.PublicCorporateWebsiteUnavailable,
   }))
+);
+const PublicTechnicalFinish = lazy(() =>
+  import("./public-site/PublicTechnicalFinish")
 );
 const PublicWorldEnhancements = lazy(() =>
   import("./public-site/PublicWorldEnhancements")
@@ -44,6 +46,30 @@ function DeferredPublicAnalyticsRuntime() {
   return (
     <Suspense fallback={null}>
       <PublicAnalyticsRuntime />
+    </Suspense>
+  );
+}
+
+function DeferredPublicTechnicalFinish() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(() => setReady(true), {
+        timeout: 320,
+      });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timerId = window.setTimeout(() => setReady(true), 140);
+    return () => window.clearTimeout(timerId);
+  }, []);
+
+  if (!ready) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <PublicTechnicalFinish />
     </Suspense>
   );
 }
@@ -118,7 +144,7 @@ export default function PublicChalinOneEntry() {
                 <PublicDetailCompanion />
                 <DeferredPublicWorldEnhancements />
                 <PublicEditorialFinish />
-                <PublicTechnicalFinish />
+                <DeferredPublicTechnicalFinish />
                 <SafePublic fallback={quietFallback}>
                   <PublicCorporateWebsiteApp />
                 </SafePublic>
