@@ -1,0 +1,54 @@
+name: Temporary Returns Admin Self Approval Hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/returns-admin-self-approval-inner-20260810
+
+permissions:
+  contents: write
+
+concurrency:
+  group: returns-admin-self-approval-hotfix
+  cancel-in-progress: false
+
+jobs:
+  apply-verify-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/returns-admin-self-approval-inner-20260810
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Apply exact Returns hotfix
+        run: |
+          set -euo pipefail
+          python .github/tmp-returns-admin-self-approval/patch.py
+          rm -rf .github/tmp-returns-admin-self-approval
+          rm -f .github/workflows/tmp-returns-admin-self-approval.yml
+
+      - name: Verify Returns and full backend
+        run: |
+          set -euo pipefail
+          cd backend
+          npm ci
+          node --test tests/returnAdminSelfApprovalContract.test.js tests/cashControlSecurity.test.js tests/operationalApprovalCentreContract.test.js tests/internalOperationalApprovalOriginContract.test.js
+          npm run syntax-check
+          npm test
+
+      - name: Publish verified hotfix only
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Allow administrator self-approval for returns"
+          git push origin HEAD:hotfix/returns-admin-self-approval-inner-20260810
