@@ -19,9 +19,9 @@ const studioRoutes = fs.readFileSync(
   "utf8"
 );
 
-function functionBlock(source, name, nextName) {
+function finalAsyncFunctionBlock(source, name) {
   const start = source.indexOf(`async function ${name}`);
-  const end = source.indexOf(`\nasync function ${nextName}`, start + 1);
+  const end = source.indexOf("\nmodule.exports", start + 1);
   if (start < 0 || end < 0) throw new Error(`Could not isolate ${name}.`);
   return source.slice(start, end);
 }
@@ -45,8 +45,10 @@ test("Content Studio AI evidence is scope-aware and aggregate-only", () => {
 });
 
 test("Studio status resolves policy without invoking a provider", () => {
-  const block = functionBlock(service, "getContentStudioAiStatus", "__MODULE_END_SENTINEL__".replace("__MODULE_END_SENTINEL__", "not_present"));
-  void block;
+  const block = finalAsyncFunctionBlock(service, "getContentStudioAiStatus");
+  assert.match(block, /resolveAiProviderSelection/);
+  assert.doesNotMatch(block, /generateProviderResponse/);
+  assert.match(block, /provider_call_performed: false/);
 });
 
 test("Studio service contains no mutation SQL or direct publishing workflow", () => {
