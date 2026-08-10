@@ -5,14 +5,32 @@ const assert = require("node:assert/strict");
 
 const { pool } = require("../config/db");
 const {
+  RELEASE_CONFIRMATION: REDIRECT_CONFIRMATION,
+  runChalinOnePublicRedirectMigration,
+} = require("../scripts/runChalinOnePublicRedirectMigration");
+const {
   MAX_LINK_REFERENCES,
   MAX_LINK_TARGETS,
   getLinkIntegrityIntelligence,
 } = require("../services/contentStudioLinkIntegrityService");
 
+function redirectMigrationEnv() {
+  return {
+    ...process.env,
+    CHALIN_ONE_ALLOW_PUBLIC_REDIRECT_MIGRATION: "true",
+    CHALIN_ONE_PUBLIC_REDIRECT_MIGRATION_CONFIRM: REDIRECT_CONFIRMATION,
+  };
+}
+
 test("Content Studio link-integrity audit executes read-only against migrated acceptance schema", async () => {
   const beforeUsers = Number((await pool.query("SELECT COUNT(*) AS total FROM users"))[0][0]?.total || 0);
   const beforePages = Number((await pool.query("SELECT COUNT(*) AS total FROM public_pages"))[0][0]?.total || 0);
+
+  // Acceptance files must be independently executable. Link integrity reads the
+  // governed redirect foundation, so apply that already-approved additive
+  // migration here instead of relying on publicRedirectDatabaseAcceptance.test
+  // running first alphabetically.
+  await runChalinOnePublicRedirectMigration({ env: redirectMigrationEnv() });
 
   const result = await getLinkIntegrityIntelligence();
   assert.ok(result);
