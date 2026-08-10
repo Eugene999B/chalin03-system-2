@@ -482,7 +482,14 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       throw error;
     }
 
-    if (Number(request.requested_by) === Number(getUserId(req))) {
+    const selfApproval =
+      Number(request.requested_by) === Number(getUserId(req));
+    const adminReturnSelfApproval =
+      selfApproval &&
+      getRole(req) === "admin" &&
+      request.approval_kind === "return_refund";
+
+    if (selfApproval && !adminReturnSelfApproval) {
       const error = new Error("The requester cannot approve their own action.");
       error.statusCode = 403;
       error.code = "SELF_APPROVAL_FORBIDDEN";
@@ -542,7 +549,9 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       connection,
       action: "APPROVE_OPERATIONAL_REQUEST",
       request: { ...request, execution_status: "executing" },
-      details: `${request.request_code} approved by ${reviewer.username}; protected action execution started.`,
+      details: `${request.request_code} approved by ${reviewer.username}${
+        adminReturnSelfApproval ? " (administrator self-approved return/refund)" : ""
+      }; protected action execution started.`,
       userId: reviewer.id,
     });
 
