@@ -11,18 +11,22 @@ function read(relativePath) {
 }
 
 const api = read("frontend/src/chalin-one/public-site/publicGuideApi.js");
+const publicApi = read("frontend/src/chalin-one/public-site/publicWebsiteApi.js");
 const widget = read(
   "frontend/src/chalin-one/public-site/PublicGuideWidget.jsx"
 );
 const css = read("frontend/src/chalin-one/public-site/publicGuide.css");
 
-test("public Guide client is anonymous and keeps session token in memory only", () => {
-  assert.match(api, /axios\.create/);
-  assert.match(api, /baseURL: "\/api\/public\/guide"/);
-  assert.match(api, /withCredentials: false/);
+test("public Guide client is anonymous, native-fetch based and keeps session token in memory only", () => {
+  assert.match(api, /publicWebsiteClient/);
+  assert.match(api, /\/public\/guide\/sessions/);
+  assert.match(api, /\/public\/guide\/messages/);
+  assert.match(api, /\/public\/guide\/history/);
   assert.match(api, /x-chalin-guide-session/);
-  assert.doesNotMatch(api, /axiosClient|Authorization|Bearer/);
+  assert.doesNotMatch(api, /axios(?:Client|\.create)|Authorization|Bearer/);
   assert.doesNotMatch(api, /localStorage|sessionStorage|document\.cookie/);
+  assert.match(publicApi, /fetch\(/);
+  assert.match(publicApi, /credentials:\s*"omit"/);
 });
 
 test("widget exposes public-only boundary and governed human handoff", () => {

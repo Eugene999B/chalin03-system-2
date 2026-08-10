@@ -41,8 +41,7 @@ function safeEnv(overrides = {}) {
     FEATURE_APPLICANT_PORTAL: "false",
     FEATURE_AI_ACTIONS: "false",
     FEATURE_AI_SCHEDULED_JOBS: "false",
-    AI_PROVIDER: "openai",
-    OPENAI_API_KEY: "staging-provider-secret-abcdefghijklmnopqrstuvwxyz-123456",
+    AI_PROVIDER: "local",
     AI_ALLOW_MOCK_PROVIDER: "false",
     SMS_ENABLED: "false",
     SMS_PROVIDER: "mock",
@@ -60,42 +59,76 @@ function safeEnv(overrides = {}) {
   };
 }
 
-test("staging chat readiness accepts isolated read-only GPT-5.6 conversation configuration", () => {
-  const env = safeEnv();
-  const result = verifyChalinOneAiChatReadiness(env);
+test("staging chat readiness accepts CHALIN Local with no paid provider or API key", () => {
+  const result = verifyChalinOneAiChatReadiness(safeEnv());
   assert.equal(result.safe, true);
-  assert.equal(result.provider, "openai");
+  assert.equal(result.provider, "local");
   assert.equal(result.provider_ready, true);
+  assert.equal(result.zero_cost_mode, true);
+  assert.equal(result.billing_required, false);
+  assert.equal(result.external_network_required, false);
+  assert.equal(result.provider_secret_configured, false);
+  assert.equal(result.provider_secret_exposed, false);
+  assert.equal(result.copilot_model, "chalin-local-governed-v1");
+  assert.equal(result.executive_model, "chalin-local-governed-v1");
+  assert.equal(result.execution_authority, "read_recommend_prepare_only");
+});
+
+test("staging chat readiness accepts configured Gemini Free without treating it as private-data approval", () => {
+  const result = verifyChalinOneAiChatReadiness(
+    safeEnv({
+      AI_PROVIDER: "gemini",
+      GEMINI_API_KEY: "staging-gemini-secret-abcdefghijklmnopqrstuvwxyz-123456",
+      GEMINI_SERVICE_TIER: "free",
+    })
+  );
+  assert.equal(result.provider, "gemini");
+  assert.equal(result.provider_ready, true);
+  assert.equal(result.zero_cost_mode, true);
+  assert.equal(result.service_tier, "free");
+  assert.equal(result.public_only_when_unpaid, true);
+  assert.equal(result.external_network_required, true);
   assert.equal(result.provider_secret_configured, true);
   assert.equal(result.provider_secret_exposed, false);
-  assert.equal(result.provider_side_storage_enabled, false);
+  assert.equal(result.copilot_model, "gemini-2.5-flash");
+  assert.equal(result.executive_model, "gemini-2.5-flash");
+  assert.equal(result.copilot_reasoning_effort, "provider_managed");
+
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, /staging-gemini-secret/i);
+  assert.doesNotMatch(serialized, /GEMINI_API_KEY/i);
+});
+
+test("staging chat readiness still accepts isolated GPT-5.6 when explicitly configured later", () => {
+  const env = safeEnv({
+    AI_PROVIDER: "openai",
+    OPENAI_API_KEY: "staging-provider-secret-abcdefghijklmnopqrstuvwxyz-123456",
+  });
+  const result = verifyChalinOneAiChatReadiness(env);
+  assert.equal(result.provider, "openai");
+  assert.equal(result.provider_ready, true);
+  assert.equal(result.zero_cost_mode, false);
+  assert.equal(result.billing_required, true);
   assert.equal(result.copilot_model, "gpt-5.6");
   assert.equal(result.executive_model, "gpt-5.6");
-  assert.equal(result.execution_authority, "read_recommend_prepare_only");
-  assert.ok(result.disabled_features.includes("FEATURE_AI_ACTIONS"));
-  assert.ok(result.disabled_features.includes("FEATURE_AI_SCHEDULED_JOBS"));
 
   const serialized = JSON.stringify(result);
   assert.doesNotMatch(serialized, /staging-provider-secret/i);
   assert.doesNotMatch(serialized, /OPENAI_API_KEY/i);
 });
 
-test("staging chat readiness fails closed when provider or secret is not ready", () => {
+test("staging chat readiness fails closed when selected external provider secret is missing", () => {
   assert.throws(
-    () => verifyChalinOneAiChatReadiness(safeEnv({ AI_PROVIDER: "disabled" })),
-    (error) => error.code === "CHALIN_ONE_FULL_STAGING_PROVIDER_REQUIRED"
+    () => verifyChalinOneAiChatReadiness(safeEnv({ AI_PROVIDER: "gemini" })),
+    (error) => error.code === "AI_GEMINI_API_KEY_REQUIRED"
   );
   assert.throws(
-    () => verifyChalinOneAiChatReadiness(safeEnv({ OPENAI_API_KEY: "" })),
+    () => verifyChalinOneAiChatReadiness(safeEnv({ AI_PROVIDER: "openai" })),
     (error) => error.code === "AI_OPENAI_API_KEY_REQUIRED"
   );
   assert.throws(
-    () => verifyChalinOneAiChatReadiness(safeEnv({ AI_PROVIDER: "mock" })),
-    (error) =>
-      [
-        "CHALIN_ONE_FULL_STAGING_MOCK_PROVIDER_BLOCKED",
-        "CHALIN_ONE_FULL_STAGING_PROVIDER_REQUIRED",
-      ].includes(error.code)
+    () => verifyChalinOneAiChatReadiness(safeEnv({ AI_PROVIDER: "disabled" })),
+    (error) => error.code === "CHALIN_ONE_FULL_STAGING_PROVIDER_REQUIRED"
   );
 });
 
@@ -117,7 +150,7 @@ test("staging chat readiness keeps mutations, schedules and production hosts blo
   );
 });
 
-test("AI status and staff gateway use readiness and a visible governed chat entry", () => {
+test("AI status, provider control and staff gateway keep governed access boundaries", () => {
   const repoRoot = path.resolve(__dirname, "..", "..");
   const routes = fs.readFileSync(path.join(repoRoot, "backend/routes/aiRoutes.js"), "utf8");
   const gateway = fs.readFileSync(
@@ -126,7 +159,11 @@ test("AI status and staff gateway use readiness and a visible governed chat entr
   );
 
   assert.match(routes, /getAiProviderReadiness/);
-  assert.doesNotMatch(routes, /configured:\s*providerKey\s*!==\s*["']disabled["']/);
+  assert.match(routes, /getProviderControlSnapshot/);
+  assert.match(routes, /updateProviderProfile/);
+  assert.match(routes, /isOriginalSystemAdministrator/);
+  assert.match(routes, /\/provider-control\/\:persona/);
+  assert.doesNotMatch(routes, /OPENAI_API_KEY\s*=|GEMINI_API_KEY\s*=/);
   assert.match(gateway, /useFeatureFlags/);
   assert.match(gateway, /flags\?\.aiEnabled === true/);
   assert.match(gateway, /permissions\.has\("workspace\.view"\)/);

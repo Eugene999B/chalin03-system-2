@@ -1,6 +1,9 @@
 "use strict";
 
 const {
+  resolveAiProviderSelection,
+} = require("./aiProviderPolicyService");
+const {
   AiSafetyError,
   sanitizeProviderMessages,
   validateProviderOutput,
@@ -194,6 +197,21 @@ class AiProviderRegistry {
 
 const aiProviderRegistry = new AiProviderRegistry();
 
+function safeProviderSelection(selection) {
+  if (!selection) return null;
+  return Object.freeze({
+    persona: selection.persona || null,
+    profile_key: selection.profile_key || null,
+    selected_provider: selection.selected_provider || null,
+    selected_model: selection.selected_model || null,
+    effective_provider: selection.effective_provider || null,
+    effective_model: selection.effective_model || null,
+    data_classification: selection.data_classification || null,
+    reason_code: selection.reason_code || null,
+    external_network_used: selection.external_network_used === true,
+  });
+}
+
 async function generateProviderResponse({
   provider = null,
   providerKey = null,
@@ -204,8 +222,32 @@ async function generateProviderResponse({
   providerContext = {},
   env = process.env,
 } = {}) {
-  const selected =
-    provider || aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
+  let selection = null;
+  let selected = provider;
+  let effectiveProviderContext =
+    providerContext && typeof providerContext === "object"
+      ? { ...providerContext }
+      : {};
+
+  if (!selected && !providerKey) {
+    selection = await resolveAiProviderSelection({
+      providerContext: effectiveProviderContext,
+      messages,
+      env,
+    });
+    providerKey = selection.effective_provider;
+    effectiveProviderContext = {
+      ...effectiveProviderContext,
+      persona: selection.persona,
+      data_classification: selection.data_classification,
+      provider_model_override: selection.effective_model,
+      provider_selection_reason: selection.reason_code,
+    };
+  }
+
+  selected =
+    selected ||
+    aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
   const key = cleanProviderKey(selected.key || providerKey || "disabled") || "disabled";
   const safeMessages = sanitizeProviderMessages(messages);
   const safeTools = Array.isArray(tools) ? tools.slice(0, 50) : [];
@@ -219,10 +261,7 @@ async function generateProviderResponse({
           messages: safeMessages,
           tools: safeTools,
           max_output_tokens: safePositiveInteger(maxOutputTokens, 1200, 8000),
-          provider_context:
-            providerContext && typeof providerContext === "object"
-              ? Object.freeze({ ...providerContext })
-              : Object.freeze({}),
+          provider_context: Object.freeze(effectiveProviderContext),
           signal: controller.signal,
         })
       ),
@@ -233,6 +272,7 @@ async function generateProviderResponse({
     return Object.freeze({
       ...normalizeProviderResult(raw, key),
       latency_ms: Date.now() - started,
+      provider_selection: safeProviderSelection(selection),
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSafetyError) {
@@ -261,5 +301,6 @@ module.exports = {
   generateProviderResponse,
   normalizeProviderResult,
   safePositiveInteger,
+  safeProviderSelection,
   withProviderTimeout,
 };

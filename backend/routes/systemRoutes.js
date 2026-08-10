@@ -27,6 +27,7 @@ const contentStudioAuthRoutes = require("./contentStudioAuthRoutes");
 const contentStudioRoutes = require("./contentStudioRoutes");
 const publicAnalyticsRoutes = require("./publicAnalyticsRoutes");
 const publicContentRoutes = require("./publicContentRoutes");
+const publicGuideRoutes = require("./publicGuideRoutes");
 const publicRedirectRoutes = require("./publicRedirectRoutes");
 
 const router = express.Router();
@@ -303,6 +304,12 @@ router.use(
   "/public/content",
   requireFeature("publicWebsite"),
   publicContentRoutes
+);
+
+router.use(
+  "/public/guide",
+  requireFeature("chalinGuide"),
+  publicGuideRoutes
 );
 
 // Content Studio owns its authentication domain. Login is feature-gated and

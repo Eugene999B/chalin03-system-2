@@ -18,8 +18,10 @@ const knowledgeRoutes = read("backend/routes/aiKnowledgeRoutes.js");
 const featureFlags = read("backend/services/featureFlagService.js");
 const registry = read("backend/services/aiToolRegistry.js");
 const provider = read("backend/services/aiProviderService.js");
+const providerPolicy = read("backend/services/aiProviderPolicyService.js");
 const providerReadiness = read("backend/services/aiProviderReadinessService.js");
 const providerRegistration = read("backend/ai-providers/registerAiProviders.js");
+const geminiProvider = read("backend/ai-providers/geminiGenerateContentProvider.js");
 const openAiProvider = read("backend/ai-providers/openAiResponsesProvider.js");
 const orchestrator = read("backend/services/aiOrchestratorService.js");
 const reasoning = read("backend/services/aiReasoningService.js");
@@ -70,20 +72,37 @@ test("tool registry denies direct database access and hides risk-four execution"
   assert.doesNotMatch(foundationTools, /config\/db|mysql2|pool\.query|connection\.query/);
 });
 
-test("provider service defaults disabled and keeps external networking isolated in explicit adapters", () => {
+test("provider service uses governed policy while external networking stays isolated in explicit adapters", () => {
   assert.match(provider, /class DisabledAiProvider/);
   assert.match(provider, /AI_PROVIDER_DISABLED/);
   assert.match(provider, /AI_PROVIDER_NOT_REGISTERED/);
   assert.match(provider, /AI_MOCK_PROVIDER_BLOCKED/);
+  assert.match(provider, /resolveAiProviderSelection/);
   assert.doesNotMatch(provider, /\bfetch\s*\(|axios|https\.request|http\.request/);
+
+  assert.match(providerRegistration, /registry\.register\("local"/);
+  assert.match(providerRegistration, /registry\.register\("gemini"/);
   assert.match(providerRegistration, /registry\.register\("openai"/);
   assert.match(aiRoutes, /registerBuiltInAiProviders\(\)/);
   assert.match(aiRoutes, /getAiProviderReadiness\(process\.env\)/);
   assert.doesNotMatch(aiRoutes, /process\.env\.AI_PROVIDER/);
-  assert.match(providerReadiness, /cleanProviderKey\(env\.AI_PROVIDER \|\| "disabled"\)/);
+
+  assert.match(providerPolicy, /AI_PROVIDER_POLICY_DEFAULT \|\| "local"/);
+  assert.match(providerPolicy, /governed_local_default/);
+  assert.match(providerPolicy, /AI_GEMINI_FREE_PRIVATE_DATA_LOCAL_FALLBACK/);
+  assert.match(providerPolicy, /AI_ALLOW_EXTERNAL_PRIVATE_DATA/);
+  assert.match(providerPolicy, /GEMINI_SERVICE_TIER/);
+
+  assert.match(providerReadiness, /providerOverride \|\| env\.AI_PROVIDER \|\| "disabled"/);
+  assert.match(providerReadiness, /AI_LOCAL_GOVERNED_PROVIDER_READY/);
+  assert.match(providerReadiness, /AI_GEMINI_PROVIDER_READY/);
   assert.match(providerReadiness, /AI_PROVIDER_DISABLED/);
   assert.match(providerReadiness, /secret_values_exposed:\s*false/);
   assert.doesNotMatch(providerReadiness, /\bfetch\s*\(|axios|https\.request|http\.request/);
+
+  assert.match(geminiProvider, /generativelanguage\.googleapis\.com/);
+  assert.match(geminiProvider, /"x-goog-api-key": apiKey/);
+  assert.doesNotMatch(geminiProvider, /body\.(?:env|GEMINI_API_KEY|GOOGLE_API_KEY)|GEMINI_API_KEY\s*:/);
 });
 
 test("OpenAI Responses adapter preserves CHALIN governance and privacy boundaries", () => {

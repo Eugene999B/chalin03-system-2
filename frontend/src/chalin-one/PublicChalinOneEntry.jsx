@@ -19,6 +19,9 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
     default: module.PublicCorporateWebsiteUnavailable,
   }))
 );
+const PublicGuideRuntime = lazy(() =>
+  import("./public-site/PublicGuideRuntime")
+);
 const PublicTechnicalFinish = lazy(() =>
   import("./public-site/PublicTechnicalFinish")
 );
@@ -46,6 +49,30 @@ function DeferredPublicAnalyticsRuntime() {
   return (
     <Suspense fallback={null}>
       <PublicAnalyticsRuntime />
+    </Suspense>
+  );
+}
+
+function DeferredPublicGuideRuntime() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(() => setReady(true), {
+        timeout: 700,
+      });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timerId = window.setTimeout(() => setReady(true), 420);
+    return () => window.clearTimeout(timerId);
+  }, []);
+
+  if (!ready) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <PublicGuideRuntime />
     </Suspense>
   );
 }
@@ -145,6 +172,7 @@ export default function PublicChalinOneEntry() {
                 <DeferredPublicWorldEnhancements />
                 <PublicEditorialFinish />
                 <DeferredPublicTechnicalFinish />
+                <DeferredPublicGuideRuntime />
                 <SafePublic fallback={quietFallback}>
                   <PublicCorporateWebsiteApp />
                 </SafePublic>
