@@ -5,9 +5,10 @@ const { CHALIN_PRODUCT_CONTEXT } = require("../services/aiProductKnowledgeServic
 const MAX_EVIDENCE_ITEMS = 5;
 const MAX_EXCERPT_LENGTH = 1200;
 const MAX_READABLE_FACTS = 14;
-const LOCAL_MODEL_KEY = "chalin-local-governed-v2";
+const LOCAL_MODEL_KEY = "chalin-local-governed-v1";
 
 const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
+  "system.group_intelligence",
   "spare_parts.operations_snapshot",
   "spare_parts.inventory_health",
   "spare_parts.collections_health",
@@ -24,6 +25,10 @@ const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
 ]);
 
 const TOOL_HINTS = Object.freeze([
+  Object.freeze({
+    key: "system.group_intelligence",
+    pattern: /\b(?:whole[- ]system|group performance|group intelligence|across all (?:businesses|workspaces|operations)|all (?:businesses|workspaces|operations)|company[- ]wide operations|overall chalin performance)\b/i,
+  }),
   Object.freeze({
     key: "equipment_finance.arrears_health",
     pattern: /\b(arrears?|overdue|delinquen|late payment|past due)\b/i,
