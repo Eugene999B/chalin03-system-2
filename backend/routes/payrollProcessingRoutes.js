@@ -5,6 +5,7 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const { normalizeCategory } = require("../services/categoryIsolationService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { PayrollFoundationError } = require("../services/payrollFoundationService");
+const { revokeCurrentPayslipsForEntry } = require("../services/payrollPayslipService");
 const payrollPayslipRoutes = require("./payrollPayslipRoutes");
 const {
   approvePayrollPeriod,
@@ -231,12 +232,20 @@ router.post(
   "/processing/adjustments/:requestId/decision",
   requirePermission("payroll.approve"),
   asyncHandler(async (req, res) => {
+    const workspaceCode = requirePayrollWorkspace(req);
     const result = await decideAdjustment({
       requestId: req.params.requestId,
-      workspaceCode: requirePayrollWorkspace(req),
+      workspaceCode,
       input: req.body || {},
       actorId: req.user?.id || null,
     });
+    if (result.status === "executed" && result.entry?.id) {
+      await revokeCurrentPayslipsForEntry({
+        entryId: result.entry.id,
+        actorId: req.user?.id || null,
+        reason: `Automatically revoked after approved salary payment reversal ${result.request_id}.`,
+      });
+    }
     await audit(
       req,
       "PAYROLL_ADJUSTMENT_DECIDED",
@@ -248,7 +257,7 @@ router.post(
     return res.json({
       status: "success",
       message: result.status === "executed"
-        ? "Approved reversal executed through preserved payment evidence and the worker balance was recalculated."
+        ? "Approved reversal executed through preserved payment evidence and the worker balance was recalculated. Any current payslip for the affected entry was revoked."
         : "Payroll adjustment request rejected; the original salary payment remains active.",
       result,
     });
