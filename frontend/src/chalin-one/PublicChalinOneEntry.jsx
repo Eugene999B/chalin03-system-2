@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
-import FeatureFlagRoute from "../components/FeatureFlagRoute";
 import PageErrorBoundary from "../components/PageErrorBoundary";
-import { FeatureFlagProvider } from "../context/FeatureFlagContext";
-import PublicAnalyticsRuntime from "./public-site/PublicAnalyticsRuntime";
 import PublicDetailCompanion from "./public-site/PublicDetailCompanion";
 import PublicEditorialFinish from "./public-site/PublicEditorialFinish";
 import PublicExperienceCompletion from "./public-site/PublicExperienceCompletion";
 import PublicInteractionSafety from "./public-site/PublicInteractionSafety";
 import PublicTechnicalFinish from "./public-site/PublicTechnicalFinish";
+import PublicWebsiteFeatureGate from "./public-site/PublicWebsiteFeatureGate";
 import "./public-site/publicBootPolish.css";
 
+const PublicAnalyticsRuntime = lazy(() =>
+  import("./public-site/PublicAnalyticsRuntime")
+);
 const PublicCorporateWebsiteApp = lazy(() =>
   import("./public-site/PublicCorporateWebsiteApp")
 );
@@ -22,6 +23,30 @@ const PublicCorporateWebsiteUnavailable = lazy(() =>
 const PublicWorldEnhancements = lazy(() =>
   import("./public-site/PublicWorldEnhancements")
 );
+
+function DeferredPublicAnalyticsRuntime() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(() => setReady(true), {
+        timeout: 900,
+      });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timerId = window.setTimeout(() => setReady(true), 450);
+    return () => window.clearTimeout(timerId);
+  }, []);
+
+  if (!ready) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <PublicAnalyticsRuntime />
+    </Suspense>
+  );
+}
 
 function DeferredPublicWorldEnhancements() {
   const [ready, setReady] = useState(false);
@@ -73,38 +98,35 @@ export default function PublicChalinOneEntry() {
   const quietFallback = <PublicStandaloneLoading />;
 
   return (
-    <FeatureFlagProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/*"
-            element={
-              <FeatureFlagRoute
-                feature="publicWebsite"
-                fallback={
-                  <SafePublic fallback={quietFallback}>
-                    <PublicCorporateWebsiteUnavailable />
-                  </SafePublic>
-                }
-                loadingFallback={quietFallback}
-              >
-                <>
-                  <PublicInteractionSafety />
-                  <PublicAnalyticsRuntime />
-                  <PublicExperienceCompletion />
-                  <PublicDetailCompanion />
-                  <DeferredPublicWorldEnhancements />
-                  <PublicEditorialFinish />
-                  <PublicTechnicalFinish />
-                  <SafePublic fallback={quietFallback}>
-                    <PublicCorporateWebsiteApp />
-                  </SafePublic>
-                </>
-              </FeatureFlagRoute>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
-    </FeatureFlagProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/*"
+          element={
+            <PublicWebsiteFeatureGate
+              fallback={
+                <SafePublic fallback={quietFallback}>
+                  <PublicCorporateWebsiteUnavailable />
+                </SafePublic>
+              }
+              loadingFallback={quietFallback}
+            >
+              <>
+                <PublicInteractionSafety />
+                <DeferredPublicAnalyticsRuntime />
+                <PublicExperienceCompletion />
+                <PublicDetailCompanion />
+                <DeferredPublicWorldEnhancements />
+                <PublicEditorialFinish />
+                <PublicTechnicalFinish />
+                <SafePublic fallback={quietFallback}>
+                  <PublicCorporateWebsiteApp />
+                </SafePublic>
+              </>
+            </PublicWebsiteFeatureGate>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   );
 }
