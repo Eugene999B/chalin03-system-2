@@ -421,8 +421,20 @@ async function validatePayrollPeriod({ periodId, workspaceCode, connection = poo
   if (!workers.length) {
     issues.push({ severity: "error", code: "eligible_workers_missing", message: "No worker employment record overlaps this payroll period." });
   }
+  const statutoryLineCodes = new Set();
+  for (const rule of rules) {
+    const lineCode = rule.configuration.line_code;
+    if (statutoryLineCodes.has(lineCode)) {
+      issues.push({ severity: "error", code: "duplicate_statutory_line_code", message: `Approved statutory rules produce the duplicate payroll line code ${lineCode}.` });
+    }
+    statutoryLineCodes.add(lineCode);
+  }
 
   for (const worker of workers) {
+    if (["terminated", "inactive"].includes(String(worker.employment_status || "").toLowerCase()) && !worker.employment_end_date) {
+      issues.push({ severity: "error", code: "employment_end_date_missing", worker_id: worker.id, worker_name: worker.full_name, message: "This inactive or terminated worker has no employment end date, so payable days cannot be determined safely." });
+      continue;
+    }
     const profiles = await profilesForWorker(connection, worker.id, workspaceCode, periodStart, periodEnd);
     const coverageIssue = compensationCoverageIssue(worker, profiles, periodStart, periodEnd);
     if (coverageIssue) {
@@ -500,18 +512,18 @@ function entryChecksumPayload(entry, lines, compensationSnapshot, statutorySnaps
 }
 
 async function preparePayrollPeriod({ periodId, workspaceCode, actorId }) {
-  const validation = await validatePayrollPeriod({ periodId, workspaceCode });
-  if (!validation.valid) {
-    const error = new PayrollFoundationError(409, "Payroll validation found issues that must be resolved before review.", "PAYROLL_PERIOD_VALIDATION_FAILED");
-    error.details = validation;
-    throw error;
-  }
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const period = await getPeriod(connection, periodId, workspaceCode, { lock: true });
     if (period.status !== "draft") {
       throw new PayrollFoundationError(409, "Only a draft payroll period can be prepared for review.", "PAYROLL_PERIOD_NOT_DRAFT");
+    }
+    const validation = await validatePayrollPeriod({ periodId, workspaceCode, connection });
+    if (!validation.valid) {
+      const error = new PayrollFoundationError(409, "Payroll validation found issues that must be resolved before review.", "PAYROLL_PERIOD_VALIDATION_FAILED");
+      error.details = validation;
+      throw error;
     }
     const [existing] = await connection.query("SELECT id FROM payroll_entries WHERE payroll_period_id = ? LIMIT 1 FOR UPDATE", [period.id]);
     if (existing.length) {
@@ -673,7 +685,7 @@ async function refreshEntryPaymentState(connection, entryId) {
   const entry = entryRows[0];
   if (!entry) throw new PayrollFoundationError(404, "Payroll entry was not found.", "PAYROLL_ENTRY_NOT_FOUND");
   const [[totals]] = await connection.query(
-    `SELECT COALESCE(SUM(CASE WHEN payment_status = 'posted' AND reversal_of_payment_id IS NULL THEN amount ELSE 0 END), 0) AS paid
+    `SELECT COALESCE(SUM(CASE WHEN payment_status IN ('posted','reversal_pending') AND reversal_of_payment_id IS NULL THEN amount ELSE 0 END), 0) AS paid
      FROM payroll_salary_payments WHERE payroll_entry_id = ?`,
     [entry.id]
   );
@@ -717,8 +729,9 @@ async function recordSalaryPayment({ entryId, workspaceCode, input, actorId }) {
     }
     const [replays] = await connection.query("SELECT * FROM payroll_salary_payments WHERE idempotency_key = ? LIMIT 1 FOR UPDATE", [key]);
     if (replays.length) {
+      const refreshedReplay = await refreshEntryPaymentState(connection, entry.id);
       await connection.commit();
-      return { replayed: true, payment: replays[0], entry: await refreshEntryPaymentState(pool, entry.id) };
+      return { replayed: true, payment: replays[0], entry: refreshedReplay };
     }
     const current = await refreshEntryPaymentState(connection, entry.id);
     if (amount > current.remaining_balance + 0.01) {
@@ -904,12 +917,20 @@ async function reconcilePayrollPeriod({ periodId, workspaceCode }) {
     for (const entry of entries) refreshed.push(await refreshEntryPaymentState(connection, entry.id));
     const outstanding = money(refreshed.reduce((sum, entry) => sum + Number(entry.remaining_balance || 0), 0));
     const paid = money(refreshed.reduce((sum, entry) => sum + Number(entry.amount_paid || 0), 0));
-    const status = outstanding <= 0.01 && refreshed.length ? "reconciled" : "paying";
+    const [[pendingRow]] = await connection.query(
+      `SELECT COUNT(*) AS pending_count FROM payroll_adjustment_requests
+       WHERE workspace_code = ? AND request_status = 'pending'
+         AND payroll_entry_id IN (SELECT id FROM payroll_entries WHERE payroll_period_id = ?)`,
+      [workspaceCode, period.id]
+    );
+    const pendingAdjustments = Number(pendingRow?.pending_count || 0);
+    const status = outstanding <= 0.01 && refreshed.length && pendingAdjustments === 0 ? "reconciled" : "paying";
     await connection.query("UPDATE payroll_periods SET status = ? WHERE id = ?", [status, period.id]);
     await connection.commit();
     return {
       period_id: period.id,
       status,
+      pending_adjustments: pendingAdjustments,
       entry_count: refreshed.length,
       fully_paid_entries: refreshed.filter((entry) => entry.entry_status === "paid").length,
       part_paid_entries: refreshed.filter((entry) => entry.entry_status === "part_paid").length,

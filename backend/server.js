@@ -103,6 +103,7 @@ const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
 const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");
+const payrollProcessingRoutes = require("./routes/payrollProcessingRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const { startDebtReminderScheduler } = require("./services/debtReminderService");
 const {
@@ -296,6 +297,7 @@ app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
 app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollProcessingRoutes);
 app.use(
   "/api/debts",
   requireAuth,

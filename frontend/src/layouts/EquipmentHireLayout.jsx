@@ -149,6 +149,13 @@ const navigationSections = [
         icon: "👷",
         permissions: ["workers.view"],
       },
+      {
+        title: "Payroll Processing",
+        description: "Validate, approve, pay and reconcile protected salary cycles",
+        path: "/equipment-hire-operations/payroll",
+        icon: "💵",
+        permissions: ["payroll.view"],
+      },
     ],
   },
   {

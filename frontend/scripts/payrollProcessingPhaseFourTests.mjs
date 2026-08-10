@@ -16,9 +16,7 @@ const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
 const financeLayout = read("src/layouts/InstallmentFinanceLayout.jsx");
 
 assert.match(app, /PayrollProcessingCentrePage/);
-for (const route of ["payroll", "mining/payroll", "equipment-hire-operations/payroll", "equipment-installment-finance/payroll"]) {
-  assert.match(app, new RegExp(route.replaceAll("/", "\\/")));
-}
+assert.equal((app.match(/path="payroll"/g) || []).length, 4);
 assert.match(app, /payroll\.view/);
 
 assert.match(page, /Payroll Processing &amp; Approval/);

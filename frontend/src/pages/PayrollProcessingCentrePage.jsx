@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router";
 
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -125,8 +126,17 @@ function buildRuleConfiguration(form) {
 
 export default function PayrollProcessingCentrePage() {
   const auth = useAuth();
-  const workspaceCode = auth.workspaceCode || auth.user?.workspace_code || "spare_parts";
+  const location = useLocation();
   const systemAdministrator = Boolean(auth.user?.is_original_system_administrator);
+  const routeWorkspace = location.pathname.startsWith("/mining")
+    ? "mining"
+    : location.pathname.startsWith("/equipment-")
+      ? "equipment_hire"
+      : "spare_parts";
+  const sessionWorkspace = auth.workspaceCode || auth.user?.workspace_code;
+  const workspaceCode = ["spare_parts", "mining", "equipment_hire"].includes(sessionWorkspace)
+    ? sessionWorkspace
+    : routeWorkspace;
   const canPrepare = auth.hasPermission("payroll.prepare");
   const canApprove = auth.hasPermission("payroll.approve");
   const canPay = auth.hasPermission("payroll.pay");
@@ -175,9 +185,7 @@ export default function PayrollProcessingCentrePage() {
   const [decisions, setDecisions] = useState({});
 
   const apiParams = useMemo(
-    () => (systemAdministrator && !["spare_parts", "mining", "equipment_hire"].includes(workspaceCode)
-      ? { workspace_code: "spare_parts" }
-      : {}),
+    () => (systemAdministrator ? { workspace_code: workspaceCode } : {}),
     [systemAdministrator, workspaceCode]
   );
 
