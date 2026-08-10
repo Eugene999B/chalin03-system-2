@@ -49,11 +49,11 @@ check("client uses only protected backend AI endpoints and never handles provide
   assert.match(api, /\/ai\/feedback/);
   assert.match(api, /\/ai\/usage/);
 
-  // Provider names may now be shown in the System Administrator control UI,
-  // but credentials and provider networking remain strictly server-side.
+  // Provider names and safe backend error codes may be displayed, but browser
+  // code must never read provider credentials or talk to providers directly.
   assert.doesNotMatch(
     api,
-    /OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY/i
+    /(?:process\.env|import\.meta\.env)\.(?:OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|ANTHROPIC_API_KEY)/i
   );
   assert.doesNotMatch(
     api,
