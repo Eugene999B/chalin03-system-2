@@ -305,6 +305,20 @@
   opacity: 0.55;
 }
 
+.worker-payroll__salary-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.worker-payroll__salary-actions span,
+.worker-payroll__salary-form-footer span,
+.worker-payroll__history-actions span { color:#65758a; font-size:.86rem; }
+.worker-payroll__salary-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; border:1px solid #d9e3ed; border-radius:14px; background:#f8fbfe; padding:14px; }
+.worker-payroll__salary-form label { display:grid; gap:6px; color:#40556c; font-size:.88rem; font-weight:700; }
+.worker-payroll__salary-form input,
+.worker-payroll__salary-form select,
+.worker-payroll__salary-form textarea { width:100%; box-sizing:border-box; border:1px solid #cbd6e1; border-radius:10px; background:#fff; padding:9px 10px; color:#20364e; font:inherit; }
+.worker-payroll__salary-form .is-wide { grid-column:1 / -1; }
+.worker-payroll__salary-form-footer,
+.worker-payroll__history-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.worker-payroll__history-actions { margin-top:10px; justify-content:flex-start; }
+
 .worker-payroll__two-column {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -379,6 +393,7 @@
   .worker-payroll__metrics,
   .worker-payroll__current-grid,
   .worker-payroll__component-groups,
+  .worker-payroll__salary-form,
   .worker-payroll__two-column,
   .worker-payroll__loan-grid {
     grid-template-columns: 1fr;

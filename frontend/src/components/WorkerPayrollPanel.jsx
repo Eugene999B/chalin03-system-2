@@ -34,6 +34,10 @@ function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
+function todayText() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function tenureLabel(days) {
   if (days === null || days === undefined) return "Not recorded";
   const total = Math.max(0, Number(days || 0));
@@ -74,12 +78,24 @@ function SectionHeader({ eyebrow, title, note }) {
 export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel }) {
   const auth = useAuth();
   const canIssuePayslip = auth.hasPermission("payroll.payslip.issue");
+  const canManageCompensation = auth.hasPermission("payroll.manage");
+  const canPrepareCompensation = auth.hasPermission("payroll.prepare");
+  const canApproveCompensation = auth.hasPermission("payroll.approve");
   const systemAdministrator = Boolean(auth.user?.is_original_system_administrator);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState("");
   const [payslipNotice, setPayslipNotice] = useState("");
   const [payslipBusy, setPayslipBusy] = useState("");
+  const [salaryNotice, setSalaryNotice] = useState("");
+  const [salaryBusy, setSalaryBusy] = useState("");
+  const [salaryChangeOpen, setSalaryChangeOpen] = useState(false);
+  const [salaryForm, setSalaryForm] = useState({
+    basic_salary: "",
+    pay_frequency: "monthly",
+    effective_from: todayText(),
+    change_reason: "",
+  });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -144,6 +160,86 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
     return systemAdministrator && worker?.workspace_code
       ? { workspace_code: worker.workspace_code }
       : {};
+  }
+
+  function carriedForwardComponents() {
+    return (currentCompensation?.components || []).map((component) => ({
+      component_code: component.component_code,
+      component_name: component.component_name,
+      component_type: component.component_type,
+      calculation_type: component.calculation_type,
+      amount_value: Number(component.amount_value || 0),
+      taxable: Boolean(component.taxable),
+      pensionable: Boolean(component.pensionable),
+      display_order: Number(component.display_order || 0),
+      notes: component.notes || "",
+    }));
+  }
+
+  async function createSalaryChange(event) {
+    event.preventDefault();
+    setSalaryBusy("create");
+    setProblem("");
+    setSalaryNotice("");
+    try {
+      const created = await axiosClient.post(`/payroll/workers/${workerId}/compensation`, {
+        ...payrollParams(),
+        basic_salary: salaryForm.basic_salary,
+        pay_frequency: salaryForm.pay_frequency,
+        effective_from: salaryForm.effective_from,
+        change_reason: salaryForm.change_reason,
+        components: carriedForwardComponents(),
+      });
+      const profileId = created.data?.profile_id;
+      let message = created.data?.message || "Salary change saved as a draft.";
+      if (profileId && canPrepareCompensation) {
+        const submitted = await axiosClient.post(`/payroll/compensation/${profileId}/submit`, payrollParams());
+        message = submitted.data?.message || "Salary change sent for approval.";
+      }
+      setSalaryNotice(message);
+      setSalaryForm({
+        basic_salary: "",
+        pay_frequency: currentCompensation?.pay_frequency || "monthly",
+        effective_from: todayText(),
+        change_reason: "",
+      });
+      setSalaryChangeOpen(false);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setProblem(errorMessage(error, "Salary change could not be saved."));
+    } finally {
+      setSalaryBusy("");
+    }
+  }
+
+  async function submitSalaryChange(item) {
+    setSalaryBusy(`submit:${item.id}`);
+    setProblem("");
+    setSalaryNotice("");
+    try {
+      const response = await axiosClient.post(`/payroll/compensation/${item.id}/submit`, payrollParams());
+      setSalaryNotice(response.data?.message || "Salary change sent for approval.");
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setProblem(errorMessage(error, "Salary change could not be sent for approval."));
+    } finally {
+      setSalaryBusy("");
+    }
+  }
+
+  async function approveSalaryChange(item) {
+    setSalaryBusy(`approve:${item.id}`);
+    setProblem("");
+    setSalaryNotice("");
+    try {
+      const response = await axiosClient.post(`/payroll/compensation/${item.id}/approve`, payrollParams());
+      setSalaryNotice(response.data?.message || "Salary change approved.");
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setProblem(errorMessage(error, "Salary change could not be approved."));
+    } finally {
+      setSalaryBusy("");
+    }
   }
 
   async function issuePayslip(entry) {
@@ -224,9 +320,10 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
       <div className="worker-payroll__notice">
         <strong>Confidential payroll record</strong>
         <span>
-          Visible only through explicit Payroll View permission. Salary history remains separate from the general worker profile and is scoped to {workspaceLabel || worker?.workspace_code || "this business category"}.
+          This is the salary record Payroll uses automatically for {workspaceLabel || worker?.workspace_code || "this business category"}. Create the worker once, then manage salary changes here without re-entering salary every month.
         </span>
       </div>
+      {salaryNotice ? <div className="worker-payroll__notice is-success">{salaryNotice}</div> : null}
       {payslipNotice ? <div className="worker-payroll__notice is-success">{payslipNotice}</div> : null}
       {problem ? <div className="worker-payroll__notice is-error" role="alert">{problem}</div> : null}
 
@@ -258,10 +355,40 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
 
       <section className="worker-payroll__card">
         <SectionHeader
-          eyebrow="Authoritative compensation"
-          title="Current salary setup"
-          note="Approved, effective-dated history only"
+          eyebrow="Salary"
+          title="Current salary"
+          note="Payroll uses this automatically"
         />
+        {canManageCompensation ? (
+          <div className="worker-payroll__salary-actions">
+            <button
+              type="button"
+              className="worker-payroll__button is-primary"
+              onClick={() => {
+                setSalaryChangeOpen((value) => !value);
+                setSalaryForm((current) => ({
+                  ...current,
+                  pay_frequency: currentCompensation?.pay_frequency || current.pay_frequency || "monthly",
+                }));
+              }}
+            >
+              {salaryChangeOpen ? "Close Salary Change" : "Change Salary"}
+            </button>
+            <span>Changing salary creates a new effective-dated record; the old salary history is never overwritten.</span>
+          </div>
+        ) : null}
+        {salaryChangeOpen ? (
+          <form className="worker-payroll__salary-form" onSubmit={createSalaryChange}>
+            <label>New basic salary (GHS)<input type="number" min="0.01" step="0.01" required value={salaryForm.basic_salary} onChange={(event) => setSalaryForm((current) => ({ ...current, basic_salary: event.target.value }))} /></label>
+            <label>Pay frequency<select value={salaryForm.pay_frequency} onChange={(event) => setSalaryForm((current) => ({ ...current, pay_frequency: event.target.value }))}><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Every two weeks</option></select></label>
+            <label>Effective from<input type="date" required value={salaryForm.effective_from} onChange={(event) => setSalaryForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
+            <label className="is-wide">Reason for salary change<textarea rows="3" minLength="8" required value={salaryForm.change_reason} onChange={(event) => setSalaryForm((current) => ({ ...current, change_reason: event.target.value }))} placeholder="e.g. Annual salary review effective September 2026" /></label>
+            <div className="worker-payroll__salary-form-footer is-wide">
+              <span>Existing recurring allowances and deductions are carried forward automatically.</span>
+              <button className="worker-payroll__button is-primary" type="submit" disabled={salaryBusy === "create"}>{salaryBusy === "create" ? "Saving…" : canPrepareCompensation ? "Save & Send for Approval" : "Save Salary Change"}</button>
+            </div>
+          </form>
+        ) : null}
         {!currentCompensation ? (
           <Empty>No approved compensation profile is effective for this worker today.</Empty>
         ) : (
@@ -412,13 +539,21 @@ export default function WorkerPayrollPanel({ workerId, worker, workspaceLabel })
             <Empty>No compensation history has been recorded.</Empty>
           ) : (
             <div className="worker-payroll__stack">
-              {profile.compensation_history.map((item) => (
-                <article key={item.id}>
-                  <div><strong>{money(item.basic_salary)}</strong><span>{label(item.status)}</span></div>
-                  <p>{dateLabel(item.effective_from)} → {item.effective_to ? dateLabel(item.effective_to) : "Open ended"}</p>
-                  <small>{item.change_reason}</small>
-                </article>
-              ))}
+              {profile.compensation_history.map((item) => {
+                const ownChange = Number(item.created_by) === Number(auth.user?.id) || Number(item.submitted_by) === Number(auth.user?.id);
+                return (
+                  <article key={item.id}>
+                    <div><strong>{money(item.basic_salary)}</strong><span>{label(item.status)}</span></div>
+                    <p>{dateLabel(item.effective_from)} → {item.effective_to ? dateLabel(item.effective_to) : "Open ended"}</p>
+                    <small>{item.change_reason}</small>
+                    <div className="worker-payroll__history-actions">
+                      {item.status === "draft" && canPrepareCompensation ? <button type="button" className="worker-payroll__button" disabled={Boolean(salaryBusy)} onClick={() => submitSalaryChange(item)}>{salaryBusy === `submit:${item.id}` ? "Sending…" : "Send for Approval"}</button> : null}
+                      {item.status === "pending_approval" && canApproveCompensation && !ownChange ? <button type="button" className="worker-payroll__button is-primary" disabled={Boolean(salaryBusy)} onClick={() => approveSalaryChange(item)}>{salaryBusy === `approve:${item.id}` ? "Approving…" : "Approve Salary Change"}</button> : null}
+                      {item.status === "pending_approval" && ownChange ? <span>Awaiting approval by another authorised user.</span> : null}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
