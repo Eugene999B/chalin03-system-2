@@ -63,7 +63,7 @@ test("Content Studio dashboard evidence is aggregate, internal and read-only", (
   assert.equal(JSON.stringify(snapshot).includes("body_text"), false);
 });
 
-test("Website Control evidence exposes aggregate health only", () => {
+test("Website Control evidence exposes the real aggregate summary shape only", () => {
   const evidence = websiteControlEvidence({
     generated_at: "2026-08-10T10:00:00.000Z",
     summary: {
@@ -73,13 +73,12 @@ test("Website Control evidence exposes aggregate health only", () => {
       healthy_pages: 7,
       attention_pages: 3,
       indexable_published_pages: 7,
-      orphan_page_count: 1,
-      canonical_conflict_count: 1,
-      redirect_candidate_count: 2,
-    },
-    issue_counts: {
-      pages: { critical: 1, warning: 2, info: 1, total: 4 },
-      navigation: { critical: 0, warning: 1, info: 2, total: 3 },
+      navigation_items: 14,
+      orphan_pages: 1,
+      canonical_conflicts: 1,
+      redirect_candidates: 2,
+      page_issues: { critical: 1, warning: 2, info: 1, total: 4 },
+      navigation_issues: { critical: 0, warning: 1, info: 2, total: 3 },
     },
     pages: [{ title: "PRIVATE DRAFT BODY MUST NOT LEAK" }],
   });
@@ -87,6 +86,10 @@ test("Website Control evidence exposes aggregate health only", () => {
   const snapshot = parseExcerpt(evidence);
   assert.equal(snapshot.health_score, 82);
   assert.equal(snapshot.attention_pages, 3);
+  assert.equal(snapshot.navigation_items, 14);
+  assert.equal(snapshot.orphan_page_count, 1);
+  assert.equal(snapshot.canonical_conflict_count, 1);
+  assert.equal(snapshot.redirect_candidate_count, 2);
   assert.equal(snapshot.page_issues.critical, 1);
   assert.equal(snapshot.navigation_issues.warning, 1);
   assert.equal(JSON.stringify(snapshot).includes("PRIVATE DRAFT BODY"), false);
