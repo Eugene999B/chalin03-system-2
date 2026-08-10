@@ -84,11 +84,21 @@ assert.equal(canOpen(cashierMining, MINING_SECTION_PERMISSIONS.overview), false)
 assert.equal(canOpen(cashierHire, HIRE_SECTION_PERMISSIONS.overview), false);
 
 const mainSource = readFileSync(join(root, "src/main.jsx"), "utf8");
+const operationalRootSource = readFileSync(
+  join(root, "src/OperationalAppRoot.jsx"),
+  "utf8"
+);
+const protectedRootSource = readFileSync(
+  join(root, "src/chalin-one/ProtectedChalinOneEntry.jsx"),
+  "utf8"
+);
 const mobilePermissionCss = readFileSync(
   join(root, "src/styles/userPermissionManager.mobile.css"),
   "utf8"
 );
-assert.match(mainSource, /userPermissionManager\.mobile\.css/);
+assert.doesNotMatch(mainSource, /userPermissionManager\.mobile\.css/);
+assert.match(operationalRootSource, /userPermissionManager\.mobile\.css/);
+assert.match(protectedRootSource, /userPermissionManager\.mobile\.css/);
 assert.match(mobilePermissionCss, /@media \(max-width: 720px\)/);
 assert.match(mobilePermissionCss, /\.upm-actions \.is-reset/);
 assert.match(mobilePermissionCss, /min-height: 46px/);
