@@ -35,7 +35,7 @@ function presentationClassFor(location) {
 
 const navigationSections = [
   {
-    title: "Installment Workflow",
+    title: "Start & Approve",
     items: [
       {
         title: "Finance Home",
@@ -62,7 +62,7 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Task & Approval Inbox",
+        title: "Work Inbox",
         description: "Only work requiring action, approval, verification or correction",
         path: "/equipment-installment-finance/applications?stage=inbox",
         legacyPath: "/equipment-installment-finance/applications?stage=operations&tab=inbox",
@@ -71,7 +71,7 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Case Operations",
+        title: "Customer Case",
         description: "One selected customer case with excavator photo, timeline, evidence and payments",
         path: "/equipment-installment-finance/applications?stage=case-operations",
         legacyPath: "/equipment-installment-finance/applications?stage=operations&tab=case",
@@ -98,7 +98,7 @@ const navigationSections = [
     ],
   },
   {
-    title: "Accounts & Payments",
+    title: "Accounts & Collections",
     items: [
       {
         title: "Active Installments",
@@ -111,7 +111,7 @@ const navigationSections = [
       },
       {
         title: "Payments & Collections",
-        description: "Record normal installment receipts and review allocation and payment history",
+        description: "Record installment receipts and review allocations and payment history",
         path: "/equipment-installment-finance/applications?stage=collections",
         icon: "💳",
         matchSearch: true,
@@ -126,7 +126,7 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Payments & Arrears",
+        title: "Arrears & Follow-up",
         description: "Due and overdue accounts, reminders, promises and follow-up",
         path: "/equipment-installment-finance/applications?stage=arrears",
         icon: "📞",
@@ -168,7 +168,7 @@ const navigationSections = [
     title: "Documents & Reports",
     items: [
       {
-        title: "Secure Case Documents",
+        title: "Private Case Files",
         description: "Private KYC evidence, reviews, approvals and controlled delivery files",
         path: "/equipment-installment-finance/applications?stage=case-workspace",
         icon: "🔒",
@@ -176,34 +176,44 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Generated Documents",
-        description: "Issued agreements, schedules, receipts, statements and document history",
+        title: "Issued Documents",
+        description: "Agreements, schedules, receipts, statements and document history",
         path: "/equipment-installment-finance/applications?stage=generated-documents",
         icon: "📄",
         matchSearch: true,
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Portfolio, SMS & Reports",
+        title: "Reports & Statements",
         description: "Statements, arrears, cash flow, accounting exports and thermal receipts",
         path: "/equipment-installment-finance/reports",
         icon: "📊",
         permissions: ["fleet.assets.view"],
       },
+    ],
+  },
+  {
+    title: "People & Payroll",
+    items: [
       {
-        title: "Staff & Workforce",
-        description: "Finance staff logins, roles, profiles, documents and permissions",
+        title: "People & Employment",
+        description: "Finance staff accounts, worker profiles, documents and permissions",
         path: "/equipment-installment-finance/workforce",
         icon: "👷",
         permissions: ["workers.view"],
       },
       {
-        title: "Payroll Processing",
-        description: "Validate, approve, pay and reconcile protected salary cycles",
+        title: "Monthly Payroll",
+        description: "Review workers and salaries, approve the month, record payments and issue payslips",
         path: "/equipment-installment-finance/payroll",
         icon: "💵",
         permissions: ["payroll.view"],
       },
+    ],
+  },
+  {
+    title: "Settings & Help",
+    items: [
       {
         title: "Finance Settings",
         description: "Payment rules, reminders, alerts, receipts, delivery and legal terms",
@@ -213,8 +223,8 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
-        title: "Final Operations & Reset",
-        description: "Verify completion, prepare the read-only reset impact and prove a fresh journey",
+        title: "Completion & Reset Checks",
+        description: "Verify completion, review reset impact and prove a fresh journey",
         path: "/equipment-installment-finance/applications?stage=finalization",
         icon: "✅",
         matchSearch: true,
@@ -228,7 +238,7 @@ const navigationSections = [
         matchSearch: true,
       },
       {
-        title: "Back to Equipment Divisions",
+        title: "Switch Equipment Division",
         description: "Return to the protected Equipment Business division gateway",
         path: "/equipment-hire",
         icon: "◫",
