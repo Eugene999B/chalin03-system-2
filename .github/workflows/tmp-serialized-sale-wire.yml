@@ -1,0 +1,52 @@
+name: Temporary Serialized Checkout Integration
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-serialized-checkout-wire
+  cancel-in-progress: false
+
+jobs:
+  wire-and-verify:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/inventory-loss-prevention-traceability
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Apply serialized checkout wiring
+        run: |
+          set -euo pipefail
+          python .github/tmp-serialized-sale-wire/patch.py
+          rm -rf .github/tmp-serialized-sale-wire
+          rm -f .github/workflows/tmp-serialized-sale-wire.yml
+      - name: Verify backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run syntax-check
+          npm test
+          npm run migration-safety
+      - name: Publish verified checkout integration
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Integrate serialized unit IDs into sale transaction"
+          git push origin HEAD:feature/inventory-loss-prevention-traceability
