@@ -1,0 +1,214 @@
+name: Temporary Payroll Processing Wiring
+
+on:
+  pull_request:
+    branches:
+      - feature/payroll-worker-profile-phase3-20260810
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.event.pull_request.head.ref == 'feature/payroll-processing-approval-phase4-20260810'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/payroll-processing-approval-phase4-20260810
+          fetch-depth: 1
+      - name: Apply deterministic processing integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              text = path.read_text()
+              if new in text:
+                  return
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected one marker, found {text.count(old)}')
+              path.write_text(text.replace(old, new))
+
+          # Backend processing safety fixes.
+          service = Path('backend/services/payrollProcessingService.js')
+          text = service.read_text()
+          text = text.replace(
+              "payment_status = 'posted' AND reversal_of_payment_id IS NULL",
+              "payment_status IN ('posted','reversal_pending') AND reversal_of_payment_id IS NULL",
+          )
+          old_prepare = '''async function preparePayrollPeriod({ periodId, workspaceCode, actorId }) {\n  const validation = await validatePayrollPeriod({ periodId, workspaceCode });\n  if (!validation.valid) {\n    const error = new PayrollFoundationError(409, "Payroll validation found issues that must be resolved before review.", "PAYROLL_PERIOD_VALIDATION_FAILED");\n    error.details = validation;\n    throw error;\n  }\n  const connection = await pool.getConnection();\n  try {\n    await connection.beginTransaction();\n    const period = await getPeriod(connection, periodId, workspaceCode, { lock: true });\n    if (period.status !== "draft") {\n      throw new PayrollFoundationError(409, "Only a draft payroll period can be prepared for review.", "PAYROLL_PERIOD_NOT_DRAFT");\n    }\n'''
+          new_prepare = '''async function preparePayrollPeriod({ periodId, workspaceCode, actorId }) {\n  const connection = await pool.getConnection();\n  try {\n    await connection.beginTransaction();\n    const period = await getPeriod(connection, periodId, workspaceCode, { lock: true });\n    if (period.status !== "draft") {\n      throw new PayrollFoundationError(409, "Only a draft payroll period can be prepared for review.", "PAYROLL_PERIOD_NOT_DRAFT");\n    }\n    const validation = await validatePayrollPeriod({ periodId, workspaceCode, connection });\n    if (!validation.valid) {\n      const error = new PayrollFoundationError(409, "Payroll validation found issues that must be resolved before review.", "PAYROLL_PERIOD_VALIDATION_FAILED");\n      error.details = validation;\n      throw error;\n    }\n'''
+          if old_prepare in text:
+              text = text.replace(old_prepare, new_prepare)
+          elif 'const validation = await validatePayrollPeriod({ periodId, workspaceCode, connection });' not in text:
+              raise SystemExit('prepare transaction marker moved')
+
+          old_no_workers = '''  if (!workers.length) {\n    issues.push({ severity: "error", code: "eligible_workers_missing", message: "No worker employment record overlaps this payroll period." });\n  }\n\n  for (const worker of workers) {\n'''
+          new_no_workers = '''  if (!workers.length) {\n    issues.push({ severity: "error", code: "eligible_workers_missing", message: "No worker employment record overlaps this payroll period." });\n  }\n  const statutoryLineCodes = new Set();\n  for (const rule of rules) {\n    const lineCode = rule.configuration.line_code;\n    if (statutoryLineCodes.has(lineCode)) {\n      issues.push({ severity: "error", code: "duplicate_statutory_line_code", message: `Approved statutory rules produce the duplicate payroll line code ${lineCode}.` });\n    }\n    statutoryLineCodes.add(lineCode);\n  }\n\n  for (const worker of workers) {\n    if (["terminated", "inactive"].includes(String(worker.employment_status || "").toLowerCase()) && !worker.employment_end_date) {\n      issues.push({ severity: "error", code: "employment_end_date_missing", worker_id: worker.id, worker_name: worker.full_name, message: "This inactive or terminated worker has no employment end date, so payable days cannot be determined safely." });\n      continue;\n    }\n'''
+          if old_no_workers in text:
+              text = text.replace(old_no_workers, new_no_workers)
+          elif 'duplicate_statutory_line_code' not in text:
+              raise SystemExit('validation marker moved')
+
+          old_replay = '''    if (replays.length) {\n      await connection.commit();\n      return { replayed: true, payment: replays[0], entry: await refreshEntryPaymentState(pool, entry.id) };\n    }\n'''
+          new_replay = '''    if (replays.length) {\n      const refreshedReplay = await refreshEntryPaymentState(connection, entry.id);\n      await connection.commit();\n      return { replayed: true, payment: replays[0], entry: refreshedReplay };\n    }\n'''
+          if old_replay in text:
+              text = text.replace(old_replay, new_replay)
+          elif 'refreshedReplay' not in text:
+              raise SystemExit('payment replay marker moved')
+
+          old_reconcile = '''    const outstanding = money(refreshed.reduce((sum, entry) => sum + Number(entry.remaining_balance || 0), 0));\n    const paid = money(refreshed.reduce((sum, entry) => sum + Number(entry.amount_paid || 0), 0));\n    const status = outstanding <= 0.01 && refreshed.length ? "reconciled" : "paying";\n    await connection.query("UPDATE payroll_periods SET status = ? WHERE id = ?", [status, period.id]);\n    await connection.commit();\n    return {\n      period_id: period.id,\n      status,\n      entry_count: refreshed.length,\n'''
+          new_reconcile = '''    const outstanding = money(refreshed.reduce((sum, entry) => sum + Number(entry.remaining_balance || 0), 0));\n    const paid = money(refreshed.reduce((sum, entry) => sum + Number(entry.amount_paid || 0), 0));\n    const [[pendingRow]] = await connection.query(\n      `SELECT COUNT(*) AS pending_count FROM payroll_adjustment_requests\n       WHERE workspace_code = ? AND request_status = 'pending'\n         AND payroll_entry_id IN (SELECT id FROM payroll_entries WHERE payroll_period_id = ?)`,\n      [workspaceCode, period.id]\n    );\n    const pendingAdjustments = Number(pendingRow?.pending_count || 0);\n    const status = outstanding <= 0.01 && refreshed.length && pendingAdjustments === 0 ? "reconciled" : "paying";\n    await connection.query("UPDATE payroll_periods SET status = ? WHERE id = ?", [status, period.id]);\n    await connection.commit();\n    return {\n      period_id: period.id,\n      status,\n      pending_adjustments: pendingAdjustments,\n      entry_count: refreshed.length,\n'''
+          if old_reconcile in text:
+              text = text.replace(old_reconcile, new_reconcile)
+          elif 'pending_adjustments: pendingAdjustments' not in text:
+              raise SystemExit('reconciliation marker moved')
+          service.write_text(text)
+
+          # Mount the processing router behind the existing payroll auth/category boundary.
+          server = Path('backend/server.js')
+          replace_once(
+              server,
+              'const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");\n',
+              'const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");\nconst payrollProcessingRoutes = require("./routes/payrollProcessingRoutes");\n',
+              'processing router import',
+          )
+          replace_once(
+              server,
+              'app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);\n',
+              'app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);\napp.use("/api/payroll", requireAuth, payrollBoundary, payrollProcessingRoutes);\n',
+              'processing router mount',
+          )
+
+          # Payroll page uses the route to resolve System Administrator workspace context.
+          page = Path('frontend/src/pages/PayrollProcessingCentrePage.jsx')
+          text = page.read_text()
+          if 'from "react-router"' not in text:
+              text = text.replace(
+                  'import { useCallback, useEffect, useMemo, useState } from "react";\n\n',
+                  'import { useCallback, useEffect, useMemo, useState } from "react";\nimport { useLocation } from "react-router";\n\n',
+              )
+          old_workspace = '''  const auth = useAuth();\n  const workspaceCode = auth.workspaceCode || auth.user?.workspace_code || "spare_parts";\n  const systemAdministrator = Boolean(auth.user?.is_original_system_administrator);\n'''
+          new_workspace = '''  const auth = useAuth();\n  const location = useLocation();\n  const systemAdministrator = Boolean(auth.user?.is_original_system_administrator);\n  const routeWorkspace = location.pathname.startsWith("/mining")\n    ? "mining"\n    : location.pathname.startsWith("/equipment-")\n      ? "equipment_hire"\n      : "spare_parts";\n  const sessionWorkspace = auth.workspaceCode || auth.user?.workspace_code;\n  const workspaceCode = ["spare_parts", "mining", "equipment_hire"].includes(sessionWorkspace)\n    ? sessionWorkspace\n    : routeWorkspace;\n'''
+          if old_workspace in text:
+              text = text.replace(old_workspace, new_workspace)
+          elif 'const routeWorkspace = location.pathname.startsWith("/mining")' not in text:
+              raise SystemExit('payroll page workspace marker moved')
+          old_params = '''  const apiParams = useMemo(\n    () => (systemAdministrator && !["spare_parts", "mining", "equipment_hire"].includes(workspaceCode)\n      ? { workspace_code: "spare_parts" }\n      : {}),\n    [systemAdministrator, workspaceCode]\n  );\n'''
+          new_params = '''  const apiParams = useMemo(\n    () => (systemAdministrator ? { workspace_code: workspaceCode } : {}),\n    [systemAdministrator, workspaceCode]\n  );\n'''
+          if old_params in text:
+              text = text.replace(old_params, new_params)
+          elif 'systemAdministrator ? { workspace_code: workspaceCode } : {}' not in text:
+              raise SystemExit('payroll API params marker moved')
+          page.write_text(text)
+
+          # Route the centre inside every existing workspace shell.
+          app = Path('frontend/src/App.jsx')
+          text = app.read_text()
+          import_marker = '''const DocumentSignatureSettingsPage = lazy(() =>\n  import("./pages/DocumentSignatureSettingsPage")\n);\n'''
+          payroll_import = '''const PayrollProcessingCentrePage = lazy(() =>\n  import("./pages/PayrollProcessingCentrePage")\n);\n'''
+          if payroll_import not in text:
+              if text.count(import_marker) != 1:
+                  raise SystemExit('App payroll import marker moved')
+              text = text.replace(import_marker, import_marker + payroll_import)
+
+          def insert_route(segment_start, segment_end, anchor, route):
+              nonlocal_text = None
+
+          segments = [
+              ('{/* Spare Parts keeps the original two-store layout and navigation. */}', '{/* Mining has its own layout, sidebar and route tree. */}'),
+              ('{/* Mining has its own layout, sidebar and route tree. */}', '{/* Equipment Hire is an operational division with its own sidebar. */}'),
+              ('{/* Equipment Hire is an operational division with its own sidebar. */}', '{/* Installment Finance is a separate division using the same protected equipment data. */}'),
+          ]
+          route_block = '''            <Route\n              path="payroll"\n              element={permissionOnlyPage(\n                "payroll.view",\n                <PayrollProcessingCentrePage />\n              )}\n            />\n'''
+          for start_marker, end_marker in segments:
+              start = text.index(start_marker)
+              end = text.index(end_marker)
+              segment = text[start:end]
+              if 'path="payroll"' not in segment:
+                  marker = '''            <Route\n              path="employment-documents"\n'''
+                  pos = segment.find(marker)
+                  if pos < 0:
+                      raise SystemExit(f'Payroll route insertion marker moved after {start_marker}')
+                  segment = segment[:pos] + route_block + segment[pos:]
+                  text = text[:start] + segment + text[end:]
+          finance_start = text.index('{/* Installment Finance is a separate division using the same protected equipment data. */}')
+          finance_segment = text[finance_start:]
+          if 'path="payroll"' not in finance_segment:
+              marker = '''            <Route\n              path="employment-documents"\n'''
+              pos = finance_segment.find(marker)
+              if pos < 0:
+                  raise SystemExit('Finance payroll route insertion marker moved')
+              finance_segment = finance_segment[:pos] + route_block + finance_segment[pos:]
+              text = text[:finance_start] + finance_segment
+          app.write_text(text)
+
+          # Spare Parts sidebar requires explicit gating because CompactSidebarNavigation is not permission-aware.
+          layout = Path('frontend/src/components/Layout.jsx')
+          text = layout.read_text()
+          old_auth = '''    canAccessAllBranches,\n  } = useAuth();\n'''
+          new_auth = '''    canAccessAllBranches,\n    hasPermission,\n  } = useAuth();\n'''
+          if old_auth in text:
+              text = text.replace(old_auth, new_auth, 1)
+          elif '    hasPermission,\n  } = useAuth();' not in text:
+              raise SystemExit('Spare Parts auth marker moved')
+          payroll_item = '''          ...(hasPermission("payroll.view")\n            ? [\n                {\n                  title: "Payroll Processing",\n                  description: "Validate, approve, pay and reconcile protected salary cycles",\n                  path: "/payroll",\n                  icon: "💵",\n                  keywords: "payroll salary wages approval payment reconciliation workforce",\n                },\n              ]\n            : []),\n'''
+          if 'title: "Payroll Processing"' not in text:
+              marker = '''          {\n            title: "Change Password",\n            description: "Update your staff login password",\n'''
+              if text.count(marker) != 1:
+                  raise SystemExit('Spare Parts payroll nav marker moved')
+              text = text.replace(marker, payroll_item + marker)
+          dep_old = '  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator]);\n'
+          dep_new = '  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission]);\n'
+          if dep_old in text:
+              text = text.replace(dep_old, dep_new)
+          layout.write_text(text)
+
+          def add_business_nav(filename, anchor_title, path_value):
+              path = Path(filename)
+              text = path.read_text()
+              if 'title: "Payroll Processing"' in text:
+                  return
+              title_marker = f'        title: "{anchor_title}",'
+              start = text.find(title_marker)
+              if start < 0:
+                  raise SystemExit(f'{filename}: payroll nav anchor missing')
+              item_start = text.rfind('      {\n', 0, start + 1)
+              item_end = text.find('      },\n', start) + len('      },\n')
+              item = '''      {\n        title: "Payroll Processing",\n        description: "Validate, approve, pay and reconcile protected salary cycles",\n        path: "PATH_VALUE",\n        icon: "💵",\n        permissions: ["payroll.view"],\n      },\n'''.replace('PATH_VALUE', path_value)
+              text = text[:item_end] + item + text[item_end:]
+              path.write_text(text)
+
+          add_business_nav('frontend/src/layouts/MiningLayout.jsx', 'Mining Workforce', '/mining/payroll')
+          add_business_nav('frontend/src/layouts/EquipmentHireLayout.jsx', 'Staff & Workforce', '/equipment-hire-operations/payroll')
+          add_business_nav('frontend/src/layouts/InstallmentFinanceLayout.jsx', 'Staff & Workforce', '/equipment-installment-finance/payroll')
+
+          # Source contract expects four nested payroll routes, not four absolute route literals.
+          test_path = Path('frontend/scripts/payrollProcessingPhaseFourTests.mjs')
+          test = test_path.read_text()
+          old_routes = '''for (const route of ["payroll", "mining/payroll", "equipment-hire-operations/payroll", "equipment-installment-finance/payroll"]) {\n  assert.match(app, new RegExp(route.replaceAll("/", "\\\\/")));\n}\n'''
+          new_routes = '''assert.equal((app.match(/path="payroll"/g) || []).length, 4);\n'''
+          if old_routes in test:
+              test = test.replace(old_routes, new_routes)
+          elif 'assert.equal((app.match(/path="payroll"/g) || []).length, 4);' not in test:
+              raise SystemExit('frontend route contract marker moved')
+          test_path.write_text(test)
+          PY
+
+          node --check backend/services/payrollProcessingService.js
+          node --check backend/routes/payrollProcessingRoutes.js
+          node --check backend/server.js
+          node --test backend/tests/payrollProcessingPhaseFour20260810.test.js
+          node frontend/scripts/payrollProcessingPhaseFourTests.mjs
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- backend/services/payrollProcessingService.js backend/server.js frontend/src/pages/PayrollProcessingCentrePage.jsx frontend/src/App.jsx frontend/src/components/Layout.jsx frontend/src/layouts/MiningLayout.jsx frontend/src/layouts/EquipmentHireLayout.jsx frontend/src/layouts/InstallmentFinanceLayout.jsx frontend/scripts/payrollProcessingPhaseFourTests.mjs
+          if git diff --cached --quiet; then
+            echo 'Payroll Processing Phase 4 integration already applied.'
+            exit 0
+          fi
+          git commit -m 'Wire protected payroll processing workflow'
+          git push origin HEAD:feature/payroll-processing-approval-phase4-20260810
