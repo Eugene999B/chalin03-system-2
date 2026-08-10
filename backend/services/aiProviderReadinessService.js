@@ -23,8 +23,8 @@ function isConfiguredProviderSecret(value) {
   return !PLACEHOLDER_MARKERS.some((marker) => lowered.includes(marker));
 }
 
-function getAiProviderReadiness(env = process.env) {
-  const key = cleanProviderKey(env.AI_PROVIDER || "disabled") || "disabled";
+function getAiProviderReadiness(env = process.env, providerOverride = null) {
+  const key = cleanProviderKey(providerOverride || env.AI_PROVIDER || "disabled") || "disabled";
   const selected = key !== "disabled";
   let credentialConfigured = false;
   let reasonCode = "AI_PROVIDER_DISABLED";
@@ -32,14 +32,31 @@ function getAiProviderReadiness(env = process.env) {
   let credentialRequired = false;
   let externalNetwork = false;
   let billingRequired = false;
+  let serviceTier = null;
+  let publicOnlyWhenUnpaid = false;
 
   if (key === "local") {
     ready = true;
     reasonCode = "AI_LOCAL_GOVERNED_PROVIDER_READY";
+    serviceTier = "local";
+  } else if (key === "gemini") {
+    credentialRequired = true;
+    externalNetwork = true;
+    serviceTier = clean(env.GEMINI_SERVICE_TIER || "free", 20).toLowerCase();
+    billingRequired = serviceTier === "paid";
+    publicOnlyWhenUnpaid = serviceTier !== "paid";
+    credentialConfigured = isConfiguredProviderSecret(
+      env.GOOGLE_API_KEY || env.GEMINI_API_KEY
+    );
+    ready = credentialConfigured;
+    reasonCode = credentialConfigured
+      ? "AI_GEMINI_PROVIDER_READY"
+      : "AI_GEMINI_API_KEY_REQUIRED";
   } else if (key === "openai") {
     credentialRequired = true;
     externalNetwork = true;
     billingRequired = true;
+    serviceTier = "paid";
     credentialConfigured = isConfiguredProviderSecret(env.OPENAI_API_KEY);
     ready = credentialConfigured;
     reasonCode = credentialConfigured
@@ -47,6 +64,7 @@ function getAiProviderReadiness(env = process.env) {
       : "AI_OPENAI_API_KEY_REQUIRED";
   } else if (key === "mock") {
     reasonCode = "AI_MOCK_PROVIDER_NOT_LIVE_READY";
+    serviceTier = "test";
   } else if (selected) {
     reasonCode = "AI_PROVIDER_READINESS_UNKNOWN";
   }
@@ -60,6 +78,8 @@ function getAiProviderReadiness(env = process.env) {
     secret_configured: credentialConfigured,
     external_network_required: externalNetwork,
     billing_required: billingRequired,
+    service_tier: serviceTier,
+    public_only_when_unpaid: publicOnlyWhenUnpaid,
     provider_side_storage_enabled: false,
     secret_values_exposed: false,
     reason_code: reasonCode,
