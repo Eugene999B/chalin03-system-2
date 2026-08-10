@@ -39,13 +39,22 @@ jobs:
           python .github/tmp-system-clarity/patch_processing_page.py
           python - <<'PY'
           from pathlib import Path
-          path = Path("frontend/scripts/payrollWorkerProfilePhaseThreeTests.mjs")
-          text = path.read_text()
+
+          worker_test = Path("frontend/scripts/payrollWorkerProfilePhaseThreeTests.mjs")
+          text = worker_test.read_text()
           old = 'assert.equal(postCalls.length, 4, "worker payroll panel should expose exactly salary create/submit/approve plus payslip issue");'
           new = 'assert.equal(postCalls.length, 5, "worker payroll panel should expose exactly salary create/auto-submit/manual-submit/approve plus payslip issue");'
           if text.count(old) != 1:
               raise SystemExit("salary mutation guard changed unexpectedly")
-          path.write_text(text.replace(old, new, 1))
+          worker_test.write_text(text.replace(old, new, 1))
+
+          processing_test = Path("frontend/scripts/payrollProcessingPhaseFourTests.mjs")
+          text = processing_test.read_text()
+          old = 'assert.match(page, /Correction Approvals/);'
+          new = 'assert.match(page, /Corrections/);'
+          if text.count(old) != 1:
+              raise SystemExit("payroll corrections label guard changed unexpectedly")
+          processing_test.write_text(text.replace(old, new, 1))
           PY
           rm -rf .github/tmp-system-clarity
           rm -f .github/workflows/tmp-system-clarity-payroll.yml
