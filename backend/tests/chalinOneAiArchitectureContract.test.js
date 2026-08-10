@@ -18,6 +18,7 @@ const knowledgeRoutes = read("backend/routes/aiKnowledgeRoutes.js");
 const featureFlags = read("backend/services/featureFlagService.js");
 const registry = read("backend/services/aiToolRegistry.js");
 const provider = read("backend/services/aiProviderService.js");
+const providerReadiness = read("backend/services/aiProviderReadinessService.js");
 const providerRegistration = read("backend/ai-providers/registerAiProviders.js");
 const openAiProvider = read("backend/ai-providers/openAiResponsesProvider.js");
 const orchestrator = read("backend/services/aiOrchestratorService.js");
@@ -77,7 +78,12 @@ test("provider service defaults disabled and keeps external networking isolated 
   assert.doesNotMatch(provider, /\bfetch\s*\(|axios|https\.request|http\.request/);
   assert.match(providerRegistration, /registry\.register\("openai"/);
   assert.match(aiRoutes, /registerBuiltInAiProviders\(\)/);
-  assert.match(aiRoutes, /process\.env\.AI_PROVIDER \|\| "disabled"/);
+  assert.match(aiRoutes, /getAiProviderReadiness\(process\.env\)/);
+  assert.doesNotMatch(aiRoutes, /process\.env\.AI_PROVIDER/);
+  assert.match(providerReadiness, /cleanProviderKey\(env\.AI_PROVIDER \|\| "disabled"\)/);
+  assert.match(providerReadiness, /AI_PROVIDER_DISABLED/);
+  assert.match(providerReadiness, /secret_values_exposed:\s*false/);
+  assert.doesNotMatch(providerReadiness, /\bfetch\s*\(|axios|https\.request|http\.request/);
 });
 
 test("OpenAI Responses adapter preserves CHALIN governance and privacy boundaries", () => {
