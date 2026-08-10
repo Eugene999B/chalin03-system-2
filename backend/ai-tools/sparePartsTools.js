@@ -41,11 +41,19 @@ function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
   return normalized;
 }
 
+function evidenceScope(output) {
+  return {
+    branch_id: output.scope.branch_id,
+    branch_code: output.scope.branch_code || null,
+    branch_name: output.scope.branch_name || null,
+    period: [output.scope.start_date, output.scope.end_date],
+  };
+}
+
 function evidenceExcerpt(viewKey, output) {
   if (viewKey === "inventory") {
     return JSON.stringify({
-      branch_id: output.scope.branch_id,
-      period: [output.scope.start_date, output.scope.end_date],
+      ...evidenceScope(output),
       product_count: output.inventory.product_count,
       low_stock_count: output.inventory.low_stock_count,
       negative_stock_count: output.inventory.negative_stock_count,
@@ -56,8 +64,7 @@ function evidenceExcerpt(viewKey, output) {
   }
   if (viewKey === "collections") {
     return JSON.stringify({
-      branch_id: output.scope.branch_id,
-      period: [output.scope.start_date, output.scope.end_date],
+      ...evidenceScope(output),
       active_debt_count: output.collections.active_debt_count,
       total_debt_balance: output.collections.total_debt_balance,
       debt_payments: output.collections.debt_payments,
@@ -66,8 +73,7 @@ function evidenceExcerpt(viewKey, output) {
     });
   }
   return JSON.stringify({
-    branch_id: output.scope.branch_id,
-    period: [output.scope.start_date, output.scope.end_date],
+    ...evidenceScope(output),
     sales: output.sales,
     collections: output.collections,
     inventory: output.inventory,
@@ -98,6 +104,8 @@ function buildAggregateEvidence(viewKey, output) {
       workspace_code: "spare_parts",
       metadata: {
         branch_id: output.scope.branch_id,
+        branch_code: output.scope.branch_code || null,
+        branch_name: output.scope.branch_name || null,
         start_date: output.scope.start_date,
         end_date: output.scope.end_date,
         aggregate_only: true,
@@ -200,6 +208,7 @@ module.exports = {
   DATE_PROPERTIES,
   buildAggregateEvidence,
   evidenceExcerpt,
+  evidenceScope,
   executeView,
   registerSparePartsAiTools,
   utcDateOnly,
