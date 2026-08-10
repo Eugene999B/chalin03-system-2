@@ -41,18 +41,19 @@ test("critical Finance workspace is retained in the operational entry bundle", (
   );
 });
 
-test("Finance app-shell rollout uses a deployment-specific cache and rejects retired assets", () => {
+test("Finance app-shell rollout rejects retired assets without taking over or refreshing active sessions", () => {
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
-  assert.match(main, /browser-cache-integrity-v35/);
-  assert.match(
-    main,
-    /register\([\s\S]*`\/sw\.js\?release=\$\{encodeURIComponent\(APP_SHELL_RELEASE\)\}`/
-  );
-  assert.match(main, /updateViaCache: "none"/);
+  assert.match(main, /browser-cache-integrity-v36/);
+  assert.match(main, /installNoAutomaticRefreshPolicy/);
+  assert.match(main, /removeChalinServiceWorkerCaches/);
+  assert.doesNotMatch(main, /serviceWorker\.register\(/);
+  assert.doesNotMatch(main, /controllerchange/);
+  assert.doesNotMatch(main, /window\.location\.reload\(/);
   assert.match(
     serviceWorker,
     /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
   );
+  assert.match(serviceWorker, /browser-cache-integrity-v36/);
   assert.match(
     serviceWorker,
     /CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
@@ -69,8 +70,9 @@ test("Finance app-shell rollout uses a deployment-specific cache and rejects ret
     serviceWorker,
     /fetch\(request, \{ cache: "no-store" \}\)/
   );
-  assert.match(serviceWorker, /self\.clients\.claim\(\)/);
-  assert.match(serviceWorker, /addEventListener\("message"/);
+  assert.doesNotMatch(serviceWorker, /self\.skipWaiting\(\)/);
+  assert.doesNotMatch(serviceWorker, /self\.clients\.claim\(\)/);
+  assert.doesNotMatch(serviceWorker, /CHALIN03_SKIP_WAITING/);
   assert.match(serviceWorker, /CHALIN03_ASSET_MISMATCH/);
   assert.match(serviceWorker, /recoveryOwner: "page"/);
   assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
