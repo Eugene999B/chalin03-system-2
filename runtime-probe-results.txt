@@ -1,0 +1,69 @@
+=== same_origin_health ===
+STATUS=200
+HTTP/2 200 
+content-type: application/json; charset=utf-8
+cache-control: no-store, max-age=0
+server: cloudflare
+x-chalin03-api-path: same-origin-pages-proxy-v2
+cf-ray: a28e32408bb6d909-IAD
+BODY_BEGIN
+{"status":"success","service":"Chalin 03 Group Operations Platform","version":"3.0.0","deployment":{"provider":"railway","railway_environment":"production","railway_service":"chalin03-system-2","commit_sha":"233782d60269cce33304f6d0a784561440854b8c","commit_short":"233782d60269","node_environment":"production"},"uptime_seconds":874,"time":"2026-08-10T10:07:55.070Z","request_id":"32bff3f2-b6db-4f92-9958-3a36b44bbfcd"}
+BODY_END
+=== direct_health ===
+STATUS=200
+HTTP/2 200 
+content-type: application/json; charset=utf-8
+access-control-allow-credentials: true
+access-control-allow-origin: https://chalin03.com
+cache-control: no-store, max-age=0
+server: cloudflare
+cf-ray: a28e32424e083eea-IAD
+BODY_BEGIN
+{"status":"success","service":"Chalin 03 Group Operations Platform","version":"3.0.0","deployment":{"provider":"railway","railway_environment":"production","railway_service":"chalin03-system-2","commit_sha":"233782d60269cce33304f6d0a784561440854b8c","commit_short":"233782d60269","node_environment":"production"},"uptime_seconds":874,"time":"2026-08-10T10:07:55.287Z","request_id":"cfee1f79-eb33-43e7-8965-218f70361e08"}
+BODY_END
+=== same_origin_backup ===
+STATUS=401
+HTTP/2 401 
+content-type: application/json; charset=utf-8
+cache-control: no-store, max-age=0
+server: cloudflare
+x-chalin03-api-path: same-origin-pages-proxy-v2
+cf-ray: a28e32431b43d66b-IAD
+BODY_BEGIN
+{"status":"error","code":"AUTHENTICATION_REQUIRED","message":"The request could not be completed safely.","request_id":"d08b6465-b395-4a64-a72e-23d15da49789"}
+BODY_END
+=== direct_backup ===
+STATUS=401
+HTTP/2 401 
+content-type: application/json; charset=utf-8
+access-control-allow-credentials: true
+access-control-allow-origin: https://chalin03.com
+cache-control: no-store, max-age=0
+server: cloudflare
+cf-ray: a28e32447d65c979-IAD
+BODY_BEGIN
+{"status":"error","code":"AUTHENTICATION_REQUIRED","message":"The request could not be completed safely.","request_id":"62c6d8e6-af0c-4c15-9580-9c5d6c9859f2"}
+BODY_END
+=== same_origin_payroll ===
+STATUS=401
+HTTP/2 401 
+content-type: application/json; charset=utf-8
+cache-control: no-store, max-age=0
+server: cloudflare
+x-chalin03-api-path: same-origin-pages-proxy-v2
+cf-ray: a28e32456a9f2514-IAD
+BODY_BEGIN
+{"status":"error","code":"AUTHENTICATION_REQUIRED","message":"The request could not be completed safely.","request_id":"6403776d-520b-4492-b848-67b1a678f7f4"}
+BODY_END
+=== direct_payroll ===
+STATUS=401
+HTTP/2 401 
+content-type: application/json; charset=utf-8
+access-control-allow-credentials: true
+access-control-allow-origin: https://chalin03.com
+cache-control: no-store, max-age=0
+server: cloudflare
+cf-ray: a28e32469fab1f89-IAD
+BODY_BEGIN
+{"status":"error","code":"AUTHENTICATION_REQUIRED","message":"The request could not be completed safely.","request_id":"69424228-b866-4672-8d8f-eb7bbd5f1ad2"}
+BODY_END
