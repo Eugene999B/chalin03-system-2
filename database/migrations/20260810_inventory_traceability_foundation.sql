@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS inventory_label_batches (
     metadata_json JSON NULL,
 
     UNIQUE KEY uq_inventory_label_batch_code (batch_code),
+    UNIQUE KEY uq_inventory_label_batch_source_item (branch_id, source_type, source_id, source_item_id),
     INDEX idx_inventory_label_batch_branch_product (branch_id, product_id, status),
     INDEX idx_inventory_label_batch_source (source_type, source_id, source_item_id),
     INDEX idx_inventory_label_batch_created_at (created_at),
