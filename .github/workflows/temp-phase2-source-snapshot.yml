@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/payroll-financial-foundation-phase2-20260810
+  pull_request:
+    branches:
+      - feature/equipment-finance-phase1-integrity-verification-20260807
 
 permissions:
   contents: read
