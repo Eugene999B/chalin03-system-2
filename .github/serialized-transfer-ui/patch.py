@@ -78,8 +78,8 @@ package_path = ROOT / "frontend/package.json"
 package = package_path.read_text(encoding="utf-8")
 package = replace_once(
     package,
-    'node scripts/inventoryTraceabilityFoundationTests.mjs",',
-    'node scripts/inventoryTraceabilityFoundationTests.mjs && node scripts/inventorySerializedTransferTests.mjs",',
+    'node scripts/inventorySerializedReturnsTests.mjs",',
+    'node scripts/inventorySerializedReturnsTests.mjs && node scripts/inventorySerializedTransferTests.mjs",',
     "frontend serialized transfer contract registration",
 )
 package_path.write_text(package, encoding="utf-8")
