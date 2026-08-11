@@ -146,23 +146,42 @@ function taskUnderstandingForPlan({ prompt, reasoningPlan = {} } = {}) {
   });
 }
 
+function objectiveTaskUnderstanding(question, { reasoningPlan = {}, objectiveCount = 1 } = {}) {
+  const taskState = reasoningPlan?.task_state || {};
+  const mayInheritContinuity = Number(objectiveCount || 0) <= 1;
+  return understandConversationTask({
+    prompt: question,
+    history: mayInheritContinuity ? taskState.inherited_turns || [] : [],
+    taskState: mayInheritContinuity ? taskState : null,
+    resolvedPrompt: mayInheritContinuity ? taskState.resolved_prompt || "" : "",
+  });
+}
+
 function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {}) {
   const taskUnderstanding = taskUnderstandingForPlan({ prompt, reasoningPlan });
   const questions = objectiveQuestionList({ prompt, reasoningPlan });
   const objectives = questions.map((question, index) => {
+    // Each decomposed sub-question owns its evidence families. Whole-request
+    // domains remain useful for answer synthesis, but must not leak one
+    // objective's evidence into another and falsely mark it as resolved.
+    const objectiveUnderstanding = objectiveTaskUnderstanding(question, {
+      reasoningPlan,
+      objectiveCount: questions.length,
+    });
     const evidenceNeeds = Object.freeze(
       unique([
         ...evidenceNeedsForQuestion(question),
-        ...taskUnderstanding.evidence_families,
+        ...objectiveUnderstanding.evidence_families,
       ])
     );
     const objective = {
       id: `objective_${index + 1}`,
       question,
       evidence_needs: evidenceNeeds,
+      task_domains: objectiveUnderstanding.domains,
       live_data_required:
         reasoningPlan?.live_data_required === true ||
-        taskUnderstanding.live_data_required === true ||
+        objectiveUnderstanding.live_data_required === true ||
         LIVE_PATTERNS.test(question),
       status: "pending",
       candidate_tools: Object.freeze([]),
@@ -290,6 +309,7 @@ module.exports = {
   candidateToolScore,
   evidenceNeedsForQuestion,
   objectiveQuestionList,
+  objectiveTaskUnderstanding,
   publicTaskPlan,
   rankedCandidateTools,
   resultToolKey,
