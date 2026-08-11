@@ -6,11 +6,17 @@ const { pool } = require("../config/db");
 const { isFeatureEnabled } = require("./featureFlagService");
 const { resolveAiScope } = require("./aiPermissionService");
 const {
+  assertDefinitionAuthority,
   createActionProposal,
   executeActionProposal,
   expectedActionConfirmation,
 } = require("./aiActionProposalService");
 const { aiActionRegistry } = require("./aiActionRegistry");
+const {
+  capabilityAnswer,
+  isCapabilityQuestion,
+  resolveActionCapabilities,
+} = require("./aiActionCapabilityService");
 
 const RENAME_PATTERNS = Object.freeze([
   /^(?:please\s+)?rename\s+(?:this|the)\s+(?:chat|conversation)\s+(?:to|as)\s+(.+)$/i,
@@ -18,7 +24,9 @@ const RENAME_PATTERNS = Object.freeze([
   /^(?:please\s+)?call\s+(?:this|the)\s+(?:chat|conversation)\s+(.+)$/i,
 ]);
 const USER_DEACTIVATION_PATTERN =
-  /^(?:please\s+)?(?:deactivate|disable|offboard)\s+(?:user|account)\s+#?(\d+)\b(?:\s+(?:because|for|reason\s*:?|with\s+reason)\s+(.+))?$/i;
+  /^(?:please\s+)?(?:deactivate|disable|offboard)\s+(?:user|account)\s+(.+?)(?:\s+(?:because|with\s+reason|reason\s*:)\s+(.+))?$/i;
+const USER_ID_REFERENCE_PATTERN = /^#?(\d+)$/;
+const USERNAME_REFERENCE_PATTERN = /^@([A-Za-z0-9._-]{1,120})$/;
 
 function clean(value, maximum = 4000) {
   return String(value ?? "")
@@ -32,6 +40,10 @@ function stripWrappingQuotes(value) {
   return clean(value, 180)
     .replace(/^["“”']+|["“”']+$/g, "")
     .trim();
+}
+
+function normalizeUserReference(value) {
+  return stripWrappingQuotes(value).replace(/\s+/g, " ").slice(0, 180);
 }
 
 function detectConversationalAction(message, { conversationKey = null } = {}) {
@@ -56,13 +68,15 @@ function detectConversationalAction(message, { conversationKey = null } = {}) {
 
   const deactivation = text.match(USER_DEACTIVATION_PATTERN);
   if (deactivation) {
-    const targetUserId = Number(deactivation[1]);
+    const targetReference = normalizeUserReference(deactivation[1]);
     const reason = clean(deactivation[2], 500);
+    if (!targetReference) return null;
     return Object.freeze({
       action_key: "system.user.deactivate",
       risk_level: 5,
+      target_reference: targetReference,
       input: Object.freeze({
-        target_user_id: Number.isSafeInteger(targetUserId) ? targetUserId : null,
+        target_user_id: null,
         reason: reason || null,
       }),
       missing_fields: Object.freeze(reason ? [] : ["reason"]),
@@ -99,43 +113,105 @@ async function replaceOwnedAssistantMessage({
   return Number(result.affectedRows || 0) === 1;
 }
 
-async function userDeactivationEvidence(targetUserId, connection = pool) {
-  const [rows] = await connection.query(
-    `SELECT id, full_name, username, role, is_active
-     FROM users
-     WHERE id = ?
-     LIMIT 1`,
-    [Number(targetUserId)]
-  );
-  const user = rows[0];
-  if (!user) {
-    const error = new Error("The requested user account was not found.");
-    error.code = "AI_ACTION_TARGET_NOT_FOUND";
-    error.statusCode = 404;
-    throw error;
+function userPublicShape(user = {}) {
+  return Object.freeze({
+    id: Number(user.id),
+    full_name: user.full_name || null,
+    username: user.username || null,
+    role: user.role || null,
+    is_active: Number(user.is_active || 0) === 1,
+  });
+}
+
+async function resolveUserActionTarget(reference, connection = pool) {
+  const target = normalizeUserReference(reference);
+  if (!target) {
+    return Object.freeze({ status: "not_found", candidates: Object.freeze([]) });
+  }
+
+  const idMatch = target.match(USER_ID_REFERENCE_PATTERN);
+  let rows;
+  if (idMatch) {
+    [rows] = await connection.query(
+      `SELECT id, full_name, username, role, is_active
+       FROM users
+       WHERE id = ?
+       LIMIT 2`,
+      [Number(idMatch[1])]
+    );
+  } else {
+    const usernameMatch = target.match(USERNAME_REFERENCE_PATTERN);
+    const lookup = usernameMatch ? usernameMatch[1] : target;
+    [rows] = await connection.query(
+      `SELECT id, full_name, username, role, is_active
+       FROM users
+       WHERE LOWER(username) = LOWER(?)
+          OR LOWER(full_name) = LOWER(?)
+       ORDER BY
+         CASE WHEN LOWER(username) = LOWER(?) THEN 0 ELSE 1 END,
+         is_active DESC,
+         id ASC
+       LIMIT 10`,
+      [lookup, lookup, lookup]
+    );
+  }
+
+  const candidates = rows.map(userPublicShape);
+  if (candidates.length === 0) {
+    return Object.freeze({
+      status: "not_found",
+      reference: target,
+      candidates: Object.freeze([]),
+    });
+  }
+  if (candidates.length > 1) {
+    return Object.freeze({
+      status: "ambiguous",
+      reference: target,
+      candidates: Object.freeze(candidates),
+    });
   }
   return Object.freeze({
-    user: Object.freeze({
-      id: Number(user.id),
-      full_name: user.full_name || null,
-      username: user.username || null,
-      role: user.role || null,
-      is_active: Number(user.is_active || 0) === 1,
-    }),
-    evidence: Object.freeze([
-      Object.freeze({
-        source_type: "system.user_identity",
-        source_ref: `users:${Number(user.id)}`,
-        source_version: "live",
-        label: `User account #${Number(user.id)} identity and active state`,
-        excerpt_text: `User #${Number(user.id)} (${user.username || "no username"}), role ${user.role || "unknown"}, active ${Number(user.is_active || 0) === 1 ? "yes" : "no"}.`,
-        as_of_at: new Date().toISOString(),
-        classification: "sensitive",
-        workspace_code: null,
-        metadata: Object.freeze({ target_user_id: Number(user.id) }),
-      }),
-    ]),
+    status: "resolved",
+    reference: target,
+    user: candidates[0],
+    candidates: Object.freeze(candidates),
   });
+}
+
+function userIdentityEvidence(user) {
+  return Object.freeze([
+    Object.freeze({
+      source_type: "system.user_identity",
+      source_ref: `users:${Number(user.id)}`,
+      source_version: "live",
+      label: `User account #${Number(user.id)} identity and active state`,
+      excerpt_text: `User #${Number(user.id)} (${user.username || "no username"}), full name ${user.full_name || "not recorded"}, role ${user.role || "unknown"}, active ${user.is_active ? "yes" : "no"}.`,
+      as_of_at: new Date().toISOString(),
+      classification: "sensitive",
+      workspace_code: null,
+      metadata: Object.freeze({ target_user_id: Number(user.id) }),
+    }),
+  ]);
+}
+
+async function userDeactivationEvidence(targetReference, connection = pool) {
+  const resolution = await resolveUserActionTarget(targetReference, connection);
+  if (resolution.status !== "resolved") return resolution;
+  return Object.freeze({
+    ...resolution,
+    evidence: userIdentityEvidence(resolution.user),
+  });
+}
+
+function candidateText(candidates = []) {
+  return candidates
+    .slice(0, 8)
+    .map(
+      (candidate) =>
+        `#${candidate.id} — ${candidate.full_name || candidate.username || "Unnamed user"}${candidate.username ? ` (@${candidate.username})` : ""} — ${candidate.role || "unknown role"}${candidate.is_active ? "" : " — inactive"}`
+    )
+    .join("\n");
 }
 
 function actionNotice(actionState) {
@@ -147,10 +223,21 @@ function actionNotice(actionState) {
     return `Done — the governed action ${actionState.action_key} completed successfully.`;
   }
   if (actionState.status === "pending_review") {
-    return `I prepared Risk Level ${actionState.risk_level} action proposal ${actionState.proposal_key}. It has **not** executed. Review is required first; after approval, the exact confirmation “${actionState.expected_confirmation}” is required before execution.`;
+    const target = actionState.target;
+    const targetText = target
+      ? ` Target: #${target.id} — ${target.full_name || target.username || "user"}${target.username ? ` (@${target.username})` : ""}.`
+      : "";
+    return `I prepared Risk Level ${actionState.risk_level} action proposal ${actionState.proposal_key}.${targetText} It has **not** executed. Review is required first; after approval, the exact confirmation “${actionState.expected_confirmation}” is required before execution.`;
   }
   if (actionState.status === "needs_input") {
     return `I can prepare that action, but I still need: ${(actionState.missing_fields || []).join(", ")}.`;
+  }
+  if (actionState.status === "target_not_found") {
+    return `I could not find an exact user account matching “${actionState.target_reference || "that reference"}”. I did not create an action proposal. Use the user ID, @username, or exact full name.`;
+  }
+  if (actionState.status === "ambiguous_target") {
+    const choices = candidateText(actionState.candidates);
+    return `More than one user exactly matches “${actionState.target_reference}”, so I will not guess. Choose the user ID or @username before I prepare the Risk Level 5 action.${choices ? `\n\n${choices}` : ""}`;
   }
   if (actionState.status === "disabled") {
     return "I recognized this as an action request, but CHALIN AI action execution is currently disabled in this environment. No business record was changed.";
@@ -159,7 +246,8 @@ function actionNotice(actionState) {
     return `I recognized the action request, but this login is not authorized to perform it. ${actionState.reason || "No business record was changed."}`.trim();
   }
   if (actionState.status === "already_inactive") {
-    return `User #${actionState.target_user_id} is already inactive, so I did not create or execute another deactivation action.`;
+    const target = actionState.target || {};
+    return `User #${actionState.target_user_id}${target.username ? ` (@${target.username})` : ""} is already inactive, so I did not create or execute another deactivation action.`;
   }
   if (actionState.status === "failed") {
     return `I recognized the action request, but the governed action could not be prepared safely: ${actionState.reason || "unknown action error"}. No unapproved write was performed.`;
@@ -180,6 +268,20 @@ function safeActionErrorState(intent, error) {
   });
 }
 
+async function capabilityResult({ req, persona, result }) {
+  const scope = resolveAiScope({ req, persona });
+  const snapshot = resolveActionCapabilities({
+    user: req.user,
+    persona,
+    scope,
+  });
+  return Object.freeze({
+    ...result,
+    answer: capabilityAnswer(snapshot),
+    capabilities: snapshot,
+  });
+}
+
 async function processConversationalAction({
   req,
   persona,
@@ -188,6 +290,19 @@ async function processConversationalAction({
   assistantMessageKey,
   result,
 } = {}) {
+  if (isCapabilityQuestion(message)) {
+    const nextResult = await capabilityResult({ req, persona, result });
+    if (assistantMessageKey && conversationKey && req?.user?.id) {
+      await replaceOwnedAssistantMessage({
+        messageKey: assistantMessageKey,
+        conversationKey,
+        userId: req.user.id,
+        content: nextResult.answer,
+      }).catch(() => null);
+    }
+    return nextResult;
+  }
+
   const intent = detectConversationalAction(message, { conversationKey });
   if (!intent) return result;
 
@@ -205,26 +320,64 @@ async function processConversationalAction({
       risk_level: intent.risk_level,
       status: "needs_input",
       missing_fields: intent.missing_fields,
+      target_reference: intent.target_reference || null,
       execution_performed: false,
     });
   } else {
     try {
       const scope = resolveAiScope({ req, persona });
+      const definition = aiActionRegistry.get(intent.action_key);
+
+      // High-risk identity lookups are themselves sensitive. Verify that the
+      // authenticated account is allowed to propose the action before probing
+      // the user directory or exposing candidate identities.
+      assertDefinitionAuthority({
+        definition,
+        user: req.user,
+        persona,
+        workspaceCode: scope.workspace_code,
+        phase: "propose",
+      });
+
       let evidence = [];
       let target = null;
+      let resolvedInput = { ...intent.input };
       if (intent.action_key === "system.user.deactivate") {
-        const targetState = await userDeactivationEvidence(intent.input.target_user_id);
-        target = targetState.user;
-        evidence = targetState.evidence;
-        if (!target.is_active) {
+        const targetState = await userDeactivationEvidence(intent.target_reference);
+        if (targetState.status === "not_found") {
           actionState = Object.freeze({
             action_key: intent.action_key,
             risk_level: intent.risk_level,
-            status: "already_inactive",
-            target_user_id: target.id,
-            target,
+            status: "target_not_found",
+            target_reference: intent.target_reference,
             execution_performed: false,
           });
+        } else if (targetState.status === "ambiguous") {
+          actionState = Object.freeze({
+            action_key: intent.action_key,
+            risk_level: intent.risk_level,
+            status: "ambiguous_target",
+            target_reference: intent.target_reference,
+            candidates: targetState.candidates,
+            execution_performed: false,
+          });
+        } else {
+          target = targetState.user;
+          evidence = targetState.evidence;
+          resolvedInput = {
+            target_user_id: target.id,
+            reason: intent.input.reason,
+          };
+          if (!target.is_active) {
+            actionState = Object.freeze({
+              action_key: intent.action_key,
+              risk_level: intent.risk_level,
+              status: "already_inactive",
+              target_user_id: target.id,
+              target,
+              execution_performed: false,
+            });
+          }
         }
       }
 
@@ -236,17 +389,16 @@ async function processConversationalAction({
             scope,
             title:
               intent.action_key === "system.user.deactivate"
-                ? `Securely deactivate user #${intent.input.target_user_id}`
-                : `Rename Intelligence conversation to ${intent.input.title}`,
+                ? `Securely deactivate user #${resolvedInput.target_user_id}`
+                : `Rename Intelligence conversation to ${resolvedInput.title}`,
             summary: clean(message, 2000),
-            payload: intent.input,
+            payload: resolvedInput,
             evidence,
           },
           user: req.user,
           req,
         });
 
-        const definition = aiActionRegistry.get(intent.action_key);
         const expectedConfirmation =
           expectedActionConfirmation(
             { proposal_key: proposal.proposal_key },
@@ -313,13 +465,20 @@ async function processConversationalAction({
 module.exports = {
   RENAME_PATTERNS,
   USER_DEACTIVATION_PATTERN,
+  USER_ID_REFERENCE_PATTERN,
+  USERNAME_REFERENCE_PATTERN,
   actionNotice,
   assistantContentHash,
+  candidateText,
+  capabilityResult,
   clean,
   detectConversationalAction,
+  normalizeUserReference,
   processConversationalAction,
   replaceOwnedAssistantMessage,
+  resolveUserActionTarget,
   safeActionErrorState,
   stripWrappingQuotes,
   userDeactivationEvidence,
+  userIdentityEvidence,
 };
