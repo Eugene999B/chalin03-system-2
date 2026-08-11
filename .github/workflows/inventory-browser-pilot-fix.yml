@@ -19,7 +19,7 @@ jobs:
   verify-and-publish:
     if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: frontend
@@ -29,7 +29,7 @@ jobs:
           ref: feature/inventory-loss-prevention-traceability
           fetch-depth: 0
 
-      - name: Apply selector fix
+      - name: Apply pilot and Returns UX fixes
         working-directory: .
         run: python .github/inventory-browser-pilot-fix/patch.py
 
@@ -42,6 +42,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Verify frontend source, lint and build
+        run: |
+          npm test
+          npm run lint
+          npm run build
+          git diff --check
+
       - name: Install Playwright
         run: npm install --no-save --package-lock=false @playwright/test@1.55.0
 
@@ -51,12 +58,15 @@ jobs:
       - name: Verify inventory browser pilot
         run: npx playwright test e2e/inventoryLossPreventionPilot.spec.js --project=chromium
 
-      - name: Publish verified selector fix
+      - name: Publish verified pilot and Returns UX fixes
         working-directory: .
         run: |
           git config user.name "chalin03-feature-gate"
           git config user.email "actions@users.noreply.github.com"
-          git add frontend/e2e/inventoryLossPreventionPilot.spec.js
+          git add \
+            frontend/e2e/inventoryLossPreventionPilot.spec.js \
+            frontend/src/pages/ReturnsPage.jsx \
+            frontend/scripts/inventorySerializedReturnsTests.mjs
           git diff --cached --quiet && exit 0
-          git commit -m "Fix inventory browser pilot return scanner assertion"
+          git commit -m "Preserve serialized return confirmation through refresh"
           git push origin HEAD:feature/inventory-loss-prevention-traceability
