@@ -230,11 +230,11 @@ function auditSecurityRuntimeAvailability() {
 function isAuditSecurityExpertPrompt(value) {
   const text = String(value ?? "").trim().slice(0, 16000);
   if (!text) return false;
-  if (/\b(?:audit trail|audit activity|audit sign[- ]?off|audit unlock|security event|security audit|access audit|backup restore|backup validation|operational approval|approval centre|approval center|shared control|risk[- ]?5|ai action governance|who changed|who approved)\b/i.test(text)) {
+  if (/\b(?:audit trail|audit activity|audit controls?|audit governance|audit sign[- ]?off|audit unlock|security event|security audit|access audit|backup restore|backup validation|operational approval|approval centre|approval center|shared control|risk[- ]?5|ai action governance|who changed|who approved)\b/i.test(text)) {
     return true;
   }
   const auditAnchor = /\b(?:audit|security|control|approval|permission|access|backup|restore|unlock|signoff|sign-off)\b/i.test(text);
-  const auditTopic = /\b(?:activity|event|history|failed|failure|severity|change|changed|review|approve|approved|reject|rejected|export|evidence|fraud|suspicious|anomaly|risk)\b/i.test(text);
+  const auditTopic = /\b(?:activity|event|history|failed|failure|severity|change|changed|governed|governance|review|approve|approved|reject|rejected|export|evidence|fraud|suspicious|anomaly|risk)\b/i.test(text);
   return auditAnchor && auditTopic;
 }
 
