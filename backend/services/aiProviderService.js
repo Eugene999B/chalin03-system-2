@@ -24,6 +24,11 @@ const {
   appendAnswerComposerInstruction,
   buildAnswerCompositionPlan,
 } = require("./aiAnswerComposerService");
+const {
+  critiqueResponse,
+  responseCriticRepairPrompt,
+  shouldAutoRepairResponse,
+} = require("./aiResponseCriticService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
@@ -88,14 +93,7 @@ function safeExternalClassification(providerContext = {}) {
 function hasPrivateBusinessSignal(prompt) {
   const text = cleanMessageContent(prompt, 16000);
   if (!text) return false;
-
-  // Product/system explanations, IT/architecture questions, marketing work,
-  // business advice and other advisory questions must not be classified as
-  // private merely because they contain words such as audit, payroll, finance,
-  // employee, database or security. They carry only static CHALIN product
-  // context to the external reasoning model.
   if (isChalinProductKnowledgeTurn(text)) return false;
-
   if (isLikelyLiveRecordRequest(text)) return true;
   return PRIVATE_BUSINESS_MARKERS.test(text) || SENSITIVE_LITERAL_MARKERS.test(text);
 }
@@ -105,12 +103,10 @@ function isPublicSafeSocialTurn({ messages = [], providerContext = {} } = {}) {
   if (persona !== "copilot") return false;
   if (providerContext?.live_data_required === true) return false;
   if (!safeExternalClassification(providerContext)) return false;
-
   const prompt = latestUserMessage(messages);
   if (!prompt || prompt.length > PUBLIC_SAFE_SOCIAL_MAX_LENGTH) return false;
   if (hasPrivateBusinessSignal(prompt)) return false;
   if (PUBLIC_SAFE_SOCIAL_PATTERN.test(prompt)) return true;
-
   return PUBLIC_SAFE_GREETING_PREFIX.test(prompt) && prompt.length <= 100;
 }
 
@@ -207,11 +203,32 @@ function normalizeProviderResult(result, providerKey) {
     cost_micros: Number.isFinite(costMicros) ? Math.ceil(costMicros) : 0,
     finish_reason: String(result.finish_reason || "stop").slice(0, 80),
     tool_calls: Object.freeze(toolCalls),
-    provider_response_id:
-      String(result.provider_response_id || "").slice(0, 180) || null,
-    reasoning_effort:
-      String(result.reasoning_effort || "").slice(0, 20) || null,
+    provider_response_id: String(result.provider_response_id || "").slice(0, 180) || null,
+    reasoning_effort: String(result.reasoning_effort || "").slice(0, 20) || null,
     provider_store_enabled: result.provider_store_enabled === true,
+  });
+}
+
+function hasApprovedEvidence(messages = []) {
+  return (Array.isArray(messages) ? messages : []).some(
+    (message) => String(message?.role || "").toLowerCase() === "system" && /\[E1\]/.test(String(message?.content || ""))
+  );
+}
+
+function hasGovernedToolResult(messages = []) {
+  return (Array.isArray(messages) ? messages : []).some(
+    (message) => String(message?.role || "").toLowerCase() === "tool"
+  );
+}
+
+function combineProviderUsage(primary, repair) {
+  if (!repair) return primary;
+  return Object.freeze({
+    ...repair,
+    input_tokens: Number(primary.input_tokens || 0) + Number(repair.input_tokens || 0),
+    output_tokens: Number(primary.output_tokens || 0) + Number(repair.output_tokens || 0),
+    cost_micros: Number(primary.cost_micros || 0) + Number(repair.cost_micros || 0),
+    redaction_count: Number(primary.redaction_count || 0) + Number(repair.redaction_count || 0),
   });
 }
 
@@ -345,35 +362,14 @@ async function generateProviderResponse({
 } = {}) {
   let selection = null;
   let selected = provider;
-  let effectiveProviderContext =
-    providerContext && typeof providerContext === "object"
-      ? { ...providerContext }
-      : {};
+  let effectiveProviderContext = providerContext && typeof providerContext === "object" ? { ...providerContext } : {};
   let effectiveMessages = Array.isArray(messages) ? messages : [];
   let effectiveTools = Array.isArray(tools) ? tools : [];
 
   const eligibleForPolicyRewrite = !selected && !providerKey;
-  const publicSafeSocialTurn =
-    eligibleForPolicyRewrite &&
-    isPublicSafeSocialTurn({
-      messages: effectiveMessages,
-      providerContext: effectiveProviderContext,
-    });
-  const publicSafeSystemTurn =
-    eligibleForPolicyRewrite &&
-    !publicSafeSocialTurn &&
-    isPublicSafeSystemTurn({
-      messages: effectiveMessages,
-      providerContext: effectiveProviderContext,
-    });
-  const publicSafeGeneralTurn =
-    eligibleForPolicyRewrite &&
-    !publicSafeSocialTurn &&
-    !publicSafeSystemTurn &&
-    isPublicSafeGeneralTurn({
-      messages: effectiveMessages,
-      providerContext: effectiveProviderContext,
-    });
+  const publicSafeSocialTurn = eligibleForPolicyRewrite && isPublicSafeSocialTurn({ messages: effectiveMessages, providerContext: effectiveProviderContext });
+  const publicSafeSystemTurn = eligibleForPolicyRewrite && !publicSafeSocialTurn && isPublicSafeSystemTurn({ messages: effectiveMessages, providerContext: effectiveProviderContext });
+  const publicSafeGeneralTurn = eligibleForPolicyRewrite && !publicSafeSocialTurn && !publicSafeSystemTurn && isPublicSafeGeneralTurn({ messages: effectiveMessages, providerContext: effectiveProviderContext });
 
   if (publicSafeSocialTurn || publicSafeSystemTurn || publicSafeGeneralTurn) {
     effectiveMessages = publicSafeSocialTurn
@@ -392,10 +388,7 @@ async function generateProviderResponse({
     };
 
     if (publicSafeGeneralTurn) {
-      const enrichment = await enrichPublicSafeMessagesWithWeb({
-        messages: effectiveMessages,
-        env,
-      });
+      const enrichment = await enrichPublicSafeMessagesWithWeb({ messages: effectiveMessages, env });
       effectiveMessages = [...enrichment.messages];
       effectiveProviderContext = {
         ...effectiveProviderContext,
@@ -432,11 +425,7 @@ async function generateProviderResponse({
   };
 
   if (!selected && !providerKey) {
-    selection = await resolveAiProviderSelection({
-      providerContext: effectiveProviderContext,
-      messages: effectiveMessages,
-      env,
-    });
+    selection = await resolveAiProviderSelection({ providerContext: effectiveProviderContext, messages: effectiveMessages, env });
     providerKey = selection.effective_provider;
     effectiveProviderContext = {
       ...effectiveProviderContext,
@@ -448,14 +437,14 @@ async function generateProviderResponse({
     };
   }
 
-  selected =
-    selected ||
-    aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
+  selected = selected || aiProviderRegistry.create({ env, providerKey: providerKey || env.AI_PROVIDER });
   const key = cleanProviderKey(selected.key || providerKey || "disabled") || "disabled";
   const safeMessages = sanitizeProviderMessages(effectiveMessages);
   const safeTools = effectiveTools.slice(0, 80);
   const started = Date.now();
   const controller = new AbortController();
+  const safeTimeout = safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 90000);
+  const safeOutputTokens = safePositiveInteger(maxOutputTokens, 4000, 32768);
 
   try {
     const raw = await withProviderTimeout(
@@ -463,20 +452,102 @@ async function generateProviderResponse({
         selected.generate({
           messages: safeMessages,
           tools: safeTools,
-          max_output_tokens: safePositiveInteger(maxOutputTokens, 4000, 32768),
+          max_output_tokens: safeOutputTokens,
           provider_context: Object.freeze(effectiveProviderContext),
           signal: controller.signal,
         })
       ),
-      safePositiveInteger(timeoutMs, DEFAULT_PROVIDER_TIMEOUT_MS, 90000),
+      safeTimeout,
       key,
       () => controller.abort()
     );
+    const primary = normalizeProviderResult(raw, key);
+
+    if (primary.tool_calls.length > 0) {
+      return Object.freeze({
+        ...primary,
+        latency_ms: Date.now() - started,
+        provider_selection: safeProviderSelection(selection),
+        answer_composition: answerComposition,
+        response_quality: Object.freeze({ skipped: true, reason: "tool_calls_pending", needs_repair: false }),
+        quality_repair_rounds: 0,
+      });
+    }
+
+    const citationRequired = hasApprovedEvidence(safeMessages);
+    const liveToolsUsed = hasGovernedToolResult(safeMessages);
+    const primaryCritique = critiqueResponse({
+      answer: primary.text,
+      composition: answerComposition,
+      citationRequired,
+      citationPresent: /\[E\d+\]/.test(primary.text),
+      liveToolsUsed,
+    });
+
+    let final = primary;
+    let finalCritique = primaryCritique;
+    let repairRounds = 0;
+
+    const autoRepair = shouldAutoRepairResponse(primaryCritique, {
+      toolsAvailable: safeTools.length > 0,
+      liveToolsUsed,
+    });
+
+    if (autoRepair) {
+      const repairController = new AbortController();
+      const repairMessages = sanitizeProviderMessages([
+        ...safeMessages,
+        {
+          role: "system",
+          content: responseCriticRepairPrompt({
+            answer: primary.text,
+            critique: primaryCritique,
+            composition: answerComposition,
+          }),
+        },
+        { role: "user", content: "Return the repaired answer only." },
+      ]);
+      const repairedRaw = await withProviderTimeout(
+        Promise.resolve(
+          selected.generate({
+            messages: repairMessages,
+            tools: [],
+            max_output_tokens: safeOutputTokens,
+            provider_context: Object.freeze({
+              ...effectiveProviderContext,
+              response_quality_repair: true,
+              response_quality_repair_round: 1,
+            }),
+            signal: repairController.signal,
+          })
+        ),
+        safeTimeout,
+        key,
+        () => repairController.abort()
+      );
+      const repaired = normalizeProviderResult(repairedRaw, key);
+      const repairedCritique = critiqueResponse({
+        answer: repaired.text,
+        composition: answerComposition,
+        citationRequired,
+        citationPresent: /\[E\d+\]/.test(repaired.text),
+        liveToolsUsed,
+      });
+
+      repairRounds = 1;
+      if (repaired.tool_calls.length === 0 && repairedCritique.score >= primaryCritique.score) {
+        final = combineProviderUsage(primary, repaired);
+        finalCritique = repairedCritique;
+      }
+    }
+
     return Object.freeze({
-      ...normalizeProviderResult(raw, key),
+      ...final,
       latency_ms: Date.now() - started,
       provider_selection: safeProviderSelection(selection),
       answer_composition: answerComposition,
+      response_quality: finalCritique,
+      quality_repair_rounds: repairRounds,
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSafetyError) {
@@ -510,7 +581,10 @@ module.exports = {
   SENSITIVE_LITERAL_MARKERS,
   aiProviderRegistry,
   cleanProviderKey,
+  combineProviderUsage,
   generateProviderResponse,
+  hasApprovedEvidence,
+  hasGovernedToolResult,
   hasPrivateBusinessSignal,
   isPublicSafeGeneralTurn,
   isPublicSafeSocialTurn,
