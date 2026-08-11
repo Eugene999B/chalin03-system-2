@@ -27,7 +27,7 @@ const DOMAIN_RULES = Object.freeze([
   }),
   Object.freeze({
     key: "customer_accounting",
-    pattern: /\b(?:customer debt|customer account|customer statement|receivable|receivables|what .* owe|owes us|owing us|collections?|debt payments?|customer payments?)\b/i,
+    pattern: /\b(?:customer debt|customer account|customer statement|receivable|receivables|(?:what|how much) .* owe|owes us|owing us|collections?|debt payments?|customer payments?)\b/i,
   }),
   Object.freeze({
     key: "audit_controls_security",
@@ -50,7 +50,7 @@ const WORKSPACE_DOMAIN = Object.freeze({
 
 const BUSINESS_SIGNAL_PATTERN = /\b(?:sale|sales|sold|profit|margin|stock|inventory|customer|debt|owe|owing|payment|collection|payroll|salary|worker|employee|production|cost|expense|contract|invoice|arrears|receivable)\b/i;
 const LIVE_SIGNAL_PATTERN = /\b(?:today|yesterday|now|current|currently|latest|live|outstanding|overdue|active|this week|this month|last week|last month|right now)\b/i;
-const INTRINSIC_LIVE_PATTERN = /\b(?:how much (?:did|do|does|is|are)|how many|current balance|current stock|stock level|outstanding debt|what .* owe|owes us|owing us|sales today|sold today|profit today|margin today|production today|payments? today|collections? today)\b/i;
+const INTRINSIC_LIVE_PATTERN = /\b(?:how much (?:did|do|does|is|are)|how many|current balance|current stock|stock level|outstanding debt|(?:what|how much) .* owe|owes us|owing us|sales today|sold today|profit today|margin today|production today|payments? today|collections? today)\b/i;
 const REFERENTIAL_PATTERN = /\b(?:it|its|that|this|these|those|them|they|he|his|him|she|her|there|same|previous|earlier|yesterday)\b/i;
 const FOLLOW_UP_START_PATTERN = /^(?:and\b|also\b|then\b|what about\b|how about\b|why\b|who\b|which\b|where\b|when\b|how much\b|how many\b|profit\b|sales?\b|margin\b|yesterday\b|today\b|there\b|same\b|do it\b|generate it\b|put that\b|put it\b|compare them\b|continue\b)/i;
 
@@ -60,7 +60,7 @@ const ANSWER_MODE_RULES = Object.freeze([
   Object.freeze({ key: "decision_support", pattern: /\b(?:should we|what should|recommend|recommendation|best option|priorit(?:y|ize)|what do you suggest|decision)\b/i }),
   Object.freeze({ key: "diagnosis", pattern: /\b(?:why|what happened|cause|caused|diagnose|problem|issue|wrong|dropped|lower|higher|increase|decrease|variance|anomaly)\b/i }),
   Object.freeze({ key: "comparison", pattern: /\b(?:compare|comparison|versus|vs\.?|difference|better than|worse than|compared with|compared to)\b/i }),
-  Object.freeze({ key: "investigation", pattern: /\b(?:trace|investigate|find out|which customer|who changed|who approved|what .* owe|what did .* buy|did .* pay)\b/i }),
+  Object.freeze({ key: "investigation", pattern: /\b(?:trace|investigate|find out|which customer|who changed|who approved|(?:what|how much) .* owe|what did .* buy|did .* pay)\b/i }),
   Object.freeze({ key: "direct_fact", pattern: /^(?:how much|how many|who|which|when|where|what is the current|what's the current|show me (?:the )?(?:current|today))\b/i }),
   Object.freeze({ key: "explanation", pattern: /\b(?:explain|how does|how do|how is|how are|tell me about|tell me more about|what is|what are|procedure|process|policy|rule|work|works|governed)\b/i }),
 ]);
@@ -185,7 +185,12 @@ function inferLiveDataRequired({ prompt, resolvedPrompt = "", domains = [] } = {
   const current = clean(prompt, 6000);
   const resolved = clean(resolvedPrompt, 12000);
   if (domains.includes("chalin_product") && !BUSINESS_SIGNAL_PATTERN.test(current)) return false;
-  if (INTRINSIC_LIVE_PATTERN.test(current)) return true;
+  if (
+    INTRINSIC_LIVE_PATTERN.test(current) &&
+    (domains.length > 0 || BUSINESS_SIGNAL_PATTERN.test(current))
+  ) {
+    return true;
+  }
   const searchable = `${current} ${resolved}`;
   return BUSINESS_SIGNAL_PATTERN.test(searchable) && LIVE_SIGNAL_PATTERN.test(searchable);
 }
@@ -216,6 +221,13 @@ function understandConversationTask({
 } = {}) {
   const currentPrompt = clean(prompt, 12000);
   const continuityRequired = isContinuation(currentPrompt, history, taskState);
+  const historyText = continuityRequired
+    ? recentTaskHistory(history)
+        .filter((item) => item.role === "user")
+        .map((item) => item.content)
+        .join("\n")
+    : "";
+  const continuityContext = resolvedPrompt || taskState?.resolved_prompt || historyText;
   const domainResult = inferDomains({
     prompt: currentPrompt,
     history,
@@ -227,10 +239,10 @@ function understandConversationTask({
   const facets = answerFacets(currentPrompt);
   const liveDataRequired = inferLiveDataRequired({
     prompt: currentPrompt,
-    resolvedPrompt: resolvedPrompt || taskState?.resolved_prompt || "",
+    resolvedPrompt: continuityContext,
     domains: domainResult.domains,
   });
-  const hints = inferHints(`${resolvedPrompt || taskState?.resolved_prompt || ""}\n${currentPrompt}`);
+  const hints = inferHints(`${continuityContext}\n${currentPrompt}`);
 
   return Object.freeze({
     version: 1,
