@@ -227,7 +227,11 @@ function evidenceFamiliesForDomains(domains = []) {
 function inferHints(text) {
   const value = clean(text, 8000);
   const times = unique((value.match(/\b(?:today|yesterday|this week|last week|this month|last month|now|current(?:ly)?)\b/gi) || []).map((item) => item.toLowerCase())).slice(0, 4);
-  const metrics = unique((value.match(/\b(?:sales?|profit|margin|stock|inventory|debt|outstanding|collections?|payments?|salary|payroll|production|costs?|expenses?|receivables?|arrears)\b/gi) || []).map((item) => item.toLowerCase())).slice(0, 8);
+  const metrics = unique(
+    (value.match(/\b(?:sales?|sell(?:ing)?|sold|profit|margin|stock|inventory|debt|outstanding|collections?|payments?|salary|payroll|production|costs?|expenses?|receivables?|arrears)\b/gi) || [])
+      .map((item) => item.toLowerCase())
+      .map((item) => /^(?:sale|sales|sell|selling|sold)$/.test(item) ? "sales" : item)
+  ).slice(0, 8);
   const locations = unique((value.match(/\b(?:main store|[a-z][a-z -]{1,40}\s+(?:store|branch|site|location))\b/gi) || []).map((item) => clean(item, 80))).slice(0, 4);
   return Object.freeze({
     time_hints: Object.freeze(times),
