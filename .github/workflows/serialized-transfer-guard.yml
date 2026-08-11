@@ -1,0 +1,57 @@
+name: Temporary Serialized Transfer Guard Integration
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: serialized-transfer-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrate-and-verify:
+    if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/inventory-loss-prevention-traceability
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply serialized transfer legacy guards
+        run: python .github/serialized-transfer-guard/patch.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Verify backend and migration safety
+        working-directory: backend
+        run: |
+          npm run syntax-check
+          npm test
+          git fetch origin main
+          npm run migration-safety -- origin/main HEAD
+          git diff --check
+
+      - name: Publish verified serialized transfer legacy guards
+        run: |
+          git config user.name "chalin03-feature-gate"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/routes/stockTransferRoutes.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Block legacy transfer actions for enforced serialized stock"
+          git push origin HEAD:feature/inventory-loss-prevention-traceability
