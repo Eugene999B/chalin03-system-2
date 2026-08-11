@@ -1,0 +1,56 @@
+name: Inventory Loss Prevention Browser Pilot
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-pilot:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run inventory loss-prevention pilot
+        run: npx playwright test e2e/inventoryLossPreventionPilot.spec.js --project=chromium
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-loss-prevention-browser-pilot-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 14
