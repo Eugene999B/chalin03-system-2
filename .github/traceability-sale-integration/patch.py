@@ -1,7 +1,69 @@
 from pathlib import Path
-import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
+
+ORIGINAL_WORKFLOW = '''name: Inventory Loss Prevention Feature Verification
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-loss-prevention-feature-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Backend syntax
+        working-directory: backend
+        run: npm run syntax-check
+      - name: Backend tests
+        working-directory: backend
+        run: npm test
+      - name: Migration safety
+        working-directory: backend
+        run: npm run migration-safety
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Frontend production build
+        working-directory: frontend
+        run: npm run build
+'''
 
 
 def replace_once(text, old, new, label):
@@ -25,21 +87,18 @@ def patch_sale_route():
         'const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");\nconst {\n  lockSaleTraceabilitySelections,\n  markSaleUnitsSold,\n} = require("../services/inventorySaleTraceabilityService");\n',
         "sale traceability import",
     )
-
     create_part = replace_once(
         create_part,
         """          quantity,\n          is_active\n         FROM products""",
         """          quantity,\n          is_active,\n          inventory_tracking_mode,\n          inventory_traceability_state\n         FROM products""",
         "sale product tracking select",
     )
-
     create_part = replace_once(
         create_part,
         """      saleItems.push({\n        product_id: product.id,\n        product_name: product.name,\n        quantity,\n        unit_price: unitPrice,\n        line_total: lineTotal,\n        cost_price_at_sale: costPriceAtSale,\n      });""",
         """      saleItems.push({\n        product_id: product.id,\n        product_name: product.name,\n        quantity,\n        unit_price: unitPrice,\n        line_total: lineTotal,\n        cost_price_at_sale: costPriceAtSale,\n        inventory_tracking_mode: product.inventory_tracking_mode || \"quantity\",\n        inventory_traceability_state: product.inventory_traceability_state || \"off\",\n        unit_ids: Array.isArray(item.unit_ids) ? item.unit_ids : [],\n      });""",
         "sale item traceability fields",
     )
-
     create_part = replace_once(
         create_part,
         """    }\n\n    subtotal = Number(subtotal.toFixed(2));""",
@@ -50,7 +109,6 @@ def patch_sale_route():
     old_loop = """    for (const saleItem of saleItems) {\n      await connection.query(\n        `INSERT INTO sale_items (\n          sale_id,\n          product_id,\n          product_name,\n          quantity,\n          unit_price,\n          line_total,\n          cost_price_at_sale\n        )\n        VALUES (?, ?, ?, ?, ?, ?, ?)`,\n        [\n          saleId,\n          saleItem.product_id,\n          saleItem.product_name,\n          saleItem.quantity,\n          saleItem.unit_price,\n          saleItem.line_total,\n          saleItem.cost_price_at_sale,\n        ]\n      );\n\n      await connection.query(\n        `UPDATE products\n         SET quantity = quantity - ?\n         WHERE id = ?\n         AND branch_id = ?`,\n        [saleItem.quantity, saleItem.product_id, branchId]\n      );\n    }"""
     new_loop = """    for (const saleItem of saleItems) {\n      const [saleItemResult] = await connection.query(\n        `INSERT INTO sale_items (\n          sale_id,\n          product_id,\n          product_name,\n          quantity,\n          unit_price,\n          line_total,\n          cost_price_at_sale\n        )\n        VALUES (?, ?, ?, ?, ?, ?, ?)`,\n        [\n          saleId,\n          saleItem.product_id,\n          saleItem.product_name,\n          saleItem.quantity,\n          saleItem.unit_price,\n          saleItem.line_total,\n          saleItem.cost_price_at_sale,\n        ]\n      );\n\n      const traceabilitySelection = saleTraceabilitySelections.get(Number(saleItem.product_id));\n      const soldUnits = await markSaleUnitsSold(connection, {\n        branchId,\n        saleId,\n        saleItemId: saleItemResult.insertId,\n        productId: saleItem.product_id,\n        unitCodes: traceabilitySelection?.unit_codes || [],\n        actorUserId: req.user.id,\n        receiptNumber,\n        customerName: finalCustomerName,\n        requestId: req.requestId || req.id || null,\n      });\n      saleItem.unit_ids = soldUnits.map((unit) => unit.unit_code);\n\n      await connection.query(\n        `UPDATE products\n         SET quantity = quantity - ?\n         WHERE id = ?\n         AND branch_id = ?`,\n        [saleItem.quantity, saleItem.product_id, branchId]\n      );\n    }"""
     create_part = replace_once(create_part, old_loop, new_loop, "atomic sale item/unit commit loop")
-
     path.write_text(create_part + marker + rest, encoding="utf-8")
 
 
@@ -64,62 +122,54 @@ def patch_new_sale_page():
         'import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";\nimport InventoryUnitScanner from "../components/InventoryUnitScanner";\n',
         "New Sale scanner import",
     )
-
+    text = replace_once(
+        text,
+        'const response = await axiosClient.get("/products");',
+        'const response = await axiosClient.get("/inventory-traceability/sale-products");',
+        "New Sale traceability catalogue",
+    )
     text = replace_once(
         text,
         """        {\n          ...product,\n          quantity: requestedQuantity,\n        },""",
         """        {\n          ...product,\n          quantity: requestedQuantity,\n          unit_ids: [],\n        },""",
         "new cart item unit list",
     )
-
     text = replace_once(
         text,
         """          ? {\n              ...item,\n              quantity: cleanQuantity,\n            }\n          : item""",
         """          ? {\n              ...item,\n              quantity: cleanQuantity,\n              unit_ids: Array.isArray(item.unit_ids)\n                ? item.unit_ids.slice(0, cleanQuantity)\n                : [],\n            }\n          : item""",
         "cart quantity trims unit IDs",
     )
-
     text = replace_once(
         text,
         """    if (cart.length === 0) {\n      setError(\"Add at least one item to the sale.\");\n      return;\n    }\n\n    const discount = Number(discountAmount || 0);""",
         """    if (cart.length === 0) {\n      setError(\"Add at least one item to the sale.\");\n      return;\n    }\n\n    const incompleteSerializedItem = cart.find((item) => {\n      const serialized = String(item.inventory_tracking_mode || \"quantity\").toLowerCase() === \"serialized\";\n      const enforced = String(item.inventory_traceability_state || \"off\").toLowerCase() === \"enforced\";\n      return serialized && enforced && Number(item.quantity) !== (item.unit_ids || []).length;\n    });\n    if (incompleteSerializedItem) {\n      setError(\n        `${incompleteSerializedItem.name} requires exactly ${incompleteSerializedItem.quantity} verified physical unit ID${Number(incompleteSerializedItem.quantity) === 1 ? \"\" : \"s\"} before checkout.`\n      );\n      return;\n    }\n\n    const discount = Number(discountAmount || 0);""",
         "frontend enforced-unit completeness check",
     )
-
     text = replace_once(
         text,
         """        items: cart.map((item) => ({\n          product_id: item.id,\n          quantity: item.quantity,\n        })),""",
         """        items: cart.map((item) => ({\n          product_id: item.id,\n          quantity: item.quantity,\n          unit_ids: Array.isArray(item.unit_ids) ? item.unit_ids : [],\n        })),""",
         "sale payload unit IDs",
     )
-
     text = replace_once(
         text,
         """                {cart.map((item) => {\n                  const lineTotal =\n                    Number(item.selling_price) * Number(item.quantity);\n\n                  return (""",
         """                {cart.map((item) => {\n                  const lineTotal =\n                    Number(item.selling_price) * Number(item.quantity);\n                  const serializedItem =\n                    String(item.inventory_tracking_mode || \"quantity\").toLowerCase() === \"serialized\";\n                  const unitIdsRequired =\n                    serializedItem &&\n                    String(item.inventory_traceability_state || \"off\").toLowerCase() === \"enforced\";\n\n                  return (""",
         "cart traceability policy variables",
     )
-
     text = replace_once(
         text,
         """                      <button\n                        type=\"button\"\n                        className=\"small-danger\"\n                        onClick={() => removeFromCart(item.id)}\n                      >\n                        Remove\n                      </button>\n                    </div>""",
         """                      <button\n                        type=\"button\"\n                        className=\"small-danger\"\n                        onClick={() => removeFromCart(item.id)}\n                      >\n                        Remove\n                      </button>\n\n                      {serializedItem ? (\n                        <div style={{ gridColumn: \"1 / -1\" }}>\n                          <InventoryUnitScanner\n                            product={item}\n                            requiredCount={item.quantity}\n                            selectedUnitCodes={item.unit_ids || []}\n                            required={unitIdsRequired}\n                            onChange={(unitIds) =>\n                              setCart((current) =>\n                                current.map((cartItem) =>\n                                  Number(cartItem.id) === Number(item.id)\n                                    ? { ...cartItem, unit_ids: unitIds }\n                                    : cartItem\n                                )\n                              )\n                            }\n                          />\n                        </div>\n                      ) : null}\n                    </div>""",
         "cart serialized scanner",
     )
-
     path.write_text(text, encoding="utf-8")
 
 
 def restore_workflow_and_cleanup():
     workflow = ROOT / ".github/workflows/inventory-loss-prevention-feature.yml"
-    previous = subprocess.run(
-        ["git", "show", "HEAD^:.github/workflows/inventory-loss-prevention-feature.yml"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    workflow.write_text(previous, encoding="utf-8")
+    workflow.write_text(ORIGINAL_WORKFLOW, encoding="utf-8")
     this_file = Path(__file__)
     this_file.unlink()
     try:

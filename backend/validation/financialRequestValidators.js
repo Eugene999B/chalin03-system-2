@@ -1,5 +1,8 @@
 const core = require("./financialRequestValidatorsCore");
 
+// Compatibility note: the legacy sanitized sale contract still owns fields such as
+// "customer_id" and remains byte-for-byte authoritative unless physical unit IDs
+// are explicitly supplied on one or more sale items.
 const INVENTORY_UNIT_CODE_PATTERN = /^[A-Z0-9]{3,12}-[A-HJ-NP-Z2-9]{8}$/;
 
 function unitError(field, message, code) {
@@ -15,14 +18,26 @@ function normalizeUnitIds(value, { itemIndex, quantity }) {
     return {
       ok: false,
       unit_ids: [],
-      errors: [unitError(field, "Physical inventory unit IDs must be provided as a list.", "INVALID_INVENTORY_UNIT_IDS")],
+      errors: [
+        unitError(
+          field,
+          "Physical inventory unit IDs must be provided as a list.",
+          "INVALID_INVENTORY_UNIT_IDS"
+        ),
+      ],
     };
   }
   if (value.length > Number(quantity || 0)) {
     return {
       ok: false,
       unit_ids: [],
-      errors: [unitError(field, "Physical unit ID count cannot be greater than the sale quantity.", "INVENTORY_UNIT_COUNT_EXCEEDS_QUANTITY")],
+      errors: [
+        unitError(
+          field,
+          "Physical unit ID count cannot be greater than the sale quantity.",
+          "INVENTORY_UNIT_COUNT_EXCEEDS_QUANTITY"
+        ),
+      ],
     };
   }
 
@@ -76,9 +91,28 @@ function validateSaleCreateRequest(context = {}) {
   });
   if (!legacyResult.ok) return legacyResult;
 
+  const hasPhysicalUnitFields = rawItems.some(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      !Array.isArray(item) &&
+      Object.prototype.hasOwnProperty.call(item, "unit_ids")
+  );
+  if (!hasPhysicalUnitFields) {
+    return legacyResult;
+  }
+
   const unitErrors = [];
   const normalizedItems = legacyResult.value.body.items.map((item, index) => {
-    const normalized = normalizeUnitIds(rawItems[index]?.unit_ids, {
+    const rawItem = rawItems[index];
+    const hasUnitIds =
+      rawItem &&
+      typeof rawItem === "object" &&
+      !Array.isArray(rawItem) &&
+      Object.prototype.hasOwnProperty.call(rawItem, "unit_ids");
+    if (!hasUnitIds) return item;
+
+    const normalized = normalizeUnitIds(rawItem.unit_ids, {
       itemIndex: index,
       quantity: item.quantity,
     });
