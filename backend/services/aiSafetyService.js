@@ -4,6 +4,9 @@ const crypto = require("crypto");
 
 const MAX_PROMPT_CHARACTERS = 32000;
 const MAX_PROVIDER_MESSAGES = 100;
+const MAX_PROVIDER_CONTEXT_CHARACTERS = 240000;
+const MAX_PROVIDER_ESSENTIAL_MESSAGE_CHARACTERS = 24000;
+const MIN_PROVIDER_PARTIAL_HISTORY_CHARACTERS = 2000;
 const MAX_PROVIDER_OUTPUT_CHARACTERS = 120000;
 const MAX_SAFE_SUMMARY_CHARACTERS = 800;
 
@@ -154,6 +157,95 @@ function inspectPrompt(value, { allowHighRiskDiscussion = true } = {}) {
   });
 }
 
+function truncateProviderContent(content, maximum) {
+  const text = String(content || "");
+  const safeMaximum = Math.max(256, Number(maximum) || MAX_PROVIDER_ESSENTIAL_MESSAGE_CHARACTERS);
+  if (text.length <= safeMaximum) return text;
+  const marker = "\n[Transport compacted: lower-priority content omitted.]";
+  return `${text.slice(0, Math.max(1, safeMaximum - marker.length))}${marker}`;
+}
+
+function providerMessageCharacters(messages = []) {
+  return (Array.isArray(messages) ? messages : []).reduce(
+    (sum, message) => sum + String(message?.content || "").length,
+    0
+  );
+}
+
+function compactSanitizedProviderMessages(
+  messages = [],
+  { maximumCharacters = MAX_PROVIDER_CONTEXT_CHARACTERS } = {}
+) {
+  const source = Array.isArray(messages) ? messages : [];
+  const maximum = Math.max(32000, Number(maximumCharacters) || MAX_PROVIDER_CONTEXT_CHARACTERS);
+  if (providerMessageCharacters(source) <= maximum) return source;
+
+  let latestUserIndex = -1;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    if (source[index]?.role === "user") {
+      latestUserIndex = index;
+      break;
+    }
+  }
+
+  const essentialIndexes = new Set();
+  source.forEach((message, index) => {
+    if (["system", "tool"].includes(message?.role)) essentialIndexes.add(index);
+  });
+  if (latestUserIndex >= 0) essentialIndexes.add(latestUserIndex);
+
+  const essentialCount = Math.max(1, essentialIndexes.size);
+  const latestUserLength = latestUserIndex >= 0
+    ? String(source[latestUserIndex]?.content || "").length
+    : 0;
+  const otherEssentialCount = Math.max(1, essentialCount - (latestUserIndex >= 0 ? 1 : 0));
+  const essentialAllowance = Math.max(
+    4000,
+    Math.min(
+      MAX_PROVIDER_ESSENTIAL_MESSAGE_CHARACTERS,
+      Math.floor((maximum - Math.min(latestUserLength, MAX_PROMPT_CHARACTERS)) / otherEssentialCount)
+    )
+  );
+
+  const selected = new Map();
+  let usedCharacters = 0;
+
+  for (const index of [...essentialIndexes].sort((a, b) => a - b)) {
+    const message = source[index];
+    const content = index === latestUserIndex
+      ? message.content
+      : truncateProviderContent(message.content, essentialAllowance);
+    const compact = Object.freeze({ role: message.role, content });
+    selected.set(index, compact);
+    usedCharacters += content.length;
+  }
+
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    if (selected.has(index)) continue;
+    const message = source[index];
+    if (!["user", "assistant"].includes(message?.role)) continue;
+    const remaining = maximum - usedCharacters;
+    if (remaining <= 0) break;
+    if (message.content.length <= remaining) {
+      selected.set(index, message);
+      usedCharacters += message.content.length;
+      continue;
+    }
+    if (remaining >= MIN_PROVIDER_PARTIAL_HISTORY_CHARACTERS) {
+      const content = truncateProviderContent(message.content, remaining);
+      selected.set(index, Object.freeze({ role: message.role, content }));
+      usedCharacters += content.length;
+    }
+    break;
+  }
+
+  return Object.freeze(
+    [...selected.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, message]) => message)
+  );
+}
+
 function sanitizeProviderMessages(messages) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new AiSafetyError("At least one AI message is required.", {
@@ -167,7 +259,7 @@ function sanitizeProviderMessages(messages) {
     );
   }
 
-  return messages.map((message, index) => {
+  const sanitized = messages.map((message, index) => {
     const role = String(message?.role || "").trim().toLowerCase();
     if (!["system", "user", "assistant", "tool"].includes(role)) {
       throw new AiSafetyError(
@@ -192,6 +284,8 @@ function sanitizeProviderMessages(messages) {
     const redacted = redactSensitiveText(content);
     return Object.freeze({ role, content: redacted.text });
   });
+
+  return compactSanitizedProviderMessages(sanitized);
 }
 
 function validateProviderOutput(value) {
@@ -234,16 +328,21 @@ module.exports = {
   AiSafetyError,
   HIGH_RISK_ACTION_PATTERNS,
   MAX_PROMPT_CHARACTERS,
+  MAX_PROVIDER_CONTEXT_CHARACTERS,
+  MAX_PROVIDER_ESSENTIAL_MESSAGE_CHARACTERS,
   MAX_PROVIDER_MESSAGES,
   MAX_PROVIDER_OUTPUT_CHARACTERS,
   PROMPT_INJECTION_PATTERNS,
   REDACTION_PATTERNS,
   SECRET_REQUEST_PATTERNS,
   cleanText,
+  compactSanitizedProviderMessages,
   findPatternKeys,
   hashText,
   inspectPrompt,
+  providerMessageCharacters,
   redactSensitiveText,
   sanitizeProviderMessages,
+  truncateProviderContent,
   validateProviderOutput,
 };
