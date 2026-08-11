@@ -150,7 +150,10 @@ for (const secureRoot of [
 assert.match(interactionSafety, /document\.addEventListener\("click", handleSecureApplicationClick, true\)/);
 assert.match(interactionSafety, /event\.preventDefault\(\)/);
 assert.match(interactionSafety, /event\.stopImmediatePropagation\(\)/);
-assert.match(interactionSafety, /window\.location\.href = destination\.href/);
+assert.match(interactionSafety, /function secureApplicationDestination\(destination\)/);
+assert.match(interactionSafety, /destination\.pathname !== "\/login"/);
+assert.match(interactionSafety, /target\.pathname = "\/staff"/);
+assert.match(interactionSafety, /window\.location\.href = secureApplicationDestination\(destination\)/);
 assert.match(interactionSafety, /destination\.origin !== window\.location\.origin/);
 assert.doesNotMatch(interactionSafety, /localStorage|sessionStorage|Bearer|Authorization/);
 assert.match(interactionSafetyCss, /\.c1-signal-dock/);
