@@ -17,6 +17,7 @@ const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
   "mining.operations_snapshot",
   "mining.stock_fuel_health",
   "mining.production_cost_health",
+  "equipment_hire.performance_diagnostics",
   "equipment_hire.operations_snapshot",
   "equipment_hire.fleet_health",
   "equipment_hire.receivables_health",
@@ -46,6 +47,10 @@ const TOOL_HINTS = Object.freeze([
   Object.freeze({
     key: "equipment_finance.portfolio_health",
     pattern: /\b(installment|finance portfolio|financed equipment|portfolio health)\b/i,
+  }),
+  Object.freeze({
+    key: "equipment_hire.performance_diagnostics",
+    pattern: /\b(?:equipment hire performance|hire performance|hire underperform|hire commercial performance|billing lag|billing pressure|cash conversion|closure backlog|return backlog|why\s+(?:is|are|was|were)[^?]*(?:hire|fleet|collection|receivable|billing|invoice|quotation|contract|revenue)|hire revenue (?:low|down)|hire collections? (?:low|down))\b/i,
   }),
   Object.freeze({
     key: "equipment_hire.fleet_health",
@@ -97,6 +102,7 @@ const WORKSPACE_DEFAULT_TOOLS = Object.freeze({
   spare_parts: Object.freeze(["spare_parts.operations_snapshot"]),
   mining: Object.freeze(["mining.operations_snapshot"]),
   equipment_hire: Object.freeze([
+    "equipment_hire.performance_diagnostics",
     "equipment_hire.operations_snapshot",
     "equipment_finance.portfolio_health",
   ]),
@@ -359,11 +365,47 @@ function composeMiningPerformanceAnswer(item) {
   ].join("\n\n");
 }
 
+function composeHirePerformanceAnswer(item) {
+  const data = parseEvidenceJson(item?.excerpt);
+  if (!data?.performance_view || !Array.isArray(data?.drivers)) return null;
+  const view = data.performance_view;
+  const locationName = clean(
+    data?.scope?.hire_location_name || data?.scope?.hire_location_code || "",
+    120
+  );
+  const location = locationName ? ` for ${locationName}` : "";
+  const fleetAvailability = view.fleet_availability_percent == null
+    ? "unavailable"
+    : `${Number(view.fleet_availability_percent).toFixed(2)}%`;
+  const onHire = view.fleet_on_hire_percent == null
+    ? "unavailable"
+    : `${Number(view.fleet_on_hire_percent).toFixed(2)}%`;
+  const driverLines = data.drivers.slice(0, 7).map((driver, index) => {
+    const title = clean(driver.key || driver.category || "driver", 120).replace(/_/g, " ");
+    const explanation = clean(driver.explanation || "", 800);
+    return `${index + 1}. ${title}: ${explanation} [${item.citation}]`;
+  });
+  return [
+    `The live Equipment Hire performance diagnosis${location} shows ${Number(view.total_assets || 0).toLocaleString("en-GH")} fleet asset(s), ${Number(view.assets_on_hire || 0).toLocaleString("en-GH")} on Hire, ${Number(view.maintenance_or_breakdown_assets || 0).toLocaleString("en-GH")} in maintenance/breakdown, fleet availability of ${fleetAvailability}, and fleet-on-Hire share of ${onHire}. [${item.citation}]`,
+    `Commercially, the governed aggregate shows ${formatMoney(view.open_quotation_value)} in open quotation pipeline, ${formatMoney(view.invoiced_amount)} billed on non-void invoices, ${formatMoney(view.paid_amount)} collected, ${formatMoney(view.outstanding_amount)} outstanding and ${formatMoney(view.overdue_amount)} overdue. Collection rate: ${Number(view.collection_rate_percent || 0).toFixed(2)}%. [${item.citation}]`,
+    `Billing/closure controls: ${Number(view.approved_uninvoiced_work_logs || 0)} approved uninvoiced work log(s), ${Number(view.returns_due_or_incomplete || 0)} return(s) due/incomplete, and ${Number(view.returned_pending_closure || 0)} returned contract(s) pending closure. [${item.citation}]`,
+    "Main evidence-backed drivers:",
+    ...driverLines,
+    `Evidence boundary: ${clean(data?.certainty?.warning || "This is Equipment Hire commercial and operating evidence, not a certified profit calculation.", 900)} [${item.citation}]`,
+  ].join("\n\n");
+}
+
 function composeEvidenceAnswer(messages = []) {
   const evidence = evidenceFromMessages(messages);
   if (evidence.length === 0) {
     return "I do not have enough approved live CHALIN evidence to answer that reliably. I will not guess or substitute an unrelated workspace snapshot.";
   }
+
+  const hirePerformance = evidence.find((item) =>
+    /equipment hire commercial and fleet performance diagnostics/i.test(item.heading)
+  );
+  const directHirePerformanceAnswer = composeHirePerformanceAnswer(hirePerformance);
+  if (directHirePerformanceAnswer) return directHirePerformanceAnswer;
 
   const miningPerformance = evidence.find((item) =>
     /mining site performance diagnostics/i.test(item.heading)
@@ -447,6 +489,16 @@ function composePublicSafeSystemAnswer(messages = []) {
       "For performance questions I separate output pressure, recorded operating expense per production unit, equipment working/idle/breakdown time, fuel/stockpile constraints, dispatch flow and pending control/safety issues. Production and dispatch are related but different measures, so a gap is not automatically loss.",
       "",
       "The current governed Mining intelligence does not expose Mining revenue or certified profit. I can explain production and operating efficiency from the available evidence, but I should not invent a profit figure. For current site figures I must use the authorized Mining live tools.",
+    ].join("\n");
+  }
+
+  if (/\b(?:equipment hire|hire operations|hire contract|hire quotation|hire fleet|hire invoice|hire receivable|rental fleet)\b/.test(question)) {
+    return [
+      "CHALIN Equipment Hire is a location-scoped commercial and fleet workflow: Customer → Enquiry → Fleet Availability → Quotation → Contract → Asset Assignment/Dispatch → Work Logs → Invoice/Payment → Return → Closure Review.",
+      "",
+      "For performance questions I separate pipeline from realized business, fleet capacity/reliability from billing, and billed value from cash collection. Open quotation value is pipeline, invoice totals are billed commercial value, payments are collections, and outstanding/overdue balances are receivables. Approved uninvoiced work is a billing-review signal, not automatic lost revenue.",
+      "",
+      "The current governed Hire snapshot does not provide a complete Hire cost model or certified profit. I can diagnose fleet, billing, collection and closure pressure from authorized live evidence, but I should not invent profit from quotations, invoices, payments or fleet activity.",
     ].join("\n");
   }
 
@@ -596,6 +648,7 @@ module.exports = {
   chooseLocalReadTool,
   collectReadableFacts,
   composeEvidenceAnswer,
+  composeHirePerformanceAnswer,
   composeMiningPerformanceAnswer,
   composePublicSafeGeneralAnswer,
   composePublicSafeSocialAnswer,
