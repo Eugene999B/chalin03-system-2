@@ -52,19 +52,34 @@ WHERE inventory_tracking_mode NOT IN ('quantity', 'batch', 'serialized')
    OR inventory_risk_tier NOT IN ('standard', 'elevated', 'high', 'critical')
    OR inventory_traceability_state NOT IN ('off', 'setup', 'enforced');
 
+-- Exact-ID enforcement is valid only for serialized products. The application
+-- separately requires full physical identity reconciliation when enforcement is
+-- enabled for the first time. After activation, legitimate lifecycle states such
+-- as sold, in_transit and returned_quarantine mean a read-only verifier must not
+-- require every enforced identity to remain active forever.
 SELECT
     COUNT(*) AS problem_count,
     CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
 FROM products
-WHERE inventory_tracking_mode = 'quantity'
-  AND inventory_traceability_state = 'enforced';
+WHERE inventory_traceability_state = 'enforced'
+  AND inventory_tracking_mode <> 'serialized';
 
--- Phase 1/2 safety: checkout enforcement has not been released yet.
 SELECT
     COUNT(*) AS problem_count,
     CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
 FROM products
-WHERE inventory_traceability_state = 'enforced';
+WHERE inventory_tracking_mode IN ('batch', 'serialized')
+  AND (inventory_product_code IS NULL OR TRIM(inventory_product_code) = '');
+
+SELECT
+    COUNT(*) AS problem_count,
+    CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
+FROM products
+WHERE inventory_traceability_state = 'enforced'
+  AND (
+      inventory_traceability_configured_by IS NULL
+      OR inventory_traceability_configured_at IS NULL
+  );
 
 SELECT
     COUNT(*) AS problem_count,
