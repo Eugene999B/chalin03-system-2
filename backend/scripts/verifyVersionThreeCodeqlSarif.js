@@ -29,6 +29,20 @@ const reviewedBypassFiles = new Set([
   "backend/services/operationalApprovalService.js",
 ]);
 
+// Inventory traceability intentionally supports both signed QR labels and manual
+// unit-code entry. CodeQL sees the input-format branch as a possible bypass even
+// though these /verify routes are read-only eligibility lookups and the actual
+// sale/return mutation revalidates exact unit identity inside a locked transaction.
+// Keep these exceptions fingerprint-pinned so a new scanner finding fails closed.
+// The receipt-number finding is likewise pinned: the Math.random suffix is a
+// public human-readable reference only; sale authority and the unit event source
+// identity are database IDs, not the receipt suffix.
+const reviewedInventorySarifFindings = new Set([
+  "js/insecure-randomness|backend/services/inventorySaleTraceabilityService.js|29a039d25ebabd6b:1|0",
+  "js/user-controlled-bypass|backend/routes/inventoryReturnScanRoutes.js|e1d48ba30e56c516:1|42",
+  "js/user-controlled-bypass|backend/routes/inventorySaleScanRoutes.js|7a34eaf3b7f5126a:1|5",
+]);
+
 // This compatibility service composes reviewed Finance routers onto the
 // equipment-sales router. Requests still enter through the global /api limiter
 // asserted below, so CodeQL's router-mount finding is the same reviewed API
@@ -65,6 +79,22 @@ function relatedLocationsFor(result) {
   return [...direct, ...flow].filter((location) => location.uri);
 }
 
+function inventoryFindingKey(result, ruleId, location) {
+  const fingerprints = result.partialFingerprints || {};
+  return [
+    ruleId,
+    location.uri,
+    String(fingerprints.primaryLocationLineHash || ""),
+    String(fingerprints.primaryLocationStartColumnFingerprint || ""),
+  ].join("|");
+}
+
+function isReviewedInventoryFinding(result, ruleId, location) {
+  return reviewedInventorySarifFindings.has(
+    inventoryFindingKey(result, ruleId, location)
+  );
+}
+
 for (const result of results) {
   const ruleId = String(result.ruleId || "unknown");
   const location = locationFor(result);
@@ -85,16 +115,25 @@ for (const result of results) {
   }
 
   if (ruleId === "js/insecure-randomness") {
-    const reviewedFallbackSource = relatedLocationsFor(result).some(
+    const related = relatedLocationsFor(result);
+    const reviewedFallbackSource = related.some(
       (source) =>
         source.uri === "backend/routes/equipmentCreditApplicationRoutes.js" &&
         source.line >= 150 &&
         source.line <= 170
     );
+    const reviewedInventoryReceiptReference =
+      isReviewedInventoryFinding(result, ruleId, location) &&
+      related.some(
+        (source) =>
+          source.uri === "backend/routes/saleRoutes.js" &&
+          source.line >= 145 &&
+          source.line <= 155
+      );
 
-    if (!reviewedFallbackSource) {
+    if (!reviewedFallbackSource && !reviewedInventoryReceiptReference) {
       violations.push(
-        `Insecure-randomness result appeared outside the one reviewed non-secret public document reference fallback at ${location.uri}:${location.line}`
+        `Insecure-randomness result appeared outside a reviewed non-secret public reference at ${location.uri}:${location.line}`
       );
     }
   }
@@ -111,10 +150,17 @@ for (const result of results) {
     }
   }
 
-  if (ruleId === "js/user-controlled-bypass" && !reviewedBypassFiles.has(location.uri)) {
-    violations.push(
-      `Authorization-bypass result appeared in an unreviewed file at ${location.uri}:${location.line}`
+  if (ruleId === "js/user-controlled-bypass") {
+    const reviewedInventoryScanner = isReviewedInventoryFinding(
+      result,
+      ruleId,
+      location
     );
+    if (!reviewedBypassFiles.has(location.uri) && !reviewedInventoryScanner) {
+      violations.push(
+        `Authorization-bypass result appeared in an unreviewed file at ${location.uri}:${location.line}`
+      );
+    }
   }
 
   if (ruleId === "js/regex/missing-regexp-anchor") {
@@ -149,6 +195,22 @@ const returnRoutesSource = fs.readFileSync(
 );
 const saleRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/saleRoutes.js"),
+  "utf8"
+);
+const inventoryReturnScanSource = fs.readFileSync(
+  path.join(root, "backend/routes/inventoryReturnScanRoutes.js"),
+  "utf8"
+);
+const inventorySaleScanSource = fs.readFileSync(
+  path.join(root, "backend/routes/inventorySaleScanRoutes.js"),
+  "utf8"
+);
+const inventoryReturnTraceabilitySource = fs.readFileSync(
+  path.join(root, "backend/services/inventoryReturnTraceabilityService.js"),
+  "utf8"
+);
+const inventorySaleTraceabilitySource = fs.readFileSync(
+  path.join(root, "backend/services/inventorySaleTraceabilityService.js"),
   "utf8"
 );
 const operationalApprovalServiceSource = fs.readFileSync(
@@ -227,6 +289,94 @@ assert.match(saleRoutesSource, /verifyIndependentApprover\(/);
 assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
+
+// The serialized sale scanner is a read-only lookup. Manual unit-code entry is
+// intentionally supported, but the route cannot mark inventory sold. The sale
+// transaction independently locks the selected identities and commits the exact
+// sale_id + sale_item_id association before product quantity changes commit.
+assert.match(
+  inventorySaleScanSource,
+  /router\.post\("\/verify", requireRole\("admin", "manager", "cashier"\)/
+);
+assert.match(inventorySaleScanSource, /unitCode = normalizeUnitCode\(input\)/);
+assert.match(inventorySaleScanSource, /FROM inventory_units u/);
+assert.match(inventorySaleScanSource, /same_store:/);
+assert.match(inventorySaleScanSource, /already_sold:/);
+assert.match(
+  inventorySaleScanSource,
+  /final_sale_validation_happens_inside_sale_transaction: true/
+);
+assert.doesNotMatch(
+  inventorySaleScanSource,
+  /\b(?:INSERT\s+INTO|UPDATE\s+[a-z_]|DELETE\s+FROM)\b/i
+);
+assert.match(inventorySaleTraceabilitySource, /FOR UPDATE/);
+assert.match(
+  inventorySaleTraceabilitySource,
+  /TRACEABILITY_SALE_UNIT_COMMIT_CONFLICT/
+);
+assert.match(inventorySaleTraceabilitySource, /sourceId: cleanSaleId/);
+assert.match(inventorySaleTraceabilitySource, /sale_id: cleanSaleId/);
+assert.match(inventorySaleTraceabilitySource, /sale_item_id: cleanSaleItemId/);
+assert.match(
+  saleRoutesSource,
+  /const saleTraceabilitySelections = await lockSaleTraceabilitySelections\(connection, \{[\s\S]*branchId,[\s\S]*saleItems/
+);
+assert.match(saleRoutesSource, /const saleId = saleResult\.insertId/);
+assert.match(saleRoutesSource, /await connection\.commit\(\)/);
+
+// The serialized return scanner is also read-only. Eligibility requires the
+// exact current store, receipt sale, product and sold state; the protected return
+// service locks and revalidates the selected identities before quarantine commit.
+assert.match(
+  inventoryReturnScanSource,
+  /router\.post\("\/verify", requireRole\("admin", "manager"\)/
+);
+assert.match(inventoryReturnScanSource, /unitCode = normalizeUnitCode\(input\)/);
+assert.match(inventoryReturnScanSource, /FROM inventory_units u/);
+assert.match(
+  inventoryReturnScanSource,
+  /eligible: sameStore && sameSale && sameProduct && sold/
+);
+assert.match(
+  inventoryReturnScanSource,
+  /return_requires_exact_sold_identity: true/
+);
+assert.doesNotMatch(
+  inventoryReturnScanSource,
+  /\b(?:INSERT\s+INTO|UPDATE\s+[a-z_]|DELETE\s+FROM)\b/i
+);
+assert.match(inventoryReturnTraceabilitySource, /FOR UPDATE/);
+assert.match(
+  inventoryReturnTraceabilitySource,
+  /TRACEABILITY_RETURN_UNIT_WRONG_SALE/
+);
+assert.match(
+  inventoryReturnTraceabilitySource,
+  /TRACEABILITY_RETURN_UNIT_WRONG_PRODUCT/
+);
+assert.match(
+  inventoryReturnTraceabilitySource,
+  /TRACEABILITY_RETURN_UNIT_WRONG_STORE/
+);
+assert.match(
+  inventoryReturnTraceabilitySource,
+  /TRACEABILITY_RETURN_UNIT_COMMIT_CONFLICT/
+);
+
+// The receipt-number suffix is a public display reference, not an authorization,
+// ownership or inventory-event identity. The authoritative sale identity is the
+// database insert ID, which is what serialized unit events use as sourceId.
+assert.match(
+  saleRoutesSource,
+  /function generateReceiptNumber\(prefix\)[\s\S]*Math\.random\(\)[\s\S]*return `\$\{prefix\}-\$\{year\}\$\{month\}\$\{day\}-\$\{hour\}\$\{minute\}\$\{second\}-\$\{random\}`/
+);
+assert.match(
+  saleRoutesSource,
+  /const receiptNumber = generateReceiptNumber\(settings\.receipt_prefix\)/
+);
+assert.match(saleRoutesSource, /const saleId = saleResult\.insertId/);
+assert.match(inventorySaleTraceabilitySource, /sourceId: cleanSaleId/);
 
 // Operational rejection is not an authorization bypass: the administrator has
 // already passed role, branch, self-approval and bcrypt checks. The user-controlled
