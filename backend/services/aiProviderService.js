@@ -14,6 +14,9 @@ const {
   productKnowledgeMessages,
   safePublicContinuityMessages,
 } = require("./aiProductKnowledgeService");
+const {
+  selectRelevantProviderTools,
+} = require("./aiProviderToolRoutingService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
@@ -381,6 +384,18 @@ async function generateProviderResponse({
       public_safe_general_turn: publicSafeGeneralTurn,
     };
   }
+
+  const toolRouting = selectRelevantProviderTools({
+    messages: effectiveMessages,
+    tools: effectiveTools,
+  });
+  effectiveTools = [...toolRouting.tools];
+  effectiveProviderContext = {
+    ...effectiveProviderContext,
+    provider_tool_routing_mode: toolRouting.mode,
+    provider_tool_original_count: toolRouting.original_count,
+    provider_tool_selected_count: toolRouting.selected_count,
+  };
 
   if (!selected && !providerKey) {
     selection = await resolveAiProviderSelection({
