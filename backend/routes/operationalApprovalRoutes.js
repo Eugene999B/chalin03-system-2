@@ -17,6 +17,8 @@ const {
   rejectOperationalRequest,
 } = require("../services/operationalApprovalService");
 
+const { lockReturnUnitSelection } = require("../services/inventoryReturnTraceabilityService");
+
 const router = express.Router();
 const ALLOWED_PAYMENT_TYPES = new Set(["cash", "momo", "bank", "credit", "mixed"]);
 const ALLOWED_REFUND_METHODS = new Set(["cash", "momo", "bank", "other"]);
@@ -147,6 +149,7 @@ async function createReturnRefundRequest(req, res) {
     const refundAmount = money(req.body?.refund_amount, -1);
     const refundMethod = cleanText(req.body?.refund_method, 30).toLowerCase();
     const refundReference = cleanText(req.body?.refund_reference, 180);
+    const unitIds = Array.isArray(req.body?.unit_ids) ? req.body.unit_ids : [];
 
     if (!branchId || !saleId || !productId || !quantity || !reason) {
       return res.status(400).json({
@@ -175,17 +178,21 @@ async function createReturnRefundRequest(req, res) {
       `SELECT si.product_id, si.product_name,
               SUM(si.quantity) AS quantity_sold,
               MAX(si.unit_price) AS unit_price,
+              MAX(p.inventory_tracking_mode) AS inventory_tracking_mode,
+              MAX(p.inventory_traceability_state) AS inventory_traceability_state,
+              MAX(p.inventory_product_code) AS inventory_product_code,
               COALESCE((
                 SELECT SUM(r.quantity)
                 FROM returns r
                 WHERE r.branch_id = ? AND r.sale_id = ? AND r.product_id = ?
               ), 0) AS quantity_returned
        FROM sale_items si
+       INNER JOIN products p ON p.id = si.product_id AND p.branch_id = ?
        WHERE si.sale_id = ? AND si.product_id = ?
        GROUP BY si.product_id, si.product_name
        LIMIT 1
        FOR UPDATE`,
-      [branchId, saleId, productId, saleId, productId]
+      [branchId, saleId, productId, branchId, saleId, productId]
     );
     const item = itemRows[0];
     if (!item) {
@@ -220,6 +227,19 @@ async function createReturnRefundRequest(req, res) {
         { statusCode: 409 }
       );
     }
+
+    const returnTraceabilitySelection = await lockReturnUnitSelection(connection, {
+      branchId,
+      saleId,
+      product: {
+        id: productId,
+        name: item.product_name,
+        inventory_tracking_mode: item.inventory_tracking_mode || "quantity",
+        inventory_traceability_state: item.inventory_traceability_state || "off",
+      },
+      quantity,
+      unitCodes: unitIds,
+    });
 
     const maximumRefund = Number(item.unit_price || 0) * quantity;
     if (refundAmount - maximumRefund > 0.009) {
@@ -257,6 +277,7 @@ async function createReturnRefundRequest(req, res) {
       refund_amount: refundAmount,
       refund_method: refundMethod,
       refund_reference: refundReference,
+      unit_ids: returnTraceabilitySelection.unit_codes,
     };
 
     const detail = [
@@ -264,6 +285,9 @@ async function createReturnRefundRequest(req, res) {
       `${item.product_name}: ${quantity} unit(s)`,
       `Refund GHS ${refundAmount.toFixed(2)} by ${refundMethod.toUpperCase()}`,
       refundReference ? `Reference ${refundReference}` : "",
+      returnTraceabilitySelection.unit_codes.length
+        ? `Physical IDs ${returnTraceabilitySelection.unit_codes.join(", ")}`
+        : "",
       `Requested by ${req.user?.full_name || req.user?.username || `user ${getUserId(req)}`}`,
       `Reason: ${reason}`,
       "No stock or money record changes until an administrator approves.",
