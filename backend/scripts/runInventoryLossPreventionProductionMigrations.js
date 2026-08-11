@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const mysql = require("mysql2/promise");
@@ -7,31 +8,66 @@ const RELEASE_CONFIRMATION = "20260811_INVENTORY_LOSS_PREVENTION_TRACEABILITY";
 const MIGRATION_LOCK_NAME =
   "chalin03:production-migrations:20260811-inventory-traceability";
 
+const APPROVED_SQL_ARTIFACTS = Object.freeze({
+  traceabilityFoundationMigration: Object.freeze({
+    filename: "20260810_inventory_traceability_foundation.sql",
+    gitBlobSha: "22b66097a919d44cf0221212aca170d47a4ba299",
+  }),
+  traceabilityFoundationVerifier: Object.freeze({
+    filename: "20260810_inventory_traceability_foundation_verify.sql",
+    gitBlobSha: "48aa76b615c28ddecd474496610069500cacf720",
+  }),
+  lossDetectionFoundationMigration: Object.freeze({
+    filename: "20260810_inventory_loss_detection_foundation.sql",
+    gitBlobSha: "6ff8f7197b6a0e70bbf77a381b8f2cd2c0dfd9df",
+  }),
+  lossDetectionFoundationVerifier: Object.freeze({
+    filename: "20260810_inventory_loss_detection_foundation_verify.sql",
+    gitBlobSha: "5ce6b41f6c15bd30396de7b26498fdf88faf092a",
+  }),
+  countSnapshotMigration: Object.freeze({
+    filename: "20260810_inventory_count_snapshot_hardening.sql",
+    gitBlobSha: "1a24c9c59a566b9731fe86a9cdb41335d9e23186",
+  }),
+  countSnapshotVerifier: Object.freeze({
+    filename: "20260810_inventory_count_snapshot_hardening_verify.sql",
+    gitBlobSha: "9c5657d53188dd7691a18a5c07a086b72b2d8cce",
+  }),
+  transferTraceabilityMigration: Object.freeze({
+    filename: "20260811_inventory_transfer_traceability.sql",
+    gitBlobSha: "c4e042f0c50cd990e59bbda1026870e18e97e7a0",
+  }),
+  transferTraceabilityVerifier: Object.freeze({
+    filename: "20260811_inventory_transfer_traceability_verify.sql",
+    gitBlobSha: "662159125b5ac9beac3aea1a3a025c01c49bbe4d",
+  }),
+});
+
 const PRODUCTION_MIGRATION_PLAN = Object.freeze([
-  {
+  Object.freeze({
     name: "20260810_inventory_traceability_foundation",
-    migration: "20260810_inventory_traceability_foundation.sql",
-    verifier: "20260810_inventory_traceability_foundation_verify.sql",
+    migrationArtifact: "traceabilityFoundationMigration",
+    verifierArtifact: "traceabilityFoundationVerifier",
     migrationRecord: "20260810_inventory_traceability_foundation",
-  },
-  {
+  }),
+  Object.freeze({
     name: "20260810_inventory_loss_detection_foundation",
-    migration: "20260810_inventory_loss_detection_foundation.sql",
-    verifier: "20260810_inventory_loss_detection_foundation_verify.sql",
+    migrationArtifact: "lossDetectionFoundationMigration",
+    verifierArtifact: "lossDetectionFoundationVerifier",
     migrationRecord: "20260810_inventory_loss_detection_foundation",
-  },
-  {
+  }),
+  Object.freeze({
     name: "20260810_inventory_count_snapshot_hardening",
-    migration: "20260810_inventory_count_snapshot_hardening.sql",
-    verifier: "20260810_inventory_count_snapshot_hardening_verify.sql",
+    migrationArtifact: "countSnapshotMigration",
+    verifierArtifact: "countSnapshotVerifier",
     migrationRecord: "20260810_inventory_count_snapshot_hardening",
-  },
-  {
+  }),
+  Object.freeze({
     name: "20260811_inventory_transfer_traceability",
-    migration: "20260811_inventory_transfer_traceability.sql",
-    verifier: "20260811_inventory_transfer_traceability_verify.sql",
+    migrationArtifact: "transferTraceabilityMigration",
+    verifierArtifact: "transferTraceabilityVerifier",
     migrationRecord: "20260811_inventory_transfer_traceability",
-  },
+  }),
 ]);
 
 function booleanValue(value) {
@@ -142,12 +178,64 @@ function migrationDirectory() {
   return path.resolve(__dirname, "../../database/migrations");
 }
 
-function readSqlFile(filename) {
-  const resolved = path.join(migrationDirectory(), filename);
-  if (!fs.existsSync(resolved)) {
-    throw new Error(`Approved Inventory SQL file is missing: ${resolved}`);
+function gitBlobSha(contentBuffer) {
+  if (!Buffer.isBuffer(contentBuffer)) {
+    throw new TypeError("gitBlobSha requires a Buffer.");
   }
-  return fs.readFileSync(resolved, "utf8");
+  const header = Buffer.from(`blob ${contentBuffer.length}\0`, "utf8");
+  return crypto
+    .createHash("sha1")
+    .update(header)
+    .update(contentBuffer)
+    .digest("hex");
+}
+
+function assertApprovedBlobIdentity(contentBuffer, expectedSha, label) {
+  if (!/^[0-9a-f]{40}$/.test(String(expectedSha || ""))) {
+    throw new Error(`${label} has an invalid approved Git blob SHA.`);
+  }
+  const actualSha = gitBlobSha(contentBuffer);
+  if (actualSha !== expectedSha) {
+    throw new Error(
+      `${label} content changed after release review. Expected Git blob ${expectedSha}, received ${actualSha}. Review and repin before migration.`
+    );
+  }
+  return actualSha;
+}
+
+function readApprovedSqlArtifact(artifactKey) {
+  if (!Object.prototype.hasOwnProperty.call(APPROVED_SQL_ARTIFACTS, artifactKey)) {
+    throw new Error(`Unknown Inventory SQL artifact: ${artifactKey}`);
+  }
+  const artifact = APPROVED_SQL_ARTIFACTS[artifactKey];
+  const filename = artifact.filename;
+  if (
+    path.basename(filename) !== filename ||
+    !/^[A-Za-z0-9._-]+\.sql$/.test(filename)
+  ) {
+    throw new Error(`Approved Inventory SQL filename is unsafe: ${filename}`);
+  }
+
+  const approvedRoot = fs.realpathSync(migrationDirectory());
+  const candidatePath = path.resolve(approvedRoot, filename);
+  if (path.dirname(candidatePath) !== approvedRoot) {
+    throw new Error(`Approved Inventory SQL path escaped its directory: ${filename}`);
+  }
+  if (!fs.existsSync(candidatePath)) {
+    throw new Error(`Approved Inventory SQL file is missing: ${filename}`);
+  }
+  const fileStat = fs.lstatSync(candidatePath);
+  if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+    throw new Error(`Approved Inventory SQL artifact must be a regular file: ${filename}`);
+  }
+  const realPath = fs.realpathSync(candidatePath);
+  if (path.dirname(realPath) !== approvedRoot) {
+    throw new Error(`Approved Inventory SQL real path escaped its directory: ${filename}`);
+  }
+
+  const contentBuffer = fs.readFileSync(realPath);
+  assertApprovedBlobIdentity(contentBuffer, artifact.gitBlobSha, filename);
+  return contentBuffer.toString("utf8");
 }
 
 async function executeStatements(connection, statements, labelText) {
@@ -245,7 +333,9 @@ async function applyPlanItem(connection, planItem, expectedDatabase) {
 
   if (priorMarkerCount === 0) {
     console.log(`Applying ${planItem.name}...`);
-    const migrationStatements = splitSqlScript(readSqlFile(planItem.migration));
+    const migrationStatements = splitSqlScript(
+      readApprovedSqlArtifact(planItem.migrationArtifact)
+    );
     await executeStatements(
       connection,
       migrationStatements,
@@ -265,7 +355,9 @@ async function applyPlanItem(connection, planItem, expectedDatabase) {
   }
 
   console.log(`Verifying ${planItem.name}...`);
-  const verifierStatements = splitSqlScript(readSqlFile(planItem.verifier));
+  const verifierStatements = splitSqlScript(
+    readApprovedSqlArtifact(planItem.verifierArtifact)
+  );
   const verifierResults = await executeStatements(
     connection,
     verifierStatements,
@@ -348,13 +440,17 @@ if (require.main === module) {
 }
 
 module.exports = {
+  APPROVED_SQL_ARTIFACTS,
   MIGRATION_LOCK_NAME,
   PRODUCTION_MIGRATION_PLAN,
   RELEASE_CONFIRMATION,
   applyPlanItem,
+  assertApprovedBlobIdentity,
   assertReleaseGates,
   connectionOptions,
+  gitBlobSha,
   migrationMarkerCount,
+  readApprovedSqlArtifact,
   runInventoryLossPreventionProductionMigrations,
   splitSqlScript,
   validateVerifierResults,
