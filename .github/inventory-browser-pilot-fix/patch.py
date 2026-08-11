@@ -18,6 +18,12 @@ pilot = replace_once(
     '''  await expect(\n    singleReturn.locator(".inventory-unit-scanner__message")\n  ).toContainText(`${UNIT_CODE} verified against this receipt`);\n''',
     "return scanner strict selector",
 )
+pilot = replace_once(
+    pilot,
+    '  await expect(page.getByText("CNT-PILOT-77")).toBeVisible();\n',
+    '''  await expect(\n    page.getByRole("heading", { name: "CNT-PILOT-77", exact: true })\n  ).toBeVisible();\n''',
+    "active blind count strict selector",
+)
 pilot_path.write_text(pilot, encoding="utf-8")
 
 returns_path = ROOT / "frontend/src/pages/ReturnsPage.jsx"
@@ -46,4 +52,4 @@ contract = replace_once(
 )
 contract_path.write_text(contract, encoding="utf-8")
 
-print("Inventory browser selector and persistent Returns success-message fixes applied.")
+print("Inventory browser selectors and persistent Returns success-message fixes applied.")
