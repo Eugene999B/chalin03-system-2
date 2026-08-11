@@ -76,9 +76,9 @@ def replace_once(text, old, new, label):
 def patch_sale_route():
     path = ROOT / "backend/routes/saleRoutes.js"
     text = path.read_text(encoding="utf-8")
-    marker = "// GET /api/sales"
+    marker = '\n// GET /api/sales\nrouter.get("/", requireAuth, async (req, res) => {'
     if marker not in text:
-        raise SystemExit("sale route GET marker not found")
+        raise SystemExit("sale route list marker not found")
     create_part, rest = text.split(marker, 1)
 
     create_part = replace_once(
