@@ -116,7 +116,7 @@ function buildRequestBudget({ messages = [], tools = [], env = process.env } = {
 
   if (estimatedInputTokens >= config.request_token_limit) {
     throw new AiBudgetError(
-      "This AI request is too large for the configured transport budget.",
+      "CHALIN could not complete this request in one pass. The conversation is intact and can continue from the same topic.",
       {
         code: "AI_REQUEST_TOKEN_LIMIT_EXCEEDED",
         statusCode: 413,

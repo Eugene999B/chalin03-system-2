@@ -20,6 +20,10 @@ const {
 const {
   enrichPublicSafeMessagesWithWeb,
 } = require("./aiPublicWebSearchService");
+const {
+  appendAnswerComposerInstruction,
+  buildAnswerCompositionPlan,
+} = require("./aiAnswerComposerService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
@@ -406,13 +410,25 @@ async function generateProviderResponse({
   const toolRouting = selectRelevantProviderTools({
     messages: effectiveMessages,
     tools: effectiveTools,
+    workspaceCode: effectiveProviderContext.workspace_code || "",
   });
   effectiveTools = [...toolRouting.tools];
+
+  const answerComposition = buildAnswerCompositionPlan({
+    prompt: latestUserMessage(effectiveMessages),
+    taskUnderstanding: toolRouting.task_understanding,
+    reasoningGraph: toolRouting.reasoning_graph,
+    providerContext: effectiveProviderContext,
+  });
+  effectiveMessages = [...appendAnswerComposerInstruction(effectiveMessages, answerComposition)];
   effectiveProviderContext = {
     ...effectiveProviderContext,
     provider_tool_routing_mode: toolRouting.mode,
     provider_tool_original_count: toolRouting.original_count,
     provider_tool_selected_count: toolRouting.selected_count,
+    answer_composition_mode: answerComposition.mode,
+    answer_objective_count: answerComposition.objective_count,
+    answer_cross_domain: answerComposition.cross_domain === true,
   };
 
   if (!selected && !providerKey) {
@@ -460,6 +476,7 @@ async function generateProviderResponse({
       ...normalizeProviderResult(raw, key),
       latency_ms: Date.now() - started,
       provider_selection: safeProviderSelection(selection),
+      answer_composition: answerComposition,
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSafetyError) {
