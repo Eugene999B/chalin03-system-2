@@ -3,6 +3,10 @@
 const {
   renderSystemKnowledgeManifest,
 } = require("./aiSystemKnowledgeManifestService");
+const {
+  expertPackForPrompt,
+  renderExpertPack,
+} = require("./aiExpertPackService");
 
 const PUBLIC_SYSTEM_MAX_LENGTH = 16000;
 const MAX_PUBLIC_CONTINUITY_MESSAGES = 6;
@@ -91,11 +95,18 @@ function isSafePublicContinuityText(value) {
   return true;
 }
 
-function productKnowledgeInstruction() {
+function productKnowledgeInstruction(prompt = "") {
+  const pack = expertPackForPrompt(prompt);
+  const renderedPack = renderExpertPack(pack);
   return [
     "This is a CHALIN system/product/advisory reasoning turn. Use the static product context below and your general reasoning ability. Do not claim that static product context is a live database result. Answer naturally like a strong general-purpose AI assistant; interpret the user's intent instead of dumping fields or policy text. Preserve the immediately relevant safe conversation thread when supplied. Answer directly first, then add only the detail that helps.",
     CHALIN_PRODUCT_CONTEXT,
-  ].join("\n\n");
+    renderedPack
+      ? `Relevant source-derived expert knowledge for this question:\n${renderedPack}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function latestUserPrompt(messages = []) {
@@ -139,7 +150,7 @@ function productKnowledgeMessages(messages = []) {
   // public-safe tail. The moment recent history looks live/private, continuity
   // stops so private CHALIN records cannot cross the public provider boundary.
   return Object.freeze([
-    Object.freeze({ role: "system", content: productKnowledgeInstruction() }),
+    Object.freeze({ role: "system", content: productKnowledgeInstruction(prompt) }),
     ...safePublicContinuityMessages(messages),
     Object.freeze({ role: "user", content: prompt }),
   ]);
