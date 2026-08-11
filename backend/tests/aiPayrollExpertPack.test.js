@@ -56,12 +56,12 @@ test("Payroll expert pack captures the reviewed salary source-of-truth contract"
   assert.equal(pack.boundaries.expert_pack_is_product_knowledge_not_live_worker_data, true);
 });
 
-test("Payroll expert pack is selected only for Payroll/compensation product questions", () => {
+test("expert-pack routing keeps Payroll specific while routing Equipment Hire separately", () => {
   assert.equal(isPayrollExpertPrompt("How does CHALIN payroll work?"), true);
   assert.equal(isPayrollExpertPrompt("Explain salary changes in CHALIN"), true);
   assert.equal(isPayrollExpertPrompt("What does Audit Intelligence do?"), false);
   assert.equal(expertPackForPrompt("How does payroll work?")?.key, "people_employment_payroll");
-  assert.equal(expertPackForPrompt("Explain Equipment Hire"), null);
+  assert.equal(expertPackForPrompt("Explain Equipment Hire")?.key, "equipment_hire_operations");
 });
 
 test("deployment availability distinguishes verified design from this source tree", () => {
