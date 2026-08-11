@@ -45,6 +45,9 @@ const {
   listFeedback,
 } = require("../services/aiFeedbackService");
 const { runAiConversationTurn } = require("../services/aiOrchestratorService");
+const {
+  processConversationalAction,
+} = require("../services/aiConversationalActionService");
 const { listUsageSummary } = require("../services/aiUsageService");
 const { resolveAiScope } = require("../services/aiPermissionService");
 const { registerFoundationAiTools } = require("../ai-tools/foundationTools");
@@ -179,7 +182,7 @@ async function runPersonaChat({ req, persona }) {
     });
   }
 
-  const result = withConversationRollover(
+  const baseResult = withConversationRollover(
     await runAiConversationTurn({
       req,
       persona,
@@ -189,6 +192,15 @@ async function runPersonaChat({ req, persona }) {
     }),
     rollover
   );
+
+  const result = await processConversationalAction({
+    req,
+    persona,
+    message,
+    conversationKey: baseResult.conversation_key || conversationKey,
+    assistantMessageKey: baseResult.message_key,
+    result: baseResult,
+  });
 
   if (!contextual) {
     return productKnowledgeTurn && contextKey
