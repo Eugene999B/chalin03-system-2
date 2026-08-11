@@ -93,6 +93,12 @@ function candidateToolScore(tool, objective) {
   let tagMatches = 0;
   for (const need of needs) if (toolTags.has(need)) tagMatches += 1;
 
+  // When the server has identified a concrete evidence family, a tool must
+  // match at least one of those families. Generic words such as "snapshot" or
+  // "status" may rank an otherwise-useful read, but they must never allow a
+  // debt tool to satisfy an inventory objective (or another unrelated task).
+  if (needs.length > 0 && tagMatches === 0) return 0;
+
   const questionTokens = tokenize(objective.question);
   const toolTokens = new Set(tokenize(toolSearchText(tool)));
   let lexicalMatches = 0;
