@@ -328,6 +328,7 @@ test("Local customer 360 selects top ranking and preserves exact customer refere
   assert.equal(selected.input.mode, "top_customers");
   assert.equal(selected.input.limit, 5);
   assert.match(selected.input.start_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(selected.input.start_date, selected.input.end_date);
 
   const answer = composeCustomerCommercialAnswer({
     citation: "E1",
@@ -344,10 +345,12 @@ test("Local customer 360 selects top ranking and preserves exact customer refere
     { role: "assistant", content: answer },
     { role: "user", content: "What does he owe us?" },
   ];
-  assert.deepEqual(customerCommercialToolInput(followupMessages), {
-    mode: "customer_account",
-    customer_id: 11,
-  });
+  const followupInput = customerCommercialToolInput(followupMessages);
+  assert.equal(followupInput.mode, "customer_account");
+  assert.equal(followupInput.customer_id, 11);
+  assert.match(followupInput.start_date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(followupInput.start_date, followupInput.end_date);
+  assert.equal(followupInput.start_date, selected.input.start_date);
 
   const provider = new LocalCustomerAccountingGovernedProvider();
   const response = await provider.generate({
@@ -357,8 +360,8 @@ test("Local customer 360 selects top ranking and preserves exact customer refere
   });
   assert.equal(response.finish_reason, "local_read_only_tool");
   assert.equal(response.tool_calls[0].tool_key, tool.key);
-  assert.deepEqual(response.tool_calls[0].input, {
-    mode: "customer_account",
-    customer_id: 11,
-  });
+  assert.equal(response.tool_calls[0].input.mode, "customer_account");
+  assert.equal(response.tool_calls[0].input.customer_id, 11);
+  assert.equal(response.tool_calls[0].input.start_date, selected.input.start_date);
+  assert.equal(response.tool_calls[0].input.end_date, selected.input.end_date);
 });
