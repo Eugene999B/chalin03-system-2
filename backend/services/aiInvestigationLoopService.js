@@ -7,6 +7,9 @@ const { toolEvidenceTags } = require("./aiTaskPlannerService");
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const HARD_MAX_TOOL_ROUNDS = 4;
 const DEFAULT_MAX_PROVIDER_ROUNDS = DEFAULT_MAX_TOOL_ROUNDS + 1;
+const PROVIDER_TOOL_DESCRIPTION_LIMIT = 720;
+const PROVIDER_SCHEMA_DESCRIPTION_LIMIT = 180;
+const PROVIDER_SCHEMA_ARRAY_LIMIT = 64;
 
 class AiInvestigationLoopError extends Error {
   constructor(
@@ -77,24 +80,70 @@ function assertReadOnlyInvestigationTools(tools = []) {
   return true;
 }
 
-function plannerAwareReadTool(tool = {}) {
+function compactSchemaForProvider(value, key = "", depth = 0) {
+  if (value == null || typeof value !== "object") {
+    if (key === "description" && typeof value === "string") {
+      return value.slice(0, PROVIDER_SCHEMA_DESCRIPTION_LIMIT);
+    }
+    return value;
+  }
+
+  if (depth > 12) return undefined;
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, PROVIDER_SCHEMA_ARRAY_LIMIT)
+      .map((item) => compactSchemaForProvider(item, key, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+
+  const compact = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    if (["examples", "example", "$comment"].includes(childKey)) continue;
+    if (childKey === "description" && typeof childValue === "string") {
+      compact[childKey] = childValue.slice(0, PROVIDER_SCHEMA_DESCRIPTION_LIMIT);
+      continue;
+    }
+    const normalized = compactSchemaForProvider(childValue, childKey, depth + 1);
+    if (normalized !== undefined) compact[childKey] = normalized;
+  }
+  return compact;
+}
+
+function providerSafeReadTool(tool = {}) {
   const tags = toolEvidenceTags(tool);
-  const description = String(tool?.description || "").trim();
+  const description = String(tool?.description || tool?.title || tool?.key || "").trim();
   const tagHint = tags.length
     ? ` Planner evidence tags: ${tags.join(", ")}.`
     : " Planner evidence tags: general governed read.";
+  const inputSchema =
+    tool?.input_schema && typeof tool.input_schema === "object"
+      ? compactSchemaForProvider(tool.input_schema)
+      : { type: "object", properties: {}, additionalProperties: false };
+
+  // Provider transport intentionally receives only the contract needed to ask
+  // for a governed read. Permission, workspace, branch/site/location and
+  // execution metadata remain server-side in aiToolRegistry and are rechecked
+  // when a requested tool is executed.
   return Object.freeze({
-    ...tool,
-    description: `${description}${tagHint}`.trim().slice(0, 1000),
+    key: String(tool?.key || "").slice(0, 150),
+    title: String(tool?.title || tool?.key || "Governed CHALIN read").slice(0, 180),
+    description: `${description}${tagHint}`.trim().slice(0, PROVIDER_TOOL_DESCRIPTION_LIMIT),
+    risk_level: Math.max(0, Number(tool?.risk_level || 0)),
+    input_schema: Object.freeze(inputSchema),
     planner_evidence_tags: Object.freeze(tags),
   });
+}
+
+function plannerAwareReadTool(tool = {}) {
+  return providerSafeReadTool(tool);
 }
 
 function filterReadOnlyInvestigationTools(tools = []) {
   return Object.freeze(
     (Array.isArray(tools) ? tools : [])
       .filter((tool) => Number(tool?.risk_level || 0) <= 1)
-      .map(plannerAwareReadTool)
+      .map(providerSafeReadTool)
   );
 }
 
@@ -195,14 +244,19 @@ module.exports = {
   DEFAULT_MAX_PROVIDER_ROUNDS,
   DEFAULT_MAX_TOOL_ROUNDS,
   HARD_MAX_TOOL_ROUNDS,
+  PROVIDER_SCHEMA_ARRAY_LIMIT,
+  PROVIDER_SCHEMA_DESCRIPTION_LIMIT,
+  PROVIDER_TOOL_DESCRIPTION_LIMIT,
   assertReadOnlyInvestigationTools,
   assertToolRound,
   boundedInteger,
   canonicalJson,
+  compactSchemaForProvider,
   filterReadOnlyInvestigationTools,
   getInvestigationConfig,
   investigationPromptBlock,
   investigationSummary,
   plannerAwareReadTool,
+  providerSafeReadTool,
   toolCallIdentity,
 };
