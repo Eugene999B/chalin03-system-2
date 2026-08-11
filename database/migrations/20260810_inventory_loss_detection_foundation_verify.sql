@@ -53,7 +53,8 @@ SELECT
     COUNT(*) AS problem_count,
     CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
 FROM inventory_count_observations
-WHERE quantity_observed <= 0
+WHERE (observation_type = 'quantity_count' AND quantity_observed < 0)
+   OR (observation_type IN ('unit_scan', 'manual_unit_id') AND quantity_observed <= 0)
    OR observation_type NOT IN ('unit_scan', 'manual_unit_id', 'quantity_count')
    OR validation_status NOT IN ('accepted', 'duplicate', 'unexpected', 'wrong_product', 'wrong_store', 'invalid');
 
