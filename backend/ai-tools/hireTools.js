@@ -7,6 +7,9 @@ const {
   buildReceivablesHealth,
   loadHireIntelligence,
 } = require("../services/aiHireIntelligenceService");
+const {
+  buildHirePerformanceDiagnostics,
+} = require("../services/aiHirePerformanceDiagnosticsService");
 
 let registered = false;
 
@@ -21,6 +24,8 @@ function evidenceFor(viewKey, output) {
           ? "Equipment Hire fleet and utilization health"
           : viewKey === "receivables"
           ? "Equipment Hire receivables health"
+          : viewKey === "performance"
+          ? "Equipment Hire performance diagnostics"
           : "Equipment Hire operations snapshot",
       excerpt_text: JSON.stringify(output).slice(0, 10000),
       as_of_at: output.generated_at,
@@ -110,6 +115,22 @@ function registerHireAiTools(
     ],
     handler: async ({ context }) =>
       runView({ context, loader, projector: buildReceivablesHealth, viewKey: "receivables" }),
+  });
+
+  registry.register({
+    ...common,
+    key: "equipment_hire.performance_diagnostics",
+    title: "Equipment Hire performance diagnostics",
+    description:
+      "Explains read-only location performance using commercial pipeline, fleet readiness, work-to-invoice completeness, receivables/cash conversion, returns and closure controls. It does not invent certified Hire profit, revenue from quotations or time-based fleet utilization when the required cost/capacity evidence is absent.",
+    required_business_permissions: ["hire.reports.view"],
+    handler: async ({ context }) =>
+      runView({
+        context,
+        loader,
+        projector: buildHirePerformanceDiagnostics,
+        viewKey: "performance",
+      }),
   });
 
   if (registry === aiToolRegistry) registered = true;
