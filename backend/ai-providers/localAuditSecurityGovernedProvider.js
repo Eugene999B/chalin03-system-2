@@ -78,13 +78,13 @@ function offeredAuditSecurityTool(tools = []) {
   ) || null;
 }
 
-function auditSecurityToolInput(messages = [], providerContext = {}) {
+function auditSecurityToolInput(messages = []) {
   const question = recentUserContext(messages) || latestUserQuestion(messages);
   const input = { ...inferredDateInput(messages) };
-  if (
-    ENTERPRISE_AUDIT_PATTERN.test(question) &&
-    providerContext?.authority?.original_system_administrator === true
-  ) {
+  if (ENTERPRISE_AUDIT_PATTERN.test(question)) {
+    // This flag communicates intent only. The tool service independently checks
+    // the immutable execution authority and rejects enterprise scope unless the
+    // current login is the original System Administrator.
     input.group_mode = true;
   }
   return Object.freeze(input);
@@ -105,7 +105,7 @@ function shouldUseAuditSecurityTool({ messages = [], tools = [], providerContext
   if (!tool) return null;
   return Object.freeze({
     tool,
-    input: auditSecurityToolInput(messages, providerContext),
+    input: auditSecurityToolInput(messages),
   });
 }
 
