@@ -35,7 +35,9 @@ function originalAdmin(overrides = {}) {
     username: String(process.env.SYSTEM_ADMIN_USERNAME || "admin"),
     role: "admin",
     workspace_code: "spare_parts",
-    effective_permissions: [],
+    // Do not inject an artificial empty effective_permissions array here.
+    // The authenticated runtime resolves the protected owner to the complete
+    // immutable business-permission catalogue before guarded routes run.
     ...overrides,
   };
 }
