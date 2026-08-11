@@ -47,31 +47,42 @@ test("ordinary conversation does not become an action", () => {
   }
 });
 
-test("Risk-5 deactivation requires an explicit numeric target and reason", () => {
-  const complete = detectConversationalAction(
+test("Risk-5 deactivation defers exact ID, username and full-name references to the governed resolver", () => {
+  const numeric = detectConversationalAction(
     "deactivate user 44 because employment ended",
     { conversationKey: "conv_admin" }
   );
-  assert.equal(complete.action_key, "system.user.deactivate");
-  assert.equal(complete.risk_level, 5);
-  assert.deepEqual(complete.input, {
-    target_user_id: 44,
+  assert.equal(numeric.action_key, "system.user.deactivate");
+  assert.equal(numeric.risk_level, 5);
+  assert.equal(numeric.target_reference, "44");
+  assert.deepEqual(numeric.input, {
+    target_user_id: null,
     reason: "employment ended",
   });
-  assert.deepEqual(complete.missing_fields, []);
+  assert.deepEqual(numeric.missing_fields, []);
+
+  const username = detectConversationalAction(
+    "offboard user @eugene because employment ended",
+    { conversationKey: "conv_admin" }
+  );
+  assert.equal(username.target_reference, "@eugene");
+  assert.equal(username.input.target_user_id, null);
+  assert.equal(username.input.reason, "employment ended");
+
+  const fullName = detectConversationalAction(
+    "disable account Eugene Amankwah Appiah because employment ended",
+    { conversationKey: "conv_admin" }
+  );
+  assert.equal(fullName.target_reference, "Eugene Amankwah Appiah");
+  assert.equal(fullName.input.target_user_id, null);
+  assert.equal(fullName.input.reason, "employment ended");
 
   const missingReason = detectConversationalAction("disable account #44", {
     conversationKey: "conv_admin",
   });
   assert.equal(missingReason.action_key, "system.user.deactivate");
+  assert.equal(missingReason.target_reference, "#44");
   assert.deepEqual(missingReason.missing_fields, ["reason"]);
-
-  assert.equal(
-    detectConversationalAction("deactivate Eugene because employment ended", {
-      conversationKey: "conv_admin",
-    }),
-    null
-  );
 });
 
 test("quoted titles are normalized without changing the requested title", () => {
@@ -170,6 +181,8 @@ test("Risk-5 target evidence is loaded from the authenticated server database be
   assert.match(service, /source_type: "system\.user_identity"/);
   assert.match(service, /classification: "sensitive"/);
   assert.match(service, /if \(!target\.is_active\)/);
+  assert.match(service, /assertDefinitionAuthority/);
+  assert.match(service, /const targetState = await userDeactivationEvidence/);
 });
 
 test("frontend action review requires review then exact proposal confirmation", () => {
