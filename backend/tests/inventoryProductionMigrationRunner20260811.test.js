@@ -4,15 +4,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
+  APPROVED_SQL_ARTIFACTS,
   MIGRATION_LOCK_NAME,
   PRODUCTION_MIGRATION_PLAN,
   RELEASE_CONFIRMATION,
+  assertApprovedBlobIdentity,
   assertReleaseGates,
+  gitBlobSha,
+  readApprovedSqlArtifact,
   splitSqlScript,
   validateVerifierResults,
 } = require("../scripts/runInventoryLossPreventionProductionMigrations");
 
 const root = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(root, "..");
 const runnerSource = fs.readFileSync(
   path.join(root, "scripts/runInventoryLossPreventionProductionMigrations.js"),
   "utf8"
@@ -49,9 +54,56 @@ test("Inventory production runner pins the exact four migration stages in order"
   );
   for (const item of PRODUCTION_MIGRATION_PLAN) {
     assert.equal(item.migrationRecord, item.name);
-    assert.equal(item.migration, `${item.name}.sql`);
-    assert.equal(item.verifier, `${item.name}_verify.sql`);
+    assert.ok(APPROVED_SQL_ARTIFACTS[item.migrationArtifact]);
+    assert.ok(APPROVED_SQL_ARTIFACTS[item.verifierArtifact]);
+    assert.equal(
+      APPROVED_SQL_ARTIFACTS[item.migrationArtifact].filename,
+      `${item.name}.sql`
+    );
+    assert.equal(
+      APPROVED_SQL_ARTIFACTS[item.verifierArtifact].filename,
+      `${item.name}_verify.sql`
+    );
   }
+});
+
+test("every executable SQL artifact is repository-path confined and pinned to its reviewed Git blob", () => {
+  const entries = Object.entries(APPROVED_SQL_ARTIFACTS);
+  assert.equal(entries.length, 8);
+
+  for (const [artifactKey, artifact] of entries) {
+    assert.match(artifactKey, /^[A-Za-z][A-Za-z0-9]+$/);
+    assert.match(artifact.filename, /^[A-Za-z0-9._-]+\.sql$/);
+    assert.equal(path.basename(artifact.filename), artifact.filename);
+    assert.match(artifact.gitBlobSha, /^[0-9a-f]{40}$/);
+
+    const fullPath = path.resolve(
+      repositoryRoot,
+      "database/migrations",
+      artifact.filename
+    );
+    const content = fs.readFileSync(fullPath);
+    assert.equal(gitBlobSha(content), artifact.gitBlobSha);
+    assert.equal(readApprovedSqlArtifact(artifactKey), content.toString("utf8"));
+  }
+
+  assert.throws(() => readApprovedSqlArtifact("../unreviewed.sql"), /Unknown Inventory SQL artifact/);
+  assert.throws(() => readApprovedSqlArtifact("notApproved"), /Unknown Inventory SQL artifact/);
+  assert.throws(
+    () =>
+      assertApprovedBlobIdentity(
+        Buffer.from("tampered inventory migration", "utf8"),
+        APPROVED_SQL_ARTIFACTS.traceabilityFoundationMigration.gitBlobSha,
+        "tampered-test"
+      ),
+    /content changed after release review/
+  );
+
+  assert.match(runnerSource, /path\.basename\(filename\) !== filename/);
+  assert.match(runnerSource, /path\.dirname\(candidatePath\) !== approvedRoot/);
+  assert.match(runnerSource, /fileStat\.isSymbolicLink\(\)/);
+  assert.match(runnerSource, /path\.dirname\(realPath\) !== approvedRoot/);
+  assert.match(runnerSource, /assertApprovedBlobIdentity/);
 });
 
 test("Inventory production runner requires authorization, rehearsal and both fresh backup confirmations", () => {
