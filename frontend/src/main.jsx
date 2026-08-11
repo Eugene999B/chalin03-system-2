@@ -17,9 +17,15 @@ const standaloneChalinOne = isChalinOneStandalonePath(
 );
 const PUBLIC_APP_HANDOFF_PATHS = new Set([
   "/login",
+  "/staff",
   "/content-studio",
   "/intelligence",
 ]);
+
+function publicApplicationHandoffUrl(target) {
+  const pathname = target.pathname === "/login" ? "/staff" : target.pathname;
+  return `${pathname}${target.search}${target.hash}`;
+}
 
 async function loadApplicationRoot() {
   if (publicWebsiteSurface) {
@@ -101,7 +107,7 @@ function installPublicApplicationBoundaryHandoffs() {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation?.();
-      window.location.href = `${target.pathname}${target.search}${target.hash}`;
+      window.location.href = publicApplicationHandoffUrl(target);
     },
     true
   );

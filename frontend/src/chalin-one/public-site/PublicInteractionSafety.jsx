@@ -16,6 +16,14 @@ function isSecureApplicationPath(pathname) {
   );
 }
 
+function secureApplicationDestination(destination) {
+  if (destination.pathname !== "/login") return destination.href;
+
+  const target = new URL(destination.href);
+  target.pathname = "/staff";
+  return target.href;
+}
+
 export default function PublicInteractionSafety() {
   useEffect(() => {
     const handleSecureApplicationClick = (event) => {
@@ -36,13 +44,14 @@ export default function PublicInteractionSafety() {
       if (destination.origin !== window.location.origin) return;
       if (!isSecureApplicationPath(destination.pathname)) return;
 
-      // These routes belong to a different application shell. Stop React Router
-      // before it can retain the public website tree, then boot the destination
-      // through a real document navigation. No visitor should need to refresh.
+      // Secure routes belong to a different application shell. Public Staff
+      // Portal links may still point at /login for compatibility, but the real
+      // secure entry is /staff: ProtectedRoute sends signed-out visitors to
+      // Login while an existing staff session opens directly without logout.
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      window.location.href = destination.href;
+      window.location.href = secureApplicationDestination(destination);
     };
 
     document.addEventListener("click", handleSecureApplicationClick, true);
