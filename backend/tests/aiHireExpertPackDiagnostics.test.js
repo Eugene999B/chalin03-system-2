@@ -244,6 +244,33 @@ test("task planner includes Hire performance diagnostics for causal commercial q
   );
 });
 
+test("Local keeps Hire and Installment Finance sibling routing isolated", () => {
+  const tools = [
+    { key: "equipment_hire.performance_diagnostics", title: "Hire performance", risk_level: 1 },
+    { key: "equipment_hire.receivables_health", title: "Hire receivables", risk_level: 1 },
+    { key: "equipment_finance.arrears_health", title: "Finance arrears", risk_level: 1 },
+    { key: "equipment_finance.portfolio_health", title: "Finance portfolio", risk_level: 1 },
+  ];
+
+  const hireSelected = chooseLocalReadTool({
+    messages: [
+      { role: "user", content: "Why is Equipment Hire overdue balance high?" },
+    ],
+    tools,
+    providerContext: { workspace_code: "equipment_hire" },
+  });
+  assert.equal(hireSelected.key, "equipment_hire.performance_diagnostics");
+
+  const financeSelected = chooseLocalReadTool({
+    messages: [
+      { role: "user", content: "Why are installment finance arrears overdue?" },
+    ],
+    tools,
+    providerContext: { workspace_code: "equipment_hire" },
+  });
+  assert.equal(financeSelected.key, "equipment_finance.arrears_health");
+});
+
 test("Local fallback chooses and explains Hire performance diagnostics", () => {
   const registry = new AiToolRegistry();
   registerHireAiTools(registry, { loader: async () => fixture() });
