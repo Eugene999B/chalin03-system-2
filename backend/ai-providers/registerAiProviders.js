@@ -3,15 +3,15 @@
 const { aiProviderRegistry } = require("../services/aiProviderService");
 const { GeminiResilientPublicRouterProvider } = require("./geminiResilientPublicRouterProvider");
 const {
-  LocalCustomerAccountingGovernedProvider,
-} = require("./localCustomerAccountingGovernedProvider");
+  LocalAuditSecurityGovernedProvider,
+} = require("./localAuditSecurityGovernedProvider");
 const { OpenAiResponsesProvider } = require("./openAiResponsesProvider");
 
 let registered = false;
 
 function registerBuiltInAiProviders(registry = aiProviderRegistry) {
   if (registered && registry === aiProviderRegistry) return true;
-  registry.register("local", () => new LocalCustomerAccountingGovernedProvider());
+  registry.register("local", () => new LocalAuditSecurityGovernedProvider());
   registry.register("gemini", ({ env }) => new GeminiResilientPublicRouterProvider({ env }));
   registry.register("openai", ({ env }) => new OpenAiResponsesProvider({ env }));
   if (registry === aiProviderRegistry) registered = true;
