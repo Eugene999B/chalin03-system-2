@@ -141,10 +141,14 @@ test("product knowledge receives Mining expert rules while live site facts remai
     isChalinProductKnowledgeTurn("How does Mining site performance work in CHALIN?"),
     true
   );
-  assert.equal(
-    isChalinProductKnowledgeTurn("How much did this Mining site produce today?"),
-    false
-  );
+  for (const prompt of [
+    "How much did this Mining site produce today?",
+    "What is the current Mining fuel level?",
+    "What was Mining cost per unit yesterday?",
+    "Show me current Mining equipment utilization",
+  ]) {
+    assert.equal(isChalinProductKnowledgeTurn(prompt), false, prompt);
+  }
 });
 
 test("Mining performance diagnostics separate output, efficiency, flow and control causes", () => {
@@ -179,7 +183,9 @@ test("Mining performance diagnostics register as a Risk-1 governed site-scoped t
   assert.ok(definition);
   assert.equal(definition.risk_level, 1);
   assert.deepEqual(definition.allowed_workspaces, ["mining"]);
-  assert.deepEqual(definition.scope_requirements, { mining_site: true });
+  assert.equal(definition.scope_requirements.mining_site, true);
+  assert.equal(definition.scope_requirements.branch, false);
+  assert.equal(definition.scope_requirements.hire_location, false);
   assert.deepEqual(definition.required_business_permissions, ["mining.reports.view"]);
   assert.match(definition.description, /does not invent Mining revenue or profit/i);
 
