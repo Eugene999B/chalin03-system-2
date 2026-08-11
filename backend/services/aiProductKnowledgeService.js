@@ -4,8 +4,8 @@ const {
   renderSystemKnowledgeManifest,
 } = require("./aiSystemKnowledgeManifestService");
 const {
-  expertPackForPrompt,
-  renderExpertPack,
+  expertPacksForPrompt,
+  renderExpertPacks,
 } = require("./aiExpertPackService");
 
 const PUBLIC_SYSTEM_MAX_LENGTH = 16000;
@@ -96,13 +96,13 @@ function isSafePublicContinuityText(value) {
 }
 
 function productKnowledgeInstruction(prompt = "") {
-  const pack = expertPackForPrompt(prompt);
-  const renderedPack = renderExpertPack(pack);
+  const packs = expertPacksForPrompt(prompt);
+  const renderedPacks = renderExpertPacks(packs);
   return [
     "This is a CHALIN system/product/advisory reasoning turn. Use the static product context below and your general reasoning ability. Do not claim that static product context is a live database result. Answer naturally like a strong general-purpose AI assistant; interpret the user's intent instead of dumping fields or policy text. Preserve the immediately relevant safe conversation thread when supplied. Answer directly first, then add only the detail that helps.",
     CHALIN_PRODUCT_CONTEXT,
-    renderedPack
-      ? `Relevant source-derived expert knowledge for this question:\n${renderedPack}`
+    renderedPacks
+      ? `Relevant source-derived expert knowledge for this question:\n${renderedPacks}`
       : "",
   ]
     .filter(Boolean)
