@@ -10,9 +10,15 @@ const {
   normalizeAiPersona,
   normalizeAiWorkspace,
 } = require("../security/aiPermissionCatalog");
+const { hasEveryPermission } = require("../security/permissionCatalog");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const { assertAiRiskAuthorized } = require("./aiCapabilityService");
 const { normalizeEvidenceList } = require("./aiEvidenceService");
 const { aiActionRegistry } = require("./aiActionRegistry");
+const {
+  executeActionDefinition,
+  validateActionPayload,
+} = require("./aiActionExecutorService");
 
 const MAX_PAYLOAD_BYTES = 64000;
 const MAX_EVIDENCE_BYTES = 64000;
@@ -22,6 +28,7 @@ const CANCELLABLE_STATUSES = Object.freeze([
   "pending_review",
   "approved",
 ]);
+const EXECUTABLE_STATUSES = Object.freeze(["approved"]);
 
 class AiActionProposalError extends Error {
   constructor(
@@ -141,7 +148,7 @@ function schemaError(error) {
 function assertActionFeatureEnabled() {
   if (!isFeatureEnabled("aiActions")) {
     throw new AiActionProposalError(
-      "AI action proposals are disabled in this environment.",
+      "AI action proposals and execution are disabled in this environment.",
       { code: "AI_ACTIONS_DISABLED", statusCode: 404 }
     );
   }
@@ -197,7 +204,20 @@ function visibleProposalFilter(user, workspaceCode) {
   };
 }
 
-function proposalPublicShape(row) {
+function definitionForRow(row, registry = aiActionRegistry) {
+  const definition = registry.get(row.action_key);
+  if (!definition || definition.version !== row.action_version) {
+    throw new AiActionProposalError(
+      "The approved action definition is no longer registered at the proposal version.",
+      { code: "AI_ACTION_DEFINITION_VERSION_MISMATCH", statusCode: 409 }
+    );
+  }
+  return definition;
+}
+
+function proposalPublicShape(row, registry = aiActionRegistry) {
+  const definition = registry.get(row.action_key);
+  const executorAvailable = Boolean(definition?.executor_key);
   return Object.freeze({
     key: row.proposal_key,
     action_key: row.action_key,
@@ -224,9 +244,15 @@ function proposalPublicShape(row) {
     decision_note: row.decision_note,
     expires_at: row.expires_at,
     decided_at: row.decided_at,
+    executed_at: row.executed_at || null,
+    result_summary: row.result_summary || null,
+    error_code: row.error_code || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    execution_available: false,
+    review_mode: definition?.review_mode || null,
+    confirmation_mode: definition?.confirmation_mode || null,
+    execution_available:
+      executorAvailable && isFeatureEnabled("aiActions"),
   });
 }
 
@@ -288,6 +314,79 @@ function assertPayloadIntegrity(row) {
   return payload;
 }
 
+function assertDefinitionAuthority({ definition, user, persona, workspaceCode, phase }) {
+  assertAiRiskAuthorized(user, definition.risk_level);
+  if (definition.system_admin_only && !isOriginalSystemAdministrator(user)) {
+    throw new AiActionProposalError(
+      "This Risk Level 5 enterprise action is reserved for the protected System Administrator.",
+      { code: "AI_ACTION_RISK5_SYSTEM_ADMIN_REQUIRED", statusCode: 403 }
+    );
+  }
+  const phasePermission = {
+    propose: "ai.actions.propose",
+    review: "ai.actions.review",
+    execute: "ai.actions.execute",
+  }[phase];
+  if (!hasEveryAiPermission(user, [phasePermission, ...definition.required_permissions].filter(Boolean))) {
+    throw new AiActionProposalError(
+      `This account cannot ${phase} the requested AI action.`,
+      { code: `AI_ACTION_${String(phase).toUpperCase()}_PERMISSION_DENIED`, statusCode: 403 }
+    );
+  }
+  if (!hasEveryPermission(user, definition.required_business_permissions || [])) {
+    throw new AiActionProposalError(
+      "This account lacks the required business permission for the requested AI action.",
+      {
+        code: "AI_ACTION_BUSINESS_PERMISSION_DENIED",
+        statusCode: 403,
+        details: definition.required_business_permissions || [],
+      }
+    );
+  }
+  const normalizedPersona = normalizeAiPersona(persona);
+  const normalizedWorkspace = normalizeAiWorkspace(workspaceCode);
+  if (!normalizedPersona || !definition.personas.includes(normalizedPersona)) {
+    throw new AiActionProposalError("The action persona is not allowed.", {
+      code: "AI_ACTION_PERSONA_DENIED",
+      statusCode: 403,
+    });
+  }
+  if (!normalizedWorkspace || !definition.allowed_workspaces.includes(normalizedWorkspace)) {
+    throw new AiActionProposalError("The action workspace is not allowed.", {
+      code: "AI_ACTION_WORKSPACE_DENIED",
+      statusCode: 403,
+    });
+  }
+  if (
+    !isOriginalSystemAdministrator(user) &&
+    normalizeAiWorkspace(user?.workspace_code) !== normalizedWorkspace
+  ) {
+    throw new AiActionProposalError(
+      "AI actions cannot cross the logged-in account's active workspace.",
+      { code: "AI_ACTION_SCOPE_MISMATCH", statusCode: 403 }
+    );
+  }
+  return true;
+}
+
+function normalizedEvidenceJson(inputEvidence, definition) {
+  const evidence = normalizeEvidenceList(inputEvidence || []);
+  if (definition.evidence_required && evidence.length === 0) {
+    throw new AiActionProposalError(
+      "This action proposal requires approved evidence.",
+      { code: "AI_ACTION_EVIDENCE_REQUIRED" }
+    );
+  }
+  const evidenceJson = JSON.stringify(evidence);
+  if (Buffer.byteLength(evidenceJson, "utf8") > MAX_EVIDENCE_BYTES) {
+    throw new AiActionProposalError(
+      "Action proposal evidence is too large.",
+      { code: "AI_ACTION_EVIDENCE_TOO_LARGE", statusCode: 413 }
+    );
+  }
+  return Object.freeze({ evidence, evidenceJson });
+}
+
 async function createActionProposal({
   input,
   user,
@@ -302,69 +401,52 @@ async function createActionProposal({
       { code: "AI_ACTION_DEFINITION_NOT_FOUND", statusCode: 404 }
     );
   }
-  if (definition.execution_available !== false) {
-    throw new AiActionProposalError(
-      "This release accepts proposal-only action definitions.",
-      { code: "AI_ACTION_EXECUTION_PROHIBITED", statusCode: 409 }
-    );
-  }
   const persona = normalizeAiPersona(input?.persona);
   const scope = normalizeScope(input?.scope || input || {});
-  if (!persona || !definition.personas.includes(persona)) {
-    throw new AiActionProposalError("The action persona is not allowed.", {
-      code: "AI_ACTION_PERSONA_DENIED",
-      statusCode: 403,
+  assertDefinitionAuthority({
+    definition,
+    user,
+    persona,
+    workspaceCode: scope.workspace_code,
+    phase: "propose",
+  });
+
+  let validatedPayload;
+  try {
+    validatedPayload = validateActionPayload(definition, input?.payload || {});
+  } catch (error) {
+    if (String(error?.code || "").startsWith("AI_ACTION_")) throw error;
+    throw new AiActionProposalError(error?.message || "Action payload is invalid.", {
+      code: "AI_ACTION_PAYLOAD_INVALID",
     });
   }
-  if (!definition.allowed_workspaces.includes(scope.workspace_code)) {
-    throw new AiActionProposalError("The action workspace is not allowed.", {
-      code: "AI_ACTION_WORKSPACE_DENIED",
-      statusCode: 403,
-    });
-  }
-  if (!hasEveryAiPermission(user, [
-    "ai.actions.propose",
-    ...definition.required_permissions,
-  ])) {
-    throw new AiActionProposalError(
-      "This account cannot propose the requested action.",
-      { code: "AI_ACTION_PROPOSAL_PERMISSION_DENIED", statusCode: 403 }
-    );
-  }
-  if (
-    !isOriginalSystemAdministrator(user) &&
-    normalizeAiWorkspace(user?.workspace_code) !== scope.workspace_code
-  ) {
-    throw new AiActionProposalError(
-      "Action proposals cannot cross the active workspace.",
-      { code: "AI_ACTION_SCOPE_MISMATCH", statusCode: 403 }
-    );
-  }
-  const reviewerId = positiveInteger(input?.assigned_to);
-  if (!reviewerId || reviewerId === Number(user?.id)) {
-    throw new AiActionProposalError(
-      "Choose a different independent reviewer.",
-      { code: "AI_ACTION_INDEPENDENT_REVIEW_REQUIRED", statusCode: 409 }
-    );
-  }
-
-  const payloadJson = canonicalJson(input?.payload || {});
-  const evidence = normalizeEvidenceList(input?.evidence || []);
-  if (definition.evidence_required && evidence.length === 0) {
-    throw new AiActionProposalError(
-      "This action proposal requires approved evidence.",
-      { code: "AI_ACTION_EVIDENCE_REQUIRED" }
-    );
-  }
-  const evidenceJson = JSON.stringify(evidence);
-  if (Buffer.byteLength(evidenceJson, "utf8") > MAX_EVIDENCE_BYTES) {
-    throw new AiActionProposalError(
-      "Action proposal evidence is too large.",
-      { code: "AI_ACTION_EVIDENCE_TOO_LARGE", statusCode: 413 }
-    );
-  }
-
+  const payloadJson = canonicalJson(validatedPayload);
+  const evidenceState = normalizedEvidenceJson(input?.evidence, definition);
   const key = proposalKey();
+  const expiresAt = normalizeExpiry(input?.expires_at, definition.maximum_expiry_hours);
+  const reviewMode = definition.review_mode || "independent";
+  const autoApproved = reviewMode === "auto";
+  let reviewerId = positiveInteger(input?.assigned_to);
+
+  if (reviewMode === "independent") {
+    if (!reviewerId || reviewerId === Number(user?.id)) {
+      throw new AiActionProposalError(
+        "Choose a different independent reviewer for this controlled action.",
+        { code: "AI_ACTION_INDEPENDENT_REVIEW_REQUIRED", statusCode: 409 }
+      );
+    }
+  } else if (reviewMode === "system_admin") {
+    if (!isOriginalSystemAdministrator(user)) {
+      throw new AiActionProposalError(
+        "This Risk Level 5 action may be proposed only by the protected System Administrator.",
+        { code: "AI_ACTION_RISK5_SYSTEM_ADMIN_REQUIRED", statusCode: 403 }
+      );
+    }
+    reviewerId = Number(user.id);
+  } else {
+    reviewerId = null;
+  }
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -373,9 +455,9 @@ async function createActionProposal({
          proposal_key, action_key, action_version, persona, risk_level,
          workspace_code, branch_id, mining_site_id, hire_location_id,
          proposal_status, title, summary_text, payload_json, payload_sha256,
-         evidence_json, evidence_count, requested_by, assigned_to,
-         request_note, request_id, expires_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         evidence_json, evidence_count, requested_by, assigned_to, approved_by,
+         request_note, request_id, expires_at, decided_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         key,
         definition.key,
@@ -386,31 +468,40 @@ async function createActionProposal({
         scope.branch_id,
         scope.mining_site_id,
         scope.hire_location_id,
+        autoApproved ? "approved" : "pending_review",
         clean(input?.title, 255) || definition.title,
         clean(input?.summary, 4000) || definition.description || definition.title,
         payloadJson,
         sha256(payloadJson),
-        evidence.length > 0 ? evidenceJson : null,
-        evidence.length,
+        evidenceState.evidence.length > 0 ? evidenceState.evidenceJson : null,
+        evidenceState.evidence.length,
         user?.id || null,
         reviewerId,
+        autoApproved ? user?.id || null : null,
         clean(input?.note, 2000),
         clean(req?.requestId, 120),
-        normalizeExpiry(input?.expires_at, definition.maximum_expiry_hours),
+        expiresAt,
+        autoApproved ? new Date() : null,
       ]
     );
     const proposalId = Number(result.insertId);
-    await connection.query(
-      `INSERT INTO ai_action_reviews (
-         proposal_id, review_status, requested_by, assigned_to, request_note
-       ) VALUES (?, 'pending', ?, ?, ?)`,
-      [proposalId, user?.id || null, reviewerId, clean(input?.note, 2000)]
-    );
+    if (!autoApproved) {
+      await connection.query(
+        `INSERT INTO ai_action_reviews (
+           proposal_id, review_status, requested_by, assigned_to, request_note
+         ) VALUES (?, 'pending', ?, ?, ?)`,
+        [proposalId, user?.id || null, reviewerId, clean(input?.note, 2000)]
+      );
+    }
     await writeAuditEvent({
       connection,
       req,
-      action: "AI_ACTION_PROPOSAL_CREATED",
-      details: "CHALIN ONE AI action proposal created for human review",
+      action: autoApproved
+        ? "AI_ACTION_PROPOSAL_AUTO_APPROVED"
+        : "AI_ACTION_PROPOSAL_CREATED",
+      details: autoApproved
+        ? "Low-risk CHALIN Intelligence action proposal validated and approved by policy"
+        : "CHALIN Intelligence action proposal created for governed review",
       entityType: "ai_action_proposal",
       entityId: proposalId,
       metadata: {
@@ -420,22 +511,31 @@ async function createActionProposal({
         risk_level: definition.risk_level,
         workspace_code: scope.workspace_code,
         payload_sha256: sha256(payloadJson),
-        evidence_count: evidence.length,
-        execution_available: false,
+        evidence_count: evidenceState.evidence.length,
+        review_mode: reviewMode,
+        execution_available: Boolean(definition.executor_key),
       },
     });
     await connection.commit();
     return Object.freeze({
       proposal_key: key,
-      status: "pending_review",
+      status: autoApproved ? "approved" : "pending_review",
       payload_sha256: sha256(payloadJson),
-      evidence_count: evidence.length,
-      expires_at: normalizeExpiry(input?.expires_at, definition.maximum_expiry_hours),
-      execution_available: false,
+      evidence_count: evidenceState.evidence.length,
+      expires_at: expiresAt,
+      review_mode: reviewMode,
+      confirmation_mode: definition.confirmation_mode,
+      execution_available: Boolean(definition.executor_key),
     });
   } catch (error) {
-    await connection.rollback();
-    if (error instanceof AiActionProposalError) throw error;
+    try {
+      await connection.rollback();
+    } catch {
+      // Preserve original error.
+    }
+    if (error instanceof AiActionProposalError || String(error?.code || "").startsWith("AI_ACTION_")) {
+      throw error;
+    }
     throw schemaError(error);
   } finally {
     connection.release();
@@ -480,7 +580,7 @@ async function listActionProposals({
        LIMIT ? OFFSET ?`,
       params
     );
-    return rows.map(proposalPublicShape);
+    return rows.map((row) => proposalPublicShape(row));
   } catch (error) {
     if (error instanceof AiActionProposalError) throw error;
     throw schemaError(error);
@@ -528,12 +628,6 @@ async function decideActionProposal({
       code: "AI_ACTION_DECISION_INVALID",
     });
   }
-  if (!hasEveryAiPermission(user, ["ai.actions.review"])) {
-    throw new AiActionProposalError("This account cannot review AI actions.", {
-      code: "AI_ACTION_REVIEW_PERMISSION_DENIED",
-      statusCode: 403,
-    });
-  }
 
   const connection = await pool.getConnection();
   try {
@@ -542,13 +636,24 @@ async function decideActionProposal({
     const row = await loadProposal(connection, key, { forUpdate: true });
     assertProposalVisible(row, user);
     assertPayloadIntegrity(row);
+    const definition = definitionForRow(row);
+    assertDefinitionAuthority({
+      definition,
+      user,
+      persona: row.persona,
+      workspaceCode: row.workspace_code,
+      phase: "review",
+    });
     if (!REVIEWABLE_STATUSES.includes(row.proposal_status)) {
       throw new AiActionProposalError(
         "This action proposal is no longer awaiting review.",
         { code: "AI_ACTION_PROPOSAL_NOT_REVIEWABLE", statusCode: 409 }
       );
     }
-    if (Number(row.requested_by) === Number(user?.id)) {
+    if (
+      Number(row.requested_by) === Number(user?.id) &&
+      !(definition.review_mode === "system_admin" && isOriginalSystemAdministrator(user))
+    ) {
       throw new AiActionProposalError(
         "The proposer cannot approve their own action proposal.",
         { code: "AI_ACTION_SELF_APPROVAL_BLOCKED", statusCode: 409 }
@@ -556,7 +661,8 @@ async function decideActionProposal({
     }
     if (
       row.assigned_to &&
-      Number(row.assigned_to) !== Number(user?.id)
+      Number(row.assigned_to) !== Number(user?.id) &&
+      !isOriginalSystemAdministrator(user)
     ) {
       throw new AiActionProposalError(
         "This action proposal is assigned to another reviewer.",
@@ -572,7 +678,7 @@ async function decideActionProposal({
     const review = reviews[0];
     if (!review) {
       throw new AiActionProposalError(
-        "The pending human review record is missing.",
+        "The pending governed review record is missing.",
         { code: "AI_ACTION_REVIEW_RECORD_REQUIRED", statusCode: 409 }
       );
     }
@@ -602,7 +708,7 @@ async function decideActionProposal({
         normalizedDecision === "approved"
           ? "AI_ACTION_PROPOSAL_APPROVED"
           : "AI_ACTION_PROPOSAL_REJECTED",
-      details: `CHALIN ONE AI action proposal ${normalizedDecision} by human reviewer`,
+      details: `CHALIN Intelligence action proposal ${normalizedDecision} by governed reviewer`,
       entityType: "ai_action_proposal",
       entityId: row.id,
       metadata: {
@@ -610,20 +716,182 @@ async function decideActionProposal({
         action_key: row.action_key,
         payload_sha256: row.payload_sha256,
         decision: normalizedDecision,
-        execution_available: false,
+        risk_level: Number(row.risk_level),
+        review_mode: definition.review_mode,
+        execution_available: Boolean(definition.executor_key),
       },
     });
     await connection.commit();
     return Object.freeze({
       proposal_key: row.proposal_key,
       status: normalizedDecision,
-      execution_available: false,
+      confirmation_mode: definition.confirmation_mode,
+      execution_available: Boolean(definition.executor_key),
     });
   } catch (error) {
-    await connection.rollback();
-    if (error instanceof AiActionProposalError) throw error;
+    try {
+      await connection.rollback();
+    } catch {
+      // Preserve original error.
+    }
+    if (error instanceof AiActionProposalError || String(error?.code || "").startsWith("AI_ACTION_")) {
+      throw error;
+    }
     throw schemaError(error);
   } finally {
+    connection.release();
+  }
+}
+
+function expectedActionConfirmation(row, definition) {
+  if (definition.confirmation_mode === "risk5_exact") {
+    return `EXECUTE ${row.proposal_key}`;
+  }
+  if (definition.confirmation_mode === "explicit") {
+    return `CONFIRM ${row.proposal_key}`;
+  }
+  return null;
+}
+
+async function markExecutionFailure(row, error) {
+  if (!row?.id) return;
+  try {
+    await pool.query(
+      `UPDATE ai_action_proposals
+       SET proposal_status = 'failed', error_code = ?, result_summary = ?,
+           updated_at = UTC_TIMESTAMP()
+       WHERE id = ? AND proposal_status = 'approved'`,
+      [
+        clean(error?.code || "AI_ACTION_EXECUTION_FAILED", 120),
+        clean(error?.message || "Action execution failed safely.", 8000),
+        Number(row.id),
+      ]
+    );
+  } catch {
+    // Preserve the business action failure.
+  }
+}
+
+async function executeActionProposal({
+  proposalKey: key,
+  confirmation,
+  user,
+  req,
+} = {}) {
+  assertActionFeatureEnabled();
+  if (!hasEveryAiPermission(user, ["ai.actions.execute"])) {
+    throw new AiActionProposalError("This account cannot execute AI actions.", {
+      code: "AI_ACTION_EXECUTE_PERMISSION_DENIED",
+      statusCode: 403,
+    });
+  }
+
+  const lockName = `chalin03:ai-action:${clean(key, 40) || "unknown"}`;
+  const connection = await pool.getConnection();
+  let row = null;
+  let executionStarted = false;
+  try {
+    const [[lock]] = await connection.query("SELECT GET_LOCK(?, 10) AS acquired", [lockName]);
+    if (Number(lock?.acquired || 0) !== 1) {
+      throw new AiActionProposalError("This AI action is already being processed.", {
+        code: "AI_ACTION_EXECUTION_LOCKED",
+        statusCode: 409,
+      });
+    }
+    await expireOverdueProposals(connection);
+    row = await loadProposal(connection, key);
+    assertProposalVisible(row, user);
+    const payload = assertPayloadIntegrity(row);
+    const definition = definitionForRow(row);
+    if (!definition.executor_key || !definition.execution_available) {
+      throw new AiActionProposalError("This action remains proposal-only and has no approved executor.", {
+        code: "AI_ACTION_EXECUTION_NOT_AVAILABLE",
+        statusCode: 409,
+      });
+    }
+    assertDefinitionAuthority({
+      definition,
+      user,
+      persona: row.persona,
+      workspaceCode: row.workspace_code,
+      phase: "execute",
+    });
+    if (!EXECUTABLE_STATUSES.includes(row.proposal_status)) {
+      throw new AiActionProposalError("Only an approved AI action proposal can be executed.", {
+        code: "AI_ACTION_PROPOSAL_NOT_EXECUTABLE",
+        statusCode: 409,
+      });
+    }
+    const expected = expectedActionConfirmation(row, definition);
+    if (expected && clean(confirmation, 120) !== expected) {
+      throw new AiActionProposalError(
+        `This action requires the exact confirmation: ${expected}`,
+        {
+          code: "AI_ACTION_CONFIRMATION_REQUIRED",
+          statusCode: 409,
+          details: { expected_confirmation: expected },
+        }
+      );
+    }
+
+    executionStarted = true;
+    const result = await executeActionDefinition({
+      definition,
+      payload,
+      user,
+      proposal: proposalPublicShape(row),
+      req,
+    });
+    const resultSummary = clean(JSON.stringify(result), 8000) || "Action completed successfully.";
+    const [update] = await connection.query(
+      `UPDATE ai_action_proposals
+       SET proposal_status = 'executed', executed_at = UTC_TIMESTAMP(),
+           result_summary = ?, error_code = NULL, updated_at = UTC_TIMESTAMP()
+       WHERE id = ? AND proposal_status = 'approved'`,
+      [resultSummary, Number(row.id)]
+    );
+    if (Number(update.affectedRows || 0) !== 1) {
+      throw new AiActionProposalError("The approved proposal changed state during execution.", {
+        code: "AI_ACTION_EXECUTION_STATE_RACE",
+        statusCode: 409,
+      });
+    }
+    await writeAuditEvent({
+      req,
+      action: "AI_ACTION_EXECUTED",
+      details: "CHALIN Intelligence executed an approved governed action",
+      entityType: "ai_action_proposal",
+      entityId: row.id,
+      severity: Number(row.risk_level) >= 5 ? "critical" : "notice",
+      metadata: {
+        proposal_key: row.proposal_key,
+        action_key: row.action_key,
+        risk_level: Number(row.risk_level),
+        payload_sha256: row.payload_sha256,
+        confirmation_mode: definition.confirmation_mode,
+        executor_key: definition.executor_key,
+        result,
+      },
+    });
+    return Object.freeze({
+      proposal_key: row.proposal_key,
+      action_key: row.action_key,
+      risk_level: Number(row.risk_level),
+      status: "executed",
+      result,
+    });
+  } catch (error) {
+    if (executionStarted) await markExecutionFailure(row, error);
+    if (error instanceof AiActionProposalError || String(error?.code || "").startsWith("AI_ACTION_")) {
+      throw error;
+    }
+    throw schemaError(error);
+  } finally {
+    try {
+      await connection.query("SELECT RELEASE_LOCK(?)", [lockName]);
+    } catch {
+      // Connection closure also releases the named lock.
+    }
     connection.release();
   }
 }
@@ -669,14 +937,13 @@ async function cancelActionProposal({ proposalKey: key, note, user, req } = {}) 
       connection,
       req,
       action: "AI_ACTION_PROPOSAL_CANCELLED",
-      details: "CHALIN ONE AI action proposal cancelled without execution",
+      details: "CHALIN Intelligence action proposal cancelled without execution",
       entityType: "ai_action_proposal",
       entityId: row.id,
       metadata: {
         proposal_key: row.proposal_key,
         action_key: row.action_key,
         payload_sha256: row.payload_sha256,
-        execution_available: false,
       },
     });
     await connection.commit();
@@ -686,7 +953,11 @@ async function cancelActionProposal({ proposalKey: key, note, user, req } = {}) 
       execution_available: false,
     });
   } catch (error) {
-    await connection.rollback();
+    try {
+      await connection.rollback();
+    } catch {
+      // Preserve original error.
+    }
     if (error instanceof AiActionProposalError) throw error;
     throw schemaError(error);
   } finally {
@@ -697,10 +968,12 @@ async function cancelActionProposal({ proposalKey: key, note, user, req } = {}) 
 module.exports = {
   AiActionProposalError,
   CANCELLABLE_STATUSES,
+  EXECUTABLE_STATUSES,
   MAX_EVIDENCE_BYTES,
   MAX_PAYLOAD_BYTES,
   REVIEWABLE_STATUSES,
   assertActionFeatureEnabled,
+  assertDefinitionAuthority,
   assertPayloadIntegrity,
   assertProposalVisible,
   cancelActionProposal,
@@ -708,12 +981,17 @@ module.exports = {
   canonicalValue,
   createActionProposal,
   decideActionProposal,
+  definitionForRow,
+  executeActionProposal,
+  expectedActionConfirmation,
   expireOverdueProposals,
   getActionProposal,
   listActionProposals,
   loadProposal,
+  markExecutionFailure,
   normalizeExpiry,
   normalizeScope,
+  normalizedEvidenceJson,
   parseJson,
   positiveInteger,
   proposalKey,

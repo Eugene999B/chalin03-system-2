@@ -3,15 +3,19 @@
 const express = require("express");
 
 const { requireAiPermission } = require("../middleware/aiPermissionMiddleware");
-const { requireFeature } = require("../services/featureFlagService");
+const { requireFeature, isFeatureEnabled } = require("../services/featureFlagService");
 const { aiActionRegistry } = require("../services/aiActionRegistry");
+const { registerBuiltInAiActions } = require("../ai-actions/registerAiActions");
 const {
   cancelActionProposal,
   createActionProposal,
   decideActionProposal,
+  executeActionProposal,
   getActionProposal,
   listActionProposals,
 } = require("../services/aiActionProposalService");
+
+registerBuiltInAiActions();
 
 const router = express.Router();
 
@@ -121,6 +125,23 @@ router.post(
 );
 
 router.post(
+  "/proposals/:proposalKey/execute",
+  requireAiPermission("ai.actions.execute"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await executeActionProposal({
+        proposalKey: req.params.proposalKey,
+        confirmation: req.body.confirmation,
+        user: req.user,
+        req,
+      })
+    )
+  )
+);
+
+router.post(
   "/proposals/:proposalKey/cancel",
   requireAiPermission("ai.actions.propose"),
   asyncHandler(async (req, res) =>
@@ -151,9 +172,9 @@ router.use((error, req, res, next) => {
     code: code || "AI_ACTION_REQUEST_FAILED",
     message:
       error.message ||
-      "The AI action proposal request failed safely.",
+      "The AI action request failed safely.",
     details: error.details || [],
-    execution_available: false,
+    execution_available: isFeatureEnabled("aiActions"),
     request_id: req.requestId || null,
   });
 });

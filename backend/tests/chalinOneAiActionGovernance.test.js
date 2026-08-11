@@ -159,13 +159,26 @@ test("proposal lifecycle requires evidence, independent review and checksum veri
   assert.match(serviceSource, /execution_available: false/);
 });
 
-test("action routes expose proposal review only and no execution endpoint", () => {
-  assert.match(routeSource, /requireFeature\("aiActions"\)/);
+test("action routes expose reviewed execution only behind explicit feature, permission and execution guards", () => {
+  assert.match(routeSource, /router\.use\(requireFeature\("aiActions"\)\)/);
   assert.match(routeSource, /ai\.actions\.propose/);
   assert.match(routeSource, /ai\.actions\.review/);
+  assert.match(routeSource, /ai\.actions\.execute/);
   assert.match(routeSource, /\/decision/);
   assert.match(routeSource, /\/cancel/);
-  assert.doesNotMatch(routeSource, /\/execute|executeAction|executed_at/);
+  assert.match(routeSource, /\/proposals\/:proposalKey\/execute/);
+  assert.match(routeSource, /executeActionProposal/);
+
+  assert.match(serviceSource, /EXECUTABLE_STATUSES/);
+  assert.match(serviceSource, /AI_ACTION_PROPOSAL_NOT_EXECUTABLE/);
+  assert.match(serviceSource, /assertPayloadIntegrity\(row\)/);
+  assert.match(serviceSource, /assertAiRiskAuthorized/);
+  assert.match(serviceSource, /hasEveryPermission/);
+  assert.match(serviceSource, /expectedActionConfirmation/);
+  assert.match(serviceSource, /SELECT GET_LOCK\(\?, 10\) AS acquired/);
+  assert.match(serviceSource, /AI_ACTION_CONFIRMATION_REQUIRED/);
+  assert.match(serviceSource, /AI_ACTION_EXECUTED/);
+  assert.match(serviceSource, /proposal_status = 'executed'/);
 });
 
 test("action governance migration is additive and executor-free", () => {
