@@ -3,6 +3,8 @@ const core = require("./financialRequestValidatorsCore");
 // Compatibility note: the legacy sanitized sale contract still owns fields such as
 // "customer_id" and remains byte-for-byte authoritative unless physical unit IDs
 // are explicitly supplied on one or more sale items.
+// Legacy sanitized output still includes customer_id: customerId when a saved
+// customer is resolved by the established core validator.
 // Legacy protected payment paths remain "credit" and "mixed"; their established
 // validation message remains: Customer name or phone is required for credit, mixed
 // or installment sales.
