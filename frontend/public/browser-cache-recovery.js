@@ -1,6 +1,65 @@
 (() => {
   const PANEL_ID = "chalin03-update-recovery";
+  const RECOVERY_PARAM = "__chalin03_recovery";
+  const RETURN_PARAM = "__chalin03_return";
+  const RECOVERY_MARKERS = Object.freeze([
+    RECOVERY_PARAM,
+    RETURN_PARAM,
+    "__chalin03_sw_recovery",
+    "__chalin03_sw_release",
+  ]);
   let recoveryStarted = false;
+
+  function removeRecoveryMarkers(url) {
+    RECOVERY_MARKERS.forEach((name) => url.searchParams.delete(name));
+    return url;
+  }
+
+  function routeText(url) {
+    return `${url.pathname}${url.search}${url.hash}` || "/";
+  }
+
+  function restoreRequestedRouteFromStatic404() {
+    const current = new URL(window.location.href);
+    const returnValue = current.searchParams.get(RETURN_PARAM);
+
+    if (!returnValue) return false;
+
+    const cleanedCurrent = removeRecoveryMarkers(new URL(current.href));
+    const rawReturnValue = String(returnValue).trim();
+    let target = null;
+
+    try {
+      target = new URL(rawReturnValue, window.location.origin);
+    } catch {
+      target = null;
+    }
+
+    const safeRelativeTarget =
+      rawReturnValue.startsWith("/") &&
+      !rawReturnValue.startsWith("//") &&
+      target?.origin === window.location.origin;
+
+    if (!safeRelativeTarget) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        routeText(cleanedCurrent)
+      );
+      return false;
+    }
+
+    removeRecoveryMarkers(target);
+    window.history.replaceState(window.history.state, "", routeText(target));
+    return true;
+  }
+
+  // 404.html cannot serve a deep SPA route directly on every host. It records
+  // the intended route in __chalin03_return and loads /. Restore that route
+  // synchronously here, before the module entry chooses the public, protected,
+  // or operational React application shell. This changes browser history only;
+  // it never reloads or interrupts an already-running workspace.
+  restoreRequestedRouteFromStatic404();
 
   function showUpdateAvailable(reason = "new-release") {
     let panel = document.getElementById(PANEL_ID);
