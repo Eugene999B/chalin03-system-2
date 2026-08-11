@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  isChalinProductKnowledgeTurn,
+  productKnowledgeMessages,
+} = require("./aiProductKnowledgeService");
+
 // These are abuse/transport guardrails, not product allowances. CHALIN no longer
 // imposes the tiny 6k-request / 100k-daily limits that made long reasoning and
 // continuity feel artificially capped. Provider context/rate limits remain the
@@ -32,6 +37,41 @@ function estimateTokens(value) {
   return Math.max(1, Math.ceil(characters / 4));
 }
 
+function latestUserPrompt(messages = []) {
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const item = messages[index];
+    if (String(item?.role || "").toLowerCase() !== "user") continue;
+    const content = String(item?.content || "").trim();
+    if (content) return content.slice(0, 16000);
+  }
+  return "";
+}
+
+function transportBudgetPayload({ messages = [], tools = [] } = {}) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const safeTools = Array.isArray(tools) ? tools : [];
+  const prompt = latestUserPrompt(safeMessages);
+
+  // The provider layer already rewrites CHALIN product/advisory questions into
+  // a public-safe product-knowledge prompt and removes every operational tool.
+  // Budget the same payload here, before the provider call, so a harmless
+  // product question cannot be rejected merely because the authenticated login
+  // has a large governed tool catalogue available.
+  if (prompt && isChalinProductKnowledgeTurn(prompt)) {
+    return Object.freeze({
+      profile: "product_knowledge",
+      messages: productKnowledgeMessages(safeMessages),
+      tools: Object.freeze([]),
+    });
+  }
+
+  return Object.freeze({
+    profile: "full_governed",
+    messages: safeMessages,
+    tools: safeTools,
+  });
+}
+
 function getAiBudgetConfig(env = process.env) {
   return Object.freeze({
     request_token_limit: boundedInteger(
@@ -62,7 +102,13 @@ function getAiBudgetConfig(env = process.env) {
 
 function buildRequestBudget({ messages = [], tools = [], env = process.env } = {}) {
   const config = getAiBudgetConfig(env);
-  const estimatedInputTokens = estimateTokens({ messages, tools });
+  const transport = transportBudgetPayload({ messages, tools });
+  const rawEstimatedInputTokens = estimateTokens({ messages, tools });
+  const estimatedInputTokens = estimateTokens({
+    messages: transport.messages,
+    tools: transport.tools,
+  });
+
   if (estimatedInputTokens >= config.request_token_limit) {
     throw new AiBudgetError(
       "This AI request is too large for the configured transport budget.",
@@ -71,7 +117,9 @@ function buildRequestBudget({ messages = [], tools = [], env = process.env } = {
         statusCode: 413,
         details: {
           estimated_input_tokens: estimatedInputTokens,
+          raw_estimated_input_tokens: rawEstimatedInputTokens,
           request_token_limit: config.request_token_limit,
+          transport_profile: transport.profile,
         },
       }
     );
@@ -80,6 +128,8 @@ function buildRequestBudget({ messages = [], tools = [], env = process.env } = {
   return Object.freeze({
     ...config,
     estimated_input_tokens: estimatedInputTokens,
+    raw_estimated_input_tokens: rawEstimatedInputTokens,
+    transport_profile: transport.profile,
     maximum_output_tokens: Math.max(
       1,
       Math.min(32768, config.request_token_limit - estimatedInputTokens)
@@ -148,4 +198,6 @@ module.exports = {
   buildRequestBudget,
   estimateTokens,
   getAiBudgetConfig,
+  latestUserPrompt,
+  transportBudgetPayload,
 };
