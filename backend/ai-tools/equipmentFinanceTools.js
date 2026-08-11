@@ -2,6 +2,9 @@
 
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
+  loadEquipmentFinancePerformanceDiagnostics,
+} = require("../services/aiEquipmentFinanceDiagnosticsService");
+const {
   loadArrearsHealth,
   loadCashFlowHealth,
   loadPortfolioHealth,
@@ -36,6 +39,8 @@ function evidenceFor(viewKey, output) {
           ? "Installment Finance cash-flow health"
           : viewKey === "sales-pipeline"
           ? "Equipment sales and credit-application pipeline"
+          : viewKey === "performance"
+          ? "Equipment Finance portfolio and arrears performance diagnostics"
           : "Installment Finance portfolio health",
       excerpt_text: JSON.stringify(output).slice(0, 12000),
       as_of_at: output.generated_at,
@@ -71,6 +76,8 @@ function registerEquipmentFinanceAiTools(
   const arrearsLoader = loaders.arrears || loadArrearsHealth;
   const cashflowLoader = loaders.cashflow || loadCashFlowHealth;
   const salesPipelineLoader = loaders.salesPipeline || loadSalesPipelineHealth;
+  const performanceLoader =
+    loaders.performance || loadEquipmentFinancePerformanceDiagnostics;
 
   const common = {
     version: "1",
@@ -100,6 +107,21 @@ function registerEquipmentFinanceAiTools(
     },
     handler: async ({ input }) =>
       runView({ input, loader: portfolioLoader, viewKey: "portfolio" }),
+  });
+
+  registry.register({
+    ...common,
+    key: "equipment_finance.performance_diagnostics",
+    title: "Equipment Finance portfolio and arrears performance diagnostics",
+    description:
+      "Explains company-wide Finance performance pressure across origination, portfolio conversion, collections, outstanding versus arrears, aging, reconciliation and sale-asset readiness without customer rows and without inventing Finance profit or yield.",
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: DATE_PROPERTIES,
+    },
+    handler: async ({ input }) =>
+      runView({ input, loader: performanceLoader, viewKey: "performance" }),
   });
 
   registry.register({
