@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
+    "migrate:inventory-loss-prevention:production": "node scripts/runInventoryLossPreventionProductionMigrations.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
@@ -55,7 +56,7 @@
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
+    "cors": "^2.8.0",
     "dotenv": "^16.0.0",
     "exceljs": "npm:@excel.js/exceljs@0.9.0",
     "express": "^4.18.0",
