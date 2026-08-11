@@ -12,6 +12,7 @@ const {
   divisionAccessDeniedMessage,
   hasEquipmentDivisionAccess,
 } = require("../security/equipmentDivisionAccess");
+const { resolveAiCapabilityProfile } = require("./aiCapabilityService");
 const { resolveMiningSiteScope } = require("./miningSiteScope");
 const { resolveHireLocationScope } = require("./hireLocationScope");
 
@@ -229,9 +230,11 @@ function buildToolExecutionContext({ req, persona, tool }) {
   assertEquipmentDivision(req.user, tool.required_equipment_division || null);
   assertWorkspaceAllowed(scope, tool.allowed_workspaces || []);
   assertRequiredLocationScope(scope, tool.scope_requirements || {});
+  const authority = resolveAiCapabilityProfile({ user: req.user, scope });
 
   // Handlers receive a minimized immutable context, never req, res, pool,
-  // connection or SQL access.
+  // connection or SQL access. The authority profile is derived from the login
+  // on the server so future action tools do not invent their own role checks.
   return Object.freeze({
     request_id: req.requestId || null,
     actor: Object.freeze({
@@ -243,6 +246,7 @@ function buildToolExecutionContext({ req, persona, tool }) {
       ).slice(0, 80) || null,
     }),
     scope,
+    authority,
     permissions: Object.freeze([
       ...(scope.permission_snapshot?.permissions || []),
     ]),
