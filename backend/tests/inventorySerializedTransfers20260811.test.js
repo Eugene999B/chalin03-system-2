@@ -49,12 +49,21 @@ test("serialized transfer receiving increases destination stock only for observe
   assert.match(service, /completed \? "received" : "dispatched"/);
 });
 
-test("legacy quantity transfer actions must be blocked for enforced serialized inventory", () => {
+test("legacy quantity transfer actions are physically guarded against enforced serialized inventory", () => {
   const service = read("backend/services/inventoryTransferTraceabilityService.js");
+  const legacyRoutes = read("backend/routes/stockTransferRoutes.js");
   assert.match(service, /assertLegacyQuantityTransferAllowed/);
   assert.match(service, /inventory_tracking_mode = 'serialized'/);
   assert.match(service, /inventory_traceability_state = 'enforced'/);
   assert.match(service, /SERIALIZED_TRANSFER_IDENTITY_WORKFLOW_REQUIRED/);
+  assert.match(
+    legacyRoutes,
+    /require\("\.\.\/services\/inventoryTransferTraceabilityService"\)/
+  );
+  const guards = legacyRoutes.match(
+    /assertLegacyQuantityTransferAllowed\(connection, \{ transferId \}\);/g
+  ) || [];
+  assert.equal(guards.length, 2, "dispatch and receive must each block the legacy quantity bypass");
 });
 
 test("transfer control API never reveals the expected ID list before physical scanning", () => {
