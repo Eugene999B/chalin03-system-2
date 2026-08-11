@@ -3,6 +3,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  HIRE_EXPERT_PACK,
+  getHireExpertPack,
+  isHireExpertPrompt,
+} = require("./aiHireExpertPackService");
+const {
   MINING_EXPERT_PACK,
   getMiningExpertPack,
   isMiningExpertPrompt,
@@ -170,6 +175,7 @@ const EXPERT_PACKS = Object.freeze({
   [PAYROLL_EXPERT_PACK.key]: PAYROLL_EXPERT_PACK,
   [SPARE_PARTS_EXPERT_PACK.key]: SPARE_PARTS_EXPERT_PACK,
   [MINING_EXPERT_PACK.key]: MINING_EXPERT_PACK,
+  [HIRE_EXPERT_PACK.key]: HIRE_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -215,6 +221,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === MINING_EXPERT_PACK.key) {
     return getMiningExpertPack({ includeAvailability });
   }
+  if (key === HIRE_EXPERT_PACK.key) {
+    return getHireExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -242,6 +251,7 @@ function expertPacksForPrompt(value) {
   if (isPayrollExpertPrompt(value)) matches.push(getExpertPack(PAYROLL_EXPERT_PACK.key));
   if (isSparePartsExpertPrompt(value)) matches.push(getExpertPack(SPARE_PARTS_EXPERT_PACK.key));
   if (isMiningExpertPrompt(value)) matches.push(getExpertPack(MINING_EXPERT_PACK.key));
+  if (isHireExpertPrompt(value)) matches.push(getExpertPack(HIRE_EXPERT_PACK.key));
   return Object.freeze(matches.filter(Boolean));
 }
 
@@ -283,6 +293,9 @@ function renderExpertPack(pack) {
   } else if (pack.key === MINING_EXPERT_PACK.key) {
     liveBoundary =
       "Use this as product/workflow knowledge only. Never infer live site production, cost, fuel, stockpile, equipment or incident figures from this pack; current Mining facts require authorized governed live evidence. Do not invent Mining revenue or profit when the governed Mining evidence does not provide it.";
+  } else if (pack.key === HIRE_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer live Hire quotations, contracts, fleet, work logs, invoices, payments, receivables, returns or closure figures from this pack; current Equipment Hire facts require authorized governed live evidence. Do not invent Hire profit from quotation, invoice or payment totals when the governed Hire evidence does not provide a complete cost model.";
   }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
@@ -313,6 +326,7 @@ function renderExpertPacks(packs = []) {
 
 module.exports = {
   EXPERT_PACKS,
+  HIRE_EXPERT_PACK,
   MINING_EXPERT_PACK,
   PAYROLL_EXPERT_PACK,
   PAYROLL_RELEASE_COMMIT,
@@ -321,6 +335,7 @@ module.exports = {
   expertPackForPrompt,
   expertPacksForPrompt,
   getExpertPack,
+  isHireExpertPrompt,
   isMiningExpertPrompt,
   isPayrollExpertPrompt,
   isSparePartsExpertPrompt,
