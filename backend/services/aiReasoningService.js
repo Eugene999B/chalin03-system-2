@@ -1,6 +1,12 @@
 "use strict";
 
 const { normalizeEvidenceList } = require("./aiEvidenceService");
+const {
+  understandConversationTask,
+} = require("./aiConversationTaskUnderstandingService");
+const {
+  buildCrossDomainReasoningGraph,
+} = require("./aiCrossDomainReasoningGraphService");
 
 const MAX_RETRIEVAL_QUERIES = 10;
 const MAX_REASONING_EVIDENCE = 32;
@@ -493,27 +499,52 @@ function answerShapeForIntent(intent) {
   return ["direct answer", "what matters", "supporting evidence", "next step if useful"];
 }
 
+function graphAwareIntent(baseIntent, graph = {}) {
+  const keys = new Set(Array.isArray(graph.relationship_keys) ? graph.relationship_keys : []);
+  if (baseIntent === "lookup" && keys.has("enterprise_business_performance_comparison")) return "compare";
+  if (baseIntent === "lookup" && keys.has("enterprise_operating_health_diagnosis")) return "diagnose";
+  return baseIntent;
+}
+
 function buildReasoningPlan({ prompt, history = [], persona = "copilot" } = {}) {
   const taskState = resolveConversationTaskState({ prompt, history });
-  const intent = classifyIntent(taskState.current_prompt || taskState.resolved_prompt);
+  const taskUnderstanding = understandConversationTask({
+    prompt: taskState.current_prompt || prompt,
+    history,
+    taskState,
+    resolvedPrompt: taskState.resolved_prompt || "",
+    subquestions: taskState.subquestions || [],
+  });
+  const reasoningGraph = buildCrossDomainReasoningGraph({ taskUnderstanding });
+  const baseIntent = classifyIntent(taskState.current_prompt || taskState.resolved_prompt);
+  const intent = graphAwareIntent(baseIntent, reasoningGraph);
   const retrievalQueries = buildRetrievalQueries({
     prompt: taskState.resolved_prompt,
     history,
   });
-  const live = requiresLiveData(taskState.resolved_prompt);
+  const live =
+    requiresLiveData(taskState.resolved_prompt) ||
+    taskUnderstanding.live_data_required === true ||
+    reasoningGraph.live_data_required === true;
   return Object.freeze({
     persona,
     intent,
     live_data_required: live,
     retrieval_queries: retrievalQueries,
     answer_shape: Object.freeze(answerShapeForIntent(intent)),
-    task_state: taskState,
+    task_state: Object.freeze({
+      ...taskState,
+      working_state: taskUnderstanding.working_state,
+    }),
+    task_understanding: taskUnderstanding,
+    reasoning_graph: reasoningGraph,
     directives: Object.freeze([
       "Understand the user's actual question before reaching for a tool; casual conversation should remain natural.",
       "Treat a short or referential sub-question as a continuation of the active task when the recent conversation supports that reading.",
       "The newest user turn overrides earlier date, location, entity, metric or output scope when it changes one of them.",
       "When a request contains multiple sub-questions, answer every material part rather than silently dropping later clauses.",
       "For business questions, investigate the strongest relevant governed sources and live tools before concluding.",
+      "When the server reasoning graph connects multiple domains, verify the material bridges instead of answering each domain as an isolated keyword match.",
       "Synthesize evidence into meaning, implications, alternatives and recommended next steps instead of reciting raw fields.",
       "Prefer governed live tool results for current operational facts and approved knowledge for policy/procedure context.",
       "Use relevant conversation continuity to remember goals and prior work, but never treat old assistant text as current evidence.",
@@ -529,6 +560,7 @@ function reasoningPromptBlock({ plan, confidence, tensions = [] } = {}) {
   const safePlan = plan || {};
   const safeConfidence = confidence || {};
   const taskState = safePlan.task_state || {};
+  const graph = safePlan.reasoning_graph || {};
   const tensionText = tensions.length
     ? tensions.map((item) => `${item.left} vs ${item.right}: ${item.reason}`).join("; ")
     : "none detected";
@@ -542,13 +574,20 @@ function reasoningPromptBlock({ plan, confidence, tensions = [] } = {}) {
     `- Follow-up/sub-question continuation: ${taskState.follow_up === true ? "yes" : "no"}.`,
     `- Resolved task context: ${clean(taskState.resolved_prompt || taskState.current_prompt || "", 5000) || "none"}.`,
     `- Current request parts that must not be silently omitted: ${subquestionText}.`,
+    `- Cross-domain coverage required: ${graph.cross_domain === true ? "yes" : "no"}.`,
+    `- Primary domains: ${(graph.primary_domains || []).join(", ") || "unresolved/general"}.`,
+    `- Related domains to verify: ${(graph.related_domains || []).join(", ") || "none"}.`,
+    `- Reasoning bridges to test: ${(graph.relationship_keys || []).join(", ") || "none"}.`,
+    `- Evidence families to verify: ${(graph.evidence_families || []).join(", ") || "general reasoning"}.`,
     `- Live operational data required: ${safePlan.live_data_required === true ? "yes" : "no"}.`,
     `- Evidence confidence before final answer: ${safeConfidence.level || "low"}.`,
     `- Potential evidence tensions: ${tensionText}.`,
+    "- The reasoning graph is a server-owned coverage map only. It is not evidence, permission, scope or execution authority.",
     "- Be conversational and answer the actual question first. Do not lead with a mechanical evidence dump.",
     "- If this is a follow-up, preserve the active customer/worker/transaction/branch/date/task unless the current user turn changes it.",
     "- Old assistant messages may help resolve words like he, it, that or them, but they are continuity only; re-check live facts before treating them as current.",
     "- For analytical questions: state the bottom line, explain what is driving it, identify implications, test alternative explanations, and recommend the next useful move.",
+    "- When several business domains are connected, explain the material relationship between them rather than presenting disconnected mini-answers.",
     "- Convert raw snapshots into interpretation. Mention only the figures that materially support the conclusion.",
     "- Cite supported business factual claims with [E#], but do not attach citations to ordinary social conversation or generic reasoning that does not depend on CHALIN evidence.",
     "- Clearly distinguish fact, inference, scenario and unknown when that distinction matters; do not clutter simple answers with labels unnecessarily.",
@@ -605,6 +644,7 @@ module.exports = {
   detectEvidenceTensions,
   evidenceRoot,
   freshnessScore,
+  graphAwareIntent,
   isLikelyFollowUp,
   isLiveOperationalEvidence,
   isLiveOperationalToolResult,

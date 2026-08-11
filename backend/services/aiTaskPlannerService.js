@@ -4,6 +4,9 @@ const {
   understandConversationTask,
   unique,
 } = require("./aiConversationTaskUnderstandingService");
+const {
+  buildCrossDomainReasoningGraph,
+} = require("./aiCrossDomainReasoningGraphService");
 
 const MAX_OBJECTIVES = 8;
 const MAX_CANDIDATE_TOOLS = 5;
@@ -159,6 +162,7 @@ function objectiveTaskUnderstanding(question, { reasoningPlan = {}, objectiveCou
 
 function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {}) {
   const taskUnderstanding = taskUnderstandingForPlan({ prompt, reasoningPlan });
+  const reasoningGraph = buildCrossDomainReasoningGraph({ taskUnderstanding });
   const questions = objectiveQuestionList({ prompt, reasoningPlan });
   const objectives = questions.map((question, index) => {
     // Each decomposed sub-question owns its evidence families. Whole-request
@@ -168,20 +172,26 @@ function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {})
       reasoningPlan,
       objectiveCount: questions.length,
     });
+    const objectiveGraph = buildCrossDomainReasoningGraph({
+      taskUnderstanding: objectiveUnderstanding,
+    });
     const evidenceNeeds = Object.freeze(
       unique([
         ...evidenceNeedsForQuestion(question),
         ...objectiveUnderstanding.evidence_families,
+        ...objectiveGraph.evidence_families,
       ])
     );
     const objective = {
       id: `objective_${index + 1}`,
       question,
       evidence_needs: evidenceNeeds,
-      task_domains: objectiveUnderstanding.domains,
+      task_domains: objectiveGraph.domains,
+      reasoning_relationship_keys: objectiveGraph.relationship_keys,
       live_data_required:
         reasoningPlan?.live_data_required === true ||
         objectiveUnderstanding.live_data_required === true ||
+        objectiveGraph.live_data_required === true ||
         LIVE_PATTERNS.test(question),
       status: "pending",
       candidate_tools: Object.freeze([]),
@@ -197,10 +207,11 @@ function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {})
     version: 2,
     intent: reasoningPlan?.intent || taskUnderstanding.answer_mode || "lookup",
     answer_mode: taskUnderstanding.answer_mode,
-    task_domains: taskUnderstanding.domains,
+    task_domains: reasoningGraph.domains,
     domain_confidence: taskUnderstanding.domain_confidence,
     continuity_required: taskUnderstanding.continuity_required,
     task_understanding: taskUnderstanding,
+    reasoning_graph: reasoningGraph,
     objective_count: objectives.length,
     objectives: Object.freeze(objectives),
     all_resolved: false,
@@ -248,21 +259,26 @@ function updateTaskPlanCoverage(plan, toolResults = []) {
 
 function taskPlannerPromptBlock(plan = {}) {
   const objectives = Array.isArray(plan?.objectives) ? plan.objectives : [];
+  const graph = plan?.reasoning_graph || {};
   const rows = objectives.map((objective, index) => {
     const candidates = (objective.candidate_tools || []).map((entry) => entry.key).join(", ") || "none";
     const supporting = (objective.supporting_tool_keys || []).join(", ") || "none";
-    return `${index + 1}. [${objective.status || "pending"}] ${objective.question}\n   evidence needs: ${(objective.evidence_needs || []).join(", ") || "general reasoning"}\n   candidate read tools: ${candidates}\n   tool evidence collected: ${supporting}`;
+    const relationships = (objective.reasoning_relationship_keys || []).join(", ") || "none";
+    return `${index + 1}. [${objective.status || "pending"}] ${objective.question}\n   evidence needs: ${(objective.evidence_needs || []).join(", ") || "general reasoning"}\n   reasoning bridges: ${relationships}\n   candidate read tools: ${candidates}\n   tool evidence collected: ${supporting}`;
   });
 
   return [
     "CHALIN server-owned task plan:",
     `Answer mode: ${plan.answer_mode || plan.intent || "generic"}.`,
     `Task domains: ${(plan.task_domains || []).join(", ") || "unresolved/general"}.`,
+    `Cross-domain reasoning required: ${graph.cross_domain === true ? "yes" : "no"}.`,
+    `Reasoning bridges: ${(graph.relationship_keys || []).join(", ") || "none"}.`,
     `Conversation continuity required: ${plan.continuity_required === true ? "yes" : "no"}.`,
     ...rows,
     `Unresolved objectives: ${Number(plan?.unresolved_count || 0)} of ${objectives.length}.`,
     "Planner rules:",
     "- Treat every objective as part of the user's request; do not silently drop one.",
+    "- The reasoning graph is an advisory coverage map, not evidence, permission, scope or execution authority.",
     "- Candidate tools are ranked hints, not permission bypasses. Request only tools actually supplied to you.",
     "- Prefer one tool call that resolves multiple objectives over repetitive calls.",
     "- Use additional read-tool rounds only for a material unresolved objective or to verify a conclusion.",
@@ -273,12 +289,16 @@ function taskPlannerPromptBlock(plan = {}) {
 }
 
 function publicTaskPlan(plan = {}) {
+  const graph = plan?.reasoning_graph || {};
   return Object.freeze({
     version: Number(plan.version || 1),
     answer_mode: plan.answer_mode || null,
     task_domains: Object.freeze([...(plan.task_domains || [])]),
     domain_confidence: plan.domain_confidence || "low",
     continuity_required: plan.continuity_required === true,
+    cross_domain: graph.cross_domain === true,
+    reasoning_relationship_keys: Object.freeze([...(graph.relationship_keys || [])]),
+    related_domains: Object.freeze([...(graph.related_domains || [])]),
     objective_count: Number(plan.objective_count || 0),
     all_resolved: plan.all_resolved === true,
     unresolved_count: Number(plan.unresolved_count || 0),
@@ -288,6 +308,8 @@ function publicTaskPlan(plan = {}) {
           id: objective.id,
           question: objective.question,
           evidence_needs: Object.freeze([...(objective.evidence_needs || [])]),
+          task_domains: Object.freeze([...(objective.task_domains || [])]),
+          reasoning_relationship_keys: Object.freeze([...(objective.reasoning_relationship_keys || [])]),
           live_data_required: objective.live_data_required === true,
           status: objective.status,
           candidate_tool_keys: Object.freeze(
