@@ -76,6 +76,7 @@ jobs:
             backend/services/inventoryTraceabilityService.js \
             backend/services/inventoryTraceabilityRepositoryService.js \
             backend/tests/inventoryTraceabilityFoundation20260810.test.js \
+            backend/tests/inventoryTraceabilityIntegrationContract20260810.test.js \
             frontend/src/pages/InventoryTraceabilitySetupPage.jsx \
             frontend/scripts/inventoryTraceabilityFoundationTests.mjs
           git diff --cached --quiet && exit 0
