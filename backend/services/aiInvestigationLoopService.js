@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const { assertToolCallBudget } = require("./aiCostControlService");
+const { toolEvidenceTags } = require("./aiTaskPlannerService");
 
 const DEFAULT_MAX_TOOL_ROUNDS = 3;
 const HARD_MAX_TOOL_ROUNDS = 4;
@@ -76,11 +77,24 @@ function assertReadOnlyInvestigationTools(tools = []) {
   return true;
 }
 
+function plannerAwareReadTool(tool = {}) {
+  const tags = toolEvidenceTags(tool);
+  const description = String(tool?.description || "").trim();
+  const tagHint = tags.length
+    ? ` Planner evidence tags: ${tags.join(", ")}.`
+    : " Planner evidence tags: general governed read.";
+  return Object.freeze({
+    ...tool,
+    description: `${description}${tagHint}`.trim().slice(0, 1000),
+    planner_evidence_tags: Object.freeze(tags),
+  });
+}
+
 function filterReadOnlyInvestigationTools(tools = []) {
   return Object.freeze(
-    (Array.isArray(tools) ? tools : []).filter(
-      (tool) => Number(tool?.risk_level || 0) <= 1
-    )
+    (Array.isArray(tools) ? tools : [])
+      .filter((tool) => Number(tool?.risk_level || 0) <= 1)
+      .map(plannerAwareReadTool)
   );
 }
 
@@ -149,11 +163,14 @@ function investigationPromptBlock({ config, toolRound = 0, totalToolCalls = 0 } 
     "CHALIN multi-step investigation contract:",
     `- You may request read-only governed tools across at most ${safeConfig.max_tool_rounds} investigation rounds.`,
     `- Completed tool rounds: ${Math.max(0, Number(toolRound) || 0)}; total governed tool calls: ${Math.max(0, Number(totalToolCalls) || 0)}.`,
+    "- The preceding reasoning contract contains the server-resolved active task and subquestions. Treat every material subquestion as an investigation objective; do not silently drop one.",
+    "- Authorized tools include planner evidence tags. Use those tags to choose the smallest set of tools that can cover the unresolved objectives.",
+    "- Prefer one governed tool call that can answer several objectives over multiple redundant calls.",
     "- Use another tool only when it can resolve a material unknown, compare a needed period/source, or verify a conclusion.",
     "- Never repeat an identical tool call. Change the scope/period/query only when the new call answers a distinct question.",
     "- Stop investigating once the evidence is sufficient. More tool calls are not automatically better.",
     "- You have no autonomous write authority. Do not request or imply execution of payments, approvals, stock changes, customer changes, releases or other mutations.",
-    "- On the final synthesis round no tools will be available; produce the best evidence-grounded answer and state unresolved unknowns.",
+    "- On the final synthesis round no tools will be available. Answer every resolved objective and explicitly identify any objective that could not be verified from the governed evidence.",
   ].join("\n");
 }
 
@@ -170,6 +187,7 @@ function investigationSummary({
     duplicate_loop_blocked: duplicateLoopBlocked === true,
     autonomous_write_authority: false,
     bounded: true,
+    planner_guided: true,
   });
 }
 
@@ -186,5 +204,6 @@ module.exports = {
   getInvestigationConfig,
   investigationPromptBlock,
   investigationSummary,
+  plannerAwareReadTool,
   toolCallIdentity,
 };
