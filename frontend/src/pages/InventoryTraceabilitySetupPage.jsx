@@ -358,9 +358,9 @@ export default function InventoryTraceabilityPage() {
       </header>
 
       <div className="traceability-safety-banner">
-        <strong>Sales enforcement is not active yet.</strong> This phase prepares and reconciles
-        identities only. A product will not be represented as theft-protected at checkout until
-        the later Sales & Scanning phase rejects missing unit IDs server-side.
+        <strong>Feature-branch Sales enforcement is active for enforced serialized products.</strong>{" "}
+        Exact physical IDs are required at checkout on this development branch. Production remains
+        unchanged until this draft feature is explicitly reviewed, released and deployed.
       </div>
 
       {error ? <div className="traceability-message traceability-message--error">{error}</div> : null}

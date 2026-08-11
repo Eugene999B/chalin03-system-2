@@ -9,6 +9,7 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 const hub = read("src/pages/InventoryTraceabilityPage.jsx");
 const setupPage = read("src/pages/InventoryTraceabilitySetupPage.jsx");
 const receivingPage = read("src/pages/InventorySerializedReceivingPage.jsx");
+const quarantinePage = read("src/pages/InventoryReturnQuarantinePage.jsx");
 const lossPage = read("src/pages/InventoryLossControlPage.jsx");
 const blindScanner = read("src/components/InventoryBlindCountScanner.jsx");
 const app = read("src/App.jsx");
@@ -20,14 +21,17 @@ const hubStyles = read("src/styles/inventoryTraceabilityHub.css");
 
 assert.match(hub, /Setup & Labels/);
 assert.match(hub, /Serialized Receiving/);
+assert.match(hub, /Return Quarantine/);
 assert.match(hub, /Blind Counts & Investigations/);
 assert.match(hub, /InventoryTraceabilitySetupPage/);
 assert.match(hub, /InventorySerializedReceivingPage/);
+assert.match(hub, /InventoryReturnQuarantinePage/);
 assert.match(hub, /InventoryLossControlPage/);
 
 assert.match(setupPage, /Inventory Control & Traceability/);
 assert.match(setupPage, /Inventory Loss Prevention/);
-assert.match(setupPage, /Sales enforcement is not active yet/);
+assert.match(setupPage, /Feature-branch Sales enforcement is active for enforced serialized products/);
+assert.match(setupPage, /Production remains/);
 assert.match(setupPage, /traceability_state:\s*config\.tracking_mode === "quantity" \? "off" : "setup"/s);
 assert.doesNotMatch(setupPage, /traceability_state:\s*"enforced"/);
 assert.match(setupPage, /Where is this item\?/);
@@ -52,6 +56,10 @@ assert.match(receivingPage, /Unused labels must be explicitly voided/);
 assert.match(receivingStyles, /\.serialized-receiving/);
 assert.match(receivingStyles, /\.serialized-receiving__card/);
 
+assert.match(quarantinePage, /Return Quarantine/);
+assert.match(quarantinePage, /Quarantine is inventory, not sellable stock/);
+assert.match(quarantinePage, /Complete Inspection/);
+
 assert.match(lossPage, /Blind Counts & Investigations/);
 assert.match(lossPage, /Evidence, not accusation/);
 assert.match(lossPage, /blind_expected_values_hidden/);
@@ -74,6 +82,6 @@ assert.match(styles, /@media \(max-width: 520px\)/);
 assert.match(lossStyles, /\.inventory-loss-control/);
 assert.match(lossStyles, /\.inventory-loss-control__investigations/);
 assert.match(hubStyles, /\.inventory-traceability-hub__tabs/);
-assert.match(hubStyles, /repeat\(3, minmax\(0, 1fr\)\)/);
+assert.match(hubStyles, /repeat\(4, minmax\(0, 1fr\)\)/);
 
-console.log("Inventory Traceability, Serialized Receiving + Loss Control frontend contract passed.");
+console.log("Inventory Traceability, Receiving, Return Quarantine + Loss Control frontend contract passed.");
