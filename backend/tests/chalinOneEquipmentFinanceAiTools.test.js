@@ -96,13 +96,14 @@ function financeDefinition(overrides = {}) {
   };
 }
 
-test("Equipment Finance AI registers four company-wide aggregate tools", () => {
+test("Equipment Finance AI registers five company-wide aggregate tools", () => {
   const registry = new AiToolRegistry();
   registerEquipmentFinanceAiTools(registry, {
     portfolio: async () => ({}),
     arrears: async () => ({}),
     cashflow: async () => ({}),
     salesPipeline: async () => ({}),
+    performance: async () => ({}),
   });
 
   const tools = registry.list({ persona: "copilot", workspace: "equipment_hire" });
@@ -111,6 +112,7 @@ test("Equipment Finance AI registers four company-wide aggregate tools", () => {
     [
       "equipment_finance.arrears_health",
       "equipment_finance.cashflow_health",
+      "equipment_finance.performance_diagnostics",
       "equipment_finance.portfolio_health",
       "equipment_finance.sales_pipeline",
     ]
