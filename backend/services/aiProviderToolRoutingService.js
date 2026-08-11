@@ -8,6 +8,9 @@ const {
   understandConversationTask,
   unique,
 } = require("./aiConversationTaskUnderstandingService");
+const {
+  buildCrossDomainReasoningGraph,
+} = require("./aiCrossDomainReasoningGraphService");
 
 const MAX_PROVIDER_ROUTED_TOOLS = 12;
 const MAX_ROUTING_USER_TURNS = 4;
@@ -46,18 +49,21 @@ function routingObjectives(messages = [], { workspaceCode = "" } = {}) {
         history: priorHistory,
         workspaceCode,
       });
+      const graph = buildCrossDomainReasoningGraph({ taskUnderstanding: task });
       return Object.freeze({
         question,
         evidence_needs: Object.freeze(
           unique([
             ...evidenceNeedsForQuestion(question),
             ...task.evidence_families,
+            ...graph.evidence_families,
           ])
         ),
-        task_domains: task.domains,
+        task_domains: graph.domains,
         answer_mode: task.answer_mode,
-        live_data_required: task.live_data_required,
+        live_data_required: task.live_data_required || graph.live_data_required,
         continuity_required: task.continuity_required,
+        reasoning_relationship_keys: graph.relationship_keys,
       });
     })
   );
@@ -115,6 +121,9 @@ function selectRelevantProviderTools({
   const source = Array.isArray(tools) ? tools : [];
   const safeMaximum = Math.max(1, Math.min(20, Number(maximum) || MAX_PROVIDER_ROUTED_TOOLS));
   const taskUnderstanding = latestTaskUnderstanding(messages, workspaceCode);
+  const reasoningGraph = taskUnderstanding
+    ? buildCrossDomainReasoningGraph({ taskUnderstanding })
+    : null;
 
   if (source.length <= safeMaximum) {
     return Object.freeze({
@@ -125,6 +134,7 @@ function selectRelevantProviderTools({
       objective_count: 0,
       selected_keys: Object.freeze(source.map((tool) => String(tool?.key || "")).filter(Boolean)),
       task_understanding: taskUnderstanding,
+      reasoning_graph: reasoningGraph,
     });
   }
 
@@ -144,6 +154,7 @@ function selectRelevantProviderTools({
       objective_count: objectives.length,
       selected_keys: Object.freeze(source.map((tool) => String(tool?.key || "")).filter(Boolean)),
       task_understanding: taskUnderstanding,
+      reasoning_graph: reasoningGraph,
     });
   }
 
@@ -157,6 +168,7 @@ function selectRelevantProviderTools({
     objective_count: objectives.length,
     selected_keys: Object.freeze(selected.map((tool) => String(tool?.key || "")).filter(Boolean)),
     task_understanding: taskUnderstanding,
+    reasoning_graph: reasoningGraph,
   });
 }
 
