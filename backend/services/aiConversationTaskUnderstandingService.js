@@ -1,5 +1,9 @@
 "use strict";
 
+const {
+  buildConversationWorkingState,
+} = require("./aiConversationWorkingStateService");
+
 const MAX_PROMPT_CHARACTERS = 12000;
 const MAX_HISTORY_TURNS = 8;
 const MAX_OBJECTIVES = 8;
@@ -133,6 +137,22 @@ function domainMatches(text) {
   return unique(DOMAIN_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.key));
 }
 
+function workingStateDomains(taskState = null) {
+  const allowed = new Set(DOMAIN_RULES.map((rule) => rule.key));
+  return unique(
+    (Array.isArray(taskState?.working_state?.domains) ? taskState.working_state.domains : [])
+      .map((item) => clean(item, 80))
+      .filter((item) => allowed.has(item))
+  ).slice(0, 5);
+}
+
+function isShortContinuation(prompt) {
+  const text = clean(prompt, 2400);
+  if (!text) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.length <= 7 && (FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text) || BUSINESS_SIGNAL_PATTERN.test(text));
+}
+
 function inferDomains({ prompt, history = [], workspaceCode = "", taskState = null } = {}) {
   const current = clean(prompt, 6000);
   const continuity = isContinuation(current, history, taskState);
@@ -148,6 +168,11 @@ function inferDomains({ prompt, history = [], workspaceCode = "", taskState = nu
     if (domains.length) source = "conversation_continuity";
   }
 
+  if (!domains.length && continuity && isShortContinuation(current)) {
+    domains = workingStateDomains(taskState);
+    if (domains.length) source = "working_state_continuity";
+  }
+
   const workspaceDomain = WORKSPACE_DOMAIN[clean(workspaceCode, 80).toLowerCase()] || null;
   if (!domains.length && workspaceDomain && BUSINESS_SIGNAL_PATTERN.test(current)) {
     domains = [workspaceDomain];
@@ -156,7 +181,7 @@ function inferDomains({ prompt, history = [], workspaceCode = "", taskState = nu
 
   const confidence = source === "current_prompt"
     ? "high"
-    : source === "conversation_continuity" || source === "authorized_workspace_context"
+    : source === "conversation_continuity" || source === "working_state_continuity" || source === "authorized_workspace_context"
       ? "medium"
       : "low";
 
@@ -244,7 +269,7 @@ function understandConversationTask({
   });
   const hints = inferHints(`${continuityContext}\n${currentPrompt}`);
 
-  return Object.freeze({
+  const result = {
     version: 1,
     current_prompt: currentPrompt,
     answer_mode: mode,
@@ -259,7 +284,17 @@ function understandConversationTask({
     objective_count: objectives.length,
     evidence_families: evidenceFamiliesForDomains(domainResult.domains),
     ...hints,
+  };
+
+  result.working_state = buildConversationWorkingState({
+    prompt: currentPrompt,
+    conversation: history,
+    previousState: taskState?.working_state || null,
+    taskUnderstanding: result,
+    taskState,
   });
+
+  return Object.freeze(result);
 }
 
 module.exports = {
@@ -288,4 +323,5 @@ module.exports = {
   recentTaskHistory,
   understandConversationTask,
   unique,
+  workingStateDomains,
 };
