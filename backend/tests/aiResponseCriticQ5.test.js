@@ -7,6 +7,7 @@ const {
   critiqueResponse,
   objectiveCoverage,
   responseCriticRepairPrompt,
+  shouldAutoRepairResponse,
 } = require("../services/aiResponseCriticService");
 const {
   generateProviderResponse,
@@ -76,6 +77,66 @@ test("Q5 requires an explicit limitation when live facts were not verified", () 
     liveToolsUsed: false,
   });
   assert.equal(honest.issues.some((item) => item.key === "live_verification_not_disclosed"), false);
+});
+
+test("Q5 keeps live-verification failure visible but does not waste a repair while read tools remain", async () => {
+  const review = critiqueResponse({
+    answer: "Captured routed tools.",
+    composition: composition({
+      objectives: ["Tell me today's sales and current customer debt at Main Store"],
+      live_data_required: true,
+    }),
+    liveToolsUsed: false,
+  });
+  assert.equal(review.needs_repair, true);
+  assert.equal(
+    shouldAutoRepairResponse(review, { toolsAvailable: true, liveToolsUsed: false }),
+    false
+  );
+
+  let calls = 0;
+  const provider = {
+    key: "liveroutingcapture",
+    async generate() {
+      calls += 1;
+      return {
+        text: "Captured routed tools.",
+        model_key: "live-routing-v1",
+        input_tokens: 3,
+        output_tokens: 2,
+        cost_micros: 0,
+        finish_reason: "stop",
+        tool_calls: [],
+        provider_store_enabled: false,
+      };
+    },
+  };
+
+  const result = await generateProviderResponse({
+    provider,
+    messages: [{ role: "user", content: "Tell me today's sales and current customer debt at Main Store" }],
+    tools: [
+      {
+        key: "spare_parts.operations_snapshot",
+        title: "Spare Parts operations snapshot",
+        description: "Read current sales profit inventory and operations evidence",
+        risk_level: 1,
+      },
+    ],
+    providerContext: {
+      persona: "copilot",
+      data_classification: "internal",
+      live_data_required: true,
+      workspace_code: "spare_parts",
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.quality_repair_rounds, 0);
+  assert.equal(result.response_quality.needs_repair, true);
+  assert.ok(
+    result.response_quality.issues.some((item) => item.key === "live_verification_not_disclosed")
+  );
 });
 
 test("Q5 action critic blocks conversational wording that implies ungoverned execution", () => {
