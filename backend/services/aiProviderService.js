@@ -17,6 +17,9 @@ const {
 const {
   selectRelevantProviderTools,
 } = require("./aiProviderToolRoutingService");
+const {
+  enrichPublicSafeMessagesWithWeb,
+} = require("./aiPublicWebSearchService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
 const PROVIDER_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,79}$/;
@@ -383,6 +386,21 @@ async function generateProviderResponse({
       public_safe_system_turn: publicSafeSystemTurn,
       public_safe_general_turn: publicSafeGeneralTurn,
     };
+
+    if (publicSafeGeneralTurn) {
+      const enrichment = await enrichPublicSafeMessagesWithWeb({
+        messages: effectiveMessages,
+        env,
+      });
+      effectiveMessages = [...enrichment.messages];
+      effectiveProviderContext = {
+        ...effectiveProviderContext,
+        public_web_search_attempted: enrichment.web_search.attempted === true,
+        public_web_search_reason: enrichment.web_search.reason || null,
+        public_web_search_result_count: Number(enrichment.web_search.result_count || 0),
+        public_web_search_credits_used: enrichment.web_search.credits_used || null,
+      };
+    }
   }
 
   const toolRouting = selectRelevantProviderTools({
