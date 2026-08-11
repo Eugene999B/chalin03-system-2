@@ -48,7 +48,7 @@ const WORKSPACE_DOMAIN = Object.freeze({
   instalment_finance: "equipment_finance",
 });
 
-const BUSINESS_SIGNAL_PATTERN = /\b(?:sale|sales|sold|profit|margin|stock|inventory|customer|debt|owe|owing|payment|collection|payroll|salary|worker|employee|production|cost|expense|contract|invoice|arrears|receivable)\b/i;
+const BUSINESS_SIGNAL_PATTERN = /\b(?:sale|sales|sold|sell|selling|profit|margin|stock|inventory|customer|debt|owe|owing|payment|collection|payroll|salary|worker|employee|production|cost|expense|contract|invoice|arrears|receivable)\b/i;
 const LIVE_SIGNAL_PATTERN = /\b(?:today|yesterday|now|current|currently|latest|live|outstanding|overdue|active|this week|this month|last week|last month|right now)\b/i;
 const INTRINSIC_LIVE_PATTERN = /\b(?:how much (?:did|do|does|is|are)|how many|current balance|current stock|stock level|outstanding debt|(?:what|how much) .* owe|owes us|owing us|sales today|sold today|profit today|margin today|production today|payments? today|collections? today)\b/i;
 const REFERENTIAL_PATTERN = /\b(?:it|its|that|this|these|those|them|they|he|his|him|she|her|there|same|previous|earlier|yesterday)\b/i;
