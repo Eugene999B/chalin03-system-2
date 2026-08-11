@@ -10,6 +10,12 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
+def replace_first(text, old, new, label):
+    if old not in text:
+        raise SystemExit(f"{label}: expected at least 1 match, found 0")
+    return text.replace(old, new, 1)
+
+
 def patch_return_routes():
     path = ROOT / "backend/routes/returnRoutes.js"
     text = path.read_text(encoding="utf-8")
@@ -27,7 +33,10 @@ def patch_return_routes():
         """          MAX(si.unit_price) AS unit_price,\n          SUM(si.line_total) AS line_total,\n          MAX(p.inventory_tracking_mode) AS inventory_tracking_mode,\n          MAX(p.inventory_traceability_state) AS inventory_traceability_state,\n          MAX(p.inventory_product_code) AS inventory_product_code,\n          COALESCE((""",
         "return sale-item tracking fields",
     )
-    text = replace_once(
+    # This join shape occurs again in the POST execution query. The first
+    # occurrence is the GET /sales/:saleId/items query whose SELECT was just
+    # expanded with p.inventory_* fields above.
+    text = replace_first(
         text,
         """         FROM sale_items si\n         INNER JOIN sales s ON si.sale_id = s.id\n         WHERE si.sale_id = ?""",
         """         FROM sale_items si\n         INNER JOIN sales s ON si.sale_id = s.id\n         INNER JOIN products p ON p.id = si.product_id AND p.branch_id = s.branch_id\n         WHERE si.sale_id = ?""",
