@@ -12,7 +12,7 @@ const styles = read("src/styles/inventoryTransferIdentity.css");
 
 assert.match(page, /InventoryTransferIdentityPanel/);
 assert.match(page, /transferIdentityPolicy/);
-assert.match(page, /serialized/);
+assert.match(page, /handleSerializedTransferCompleted/);
 assert.match(page, /Checking physical-ID transfer policy/i);
 assert.match(page, /transferIdentityPolicy === "quantity"/);
 assert.match(page, /loadTransferDetails/);
