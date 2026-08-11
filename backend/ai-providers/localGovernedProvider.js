@@ -32,13 +32,33 @@ const TOOL_HINTS = Object.freeze([
     key: "system.group_intelligence",
     pattern: /\b(?:whole[- ]system|group performance|group intelligence|across all (?:businesses|workspaces|operations)|all (?:businesses|workspaces|operations)|company[- ]wide operations|overall chalin performance)\b/i,
   }),
+  // Equipment Hire must be considered before the sibling Installment Finance
+  // division. System Administrator can legitimately see both divisions, so a
+  // Hire-specific overdue/collection question must not be captured by a generic
+  // Finance arrears keyword just because both tool families are offered.
+  Object.freeze({
+    key: "equipment_hire.performance_diagnostics",
+    pattern: /\b(?:equipment hire performance|hire performance|hire underperform|hire commercial performance|billing lag|billing pressure|cash conversion|closure backlog|return backlog|why\s+(?:is|are|was|were)[^?]*(?:hire|fleet|collection|receivable|billing|invoice|quotation|contract|revenue)|hire revenue (?:low|down)|hire collections? (?:low|down))\b/i,
+  }),
+  Object.freeze({
+    key: "equipment_hire.fleet_health",
+    pattern: /\b(?:hire fleet|equipment hire fleet|hire asset availability|hire maintenance|hire breakdown|hire utili[sz]ation|assets? on hire|fleet availability)\b/i,
+  }),
+  Object.freeze({
+    key: "equipment_hire.receivables_health",
+    pattern: /\b(?:hire receivable|hire invoice|uninvoiced|hire collection|hire overdue|equipment hire overdue|equipment hire receivable)\b/i,
+  }),
+  Object.freeze({
+    key: "equipment_hire.operations_snapshot",
+    pattern: /\b(hire operation|hire quotation|hire contract|hire work log|equipment hire)\b/i,
+  }),
   Object.freeze({
     key: "equipment_finance.arrears_health",
-    pattern: /\b(arrears?|overdue|delinquen|late payment|past due)\b/i,
+    pattern: /\b(?:equipment finance|installment|instalment|finance account|repayment)[\s\S]{0,80}\b(?:arrears?|overdue|delinquen|late payment|past due)\b|\b(?:arrears?|overdue|delinquen|late payment|past due)[\s\S]{0,80}\b(?:equipment finance|installment|instalment|finance account|repayment)\b/i,
   }),
   Object.freeze({
     key: "equipment_finance.cashflow_health",
-    pattern: /\b(cash\s*flow|collection trend|scheduled payment|payment method|expected collection)\b/i,
+    pattern: /\b(?:equipment finance|installment|instalment|finance account)[\s\S]{0,80}\b(?:cash\s*flow|collection trend|scheduled payment|payment method|expected collection)\b|\b(?:cash\s*flow|collection trend|scheduled payment|payment method|expected collection)[\s\S]{0,80}\b(?:equipment finance|installment|instalment|finance account)\b/i,
   }),
   Object.freeze({
     key: "equipment_finance.sales_pipeline",
@@ -46,23 +66,7 @@ const TOOL_HINTS = Object.freeze([
   }),
   Object.freeze({
     key: "equipment_finance.portfolio_health",
-    pattern: /\b(installment|finance portfolio|financed equipment|portfolio health)\b/i,
-  }),
-  Object.freeze({
-    key: "equipment_hire.performance_diagnostics",
-    pattern: /\b(?:equipment hire performance|hire performance|hire underperform|hire commercial performance|billing lag|billing pressure|cash conversion|closure backlog|return backlog|why\s+(?:is|are|was|were)[^?]*(?:hire|fleet|collection|receivable|billing|invoice|quotation|contract|revenue)|hire revenue (?:low|down)|hire collections? (?:low|down))\b/i,
-  }),
-  Object.freeze({
-    key: "equipment_hire.fleet_health",
-    pattern: /\b(fleet|asset availability|maintenance|breakdown|utili[sz]ation|on hire)\b/i,
-  }),
-  Object.freeze({
-    key: "equipment_hire.receivables_health",
-    pattern: /\b(hire receivable|hire invoice|uninvoiced|hire collection|hire overdue)\b/i,
-  }),
-  Object.freeze({
-    key: "equipment_hire.operations_snapshot",
-    pattern: /\b(hire operation|quotation|hire contract|work log|equipment hire)\b/i,
+    pattern: /\b(installment|instalment|finance portfolio|financed equipment|portfolio health|equipment finance)\b/i,
   }),
   Object.freeze({
     key: "mining.stock_fuel_health",
