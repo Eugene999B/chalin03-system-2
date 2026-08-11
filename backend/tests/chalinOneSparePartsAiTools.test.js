@@ -195,6 +195,7 @@ test("Spare Parts AI tools register as read-only branch-scoped R1 tools", () => 
     tools.map((tool) => tool.key),
     [
       "spare_parts.collections_health",
+      "spare_parts.customer_accounting_collections_diagnostics",
       "spare_parts.inventory_health",
       "spare_parts.operations_snapshot",
       "spare_parts.performance_diagnostics",

@@ -2,6 +2,9 @@
 
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
+  buildCustomerAccountingCollectionsDiagnostics,
+} = require("../services/aiCustomerAccountingCollectionsDiagnosticsService");
+const {
   buildCollectionsHealth,
   buildInventoryHealth,
   buildOperationsSnapshot,
@@ -73,6 +76,15 @@ function evidenceExcerpt(viewKey, output) {
       aging: output.collections.aging,
     });
   }
+  if (viewKey === "customer-accounting") {
+    return JSON.stringify({
+      ...evidenceScope(output),
+      performance_view: output.performance_view,
+      certainty: output.certainty,
+      causal_map: output.causal_map,
+      drivers: output.drivers,
+    });
+  }
   if (viewKey === "performance") {
     return JSON.stringify({
       ...evidenceScope(output),
@@ -106,9 +118,11 @@ function buildAggregateEvidence(viewKey, output) {
       ? "Spare Parts inventory health snapshot"
       : viewKey === "collections"
         ? "Spare Parts collections health snapshot"
-        : viewKey === "performance"
-          ? "Spare Parts cross-module performance diagnostics"
-          : "Spare Parts operations snapshot";
+        : viewKey === "customer-accounting"
+          ? "Customer accounting and collections diagnostics"
+          : viewKey === "performance"
+            ? "Spare Parts cross-module performance diagnostics"
+            : "Spare Parts operations snapshot";
   return [
     {
       source_type: "system_snapshot",
@@ -126,8 +140,9 @@ function buildAggregateEvidence(viewKey, output) {
         start_date: output.scope.start_date,
         end_date: output.scope.end_date,
         aggregate_only: true,
+        customer_identity_included: false,
         execution_authority: "read_only",
-        causal_diagnostics: viewKey === "performance",
+        causal_diagnostics: ["performance", "customer-accounting"].includes(viewKey),
       },
     },
   ];
@@ -231,6 +246,23 @@ function registerSparePartsAiTools(
         loader,
         projector: buildCollectionsHealth,
         viewKey: "collections",
+      }),
+  });
+
+  registry.register({
+    ...common,
+    key: "spare_parts.customer_accounting_collections_diagnostics",
+    title: "Customer accounting and collections diagnostics",
+    description:
+      "Explains branch-scoped aggregate customer receivables, selected-period sales balance, active debt, debt payments, aging, supplier-balance separation and accounting-confidence boundaries without customer identities or individual debt rows. It prevents double-counting period sales balance with current debt and prevents debt payments from being counted as new sales.",
+    required_business_permissions: ["spare_parts.audit"],
+    handler: async ({ input, context }) =>
+      executeView({
+        input,
+        context,
+        loader,
+        projector: buildCustomerAccountingCollectionsDiagnostics,
+        viewKey: "customer-accounting",
       }),
   });
 
