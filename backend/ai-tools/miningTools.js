@@ -3,6 +3,7 @@
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   buildOperationsSnapshot,
+  buildPerformanceDiagnostics,
   buildProductionCostHealth,
   buildStockFuelHealth,
   loadMiningIntelligence,
@@ -34,6 +35,8 @@ function evidenceFor(viewKey, output) {
           ? "Mining stockpile and fuel health"
           : viewKey === "production-cost"
           ? "Mining production, cost and utilization health"
+          : viewKey === "performance"
+          ? "Mining site performance diagnostics"
           : "Mining operations snapshot",
       excerpt_text: JSON.stringify(output).slice(0, 10000),
       as_of_at: output.generated_at,
@@ -123,6 +126,17 @@ function registerMiningAiTools(
     ],
     handler: async ({ input, context }) =>
       runView({ input, context, loader, projector: buildProductionCostHealth, viewKey: "production-cost" }),
+  });
+
+  registry.register({
+    ...common,
+    key: "mining.performance_diagnostics",
+    title: "Mining site performance diagnostics",
+    description:
+      "Explains read-only site performance using production target-reference pressure, operating expense per recorded unit, equipment utilization/idle/breakdown, dispatch flow, stockpile/fuel constraints, pending controls and incident risk. It explicitly does not invent Mining revenue or profit.",
+    required_business_permissions: ["mining.reports.view"],
+    handler: async ({ input, context }) =>
+      runView({ input, context, loader, projector: buildPerformanceDiagnostics, viewKey: "performance" }),
   });
 
   if (registry === aiToolRegistry) registered = true;

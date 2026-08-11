@@ -3,6 +3,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  MINING_EXPERT_PACK,
+  getMiningExpertPack,
+  isMiningExpertPrompt,
+} = require("./aiMiningExpertPackService");
+const {
   SPARE_PARTS_EXPERT_PACK,
   getSparePartsExpertPack,
   isSparePartsExpertPrompt,
@@ -164,6 +169,7 @@ const PAYROLL_EXPERT_PACK = Object.freeze({
 const EXPERT_PACKS = Object.freeze({
   [PAYROLL_EXPERT_PACK.key]: PAYROLL_EXPERT_PACK,
   [SPARE_PARTS_EXPERT_PACK.key]: SPARE_PARTS_EXPERT_PACK,
+  [MINING_EXPERT_PACK.key]: MINING_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -206,6 +212,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === SPARE_PARTS_EXPERT_PACK.key) {
     return getSparePartsExpertPack({ includeAvailability });
   }
+  if (key === MINING_EXPERT_PACK.key) {
+    return getMiningExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -232,6 +241,7 @@ function expertPacksForPrompt(value) {
   const matches = [];
   if (isPayrollExpertPrompt(value)) matches.push(getExpertPack(PAYROLL_EXPERT_PACK.key));
   if (isSparePartsExpertPrompt(value)) matches.push(getExpertPack(SPARE_PARTS_EXPERT_PACK.key));
+  if (isMiningExpertPrompt(value)) matches.push(getExpertPack(MINING_EXPERT_PACK.key));
   return Object.freeze(matches.filter(Boolean));
 }
 
@@ -262,6 +272,18 @@ function renderExpertPack(pack) {
     .map((item) => `- ${item}`)
     .join("\n");
   const availability = pack.deployment_availability || {};
+  let liveBoundary =
+    "Use this as product/workflow knowledge only. Current business facts require authorized governed live evidence.";
+  if (pack.key === PAYROLL_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer a live worker salary, payroll result or employee fact from this pack; live payroll records require an authorized governed read path.";
+  } else if (pack.key === SPARE_PARTS_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer live branch sales, stock, debt, customer or profit figures from this pack; current Spare Parts facts require authorized governed live evidence.";
+  } else if (pack.key === MINING_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer live site production, cost, fuel, stockpile, equipment or incident figures from this pack; current Mining facts require authorized governed live evidence. Do not invent Mining revenue or profit when the governed Mining evidence does not provide it.";
+  }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
     `Pack version: ${pack.version}.`,
@@ -276,9 +298,7 @@ function renderExpertPack(pack) {
     diagnostics,
     rules ? "Reasoning rules:" : "",
     rules,
-    pack.key === PAYROLL_EXPERT_PACK.key
-      ? "Use this as product/workflow knowledge only. Never infer a live worker salary, payroll result or employee fact from this pack; live payroll records require an authorized governed read path."
-      : "Use this as product/workflow knowledge only. Never infer live branch sales, stock, debt, customer or profit figures from this pack; current Spare Parts facts require authorized governed live evidence.",
+    liveBoundary,
   ]
     .filter(Boolean)
     .join("\n");
@@ -293,6 +313,7 @@ function renderExpertPacks(packs = []) {
 
 module.exports = {
   EXPERT_PACKS,
+  MINING_EXPERT_PACK,
   PAYROLL_EXPERT_PACK,
   PAYROLL_RELEASE_COMMIT,
   PAYROLL_RUNTIME_FILES,
@@ -300,6 +321,7 @@ module.exports = {
   expertPackForPrompt,
   expertPacksForPrompt,
   getExpertPack,
+  isMiningExpertPrompt,
   isPayrollExpertPrompt,
   isSparePartsExpertPrompt,
   listExpertPacks,

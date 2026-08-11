@@ -341,10 +341,225 @@ function buildProductionCostHealth(intelligence) {
   };
 }
 
+function inclusivePeriodDays(startDate, endDate) {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  return Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+}
+
+function buildPerformanceDiagnostics(intelligence) {
+  const s = intelligence.summary;
+  const scope = intelligence.scope;
+  const trackedHours = asNumber(s.working_hours) + asNumber(s.idle_hours) + asNumber(s.breakdown_hours);
+  const periodDays = inclusivePeriodDays(scope.start_date, scope.end_date);
+  const targetReference = asNumber(scope.daily_target) > 0 && periodDays > 0
+    ? round(asNumber(scope.daily_target) * periodDays, 3)
+    : null;
+  const targetAttainment = targetReference > 0
+    ? round((asNumber(s.production_quantity) / targetReference) * 100, 2)
+    : null;
+  const dispatchToProduction = asNumber(s.production_quantity) > 0
+    ? round((asNumber(s.dispatched_quantity) / asNumber(s.production_quantity)) * 100, 2)
+    : null;
+  const idleShare = trackedHours > 0 ? round((asNumber(s.idle_hours) / trackedHours) * 100, 2) : null;
+  const breakdownShare = trackedHours > 0 ? round((asNumber(s.breakdown_hours) / trackedHours) * 100, 2) : null;
+  const drivers = [];
+
+  function addDriver({ key, category, severity = "info", effect, explanation, evidence }) {
+    drivers.push(Object.freeze({ key, category, severity, effect, explanation, evidence }));
+  }
+
+  if (targetAttainment != null && targetAttainment < 90) {
+    addDriver({
+      key: "production_target_pressure",
+      category: "output",
+      severity: targetAttainment < 70 ? "danger" : "warning",
+      effect: "production_pressure",
+      explanation: `Recorded production is ${targetAttainment}% of the simple daily-target reference for the selected calendar period. This is a planning reference, not proof that every calendar day was scheduled for full production.`,
+      evidence: { production_quantity: s.production_quantity, target_reference_quantity: targetReference, target_attainment_percent: targetAttainment },
+    });
+  }
+
+  if (s.cost_per_unit == null && asNumber(s.operating_cost) > 0) {
+    addDriver({
+      key: "cost_without_recorded_output",
+      category: "operating_efficiency",
+      severity: "danger",
+      effect: "cost_pressure",
+      explanation: "Operating expenses were recorded while production quantity is zero, so an operating cost per unit cannot be computed for the period.",
+      evidence: { operating_cost: s.operating_cost, production_quantity: s.production_quantity },
+    });
+  }
+
+  if (s.utilization_percent != null && Number(s.utilization_percent) < 60) {
+    addDriver({
+      key: "low_equipment_utilization",
+      category: "equipment",
+      severity: Number(s.utilization_percent) < 40 ? "danger" : "warning",
+      effect: "output_and_cost_efficiency_pressure",
+      explanation: `Recorded equipment utilization is ${s.utilization_percent}%. Lower working-hour share can reduce output and increase operating expense per recorded unit, but the aggregate does not prove the mechanical or scheduling cause.`,
+      evidence: { utilization_percent: s.utilization_percent, working_hours: s.working_hours, idle_hours: s.idle_hours, breakdown_hours: s.breakdown_hours },
+    });
+  }
+
+  if (breakdownShare != null && breakdownShare >= 20) {
+    addDriver({
+      key: "breakdown_time_pressure",
+      category: "equipment",
+      severity: breakdownShare >= 35 ? "danger" : "warning",
+      effect: "downtime_pressure",
+      explanation: `Breakdown time is ${breakdownShare}% of tracked equipment hours in the selected period. This is a strong downtime signal that should be traced to the underlying equipment logs before assigning a root cause.`,
+      evidence: { breakdown_share_percent: breakdownShare, breakdown_hours: s.breakdown_hours, tracked_hours: round(trackedHours, 2) },
+    });
+  }
+
+  if (idleShare != null && idleShare >= 25) {
+    addDriver({
+      key: "idle_time_pressure",
+      category: "equipment",
+      severity: idleShare >= 40 ? "warning" : "review",
+      effect: "utilization_pressure",
+      explanation: `Idle time is ${idleShare}% of tracked equipment hours. Investigate scheduling, material availability, crew readiness and other operational causes before concluding why the equipment was idle.`,
+      evidence: { idle_share_percent: idleShare, idle_hours: s.idle_hours, tracked_hours: round(trackedHours, 2) },
+    });
+  }
+
+  if (Number(s.low_tanks || 0) > 0) {
+    addDriver({
+      key: "low_fuel_availability",
+      category: "fuel",
+      severity: "warning",
+      effect: "operational_constraint",
+      explanation: `${s.low_tanks} active fuel tank(s) are at or below minimum level. Low balance can constrain operations, but current balance alone is not a fuel-consumption or fuel-loss calculation.`,
+      evidence: { low_fuel_tanks: s.low_tanks, fuel_balance_litres: s.fuel_balance_litres },
+    });
+  }
+
+  if (Number(s.low_stockpiles || 0) > 0) {
+    addDriver({
+      key: "low_stockpile_availability",
+      category: "material_flow",
+      severity: "warning",
+      effect: "flow_constraint",
+      explanation: `${s.low_stockpiles} active stockpile(s) are at or below minimum quantity. This can affect material flow or dispatch readiness and should be checked against production and stockpile movements.`,
+      evidence: { low_stockpiles: s.low_stockpiles, stockpile_quantity: s.stockpile_quantity },
+    });
+  }
+
+  if (dispatchToProduction != null && dispatchToProduction < 80) {
+    addDriver({
+      key: "production_dispatch_flow_gap",
+      category: "material_flow",
+      severity: "review",
+      effect: "dispatch_flow_review",
+      explanation: `Approved dispatched quantity is ${dispatchToProduction}% of recorded production for the selected period. This can reflect stockpile accumulation, timing or pending approvals; it is not automatic evidence of loss.`,
+      evidence: { production_quantity: s.production_quantity, dispatched_quantity: s.dispatched_quantity, dispatch_to_production_percent: dispatchToProduction, pending_dispatches: s.pending_dispatches },
+    });
+  }
+
+  if (Number(s.pending_dispatches || 0) > 0) {
+    addDriver({
+      key: "pending_dispatch_approvals",
+      category: "control",
+      severity: "review",
+      effect: "flow_and_completeness_risk",
+      explanation: `${s.pending_dispatches} dispatch(es) are waiting for approval, so the selected period's material-flow picture may be incomplete.`,
+      evidence: { pending_dispatches: s.pending_dispatches },
+    });
+  }
+
+  if (Number(s.serious_incidents || 0) > 0) {
+    addDriver({
+      key: "serious_incident_risk",
+      category: "safety_control",
+      severity: "danger",
+      effect: "operational_and_safety_risk",
+      explanation: `${s.serious_incidents} high/critical incident(s) remain open. This requires management attention; the aggregate count alone does not quantify production or financial impact.`,
+      evidence: { serious_incidents: s.serious_incidents, open_incidents: s.open_incidents },
+    });
+  }
+
+  if (Number(s.pending_closings || 0) > 0 || Number(s.pending_crews || 0) > 0) {
+    addDriver({
+      key: "period_control_incomplete",
+      category: "control",
+      severity: "review",
+      effect: "data_completeness_risk",
+      explanation: `${s.pending_closings || 0} site closing(s) and ${s.pending_crews || 0} crew record(s) remain pending. Conclusions for the period should be treated as provisional until the operational controls are completed.`,
+      evidence: { pending_closings: s.pending_closings, pending_crews: s.pending_crews },
+    });
+  }
+
+  if (drivers.length === 0) {
+    addDriver({
+      key: "no_major_aggregate_exception",
+      category: "overall",
+      severity: "info",
+      effect: "no_obvious_aggregate_driver",
+      explanation: "The current aggregate snapshot does not show a major configured exception. A deeper root-cause answer would require comparison with another period or more detailed operational evidence.",
+      evidence: { production_quantity: s.production_quantity, operating_cost: s.operating_cost, utilization_percent: s.utilization_percent },
+    });
+  }
+
+  const severityOrder = { danger: 0, warning: 1, review: 2, info: 3 };
+  drivers.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
+
+  return {
+    scope,
+    performance_view: {
+      production_quantity: s.production_quantity,
+      production_unit: scope.production_unit,
+      daily_target: scope.daily_target,
+      target_reference_quantity: targetReference,
+      target_attainment_percent: targetAttainment,
+      dispatched_quantity: s.dispatched_quantity,
+      dispatch_to_production_percent: dispatchToProduction,
+      operating_cost: s.operating_cost,
+      operating_cost_per_recorded_unit: s.cost_per_unit,
+      equipment_utilization_percent: s.utilization_percent,
+      working_hours: s.working_hours,
+      idle_hours: s.idle_hours,
+      breakdown_hours: s.breakdown_hours,
+      idle_share_percent: idleShare,
+      breakdown_share_percent: breakdownShare,
+      low_fuel_tanks: s.low_tanks,
+      low_stockpiles: s.low_stockpiles,
+      pending_dispatches: s.pending_dispatches,
+      pending_closings: s.pending_closings,
+      pending_crews: s.pending_crews,
+      open_incidents: s.open_incidents,
+      serious_incidents: s.serious_incidents,
+    },
+    drivers,
+    causal_map: {
+      output: "recorded production and target-reference attainment",
+      operating_efficiency: "recorded Mining operating expenses per recorded production unit",
+      equipment: "working, idle and breakdown hours plus utilization",
+      material_flow: "production, stockpile availability and approved dispatch flow",
+      fuel: "current fuel availability signals",
+      controls: "pending approvals/closings and incident signals",
+    },
+    certainty: {
+      has_mining_revenue_evidence: false,
+      has_certified_mining_profit_evidence: false,
+      cost_scope: "recorded_mining_expenses_divided_by_recorded_production",
+      target_reference_is_calendar_day_planning_reference: targetReference != null,
+      production_dispatch_gap_is_not_automatic_loss: true,
+      current_fuel_balance_is_not_period_consumption: true,
+      warning:
+        "This diagnostic explains operational performance from governed Mining aggregates. It does not calculate Mining revenue, certified total production cost or profit because those measures are not present in the current Mining AI evidence.",
+    },
+    generated_at: intelligence.generated_at,
+  };
+}
+
 module.exports = {
   buildOperationsSnapshot,
+  buildPerformanceDiagnostics,
   buildProductionCostHealth,
   buildStockFuelHealth,
+  inclusivePeriodDays,
   loadMiningIntelligence,
   normalizeDateRange,
 };
