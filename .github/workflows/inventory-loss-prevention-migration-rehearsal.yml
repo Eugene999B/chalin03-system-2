@@ -1,0 +1,284 @@
+name: Inventory Loss Prevention Migration Rehearsal
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-loss-prevention-migration-rehearsal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  disposable-mysql-rehearsal:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: inventory-rehearsal-root
+          MYSQL_DATABASE: chalin03_inventory_rehearsal
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pinventory-rehearsal-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      MYSQL_PWD: inventory-rehearsal-root
+      REHEARSAL_DB: chalin03_inventory_rehearsal
+
+    steps:
+      - name: Checkout feature source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Confirm MySQL client
+        run: |
+          set -euo pipefail
+          mysql --version
+          mysqladmin ping -h 127.0.0.1 -uroot --silent
+
+      - name: Build production-shaped pre-feature database
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" < database/schema.sql
+
+          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" <<'SQL'
+          INSERT INTO branches (id, code, branch_code, name, location, is_head_office, is_active)
+          VALUES
+            (1, 'S1', 'S1', 'Main Store', 'Dunkwa Main Store', 1, 1),
+            (2, 'S2', 'S2', 'East Store', 'Dunkwa East Store', 0, 1);
+
+          INSERT INTO users (
+            id, full_name, username, password_hash, role, default_branch_id,
+            can_access_all_branches, is_active, must_change_password
+          ) VALUES (
+            1, 'Inventory Rehearsal Administrator', 'inventory-rehearsal-admin',
+            '$2b$12$inventoryRehearsalNotARealCredential000000000000000000000',
+            'admin', 1, 1, 1, 0
+          );
+
+          INSERT INTO products (
+            id, branch_id, name, size, category, cost_price, selling_price,
+            quantity, low_stock_threshold, barcode, is_active, created_by
+          ) VALUES
+            (101, 1, 'Legacy Oil Filter', 'LF-01', 'Filters', 60.00, 100.00, 7, 2, 'LEGACY-101', 1, 1),
+            (102, 1, 'Serialized Pilot Seal', 'SP-01', 'Seals', 40.00, 75.00, 1, 1, 'SERIAL-102', 1, 1);
+          SQL
+
+          mysql -h 127.0.0.1 -uroot -N -B "$REHEARSAL_DB" \
+            -e "SELECT CONCAT_WS('|', id, branch_id, name, size, category, cost_price, selling_price, quantity, low_stock_threshold, barcode, is_active, created_by) FROM products WHERE id = 101" \
+            > /tmp/inventory-legacy-before.txt
+
+          printf 'pre_feature_legacy_product=' > inventory-migration-rehearsal-evidence.txt
+          cat /tmp/inventory-legacy-before.txt >> inventory-migration-rehearsal-evidence.txt
+
+      - name: Apply and verify inventory migrations in release order
+        run: |
+          set -euo pipefail
+
+          verify_sql() {
+            local file="$1"
+            local label="$2"
+            local output
+            output="$(mysql -h 127.0.0.1 -uroot -N -B "$REHEARSAL_DB" < "$file")"
+            {
+              printf '\n[%s]\n' "$label"
+              printf '%s\n' "$output"
+            } | tee -a inventory-migration-rehearsal-evidence.txt
+
+            if printf '%s\n' "$output" | grep -Eq $'\tFAIL$'; then
+              echo "Verifier reported FAIL: $label" >&2
+              exit 1
+            fi
+            if ! printf '%s\n' "$output" | grep -Eq $'\tPASS$'; then
+              echo "Verifier produced no PASS rows: $label" >&2
+              exit 1
+            fi
+            if printf '%s\n' "$output" | awk -F '\t' '$NF == "PASS" && $(NF-1) != "0" { bad = 1 } END { exit bad ? 0 : 1 }'; then
+              echo "Verifier emitted PASS with a non-zero problem_count: $label" >&2
+              exit 1
+            fi
+          }
+
+          apply_and_verify() {
+            local migration="$1"
+            local verifier="$2"
+            local label="$3"
+            echo "Applying $migration"
+            mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" < "$migration"
+            verify_sql "$verifier" "$label"
+          }
+
+          apply_and_verify \
+            database/migrations/20260810_inventory_traceability_foundation.sql \
+            database/migrations/20260810_inventory_traceability_foundation_verify.sql \
+            foundation
+
+          # Exercise the released enforcement rule with a valid serialized product.
+          # The first state is reconciled (one active ID for quantity one); then the
+          # unit is sold and aggregate quantity becomes zero. The verifier must still
+          # accept the enforced product because lifecycle state is not activation state.
+          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" <<'SQL'
+          UPDATE products
+          SET inventory_tracking_mode = 'serialized',
+              inventory_product_code = 'SPS',
+              inventory_risk_tier = 'high',
+              inventory_traceability_state = 'enforced',
+              inventory_traceability_configured_by = 1,
+              inventory_traceability_configured_at = NOW()
+          WHERE id = 102;
+
+          INSERT INTO inventory_label_batches (
+            id, batch_code, branch_id, product_id, source_type, source_id, source_item_id,
+            expected_quantity, generated_quantity, activated_quantity, voided_quantity,
+            status, label_format, created_by, printed_by, verified_by, activated_by,
+            printed_at, verified_at, activated_at, notes
+          ) VALUES (
+            11, 'LBL-S1-REHEARSAL', 1, 102, 'opening_reconciliation', 102, 1,
+            1, 1, 1, 0, 'activated', 'a4', 1, 1, 1, 1,
+            NOW(), NOW(), NOW(), 'Disposable migration rehearsal only'
+          );
+
+          INSERT INTO inventory_units (
+            id, unit_code, product_id, origin_branch_id, current_branch_id,
+            label_batch_id, status, activated_by, activated_at, last_verified_by,
+            last_verified_at, status_changed_at
+          ) VALUES (
+            201, 'SPS-Z9Y8X7W6', 102, 1, 1, 11, 'active', 1, NOW(), 1, NOW(), NOW()
+          );
+
+          INSERT INTO inventory_unit_events (
+            unit_id, event_sequence, branch_id, event_type, from_status, to_status,
+            source_type, source_id, actor_user_id, reason, request_id,
+            previous_event_hash, event_hash
+          ) VALUES (
+            201, 1, 1, 'label_activated', 'label_pending', 'active',
+            'opening_reconciliation', 102, 1, 'Disposable rehearsal activation',
+            'migration-rehearsal-activation', NULL, REPEAT('a', 64)
+          );
+          SQL
+
+          verify_sql \
+            database/migrations/20260810_inventory_traceability_foundation_verify.sql \
+            foundation-valid-enforcement
+
+          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" <<'SQL'
+          UPDATE inventory_units
+          SET status = 'sold', status_changed_at = NOW()
+          WHERE id = 201;
+          UPDATE products SET quantity = 0 WHERE id = 102;
+          INSERT INTO inventory_unit_events (
+            unit_id, event_sequence, branch_id, event_type, from_status, to_status,
+            source_type, source_id, actor_user_id, reason, request_id,
+            previous_event_hash, event_hash
+          ) VALUES (
+            201, 2, 1, 'sale_completed', 'active', 'sold',
+            'sale', 500, 1, 'Disposable rehearsal lifecycle transition',
+            'migration-rehearsal-sale', REPEAT('a', 64), REPEAT('b', 64)
+          );
+          SQL
+
+          verify_sql \
+            database/migrations/20260810_inventory_traceability_foundation_verify.sql \
+            foundation-post-lifecycle
+
+          apply_and_verify \
+            database/migrations/20260810_inventory_loss_detection_foundation.sql \
+            database/migrations/20260810_inventory_loss_detection_foundation_verify.sql \
+            loss-detection
+
+          apply_and_verify \
+            database/migrations/20260810_inventory_count_snapshot_hardening.sql \
+            database/migrations/20260810_inventory_count_snapshot_hardening_verify.sql \
+            count-snapshot
+
+          apply_and_verify \
+            database/migrations/20260811_inventory_transfer_traceability.sql \
+            database/migrations/20260811_inventory_transfer_traceability_verify.sql \
+            transfer-traceability
+
+      - name: Reapply migrations to prove idempotence
+        run: |
+          set -euo pipefail
+
+          migrations=(
+            database/migrations/20260810_inventory_traceability_foundation.sql
+            database/migrations/20260810_inventory_loss_detection_foundation.sql
+            database/migrations/20260810_inventory_count_snapshot_hardening.sql
+            database/migrations/20260811_inventory_transfer_traceability.sql
+          )
+          verifiers=(
+            database/migrations/20260810_inventory_traceability_foundation_verify.sql
+            database/migrations/20260810_inventory_loss_detection_foundation_verify.sql
+            database/migrations/20260810_inventory_count_snapshot_hardening_verify.sql
+            database/migrations/20260811_inventory_transfer_traceability_verify.sql
+          )
+
+          for migration in "${migrations[@]}"; do
+            mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" < "$migration"
+          done
+
+          for verifier in "${verifiers[@]}"; do
+            output="$(mysql -h 127.0.0.1 -uroot -N -B "$REHEARSAL_DB" < "$verifier")"
+            {
+              printf '\n[idempotence:%s]\n' "$(basename "$verifier")"
+              printf '%s\n' "$output"
+            } | tee -a inventory-migration-rehearsal-evidence.txt
+            if printf '%s\n' "$output" | grep -Eq $'\tFAIL$'; then
+              echo "Idempotence verifier failed: $verifier" >&2
+              exit 1
+            fi
+            if ! printf '%s\n' "$output" | grep -Eq $'\tPASS$'; then
+              echo "Idempotence verifier produced no PASS rows: $verifier" >&2
+              exit 1
+            fi
+          done
+
+          marker_count="$(mysql -h 127.0.0.1 -uroot -N -B "$REHEARSAL_DB" -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_name IN ('20260810_inventory_traceability_foundation','20260810_inventory_loss_detection_foundation','20260810_inventory_count_snapshot_hardening','20260811_inventory_transfer_traceability')")"
+          if [ "$marker_count" != "4" ]; then
+            echo "Expected exactly four inventory migration markers; found $marker_count" >&2
+            exit 1
+          fi
+          echo "inventory_migration_marker_count=$marker_count" >> inventory-migration-rehearsal-evidence.txt
+
+      - name: Prove legacy business data was preserved
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -uroot -N -B "$REHEARSAL_DB" \
+            -e "SELECT CONCAT_WS('|', id, branch_id, name, size, category, cost_price, selling_price, quantity, low_stock_threshold, barcode, is_active, created_by) FROM products WHERE id = 101" \
+            > /tmp/inventory-legacy-after.txt
+
+          if ! cmp -s /tmp/inventory-legacy-before.txt /tmp/inventory-legacy-after.txt; then
+            echo "Legacy sentinel product changed during additive inventory migrations." >&2
+            diff -u /tmp/inventory-legacy-before.txt /tmp/inventory-legacy-after.txt || true
+            exit 1
+          fi
+
+          printf 'post_migration_legacy_product=' >> inventory-migration-rehearsal-evidence.txt
+          cat /tmp/inventory-legacy-after.txt >> inventory-migration-rehearsal-evidence.txt
+          echo 'legacy_business_data_preserved=PASS' >> inventory-migration-rehearsal-evidence.txt
+          echo 'production_database_touched=NO' >> inventory-migration-rehearsal-evidence.txt
+
+      - name: Upload sanitized migration rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-loss-prevention-migration-rehearsal-evidence
+          path: inventory-migration-rehearsal-evidence.txt
+          if-no-files-found: warn
+          retention-days: 30
