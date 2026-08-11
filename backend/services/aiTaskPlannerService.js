@@ -204,7 +204,7 @@ function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {})
   });
 
   return Object.freeze({
-    version: 3,
+    version: 2,
     intent: reasoningPlan?.intent || taskUnderstanding.answer_mode || "lookup",
     answer_mode: taskUnderstanding.answer_mode,
     task_domains: reasoningGraph.domains,
