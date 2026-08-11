@@ -3,7 +3,7 @@
 const { CHALIN_PRODUCT_CONTEXT } = require("../services/aiProductKnowledgeService");
 
 const MAX_EVIDENCE_ITEMS = 5;
-const MAX_EXCERPT_LENGTH = 1200;
+const MAX_EXCERPT_LENGTH = 6000;
 const MAX_READABLE_FACTS = 14;
 const LOCAL_MODEL_KEY = "chalin-local-governed-v1";
 
@@ -79,7 +79,7 @@ const TOOL_HINTS = Object.freeze([
   }),
   Object.freeze({
     key: "spare_parts.operations_snapshot",
-    pattern: /\b(spare parts|sales|purchase|return|expense|branch operation|store performance)\b/i,
+    pattern: /\b(spare parts|sales?|sold|selling|sell|purchase|return|expense|branch operation|store performance)\b/i,
   }),
 ]);
 
@@ -133,6 +133,19 @@ function latestUserQuestion(messages = []) {
   return "";
 }
 
+function recentUserContext(messages = [], limit = 4) {
+  const turns = [];
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (String(message?.role || "").toLowerCase() !== "user") continue;
+    const question = clean(message?.content, 2000);
+    if (!question) continue;
+    turns.unshift(question);
+    if (turns.length >= limit) break;
+  }
+  return turns.join(" \n ");
+}
+
 function offeredReadOnlyToolMap(tools = []) {
   const allowed = new Set(LOCAL_LIVE_TOOL_KEYS);
   const result = new Map();
@@ -158,7 +171,10 @@ function chooseLocalReadTool({ messages = [], tools = [], providerContext = {} }
   const offered = offeredReadOnlyToolMap(tools);
   if (offered.size === 0) return null;
 
-  const question = latestUserQuestion(messages);
+  // A short answer such as "at main store" can be completing the prior
+  // question, so tool choice uses the recent user thread rather than treating
+  // the last sentence as an isolated request.
+  const question = recentUserContext(messages) || latestUserQuestion(messages);
   for (const hint of TOOL_HINTS) {
     if (hint.pattern.test(question) && offered.has(hint.key)) {
       return offered.get(hint.key);
@@ -228,22 +244,72 @@ function readableExcerpt(excerpt) {
   }
 }
 
+function parseEvidenceJson(excerpt) {
+  const raw = clean(excerpt, MAX_EXCERPT_LENGTH);
+  if (!raw || !/^[\[{]/.test(raw)) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "GHS 0.00";
+  return `GHS ${number.toLocaleString("en-GH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function composeSparePartsOperationsAnswer(item) {
+  const data = parseEvidenceJson(item?.excerpt);
+  if (!data?.sales || !Array.isArray(data?.period)) return null;
+  const sales = data.sales;
+  const branchName = clean(data.branch_name || data.branch_code || "", 120);
+  const location = branchName ? ` at ${branchName}` : "";
+  const start = clean(data.period[0], 20);
+  const end = clean(data.period[1], 20);
+  const period = start && end
+    ? start === end
+      ? ` on ${start}`
+      : ` from ${start} to ${end}`
+    : "";
+  const transactions = Number(sales.transaction_count || 0);
+  const total = formatMoney(sales.total_sales);
+  const paid = formatMoney(sales.total_paid);
+  const balance = formatMoney(sales.total_balance);
+  const collectionRate = Number(sales.collection_rate || 0);
+  return [
+    `Spare Parts${location} recorded ${transactions.toLocaleString("en-GH")} sale${transactions === 1 ? "" : "s"}${period}, totaling ${total}. [${item.citation}]`,
+    `Paid: ${paid}. Outstanding from those sales: ${balance}.${Number.isFinite(collectionRate) ? ` Collection rate: ${collectionRate.toFixed(2)}%.` : ""} [${item.citation}]`,
+    "If you want, I can next break down what this means operationally rather than just repeat the figures.",
+  ].join("\n\n");
+}
+
 function composeEvidenceAnswer(messages = []) {
   const evidence = evidenceFromMessages(messages);
   if (evidence.length === 0) {
-    return "I do not have enough approved live CHALIN evidence to answer that reliably in local fallback mode. I will not guess or substitute an unrelated workspace snapshot.";
+    return "I do not have enough approved live CHALIN evidence to answer that reliably. I will not guess or substitute an unrelated workspace snapshot.";
   }
+
+  const sparePartsOperations = evidence.find((item) =>
+    /spare parts operations snapshot/i.test(item.heading)
+  );
+  const directSparePartsAnswer = composeSparePartsOperationsAnswer(sparePartsOperations);
+  if (directSparePartsAnswer) return directSparePartsAnswer;
 
   const lines = evidence.map((item) => {
     const excerpt = readableExcerpt(item.excerpt);
     return `- ${item.heading}: ${excerpt}${excerpt.endsWith(".") ? "" : "."} [${item.citation}]`;
   });
   return [
-    "Here is what the approved CHALIN evidence shows:",
+    "The approved CHALIN evidence shows:",
     "",
     ...lines,
     "",
-    "This is the local governed fallback. It used only the supplied evidence and did not execute a business change.",
+    "I used only the supplied governed evidence and did not execute a business change.",
   ].join("\n");
 }
 
@@ -269,11 +335,11 @@ function composePublicSafeSystemAnswer(messages = []) {
 
   if (/\baudit(?:\s+|-)intelligence\b|\badvanced accounting intelligence\b/.test(question)) {
     return [
-      "Audit Intelligence is CHALIN’s management and audit observatory. It is meant to help you understand whether the business records make sense and where management should investigate.",
+      "Audit Intelligence is CHALIN’s management and audit observatory. It helps you understand whether the business records make sense and where management should investigate.",
       "",
-      "It brings together signals from sales and collections, unpaid balances and debts, expenses and purchases, returns/refunds, stock adjustments and transfers, SMS delivery, sensitive system events, backup/restore and maintenance activity, audit unlocks and sign-off controls. It then presents items such as an audit score/status, an audit review checklist, profit-and-loss intelligence, management ledger and debt/aging intelligence.",
+      "It combines signals from sales and collections, unpaid balances and debts, expenses and purchases, returns/refunds, stock adjustments and transfers, SMS delivery, sensitive system events, backup/restore and maintenance activity, audit unlocks and sign-off controls. It then turns those signals into an audit status, review checklist, profit-and-loss intelligence, management ledger, debt/aging intelligence and control warnings.",
       "",
-      "So the purpose is not simply to display numbers. It should help answer questions such as: what looks unusual, where controls are weak, what is not reconciling, what risk needs attention, and what management should review next.",
+      "In simple terms: it should help you see what looks wrong, why it matters and what needs investigation next.",
     ].join("\n");
   }
 
@@ -282,26 +348,56 @@ function composePublicSafeSystemAnswer(messages = []) {
   }
 
   if (/\bmarketing\b|\badvertis|\bbrand|\bcampaign|\bpositioning\b/.test(question)) {
-    return "For CHALIN marketing, position the product around operational control rather than a long feature list: one governed system for sales, stock, people, payroll, mining, equipment operations, finance, audit and management intelligence. Build separate messages for each buyer type, show concrete before/after workflows, use demonstrations and proof points, and measure qualified leads, demo-to-trial conversion, activation and retained business use. A full external reasoning provider can develop campaigns, copy and channel strategy in much more depth.";
+    return "For CHALIN marketing, lead with the operational problem CHALIN solves instead of listing every feature. Segment the message by buyer, demonstrate the before/after workflow, use concrete proof, and measure qualified leads, demos, activation and retained use. I can go deeper on positioning, campaigns, copy or channels if you tell me what you are trying to achieve.";
   }
 
   if (/\barchitecture\b|\bsoftware\b|\bit\b|\btechnical\b|\bdatabase\b|\bsecurity\b|\bcyber/.test(question)) {
-    return "CHALIN should be treated as a multi-workspace business platform with server-enforced permissions, scoped business services, audit evidence and a separate AI tool boundary. For IT decisions, prioritize reliability, explicit workspace/data boundaries, least privilege, transactional business operations, observable deployments, recoverability and APIs that the AI can use through governed tools instead of direct database access.";
+    return "CHALIN should be treated as a multi-workspace business platform with server-enforced permissions, scoped business services, audit evidence and a separate AI tool boundary. The main IT priorities are reliability, explicit data boundaries, least privilege, transactional business operations, observable deployments, recoverability and governed APIs instead of direct AI database access.";
   }
 
-  return `I can explain this from CHALIN’s product model and help reason about it. The local fallback has the following static system context available: ${clean(CHALIN_PRODUCT_CONTEXT, 900)}… A configured external reasoning model is preferred for a deeper, more conversational answer.`;
+  return "I can explain this from CHALIN’s product model and reason through it with you. Tell me the specific part you want to understand and I’ll answer it directly before adding detail.";
 }
 
 function composePublicSafeGeneralAnswer() {
   return "This question does not require private CHALIN records. A configured external reasoning provider should answer it normally. CHALIN Local is only the governed fallback, so I will not pretend it has broad world knowledge that it does not have.";
 }
 
-function localToolCall(tool) {
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function inferredDateInput(messages = [], now = new Date()) {
+  const question = recentUserContext(messages).toLowerCase();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (/\byesterday\b/.test(question)) {
+    const yesterday = new Date(today);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const value = isoDate(yesterday);
+    return Object.freeze({ start_date: value, end_date: value });
+  }
+  if (/\bthis\s+week\b/.test(question)) {
+    const start = new Date(today);
+    const weekday = start.getUTCDay() || 7;
+    start.setUTCDate(start.getUTCDate() - weekday + 1);
+    return Object.freeze({ start_date: isoDate(start), end_date: isoDate(today) });
+  }
+  if (/\bthis\s+month\b/.test(question)) {
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    return Object.freeze({ start_date: isoDate(start), end_date: isoDate(today) });
+  }
+  if (/\b(today|today's|right now|current|currently|latest|live)\b/.test(question)) {
+    const value = isoDate(today);
+    return Object.freeze({ start_date: value, end_date: value });
+  }
+  return Object.freeze({});
+}
+
+function localToolCall(tool, messages = []) {
   const key = clean(tool?.key, 150).toLowerCase();
   return Object.freeze({
     id: `local_${key.replace(/[^a-z0-9]+/gi, "_").slice(0, 90)}`,
     tool_key: key,
-    input: Object.freeze({}),
+    input: inferredDateInput(messages),
   });
 }
 
@@ -368,7 +464,7 @@ class LocalGovernedProvider {
         output_tokens: Math.ceil(text.length / 4),
         cost_micros: 0,
         finish_reason: "local_read_only_tool",
-        tool_calls: [localToolCall(selectedTool)],
+        tool_calls: [localToolCall(selectedTool, messages)],
         provider_store_enabled: false,
       };
     }
@@ -399,9 +495,14 @@ module.exports = {
   composePublicSafeGeneralAnswer,
   composePublicSafeSocialAnswer,
   composePublicSafeSystemAnswer,
+  composeSparePartsOperationsAnswer,
   evidenceFromMessages,
+  formatMoney,
+  inferredDateInput,
   latestUserQuestion,
   localToolCall,
   offeredReadOnlyToolMap,
+  parseEvidenceJson,
   readableExcerpt,
+  recentUserContext,
 };

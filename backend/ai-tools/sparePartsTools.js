@@ -23,11 +23,37 @@ const DATE_PROPERTIES = Object.freeze({
   },
 });
 
+function utcDateOnly(now = new Date()) {
+  return now.toISOString().slice(0, 10);
+}
+
+function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
+  const normalized = input && typeof input === "object" ? { ...input } : {};
+  if (
+    viewKey === "operations" &&
+    !String(normalized.start_date || "").trim() &&
+    !String(normalized.end_date || "").trim()
+  ) {
+    const today = utcDateOnly(now);
+    normalized.start_date = today;
+    normalized.end_date = today;
+  }
+  return normalized;
+}
+
+function evidenceScope(output) {
+  return {
+    branch_id: output.scope.branch_id,
+    branch_code: output.scope.branch_code || null,
+    branch_name: output.scope.branch_name || null,
+    period: [output.scope.start_date, output.scope.end_date],
+  };
+}
+
 function evidenceExcerpt(viewKey, output) {
   if (viewKey === "inventory") {
     return JSON.stringify({
-      branch_id: output.scope.branch_id,
-      period: [output.scope.start_date, output.scope.end_date],
+      ...evidenceScope(output),
       product_count: output.inventory.product_count,
       low_stock_count: output.inventory.low_stock_count,
       negative_stock_count: output.inventory.negative_stock_count,
@@ -38,8 +64,7 @@ function evidenceExcerpt(viewKey, output) {
   }
   if (viewKey === "collections") {
     return JSON.stringify({
-      branch_id: output.scope.branch_id,
-      period: [output.scope.start_date, output.scope.end_date],
+      ...evidenceScope(output),
       active_debt_count: output.collections.active_debt_count,
       total_debt_balance: output.collections.total_debt_balance,
       debt_payments: output.collections.debt_payments,
@@ -48,8 +73,7 @@ function evidenceExcerpt(viewKey, output) {
     });
   }
   return JSON.stringify({
-    branch_id: output.scope.branch_id,
-    period: [output.scope.start_date, output.scope.end_date],
+    ...evidenceScope(output),
     sales: output.sales,
     collections: output.collections,
     inventory: output.inventory,
@@ -80,6 +104,8 @@ function buildAggregateEvidence(viewKey, output) {
       workspace_code: "spare_parts",
       metadata: {
         branch_id: output.scope.branch_id,
+        branch_code: output.scope.branch_code || null,
+        branch_name: output.scope.branch_name || null,
         start_date: output.scope.start_date,
         end_date: output.scope.end_date,
         aggregate_only: true,
@@ -90,7 +116,8 @@ function buildAggregateEvidence(viewKey, output) {
 }
 
 async function executeView({ input, context, loader, projector, viewKey }) {
-  const { intelligence } = await loader({ context, input });
+  const effectiveInput = withOperationsDefaultWindow(viewKey, input);
+  const { intelligence } = await loader({ context, input: effectiveInput });
   const output = projector(intelligence, context);
   return {
     ...output,
@@ -129,7 +156,7 @@ function registerSparePartsAiTools(
     key: "spare_parts.operations_snapshot",
     title: "Spare Parts operations snapshot",
     description:
-      "Returns branch-scoped aggregate sales, collections, inventory, expense, purchase, return and audit health without customer identities or raw rows.",
+      "Returns branch-scoped aggregate sales, collections, inventory, expense, purchase, return and audit health without customer identities or raw rows. When no date window is supplied, the operations snapshot defaults to the current UTC business date so natural current/today questions do not accidentally return a 30-day range.",
     handler: async ({ input, context }) =>
       executeView({
         input,
@@ -181,6 +208,9 @@ module.exports = {
   DATE_PROPERTIES,
   buildAggregateEvidence,
   evidenceExcerpt,
+  evidenceScope,
   executeView,
   registerSparePartsAiTools,
+  utcDateOnly,
+  withOperationsDefaultWindow,
 };

@@ -15,6 +15,9 @@ import "./ai/providerControlOverhaul.css";
 const AiProviderControlLauncher = lazy(() =>
   import("./ai/AiProviderControlLauncher")
 );
+const AiFeedbackCorrectionCapture = lazy(() =>
+  import("./ai/AiFeedbackCorrectionCapture")
+);
 const ContentStudioAiLauncher = lazy(() =>
   import("./content-studio/ContentStudioAiLauncher")
 );
@@ -38,6 +41,7 @@ export default function ProtectedChalinOneEntry() {
         {showProviderControl ? (
           <Suspense fallback={null}>
             <AiProviderControlLauncher />
+            <AiFeedbackCorrectionCapture />
           </Suspense>
         ) : null}
         {showContentStudioAi ? (

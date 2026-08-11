@@ -23,9 +23,11 @@ const TIME_WORDS = new Set([
 ]);
 
 const OPERATIONAL_WORDS = new Set([
-  "arrears", "balance", "cash", "contract", "contracts", "customer",
-  "customers", "debt", "debts", "equipment", "finance", "hire", "inventory",
-  "payment", "payments", "quantity", "revenue", "sale", "sales", "stock",
+  "arrears", "balance", "cash", "collection", "collections", "collected",
+  "contract", "contracts", "customer", "customers", "debt", "debts",
+  "equipment", "finance", "hire", "inventory", "payment", "payments",
+  "purchase", "purchases", "purchased", "bought", "quantity", "received",
+  "revenue", "sale", "sales", "sell", "selling", "sold", "stock",
   "transaction", "transactions",
 ]);
 
@@ -86,7 +88,7 @@ function requiresLiveData(prompt) {
   const tokens = new Set(tokenizeReasoning(prompt));
   const hasOperational = [...tokens].some((token) => OPERATIONAL_WORDS.has(token));
   const hasTimeSignal = [...tokens].some((token) => TIME_WORDS.has(token));
-  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|active (?:hire|finance|contract)|sales? today|payments? today|cash position|current status)\b/i.test(clean(prompt));
+  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|active (?:hire|finance|contract)|sales? today|sold today|selling today|payments? today|collections? today|cash position|current status)\b/i.test(clean(prompt));
   return intrinsicallyLive || (hasOperational && hasTimeSignal);
 }
 

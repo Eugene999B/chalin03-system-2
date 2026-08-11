@@ -72,13 +72,17 @@ export function FeatureFlagProvider({ children }) {
   const [error, setError] = useState("");
   const lastTokenRef = useRef(currentToken());
   const requestSequenceRef = useRef(0);
+  const hasLoadedSnapshotRef = useRef(false);
 
   const refreshFeatureFlags = useCallback(async () => {
     const requestSequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestSequence;
     const token = currentToken();
+    const initialLoad = !hasLoadedSnapshotRef.current;
 
-    setLoading(true);
+    // A loaded CHALIN screen must never be replaced by a loading surface merely
+    // because feature availability is being refreshed in the background.
+    if (initialLoad) setLoading(true);
     setError("");
 
     try {
@@ -90,20 +94,25 @@ export function FeatureFlagProvider({ children }) {
 
       setFlags(snapshot.flags);
       setAudience(snapshot.audience);
+      hasLoadedSnapshotRef.current = true;
       return true;
     } catch (requestError) {
       if (requestSequence !== requestSequenceRef.current) {
         return false;
       }
 
-      // Feature availability always fails closed. Ordinary Chalin 03 pages
-      // continue to work even when this optional status request is unavailable.
-      setFlags(CHALIN_ONE_FEATURE_DEFAULTS);
-      setAudience(token ? "staff" : "public");
+      // Fail closed on the initial boot. Once a valid screen is already
+      // mounted, preserve the last verified snapshot so a transient background
+      // request cannot make the application flash, disappear or redirect.
+      if (initialLoad) {
+        setFlags(CHALIN_ONE_FEATURE_DEFAULTS);
+        setAudience(token ? "staff" : "public");
+      }
       setError(
         requestError.response?.data?.message ||
           "CHALIN ONE feature availability could not be confirmed."
       );
+      hasLoadedSnapshotRef.current = true;
       return false;
     } finally {
       if (requestSequence === requestSequenceRef.current) {

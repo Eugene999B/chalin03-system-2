@@ -138,7 +138,7 @@ test("the exact reported Audit Intelligence question never triggers a Spare Part
 
   assert.equal(result.tool_calls.length, 0);
   assert.match(result.text, /management and audit observatory/i);
-  assert.match(result.text, /audit score/i);
+  assert.match(result.text, /audit (?:score|status)/i);
   assert.doesNotMatch(result.text, /Sales Transaction Count|Zero-cost local mode|operations snapshot/i);
 });
 

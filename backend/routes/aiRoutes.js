@@ -31,11 +31,14 @@ const {
 } = require("../services/aiProductKnowledgeService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
+  CONVERSATION_ROLLOVER_CHARACTER_LIMIT,
+  CONVERSATION_ROLLOVER_MESSAGE_LIMIT,
   archiveConversation,
   deleteConversation,
   getConversationDetails,
   listConversations,
   renameConversation,
+  rolloverConversationIfNeeded,
 } = require("../services/aiConversationService");
 const {
   createFeedback,
@@ -122,10 +125,43 @@ function requireOriginalAdministrator(req, res, next) {
   });
 }
 
+function conversationRolloverNotice(rollover) {
+  if (!rollover?.rolled_over) return "";
+  const title = String(rollover.title || "the continuation chat").trim();
+  return `This conversation reached its reasoning limit, so I started a fresh continuation: “${title}”. I carried forward only a small continuity capsule to keep the discussion accurate. Any earlier live figures are historical context and will be re-checked before I treat them as current.`;
+}
+
+function withConversationRollover(result, rollover) {
+  if (!rollover?.rolled_over) return result;
+  const notice = conversationRolloverNotice(rollover);
+  return Object.freeze({
+    ...result,
+    answer: notice ? `${notice}\n\n${result.answer || ""}`.trim() : result.answer,
+    conversation_rollover: Object.freeze({
+      occurred: true,
+      reason: rollover.reason,
+      previous_conversation_key: rollover.previous_conversation_key,
+      conversation_key: rollover.conversation_key,
+      title: rollover.title,
+      notice,
+      previous_message_count: rollover.usage?.message_count || 0,
+      previous_character_count: rollover.usage?.character_count || 0,
+    }),
+  });
+}
+
 async function runPersonaChat({ req, persona }) {
   const contextKey = String(req.body.context_key || "").trim() || null;
   const message = String(req.body.message || "");
   const productKnowledgeTurn = isChalinProductKnowledgeTurn(message);
+  const scope = resolveAiScope({ req, persona });
+  const rollover = await rolloverConversationIfNeeded({
+    conversationKey: req.body.conversation_key || null,
+    userId: req.user.id,
+    persona,
+    scope,
+  });
+  const conversationKey = rollover.conversation_key || req.body.conversation_key || null;
   let contextual = null;
 
   // Context buttons should supply live business evidence only when the question
@@ -141,13 +177,16 @@ async function runPersonaChat({ req, persona }) {
     });
   }
 
-  const result = await runAiConversationTurn({
-    req,
-    persona,
-    conversationKey: req.body.conversation_key || null,
-    message,
-    provider: contextual?.provider || null,
-  });
+  const result = withConversationRollover(
+    await runAiConversationTurn({
+      req,
+      persona,
+      conversationKey,
+      message,
+      provider: contextual?.provider || null,
+    }),
+    rollover
+  );
 
   if (!contextual) {
     return productKnowledgeTurn && contextKey
@@ -329,6 +368,11 @@ router.get(
         can_manage: isOriginalSystemAdministrator(req.user),
       },
       permissions: getAiPermissionSnapshot(req.user),
+      conversation_limits: {
+        message_limit: CONVERSATION_ROLLOVER_MESSAGE_LIMIT,
+        character_limit: CONVERSATION_ROLLOVER_CHARACTER_LIMIT,
+        rollover_mode: "automatic_continuation",
+      },
       execution_authority: flags.aiActions
         ? "approved_low_risk_actions_only"
         : "read_recommend_prepare_only",

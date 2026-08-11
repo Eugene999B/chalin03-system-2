@@ -106,6 +106,15 @@ assert.equal(
 assert.match(workspace, /clearAiConversationHistory/);
 assert.match(workspace, /ClearHistoryDialog/);
 
+// Server-side conversation intelligence owns evolving names and long-chat
+// rollover. A rollover must replace the visible stream with the new persisted
+// continuation instead of visually mixing two separate server conversations.
+assert.match(workspace, /const nextTitle = result\?\.conversation\?\.title \|\|/);
+assert.match(workspace, /const rolledOver = result\?\.conversation_rollover\?\.occurred === true/);
+assert.match(workspace, /if \(rolledOver\) \{/);
+assert.match(workspace, /const details = await getAiConversation\(persona, conversationKey\)/);
+assert.match(workspace, /setMessages\(details\?\.messages \|\| \[optimisticUser, assistant\]\)/);
+
 // Chat management belongs on each conversation row, not in a distant footer.
 assert.match(workspace, /function ConversationRow/);
 assert.match(workspace, /ci-conversation-more/);
