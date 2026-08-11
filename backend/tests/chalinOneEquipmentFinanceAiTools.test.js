@@ -134,7 +134,15 @@ test("Hire AI tools are explicitly Hire-only", () => {
   const registry = new AiToolRegistry();
   registerHireAiTools(registry, { loader: async () => ({}) });
   const tools = registry.list({ persona: "copilot", workspace: "equipment_hire" });
-  assert.equal(tools.length, 3);
+  assert.deepEqual(
+    tools.map((tool) => tool.key),
+    [
+      "equipment_hire.fleet_health",
+      "equipment_hire.operations_snapshot",
+      "equipment_hire.performance_diagnostics",
+      "equipment_hire.receivables_health",
+    ]
+  );
   assert.equal(
     tools.every((tool) => tool.required_equipment_division === "hire"),
     true
