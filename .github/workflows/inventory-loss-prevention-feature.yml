@@ -58,9 +58,14 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
+          # The deterministic patch intentionally restores/removes temporary CI files
+          # in its working tree. Keep those workflow/script changes out of the bot
+          # commit; the connected GitHub control plane will clean them up afterward.
+          git checkout HEAD -- .github/workflows/inventory-loss-prevention-feature.yml
+          git checkout HEAD -- .github/traceability-sale-integration/patch.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add backend/routes/saleRoutes.js frontend/src/pages/NewSalePage.jsx
           git diff --cached --check
           git commit -m "Wire atomic serialized unit checkout"
           git push origin HEAD:feature/inventory-loss-prevention-traceability
