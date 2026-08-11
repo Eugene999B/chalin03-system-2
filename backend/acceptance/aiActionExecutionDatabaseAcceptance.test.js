@@ -117,4 +117,8 @@ if (!enabled) {
     });
     assert.equal(afterReplay.title, "Renamed by Governed AI Action");
   });
+
+  test.after(async () => {
+    await pool.end();
+  });
 }
