@@ -49,6 +49,16 @@ backend_test = replace_once(
 )
 backend_test_path.write_text(backend_test, encoding="utf-8")
 
+integration_test_path = ROOT / "backend/tests/inventoryTraceabilityIntegrationContract20260810.test.js"
+integration_test = integration_test_path.read_text(encoding="utf-8")
+integration_test = replace_once(
+    integration_test,
+    '''test("tracking is backward compatible and checkout enforcement is impossible before Phase 3", () => {\n  assert.match(migration, /inventory_tracking_mode` VARCHAR\\(20\\) NOT NULL DEFAULT ''quantity''/);\n  assert.match(migration, /inventory_traceability_state` VARCHAR\\(20\\) NOT NULL DEFAULT ''off''/);\n  assert.match(repository, /ready_for_serialized_enforcement/);\n  assert.match(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);\n  assert.match(primitives, /Sales & Scanning phase is enabled server-side/);\n  assert.doesNotMatch(repository, /inventory_traceability_state\\s*=\\s*'enforced'/);\n  assert.match(coreRoutes, /an administrator may enable enforcement separately/);\n});''',
+    '''test("tracking is backward compatible and exact-ID enforcement is explicit, serialized-only and reconciled", () => {\n  assert.match(migration, /inventory_tracking_mode` VARCHAR\\(20\\) NOT NULL DEFAULT ''quantity''/);\n  assert.match(migration, /inventory_traceability_state` VARCHAR\\(20\\) NOT NULL DEFAULT ''off''/);\n  assert.match(repository, /ready_for_serialized_enforcement/);\n  assert.match(repository, /current\\.inventory_traceability_state !== TRACEABILITY_STATES\\.ENFORCED/);\n  assert.match(primitives, /TRACEABILITY_ENFORCEMENT_REQUIRES_SERIALIZED/);\n  assert.match(primitives, /Exact-ID enforcement is available only for serialized products/);\n  assert.doesNotMatch(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);\n  assert.match(coreRoutes, /an administrator may enable enforcement separately/);\n});''',
+    "replace retired Phase 1 enforcement lock contract",
+)
+integration_test_path.write_text(integration_test, encoding="utf-8")
+
 page_path = ROOT / "frontend/src/pages/InventoryTraceabilitySetupPage.jsx"
 page = page_path.read_text(encoding="utf-8")
 page = replace_once(
