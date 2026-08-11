@@ -56,6 +56,19 @@ test("tracking is backward compatible and exact-ID enforcement is explicit, seri
   assert.match(primitives, /Exact-ID enforcement is available only for serialized products/);
   assert.doesNotMatch(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);
   assert.match(coreRoutes, /an administrator may enable enforcement separately/);
+  assert.match(
+    verifier,
+    /inventory_traceability_state = 'enforced'[\s\S]*inventory_tracking_mode <> 'serialized'/
+  );
+  assert.match(
+    verifier,
+    /inventory_tracking_mode IN \('batch', 'serialized'\)[\s\S]*inventory_product_code IS NULL/
+  );
+  assert.doesNotMatch(verifier, /checkout enforcement has not been released yet/i);
+  assert.doesNotMatch(
+    verifier,
+    /FROM products\s+WHERE inventory_traceability_state = 'enforced';/
+  );
 });
 
 test("serialized configuration cannot be downgraded or silently recoded after identities exist", () => {
