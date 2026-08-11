@@ -16,6 +16,9 @@ const {
   updateKnowledgeDraft,
 } = require("../services/aiKnowledgeService");
 const {
+  getKnowledgeHealthSnapshot,
+} = require("../services/aiKnowledgeHealthService");
+const {
   getKnowledgeChunk,
   ingestKnowledgeDocument,
   listKnowledgeDocuments,
@@ -149,6 +152,25 @@ router.post(
         req,
       }),
       201
+    )
+  )
+);
+
+// Keep fixed knowledge-health diagnostics above the dynamic /:sourceId route.
+// Non-enterprise users are always scoped to their authenticated workspace;
+// the original System Administrator / executive authority can request an
+// enterprise snapshot or explicitly select a workspace.
+router.get(
+  "/health",
+  requireAiPermission("ai.knowledge.view"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await getKnowledgeHealthSnapshot({
+        workspaceCode: activeKnowledgeWorkspace(req),
+        windowDays: req.query.window_days,
+      })
     )
   )
 );

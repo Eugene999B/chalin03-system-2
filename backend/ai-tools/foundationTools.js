@@ -10,6 +10,9 @@ const {
   searchGovernedKnowledge,
 } = require("../services/aiKnowledgeRetrievalService");
 const {
+  getKnowledgeHealthSnapshot,
+} = require("../services/aiKnowledgeHealthService");
+const {
   loadGroupIntelligence,
 } = require("../services/aiGroupIntelligenceService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
@@ -143,6 +146,64 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
         result_count: evidence.length,
         retrieval_authority: "published_governed_knowledge_only",
         evidence,
+      };
+    },
+  });
+
+  registry.register({
+    key: "knowledge.health",
+    title: "Knowledge health and gap diagnostics",
+    description:
+      "Returns read-only CHALIN knowledge coverage, freshness, approval backlog, retrieval hit-rate, zero-result search gaps and unresolved correction-review signals. Use it when asked what CHALIN knows, what knowledge is missing, where answers are weak or what should be taught next.",
+    version: "1",
+    risk_level: 1,
+    personas: ["copilot", "executive"],
+    required_permissions: ["ai.use", "ai.knowledge.view"],
+    allowed_workspaces: [],
+    evidence_required: true,
+    max_input_bytes: 1000,
+    max_output_bytes: 120000,
+    timeout_ms: 5000,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        window_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 180,
+          description: "Optional lookback window for retrieval gaps and correction feedback.",
+        },
+      },
+    },
+    handler: async ({ input, context }) => {
+      const workspaceCode = context.authority?.cross_workspace
+        ? null
+        : context.scope.workspace_code;
+      const snapshot = await getKnowledgeHealthSnapshot({
+        workspaceCode,
+        windowDays: input.window_days,
+      });
+      return {
+        ...snapshot,
+        evidence: [
+          {
+            source_type: "system_snapshot",
+            source_ref: `chalin:knowledge-health:${workspaceCode || "enterprise"}`,
+            source_version: "knowledge-health-v1",
+            label: "CHALIN governed knowledge health snapshot",
+            excerpt_text: JSON.stringify(snapshot).slice(0, 30000),
+            as_of_at: snapshot.generated_at,
+            classification: "internal",
+            workspace_code: workspaceCode,
+            metadata: {
+              read_only: true,
+              correction_text_exposed: false,
+              conversation_text_exposed: false,
+              knowledge_gap_detection: true,
+            },
+          },
+        ],
       };
     },
   });
