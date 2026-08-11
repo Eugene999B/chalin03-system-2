@@ -7,6 +7,9 @@ const {
   loadPortfolioHealth,
   loadSalesPipelineHealth,
 } = require("../services/aiEquipmentFinanceIntelligenceService");
+const {
+  loadEquipmentFinancePerformanceDiagnostics,
+} = require("../services/aiEquipmentFinancePerformanceDiagnosticsService");
 
 let registered = false;
 
@@ -36,6 +39,8 @@ function evidenceFor(viewKey, output) {
           ? "Installment Finance cash-flow health"
           : viewKey === "sales-pipeline"
           ? "Equipment sales and credit-application pipeline"
+          : viewKey === "performance"
+          ? "Installment Finance performance diagnostics"
           : "Installment Finance portfolio health",
       excerpt_text: JSON.stringify(output).slice(0, 12000),
       as_of_at: output.generated_at,
@@ -71,6 +76,7 @@ function registerEquipmentFinanceAiTools(
   const arrearsLoader = loaders.arrears || loadArrearsHealth;
   const cashflowLoader = loaders.cashflow || loadCashFlowHealth;
   const salesPipelineLoader = loaders.salesPipeline || loadSalesPipelineHealth;
+  const performanceLoader = loaders.performance || loadEquipmentFinancePerformanceDiagnostics;
 
   const common = {
     version: "1",
@@ -147,6 +153,21 @@ function registerEquipmentFinanceAiTools(
     },
     handler: async ({ input }) =>
       runView({ input, loader: salesPipelineLoader, viewKey: "sales-pipeline" }),
+  });
+
+  registry.register({
+    ...common,
+    key: "equipment_finance.performance_diagnostics",
+    title: "Installment Finance performance diagnostics",
+    description:
+      "Explains company-wide Finance performance using credit/KYC/risk pipeline, sale-capable equipment, portfolio collections, outstanding/overdue exposure, arrears aging and reconciliation integrity without customer rows. It does not double-count deposits or overdue balances and does not invent certified Finance profit.",
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: DATE_PROPERTIES,
+    },
+    handler: async ({ input }) =>
+      runView({ input, loader: performanceLoader, viewKey: "performance" }),
   });
 
   if (registry === aiToolRegistry) registered = true;
