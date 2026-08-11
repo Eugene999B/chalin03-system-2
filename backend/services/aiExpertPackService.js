@@ -3,6 +3,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  CUSTOMER_ACCOUNTING_EXPERT_PACK,
+  getCustomerAccountingExpertPack,
+  isCustomerAccountingExpertPrompt,
+} = require("./aiCustomerAccountingExpertPackService");
+const {
   EQUIPMENT_FINANCE_EXPERT_PACK,
   getEquipmentFinanceExpertPack,
   isEquipmentFinanceExpertPrompt,
@@ -182,6 +187,7 @@ const EXPERT_PACKS = Object.freeze({
   [MINING_EXPERT_PACK.key]: MINING_EXPERT_PACK,
   [HIRE_EXPERT_PACK.key]: HIRE_EXPERT_PACK,
   [EQUIPMENT_FINANCE_EXPERT_PACK.key]: EQUIPMENT_FINANCE_EXPERT_PACK,
+  [CUSTOMER_ACCOUNTING_EXPERT_PACK.key]: CUSTOMER_ACCOUNTING_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -233,6 +239,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === EQUIPMENT_FINANCE_EXPERT_PACK.key) {
     return getEquipmentFinanceExpertPack({ includeAvailability });
   }
+  if (key === CUSTOMER_ACCOUNTING_EXPERT_PACK.key) {
+    return getCustomerAccountingExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -263,6 +272,9 @@ function expertPacksForPrompt(value) {
   if (isHireExpertPrompt(value)) matches.push(getExpertPack(HIRE_EXPERT_PACK.key));
   if (isEquipmentFinanceExpertPrompt(value)) {
     matches.push(getExpertPack(EQUIPMENT_FINANCE_EXPERT_PACK.key));
+  }
+  if (isCustomerAccountingExpertPrompt(value)) {
+    matches.push(getExpertPack(CUSTOMER_ACCOUNTING_EXPERT_PACK.key));
   }
   return Object.freeze(matches.filter(Boolean));
 }
@@ -311,6 +323,9 @@ function renderExpertPack(pack) {
   } else if (pack.key === EQUIPMENT_FINANCE_EXPERT_PACK.key) {
     liveBoundary =
       "Use this as product/workflow knowledge only. Never infer live Finance applications, portfolio balances, collections, arrears, KYC/risk state or machine availability from this pack; current Equipment Finance facts require authorized governed company-wide aggregate evidence. Do not double-count deposits/collections or overdue/outstanding balances, and do not invent Finance profit from portfolio aggregates.";
+  } else if (pack.key === CUSTOMER_ACCOUNTING_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer a live customer identity, individual debt, current branch receivable figure or certified profit from this pack. Live collections/accounting figures require governed branch-scoped aggregate evidence; customer identity matching remains a separately governed sensitive suggestion-only path. Do not double-count period sales balance with current active debt or count debt payments as new sales.";
   }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
@@ -340,6 +355,7 @@ function renderExpertPacks(packs = []) {
 }
 
 module.exports = {
+  CUSTOMER_ACCOUNTING_EXPERT_PACK,
   EQUIPMENT_FINANCE_EXPERT_PACK,
   EXPERT_PACKS,
   HIRE_EXPERT_PACK,
@@ -351,6 +367,7 @@ module.exports = {
   expertPackForPrompt,
   expertPacksForPrompt,
   getExpertPack,
+  isCustomerAccountingExpertPrompt,
   isEquipmentFinanceExpertPrompt,
   isHireExpertPrompt,
   isMiningExpertPrompt,
