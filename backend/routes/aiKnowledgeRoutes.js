@@ -19,6 +19,9 @@ const {
   getKnowledgeHealthSnapshot,
 } = require("../services/aiKnowledgeHealthService");
 const {
+  getKnowledgeCurriculum,
+} = require("../services/aiKnowledgeCurriculumService");
+const {
   getKnowledgeChunk,
   ingestKnowledgeDocument,
   listKnowledgeDocuments,
@@ -156,10 +159,7 @@ router.post(
   )
 );
 
-// Keep fixed knowledge-health diagnostics above the dynamic /:sourceId route.
-// Non-enterprise users are always scoped to their authenticated workspace;
-// the original System Administrator / executive authority can request an
-// enterprise snapshot or explicitly select a workspace.
+// Fixed diagnostics/planning routes must remain above dynamic /:sourceId.
 router.get(
   "/health",
   requireAiPermission("ai.knowledge.view"),
@@ -168,6 +168,21 @@ router.get(
       res,
       req,
       await getKnowledgeHealthSnapshot({
+        workspaceCode: activeKnowledgeWorkspace(req),
+        windowDays: req.query.window_days,
+      })
+    )
+  )
+);
+
+router.get(
+  "/curriculum",
+  requireAiPermission("ai.knowledge.view"),
+  asyncHandler(async (req, res) =>
+    success(
+      res,
+      req,
+      await getKnowledgeCurriculum({
         workspaceCode: activeKnowledgeWorkspace(req),
         windowDays: req.query.window_days,
       })
