@@ -61,7 +61,11 @@ test("Payroll expert pack is selected only for Payroll/compensation product ques
   assert.equal(isPayrollExpertPrompt("Explain salary changes in CHALIN"), true);
   assert.equal(isPayrollExpertPrompt("What does Audit Intelligence do?"), false);
   assert.equal(expertPackForPrompt("How does payroll work?")?.key, "people_employment_payroll");
-  assert.equal(expertPackForPrompt("Explain Equipment Hire"), null);
+  assert.equal(expertPackForPrompt("Explain Equipment Hire")?.key, "equipment_hire_operations");
+  assert.notEqual(
+    expertPackForPrompt("Explain Equipment Hire")?.key,
+    "people_employment_payroll"
+  );
 });
 
 test("deployment availability distinguishes verified design from this source tree", () => {
