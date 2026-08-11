@@ -44,7 +44,10 @@ jobs:
           npm run syntax-check
           npm test
           git fetch origin main
-          npm run migration-safety -- origin/main HEAD
+          npm run migration-safety -- \
+            --base "$(git rev-parse origin/main)" \
+            --head "$(git rev-parse HEAD)" \
+            --repo-root "$GITHUB_WORKSPACE"
           git diff --check
 
       - name: Publish verified serialized transfer legacy guards
