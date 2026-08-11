@@ -12,6 +12,7 @@ const {
   isChalinProductKnowledgeTurn,
   productKnowledgeInstruction,
 } = require("../services/aiProductKnowledgeService");
+const { buildReasoningPlan } = require("../services/aiReasoningService");
 const {
   buildHirePerformanceDiagnostics,
 } = require("../services/aiHirePerformanceDiagnosticsService");
@@ -149,10 +150,16 @@ test("product knowledge receives Hire expert rules while live location facts rem
     "What are the current Equipment Hire overdue invoices?",
     "How much did Equipment Hire invoice today?",
     "Show me current Hire receivables",
-    "Why is Equipment Hire performance poor today?",
   ]) {
     assert.equal(isChalinProductKnowledgeTurn(prompt), false, prompt);
   }
+
+  const causalLivePlan = buildReasoningPlan({
+    prompt: "Why is Equipment Hire performance poor today?",
+    history: [],
+    persona: "copilot",
+  });
+  assert.equal(causalLivePlan.live_data_required, true);
 });
 
 test("Hire performance diagnostics separate fleet, billing, cash and lifecycle pressure", () => {
