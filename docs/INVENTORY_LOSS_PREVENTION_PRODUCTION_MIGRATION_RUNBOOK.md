@@ -38,6 +38,8 @@ The runner pins and verifies these migrations in this exact order:
 
 Each migration has a matching read-only `_verify.sql` file. The runner checks `schema_migrations` before each stage. If exactly one marker already exists, it skips reapplying that migration and still runs its verifier. If the marker is absent, it applies the migration once, requires exactly one marker afterward, and then runs the verifier. Duplicate markers or any verifier problem stop the release.
 
+The eight executable SQL artifacts are also pinned to their reviewed Git blob identities. The runner accepts only its fixed artifact keys, confines every resolved file to `database/migrations`, rejects symbolic links/path escape, recalculates the Git blob SHA from the bytes on disk, and fails before SQL execution if any migration or verifier changed after review. A legitimate SQL edit therefore requires an explicit code review and repin before the production command can run.
+
 ## Required environment gates
 
 Set these only for the controlled migration operation:
@@ -66,9 +68,10 @@ Before changing schema, the runner:
 - requires the exact release token;
 - requires the exact expected database name and rejects a mismatched connection;
 - requires the existing `schema_migrations` control table;
+- verifies the fixed, path-confined SQL artifacts still match their reviewed Git blob identities;
 - acquires a named MySQL advisory lock so two Inventory migration operations cannot run concurrently.
 
-During execution, every approved stage is verified before the next stage begins. A non-zero `problem_count`, missing `PASS`, wrong selected database, SQL error, missing marker, duplicate marker, or lock failure aborts the runner.
+During execution, every approved stage is verified before the next stage begins. A non-zero `problem_count`, missing `PASS`, wrong selected database, changed SQL artifact, SQL error, missing marker, duplicate marker, or lock failure aborts the runner.
 
 ## Abort conditions
 
@@ -77,6 +80,7 @@ Do not continue manually if the runner stops. Preserve the output and investigat
 - database-name mismatch;
 - inability to acquire the migration lock;
 - missing or duplicate migration marker;
+- migration/verifier content that no longer matches its reviewed Git blob identity;
 - any verifier result other than `problem_count=0` and `PASS`;
 - SQL/connection/TLS errors;
 - missing backup evidence or uncertainty about restore capability.
