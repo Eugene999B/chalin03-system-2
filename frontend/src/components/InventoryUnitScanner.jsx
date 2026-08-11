@@ -69,7 +69,7 @@ export default function InventoryUnitScanner({
     setMessage("");
     setVerifying(true);
     try {
-      const response = await axiosClient.post("/inventory-traceability/scan/verify", {
+      const response = await axiosClient.post("/inventory-traceability/sale-scan/verify", {
         value: raw,
       });
       const unit = response.data?.unit;
@@ -79,6 +79,9 @@ export default function InventoryUnitScanner({
         throw new Error(
           `${code} belongs to ${unit.product_name || "another product"}, not ${product?.name || "this sale item"}.`
         );
+      }
+      if (unit.same_store === false) {
+        throw new Error(`${code} belongs to another store and cannot be attached to this sale.`);
       }
       if (String(unit.status || "").toLowerCase() !== "active") {
         throw new Error(`${code} cannot be sold because its current status is ${unit.status || "unknown"}.`);
