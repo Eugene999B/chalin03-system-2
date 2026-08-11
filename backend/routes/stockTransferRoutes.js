@@ -8,6 +8,9 @@ const {
   validateStockTransferActionRequest,
   validateStockTransferCreateRequest,
 } = require("../validation/operationsRequestValidators");
+const {
+  assertLegacyQuantityTransferAllowed,
+} = require("../services/inventoryTransferTraceabilityService");
 
 const router = express.Router();
 
@@ -1450,6 +1453,8 @@ router.post(
         throw new Error("This transfer has no items.");
       }
 
+      await assertLegacyQuantityTransferAllowed(connection, { transferId });
+
       for (const item of items) {
         const product = await getSourceProduct(
           connection,
@@ -1608,6 +1613,8 @@ router.post(
       if (items.length === 0) {
         throw new Error("This transfer has no items.");
       }
+
+      await assertLegacyQuantityTransferAllowed(connection, { transferId });
 
       for (const item of items) {
         const sourceProduct = await getSourceProduct(
