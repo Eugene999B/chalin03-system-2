@@ -5,6 +5,8 @@ const { normalizeEvidenceList } = require("./aiEvidenceService");
 const MAX_RETRIEVAL_QUERIES = 10;
 const MAX_REASONING_EVIDENCE = 32;
 const MAX_HISTORY_MESSAGES = 48;
+const MAX_TASK_CONTEXT_TURNS = 8;
+const MAX_SUBQUESTIONS = 8;
 
 const STOP_WORDS = new Set([
   "about", "after", "again", "against", "also", "and", "are", "because",
@@ -24,11 +26,13 @@ const TIME_WORDS = new Set([
 
 const OPERATIONAL_WORDS = new Set([
   "arrears", "balance", "cash", "collection", "collections", "collected",
-  "contract", "contracts", "customer", "customers", "debt", "debts",
-  "equipment", "finance", "hire", "inventory", "payment", "payments",
-  "purchase", "purchases", "purchased", "bought", "quantity", "received",
-  "revenue", "sale", "sales", "sell", "selling", "sold", "stock",
-  "transaction", "transactions",
+  "contract", "contracts", "cost", "costs", "customer", "customers", "debt",
+  "debts", "employee", "employees", "equipment", "expense", "expenses",
+  "finance", "hire", "inventory", "margin", "margins", "owe", "owes",
+  "owing", "payment", "payments", "payroll", "profit", "profits", "purchase",
+  "purchases", "purchased", "bought", "quantity", "received", "revenue",
+  "sale", "sales", "salary", "sell", "selling", "sold", "stock",
+  "transaction", "transactions", "worker", "workers",
 ]);
 
 const NON_OPERATIONAL_TOOL_KEYS = new Set([
@@ -53,6 +57,15 @@ const INTENT_PATTERNS = Object.freeze([
   ["decision_support", /\b(recommend|recommendation|should we|what should|decision|priority|prioritize|best option|risk)\b/i],
   ["explain", /\b(explain|how does|how do|meaning|procedure|process|policy|rule|steps)\b/i],
 ]);
+
+const FOLLOW_UP_START_PATTERN =
+  /^(?:and\b|also\b|then\b|what about\b|how about\b|what if\b|why\b|who\b|which\b|where\b|when\b|how much\b|how many\b|profit\b|sales?\b|margin\b|yesterday\b|today\b|tomorrow\b|there\b|same\b|the same\b|do it\b|generate it\b|print it\b|put that\b|put it\b|compare them\b|summarize it\b|continue\b|proceed\b)/i;
+const REFERENTIAL_PATTERN =
+  /\b(?:it|its|that|this|these|those|them|they|he|his|him|she|her|there|same|other|another|everything|above|previous|earlier)\b/i;
+const SOCIAL_ONLY_PATTERN =
+  /^(?:hi|hello|hey|good morning|good afternoon|good evening|thanks|thank you|okay|ok|alright|great|nice|cool|bye)[!.\s]*$/i;
+const COMPOUND_CLAUSE_START =
+  /(?:and\s+)?(?:tell|show|calculate|compute|compare|generate|create|summarize|identify|find|explain|give|put|include|who|what|why|how|whether|which)\b/i;
 
 function clean(value, maxLength = 32000) {
   return String(value ?? "")
@@ -85,10 +98,11 @@ function classifyIntent(prompt) {
 }
 
 function requiresLiveData(prompt) {
-  const tokens = new Set(tokenizeReasoning(prompt));
+  const text = clean(prompt);
+  const tokens = new Set(tokenizeReasoning(text));
   const hasOperational = [...tokens].some((token) => OPERATIONAL_WORDS.has(token));
   const hasTimeSignal = [...tokens].some((token) => TIME_WORDS.has(token));
-  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|active (?:hire|finance|contract)|sales? today|sold today|selling today|payments? today|collections? today|cash position|current status)\b/i.test(clean(prompt));
+  const intrinsicallyLive = /\b(stock|quantity|balance|outstanding|overdue|owe|owes|owing|active (?:hire|finance|contract)|sales? today|sold today|selling today|payments? today|collections? today|profit today|margin today|cash position|current status)\b/i.test(text);
   return intrinsicallyLive || (hasOperational && hasTimeSignal);
 }
 
@@ -118,6 +132,122 @@ function addUniqueQuery(target, value) {
   target.push(query);
 }
 
+function isSubstantiveTaskTurn(item = {}) {
+  if (!["user", "assistant"].includes(item?.role)) return false;
+  const text = clean(item?.content, 4000);
+  if (!text) return false;
+  if (item.role === "user" && SOCIAL_ONLY_PATTERN.test(text)) return false;
+  return true;
+}
+
+function recentTaskTurns(history = [], maximum = MAX_TASK_CONTEXT_TURNS) {
+  const source = Array.isArray(history) ? history : [];
+  const safeMaximum = Math.max(2, Math.min(16, Number(maximum) || MAX_TASK_CONTEXT_TURNS));
+  return Object.freeze(
+    source
+      .filter(isSubstantiveTaskTurn)
+      .slice(-safeMaximum)
+      .map((item) =>
+        Object.freeze({
+          role: item.role,
+          content: clean(item.content, 4000),
+          authority: item.role === "assistant" ? "continuity_only_not_evidence" : "user_instruction_context",
+        })
+      )
+  );
+}
+
+function isLikelyFollowUp(prompt, history = []) {
+  const text = clean(prompt, 2000);
+  if (!text || SOCIAL_ONLY_PATTERN.test(text)) return false;
+  const taskTurns = recentTaskTurns(history, MAX_TASK_CONTEXT_TURNS);
+  if (!taskTurns.length) return false;
+  if (FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text)) return true;
+
+  const tokens = tokenizeReasoning(text);
+  if (tokens.length <= 5) {
+    return tokens.some(
+      (token) =>
+        TIME_WORDS.has(token) ||
+        OPERATIONAL_WORDS.has(token) ||
+        ["more", "again", "same", "other", "document", "pdf", "excel", "word"].includes(token)
+    );
+  }
+  return false;
+}
+
+function normalizeSubquestion(value) {
+  return clean(value, 700)
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, "")
+    .replace(/^and\s+/i, "")
+    .trim();
+}
+
+function decomposeSubquestions(prompt) {
+  const text = clean(prompt, 12000);
+  if (!text) return Object.freeze([]);
+
+  const firstPass = text
+    .split(/[?;\n]+/)
+    .map(normalizeSubquestion)
+    .filter(Boolean);
+  const expanded = [];
+
+  for (const part of firstPass) {
+    const commaParts = part.split(/,\s*(?=(?:and\s+)?(?:tell|show|calculate|compute|compare|generate|create|summarize|identify|find|explain|give|put|include|who|what|why|how|whether|which)\b)/i);
+    for (const commaPart of commaParts) {
+      const conjunctionParts = commaPart.split(/\s+and\s+(?=(?:tell|show|calculate|compute|compare|generate|create|summarize|identify|find|explain|give|put|include|who|what|why|how|whether|which)\b)/i);
+      expanded.push(...conjunctionParts);
+    }
+  }
+
+  const unique = [];
+  for (const value of expanded.map(normalizeSubquestion).filter(Boolean)) {
+    const identity = value.toLowerCase();
+    if (unique.some((item) => item.toLowerCase() === identity)) continue;
+    unique.push(value);
+    if (unique.length >= MAX_SUBQUESTIONS) break;
+  }
+
+  if (unique.length === 1 && COMPOUND_CLAUSE_START.test(unique[0]) === false) {
+    return Object.freeze(unique);
+  }
+  return Object.freeze(unique);
+}
+
+function resolveConversationTaskState({ prompt, history = [] } = {}) {
+  const currentPrompt = clean(prompt, 12000);
+  const followUp = isLikelyFollowUp(currentPrompt, history);
+  const contextTurns = followUp
+    ? recentTaskTurns(history, MAX_TASK_CONTEXT_TURNS)
+    : Object.freeze([]);
+  const subquestions = decomposeSubquestions(currentPrompt);
+  const hasReferentialLanguage = REFERENTIAL_PATTERN.test(currentPrompt);
+
+  const resolvedPrompt = followUp
+    ? [
+        "Continue the existing user task using the following conversation context.",
+        ...contextTurns.map((item) =>
+          item.role === "assistant"
+            ? `Assistant continuity only (not current evidence): ${item.content}`
+            : `Prior user instruction/context: ${item.content}`
+        ),
+        `Current follow-up; this takes precedence anywhere it changes the earlier scope: ${currentPrompt}`,
+      ].join("\n")
+    : currentPrompt;
+
+  return Object.freeze({
+    follow_up: followUp,
+    referential_language: hasReferentialLanguage,
+    current_prompt: currentPrompt,
+    resolved_prompt: resolvedPrompt,
+    inherited_turn_count: contextTurns.length,
+    inherited_turns: contextTurns,
+    subquestions,
+    subquestion_count: subquestions.length,
+  });
+}
+
 function buildRetrievalQueries({ prompt, history = [] } = {}) {
   const queries = [];
   const text = clean(prompt, 32000);
@@ -132,11 +262,11 @@ function buildRetrievalQueries({ prompt, history = [] } = {}) {
   const priorUserTurns = [...history]
     .reverse()
     .filter((item) => item?.role === "user" && clean(item?.content, 2000))
-    .slice(0, 3);
+    .slice(0, 4);
   for (const priorUser of priorUserTurns) {
     const carry = meaningfulTokens(`${priorUser.content} ${text}`)
       .filter((token) => token.length >= 3)
-      .slice(0, 16)
+      .slice(0, 18)
       .join(" ");
     addUniqueQuery(queries, carry);
   }
@@ -364,17 +494,25 @@ function answerShapeForIntent(intent) {
 }
 
 function buildReasoningPlan({ prompt, history = [], persona = "copilot" } = {}) {
-  const intent = classifyIntent(prompt);
-  const retrievalQueries = buildRetrievalQueries({ prompt, history });
-  const live = requiresLiveData(prompt);
+  const taskState = resolveConversationTaskState({ prompt, history });
+  const intent = classifyIntent(taskState.current_prompt || taskState.resolved_prompt);
+  const retrievalQueries = buildRetrievalQueries({
+    prompt: taskState.resolved_prompt,
+    history,
+  });
+  const live = requiresLiveData(taskState.resolved_prompt);
   return Object.freeze({
     persona,
     intent,
     live_data_required: live,
     retrieval_queries: retrievalQueries,
     answer_shape: Object.freeze(answerShapeForIntent(intent)),
+    task_state: taskState,
     directives: Object.freeze([
       "Understand the user's actual question before reaching for a tool; casual conversation should remain natural.",
+      "Treat a short or referential sub-question as a continuation of the active task when the recent conversation supports that reading.",
+      "The newest user turn overrides earlier date, location, entity, metric or output scope when it changes one of them.",
+      "When a request contains multiple sub-questions, answer every material part rather than silently dropping later clauses.",
       "For business questions, investigate the strongest relevant governed sources and live tools before concluding.",
       "Synthesize evidence into meaning, implications, alternatives and recommended next steps instead of reciting raw fields.",
       "Prefer governed live tool results for current operational facts and approved knowledge for policy/procedure context.",
@@ -390,17 +528,26 @@ function buildReasoningPlan({ prompt, history = [], persona = "copilot" } = {}) 
 function reasoningPromptBlock({ plan, confidence, tensions = [] } = {}) {
   const safePlan = plan || {};
   const safeConfidence = confidence || {};
+  const taskState = safePlan.task_state || {};
   const tensionText = tensions.length
     ? tensions.map((item) => `${item.left} vs ${item.right}: ${item.reason}`).join("; ")
     : "none detected";
+  const subquestionText = Array.isArray(taskState.subquestions) && taskState.subquestions.length
+    ? taskState.subquestions.map((item, index) => `${index + 1}. ${item}`).join(" | ")
+    : "single current question";
   return [
     "CHALIN deep-reasoning answer contract:",
     "- Think deeply and privately before answering; never reveal hidden chain-of-thought.",
     `- Intent: ${safePlan.intent || "lookup"}.`,
+    `- Follow-up/sub-question continuation: ${taskState.follow_up === true ? "yes" : "no"}.`,
+    `- Resolved task context: ${clean(taskState.resolved_prompt || taskState.current_prompt || "", 5000) || "none"}.`,
+    `- Current request parts that must not be silently omitted: ${subquestionText}.`,
     `- Live operational data required: ${safePlan.live_data_required === true ? "yes" : "no"}.`,
     `- Evidence confidence before final answer: ${safeConfidence.level || "low"}.`,
     `- Potential evidence tensions: ${tensionText}.`,
     "- Be conversational and answer the actual question first. Do not lead with a mechanical evidence dump.",
+    "- If this is a follow-up, preserve the active customer/worker/transaction/branch/date/task unless the current user turn changes it.",
+    "- Old assistant messages may help resolve words like he, it, that or them, but they are continuity only; re-check live facts before treating them as current.",
     "- For analytical questions: state the bottom line, explain what is driving it, identify implications, test alternative explanations, and recommend the next useful move.",
     "- Convert raw snapshots into interpretation. Mention only the figures that materially support the conclusion.",
     "- Cite supported business factual claims with [E#], but do not attach citations to ordinary social conversation or generic reasoning that does not depend on CHALIN evidence.",
@@ -431,13 +578,19 @@ function citationIntegrity(answer, evidence = []) {
 }
 
 module.exports = {
+  COMPOUND_CLAUSE_START,
+  FOLLOW_UP_START_PATTERN,
   INTENT_PATTERNS,
   LIVE_OPERATIONAL_EVIDENCE_TYPES,
   MAX_HISTORY_MESSAGES,
   MAX_REASONING_EVIDENCE,
   MAX_RETRIEVAL_QUERIES,
+  MAX_SUBQUESTIONS,
+  MAX_TASK_CONTEXT_TURNS,
   NON_OPERATIONAL_TOOL_KEYS,
   OPERATIONAL_WORDS,
+  REFERENTIAL_PATTERN,
+  SOCIAL_ONLY_PATTERN,
   STOP_WORDS,
   TIME_WORDS,
   addUniqueQuery,
@@ -448,19 +601,25 @@ module.exports = {
   citationIntegrity,
   classifyIntent,
   comparisonSides,
+  decomposeSubquestions,
   detectEvidenceTensions,
   evidenceRoot,
   freshnessScore,
+  isLikelyFollowUp,
   isLiveOperationalEvidence,
   isLiveOperationalToolResult,
+  isSubstantiveTaskTurn,
   jaccard,
   meaningfulTokens,
+  normalizeSubquestion,
   numericSignature,
   overlapScore,
   quotedPhrases,
   rankEvidence,
   reasoningPromptBlock,
+  recentTaskTurns,
   requiresLiveData,
+  resolveConversationTaskState,
   scoreEvidence,
   selectRelevantHistory,
   tokenizeReasoning,

@@ -3,6 +3,7 @@
 const crypto = require("crypto");
 
 const { isFeatureEnabled } = require("./featureFlagService");
+const { assertAiRiskAuthorized } = require("./aiCapabilityService");
 const {
   AiPermissionError,
   buildToolExecutionContext,
@@ -272,6 +273,13 @@ class AiToolRegistry {
         code: "AI_TOOL_PERSONA_DENIED",
       });
     }
+
+    // Risk authority is derived from the authenticated login before a handler
+    // can run. Risk 5 is therefore impossible for a non-original System
+    // Administrator even if a future tool is accidentally registered with
+    // insufficient permission metadata.
+    assertAiRiskAuthorized(req?.user || {}, tool.risk_level);
+
     if (tool.risk_level >= 4 && !isFeatureEnabled("aiActions")) {
       throw new AiPermissionError(
         "AI execution actions are disabled. Only read, recommendation and draft tools are available.",
