@@ -137,17 +137,30 @@ test("chat integration processes actions after the assistant turn and persists t
   assert.match(service, /m\.message_role = 'assistant'/);
 });
 
-test("Risk-5 chat commands can never auto-execute", () => {
+test("Risk-5 chat commands can never use the low-risk auto-execution branch", () => {
   const service = source("backend/services/aiConversationalActionService.js");
+
+  // Auto-execution is structurally restricted to an already-approved action
+  // with no confirmation requirement and Risk <= 3.
+  assert.match(service, /proposal\.status === "approved"/);
   assert.match(service, /definition\?\.confirmation_mode === "none"/);
   assert.match(service, /definition\?\.risk_level <= 3/);
-  assert.match(service, /proposal\.status === "approved"/);
-  assert.match(service, /system\.user\.deactivate/);
-  assert.match(service, /status: "pending_review"/);
-  assert.doesNotMatch(
-    service,
-    /intent\.action_key === "system\.user\.deactivate"[\s\S]{0,900}executeActionProposal/
+  assert.match(service, /executeActionProposal/);
+
+  // All other governed actions, including Risk 5, preserve the proposal's
+  // server-owned review state and expose review/confirmation metadata instead
+  // of manufacturing a local pending state or executing directly.
+  assert.match(service, /status: proposal\.status/);
+  assert.match(service, /review_required: proposal\.status === "pending_review"/);
+  assert.match(service, /expected_confirmation: expectedConfirmation/);
+  assert.match(service, /execution_performed: false/);
+
+  const risk5 = detectConversationalAction(
+    "deactivate user 44 because employment ended",
+    { conversationKey: "conv_admin" }
   );
+  assert.equal(risk5.risk_level, 5);
+  assert.ok(risk5.risk_level > 3);
 });
 
 test("Risk-5 target evidence is loaded from the authenticated server database before proposal", () => {
