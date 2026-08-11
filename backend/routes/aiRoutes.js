@@ -62,6 +62,7 @@ const {
 } = require("../ai-providers/registerAiProviders");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
 const aiDocumentRoutes = require("./aiDocumentRoutes");
+const aiActionRoutes = require("./aiActionRoutes");
 
 registerBuiltInAiProviders();
 registerFoundationAiTools();
@@ -375,7 +376,7 @@ router.get(
         rollover_mode: "automatic_continuation",
       },
       execution_authority: flags.aiActions
-        ? "approved_low_risk_actions_only"
+        ? "reviewed_risk_aware_actions"
         : "read_recommend_prepare_only",
       ai_actions_enabled: flags.aiActions === true,
     });
@@ -424,6 +425,7 @@ router.use("/copilot", personaRouter("copilot", "chalinCopilot"));
 router.use("/executive", personaRouter("executive", "chalinExecutive"));
 router.use("/knowledge", aiKnowledgeRoutes);
 router.use("/documents", aiDocumentRoutes);
+router.use("/actions", aiActionRoutes);
 
 router.post(
   "/feedback",
