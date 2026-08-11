@@ -82,7 +82,7 @@ function registerCustomerCommercialAiTools(
     title: "Customer commercial 360 and contribution ranking",
     description:
       "Returns sensitive branch-scoped customer commercial intelligence. It can rank the highest-contributing customers by valid sales value for a selected period, or resolve one exact customer and show selected-period purchases plus current open/overdue debt. Phone numbers are masked. Customer contribution means sales value, not profit. Exact customer resolution never uses fuzzy guessing.",
-    risk_level: 2,
+    risk_level: 1,
     personas: ["copilot", "executive"],
     required_permissions: ["ai.use", "ai.read_sensitive"],
     required_business_permissions: ["spare_parts.audit"],
