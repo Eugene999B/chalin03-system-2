@@ -86,7 +86,12 @@ const intelligence = Object.freeze({
     ],
   },
   expenses: { expense_count: 3, total_expenses: 450 },
-  purchases: { purchase_count: 2, total_purchases: 1900, balance: 500 },
+  purchases: {
+    purchase_count: 2,
+    total_purchases: 1900,
+    amount_paid: 1400,
+    balance: 500,
+  },
   returns: { return_count: 1, total_return_amount: 200 },
   stock_adjustments: {
     adjustment_count: 2,
@@ -99,6 +104,15 @@ const intelligence = Object.freeze({
     transfer_count: 2,
     dispatched_not_received_count: 1,
     quantity_mismatch_count: 0,
+  },
+  profit_and_loss: {
+    gross_sales: 5000,
+    discounts: 50,
+    net_sales: 4950,
+    operating_expenses: 450,
+    estimated_net_before_stock_cost: 4500,
+    conservative_cash_position: 2350,
+    warning: "True profit requires reliable cost of goods sold.",
   },
   audit: {
     audit_score: 82,
@@ -183,6 +197,7 @@ test("Spare Parts AI tools register as read-only branch-scoped R1 tools", () => 
       "spare_parts.collections_health",
       "spare_parts.inventory_health",
       "spare_parts.operations_snapshot",
+      "spare_parts.performance_diagnostics",
     ]
   );
   for (const tool of tools) {
@@ -201,6 +216,7 @@ test("tool handlers return aggregate evidence and no execution authority", async
   });
   for (const key of [
     "spare_parts.operations_snapshot",
+    "spare_parts.performance_diagnostics",
     "spare_parts.inventory_health",
     "spare_parts.collections_health",
   ]) {
