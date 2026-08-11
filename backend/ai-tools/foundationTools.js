@@ -13,6 +13,9 @@ const {
   getKnowledgeHealthSnapshot,
 } = require("../services/aiKnowledgeHealthService");
 const {
+  getKnowledgeCurriculum,
+} = require("../services/aiKnowledgeCurriculumService");
+const {
   loadGroupIntelligence,
 } = require("../services/aiGroupIntelligenceService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
@@ -201,6 +204,65 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
               correction_text_exposed: false,
               conversation_text_exposed: false,
               knowledge_gap_detection: true,
+            },
+          },
+        ],
+      };
+    },
+  });
+
+  registry.register({
+    key: "knowledge.curriculum",
+    title: "Knowledge curriculum and expert-pack plan",
+    description:
+      "Turns governed knowledge-health gaps into a prioritized read-only teaching curriculum across CHALIN expert domains. Use it when asked what CHALIN should learn next, which expert packs are weak, or how to improve organizational knowledge. Curriculum targets never auto-create or publish knowledge.",
+    version: "1",
+    risk_level: 1,
+    personas: ["copilot", "executive"],
+    required_permissions: ["ai.use", "ai.knowledge.view"],
+    allowed_workspaces: [],
+    evidence_required: true,
+    max_input_bytes: 1000,
+    max_output_bytes: 160000,
+    timeout_ms: 6000,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        window_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 180,
+          description: "Optional lookback window for knowledge gaps and correction signals.",
+        },
+      },
+    },
+    handler: async ({ input, context }) => {
+      const workspaceCode = context.authority?.cross_workspace
+        ? null
+        : context.scope.workspace_code;
+      const curriculum = await getKnowledgeCurriculum({
+        workspaceCode,
+        windowDays: input.window_days,
+      });
+      return {
+        ...curriculum,
+        evidence: [
+          {
+            source_type: "system_snapshot",
+            source_ref: `chalin:knowledge-curriculum:${workspaceCode || "enterprise"}`,
+            source_version: "knowledge-curriculum-v1",
+            label: "CHALIN governed knowledge curriculum",
+            excerpt_text: JSON.stringify(curriculum).slice(0, 30000),
+            as_of_at: curriculum.generated_at,
+            classification: "internal",
+            workspace_code: workspaceCode,
+            metadata: {
+              read_only: true,
+              curriculum_targets_are_not_facts: true,
+              auto_create_disabled: true,
+              auto_publish_disabled: true,
+              correction_text_exposed: false,
             },
           },
         ],
