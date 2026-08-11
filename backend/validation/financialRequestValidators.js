@@ -78,6 +78,68 @@ function normalizeUnitIds(value, { itemIndex, quantity }) {
   return { ok: errors.length === 0, unit_ids: codes, errors };
 }
 
+function normalizeReturnUnitIds(value, quantity) {
+  if (value === undefined || value === null) {
+    return { ok: true, unit_ids: [], errors: [] };
+  }
+  const field = "body.unit_ids";
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+      unit_ids: [],
+      errors: [
+        unitError(
+          field,
+          "Returned physical inventory unit IDs must be provided as a list.",
+          "INVALID_RETURN_INVENTORY_UNIT_IDS"
+        ),
+      ],
+    };
+  }
+
+  const errors = [];
+  const codes = [];
+  const seen = new Set();
+  value.forEach((entry, unitIndex) => {
+    const code = String(entry || "").trim().toUpperCase();
+    const unitField = `${field}[${unitIndex}]`;
+    if (!INVENTORY_UNIT_CODE_PATTERN.test(code)) {
+      errors.push(
+        unitError(
+          unitField,
+          "Returned inventory unit ID format is invalid.",
+          "INVALID_RETURN_INVENTORY_UNIT_ID"
+        )
+      );
+      return;
+    }
+    if (seen.has(code)) {
+      errors.push(
+        unitError(
+          unitField,
+          `Duplicate returned physical inventory unit ID: ${code}.`,
+          "DUPLICATE_RETURN_INVENTORY_UNIT_ID"
+        )
+      );
+      return;
+    }
+    seen.add(code);
+    codes.push(code);
+  });
+
+  if (errors.length === 0 && codes.length !== Number(quantity || 0)) {
+    errors.push(
+      unitError(
+        field,
+        `Returned physical unit ID count must equal the return quantity (${Number(quantity || 0)}).`,
+        "RETURN_INVENTORY_UNIT_COUNT_MISMATCH"
+      )
+    );
+  }
+
+  return { ok: errors.length === 0, unit_ids: codes, errors };
+}
+
 function validateSaleCreateRequest(context = {}) {
   const body = context.body;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -140,9 +202,49 @@ function validateSaleCreateRequest(context = {}) {
   };
 }
 
+function validateReturnCreateRequest(context = {}) {
+  const body = context.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return core.validateReturnCreateRequest(context);
+  }
+
+  const hasUnitIds = Object.prototype.hasOwnProperty.call(body, "unit_ids");
+  if (!hasUnitIds) {
+    return core.validateReturnCreateRequest(context);
+  }
+
+  const { unit_ids: rawUnitIds, ...legacyBody } = body;
+  const legacyResult = core.validateReturnCreateRequest({
+    ...context,
+    body: legacyBody,
+  });
+  if (!legacyResult.ok) return legacyResult;
+
+  const normalized = normalizeReturnUnitIds(
+    rawUnitIds,
+    legacyResult.value.body.quantity
+  );
+  if (!normalized.ok) {
+    return { ok: false, value: null, errors: normalized.errors };
+  }
+
+  return {
+    ...legacyResult,
+    value: {
+      ...legacyResult.value,
+      body: {
+        ...legacyResult.value.body,
+        unit_ids: normalized.unit_ids,
+      },
+    },
+  };
+}
+
 module.exports = {
   ...core,
   INVENTORY_UNIT_CODE_PATTERN,
+  normalizeReturnUnitIds,
   normalizeUnitIds,
+  validateReturnCreateRequest,
   validateSaleCreateRequest,
 };
