@@ -1,0 +1,153 @@
+.inventory-blind-scanner {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.inventory-blind-scanner__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inventory-blind-scanner__head > div {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.inventory-blind-scanner__head strong {
+  font-size: 0.98rem;
+}
+
+.inventory-blind-scanner__head span {
+  color: #475569;
+  font-size: 0.86rem;
+}
+
+.inventory-blind-scanner__blind {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff !important;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.inventory-blind-scanner__actions,
+.inventory-blind-scanner__manual {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.inventory-blind-scanner__manual {
+  flex: 1 1 28rem;
+}
+
+.inventory-blind-scanner input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.74rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+
+.inventory-blind-scanner button {
+  min-height: 42px;
+  padding: 0.68rem 0.9rem;
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inventory-blind-scanner button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inventory-blind-scanner__camera-button {
+  background: #334155 !important;
+}
+
+.inventory-blind-scanner__camera {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #020617;
+}
+
+.inventory-blind-scanner__camera video {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+}
+
+.inventory-blind-scanner__camera-frame {
+  position: absolute;
+  inset: 18% 16% 28%;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  border-radius: 18px;
+  pointer-events: none;
+}
+
+.inventory-blind-scanner__camera p {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.55rem;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border-radius: 9px;
+  background: rgba(2, 6, 23, 0.82);
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.inventory-blind-scanner__message,
+.inventory-blind-scanner__error,
+.inventory-blind-scanner__hint {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.inventory-blind-scanner__message {
+  color: #166534;
+}
+
+.inventory-blind-scanner__error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.inventory-blind-scanner__hint {
+  color: #475569;
+}
+
+@media (max-width: 760px) {
+  .inventory-blind-scanner__head,
+  .inventory-blind-scanner__actions,
+  .inventory-blind-scanner__manual {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-blind-scanner__manual {
+    flex-basis: auto;
+  }
+
+  .inventory-blind-scanner button {
+    width: 100%;
+  }
+}
