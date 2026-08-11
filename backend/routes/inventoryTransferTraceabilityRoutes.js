@@ -70,6 +70,19 @@ function sendError(res, error, fallback) {
   });
 }
 
+async function writeSecondaryAudit(event) {
+  try {
+    await writeAuditEvent(event);
+    return true;
+  } catch (error) {
+    console.error(
+      "Serialized transfer secondary audit write failed after the authoritative inventory transaction committed:",
+      error
+    );
+    return false;
+  }
+}
+
 router.use(requireAuth);
 router.use(requireRole("admin", "manager"));
 
@@ -118,7 +131,7 @@ router.post("/:transferId/dispatch", async (req, res) => {
       requestId: req.requestId || req.id || null,
     });
 
-    await writeAuditEvent({
+    const secondaryAuditRecorded = await writeSecondaryAudit({
       req,
       branchId: plan.transfer.from_branch_id,
       userId: req.user.id,
@@ -143,6 +156,7 @@ router.post("/:transferId/dispatch", async (req, res) => {
       message:
         "Transfer dispatched. Source quantity was reduced and every enforced serialized unit is now recorded in transit.",
       result,
+      secondary_audit_recorded: secondaryAuditRecorded,
       ...updated,
     });
   } catch (error) {
@@ -162,7 +176,7 @@ router.post("/:transferId/receive", async (req, res) => {
       requestId: req.requestId || req.id || null,
     });
 
-    await writeAuditEvent({
+    const secondaryAuditRecorded = await writeSecondaryAudit({
       req,
       branchId: plan.transfer.to_branch_id,
       userId: req.user.id,
@@ -194,6 +208,7 @@ router.post("/:transferId/receive", async (req, res) => {
         ? "Transfer received. Destination stock increased only for the physical IDs actually verified."
         : "Partial receipt recorded. Missing dispatched IDs remain in transit and have investigation evidence; destination stock increased only for verified arrivals.",
       result,
+      secondary_audit_recorded: secondaryAuditRecorded,
       ...updated,
     });
   } catch (error) {
