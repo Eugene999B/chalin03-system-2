@@ -364,6 +364,9 @@ export default function InventoryTransferIdentityPanel({
         `/inventory-traceability/transfer-control/${transferId}/${phase === "dispatch" ? "dispatch" : "receive"}`,
         payload
       );
+      const nextPlan = response.data || null;
+      setPlan(nextPlan);
+      onPolicyChange?.(nextPlan?.serialized_identity_required ? "serialized" : "quantity");
       setScansByItem({});
       onCompleted?.({
         message: response.data?.message || (phase === "dispatch" ? "Serialized transfer dispatched." : "Serialized transfer receipt recorded."),
