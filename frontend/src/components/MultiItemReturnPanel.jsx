@@ -23,6 +23,11 @@ function makeLine(item) {
       ? item.active_refund_request_codes
       : [],
     unit_price: Number(item.unit_price || 0),
+    serialized_return_requires_unit_ids: Boolean(
+      item.serialized_return_requires_unit_ids ||
+        (item.inventory_tracking_mode === "serialized" &&
+          item.inventory_traceability_state === "enforced")
+    ),
     selected: false,
     quantity: "",
     refund_amount: "0",
@@ -215,6 +220,10 @@ export default function MultiItemReturnPanel({
     }
 
     for (const line of selectedLines) {
+      if (line.serialized_return_requires_unit_ids) {
+        return `${line.product_name}: serialized exact-ID returns cannot use the multi-item shortcut. Use Single Item Return to scan the physical IDs.`;
+      }
+
       const quantity = Number(
         line.quantity || 0
       );
@@ -406,7 +415,9 @@ export default function MultiItemReturnPanel({
       </h2>
 
       <p className="returns-batch-intro">
-        Select every product the customer
+        Serialized exact-ID returns cannot use the multi-item shortcut; use Single Item Return so every physical ID is verified against the receipt and quarantined.
+        <br />
+        Select every other product the customer
         returned, enter each quantity, then
         save them together for{" "}
         <strong>
@@ -424,7 +435,9 @@ export default function MultiItemReturnPanel({
       <div className="returns-batch-lines">
         {lines.map((line) => {
           const unavailable =
-            line.remaining_quantity <= 0 || line.active_refund_request_count > 0;
+            line.remaining_quantity <= 0 ||
+            line.active_refund_request_count > 0 ||
+            line.serialized_return_requires_unit_ids;
 
           return (
             <article
@@ -462,6 +475,9 @@ export default function MultiItemReturnPanel({
                     {formatMoney(line.unit_price)} each
                     {line.active_refund_request_codes.length > 0
                       ? ` · ${line.active_refund_request_codes.join(", ")}`
+                      : ""}
+                    {line.serialized_return_requires_unit_ids
+                      ? " · Use Single Item Return to scan exact physical IDs"
                       : ""}
                   </small>
                 </span>
