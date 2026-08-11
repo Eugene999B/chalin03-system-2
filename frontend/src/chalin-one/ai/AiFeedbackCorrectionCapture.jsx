@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import axiosClient from "../../api/axiosClient";
+import {
+  generateAndDownloadAiDocument,
+  requestedAiDocumentFormat,
+} from "./aiDocumentClient";
 
 const NEGATIVE_RATINGS = new Set(["not_helpful", "incorrect"]);
 
@@ -36,6 +40,34 @@ function withCorrection(config, { comment = "", correction = "" } = {}) {
   };
 }
 
+function chatPersonaFromUrl(config) {
+  const url = String(config?.url || "");
+  const match = url.match(/(?:^|\/)ai\/(copilot|executive)\/chat(?:$|[?#])/i);
+  return match?.[1]?.toLowerCase() || null;
+}
+
+function documentRequestFromChatResponse(response) {
+  const persona = chatPersonaFromUrl(response?.config);
+  if (!persona) return null;
+
+  const requestPayload = feedbackPayload(response?.config);
+  const format = requestedAiDocumentFormat(requestPayload.message);
+  if (!format) return null;
+
+  const result = response?.data?.data ?? response?.data ?? {};
+  const conversationKey = String(result?.conversation_key || "").trim();
+  const messageKey = String(result?.message_key || "").trim();
+  if (!conversationKey || !messageKey) return null;
+
+  return Object.freeze({
+    conversationKey,
+    messageKey,
+    format,
+    title: String(result?.conversation?.title || "").trim() || null,
+    persona,
+  });
+}
+
 export default function AiFeedbackCorrectionCapture() {
   const [pending, setPending] = useState(null);
   const [comment, setComment] = useState("");
@@ -43,7 +75,7 @@ export default function AiFeedbackCorrectionCapture() {
   const pendingRef = useRef(null);
 
   useEffect(() => {
-    const interceptorId = axiosClient.interceptors.request.use((config) => {
+    const requestInterceptorId = axiosClient.interceptors.request.use((config) => {
       if (!isCorrectionCandidate(config)) return config;
 
       return new Promise((resolve) => {
@@ -61,8 +93,44 @@ export default function AiFeedbackCorrectionCapture() {
       });
     });
 
+    const responseInterceptorId = axiosClient.interceptors.response.use(
+      (response) => {
+        const documentRequest = documentRequestFromChatResponse(response);
+        if (documentRequest) {
+          // The already-successful chat response must never be hidden by a
+          // secondary document-rendering problem. Generate the artifact from
+          // the persisted server-owned answer/evidence without delaying chat.
+          Promise.resolve()
+            .then(() => generateAndDownloadAiDocument(documentRequest))
+            .catch((error) => {
+              console.warn(
+                "CHALIN Intelligence document generation failed after the chat response was saved:",
+                error?.message || error
+              );
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("chalin03:ai-document-error", {
+                    detail: {
+                      message:
+                        error?.response?.data?.message ||
+                        error?.message ||
+                        "The answer was saved, but its document could not be generated.",
+                    },
+                  })
+                );
+              } catch {
+                // The chat result remains successful even without UI notice.
+              }
+            });
+        }
+        return response;
+      },
+      (error) => Promise.reject(error)
+    );
+
     return () => {
-      axiosClient.interceptors.request.eject(interceptorId);
+      axiosClient.interceptors.request.eject(requestInterceptorId);
+      axiosClient.interceptors.response.eject(responseInterceptorId);
       if (pendingRef.current?.resolve) {
         pendingRef.current.resolve(pendingRef.current.config);
       }
@@ -216,6 +284,8 @@ export default function AiFeedbackCorrectionCapture() {
 
 export {
   NEGATIVE_RATINGS,
+  chatPersonaFromUrl,
+  documentRequestFromChatResponse,
   feedbackPayload,
   isCorrectionCandidate,
   withCorrection,
