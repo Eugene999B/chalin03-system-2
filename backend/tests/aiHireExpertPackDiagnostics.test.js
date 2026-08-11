@@ -140,7 +140,7 @@ test("product knowledge receives Hire expert rules while live location facts rem
   );
   assert.match(instruction, /Equipment Hire Operations, Commercial Flow & Fleet Performance Intelligence/);
   assert.match(instruction, /Never treat open quotation value as recognized revenue/i);
-  assert.match(instruction, /paid amount as cash collection/i);
+  assert.match(instruction, /paid amount as cash-collection evidence/i);
   assert.equal(
     isChalinProductKnowledgeTurn("How does Equipment Hire performance work in CHALIN?"),
     true
