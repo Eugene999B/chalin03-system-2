@@ -187,7 +187,6 @@ function investigationSummary({
     duplicate_loop_blocked: duplicateLoopBlocked === true,
     autonomous_write_authority: false,
     bounded: true,
-    planner_guided: true,
   });
 }
 
