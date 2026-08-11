@@ -3,12 +3,13 @@
 const { CHALIN_PRODUCT_CONTEXT } = require("../services/aiProductKnowledgeService");
 
 const MAX_EVIDENCE_ITEMS = 5;
-const MAX_EXCERPT_LENGTH = 6000;
+const MAX_EXCERPT_LENGTH = 12000;
 const MAX_READABLE_FACTS = 14;
 const LOCAL_MODEL_KEY = "chalin-local-governed-v1";
 
 const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
   "system.group_intelligence",
+  "spare_parts.performance_diagnostics",
   "spare_parts.operations_snapshot",
   "spare_parts.inventory_health",
   "spare_parts.collections_health",
@@ -70,6 +71,10 @@ const TOOL_HINTS = Object.freeze([
     pattern: /\b(mining|mine|site operation|dispatch|crew|site closing)\b/i,
   }),
   Object.freeze({
+    key: "spare_parts.performance_diagnostics",
+    pattern: /\b(?:profit|margin|why\s+(?:is|are|was|were)|performance|cash[- ]?poor|cash pressure|expense pressure|discount pressure|sales pressure|commercial performance|store performance|branch performance)\b/i,
+  }),
+  Object.freeze({
     key: "spare_parts.inventory_health",
     pattern: /\b(inventory|stock|low stock|negative stock|product quantity|stock value)\b/i,
   }),
@@ -79,7 +84,7 @@ const TOOL_HINTS = Object.freeze([
   }),
   Object.freeze({
     key: "spare_parts.operations_snapshot",
-    pattern: /\b(spare parts|sales?|sold|selling|sell|purchase|return|expense|branch operation|store performance)\b/i,
+    pattern: /\b(spare parts|sales?|sold|selling|sell|purchase|return|expense|branch operation)\b/i,
   }),
 ]);
 
@@ -263,19 +268,21 @@ function formatMoney(value) {
   })}`;
 }
 
+function evidencePeriodText(data = {}) {
+  const period = Array.isArray(data.period) ? data.period : [];
+  const start = clean(period[0], 20);
+  const end = clean(period[1], 20);
+  if (!start || !end) return "";
+  return start === end ? ` on ${start}` : ` from ${start} to ${end}`;
+}
+
 function composeSparePartsOperationsAnswer(item) {
   const data = parseEvidenceJson(item?.excerpt);
   if (!data?.sales || !Array.isArray(data?.period)) return null;
   const sales = data.sales;
   const branchName = clean(data.branch_name || data.branch_code || "", 120);
   const location = branchName ? ` at ${branchName}` : "";
-  const start = clean(data.period[0], 20);
-  const end = clean(data.period[1], 20);
-  const period = start && end
-    ? start === end
-      ? ` on ${start}`
-      : ` from ${start} to ${end}`
-    : "";
+  const period = evidencePeriodText(data);
   const transactions = Number(sales.transaction_count || 0);
   const total = formatMoney(sales.total_sales);
   const paid = formatMoney(sales.total_paid);
@@ -288,11 +295,41 @@ function composeSparePartsOperationsAnswer(item) {
   ].join("\n\n");
 }
 
+function composeSparePartsPerformanceAnswer(item) {
+  const data = parseEvidenceJson(item?.excerpt);
+  if (!data?.financial_view || !Array.isArray(data?.drivers)) return null;
+  const branchName = clean(data.branch_name || data.branch_code || "", 120);
+  const location = branchName ? ` for ${branchName}` : "";
+  const period = evidencePeriodText(data);
+  const financial = data.financial_view;
+  const certainty = data.certainty || {};
+  const drivers = data.drivers.slice(0, 5);
+  const driverLines = drivers.map((driver, index) => {
+    const title = clean(driver.key || driver.category || "driver", 120).replace(/_/g, " ");
+    const explanation = clean(driver.explanation || "", 700);
+    const effect = clean(driver.effect || "", 120).replace(/_/g, " ");
+    return `${index + 1}. ${title}: ${explanation}${effect ? ` Effect: ${effect}.` : ""} [${item.citation}]`;
+  });
+  return [
+    `The live Spare Parts performance diagnosis${location}${period} shows a management net estimate before reliable stock cost of ${formatMoney(financial.estimated_net_before_stock_cost)}, with ${formatMoney(financial.gross_sales)} gross sales, ${formatMoney(financial.discounts)} discounts and ${formatMoney(financial.operating_expenses)} operating expenses. [${item.citation}]`,
+    `Cash conversion is separate: ${formatMoney(financial.total_paid)} was paid, ${formatMoney(financial.sales_balance)} remained on those sales, and the collection rate was ${Number(financial.collection_rate || 0).toFixed(2)}%. [${item.citation}]`,
+    "Main evidence-backed drivers:",
+    ...driverLines,
+    `Accounting boundary: ${clean(certainty.warning || "True profit requires reliable COGS; purchases are not certified COGS.", 700)} [${item.citation}]`,
+  ].join("\n\n");
+}
+
 function composeEvidenceAnswer(messages = []) {
   const evidence = evidenceFromMessages(messages);
   if (evidence.length === 0) {
     return "I do not have enough approved live CHALIN evidence to answer that reliably. I will not guess or substitute an unrelated workspace snapshot.";
   }
+
+  const sparePartsPerformance = evidence.find((item) =>
+    /spare parts cross-module performance diagnostics/i.test(item.heading)
+  );
+  const directPerformanceAnswer = composeSparePartsPerformanceAnswer(sparePartsPerformance);
+  if (directPerformanceAnswer) return directPerformanceAnswer;
 
   const sparePartsOperations = evidence.find((item) =>
     /spare parts operations snapshot/i.test(item.heading)
@@ -345,6 +382,16 @@ function composePublicSafeSystemAnswer(messages = []) {
 
   if (/\bpayroll\b|\bworker profile\b|\bsalary\b/.test(question)) {
     return "In CHALIN, People & Employment should be the source of worker identity and compensation. A worker’s effective salary/pay-frequency record should flow into Monthly Payroll so the salary is not retyped every month. Payroll then previews the workers and authoritative salaries for the period before approval, payment and payslip generation.";
+  }
+
+  if (/\bspare parts\b|\bstock adjustment\b|\bstock transfer\b|\bcustomer debt\b|\btrue profit\b|\bcogs\b/.test(question)) {
+    return [
+      "CHALIN Spare Parts should be understood as connected commercial flows, not isolated screens: Customer → Sale → Payment/Balance → Debt → Debt Payment; and Product → Purchase/Cost History → Stock → Sale → Revenue.",
+      "",
+      "For profit questions, sales are not profit and purchases are not automatically COGS. The current CHALIN ONE accounting layer gives a management estimate using net sales and operating expenses, while true profit still requires reliable cost-of-goods-sold evidence. Collections explain cash conversion, not profit by themselves.",
+      "",
+      "Returns/refunds should be traced back to the original sale and stock/cash reversal, while stock adjustments and transfer mismatches are control signals that can weaken confidence in the numbers. For current branch figures I must use governed live evidence rather than this product knowledge.",
+    ].join("\n");
   }
 
   if (/\bmarketing\b|\badvertis|\bbrand|\bcampaign|\bpositioning\b/.test(question)) {
@@ -484,6 +531,7 @@ class LocalGovernedProvider {
 }
 
 module.exports = {
+  CHALIN_PRODUCT_CONTEXT,
   LOCAL_LIVE_TOOL_KEYS,
   LOCAL_MODEL_KEY,
   LocalGovernedProvider,
@@ -496,6 +544,7 @@ module.exports = {
   composePublicSafeSocialAnswer,
   composePublicSafeSystemAnswer,
   composeSparePartsOperationsAnswer,
+  composeSparePartsPerformanceAnswer,
   evidenceFromMessages,
   formatMoney,
   inferredDateInput,

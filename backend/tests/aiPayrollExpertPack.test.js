@@ -87,7 +87,7 @@ test("Payroll product instruction injects the expert pack without affecting unre
   );
   assert.match(payrollInstruction, /CHALIN source-derived expert pack: People, Employment & Payroll/);
   assert.match(payrollInstruction, /authoritative salary source/i);
-  assert.match(payrollInstruction, /Verified operating workflow/i);
+  assert.match(payrollInstruction, /Verified operating (?:workflow|relationships\/workflow)/i);
 
   const auditInstruction = productKnowledgeInstruction(
     "Tell me about Audit Intelligence in CHALIN"

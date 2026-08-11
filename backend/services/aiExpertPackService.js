@@ -2,6 +2,11 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  SPARE_PARTS_EXPERT_PACK,
+  getSparePartsExpertPack,
+  isSparePartsExpertPrompt,
+} = require("./aiSparePartsExpertPackService");
 
 const PAYROLL_RELEASE_COMMIT = "8e4ca14e4020b809ab4a2245e3e5eeb67d7fc369";
 
@@ -158,6 +163,7 @@ const PAYROLL_EXPERT_PACK = Object.freeze({
 
 const EXPERT_PACKS = Object.freeze({
   [PAYROLL_EXPERT_PACK.key]: PAYROLL_EXPERT_PACK,
+  [SPARE_PARTS_EXPERT_PACK.key]: SPARE_PARTS_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -197,6 +203,9 @@ function payrollRuntimeAvailability() {
 
 function getExpertPack(packKey, { includeAvailability = true } = {}) {
   const key = clean(packKey, 80).toLowerCase();
+  if (key === SPARE_PARTS_EXPERT_PACK.key) {
+    return getSparePartsExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -219,11 +228,23 @@ function isPayrollExpertPrompt(value) {
   return /\b(?:payroll|salary|salaries|payslip|wage|compensation|pay frequency|basic salary|worker payroll|salary deduction|salary allowance)\b/i.test(text);
 }
 
+function expertPacksForPrompt(value) {
+  const matches = [];
+  if (isPayrollExpertPrompt(value)) matches.push(getExpertPack(PAYROLL_EXPERT_PACK.key));
+  if (isSparePartsExpertPrompt(value)) matches.push(getExpertPack(SPARE_PARTS_EXPERT_PACK.key));
+  return Object.freeze(matches.filter(Boolean));
+}
+
 function expertPackForPrompt(value) {
-  if (isPayrollExpertPrompt(value)) {
-    return getExpertPack(PAYROLL_EXPERT_PACK.key);
+  return expertPacksForPrompt(value)[0] || null;
+}
+
+function workflowLines(pack) {
+  if (Array.isArray(pack.workflow)) return pack.workflow;
+  if (Array.isArray(pack.workflows)) {
+    return pack.workflows.map((item) => `${item.path}. ${item.interpretation}`);
   }
-  return null;
+  return [];
 }
 
 function renderExpertPack(pack) {
@@ -231,24 +252,43 @@ function renderExpertPack(pack) {
   const facts = (pack.facts || [])
     .map((fact, index) => `${index + 1}. ${fact.statement}`)
     .join("\n");
-  const workflow = (pack.workflow || [])
+  const workflow = workflowLines(pack)
     .map((step, index) => `${index + 1}. ${step}`)
+    .join("\n");
+  const diagnostics = (pack.diagnostic_questions || [])
+    .map((item) => `- ${item}`)
+    .join("\n");
+  const rules = (pack.reasoning_rules || [])
+    .map((item) => `- ${item}`)
     .join("\n");
   const availability = pack.deployment_availability || {};
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
     `Pack version: ${pack.version}.`,
-    `Verified release commit: ${pack.verified_release_commit}.`,
+    `Verified release/source commit: ${pack.verified_release_commit}.`,
     `Current deployment availability: ${availability.status || "unknown"}.`,
     availability.warning ? `Deployment warning: ${availability.warning}` : "",
     "Verified product behavior:",
     facts,
-    "Verified operating workflow:",
+    workflow ? "Verified operating relationships/workflow:" : "",
     workflow,
-    "Use this as product/workflow knowledge only. Never infer a live worker salary, payroll result or employee fact from this pack; live payroll records require an authorized governed read path.",
+    diagnostics ? "Diagnostic questions:" : "",
+    diagnostics,
+    rules ? "Reasoning rules:" : "",
+    rules,
+    pack.key === PAYROLL_EXPERT_PACK.key
+      ? "Use this as product/workflow knowledge only. Never infer a live worker salary, payroll result or employee fact from this pack; live payroll records require an authorized governed read path."
+      : "Use this as product/workflow knowledge only. Never infer live branch sales, stock, debt, customer or profit figures from this pack; current Spare Parts facts require authorized governed live evidence.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function renderExpertPacks(packs = []) {
+  return (Array.isArray(packs) ? packs : [])
+    .map(renderExpertPack)
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 module.exports = {
@@ -256,11 +296,15 @@ module.exports = {
   PAYROLL_EXPERT_PACK,
   PAYROLL_RELEASE_COMMIT,
   PAYROLL_RUNTIME_FILES,
+  SPARE_PARTS_EXPERT_PACK,
   expertPackForPrompt,
+  expertPacksForPrompt,
   getExpertPack,
   isPayrollExpertPrompt,
+  isSparePartsExpertPrompt,
   listExpertPacks,
   payrollRuntimeAvailability,
   renderExpertPack,
+  renderExpertPacks,
   runtimePath,
 };
