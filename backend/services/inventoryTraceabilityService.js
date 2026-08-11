@@ -190,15 +190,18 @@ function assertTrackingConfiguration({ trackingMode, traceabilityState, productC
   const mode = normalizeTrackingMode(trackingMode);
   const state = normalizeTraceabilityState(traceabilityState);
 
-  // Phase 1/2 deliberately cannot claim checkout protection. Server-side Sales
-  // enforcement is introduced only in Phase 3; until then every configured
-  // serialized/batch product remains in setup mode.
-  if (state === TRACEABILITY_STATES.ENFORCED) {
+  // Exact-ID checkout enforcement is only meaningful for serialized products.
+  // The repository service separately verifies physical identity reconciliation
+  // before a product is allowed to enter ENFORCED for the first time.
+  if (
+    state === TRACEABILITY_STATES.ENFORCED &&
+    mode !== TRACKING_MODES.SERIALIZED
+  ) {
     const error = new Error(
-      "Serialized enforcement is not available until the Sales & Scanning phase is enabled server-side. Keep this product in setup for now."
+      "Exact-ID enforcement is available only for serialized products."
     );
     error.statusCode = 409;
-    error.code = "TRACEABILITY_ENFORCEMENT_NOT_RELEASED";
+    error.code = "TRACEABILITY_ENFORCEMENT_REQUIRES_SERIALIZED";
     throw error;
   }
 

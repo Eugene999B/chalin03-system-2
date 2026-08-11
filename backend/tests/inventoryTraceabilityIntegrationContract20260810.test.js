@@ -47,13 +47,14 @@ test("composite traceability router exposes receiving and loss-control without d
   assert.match(lossRoutes, /\/handovers/);
 });
 
-test("tracking is backward compatible and checkout enforcement is impossible before Phase 3", () => {
+test("tracking is backward compatible and exact-ID enforcement is explicit, serialized-only and reconciled", () => {
   assert.match(migration, /inventory_tracking_mode` VARCHAR\(20\) NOT NULL DEFAULT ''quantity''/);
   assert.match(migration, /inventory_traceability_state` VARCHAR\(20\) NOT NULL DEFAULT ''off''/);
   assert.match(repository, /ready_for_serialized_enforcement/);
-  assert.match(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);
-  assert.match(primitives, /Sales & Scanning phase is enabled server-side/);
-  assert.doesNotMatch(repository, /inventory_traceability_state\s*=\s*'enforced'/);
+  assert.match(repository, /current\.inventory_traceability_state !== TRACEABILITY_STATES\.ENFORCED/);
+  assert.match(primitives, /TRACEABILITY_ENFORCEMENT_REQUIRES_SERIALIZED/);
+  assert.match(primitives, /Exact-ID enforcement is available only for serialized products/);
+  assert.doesNotMatch(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);
   assert.match(coreRoutes, /an administrator may enable enforcement separately/);
 });
 

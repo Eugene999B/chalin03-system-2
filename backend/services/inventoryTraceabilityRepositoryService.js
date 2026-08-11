@@ -283,11 +283,14 @@ async function configureProductTraceability(
     throw error;
   }
 
-  // Kept as the future Phase 3 invariant. The pure configuration service
-  // currently rejects ENFORCED before this point until checkout integration is released.
+  // Entering enforcement is an explicit admin action and is allowed only when
+  // every physical stock unit is represented by one active serialized identity.
+  // Once enforced, legitimate lifecycle states (sold, in transit, quarantine) must
+  // not prevent an admin from saving unrelated policy fields while keeping enforcement.
   if (
     configuration.traceabilityState === TRACEABILITY_STATES.ENFORCED &&
     configuration.trackingMode === TRACKING_MODES.SERIALIZED &&
+    current.inventory_traceability_state !== TRACEABILITY_STATES.ENFORCED &&
     !current.ready_for_serialized_enforcement
   ) {
     const error = new Error(

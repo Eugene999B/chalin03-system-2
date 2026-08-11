@@ -152,6 +152,11 @@ export default function InventoryTraceabilityPage() {
     );
   }, [products, search]);
 
+  const canEnableSerializedEnforcement =
+    config.tracking_mode === "serialized" &&
+    (Boolean(productDetail?.product?.ready_for_serialized_enforcement) ||
+      config.traceability_state === "enforced");
+
   const metrics = useMemo(() => {
     const unitRows = overview?.units || [];
     const count = (status) =>
@@ -175,10 +180,12 @@ export default function InventoryTraceabilityPage() {
     try {
       const payload = {
         ...config,
-        // Until checkout enforcement is implemented, the operator-facing page
-        // deliberately exposes setup/off only.
         traceability_state:
-          config.tracking_mode === "quantity" ? "off" : "setup",
+          config.tracking_mode === "quantity"
+            ? "off"
+            : config.tracking_mode === "serialized"
+            ? config.traceability_state
+            : "setup",
       };
       const response = await axiosClient.put(
         `/inventory-traceability/products/${selectedProductId}/config`,
@@ -489,9 +496,19 @@ export default function InventoryTraceabilityPage() {
                       Tracking level
                       <select
                         value={config.tracking_mode}
-                        onChange={(event) =>
-                          setConfig((current) => ({ ...current, tracking_mode: event.target.value }))
-                        }
+                        onChange={(event) => {
+                          const nextMode = event.target.value;
+                          setConfig((current) => ({
+                            ...current,
+                            tracking_mode: nextMode,
+                            traceability_state:
+                              nextMode === "quantity"
+                                ? "off"
+                                : nextMode === "serialized" && current.traceability_state === "enforced"
+                                ? "enforced"
+                                : "setup",
+                          }));
+                        }}
                       >
                         <option value="quantity">Quantity only</option>
                         <option value="batch">Batch tracked (foundation)</option>
@@ -528,10 +545,38 @@ export default function InventoryTraceabilityPage() {
                     </label>
                     <label>
                       Rollout state
-                      <input
-                        value={config.tracking_mode === "quantity" ? "Off" : "Setup — enforcement withheld"}
-                        readOnly
-                      />
+                      <select
+                        value={
+                          config.tracking_mode === "quantity"
+                            ? "off"
+                            : config.tracking_mode === "serialized"
+                            ? config.traceability_state
+                            : "setup"
+                        }
+                        disabled={config.tracking_mode !== "serialized"}
+                        onChange={(event) =>
+                          setConfig((current) => ({
+                            ...current,
+                            traceability_state: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="off">Off — quantity tracking</option>
+                        <option value="setup">Setup — labels/history, no exact-ID checkout</option>
+                        <option
+                          value="enforced"
+                          disabled={!canEnableSerializedEnforcement}
+                        >
+                          Enforced — exact IDs required
+                        </option>
+                      </select>
+                      <small>
+                        {config.tracking_mode === "serialized"
+                          ? canEnableSerializedEnforcement
+                            ? "Identity reconciliation is complete. System Admin may enable exact-ID Sales enforcement."
+                            : "Enforcement unlocks only when active physical IDs exactly match system stock and no labels remain pending."
+                          : "Exact-ID enforcement applies only to serialized products."}
+                      </small>
                     </label>
                   </div>
                   <button type="submit" disabled={busy === "config"}>
