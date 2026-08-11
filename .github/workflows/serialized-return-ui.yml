@@ -1,0 +1,54 @@
+name: Temporary Serialized Return UI Integration
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: serialized-return-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrate-and-verify:
+    if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/inventory-loss-prevention-traceability
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Apply Returns UI integration
+        run: python .github/serialized-return-ui/patch.py
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm test
+          npm run lint
+          npm run build
+      - name: Publish verified Returns UI integration
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/pages/ReturnsPage.jsx frontend/src/components/MultiItemReturnPanel.jsx frontend/package.json
+          git diff --cached --check
+          git commit -m "Wire exact-ID serialized returns UI"
+          git push origin HEAD:feature/inventory-loss-prevention-traceability
