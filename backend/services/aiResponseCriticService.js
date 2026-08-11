@@ -13,6 +13,16 @@ const ACTION_EXECUTION_PATTERN = /\b(?:i|chalin|we)\s+(?:have\s+)?(?:executed|co
 const ACTION_STATUS_PATTERN = /\b(?:proposed|proposal|awaiting|pending|review|confirmation|confirmed|blocked|executed|completed|not executed|not yet executed)\b/i;
 const HEDGING_OPEN_PATTERN = /^(?:sure|absolutely|certainly|of course|here(?:'s| is)|i can help|happy to help)[,!.:\s-]+/i;
 
+const AUTO_REPAIR_ISSUES = new Set([
+  "empty_answer",
+  "too_short_for_multi_objective",
+  "internal_implementation_leak",
+  "raw_internal_data_dump",
+  "objectives_not_addressed",
+  "live_verification_not_disclosed",
+  "action_status_unclear",
+]);
+
 const STOP_WORDS = new Set([
   "about", "after", "again", "also", "and", "are", "because", "been", "before",
   "but", "can", "could", "did", "does", "for", "from", "has", "have", "how",
@@ -123,15 +133,7 @@ function critiqueResponse({
   const score = Math.max(0, Math.min(100, 100 - penalty));
   const critical = issues.some((item) => item.severity === "critical");
   const high = issues.some((item) => item.severity === "high");
-  const repairablePresentationFailure = issues.some((item) => [
-    "empty_answer",
-    "too_short_for_multi_objective",
-    "internal_implementation_leak",
-    "raw_internal_data_dump",
-    "objectives_not_addressed",
-    "live_verification_not_disclosed",
-    "action_status_unclear",
-  ].includes(item.key));
+  const repairablePresentationFailure = issues.some((item) => AUTO_REPAIR_ISSUES.has(item.key));
 
   return Object.freeze({
     version: 1,
@@ -144,6 +146,25 @@ function critiqueResponse({
     uncovered_objective_count: uncoveredCount,
     hidden_chain_of_thought_reviewed: false,
   });
+}
+
+function shouldAutoRepairResponse(critique = null, { toolsAvailable = false, liveToolsUsed = false } = {}) {
+  const review = critique && typeof critique === "object" ? critique : {};
+  if (review.needs_repair !== true) return false;
+  const issueKeys = (Array.isArray(review.issues) ? review.issues : [])
+    .map((item) => clean(item?.key, 100))
+    .filter((key) => AUTO_REPAIR_ISSUES.has(key));
+  if (!issueKeys.length) return false;
+
+  // If governed read tools are still available for a live question, lack of
+  // live verification is an investigation-quality signal, not a presentation
+  // rewrite signal. A tool-free repair cannot create evidence and would add a
+  // wasteful second provider call. Other concrete presentation failures remain
+  // repairable on the same turn.
+  const actionable = issueKeys.filter(
+    (key) => !(key === "live_verification_not_disclosed" && toolsAvailable === true && liveToolsUsed !== true)
+  );
+  return actionable.length > 0;
 }
 
 function responseCriticRepairPrompt({ answer = "", critique = null, composition = null } = {}) {
@@ -171,6 +192,7 @@ function responseCriticRepairPrompt({ answer = "", critique = null, composition 
 module.exports = {
   ACTION_EXECUTION_PATTERN,
   ACTION_STATUS_PATTERN,
+  AUTO_REPAIR_ISSUES,
   HEDGING_OPEN_PATTERN,
   INTERNAL_LEAK_PATTERN,
   JSON_FIELD_PATTERN,
@@ -184,5 +206,6 @@ module.exports = {
   critiqueResponse,
   objectiveCoverage,
   responseCriticRepairPrompt,
+  shouldAutoRepairResponse,
   tokens,
 };
