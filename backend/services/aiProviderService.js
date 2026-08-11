@@ -27,6 +27,7 @@ const {
 const {
   critiqueResponse,
   responseCriticRepairPrompt,
+  shouldAutoRepairResponse,
 } = require("./aiResponseCriticService");
 
 const DEFAULT_PROVIDER_TIMEOUT_MS = 60000;
@@ -487,7 +488,12 @@ async function generateProviderResponse({
     let finalCritique = primaryCritique;
     let repairRounds = 0;
 
-    if (primaryCritique.needs_repair) {
+    const autoRepair = shouldAutoRepairResponse(primaryCritique, {
+      toolsAvailable: safeTools.length > 0,
+      liveToolsUsed,
+    });
+
+    if (autoRepair) {
       const repairController = new AbortController();
       const repairMessages = sanitizeProviderMessages([
         ...safeMessages,
