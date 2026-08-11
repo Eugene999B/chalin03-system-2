@@ -232,7 +232,11 @@ function inferHints(text) {
       .map((item) => item.toLowerCase())
       .map((item) => /^(?:sale|sales|sell|selling|sold)$/.test(item) ? "sales" : item)
   ).slice(0, 8);
-  const locations = unique((value.match(/\b(?:main store|[a-z][a-z -]{1,40}\s+(?:store|branch|site|location))\b/gi) || []).map((item) => clean(item, 80))).slice(0, 4);
+  const explicitLocations = /\bmain store\b/i.test(value) ? ["Main Store"] : [];
+  const genericLocations = (value.match(/\b[a-z][a-z-]{1,30}(?:\s+[a-z][a-z-]{1,30}){0,2}\s+(?:store|branch|site|location)\b/gi) || [])
+    .map((item) => clean(item, 80))
+    .filter((item) => !/\bmain store$/i.test(item));
+  const locations = unique([...explicitLocations, ...genericLocations]).slice(0, 4);
   return Object.freeze({
     time_hints: Object.freeze(times),
     metric_hints: Object.freeze(metrics),
