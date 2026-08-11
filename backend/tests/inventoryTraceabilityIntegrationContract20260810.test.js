@@ -8,6 +8,9 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 const server = read("server.js");
 const routes = read("routes/inventoryTraceabilityRoutes.js");
+const coreRoutes = read("routes/inventoryTraceabilityCoreRoutes.js");
+const receivingRoutes = read("routes/inventoryTraceabilityReceivingRoutes.js");
+const lossRoutes = read("routes/inventoryLossDetectionRoutes.js");
 const repository = read("services/inventoryTraceabilityRepositoryService.js");
 const labels = read("services/inventoryLabelDocumentService.js");
 const primitives = read("services/inventoryTraceabilityService.js");
@@ -26,9 +29,22 @@ test("feature API is branch-isolated and mounted only in Spare Parts workspace",
     server,
     /app\.use\(\s*"\/api\/inventory-traceability",\s*requireAuth,\s*sparePartsBoundary,\s*inventoryTraceabilityRoutes\s*\)/s
   );
-  assert.match(routes, /router\.use\(requireAuth\)/);
-  assert.match(routes, /requireRole\("admin"\)/);
-  assert.match(routes, /requireRole\("admin", "manager"\)/);
+  assert.match(coreRoutes, /router\.use\(requireAuth\)/);
+  assert.match(coreRoutes, /requireRole\("admin"\)/);
+  assert.match(coreRoutes, /requireRole\("admin", "manager"\)/);
+});
+
+test("composite traceability router exposes receiving and loss-control without duplicating the core API", () => {
+  assert.match(routes, /inventoryTraceabilityCoreRoutes/);
+  assert.match(routes, /inventoryTraceabilityReceivingRoutes/);
+  assert.match(routes, /inventoryLossDetectionRoutes/);
+  assert.match(routes, /router\.use\("\/receiving", inventoryTraceabilityReceivingRoutes\)/);
+  assert.match(routes, /router\.use\("\/loss-control", inventoryLossDetectionRoutes\)/);
+  assert.match(routes, /router\.use\(inventoryTraceabilityCoreRoutes\)/);
+  assert.match(receivingRoutes, /purchase-items/);
+  assert.match(lossRoutes, /\/counts/);
+  assert.match(lossRoutes, /\/investigations/);
+  assert.match(lossRoutes, /\/handovers/);
 });
 
 test("tracking is backward compatible and checkout enforcement is impossible before Phase 3", () => {
@@ -38,7 +54,7 @@ test("tracking is backward compatible and checkout enforcement is impossible bef
   assert.match(primitives, /TRACEABILITY_ENFORCEMENT_NOT_RELEASED/);
   assert.match(primitives, /Sales & Scanning phase is enabled server-side/);
   assert.doesNotMatch(repository, /inventory_traceability_state\s*=\s*'enforced'/);
-  assert.match(routes, /an administrator may enable enforcement separately/);
+  assert.match(coreRoutes, /an administrator may enable enforcement separately/);
 });
 
 test("serialized configuration cannot be downgraded or silently recoded after identities exist", () => {
@@ -56,8 +72,8 @@ test("label batch finalization requires every generated identity to be activated
 
 test("unit event history is append-only through the feature API", () => {
   assert.match(repository, /INSERT INTO inventory_unit_events/);
-  assert.doesNotMatch(routes, /DELETE\s+FROM\s+inventory_unit_events/i);
-  assert.doesNotMatch(routes, /UPDATE\s+inventory_unit_events/i);
+  assert.doesNotMatch(coreRoutes, /DELETE\s+FROM\s+inventory_unit_events/i);
+  assert.doesNotMatch(coreRoutes, /UPDATE\s+inventory_unit_events/i);
   assert.doesNotMatch(repository, /DELETE\s+FROM\s+inventory_unit_events/i);
   assert.doesNotMatch(repository, /UPDATE\s+inventory_unit_events/i);
   assert.match(migration, /previous_event_hash CHAR\(64\)/);
@@ -66,29 +82,29 @@ test("unit event history is append-only through the feature API", () => {
 
 test("signed QR payloads are generated only inside the controlled PDF path", () => {
   assert.match(labels, /buildSignedLabelPayload\(units\[index\]\.unit_code, signingSecret\)/);
-  assert.match(routes, /buildInventoryLabelPdf/);
-  assert.match(routes, /verifySignedLabelPayload\(input\)/);
-  assert.doesNotMatch(routes, /qr_payload\s*:/);
-  assert.match(routes, /Signed QR payloads are not exposed through the API/);
+  assert.match(coreRoutes, /buildInventoryLabelPdf/);
+  assert.match(coreRoutes, /verifySignedLabelPayload\(input\)/);
+  assert.doesNotMatch(coreRoutes, /qr_payload\s*:/);
+  assert.match(coreRoutes, /Signed QR payloads are not exposed through the API/);
   assert.match(primitives, /INVENTORY_LABEL_SIGNING_SECRET/);
   assert.doesNotMatch(primitives, /BACKUP_SIGNING_SECRET/);
   assert.doesNotMatch(primitives, /JWT_SECRET/);
 });
 
 test("label reprints are administrator-controlled and cannot be silently acknowledged", () => {
-  assert.match(routes, /TRACEABILITY_REPRINT_ADMIN_REQUIRED/);
-  assert.match(routes, /TRACEABILITY_REPRINT_REASON_REQUIRED/);
-  assert.match(routes, /REPRINT_INVENTORY_LABEL_BATCH/);
-  assert.match(routes, /TRACEABILITY_USE_CONTROLLED_PRINT/);
-  assert.match(routes, /prior_print_count/);
+  assert.match(coreRoutes, /TRACEABILITY_REPRINT_ADMIN_REQUIRED/);
+  assert.match(coreRoutes, /TRACEABILITY_REPRINT_REASON_REQUIRED/);
+  assert.match(coreRoutes, /REPRINT_INVENTORY_LABEL_BATCH/);
+  assert.match(coreRoutes, /TRACEABILITY_USE_CONTROLLED_PRINT/);
+  assert.match(coreRoutes, /prior_print_count/);
 });
 
 test("activation requires physical labels to have been printed and manager verification is independent", () => {
-  assert.match(routes, /TRACEABILITY_PRINT_REQUIRED_BEFORE_ACTIVATION/);
-  assert.match(routes, /TRACEABILITY_INDEPENDENT_VERIFICATION_REQUIRED/);
-  assert.match(routes, /control\.created_by/);
-  assert.match(routes, /control\.printed_by/);
-  assert.match(routes, /roleOf\(req\) !== "admin"/);
+  assert.match(coreRoutes, /TRACEABILITY_PRINT_REQUIRED_BEFORE_ACTIVATION/);
+  assert.match(coreRoutes, /TRACEABILITY_INDEPENDENT_VERIFICATION_REQUIRED/);
+  assert.match(coreRoutes, /control\.created_by/);
+  assert.match(coreRoutes, /control\.printed_by/);
+  assert.match(coreRoutes, /roleOf\(req\) !== "admin"/);
 });
 
 test("foundation migration carries explicit additive and backup-required markers", () => {
