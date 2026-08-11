@@ -17,6 +17,14 @@ assert.match(returnsPage, /serialized_return_requires_unit_ids/);
 assert.match(returnsPage, /payload\.unit_ids = returnUnitIds/);
 assert.match(returnsPage, /requiredCount=\{Number\(form\.quantity \|\| 0\)\}/);
 assert.match(returnsPage, /Returned serialized units are quarantined/i);
+assert.match(
+  returnsPage,
+  /const successMessage =[\s\S]*await Promise\.all[\s\S]*setMessage\(successMessage\)/
+);
+assert.match(
+  returnsPage,
+  /async function handleMultiReturnResult[\s\S]*await Promise\.all[\s\S]*setMessage\(result\?\.message/
+);
 
 assert.match(multiReturn, /serialized_return_requires_unit_ids/);
 assert.match(multiReturn, /Use Single Item Return/i);

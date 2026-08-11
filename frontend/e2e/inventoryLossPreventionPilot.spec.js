@@ -908,7 +908,9 @@ test("inventory loss-prevention pilot proves the physical lifecycle without prod
   await singleReturn.locator('input[name="quantity"]').fill("1");
   await singleReturn.getByPlaceholder("Enter returned unit ID or QR payload").fill(UNIT_CODE);
   await singleReturn.getByRole("button", { name: "Verify Returned ID" }).click();
-  await expect(singleReturn.getByText(/verified against this receipt/)).toBeVisible();
+  await expect(
+    singleReturn.locator(".inventory-unit-scanner__message")
+  ).toContainText(`${UNIT_CODE} verified against this receipt`);
   await singleReturn.locator('textarea[name="reason"]').fill("Pilot exact-ID return");
   await singleReturn.getByRole("button", { name: "Save Stock-Only Return" }).click();
   await expect(page.getByText(/in quarantine and are not sellable/)).toBeVisible();
@@ -957,7 +959,9 @@ test("inventory loss-prevention pilot proves the physical lifecycle without prod
   await page.getByPlaceholder("Routine blind inventory verification").fill("Release-readiness blind count");
   await page.getByRole("button", { name: "Open Blind Count" }).click();
   await expect(page.getByText("Expected IDs hidden")).toBeVisible();
-  await expect(page.getByText("CNT-PILOT-77")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "CNT-PILOT-77", exact: true })
+  ).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Submit Count" }).click();
   await expect(page.getByText(/Frozen expected values are now revealed/)).toBeVisible();

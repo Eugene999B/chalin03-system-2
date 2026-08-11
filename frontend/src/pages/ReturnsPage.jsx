@@ -237,7 +237,8 @@ export default function ReturnsPage() {
           )
         : await axiosClient.post("/returns", payload);
 
-      setMessage(response.data.message || "Return processed successfully.");
+      const successMessage =
+        response.data.message || "Return processed successfully.";
       setForm(EMPTY_FORM);
       setReturnUnitIds([]);
 
@@ -250,6 +251,10 @@ export default function ReturnsPage() {
           loadSales(),
         ]);
       }
+      // loadSaleItems intentionally clears stale messages when changing receipts.
+      // Restore this completed action's server message after the refresh so the
+      // operator keeps the quarantine/refund confirmation they need to see.
+      setMessage(successMessage);
     } catch (requestError) {
       setError(apiMessage(requestError, "Failed to process the return."));
     } finally {
@@ -258,7 +263,6 @@ export default function ReturnsPage() {
   }
 
   async function handleMultiReturnResult(result) {
-    setMessage(result?.message || "");
     setError(result?.error || "");
 
     if (!result?.pendingApproval) {
@@ -270,6 +274,7 @@ export default function ReturnsPage() {
     } else {
       await Promise.all([loadSaleItems(selectedSaleId), loadSales()]);
     }
+    setMessage(result?.message || "");
   }
 
   if (!["admin", "manager"].includes(role)) {
