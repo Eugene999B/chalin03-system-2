@@ -5,6 +5,7 @@ const {
   buildCollectionsHealth,
   buildInventoryHealth,
   buildOperationsSnapshot,
+  buildPerformanceDiagnostics,
   loadSparePartsIntelligence,
 } = require("../services/aiSparePartsIntelligenceService");
 
@@ -30,7 +31,7 @@ function utcDateOnly(now = new Date()) {
 function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
   const normalized = input && typeof input === "object" ? { ...input } : {};
   if (
-    viewKey === "operations" &&
+    ["operations", "performance"].includes(viewKey) &&
     !String(normalized.start_date || "").trim() &&
     !String(normalized.end_date || "").trim()
   ) {
@@ -72,6 +73,20 @@ function evidenceExcerpt(viewKey, output) {
       aging: output.collections.aging,
     });
   }
+  if (viewKey === "performance") {
+    return JSON.stringify({
+      ...evidenceScope(output),
+      financial_view: output.financial_view,
+      inventory_view: output.inventory_view,
+      certainty: output.certainty,
+      causal_map: output.causal_map,
+      drivers: output.drivers,
+      audit: {
+        score: output.audit.score,
+        status: output.audit.status,
+      },
+    });
+  }
   return JSON.stringify({
     ...evidenceScope(output),
     sales: output.sales,
@@ -90,15 +105,17 @@ function buildAggregateEvidence(viewKey, output) {
     viewKey === "inventory"
       ? "Spare Parts inventory health snapshot"
       : viewKey === "collections"
-      ? "Spare Parts collections health snapshot"
-      : "Spare Parts operations snapshot";
+        ? "Spare Parts collections health snapshot"
+        : viewKey === "performance"
+          ? "Spare Parts cross-module performance diagnostics"
+          : "Spare Parts operations snapshot";
   return [
     {
       source_type: "system_snapshot",
       source_ref: `spare_parts:${viewKey}:branch:${output.scope.branch_id}`,
       source_version: "live-read-only",
       label,
-      excerpt_text: evidenceExcerpt(viewKey, output).slice(0, 6000),
+      excerpt_text: evidenceExcerpt(viewKey, output).slice(0, 12000),
       as_of_at: output.generated_at,
       classification: "internal",
       workspace_code: "spare_parts",
@@ -110,6 +127,7 @@ function buildAggregateEvidence(viewKey, output) {
         end_date: output.scope.end_date,
         aggregate_only: true,
         execution_authority: "read_only",
+        causal_diagnostics: viewKey === "performance",
       },
     },
   ];
@@ -164,6 +182,22 @@ function registerSparePartsAiTools(
         loader,
         projector: buildOperationsSnapshot,
         viewKey: "operations",
+      }),
+  });
+
+  registry.register({
+    ...common,
+    key: "spare_parts.performance_diagnostics",
+    title: "Spare Parts cross-module performance diagnostics",
+    description:
+      "Explains branch-scoped sales, profit-estimate, discount, expense, return/refund, collection/debt, purchase/stock and inventory-control drivers together. Distinguishes management profit estimates from cash flow, receivables, inventory availability and data-quality risk; never treats purchases as certified COGS. Use for questions such as why sales, cash or profit performance is weak.",
+    handler: async ({ input, context }) =>
+      executeView({
+        input,
+        context,
+        loader,
+        projector: buildPerformanceDiagnostics,
+        viewKey: "performance",
       }),
   });
 
