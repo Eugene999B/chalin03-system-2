@@ -61,6 +61,7 @@ const {
   registerBuiltInAiProviders,
 } = require("../ai-providers/registerAiProviders");
 const aiKnowledgeRoutes = require("./aiKnowledgeRoutes");
+const aiDocumentRoutes = require("./aiDocumentRoutes");
 
 registerBuiltInAiProviders();
 registerFoundationAiTools();
@@ -422,6 +423,7 @@ router.put(
 router.use("/copilot", personaRouter("copilot", "chalinCopilot"));
 router.use("/executive", personaRouter("executive", "chalinExecutive"));
 router.use("/knowledge", aiKnowledgeRoutes);
+router.use("/documents", aiDocumentRoutes);
 
 router.post(
   "/feedback",
