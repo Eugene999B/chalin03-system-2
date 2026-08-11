@@ -7,65 +7,61 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: inventory-loss-prevention-feature-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  integrate-serialized-sales:
-    if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+  backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/inventory-loss-prevention-traceability
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
-      - name: Apply atomic serialized-sale integration
-        run: python .github/traceability-sale-integration/patch.py
+          cache-dependency-path: backend/package-lock.json
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
-      - name: Backend syntax and regression
+      - name: Backend syntax
+        working-directory: backend
+        run: npm run syntax-check
+      - name: Backend tests and migration safety
         working-directory: backend
         run: |
           set -euo pipefail
-          npm run syntax-check
           npm test
           git fetch origin main --no-tags
           npm run migration-safety -- --base origin/main --head HEAD --repo-root "$GITHUB_WORKSPACE"
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Frontend regression lint and build
+      - name: Frontend tests
         working-directory: frontend
-        run: |
-          npm test
-          npm run lint
-          npm run build
-      - name: Publish verified sale integration
-        run: |
-          set -euo pipefail
-          git diff --check
-          # The deterministic patch intentionally restores/removes temporary CI files
-          # in its working tree. Keep those workflow/script changes out of the bot
-          # commit; the connected GitHub control plane will clean them up afterward.
-          git checkout HEAD -- .github/workflows/inventory-loss-prevention-feature.yml
-          git checkout HEAD -- .github/traceability-sale-integration/patch.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/routes/saleRoutes.js frontend/src/pages/NewSalePage.jsx
-          git diff --cached --check
-          git commit -m "Wire atomic serialized unit checkout"
-          git push origin HEAD:feature/inventory-loss-prevention-traceability
+        run: npm test
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Frontend production build
+        working-directory: frontend
+        run: npm run build
