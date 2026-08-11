@@ -19,6 +19,9 @@ const {
   loadGroupIntelligence,
 } = require("../services/aiGroupIntelligenceService");
 const { aiToolRegistry } = require("../services/aiToolRegistry");
+const {
+  registerAuditSecurityAiTools,
+} = require("./auditSecurityTools");
 
 let registered = false;
 
@@ -338,6 +341,11 @@ function registerFoundationAiTools(registry = aiToolRegistry) {
       evidence: [],
     }),
   });
+
+  // Production/global foundation registration also includes aggregate audit
+  // controls intelligence. Custom registries preserve the historical
+  // foundation-only test contract unless they register the audit tool directly.
+  if (registry === aiToolRegistry) registerAuditSecurityAiTools(registry);
 
   if (registry === aiToolRegistry) registered = true;
   return registry.list();
