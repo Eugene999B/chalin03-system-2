@@ -4,6 +4,10 @@ const {
   evidenceNeedsForQuestion,
   rankedCandidateTools,
 } = require("./aiTaskPlannerService");
+const {
+  understandConversationTask,
+  unique,
+} = require("./aiConversationTaskUnderstandingService");
 
 const MAX_PROVIDER_ROUTED_TOOLS = 12;
 const MAX_ROUTING_USER_TURNS = 4;
@@ -32,15 +36,30 @@ function recentUserRoutingQuestions(messages = [], maximum = MAX_ROUTING_USER_TU
   return Object.freeze(selected);
 }
 
-function routingObjectives(messages = []) {
+function routingObjectives(messages = [], { workspaceCode = "" } = {}) {
   const questions = recentUserRoutingQuestions(messages);
   return Object.freeze(
-    questions.map((question) =>
-      Object.freeze({
+    questions.map((question, index) => {
+      const priorHistory = questions.slice(0, index).map((content) => ({ role: "user", content }));
+      const task = understandConversationTask({
+        prompt: question,
+        history: priorHistory,
+        workspaceCode,
+      });
+      return Object.freeze({
         question,
-        evidence_needs: evidenceNeedsForQuestion(question),
-      })
-    )
+        evidence_needs: Object.freeze(
+          unique([
+            ...evidenceNeedsForQuestion(question),
+            ...task.evidence_families,
+          ])
+        ),
+        task_domains: task.domains,
+        answer_mode: task.answer_mode,
+        live_data_required: task.live_data_required,
+        continuity_required: task.continuity_required,
+      });
+    })
   );
 }
 
@@ -75,13 +94,27 @@ function rankedToolUnion(objectives = [], tools = [], maximum = MAX_PROVIDER_ROU
     .slice(0, Math.max(1, Math.min(20, Number(maximum) || MAX_PROVIDER_ROUTED_TOOLS)));
 }
 
+function latestTaskUnderstanding(messages = [], workspaceCode = "") {
+  const source = Array.isArray(messages) ? messages : [];
+  const userTurns = source.filter((item) => String(item?.role || "").toLowerCase() === "user");
+  const current = userTurns[userTurns.length - 1];
+  if (!current) return null;
+  return understandConversationTask({
+    prompt: current.content,
+    history: source.slice(0, Math.max(0, source.lastIndexOf(current))),
+    workspaceCode,
+  });
+}
+
 function selectRelevantProviderTools({
   messages = [],
   tools = [],
   maximum = MAX_PROVIDER_ROUTED_TOOLS,
+  workspaceCode = "",
 } = {}) {
   const source = Array.isArray(tools) ? tools : [];
   const safeMaximum = Math.max(1, Math.min(20, Number(maximum) || MAX_PROVIDER_ROUTED_TOOLS));
+  const taskUnderstanding = latestTaskUnderstanding(messages, workspaceCode);
 
   if (source.length <= safeMaximum) {
     return Object.freeze({
@@ -91,10 +124,11 @@ function selectRelevantProviderTools({
       selected_count: source.length,
       objective_count: 0,
       selected_keys: Object.freeze(source.map((tool) => String(tool?.key || "")).filter(Boolean)),
+      task_understanding: taskUnderstanding,
     });
   }
 
-  const objectives = routingObjectives(messages);
+  const objectives = routingObjectives(messages, { workspaceCode });
   const ranked = rankedToolUnion(objectives, source, safeMaximum);
 
   // A low-confidence router must not silently remove a capability. If none of
@@ -109,6 +143,7 @@ function selectRelevantProviderTools({
       selected_count: source.length,
       objective_count: objectives.length,
       selected_keys: Object.freeze(source.map((tool) => String(tool?.key || "")).filter(Boolean)),
+      task_understanding: taskUnderstanding,
     });
   }
 
@@ -121,6 +156,7 @@ function selectRelevantProviderTools({
     selected_count: selected.length,
     objective_count: objectives.length,
     selected_keys: Object.freeze(selected.map((tool) => String(tool?.key || "")).filter(Boolean)),
+    task_understanding: taskUnderstanding,
   });
 }
 
@@ -129,6 +165,7 @@ module.exports = {
   MAX_ROUTING_TURN_CHARACTERS,
   MAX_ROUTING_USER_TURNS,
   clean,
+  latestTaskUnderstanding,
   rankedToolUnion,
   recentUserRoutingQuestions,
   routingObjectives,
