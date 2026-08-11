@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -14,6 +17,7 @@ concurrency:
 
 jobs:
   integrate-serialized-sales:
+    if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
