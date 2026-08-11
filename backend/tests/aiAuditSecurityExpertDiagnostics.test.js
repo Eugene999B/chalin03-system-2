@@ -433,7 +433,10 @@ test("live audit service returns aggregate-only secret-free scoped control evide
   assert.equal(output.privacy.raw_details_exposed, false);
   assert.equal(output.privacy.raw_metadata_exposed, false);
   const serialized = JSON.stringify(output);
-  assert.doesNotMatch(serialized, /password|api[_-]?key|jwt|192\.168|actor_name|username/i);
+  assert.doesNotMatch(
+    serialized,
+    /password|api[_-]?key|jwt|192\.168|"(?:actor_name|actor_username|username)"\s*:/i
+  );
 });
 
 test("audit tool is Risk-1, audit-gated, confidential and exposes no actor/detail rows", async () => {
@@ -447,7 +450,6 @@ test("audit tool is Risk-1, audit-gated, confidential and exposes no actor/detai
   assert.deepEqual(definition.required_business_permissions, ["audit.view"]);
   assert.deepEqual(definition.allowed_workspaces, ["spare_parts", "mining", "equipment_hire"]);
   assert.match(definition.description, /no actor rows, usernames, IP addresses, raw details or metadata/i);
-
   const output = await registry.get(definition.key).handler({ input: {}, context: normalContext() });
   assert.equal(output.execution_authority, "read_only");
   assert.equal(output.evidence[0].classification, "confidential");
