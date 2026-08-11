@@ -4,6 +4,9 @@ const { aiToolRegistry } = require("../services/aiToolRegistry");
 const {
   findDuplicateCustomerSuggestions,
 } = require("../services/aiCustomerIdentityIntelligenceService");
+const {
+  registerCustomerCommercialAiTools,
+} = require("./customerCommercialTools");
 
 let registered = false;
 
@@ -104,6 +107,8 @@ function registerCustomerIdentityAiTools(
       };
     },
   });
+
+  registerCustomerCommercialAiTools(registry);
 
   if (registry === aiToolRegistry) registered = true;
   return registry.list();
