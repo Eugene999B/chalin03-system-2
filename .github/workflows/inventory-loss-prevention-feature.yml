@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature/inventory-loss-prevention-traceability
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -40,9 +40,11 @@ jobs:
       - name: Backend syntax and regression
         working-directory: backend
         run: |
+          set -euo pipefail
           npm run syntax-check
           npm test
-          npm run migration-safety
+          git fetch origin main --no-tags
+          npm run migration-safety -- --base origin/main --head HEAD --repo-root "$GITHUB_WORKSPACE"
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
