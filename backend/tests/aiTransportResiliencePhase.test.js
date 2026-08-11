@@ -8,6 +8,9 @@ const {
   buildRequestBudget,
   transportBudgetPayload,
 } = require("../services/aiCostControlService");
+const {
+  filterReadOnlyInvestigationTools,
+} = require("../services/aiInvestigationLoopService");
 
 function oversizedToolCatalogue() {
   return Array.from({ length: 40 }, (_, index) => ({
@@ -15,10 +18,19 @@ function oversizedToolCatalogue() {
     title: `Governed read tool ${index + 1}`,
     description: `Operational schema ${index + 1} ${"x".repeat(7000)}`,
     risk_level: 1,
+    required_permissions: ["ai.use", "ai.tools.read"],
+    required_business_permissions: ["sensitive.business.permission"],
+    allowed_workspaces: ["spare_parts", "mining", "equipment_hire"],
+    internal_execution_notes: "server-only metadata ".repeat(100),
     input_schema: {
       type: "object",
+      description: "schema description ".repeat(200),
       properties: {
-        query: { type: "string", description: "y".repeat(2000) },
+        query: {
+          type: "string",
+          description: "y".repeat(2000),
+          examples: ["example".repeat(300)],
+        },
       },
     },
   }));
@@ -96,4 +108,49 @@ test("genuinely oversized live business requests still retain the transport guar
       return true;
     }
   );
+});
+
+test("provider-facing governed reads drop server-only metadata and compact verbose schemas", () => {
+  const compact = filterReadOnlyInvestigationTools(oversizedToolCatalogue());
+
+  assert.equal(compact.length, 40);
+  assert.deepEqual(
+    Object.keys(compact[0]).sort(),
+    [
+      "description",
+      "input_schema",
+      "key",
+      "planner_evidence_tags",
+      "risk_level",
+      "title",
+    ].sort()
+  );
+  assert.equal(compact[0].required_permissions, undefined);
+  assert.equal(compact[0].allowed_workspaces, undefined);
+  assert.equal(compact[0].internal_execution_notes, undefined);
+  assert.ok(compact[0].description.length <= 720);
+  assert.ok(compact[0].input_schema.description.length <= 180);
+  assert.ok(compact[0].input_schema.properties.query.description.length <= 180);
+  assert.equal(compact[0].input_schema.properties.query.examples, undefined);
+});
+
+test("live operational transport fits after governed read tools are compacted", () => {
+  const messages = [
+    { role: "system", content: "Governed private operational request." },
+    {
+      role: "user",
+      content: "Tell me today's live sales and current customer debt at Main Store",
+    },
+  ];
+  const compactTools = filterReadOnlyInvestigationTools(oversizedToolCatalogue());
+
+  const budget = buildRequestBudget({
+    messages,
+    tools: compactTools,
+    env: SMALL_TRANSPORT_ENV,
+  });
+
+  assert.equal(budget.transport_profile, "full_governed");
+  assert.ok(budget.estimated_input_tokens < budget.request_token_limit);
+  assert.ok(budget.maximum_output_tokens > 1);
 });
