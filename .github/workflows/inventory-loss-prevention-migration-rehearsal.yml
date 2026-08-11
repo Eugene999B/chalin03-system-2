@@ -52,10 +52,10 @@ jobs:
           mysql --version
           mysqladmin ping -h 127.0.0.1 -uroot --silent
 
-      - name: Build production-shaped pre-feature database
+      - name: Build isolated pre-feature inventory baseline
         run: |
           set -euo pipefail
-          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" < database/schema.sql
+          mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" < backend/tests/fixtures/inventoryMigrationPreFeatureBaseline.sql
 
           mysql -h 127.0.0.1 -uroot "$REHEARSAL_DB" <<'SQL'
           INSERT INTO branches (id, code, branch_code, name, location, is_head_office, is_active)
