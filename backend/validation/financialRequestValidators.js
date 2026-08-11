@@ -3,6 +3,9 @@ const core = require("./financialRequestValidatorsCore");
 // Compatibility note: the legacy sanitized sale contract still owns fields such as
 // "customer_id" and remains byte-for-byte authoritative unless physical unit IDs
 // are explicitly supplied on one or more sale items.
+// Legacy protected payment paths remain "credit" and "mixed"; their established
+// validation message remains: Customer name or phone is required for credit, mixed
+// or installment sales.
 const INVENTORY_UNIT_CODE_PATTERN = /^[A-Z0-9]{3,12}-[A-HJ-NP-Z2-9]{8}$/;
 
 function unitError(field, message, code) {
