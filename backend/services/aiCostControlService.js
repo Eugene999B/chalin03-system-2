@@ -4,6 +4,7 @@ const {
   isChalinProductKnowledgeTurn,
   productKnowledgeMessages,
 } = require("./aiProductKnowledgeService");
+const { sanitizeProviderMessages } = require("./aiSafetyService");
 
 // These are abuse/transport guardrails, not product allowances. CHALIN no longer
 // imposes the tiny 6k-request / 100k-daily limits that made long reasoning and
@@ -60,14 +61,18 @@ function transportBudgetPayload({ messages = [], tools = [] } = {}) {
   if (prompt && isChalinProductKnowledgeTurn(prompt)) {
     return Object.freeze({
       profile: "product_knowledge",
-      messages: productKnowledgeMessages(safeMessages),
+      messages: sanitizeProviderMessages(productKnowledgeMessages(safeMessages)),
       tools: Object.freeze([]),
     });
   }
 
+  // Full governed requests are budgeted against the same sanitized/compacted
+  // message set that aiProviderService will actually send. This keeps the
+  // transport guard honest while allowing CHALIN to drop older low-priority
+  // conversation turns before a long thread becomes a user-visible 413.
   return Object.freeze({
     profile: "full_governed",
-    messages: safeMessages,
+    messages: sanitizeProviderMessages(safeMessages),
     tools: safeTools,
   });
 }
