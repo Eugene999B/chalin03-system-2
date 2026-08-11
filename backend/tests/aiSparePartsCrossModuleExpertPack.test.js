@@ -143,6 +143,9 @@ test("expert pack selection is topic-specific and can combine domains", () => {
   const spareParts = expertPacksForPrompt("How does Spare Parts true profit work in CHALIN?");
   assert.deepEqual(spareParts.map((pack) => pack.key), ["spare_parts_operations"]);
 
+  const mining = expertPacksForPrompt("How does Mining profit work in CHALIN?");
+  assert.equal(mining.some((pack) => pack.key === "spare_parts_operations"), false);
+
   const payroll = expertPacksForPrompt("How does a worker salary flow into payroll?");
   assert.deepEqual(payroll.map((pack) => pack.key), ["people_employment_payroll"]);
 
