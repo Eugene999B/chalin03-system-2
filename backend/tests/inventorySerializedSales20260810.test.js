@@ -6,9 +6,11 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const serviceSource = read("services/inventorySaleTraceabilityService.js");
+const saleRouteSource = read("routes/saleRoutes.js");
 const validatorSource = read("validation/financialRequestValidators.js");
 const productRouterSource = read("routes/productRoutes.js");
 const saleCatalogueSource = read("routes/inventorySaleCatalogueRoutes.js");
+const saleScanSource = read("routes/inventorySaleScanRoutes.js");
 const traceabilityRouterSource = read("routes/inventoryTraceabilityRoutes.js");
 
 const {
@@ -20,12 +22,29 @@ const {
   validateSaleCreateRequest,
 } = require("../validation/financialRequestValidators");
 
-test("serialized checkout transaction engine exists without claiming legacy sale-route integration yet", () => {
+test("serialized checkout engine is wired into the existing atomic sale transaction", () => {
+  assert.match(saleRouteSource, /inventorySaleTraceabilityService/);
+  assert.match(saleRouteSource, /lockSaleTraceabilitySelections/);
+  assert.match(saleRouteSource, /markSaleUnitsSold/);
+  assert.match(saleRouteSource, /inventory_tracking_mode/);
+  assert.match(saleRouteSource, /inventory_traceability_state/);
+  assert.match(
+    saleRouteSource,
+    /const saleTraceabilitySelections = await lockSaleTraceabilitySelections\(connection, \{[\s\S]*branchId,[\s\S]*saleItems,[\s\S]*\}\);/
+  );
+  assert.match(saleRouteSource, /const \[saleItemResult\] = await connection\.query/);
+  assert.match(saleRouteSource, /saleItemId: saleItemResult\.insertId/);
+  assert.match(saleRouteSource, /saleItem\.unit_ids = soldUnits\.map/);
+  assert.match(saleRouteSource, /await connection\.commit\(\)/);
+});
+
+test("serialized checkout transaction engine locks and commits exact physical identities", () => {
   assert.match(serviceSource, /lockSaleTraceabilitySelections/);
   assert.match(serviceSource, /markSaleUnitsSold/);
   assert.match(serviceSource, /sale_item_id/);
   assert.match(serviceSource, /sale_completed/);
   assert.match(serviceSource, /FOR UPDATE/);
+  assert.match(serviceSource, /TRACEABILITY_SALE_UNIT_COMMIT_CONFLICT/);
 });
 
 test("sale request validation extends physical unit IDs without changing ordinary sanitized sales", () => {
@@ -73,6 +92,15 @@ test("legacy product router remains in its established source location and sale 
   assert.match(saleCatalogueSource, /inventory_traceability_state/);
   assert.match(saleCatalogueSource, /final_unit_validation_inside_sale_transaction/);
   assert.match(traceabilityRouterSource, /router\.use\("\/sale-products", inventorySaleCatalogueRoutes\)/);
+});
+
+test("cashier sale scanner exposes only minimal sale eligibility, not forensic unit history", () => {
+  assert.match(saleScanSource, /requireRole\("admin", "manager", "cashier"\)/);
+  assert.match(saleScanSource, /same_store/);
+  assert.match(saleScanSource, /already_sold/);
+  assert.match(saleScanSource, /cashier_forensic_history_exposed: false/);
+  assert.doesNotMatch(saleScanSource, /inventory_unit_events/);
+  assert.match(traceabilityRouterSource, /router\.use\("\/sale-scan", inventorySaleScanRoutes\)/);
 });
 
 test("serialized enforcement requires exact active unit identities", () => {
