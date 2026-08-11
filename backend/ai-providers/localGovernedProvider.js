@@ -13,6 +13,7 @@ const LOCAL_LIVE_TOOL_KEYS = Object.freeze([
   "spare_parts.operations_snapshot",
   "spare_parts.inventory_health",
   "spare_parts.collections_health",
+  "mining.performance_diagnostics",
   "mining.operations_snapshot",
   "mining.stock_fuel_health",
   "mining.production_cost_health",
@@ -61,6 +62,10 @@ const TOOL_HINTS = Object.freeze([
   Object.freeze({
     key: "mining.stock_fuel_health",
     pattern: /\b(fuel|stockpile|diesel|tank|ore stock|mining stock)\b/i,
+  }),
+  Object.freeze({
+    key: "mining.performance_diagnostics",
+    pattern: /\b(?:mining performance|mine performance|site performance|low production|production (?:low|down)|mining underperform|mine underperform|operating efficiency|cost per unit (?:high|rising)|why\s+(?:is|are|was|were)[^?]*(?:production|utili[sz]ation|mining cost|cost per unit))\b/i,
   }),
   Object.freeze({
     key: "mining.production_cost_health",
@@ -276,6 +281,13 @@ function evidencePeriodText(data = {}) {
   return start === end ? ` on ${start}` : ` from ${start} to ${end}`;
 }
 
+function miningPeriodText(data = {}) {
+  const start = clean(data?.scope?.start_date, 20);
+  const end = clean(data?.scope?.end_date, 20);
+  if (!start || !end) return "";
+  return start === end ? ` on ${start}` : ` from ${start} to ${end}`;
+}
+
 function composeSparePartsOperationsAnswer(item) {
   const data = parseEvidenceJson(item?.excerpt);
   if (!data?.sales || !Array.isArray(data?.period)) return null;
@@ -319,11 +331,45 @@ function composeSparePartsPerformanceAnswer(item) {
   ].join("\n\n");
 }
 
+function composeMiningPerformanceAnswer(item) {
+  const data = parseEvidenceJson(item?.excerpt);
+  if (!data?.performance_view || !Array.isArray(data?.drivers)) return null;
+  const view = data.performance_view;
+  const siteName = clean(data?.scope?.site_name || data?.scope?.site_code || "", 120);
+  const location = siteName ? ` for ${siteName}` : "";
+  const period = miningPeriodText(data);
+  const unit = clean(view.production_unit || "units", 50);
+  const targetText = view.target_attainment_percent == null
+    ? "No configured target-reference percentage is available for this period."
+    : `Target-reference attainment is ${Number(view.target_attainment_percent).toFixed(2)}%.`;
+  const costText = view.operating_cost_per_recorded_unit == null
+    ? "Operating cost per recorded unit is unavailable because there is no recorded production for the period."
+    : `Recorded operating expense per production unit is ${formatMoney(view.operating_cost_per_recorded_unit)}.`;
+  const driverLines = data.drivers.slice(0, 6).map((driver, index) => {
+    const title = clean(driver.key || driver.category || "driver", 120).replace(/_/g, " ");
+    const explanation = clean(driver.explanation || "", 750);
+    return `${index + 1}. ${title}: ${explanation} [${item.citation}]`;
+  });
+  return [
+    `The live Mining performance diagnosis${location}${period} shows ${Number(view.production_quantity || 0).toLocaleString("en-GH")} ${unit} of recorded production, ${Number(view.dispatched_quantity || 0).toLocaleString("en-GH")} ${unit} approved for dispatch, and ${Number(view.equipment_utilization_percent || 0).toFixed(2)}% recorded equipment utilization. [${item.citation}]`,
+    `${targetText} ${costText} [${item.citation}]`,
+    "Main evidence-backed drivers:",
+    ...driverLines,
+    `Evidence boundary: ${clean(data?.certainty?.warning || "This is operational performance evidence, not a Mining revenue or profit calculation.", 800)} [${item.citation}]`,
+  ].join("\n\n");
+}
+
 function composeEvidenceAnswer(messages = []) {
   const evidence = evidenceFromMessages(messages);
   if (evidence.length === 0) {
     return "I do not have enough approved live CHALIN evidence to answer that reliably. I will not guess or substitute an unrelated workspace snapshot.";
   }
+
+  const miningPerformance = evidence.find((item) =>
+    /mining site performance diagnostics/i.test(item.heading)
+  );
+  const directMiningPerformanceAnswer = composeMiningPerformanceAnswer(miningPerformance);
+  if (directMiningPerformanceAnswer) return directMiningPerformanceAnswer;
 
   const sparePartsPerformance = evidence.find((item) =>
     /spare parts cross-module performance diagnostics/i.test(item.heading)
@@ -391,6 +437,16 @@ function composePublicSafeSystemAnswer(messages = []) {
       "For profit questions, sales are not profit and purchases are not automatically COGS. The current CHALIN ONE accounting layer gives a management estimate using net sales and operating expenses, while true profit still requires reliable cost-of-goods-sold evidence. Collections explain cash conversion, not profit by themselves.",
       "",
       "Returns/refunds should be traced back to the original sale and stock/cash reversal, while stock adjustments and transfer mismatches are control signals that can weaken confidence in the numbers. For current branch figures I must use governed live evidence rather than this product knowledge.",
+    ].join("\n");
+  }
+
+  if (/\b(?:mining|mining site|mine site|stockpile|site closing|mining production|mining fuel)\b/.test(question)) {
+    return [
+      "CHALIN Mining is a site-scoped operating system. The verified flow is Authorized Site → Shift/Crew → Production → Stockpile → Dispatch, with equipment hours, fuel control, expenses, incidents and site closing providing the operating and control context.",
+      "",
+      "For performance questions I separate output pressure, recorded operating expense per production unit, equipment working/idle/breakdown time, fuel/stockpile constraints, dispatch flow and pending control/safety issues. Production and dispatch are related but different measures, so a gap is not automatically loss.",
+      "",
+      "The current governed Mining intelligence does not expose Mining revenue or certified profit. I can explain production and operating efficiency from the available evidence, but I should not invent a profit figure. For current site figures I must use the authorized Mining live tools.",
     ].join("\n");
   }
 
@@ -540,6 +596,7 @@ module.exports = {
   chooseLocalReadTool,
   collectReadableFacts,
   composeEvidenceAnswer,
+  composeMiningPerformanceAnswer,
   composePublicSafeGeneralAnswer,
   composePublicSafeSocialAnswer,
   composePublicSafeSystemAnswer,
