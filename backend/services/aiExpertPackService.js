@@ -3,6 +3,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  EQUIPMENT_FINANCE_EXPERT_PACK,
+  getEquipmentFinanceExpertPack,
+  isEquipmentFinanceExpertPrompt,
+} = require("./aiEquipmentFinanceExpertPackService");
+const {
   HIRE_EXPERT_PACK,
   getHireExpertPack,
   isHireExpertPrompt,
@@ -176,6 +181,7 @@ const EXPERT_PACKS = Object.freeze({
   [SPARE_PARTS_EXPERT_PACK.key]: SPARE_PARTS_EXPERT_PACK,
   [MINING_EXPERT_PACK.key]: MINING_EXPERT_PACK,
   [HIRE_EXPERT_PACK.key]: HIRE_EXPERT_PACK,
+  [EQUIPMENT_FINANCE_EXPERT_PACK.key]: EQUIPMENT_FINANCE_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -224,6 +230,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === HIRE_EXPERT_PACK.key) {
     return getHireExpertPack({ includeAvailability });
   }
+  if (key === EQUIPMENT_FINANCE_EXPERT_PACK.key) {
+    return getEquipmentFinanceExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -252,6 +261,9 @@ function expertPacksForPrompt(value) {
   if (isSparePartsExpertPrompt(value)) matches.push(getExpertPack(SPARE_PARTS_EXPERT_PACK.key));
   if (isMiningExpertPrompt(value)) matches.push(getExpertPack(MINING_EXPERT_PACK.key));
   if (isHireExpertPrompt(value)) matches.push(getExpertPack(HIRE_EXPERT_PACK.key));
+  if (isEquipmentFinanceExpertPrompt(value)) {
+    matches.push(getExpertPack(EQUIPMENT_FINANCE_EXPERT_PACK.key));
+  }
   return Object.freeze(matches.filter(Boolean));
 }
 
@@ -296,6 +308,9 @@ function renderExpertPack(pack) {
   } else if (pack.key === HIRE_EXPERT_PACK.key) {
     liveBoundary =
       "Use this as product/workflow knowledge only. Never infer live Hire enquiries, quotations, fleet state, work logs, invoices, collections, returns or balances from this pack; current Equipment Hire facts require authorized governed live evidence. Do not invent Hire profit or time-based utilization when the governed Hire evidence does not provide the required cost/capacity evidence.";
+  } else if (pack.key === EQUIPMENT_FINANCE_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/workflow knowledge only. Never infer live Finance applications, portfolio balances, collections, arrears, KYC/risk state or machine availability from this pack; current Equipment Finance facts require authorized governed company-wide aggregate evidence. Do not double-count deposits/collections or overdue/outstanding balances, and do not invent Finance profit from portfolio aggregates.";
   }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
@@ -325,6 +340,7 @@ function renderExpertPacks(packs = []) {
 }
 
 module.exports = {
+  EQUIPMENT_FINANCE_EXPERT_PACK,
   EXPERT_PACKS,
   HIRE_EXPERT_PACK,
   MINING_EXPERT_PACK,
@@ -335,6 +351,7 @@ module.exports = {
   expertPackForPrompt,
   expertPacksForPrompt,
   getExpertPack,
+  isEquipmentFinanceExpertPrompt,
   isHireExpertPrompt,
   isMiningExpertPrompt,
   isPayrollExpertPrompt,
