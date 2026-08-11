@@ -163,6 +163,7 @@ test("domain AI tool registrations carry workspace and business boundaries", () 
     miningTools.map((tool) => tool.key),
     [
       "mining.operations_snapshot",
+      "mining.performance_diagnostics",
       "mining.production_cost_health",
       "mining.stock_fuel_health",
     ]
@@ -175,6 +176,11 @@ test("domain AI tool registrations carry workspace and business boundaries", () 
     miningTools.every((tool) => tool.required_business_permissions.length > 0),
     true
   );
+  const miningDiagnostics = miningTools.find(
+    (tool) => tool.key === "mining.performance_diagnostics"
+  );
+  assert.equal(miningDiagnostics.risk_level, 1);
+  assert.deepEqual(miningDiagnostics.required_business_permissions, ["mining.reports.view"]);
 
   const hire = new AiToolRegistry();
   registerHireAiTools(hire, { loader: async () => ({}) });
