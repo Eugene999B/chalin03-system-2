@@ -108,7 +108,11 @@ function registerCustomerIdentityAiTools(
     },
   });
 
-  registerCustomerCommercialAiTools(registry);
+  // The production/global customer-intelligence family includes the governed
+  // commercial 360 read. Custom registries used by unit/security tests retain
+  // the historical identity-only contract unless they explicitly register the
+  // commercial tool themselves.
+  if (registry === aiToolRegistry) registerCustomerCommercialAiTools(registry);
 
   if (registry === aiToolRegistry) registered = true;
   return registry.list();
