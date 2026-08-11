@@ -11,6 +11,11 @@ const {
 const {
   filterReadOnlyInvestigationTools,
 } = require("../services/aiInvestigationLoopService");
+const {
+  MAX_PROVIDER_CONTEXT_CHARACTERS,
+  providerMessageCharacters,
+  sanitizeProviderMessages,
+} = require("../services/aiSafetyService");
 
 function oversizedToolCatalogue() {
   return Array.from({ length: 40 }, (_, index) => ({
@@ -153,4 +158,45 @@ test("live operational transport fits after governed read tools are compacted", 
   assert.equal(budget.transport_profile, "full_governed");
   assert.ok(budget.estimated_input_tokens < budget.request_token_limit);
   assert.ok(budget.maximum_output_tokens > 1);
+});
+
+test("long provider context keeps critical evidence and newest task while dropping oldest chat first", () => {
+  const messages = [
+    { role: "system", content: `CRITICAL SYSTEM CONTRACT ${"s".repeat(30000)}` },
+    ...Array.from({ length: 16 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `${index === 0 ? "OLDEST-HISTORY" : `history-${index}`} ${"h".repeat(18000)}`,
+    })),
+    { role: "tool", content: `CRITICAL GOVERNED EVIDENCE ${"e".repeat(30000)}` },
+    { role: "user", content: "LATEST USER TASK: explain the Main Store profit problem" },
+  ];
+
+  const compact = sanitizeProviderMessages(messages);
+  const combined = compact.map((item) => item.content).join("\n");
+
+  assert.ok(providerMessageCharacters(compact) <= MAX_PROVIDER_CONTEXT_CHARACTERS);
+  assert.match(combined, /CRITICAL SYSTEM CONTRACT/);
+  assert.match(combined, /CRITICAL GOVERNED EVIDENCE/);
+  assert.match(combined, /LATEST USER TASK/);
+  assert.doesNotMatch(combined, /OLDEST-HISTORY/);
+  assert.ok(compact.length < messages.length);
+});
+
+test("full-governed budget uses the same compacted message set as provider transport", () => {
+  const messages = [
+    { role: "system", content: `Reasoning contract ${"r".repeat(30000)}` },
+    ...Array.from({ length: 18 }, (_, index) => ({
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `old-${index} ${"o".repeat(18000)}`,
+    })),
+    { role: "tool", content: `Governed evidence ${"e".repeat(30000)}` },
+    { role: "user", content: "Tell me today's current sales at Main Store" },
+  ];
+  const compactTools = filterReadOnlyInvestigationTools(oversizedToolCatalogue().slice(0, 8));
+  const payload = transportBudgetPayload({ messages, tools: compactTools });
+
+  assert.equal(payload.profile, "full_governed");
+  assert.ok(payload.messages.length < messages.length);
+  assert.ok(providerMessageCharacters(payload.messages) <= MAX_PROVIDER_CONTEXT_CHARACTERS);
+  assert.match(payload.messages.at(-1)?.content || "", /today's current sales at Main Store/i);
 });
