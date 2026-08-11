@@ -190,6 +190,7 @@ test("domain AI tool registrations carry workspace and business boundaries", () 
     [
       "equipment_hire.fleet_health",
       "equipment_hire.operations_snapshot",
+      "equipment_hire.performance_diagnostics",
       "equipment_hire.receivables_health",
     ]
   );
@@ -201,6 +202,14 @@ test("domain AI tool registrations carry workspace and business boundaries", () 
     hireTools.every((tool) => tool.required_business_permissions.length > 0),
     true
   );
+  const hireDiagnostics = hireTools.find(
+    (tool) => tool.key === "equipment_hire.performance_diagnostics"
+  );
+  assert.equal(hireDiagnostics.risk_level, 1);
+  assert.deepEqual(hireDiagnostics.allowed_workspaces, ["equipment_hire"]);
+  assert.equal(hireDiagnostics.required_equipment_division, "hire");
+  assert.deepEqual(hireDiagnostics.required_business_permissions, ["hire.reports.view"]);
+  assert.match(hireDiagnostics.description, /does not invent certified Hire profit/i);
 });
 
 test("Spare Parts AI tools now use registered AI and business read gates", () => {
