@@ -205,7 +205,21 @@ function sparePartsRuntimeAvailability() {
 
 function isSparePartsExpertPrompt(value) {
   const text = String(value ?? "").trim().slice(0, 16000);
-  return /\b(?:spare parts|stock|inventory|sales?|sold|selling|purchase|supplier|customer debt|collections?|returns?|refunds?|stock adjustment|stock transfer|daily closing|profit|margin|receivables?)\b/i.test(text);
+  if (!text) return false;
+  if (
+    /\b(?:spare parts|stock adjustment|stock transfer|daily closing|customer debt|credit sale|low stock|negative stock)\b/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  const operationalTopic = /\b(?:stock|inventory|sales?|sold|selling|purchase|supplier|collections?|returns?|refunds?|profit|margin|receivables?)\b/i.test(
+    text
+  );
+  const sparePartsAnchor = /\b(?:store|branch|parts?|product|supplier|customer|inventory|stock)\b/i.test(
+    text
+  );
+  return operationalTopic && sparePartsAnchor;
 }
 
 function getSparePartsExpertPack({ includeAvailability = true } = {}) {
