@@ -3,6 +3,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+  AUDIT_SECURITY_EXPERT_PACK,
+  getAuditSecurityExpertPack,
+  isAuditSecurityExpertPrompt,
+} = require("./aiAuditSecurityExpertPackService");
+const {
   CUSTOMER_ACCOUNTING_EXPERT_PACK,
   getCustomerAccountingExpertPack,
   isCustomerAccountingExpertPrompt,
@@ -188,6 +193,7 @@ const EXPERT_PACKS = Object.freeze({
   [HIRE_EXPERT_PACK.key]: HIRE_EXPERT_PACK,
   [EQUIPMENT_FINANCE_EXPERT_PACK.key]: EQUIPMENT_FINANCE_EXPERT_PACK,
   [CUSTOMER_ACCOUNTING_EXPERT_PACK.key]: CUSTOMER_ACCOUNTING_EXPERT_PACK,
+  [AUDIT_SECURITY_EXPERT_PACK.key]: AUDIT_SECURITY_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -242,6 +248,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === CUSTOMER_ACCOUNTING_EXPERT_PACK.key) {
     return getCustomerAccountingExpertPack({ includeAvailability });
   }
+  if (key === AUDIT_SECURITY_EXPERT_PACK.key) {
+    return getAuditSecurityExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -275,6 +284,9 @@ function expertPacksForPrompt(value) {
   }
   if (isCustomerAccountingExpertPrompt(value)) {
     matches.push(getExpertPack(CUSTOMER_ACCOUNTING_EXPERT_PACK.key));
+  }
+  if (isAuditSecurityExpertPrompt(value)) {
+    matches.push(getExpertPack(AUDIT_SECURITY_EXPERT_PACK.key));
   }
   return Object.freeze(matches.filter(Boolean));
 }
@@ -326,6 +338,9 @@ function renderExpertPack(pack) {
   } else if (pack.key === CUSTOMER_ACCOUNTING_EXPERT_PACK.key) {
     liveBoundary =
       "Use this as product/workflow knowledge only. Never infer a live customer identity, individual debt, current branch receivable figure or certified profit from this pack. Live collections/accounting figures require governed branch-scoped aggregate evidence; customer identity matching remains a separately governed sensitive suggestion-only path. Do not double-count period sales balance with current active debt or count debt payments as new sales.";
+  } else if (pack.key === AUDIT_SECURITY_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as product/control knowledge only. Never infer current audit events, failed controls, user-access changes, unlocks, backup/restore activity, approval status or security incidents from this pack; current control status requires authorized governed audit evidence. A failure/high-severity count is an investigation signal, not proof of fraud, compromise or financial loss.";
   }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
@@ -355,6 +370,7 @@ function renderExpertPacks(packs = []) {
 }
 
 module.exports = {
+  AUDIT_SECURITY_EXPERT_PACK,
   CUSTOMER_ACCOUNTING_EXPERT_PACK,
   EQUIPMENT_FINANCE_EXPERT_PACK,
   EXPERT_PACKS,
@@ -367,6 +383,7 @@ module.exports = {
   expertPackForPrompt,
   expertPacksForPrompt,
   getExpertPack,
+  isAuditSecurityExpertPrompt,
   isCustomerAccountingExpertPrompt,
   isEquipmentFinanceExpertPrompt,
   isHireExpertPrompt,
