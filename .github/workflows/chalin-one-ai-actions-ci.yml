@@ -1,0 +1,125 @@
+name: CHALIN ONE AI Actions CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chalin-one
+  pull_request:
+    branches:
+      - chalin-one
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalin-one-ai-actions-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  action-execution-acceptance:
+    name: Governed AI action execution acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: acceptance-root-password
+          MYSQL_DATABASE: chalin_one_acceptance_actions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h localhost -pacceptance-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: acceptance-root-password
+      DB_NAME: chalin_one_acceptance_actions
+      DB_SSL: "false"
+      SYSTEM_ADMIN_USER_ID: "1"
+      SYSTEM_ADMIN_USERNAME: admin
+      CHALIN_ONE_ALLOW_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_PUBLIC_CONTENT_MIGRATION_CONFIRM: 20260805_CHALIN_ONE_PUBLIC_CONTENT_FOUNDATION
+      CHALIN_ONE_ALLOW_AI_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_AI_MIGRATION_CONFIRM: 20260806_CHALIN_ONE_AI_FOUNDATION
+      CHALIN_ONE_ALLOW_AI_ACTION_SCHEMA_MIGRATION: "true"
+      CHALIN_ONE_AI_ACTION_MIGRATION_CONFIRM: 20260806_CHALIN_ONE_AI_ACTION_GOVERNANCE
+      FEATURE_AI_ENABLED: "true"
+      FEATURE_AI_ACTIONS: "true"
+      FEATURE_CHALIN_COPILOT: "true"
+      FEATURE_CHALIN_EXECUTIVE: "true"
+      FEATURE_CHALIN_GUIDE: "false"
+      FEATURE_AI_SCHEDULED_JOBS: "false"
+      AI_PROVIDER: disabled
+      AI_ALLOW_MOCK_PROVIDER: "false"
+      CHALIN_ONE_AI_ACTION_EXECUTION_ACCEPTANCE: "true"
+      PUBLIC_FORM_IP_HASH_SECRET: chalin-one-action-acceptance-only-ip-hash-secret-000000000000000000000000
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Prepare isolated legacy database fixture
+        run: npm run prepare:chalin-one:acceptance-db
+
+      - name: Rehearse approved public-content migration
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Verify public-content migration idempotency
+        run: npm run migrate:chalin-one:public-content
+
+      - name: Rehearse approved AI foundation migration
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Verify AI foundation migration idempotency
+        run: npm run migrate:chalin-one:ai-foundation
+
+      - name: Rehearse approved AI action-governance migration
+        run: npm run migrate:chalin-one:ai-actions
+
+      - name: Verify AI action-governance migration idempotency
+        run: npm run migrate:chalin-one:ai-actions
+
+      - name: Run AI action authority and execution contracts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          node --test tests/aiActionExecutionPhase.test.js 2>&1 | tee artifacts/chalin-one-ai-action-contracts.log
+
+      - name: Execute safe Risk-3 action in isolated database
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test --test-concurrency=1 acceptance/aiActionExecutionDatabaseAcceptance.test.js 2>&1 | tee artifacts/chalin-one-ai-action-database-acceptance.log
+
+      - name: Upload governed action acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-ai-action-acceptance-${{ github.sha }}
+          path: |
+            backend/artifacts/chalin-one-ai-action-contracts.log
+            backend/artifacts/chalin-one-ai-action-database-acceptance.log
+          if-no-files-found: error
+          retention-days: 30
