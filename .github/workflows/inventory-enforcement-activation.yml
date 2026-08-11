@@ -1,0 +1,83 @@
+name: Temporary Serialized Enforcement Activation Gate
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inventory-enforcement-activation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-publish:
+    if: ${{ github.event_name == 'push' || github.head_ref == 'feature/inventory-loss-prevention-traceability' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/inventory-loss-prevention-traceability
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Apply serialized enforcement activation controls
+        run: python .github/inventory-enforcement-activation/patch.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Verify backend and migration safety
+        working-directory: backend
+        run: |
+          npm run syntax-check
+          npm test
+          git fetch origin main
+          npm run migration-safety -- \
+            --base "$(git rev-parse origin/main)" \
+            --head "$(git rev-parse HEAD)" \
+            --repo-root "$GITHUB_WORKSPACE"
+          git diff --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm test
+          npm run lint
+          npm run build
+          git diff --check
+
+      - name: Publish verified enforcement activation controls
+        run: |
+          git config user.name "chalin03-feature-gate"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            backend/services/inventoryTraceabilityService.js \
+            backend/services/inventoryTraceabilityRepositoryService.js \
+            backend/tests/inventoryTraceabilityFoundation20260810.test.js \
+            frontend/src/pages/InventoryTraceabilitySetupPage.jsx \
+            frontend/scripts/inventoryTraceabilityFoundationTests.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "Enable reconciled serialized inventory enforcement"
+          git push origin HEAD:feature/inventory-loss-prevention-traceability
