@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  understandConversationTask,
+  unique,
+} = require("./aiConversationTaskUnderstandingService");
+
 const MAX_OBJECTIVES = 8;
 const MAX_CANDIDATE_TOOLS = 5;
 
@@ -26,10 +31,6 @@ function clean(value, maximum = 12000) {
     .replace(/\r\n?/g, "\n")
     .trim()
     .slice(0, maximum);
-}
-
-function unique(values) {
-  return [...new Set(values.filter(Boolean))];
 }
 
 function tokenize(value) {
@@ -134,16 +135,54 @@ function objectiveQuestionList({ prompt, reasoningPlan } = {}) {
   return [clean(reasoningPlan?.task_state?.current_prompt || prompt, 4000)].filter(Boolean);
 }
 
+function taskUnderstandingForPlan({ prompt, reasoningPlan = {} } = {}) {
+  const taskState = reasoningPlan?.task_state || {};
+  return understandConversationTask({
+    prompt: taskState.current_prompt || prompt,
+    history: taskState.inherited_turns || [],
+    taskState,
+    resolvedPrompt: taskState.resolved_prompt || "",
+    subquestions: taskState.subquestions || [],
+  });
+}
+
+function objectiveTaskUnderstanding(question, { reasoningPlan = {}, objectiveCount = 1 } = {}) {
+  const taskState = reasoningPlan?.task_state || {};
+  const mayInheritContinuity = Number(objectiveCount || 0) <= 1;
+  return understandConversationTask({
+    prompt: question,
+    history: mayInheritContinuity ? taskState.inherited_turns || [] : [],
+    taskState: mayInheritContinuity ? taskState : null,
+    resolvedPrompt: mayInheritContinuity ? taskState.resolved_prompt || "" : "",
+  });
+}
+
 function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {}) {
+  const taskUnderstanding = taskUnderstandingForPlan({ prompt, reasoningPlan });
   const questions = objectiveQuestionList({ prompt, reasoningPlan });
   const objectives = questions.map((question, index) => {
-    const evidenceNeeds = evidenceNeedsForQuestion(question);
+    // Each decomposed sub-question owns its evidence families. Whole-request
+    // domains remain useful for answer synthesis, but must not leak one
+    // objective's evidence into another and falsely mark it as resolved.
+    const objectiveUnderstanding = objectiveTaskUnderstanding(question, {
+      reasoningPlan,
+      objectiveCount: questions.length,
+    });
+    const evidenceNeeds = Object.freeze(
+      unique([
+        ...evidenceNeedsForQuestion(question),
+        ...objectiveUnderstanding.evidence_families,
+      ])
+    );
     const objective = {
       id: `objective_${index + 1}`,
       question,
       evidence_needs: evidenceNeeds,
+      task_domains: objectiveUnderstanding.domains,
       live_data_required:
-        reasoningPlan?.live_data_required === true || LIVE_PATTERNS.test(question),
+        reasoningPlan?.live_data_required === true ||
+        objectiveUnderstanding.live_data_required === true ||
+        LIVE_PATTERNS.test(question),
       status: "pending",
       candidate_tools: Object.freeze([]),
       supporting_tool_keys: Object.freeze([]),
@@ -155,8 +194,13 @@ function buildMultiToolTaskPlan({ prompt, reasoningPlan = {}, tools = [] } = {})
   });
 
   return Object.freeze({
-    version: 1,
-    intent: reasoningPlan?.intent || "lookup",
+    version: 2,
+    intent: reasoningPlan?.intent || taskUnderstanding.answer_mode || "lookup",
+    answer_mode: taskUnderstanding.answer_mode,
+    task_domains: taskUnderstanding.domains,
+    domain_confidence: taskUnderstanding.domain_confidence,
+    continuity_required: taskUnderstanding.continuity_required,
+    task_understanding: taskUnderstanding,
     objective_count: objectives.length,
     objectives: Object.freeze(objectives),
     all_resolved: false,
@@ -212,6 +256,9 @@ function taskPlannerPromptBlock(plan = {}) {
 
   return [
     "CHALIN server-owned task plan:",
+    `Answer mode: ${plan.answer_mode || plan.intent || "generic"}.`,
+    `Task domains: ${(plan.task_domains || []).join(", ") || "unresolved/general"}.`,
+    `Conversation continuity required: ${plan.continuity_required === true ? "yes" : "no"}.`,
     ...rows,
     `Unresolved objectives: ${Number(plan?.unresolved_count || 0)} of ${objectives.length}.`,
     "Planner rules:",
@@ -228,6 +275,10 @@ function taskPlannerPromptBlock(plan = {}) {
 function publicTaskPlan(plan = {}) {
   return Object.freeze({
     version: Number(plan.version || 1),
+    answer_mode: plan.answer_mode || null,
+    task_domains: Object.freeze([...(plan.task_domains || [])]),
+    domain_confidence: plan.domain_confidence || "low",
+    continuity_required: plan.continuity_required === true,
     objective_count: Number(plan.objective_count || 0),
     all_resolved: plan.all_resolved === true,
     unresolved_count: Number(plan.unresolved_count || 0),
@@ -258,10 +309,12 @@ module.exports = {
   candidateToolScore,
   evidenceNeedsForQuestion,
   objectiveQuestionList,
+  objectiveTaskUnderstanding,
   publicTaskPlan,
   rankedCandidateTools,
   resultToolKey,
   taskPlannerPromptBlock,
+  taskUnderstandingForPlan,
   toolEvidenceTags,
   toolSearchText,
   updateTaskPlanCoverage,
