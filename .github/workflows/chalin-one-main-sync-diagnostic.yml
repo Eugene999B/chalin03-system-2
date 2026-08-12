@@ -29,6 +29,11 @@ jobs:
           git diff --name-only --diff-filter=U > conflicts.txt
           git status --porcelain=v1 > status.txt
           git diff --cc > conflict-diff.patch
+          if [ -s conflicts.txt ]; then
+            tar -czf conflict-files.tar.gz -T conflicts.txt
+          else
+            tar -czf conflict-files.tar.gz --files-from /dev/null
+          fi
           printf 'merge_status=%s\n' "$merge_status" > diagnostic-summary.txt
           printf 'conflict_count=%s\n' "$(wc -l < conflicts.txt | tr -d ' ')" >> diagnostic-summary.txt
           printf 'base_head=%s\n' "$(git rev-parse HEAD)" >> diagnostic-summary.txt
@@ -47,4 +52,5 @@ jobs:
             conflicts.txt
             status.txt
             conflict-diff.patch
+            conflict-files.tar.gz
             diagnostic-summary.txt
