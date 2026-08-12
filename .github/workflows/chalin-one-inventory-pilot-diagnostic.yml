@@ -1,0 +1,53 @@
+name: CHALIN ONE Inventory Pilot Diagnostic
+
+on:
+  push:
+    branches:
+      - integration/chalin-one-inventory-pilot-20260812
+
+permissions:
+  contents: read
+
+jobs:
+  merge-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect exact Inventory Traceability merge
+        shell: bash
+        env:
+          INVENTORY_SHA: 40f03d32f71ecb1fa57ab4de1adc16b7455f480a
+        run: |
+          set +e
+          git config user.name "CHALIN ONE Inventory Diagnostic"
+          git config user.email "chalin-one-inventory-diagnostic@users.noreply.github.com"
+          git fetch origin feature/inventory-loss-prevention-traceability
+          test "$(git rev-parse origin/feature/inventory-loss-prevention-traceability)" = "$INVENTORY_SHA" || exit 91
+          git merge --no-commit --no-ff "$INVENTORY_SHA" > merge-output.txt 2>&1
+          merge_status=$?
+          git diff --name-only --diff-filter=U > conflicts.txt
+          git status --porcelain=v1 > status.txt
+          git diff --cc > conflict-diff.patch
+          printf 'merge_status=%s\n' "$merge_status" > diagnostic-summary.txt
+          printf 'conflict_count=%s\n' "$(wc -l < conflicts.txt | tr -d ' ')" >> diagnostic-summary.txt
+          printf 'base_head=%s\n' "$(git rev-parse HEAD)" >> diagnostic-summary.txt
+          printf 'inventory_head=%s\n' "$INVENTORY_SHA" >> diagnostic-summary.txt
+          cat diagnostic-summary.txt
+          cat conflicts.txt
+          exit 0
+
+      - name: Upload diagnostic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-inventory-pilot-diagnostic
+          if-no-files-found: error
+          path: |
+            merge-output.txt
+            conflicts.txt
+            status.txt
+            conflict-diff.patch
+            diagnostic-summary.txt
