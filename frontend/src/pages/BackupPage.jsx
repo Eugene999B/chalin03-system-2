@@ -60,6 +60,20 @@ function backupRequestErrorMessage(requestError, fallback) {
   return report?.message || fallback;
 }
 
+function protectedUnlockErrorMessage(requestError) {
+  const responseMessage = requestError.response?.data?.message;
+  if (responseMessage) return responseMessage;
+
+  // A browser policy/network failure has no HTTP response. Do not tell the
+  // Administrator that their password was rejected when the verification
+  // request never reached CHALIN.
+  if (!requestError.response) {
+    return "CHALIN could not reach the protected-action verification service. Your password was not rejected; the verification request was blocked or could not connect.";
+  }
+
+  return "Your current Administrator password was not accepted.";
+}
+
 export default function BackupPage() {
   const { user, branchCode, branchName, branchLocation, hasPermission } = useAuth();
   const role = String(user?.role || "").toLowerCase();
@@ -129,10 +143,7 @@ export default function BackupPage() {
           "Backup and restore actions are unlocked for this page session."
       );
     } catch (requestError) {
-      setError(
-        requestError.response?.data?.message ||
-          "Your current Administrator password was not accepted."
-      );
+      setError(protectedUnlockErrorMessage(requestError));
     } finally {
       setUnlocking(false);
     }
@@ -261,75 +272,31 @@ export default function BackupPage() {
       setError("Unlock protected actions with your current password first.");
       return;
     }
-    if (!canRestorePermission) {
-      setError("Your account does not have Backup Restore permission.");
-      return;
-    }
-    if (
-      !window.confirm(
-        "Prepare only the isolated CHALIN ONE trial schema from approved additive migrations? This does not restore production data and destructive/data-repair migrations are blocked."
-      )
-    ) {
-      return;
-    }
-
     setPreparingSchema(true);
     setError("");
-    setMessage("Preparing the isolated trial schema from approved additive migrations…");
-
+    setMessage("");
     try {
       const backup = JSON.parse(await selectedFile.text());
-      let completed = false;
-
-      for (let batch = 1; batch <= 30; batch += 1) {
-        const response = await axiosClient.post(
-          backupRequestUrl("/restore/prepare-staging-schema"),
-          { backup },
-          {
-            headers: protectedHeaders,
-            timeout: BACKUP_SCHEMA_PREPARE_TIMEOUT_MS,
-          }
-        );
-        const payload = response.data || {};
-        if (payload.validation) setDryRunReport(payload.validation);
-
-        if (payload.recovery_schema_ready) {
-          setMessage(
-            "Trial schema preparation completed. Every durable production backup table and column now has a compatible staging target. Restore readiness is green."
-          );
-          completed = true;
-          break;
+      const response = await axiosClient.post(
+        backupRequestUrl("/restore/prepare-staging-schema"),
+        { backup },
+        {
+          headers: protectedHeaders,
+          timeout: BACKUP_SCHEMA_PREPARE_TIMEOUT_MS,
         }
-
-        const remaining = Number(
-          payload.preparation?.remaining_candidate_count || 0
-        );
-        if (remaining <= 0) {
-          setError(
-            payload.message ||
-              "The safe migration inventory is exhausted but schema gaps remain. Restore stays blocked."
-          );
-          completed = true;
-          break;
-        }
-
-        setMessage(
-          `Preparing trial schema… safe batch ${batch} completed; ${remaining} approved source migration(s) remain.`
-        );
-      }
-
-      if (!completed) {
-        setError(
-          "Trial schema preparation reached its bounded batch limit. Restore remains blocked; run Prepare Trial Schema again to continue safely."
-        );
-      }
+      );
+      setDryRunReport(response.data.validation || response.data);
+      setMessage(
+        response.data.message ||
+          "The isolated trial schema was prepared safely for this backup."
+      );
     } catch (requestError) {
-      const payload = requestError.response?.data || null;
-      if (payload?.validation) setDryRunReport(payload.validation);
+      const report = requestError.response?.data || null;
+      setDryRunReport(report?.validation || report);
       setError(
         backupRequestErrorMessage(
           requestError,
-          "The trial schema could not be prepared safely. Restore remains blocked."
+          "The isolated trial schema could not be prepared safely."
         )
       );
     } finally {
@@ -337,55 +304,47 @@ export default function BackupPage() {
     }
   }
 
-  async function restoreBackup(event) {
-    event.preventDefault();
-    if (!canRestorePermission) {
-      setError("Your account does not have Backup Restore permission.");
+  async function restoreBackup() {
+    if (!selectedFile) {
+      setError("Choose the production backup JSON file first.");
+      return;
+    }
+    if (!tokenReady) {
+      setError("Unlock protected actions with your current password first.");
       return;
     }
     if (confirmText !== RESTORE_CONFIRMATION_TEXT) {
       setError(`Type ${RESTORE_CONFIRMATION_TEXT} exactly before restoring.`);
       return;
     }
-    if (!window.confirm("This will replace the full current database. Continue only during an approved restore window?")) return;
 
     setRestoring(true);
     setError("");
     setMessage("");
     try {
-      const validation = await validateSelectedBackup();
-      if (!validation?.report?.valid) return;
-      if (
-        (validation.report.source_only_tables || []).length > 0 ||
-        sourceOnlyColumnCount(validation.report) > 0
-      ) {
-        setError(
-          "The backup is valid, but the trial database schema is still behind production. Use Prepare Trial Schema before restoring."
-        );
-        return;
-      }
+      const backup = JSON.parse(await selectedFile.text());
       const response = await axiosClient.post(
         backupRequestUrl("/restore"),
-        {
-          confirmation: RESTORE_CONFIRMATION_TEXT,
-          backup: validation.backup,
-        },
+        { backup, confirmation: confirmText },
         {
           headers: protectedHeaders,
           timeout: BACKUP_RESTORE_TIMEOUT_MS,
         }
       );
-      setMessage(response.data.message || "Full-system restore completed.");
-      setSelectedFile(null);
-      setSelectedBackupInfo(null);
-      setDryRunReport(null);
-      setConfirmText("");
+      setDryRunReport(response.data);
+      setMessage(
+        response.data.message ||
+          "Full-system restore completed and verification passed. Sign in again before continuing."
+      );
       setProtectedToken(null);
+      setConfirmText("");
     } catch (requestError) {
+      const report = requestError.response?.data || null;
+      setDryRunReport(report);
       setError(
         backupRequestErrorMessage(
           requestError,
-          "The full-system restore did not complete. Review the backend log before retrying."
+          "Full-system restore failed. No unverified success was reported."
         )
       );
     } finally {
@@ -394,71 +353,274 @@ export default function BackupPage() {
   }
 
   if (!canDownload && !canValidate && !canRestorePermission) {
-    return <div><div className="page-header"><div><h1>Access Denied</h1><p>Backup & Restore requires explicit Administrator permissions.</p></div></div><div className="error-box">The original owner has not authorized this account for backup operations.</div></div>;
+    return (
+      <div className="settings-container">
+        <h1>Backup & Restore</h1>
+        <p className="settings-description">
+          You do not have permission to access full-system backup controls.
+        </p>
+      </div>
+    );
   }
 
-  const reportErrors = backupReportErrors(dryRunReport);
-  const reportWarnings = backupReportWarnings(dryRunReport);
-  const preservedCurrentTables = Array.isArray(
-    dryRunReport?.preserved_current_only_tables
-  )
-    ? dryRunReport.preserved_current_only_tables
-    : [];
   const sourceOnlyTables = Array.isArray(dryRunReport?.source_only_tables)
     ? dryRunReport.source_only_tables
     : [];
   const sourceOnlyColumns = sourceOnlyColumnCount(dryRunReport);
-  const crossEnvironmentRecovery = Boolean(
-    dryRunReport?.cross_environment_recovery
-  );
-  const schemaPreparationNeeded = Boolean(
-    dryRunReport?.valid &&
-      crossEnvironmentRecovery &&
-      (sourceOnlyTables.length > 0 || sourceOnlyColumns > 0)
-  );
-  const restoreReady = Boolean(
-    dryRunReport?.valid &&
-      sourceOnlyTables.length === 0 &&
-      sourceOnlyColumns === 0 &&
-      (!crossEnvironmentRecovery || dryRunReport?.recovery_schema_ready !== false)
-  );
+  const recoverySchemaReady =
+    dryRunReport?.recovery_schema_ready !== false &&
+    sourceOnlyTables.length === 0 &&
+    sourceOnlyColumns === 0;
 
   return (
-    <div>
-      <div className="page-header"><div><h1>Backup & Restore</h1><p>Validated, protected full-system disaster recovery.</p></div></div>
-      {message ? <div className="success-box">{message}</div> : null}
-      {error ? <div className="error-box">{error}</div> : null}
+    <div className="settings-container backup-page">
+      <h1>Backup & Restore</h1>
+      <p className="settings-description">
+        Validated, protected full-system disaster recovery.
+      </p>
 
-      <div className="warning-box"><strong>Current context:</strong> {currentStoreCode} — {currentStoreName}{currentStoreLocation ? ` — ${currentStoreLocation}` : ""}<br /><small>Backup and restore remain system-wide across Spare Parts, Mining Operations, Equipment Hire, users, permissions and audit evidence.</small></div>
+      {message && <div className="success-message">{message}</div>}
+      {error && <div className="error-message">{error}</div>}
 
-      <form className="section-card" onSubmit={unlockProtectedActions} autoComplete="off" style={{ marginBottom: 18 }}>
-        <h2>Protected Action Confirmation</h2>
-        <p>{tokenReady ? "Protected backup actions are unlocked for this page session." : "Enter your current Administrator password before downloading, validating or restoring. Passwords are never recorded."}</p>
-        {!tokenReady ? <div className="form-row"><input type="password" value={unlockPassword} onChange={(event) => setUnlockPassword(event.target.value)} placeholder="Current Administrator password" autoComplete="new-password" required /><button type="submit" disabled={unlocking}>{unlocking ? "Unlocking…" : "Unlock Backup Actions"}</button></div> : <div className="success-box">Protected action window is active.</div>}
-      </form>
-
-      <div className="backup-grid">
-        <div className="section-card backup-card">
-          <h2>Download Full-System Backup</h2>
-          <p>Creates one private JSON recovery package containing every current canonical application table.</p>
-          <ul style={{ lineHeight: 1.8, fontWeight: 700 }}><li>All three independent business workspaces</li><li>Users, permissions and location access</li><li>Sales, finance, mining and hire records</li><li>Audit, security, SMS and system evidence</li><li>SHA-256 integrity checksum</li></ul>
-          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Downloading…" : "Download Full-System Backup"}</button>
-        </div>
-
-        <form className="section-card backup-card" onSubmit={restoreBackup}>
-          <h2>Validate and Restore</h2>
-          <p>Validation is read-only. Restore is available only when Railway has <code>ALLOW_WEB_RESTORE=true</code> for an approved window.</p>
-          <input type="file" accept=".json,application/json" onChange={handleFileChange} />
-          {selectedFile ? <p className="selected-file"><strong>{selectedFile.name}</strong><br />{formatFileSize(selectedFile.size)}</p> : null}
-          {selectedBackupInfo ? <div className="warning-box"><strong>Local file preview</strong><br />App: {selectedBackupInfo.app}<br />Type: {selectedBackupInfo.backup_type}<br />Version: {selectedBackupInfo.version}<br />Created: {selectedBackupInfo.created_at}<br />Tables: {formatNumber(selectedBackupInfo.table_count)}<br />Rows: {formatNumber(selectedBackupInfo.total_rows)}<br />Checksum: {selectedBackupInfo.checksum || "Not provided"}</div> : null}
-          <button type="button" onClick={runValidation} disabled={!canValidate || !selectedFile || !tokenReady || restoring || preparingSchema}>{restoring ? "Checking…" : "Run Validation and Restore Preview"}</button>
-          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Backup package valid" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Production tables missing in trial schema: {sourceOnlyTables.length}<br />Production columns missing in trial schema: {sourceOnlyColumns}<br />Preserved newer tables: {preservedCurrentTables.length}<br />Recovery mode: {crossEnvironmentRecovery ? "Isolated staging cross-environment recovery" : "Same-environment recovery"}<br />Compatibility mode: {dryRunReport.additive_schema_compatibility_applied ? "Safe additive schema compatibility applied" : "Exact/current schema"}<br />Restore readiness: {restoreReady ? "Ready" : schemaPreparationNeeded ? "Prepare trial schema" : "Not ready"}<br />Warnings: {reportWarnings.length}<br />Errors: {reportErrors.length}{reportWarnings.length ? <><br /><strong>Warnings:</strong> {reportWarnings.slice(0, 8).join(" ")}{reportWarnings.length > 8 ? ` … ${reportWarnings.length - 8} more warning(s).` : ""}</> : null}{reportErrors.length ? <><br /><strong>Errors:</strong> {reportErrors.join(" ")}</> : null}</div> : null}
-          {schemaPreparationNeeded ? <button type="button" onClick={prepareTrialSchema} disabled={!canRestorePermission || !tokenReady || preparingSchema || restoring}>{preparingSchema ? "Preparing Trial Schema…" : "Prepare Trial Schema"}</button> : null}
-          <label>Type {RESTORE_CONFIRMATION_TEXT} to confirm</label>
-          <input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} placeholder={RESTORE_CONFIRMATION_TEXT} />
-          <button type="submit" className="danger-button" disabled={!canRestorePermission || !restoreReady || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring || preparingSchema}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
-        </form>
+      <div className="backup-context-card">
+        <strong>
+          Current context: {currentStoreCode} — {currentStoreName}
+          {currentStoreLocation ? ` — ${currentStoreLocation}` : ""}
+        </strong>
+        <p>
+          Backup and restore remain system-wide across Spare Parts, Mining Operations,
+          Equipment Hire, users, permissions and audit evidence.
+        </p>
       </div>
+
+      <section className="settings-card backup-protected-card">
+        <h2>Protected Action Confirmation</h2>
+        <p>
+          Enter your current Administrator password before downloading, validating or
+          restoring. Passwords are never recorded.
+        </p>
+        <form className="backup-unlock-form" onSubmit={unlockProtectedActions}>
+          <input
+            type="password"
+            value={unlockPassword}
+            onChange={(event) => setUnlockPassword(event.target.value)}
+            placeholder="Current Administrator password"
+            autoComplete="current-password"
+            required
+          />
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={unlocking || !unlockPassword}
+          >
+            {unlocking ? "Unlocking…" : tokenReady ? "Unlock Again" : "Unlock Backup Actions"}
+          </button>
+        </form>
+        {tokenReady && (
+          <p className="backup-token-status">
+            Protected backup actions are temporarily unlocked for this page.
+          </p>
+        )}
+      </section>
+
+      <section className="settings-card">
+        <h2>1. Download Full Backup</h2>
+        <p>
+          Creates a point-in-time JSON snapshot of all durable Chalin 03 tables. Active
+          sessions, OTPs and temporary recovery tokens are excluded by design.
+        </p>
+        <button
+          className="primary-button"
+          disabled={!canDownload || downloading || !tokenReady}
+          onClick={downloadBackup}
+        >
+          {downloading ? "Preparing signed backup…" : "Download Signed Full Backup"}
+        </button>
+      </section>
+
+      <section className="settings-card">
+        <h2>2. Validation and Restore Preview</h2>
+        <p>
+          Choose a signed full-system backup. Chalin 03 verifies its checksum, signature,
+          schema coverage and record counts before any restore is allowed.
+        </p>
+        <input
+          type="file"
+          accept="application/json,.json"
+          onChange={handleFileChange}
+        />
+
+        {selectedFile && (
+          <p className="backup-file-meta">
+            {selectedFile.name} — {formatFileSize(selectedFile.size)}
+          </p>
+        )}
+
+        {selectedBackupInfo && (
+          <div className="backup-manifest-summary">
+            <p>
+              <strong>Application:</strong> {selectedBackupInfo.app}
+            </p>
+            <p>
+              <strong>Backup type:</strong> {selectedBackupInfo.backup_type}
+            </p>
+            <p>
+              <strong>Manifest version:</strong> {selectedBackupInfo.version}
+            </p>
+            <p>
+              <strong>Created:</strong> {selectedBackupInfo.created_at}
+            </p>
+            <p>
+              <strong>Tables:</strong> {formatNumber(selectedBackupInfo.table_count)}
+            </p>
+            <p>
+              <strong>Records:</strong> {formatNumber(selectedBackupInfo.total_rows)}
+            </p>
+            {selectedBackupInfo.checksum && (
+              <p className="backup-checksum">
+                <strong>Checksum:</strong> {selectedBackupInfo.checksum}
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          className="secondary-button"
+          disabled={!canValidate || restoring || !selectedFile || !tokenReady}
+          onClick={runValidation}
+        >
+          {restoring ? "Validating…" : "Run Restore Dry Run"}
+        </button>
+
+        {dryRunReport && (
+          <div className="backup-validation-report">
+            <h3>Dry-run report</h3>
+            <p>
+              <strong>Status:</strong> {dryRunReport.valid ? "Valid" : "Blocked"}
+            </p>
+            <p>
+              <strong>Restore tables:</strong>{" "}
+              {formatNumber((dryRunReport.restore_tables || []).length)}
+            </p>
+            <p>
+              <strong>Preserved newer tables:</strong>{" "}
+              {formatNumber((dryRunReport.preserved_current_only_tables || []).length)}
+            </p>
+            <p>
+              <strong>Production tables missing in trial schema:</strong>{" "}
+              {formatNumber(sourceOnlyTables.length)}
+            </p>
+            <p>
+              <strong>Production columns missing in trial schema:</strong>{" "}
+              {formatNumber(sourceOnlyColumns)}
+            </p>
+            <p>
+              <strong>Compatibility mode:</strong>{" "}
+              {dryRunReport.cross_environment_recovery
+                ? "Signed production → isolated staging recovery"
+                : dryRunReport.additive_schema_compatibility_applied
+                  ? "Safe additive schema compatibility applied"
+                  : "Exact/current schema"}
+            </p>
+            <p>
+              <strong>Warnings:</strong>{" "}
+              {formatNumber(backupReportWarnings(dryRunReport).length)}
+            </p>
+            <p>
+              <strong>Errors:</strong>{" "}
+              {formatNumber(backupReportErrors(dryRunReport).length)}
+            </p>
+            {sourceOnlyTables.length > 0 && (
+              <div className="backup-error-list">
+                <strong>Trial schema is missing these production tables:</strong>
+                <ul>
+                  {sourceOnlyTables.map((tableName) => (
+                    <li key={`source-table-${tableName}`}>{tableName}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {sourceOnlyColumns > 0 && (
+              <div className="backup-error-list">
+                <strong>Trial schema is missing production columns:</strong>
+                <ul>
+                  {Object.entries(dryRunReport.source_only_columns || {}).flatMap(
+                    ([tableName, columns]) =>
+                      (columns || []).map((columnName) => (
+                        <li key={`source-column-${tableName}-${columnName}`}>
+                          {tableName}.{columnName}
+                        </li>
+                      ))
+                  )}
+                </ul>
+              </div>
+            )}
+            {backupReportWarnings(dryRunReport).length > 0 && (
+              <div className="backup-warning-list">
+                <strong>Warnings:</strong>
+                <ul>
+                  {backupReportWarnings(dryRunReport).map((warning, index) => (
+                    <li key={`warning-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {backupReportErrors(dryRunReport).length > 0 && (
+              <div className="backup-error-list">
+                <strong>Errors:</strong>
+                <ul>
+                  {backupReportErrors(dryRunReport).map((reportError, index) => (
+                    <li key={`error-${index}`}>{reportError}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {dryRunReport?.cross_environment_recovery && !recoverySchemaReady && (
+          <button
+            className="secondary-button"
+            disabled={preparingSchema || !canRestorePermission || !tokenReady}
+            onClick={prepareTrialSchema}
+          >
+            {preparingSchema ? "Preparing Trial Schema…" : "Prepare Trial Schema"}
+          </button>
+        )}
+      </section>
+
+      <section className="settings-card danger-zone">
+        <h2>3. Full Restore</h2>
+        <p>
+          Restore is destructive. Durable tables are replaced from the validated backup,
+          temporary authentication state is cleared, record counts are verified, and active
+          users must sign in again afterward.
+        </p>
+        <label htmlFor="restore-confirmation">
+          Type <strong>{RESTORE_CONFIRMATION_TEXT}</strong> to enable restore.
+        </label>
+        <input
+          id="restore-confirmation"
+          value={confirmText}
+          onChange={(event) => setConfirmText(event.target.value)}
+          placeholder={RESTORE_CONFIRMATION_TEXT}
+        />
+        <button
+          className="danger-button"
+          disabled={
+            !canRestorePermission ||
+            restoring ||
+            !selectedFile ||
+            !tokenReady ||
+            confirmText !== RESTORE_CONFIRMATION_TEXT ||
+            !dryRunReport?.valid ||
+            !recoverySchemaReady
+          }
+          onClick={restoreBackup}
+        >
+          {restoring ? "Restoring…" : "Restore Full System Backup"}
+        </button>
+      </section>
     </div>
   );
 }
