@@ -4,7 +4,7 @@
     "buildCommand": "cd backend && npm ci"
   },
   "deploy": {
-    "startCommand": "cd backend && node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && node scripts/bootstrapChalinOneStaging.js && node scripts/bootstrapChalinOnePublicRedirectStaging.js && node scripts/bootstrapChalinOnePublicAnalyticsStaging.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "startCommand": "cd backend && node scripts/verifyChalinOneFullStagingEnvironment.js --mode=runtime && node scripts/bootstrapChalinOneStaging.js && node scripts/upgradeChalinOneStagingOperationalSchema.js && node scripts/bootstrapChalinOnePublicRedirectStaging.js && node scripts/bootstrapChalinOnePublicAnalyticsStaging.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "healthcheckPath": "/",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
