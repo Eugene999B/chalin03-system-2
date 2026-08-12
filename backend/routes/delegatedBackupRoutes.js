@@ -68,9 +68,9 @@ function backupChecksum(backup) {
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
-function isSignedV2StagingRecovery(backup) {
+function isSignedV2StagingRecovery(backup, explicitlyAuthorized = false) {
   return (
-    isConfirmedRailwayStaging() &&
+    (explicitlyAuthorized || isConfirmedRailwayStaging()) &&
     backup?.backup_type === "full_system_backup" &&
     backup?.version === SIGNED_V2_MANIFEST_VERSION
   );
@@ -258,8 +258,13 @@ function requesterPresent(backup, requester) {
   );
 }
 
-async function validateSignedV2StagingBackup(connection, backup, requester) {
-  if (!isSignedV2StagingRecovery(backup)) return null;
+async function validateSignedV2StagingBackup(
+  connection,
+  backup,
+  requester,
+  { explicitlyAuthorized = false } = {}
+) {
+  if (!isSignedV2StagingRecovery(backup, explicitlyAuthorized)) return null;
 
   const allTables = await existingTables(connection);
   const inventory = classifyDatabaseTables(allTables);
@@ -281,6 +286,7 @@ async function validateSignedV2StagingBackup(connection, backup, requester) {
     signingSecret: String(process.env.BACKUP_SIGNING_SECRET || "").trim(),
     requireSignature: false,
     allowAdditiveSchemaDrift: true,
+    allowCrossEnvironmentRecovery: explicitlyAuthorized,
   });
 
   const restoreTables = report.includedTables || [];
@@ -294,6 +300,7 @@ async function validateSignedV2StagingBackup(connection, backup, requester) {
     preserved_current_only_tables: report.currentOnlyTables || [],
     unsupported_tables: report.sourceOnlyTables || [],
     source_only_tables: report.sourceOnlyTables || [],
+    source_only_columns: report.sourceOnlyColumns || {},
     restore_columns: report.restoreColumns || {},
     checksum_sha256: backup.checksum_sha256 || null,
     preview_counts: Object.fromEntries(
@@ -312,7 +319,12 @@ async function validateSignedV2StagingBackup(connection, backup, requester) {
   };
 }
 
-async function validateBackup(connection, backup, requester) {
+async function validateBackup(
+  connection,
+  backup,
+  requester,
+  { signedV2StagingRecoveryAuthorized = false } = {}
+) {
   const errors = [];
   const warnings = [];
 
@@ -334,7 +346,8 @@ async function validateBackup(connection, backup, requester) {
   const signedV2Report = await validateSignedV2StagingBackup(
     connection,
     backup,
-    requester
+    requester,
+    { explicitlyAuthorized: signedV2StagingRecoveryAuthorized }
   );
   if (signedV2Report) return signedV2Report;
 
@@ -639,11 +652,29 @@ router.post(
     let validation;
     try {
       const backup = req.body?.backup || req.body;
-      validation = await validateBackup(
-        connection,
-        backup,
-        req.delegatedSystemAdministrator
-      );
+      const stagingAuthorized = req.signedV2StagingRecoveryAuthorized === true;
+
+      if (stagingAuthorized && req.stagingRecoveryValidation?.valid === true) {
+        // Reuse the exact successful staging preflight instead of reclassifying
+        // the same request against ambiguous Railway environment labels.
+        validation = {
+          ...req.stagingRecoveryValidation,
+          requester_present_in_backup: requesterPresent(
+            backup,
+            req.delegatedSystemAdministrator
+          ),
+          signed_v2_recovery: true,
+          cross_environment_recovery: true,
+        };
+      } else {
+        validation = await validateBackup(
+          connection,
+          backup,
+          req.delegatedSystemAdministrator,
+          { signedV2StagingRecoveryAuthorized: stagingAuthorized }
+        );
+      }
+
       if (!validation.valid) {
         return res.status(400).json({
           status: "error",
