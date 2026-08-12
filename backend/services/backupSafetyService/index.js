@@ -26,10 +26,6 @@ const TECHNICAL_RECOVERY_TABLES = Object.freeze([
   "chalin03_snap_20260731_ops_sale_payments",
 ]);
 
-// These are recovery mechanics rather than durable business records. Mutating
-// the shared Sets is intentional: classifyDatabaseTables() closes over them,
-// so future signed-v2 backups omit these technical snapshots and passkey
-// challenges without changing the canonical checksum contract for old files.
 base.EPHEMERAL_SECURITY_TABLES.add("passkey_challenges");
 base.NEVER_RESTORE_TABLES.add("passkey_challenges");
 for (const tableName of TECHNICAL_RECOVERY_TABLES) {
@@ -98,9 +94,6 @@ function isConfirmedRailwayStaging(env = process.env) {
 }
 
 function isLiveProductionEnvironment(env = process.env) {
-  // Railway staging sometimes runs the Node process with NODE_ENV=production.
-  // The Railway service identity is more authoritative than NODE_ENV for
-  // deciding whether cross-environment recovery controls are permitted.
   if (isConfirmedRailwayStaging(env)) return false;
 
   const railwayEnvironment = railwayEnvironmentName(env);
@@ -129,35 +122,24 @@ function isCrossEnvironmentRecovery(
 
   if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
 
-  // The explicit override is only supplied by the protected staging recovery
-  // router after its staging-only request gate, authentication, permission and
-  // protected-action checks. Honor it before interpreting Railway's sometimes
-  // misleading environment label so the router cannot be forced back into the
-  // strict production validator merely because RAILWAY_ENVIRONMENT_NAME says
-  // "production" on the dedicated staging service.
-  if (
-    allowCrossEnvironmentRecovery === true &&
-    requireSignature === false
-  ) {
-    return true;
-  }
-
   const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
   const railwayEnvironment = railwayEnvironmentName(env);
 
-  // An explicitly identified Railway production environment is an immutable
-  // boundary unless the same server identity also proves it is the dedicated
-  // CHALIN ONE staging service.
+  // A real Railway production identity is immutable. A caller cannot turn a
+  // production runtime into staging merely by passing the recovery option.
   if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
     return false;
   }
 
+  // The protected staging router supplies a verified staging recoveryEnvironment
+  // when Railway exposes production-like process settings on the trial service.
   if (confirmedRailwayStaging) return true;
 
-  // Generic local/non-production recovery remains available only when target-
-  // side signature enforcement has been deliberately disabled.
   if (isLiveProductionEnvironment(env)) return false;
-  return requireSignature === false;
+
+  // Local/non-production recovery can be opted into only when target-side HMAC
+  // verification is intentionally disabled and additive compatibility is on.
+  return allowCrossEnvironmentRecovery === true && requireSignature === false;
 }
 
 function isCompatibilityError(message) {
