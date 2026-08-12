@@ -3,8 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const PRODUCTION_BACKUP_API_ROOT = "https://api.chalin03.com/api/backups";
-const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;
+const BACKUP_DOWNLOAD_TIMEOUT_MS = 900000;
 const BACKUP_VALIDATE_TIMEOUT_MS = 180000;
 const BACKUP_RESTORE_TIMEOUT_MS = 600000;
 
@@ -13,24 +12,6 @@ function backupRequestUrl(pathname) {
     ? String(pathname || "")
     : `/${String(pathname || "")}`;
   return `/backups${suffix}`;
-}
-
-function isOfficialProductionHost() {
-  if (typeof window === "undefined") return false;
-  const hostname = String(window.location?.hostname || "")
-    .trim()
-    .toLowerCase();
-  return hostname === "chalin03.com" || hostname === "www.chalin03.com";
-}
-
-function shouldRetryBackupDownloadDirectly(requestError) {
-  if (!isOfficialProductionHost()) return false;
-
-  const status = Number(requestError?.response?.status || 0);
-  if ([502, 504, 520, 521, 522, 523, 524].includes(status)) return true;
-
-  const errorCode = String(requestError?.code || "").toUpperCase();
-  return !requestError?.response && errorCode === "ERR_NETWORK";
 }
 
 function formatNumber(value) {
@@ -92,22 +73,6 @@ export default function BackupPage() {
     return requestError.response?.data?.message || "";
   }
 
-  async function requestBackupDownload() {
-    const requestOptions = {
-      responseType: "blob",
-      headers: protectedHeaders,
-      timeout: BACKUP_DOWNLOAD_TIMEOUT_MS,
-    };
-
-    try {
-      return await axiosClient.get(backupRequestUrl("/download"), requestOptions);
-    } catch (requestError) {
-      if (!shouldRetryBackupDownloadDirectly(requestError)) throw requestError;
-
-      return axiosClient.get(`${PRODUCTION_BACKUP_API_ROOT}/download`, requestOptions);
-    }
-  }
-
   async function unlockProtectedActions(event) {
     event.preventDefault();
     setUnlocking(true);
@@ -144,9 +109,13 @@ export default function BackupPage() {
     }
     setDownloading(true);
     setError("");
-    setMessage("");
+    setMessage("Preparing the signed full-system backup. Keep this page open while the database snapshot is streamed securely.");
     try {
-      const response = await requestBackupDownload();
+      const response = await axiosClient.get(backupRequestUrl("/download"), {
+        responseType: "blob",
+        headers: protectedHeaders,
+        timeout: BACKUP_DOWNLOAD_TIMEOUT_MS,
+      });
       const fileUrl = window.URL.createObjectURL(
         new Blob([response.data], { type: "application/json" })
       );
@@ -161,6 +130,7 @@ export default function BackupPage() {
         "Full-system backup downloaded successfully. Keep it private; it contains sensitive business records and password hashes."
       );
     } catch (requestError) {
+      setMessage("");
       setError((await readErrorBlob(requestError)) || "Backup download failed.");
     } finally {
       setDownloading(false);
@@ -308,7 +278,7 @@ export default function BackupPage() {
           <h2>Download Full-System Backup</h2>
           <p>Creates one private JSON recovery package containing every current canonical application table.</p>
           <ul style={{ lineHeight: 1.8, fontWeight: 700 }}><li>All three independent business workspaces</li><li>Users, permissions and location access</li><li>Sales, finance, mining and hire records</li><li>Audit, security, SMS and system evidence</li><li>SHA-256 integrity checksum</li></ul>
-          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Downloading…" : "Download Full-System Backup"}</button>
+          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Preparing & Downloading…" : "Download Full-System Backup"}</button>
         </div>
 
         <form className="section-card backup-card" onSubmit={restoreBackup}>
@@ -318,7 +288,7 @@ export default function BackupPage() {
           {selectedFile ? <p className="selected-file"><strong>{selectedFile.name}</strong><br />{formatFileSize(selectedFile.size)}</p> : null}
           {selectedBackupInfo ? <div className="warning-box"><strong>Local file preview</strong><br />App: {selectedBackupInfo.app}<br />Type: {selectedBackupInfo.backup_type}<br />Version: {selectedBackupInfo.version}<br />Created: {selectedBackupInfo.created_at}<br />Tables: {formatNumber(selectedBackupInfo.table_count)}<br />Rows: {formatNumber(selectedBackupInfo.total_rows)}<br />Checksum: {selectedBackupInfo.checksum || "Not provided"}</div> : null}
           <button type="button" onClick={runValidation} disabled={!canValidate || !selectedFile || !tokenReady || restoring}>{restoring ? "Checking…" : "Run Validation and Restore Preview"}</button>
-          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Warnings: {(dryRunReport.warnings || []).length}<br />Errors: {(dryRunReport.errors || []).length}{(dryRunReport.errors || []).length ? <><br />{dryRunReport.errors.join(" ")}</> : null}</div> : null}
+          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Warnings: {(dryRunReport.warnings || []).length}<br />Errors: {(dryRunReport.errors || []).length}{(dryRunReport.errors || []).length ? <><br />{dryRunReport.errors.join(" ")}</> : null}</div> : null}
           <label>Type {RESTORE_CONFIRMATION_TEXT} to confirm</label>
           <input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} placeholder={RESTORE_CONFIRMATION_TEXT} />
           <button type="submit" className="danger-button" disabled={!canRestorePermission || !dryRunReport?.valid || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
