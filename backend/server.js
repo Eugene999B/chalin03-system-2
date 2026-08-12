@@ -66,6 +66,7 @@ const returnRoutes = require("./routes/returnRoutes");
 const exportRoutes = require("./routes/exportRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
+const stagingBackupRecoveryRoutes = require("./routes/stagingBackupRecoveryRoutes");
 const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
@@ -366,6 +367,7 @@ app.use(
   activityRoutes
 );
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
+app.use("/api/backups", stagingBackupRecoveryRoutes);
 app.use("/api/backups", delegatedBackupRoutes);
 app.use("/api/backups", backupRoutes);
 app.use(
