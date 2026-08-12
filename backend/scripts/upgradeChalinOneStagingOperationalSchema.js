@@ -66,6 +66,17 @@ const STAGING_FOUNDATION_MIGRATIONS = Object.freeze([
     ]),
   }),
   Object.freeze({
+    record: "release2a1_one_active_session",
+    file: "20260716_release2a1_one_active_session.sql",
+    required_tables: Object.freeze(["auth_sessions"]),
+    required_columns: Object.freeze([
+      Object.freeze(["auth_sessions", "session_id"]),
+      Object.freeze(["auth_sessions", "user_id"]),
+      Object.freeze(["auth_sessions", "expires_at"]),
+      Object.freeze(["auth_sessions", "revoked_at"]),
+    ]),
+  }),
+  Object.freeze({
     record: "release3fa_authentication_sessions_ux",
     file: "20260718_release3fa_authentication_sessions_ux.sql",
     required_columns: Object.freeze([
