@@ -32,7 +32,11 @@ assert.match(headers, /\/company\/\*[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/mining-operations[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/equipment-hire[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /https:\/\/api\.chalin03\.com/);
-assert.doesNotMatch(headers, /pages\.dev/);
+assert.match(
+  headers,
+  /connect-src[^;]*https:\/\/chalin03-system-2-staging\.up\.railway\.app/
+);
+assert.doesNotMatch(headers, /connect-src[^;]*pages\.dev/);
 
 assert.match(
   appIndex,
