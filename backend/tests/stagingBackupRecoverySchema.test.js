@@ -171,7 +171,8 @@ test("signed-v2 staging router owns dry-run, preparation and restore preflight b
   assert.match(routeSource, /requireProtectedAction/);
   assert.match(routeSource, /requirePermission\("backup\.restore"\)/);
   assert.match(routeSource, /checksumBackup\(backup\)/);
-  assert.match(routeSource, /headers\?\.host/);
+  assert.match(routeSource, /x-forwarded-host/);
+  assert.match(routeSource, /requestHosts\(req\)/);
   assert.match(routeSource, /CHALIN_ONE_STAGING_PUBLIC_DOMAIN/);
   assert.match(routeSource, /recoveryEnvironmentForRequest\(req\)/);
 
@@ -187,6 +188,12 @@ test("signed-v2 staging router owns dry-run, preparation and restore preflight b
   assert.ok(stagingMount >= 0);
   assert.ok(stagingMount < delegatedMount);
   assert.ok(delegatedMount < canonicalMount);
+});
+
+test("Railway proxy host forwarding is explicitly recognized by the staging recovery gate", () => {
+  assert.match(routeSource, /headers\?\.\["x-forwarded-host"\]/);
+  assert.match(routeSource, /split\(","\)/);
+  assert.match(routeSource, /includes\(CHALIN_ONE_STAGING_PUBLIC_DOMAIN\)/);
 });
 
 test("Backup page exposes one-click trial schema preparation and blocks restore on table or column gaps", () => {
