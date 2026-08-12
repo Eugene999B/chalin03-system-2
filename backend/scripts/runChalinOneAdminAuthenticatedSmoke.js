@@ -243,8 +243,8 @@ async function runMatrix(origin, token) {
           if (Number(payload?.user?.id || payload?.id || 0) !== 1) {
             throw new Error("Permission detail did not resolve the selected admin user.");
           }
-          if (!Array.isArray(payload?.effective_permissions)) {
-            throw new Error("Permission detail did not return effective_permissions.");
+          if (!Array.isArray(payload?.permission_state?.effective_permissions)) {
+            throw new Error("Permission detail did not return permission_state.effective_permissions.");
           }
         }],
       ],
