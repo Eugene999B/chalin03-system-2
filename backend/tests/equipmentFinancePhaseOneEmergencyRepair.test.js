@@ -38,20 +38,22 @@ test("Phase 1 emergency repair detects any missing installment schema part", asy
   assert.equal(await phaseOneSchemaNeedsRepair(connection), true);
 });
 
-test("Railway repairs Phase 1 before the strict verifier and server startup", () => {
+test("controlled maintenance repairs Phase 1 before the strict verifier while API startup stays independent", () => {
   const packageJson = JSON.parse(
     fs.readFileSync(path.join(backendRoot, "package.json"), "utf8")
   );
-  const start = packageJson.scripts.start;
-  const repairIndex = start.indexOf("runEquipmentFinancePhaseOneEmergencyRepair.js");
-  const verifierIndex = start.indexOf("runEquipmentFinancePhaseOneSchemaStartup.js");
-  const operationalIndex = start.indexOf("runEquipmentFinanceOperationalPolishStartup.js");
-  const serverIndex = start.indexOf("server.js");
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const repairIndex = maintenance.indexOf("runEquipmentFinancePhaseOneEmergencyRepair.js");
+  const verifierIndex = maintenance.indexOf("runEquipmentFinancePhaseOneSchemaStartup.js");
+  const operationalIndex = maintenance.indexOf("runEquipmentFinanceOperationalPolishStartup.js");
 
   assert.ok(repairIndex >= 0);
   assert.ok(verifierIndex > repairIndex);
   assert.ok(operationalIndex > verifierIndex);
-  assert.ok(serverIndex > operationalIndex);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase1-repair:production"],
     "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js"

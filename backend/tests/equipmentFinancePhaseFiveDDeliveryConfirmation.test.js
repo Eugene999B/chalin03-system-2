@@ -105,7 +105,7 @@ test("delivery endpoint is rate limited and mounted before legacy lifecycle rout
   assert.match(independent, /delivery_confirmation_enabled:\s*true/);
 });
 
-test("Phase 5D startup follows 5C and fails closed", () => {
+test("Phase 5D controlled maintenance gate follows 5C and fails closed", () => {
   assert.match(runner, /chalin03:equipment-finance:phase5d-delivery-confirmation/);
   assert.match(runner, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(runner, /GET_LOCK/);
@@ -113,9 +113,12 @@ test("Phase 5D startup follows 5C and fails closed", () => {
   assert.match(runner, /validateVerifierResults/);
   assert.match(runner, /process\.exit\(1\)/);
   assert.match(verifier, /confirmed_by = authorization\.decided_by/);
-  const start = packageJson.scripts.start;
-  const phaseC = start.indexOf("runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js");
-  const phaseD = start.indexOf("runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js");
-  const server = start.indexOf("server.js");
-  assert.ok(phaseC >= 0 && phaseD > phaseC && server > phaseD);
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseC = maintenance.indexOf("runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js");
+  const phaseD = maintenance.indexOf("runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js");
+  assert.ok(phaseC >= 0 && phaseD > phaseC);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
 });

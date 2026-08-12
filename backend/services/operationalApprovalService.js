@@ -203,6 +203,60 @@ async function auditApprovalEvent({
   }
 }
 
+function normalizeReturnReservation(row) {
+  const payload = parseJson(row?.approval_payload_json, {});
+  return {
+    id: positiveInteger(row?.id),
+    request_code: requestCodeFromRow(row),
+    status: cleanText(row?.status, 30).toLowerCase(),
+    execution_status: cleanText(row?.execution_status, 30).toLowerCase(),
+    product_id: positiveInteger(payload?.product_id),
+    quantity: positiveInteger(payload?.quantity),
+    sale_id: positiveInteger(payload?.sale_id || row?.entity_id),
+    refund_amount: money(payload?.refund_amount),
+  };
+}
+
+async function listActiveReturnReservations(
+  connection = pool,
+  { branchId, saleId, excludeRequestId = null, forUpdate = false } = {}
+) {
+  const cleanBranchId = positiveInteger(branchId);
+  const cleanSaleId = positiveInteger(saleId);
+  if (!cleanBranchId || !cleanSaleId) return [];
+
+  const params = [cleanBranchId, cleanSaleId];
+  let excludeSql = "";
+  const cleanExcludeId = positiveInteger(excludeRequestId);
+  if (cleanExcludeId) {
+    excludeSql = " AND id <> ?";
+    params.push(cleanExcludeId);
+  }
+
+  const [rows] = await connection.query(
+    `SELECT id, requested_action, status, execution_status, expires_at,
+            entity_id, approval_payload_json
+     FROM audit_unlock_requests
+     WHERE branch_id = ?
+       AND approval_kind = 'return_refund'
+       AND entity_type = 'sale'
+       AND entity_id = ?
+       AND status IN ('pending', 'approved')
+       AND execution_status IN ('pending', 'executing', 'failed')
+       AND (
+         execution_status = 'executing'
+         OR expires_at IS NULL
+         OR expires_at > NOW()
+       )${excludeSql}
+     ORDER BY id ASC${forUpdate ? " FOR UPDATE" : ""}`,
+    params
+  );
+
+  return rows
+    .map(normalizeReturnReservation)
+    .filter((reservation) => reservation.id && reservation.product_id && reservation.quantity);
+}
+
 async function createOperationalRequest({
   req,
   connection = pool,
@@ -482,7 +536,14 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       throw error;
     }
 
-    if (Number(request.requested_by) === Number(getUserId(req))) {
+    const selfApproval =
+      Number(request.requested_by) === Number(getUserId(req));
+    const adminReturnSelfApproval =
+      selfApproval &&
+      getRole(req) === "admin" &&
+      request.approval_kind === "return_refund";
+
+    if (selfApproval && !adminReturnSelfApproval) {
       const error = new Error("The requester cannot approve their own action.");
       error.statusCode = 403;
       error.code = "SELF_APPROVAL_FORBIDDEN";
@@ -542,7 +603,9 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       connection,
       action: "APPROVE_OPERATIONAL_REQUEST",
       request: { ...request, execution_status: "executing" },
-      details: `${request.request_code} approved by ${reviewer.username}; protected action execution started.`,
+      details: `${request.request_code} approved by ${reviewer.username}${
+        adminReturnSelfApproval ? " (administrator self-approved return/refund)" : ""
+      }; protected action execution started.`,
       userId: reviewer.id,
     });
 
@@ -568,7 +631,14 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
       error.statusCode = 404;
       throw error;
     }
-    if (Number(request.requested_by) === Number(getUserId(req))) {
+    const selfReview =
+      Number(request.requested_by) === Number(getUserId(req));
+    const adminReturnSelfRejection =
+      selfReview &&
+      getRole(req) === "admin" &&
+      request.approval_kind === "return_refund";
+
+    if (selfReview && !adminReturnSelfRejection) {
       const error = new Error("The requester cannot review their own action.");
       error.statusCode = 403;
       throw error;
@@ -615,10 +685,9 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
       connection,
       action: "REJECT_OPERATIONAL_REQUEST",
       request: { ...request, execution_status: "rejected" },
-      details: `${request.request_code} rejected by ${reviewer.username}: ${cleanText(
-        reviewNote,
-        500
-      )}`,
+      details: `${request.request_code} rejected by ${reviewer.username}${
+        adminReturnSelfRejection ? " (administrator closed their own return/refund request)" : ""
+      }: ${cleanText(reviewNote, 500)}`,
       userId: reviewer.id,
     });
 
@@ -639,6 +708,30 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
     const request = await lockOperationalRequest(connection, requestId);
     if (!request) throw new Error("Operational request disappeared during execution.");
 
+    // Return/refund execution may finalize itself inside the same transaction
+    // that changes stock and money. If so, never downgrade that durable success
+    // merely because the internal HTTP response was interrupted afterward.
+    if (request.execution_status === "executed") {
+      if (request.notification_id) {
+        await connection.query(
+          `UPDATE notifications
+           SET status = 'resolved', resolved_at = COALESCE(resolved_at, NOW()),
+               resolved_by = COALESCE(resolved_by, ?),
+               resolution_note = 'Approved action executed successfully.'
+           WHERE id = ?`,
+          [request.reviewed_by || null, request.notification_id]
+        ).catch(() => {});
+      }
+      await connection.commit();
+      return request;
+    }
+
+    if (request.execution_status !== "executing") {
+      await connection.commit();
+      return request;
+    }
+
+    const finalStatus = success ? "executed" : "failed";
     if (success) {
       await connection.query(
         `UPDATE audit_unlock_requests
@@ -668,10 +761,34 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
       );
     }
 
+    await writeAuditEvent({
+      connection,
+      userId: request.reviewed_by || request.requested_by || null,
+      branchId: request.branch_id || null,
+      action: success
+        ? "EXECUTE_OPERATIONAL_APPROVAL_REQUEST"
+        : "FAIL_OPERATIONAL_APPROVAL_EXECUTION",
+      details: success
+        ? `${request.request_code} protected action executed successfully.`
+        : `${request.request_code} protected action execution failed: ${cleanText(errorMessage, 1000)}`,
+      workspaceCode: "spare_parts",
+      entityType: "operational_approval_request",
+      entityId: request.id,
+      actionType: success ? "execution_success" : "execution_failure",
+      outcome: success ? "success" : "failure",
+      severity: success ? "high" : "critical",
+      metadata: {
+        request_code: request.request_code,
+        approval_kind: request.approval_kind,
+        execution_status: finalStatus,
+      },
+    });
+
     await connection.commit();
     return normalizeRequestRow({
       ...request,
-      execution_status: success ? "executed" : "failed",
+      execution_status: finalStatus,
+      execution_error: success ? null : cleanText(errorMessage, 12000),
     });
   } catch (error) {
     await connection.rollback().catch(() => {});
@@ -695,6 +812,7 @@ module.exports = {
   getUserId,
   hashPayload,
   listOperationalRequests,
+  listActiveReturnReservations,
   lockOperationalRequest,
   money,
   normalizeRequestRow,

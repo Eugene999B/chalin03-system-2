@@ -25,7 +25,7 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(backendRoot, "package.json"), "utf8")
 );
 
-test("the authorized reset executes only on production startup and only once", () => {
+test("the authorized reset executes only in production and only once", () => {
   assert.equal(resolveExecutionMode({ NODE_ENV: "production" }), "execute_once");
   assert.equal(
     resolveExecutionMode({ NODE_ENV: "development" }),
@@ -88,27 +88,27 @@ test("identifier and id helpers reject unsafe or duplicate input", () => {
   assert.deepEqual(uniqueNumericIds([1, "1", 2, 0, -1, "x", 2]), [1, 2]);
 });
 
-test("production startup runs the completed reset and safe cleanup attempt before the server", () => {
-  const start = packageJson.scripts.start;
-  const phaseSix = start.indexOf(
+test("controlled maintenance runs the completed reset and safe cleanup attempt in order", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseSix = maintenance.indexOf(
     "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js"
   );
-  const reset = start.indexOf(
+  const reset = maintenance.indexOf(
     "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js"
   );
-  const cleanupRecovery = start.indexOf(
+  const cleanupRecovery = maintenance.indexOf(
     "node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js"
-  );
-  const server = start.indexOf(
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
   );
 
   assert.ok(phaseSix >= 0, "Phase Six schema startup must remain registered");
   assert.ok(reset > phaseSix, "reset must run after all Finance schema startups");
   assert.ok(cleanupRecovery > reset, "safe cleanup recovery must follow the completed reset");
-  assert.ok(server > cleanupRecovery, "safe recovery attempt must settle before API startup");
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.doesNotMatch(
-    start,
+    maintenance,
     /node scripts\/runUserAuthorizedInstallmentExcavatorCleanup20260805\.js/
   );
   assert.equal(

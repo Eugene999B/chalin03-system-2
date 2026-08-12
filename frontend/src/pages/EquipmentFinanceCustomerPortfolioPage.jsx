@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import "../styles/equipmentFinanceAccountsCompletion.css";
+import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/finance-customers";
 
@@ -51,6 +52,11 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [problem, setProblem] = useState("");
 
+  const clearSelection = useCallback(() => {
+    setSelectedId("");
+    setProfile(null);
+  }, []);
+
   const loadProfile = useCallback(async (customerId) => {
     if (!customerId) return;
     setProfileLoading(true);
@@ -61,34 +67,31 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
       setSelectedId(String(customerId));
     } catch (error) {
       setProblem(errorMessage(error, "Could not load the customer installment profile."));
-      setProfile(null);
+      clearSelection();
     } finally {
       setProfileLoading(false);
     }
-  }, []);
+  }, [clearSelection]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setProblem("");
     try {
       const response = await axiosClient.get(API, { params: { limit: 500 } });
-      const rows = response.data?.customers || [];
-      setCustomers(rows);
+      setCustomers(response.data?.customers || []);
       setSummary(response.data?.summary || {});
-      const preferred = requestedCustomer || selectedId || rows[0]?.customer_id;
-      if (preferred) await loadProfile(preferred);
+      if (requestedCustomer) await loadProfile(requestedCustomer);
+      else clearSelection();
     } catch (error) {
       setProblem(errorMessage(error, "Could not load Finance customer portfolios."));
     } finally {
       setLoading(false);
     }
-  }, [loadProfile, requestedCustomer, selectedId]);
+  }, [clearSelection, loadProfile, requestedCustomer]);
 
   useEffect(() => {
     load();
-    // Selection refreshes are handled explicitly so opening a profile does not reload the list.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedCustomer]);
+  }, [load]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -128,23 +131,19 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
   }, [profile]);
 
   return (
-    <main className="finance-accounts" data-testid="finance-customer-portfolios">
+    <main className="finance-accounts finance-simplified" data-testid="finance-customer-portfolios">
       <header className="finance-accounts__hero">
         <div>
-          <p>One customer, complete installment history</p>
+          <p>Search first, open only what you need</p>
           <h1>Customer Installment Profiles</h1>
           <span>
-            View the customer identity, KYC snapshot, applications, agreements, schedules,
-            payments, overdue exposure, delivery and ownership evidence in one place.
+            Find a customer, select the correct record, then open the full installment history.
+            No customer file opens automatically.
           </span>
         </div>
         <div className="finance-accounts__hero-actions">
-          <Link className="is-primary" to="/equipment-installment-finance/applications?stage=collections">
-            Payments Centre
-          </Link>
-          <Link to="/equipment-installment-finance/applications?stage=customers">
-            Customer Register
-          </Link>
+          <Link className="is-primary" to="/equipment-installment-finance/applications?stage=collections">Payments Centre</Link>
+          <Link to="/equipment-installment-finance/applications?stage=customers">Customer Register</Link>
         </div>
       </header>
 
@@ -154,17 +153,21 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
         <article><span>Finance customers</span><strong>{summary.customers || customers.length}</strong></article>
         <article><span>Active customers</span><strong>{summary.active_customers || 0}</strong></article>
         <article className={(summary.overdue_customers || 0) > 0 ? "is-warning" : ""}><span>Overdue customers</span><strong>{summary.overdue_customers || 0}</strong></article>
-        <article><span>Collected</span><strong>{money(summary.amount_paid)}</strong></article>
         <article><span>Outstanding</span><strong>{money(summary.outstanding_balance)}</strong></article>
-        <article className={(summary.overdue_amount || 0) > 0 ? "is-warning" : ""}><span>Overdue amount</span><strong>{money(summary.overdue_amount)}</strong></article>
       </section>
 
       <section className="finance-accounts__split">
         <aside className="finance-accounts__customer-list">
           <div className="finance-accounts__toolbar is-stacked">
-            <div><p>Customer portfolio</p><h2>{visible.length} customer(s)</h2></div>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone, ID or guarantor" />
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <div><p>Choose customer</p><h2>{visible.length} result(s)</h2></div>
+            <input
+              aria-label="Search Finance customers"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, phone, ID or guarantor"
+              autoComplete="off"
+            />
+            <select aria-label="Filter customer portfolio status" value={status} onChange={(event) => setStatus(event.target.value)}>
               <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="overdue">Overdue</option>
@@ -175,6 +178,7 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
             </select>
           </div>
           {loading ? <div className="finance-accounts__empty">Loading customers…</div> : null}
+          {!loading && !visible.length ? <div className="finance-accounts__empty">No customer matches this search.</div> : null}
           <div className="finance-accounts__customer-scroll">
             {visible.map((item) => (
               <button
@@ -193,8 +197,15 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
         </aside>
 
         <div className="finance-accounts__profile">
-          {profileLoading ? <div className="finance-accounts__empty">Opening customer profile…</div> : null}
-          {!profileLoading && !customer ? <div className="finance-accounts__empty">Choose a customer to open the complete installment profile.</div> : null}
+          {profileLoading ? <div className="finance-simplified__selection-panel"><div><strong>Opening customer profile…</strong><span>Please wait.</span></div></div> : null}
+          {!profileLoading && !customer ? (
+            <div className="finance-simplified__selection-panel">
+              <div>
+                <strong>No customer selected</strong>
+                <span>Use the search box, then select one customer to see details.</span>
+              </div>
+            </div>
+          ) : null}
           {!profileLoading && customer ? (
             <>
               <section className="finance-accounts__profile-hero">
@@ -205,13 +216,10 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                   <small>{customer.address || "No address recorded"}</small>
                 </div>
                 <div className="finance-accounts__profile-actions">
-                  <Link className="is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.customer_id}`}>
-                    Start New Installment
-                  </Link>
+                  <button type="button" onClick={clearSelection}>Close profile</button>
+                  <Link className="is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.customer_id}`}>Start New Installment</Link>
                   {customer.active_agreement_count > 0 ? (
-                    <Link to={`/equipment-installment-finance/applications?stage=collections&customer=${customer.customer_id}`}>
-                      Record Payment
-                    </Link>
+                    <Link to={`/equipment-installment-finance/applications?stage=collections&customer=${customer.customer_id}`}>Record Payment</Link>
                   ) : null}
                 </div>
               </section>
@@ -224,29 +232,6 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                 <article><span>Overdue</span><strong>{money(customer.overdue_amount)}</strong></article>
                 <article><span>Next due</span><strong>{dateLabel(customer.next_due_date)}</strong></article>
               </div>
-
-              {customer.latest_application?.application_id ? (
-                <section className="finance-accounts__identity">
-                  <div className="finance-accounts__application-image">
-                    <img
-                      src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`}
-                      alt={`Excavator for ${customer.customer_name}`}
-                    />
-                  </div>
-                  <div>
-                    <p>Latest identity and assessment snapshot</p>
-                    <h3>{customer.latest_application.application_number}</h3>
-                    <div className="finance-accounts__facts">
-                      <div><span>ID</span><strong>{customer.latest_kyc?.id_type || "Not recorded"} · {customer.latest_kyc?.id_number || "Not recorded"}</strong></div>
-                      <div><span>Occupation</span><strong>{customer.latest_kyc?.occupation || "Not recorded"}</strong></div>
-                      <div><span>Employer / business</span><strong>{customer.latest_kyc?.employer_business_name || "Not recorded"}</strong></div>
-                      <div><span>Guarantor</span><strong>{customer.latest_kyc?.guarantor_name || "Not recorded"}</strong></div>
-                      <div><span>Risk</span><strong>{label(customer.highest_risk_band)}</strong></div>
-                      <div><span>Aging</span><strong>{label(customer.aging_bucket)}</strong></div>
-                    </div>
-                  </div>
-                </section>
-              ) : null}
 
               <section className="finance-accounts__panel">
                 <div className="finance-accounts__section-head"><div><p>Installment accounts</p><h2>{customer.agreements?.length || 0} agreement(s)</h2></div></div>
@@ -266,11 +251,9 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                           <span>{money(agreement.outstanding_balance)}</span>
                         </div>
                         <div className="finance-accounts__facts">
-                          <div><span>Total</span><strong>{money(agreement.total_amount)}</strong></div>
                           <div><span>Paid</span><strong>{money(agreement.amount_paid)}</strong></div>
                           <div><span>Overdue</span><strong>{money(agreement.overdue_amount)}</strong></div>
                           <div><span>Next due</span><strong>{dateLabel(agreement.next_due_date)}</strong></div>
-                          <div><span>Schedule lines</span><strong>{schedule.length}</strong></div>
                           <div><span>Payments</span><strong>{payments.length}</strong></div>
                         </div>
                         <div className="finance-accounts__actions">
@@ -278,19 +261,22 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                           {id ? <Link to={`/equipment-installment-finance/applications?stage=accounts&agreement=${id}`}>Open Account</Link> : null}
                           {id ? <Link to={`/equipment-installment-finance/applications?stage=case-operations&case_type=agreement&case_id=${id}`}>Case History</Link> : null}
                         </div>
-                        {payments.length ? (
+                        {(payments.length || schedule.length) ? (
                           <details>
-                            <summary>Show payment history</summary>
-                            <div className="finance-accounts__rows">
-                              {payments.map((payment) => (
-                                <article key={payment.id}>
-                                  <span>{payment.receipt_number || payment.payment_number}</span>
-                                  <strong>{dateLabel(payment.payment_date)}</strong>
-                                  <b>{money(payment.amount)}</b>
-                                  <small>{label(payment.payment_method)}</small>
-                                </article>
-                              ))}
-                            </div>
+                            <summary>Show schedule and payment details</summary>
+                            <p>{schedule.length} schedule line(s) · {payments.length} payment(s)</p>
+                            {payments.length ? (
+                              <div className="finance-accounts__rows">
+                                {payments.map((payment) => (
+                                  <article key={payment.id}>
+                                    <span>{payment.receipt_number || payment.payment_number}</span>
+                                    <strong>{dateLabel(payment.payment_date)}</strong>
+                                    <b>{money(payment.amount)}</b>
+                                    <small>{label(payment.payment_method)}</small>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : null}
                           </details>
                         ) : null}
                       </article>
@@ -300,8 +286,31 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                 </div>
               </section>
 
-              <section className="finance-accounts__panel">
-                <div className="finance-accounts__section-head"><div><p>Application history</p><h2>{customer.applications?.length || 0} application(s)</h2></div></div>
+              <details>
+                <summary>Show identity, KYC and assessment details</summary>
+                {customer.latest_application?.application_id ? (
+                  <section className="finance-accounts__identity">
+                    <div className="finance-accounts__application-image">
+                      <img src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`} alt={`Excavator for ${customer.customer_name}`} />
+                    </div>
+                    <div>
+                      <p>Latest identity and assessment snapshot</p>
+                      <h3>{customer.latest_application.application_number}</h3>
+                      <div className="finance-accounts__facts">
+                        <div><span>ID</span><strong>{customer.latest_kyc?.id_type || "Not recorded"} · {customer.latest_kyc?.id_number || "Not recorded"}</strong></div>
+                        <div><span>Occupation</span><strong>{customer.latest_kyc?.occupation || "Not recorded"}</strong></div>
+                        <div><span>Employer / business</span><strong>{customer.latest_kyc?.employer_business_name || "Not recorded"}</strong></div>
+                        <div><span>Guarantor</span><strong>{customer.latest_kyc?.guarantor_name || "Not recorded"}</strong></div>
+                        <div><span>Risk</span><strong>{label(customer.highest_risk_band)}</strong></div>
+                        <div><span>Aging</span><strong>{label(customer.aging_bucket)}</strong></div>
+                      </div>
+                    </div>
+                  </section>
+                ) : <div className="finance-accounts__empty">No application identity snapshot is available.</div>}
+              </details>
+
+              <details>
+                <summary>Show application history ({customer.applications?.length || 0})</summary>
                 <div className="finance-accounts__rows">
                   {(customer.applications || []).map((application) => (
                     <article key={application.application_id}>
@@ -312,7 +321,7 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                     </article>
                   ))}
                 </div>
-              </section>
+              </details>
             </>
           ) : null}
         </div>

@@ -116,51 +116,28 @@ function drawWatermark(doc, document) {
   const centreX = doc.page.width / 2;
   const centreY = doc.page.height / 2 + 28;
 
-  drawOfficialLogo(doc, centreX - 155, centreY - 160, 310, 310, 0.085);
+  drawOfficialLogo(doc, centreX - 145, centreY - 145, 290, 290, 0.038);
 
   doc.save();
-  doc.strokeColor(template.accent).opacity(0.075).lineWidth(2.4);
-  doc.moveTo(centreX, centreY - 178)
-    .lineTo(centreX + 178, centreY)
-    .lineTo(centreX, centreY + 178)
-    .lineTo(centreX - 178, centreY)
+  doc.strokeColor(template.accent).opacity(0.035).lineWidth(2.2);
+  doc.moveTo(centreX, centreY - 168)
+    .lineTo(centreX + 168, centreY)
+    .lineTo(centreX, centreY + 168)
+    .lineTo(centreX - 168, centreY)
     .closePath()
     .stroke();
-  doc.moveTo(centreX, centreY - 150)
-    .lineTo(centreX + 150, centreY)
-    .lineTo(centreX, centreY + 150)
-    .lineTo(centreX - 150, centreY)
+  doc.moveTo(centreX, centreY - 142)
+    .lineTo(centreX + 142, centreY)
+    .lineTo(centreX, centreY + 142)
+    .lineTo(centreX - 142, centreY)
     .closePath()
     .stroke();
   doc.restore();
 
   doc.save();
-  doc.fillColor(template.accent).fillOpacity(0.105);
-  doc.font("Times-Bold").fontSize(template.family === "certificate" ? 58 : 43);
-  safeAbsoluteText(doc, template.watermark, centreX - 265, centreY + 122, {
-    width: 530,
-    align: "center",
-  });
-  doc.restore();
-}
-
-function drawVisibleOverlayWatermark(doc, document) {
-  const template = templateFor(document);
-  const centreX = doc.page.width / 2;
-  const centreY = doc.page.height / 2 + 18;
-
-  drawOfficialLogo(doc, centreX - 122, centreY - 128, 244, 244, 0.065);
-
-  doc.save();
-  doc.rotate(-27, { origin: [centreX, centreY] });
-  doc.fillColor(COLORS.goldDark).fillOpacity(0.09);
-  doc.font("Times-Bold").fontSize(template.family === "certificate" ? 48 : 38);
-  safeAbsoluteText(doc, template.watermark, centreX - 255, centreY - 7, {
-    width: 510,
-    align: "center",
-  });
-  doc.fillColor(template.accent).fillOpacity(0.16);
-  safeAbsoluteText(doc, template.watermark, centreX - 255, centreY - 10, {
+  doc.fillColor(template.accent).fillOpacity(0.048);
+  doc.font("Times-Bold").fontSize(template.family === "certificate" ? 55 : 41);
+  safeAbsoluteText(doc, template.watermark, centreX - 255, centreY + 116, {
     width: 510,
     align: "center",
   });
@@ -293,7 +270,6 @@ function drawFooters(doc, document) {
   const range = doc.bufferedPageRange();
   for (let index = range.start; index < range.start + range.count; index += 1) {
     doc.switchToPage(index);
-    drawVisibleOverlayWatermark(doc, document);
     const y = doc.page.height - 34;
     doc.rect(0, y - 5, doc.page.width, 39).fill(COLORS.forestDeep);
     doc.rect(0, y - 6, doc.page.width, 2).fill(COLORS.gold);

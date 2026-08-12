@@ -90,15 +90,17 @@ test("recovery is locked, transactional and preserves all financial totals", () 
   assert.doesNotMatch(source, /SET\s+(?:total|amount_owed|amount_paid|balance)\s*=/i);
 });
 
-test("Railway runs exact receipt recovery after rollback and never runs broad regrouping", () => {
-  const start = packageJson.scripts.start;
-  const rollbackIndex = start.indexOf("runAutomaticCustomerMergeRollback20260805.js");
-  const exactIndex = start.indexOf("runExactNameReceiptOwnerRecovery20260805.js");
-  const serverIndex = start.indexOf("server.js");
+test("controlled maintenance runs exact receipt recovery after rollback and never broad regrouping", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const rollbackIndex = maintenance.indexOf("runAutomaticCustomerMergeRollback20260805.js");
+  const exactIndex = maintenance.indexOf("runExactNameReceiptOwnerRecovery20260805.js");
   assert.ok(rollbackIndex >= 0);
   assert.ok(exactIndex > rollbackIndex);
-  assert.ok(serverIndex > exactIndex);
-  assert.equal(start.includes("runPostRollbackDebtAccountReconciliation20260805.js"), false);
+  assert.equal(maintenance.includes("runPostRollbackDebtAccountReconciliation20260805.js"), false);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["repair:exact-name-receipt-owners:20260805:production"],
     "node scripts/runExactNameReceiptOwnerRecovery20260805.js"

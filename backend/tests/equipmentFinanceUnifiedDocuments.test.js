@@ -156,16 +156,20 @@ test("Finance navigation distinguishes evidence from generated documents", () =>
   assert.match(documentPage, /replacement_of_document_id/);
 });
 
-test("Railway runs unification after review schema and before delivery gates", () => {
-  const start = packageJson.scripts.start;
-  const review = start.indexOf("runEquipmentFinancePhaseFiveBDocumentReviewStartup.js");
-  const unified = start.indexOf(
+test("controlled maintenance runs unification after review schema and before delivery gates", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const review = maintenance.indexOf("runEquipmentFinancePhaseFiveBDocumentReviewStartup.js");
+  const unified = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js"
   );
-  const authorization = start.indexOf(
+  const authorization = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js"
   );
   assert.ok(review >= 0 && unified > review && authorization > unified);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts[
       "migrate:equipment-finance:phase5-unified-documents:production"
@@ -173,4 +177,3 @@ test("Railway runs unification after review schema and before delivery gates", (
     "node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js"
   );
 });
-

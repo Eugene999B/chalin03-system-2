@@ -488,7 +488,7 @@ test("administrator completes the minimal installment workflow and sees the back
 
   await page.getByLabel("Amount received").fill("100");
   await page.getByRole("button", { name: "Record Payment" }).click();
-  await expect(page.getByText(/COL-RECEIPT-001/)).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("COL-RECEIPT-001");
   await expect(page.getByTestId("account-detail-official-balance")).toHaveText("GHS 700.00");
   await expect(page.getByTestId("payment-history-row")).toHaveCount(2);
   await expect(page.getByTestId("payment-history")).toContainText("DEP-RECEIPT-001");

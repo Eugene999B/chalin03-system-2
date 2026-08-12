@@ -28,7 +28,7 @@ function json(route, body, status = 200) {
   });
 }
 
-test("staff can move from account monitoring to customer profile and committed payment allocation", async ({ page }) => {
+test("staff can search, select and move through account, customer and payment details", async ({ page }) => {
   const state = {
     paid: 200,
     outstanding: 800,
@@ -184,15 +184,12 @@ test("staff can move from account monitoring to customer profile and committed p
     if (path === "/auth/me" && method === "GET") {
       return json(route, { status: "success", user: adminUser, workspace: adminUser.active_workspace });
     }
-
     if (path === "/equipment-catalogue/sales/finance-lifecycle/readiness" && method === "GET") {
       return json(route, { status: "success", readiness: { ready: true } });
     }
-
     if (path === "/equipment-catalogue/sales/finance-lifecycle/accounts" && method === "GET") {
       return json(route, { status: "success", count: 1, accounts: [account()] });
     }
-
     if (path === "/equipment-catalogue/sales/finance-lifecycle/accounts/601" && method === "GET") {
       return json(route, {
         status: "success",
@@ -213,7 +210,6 @@ test("staff can move from account monitoring to customer profile and committed p
         ownership_transfers: [],
       });
     }
-
     if (path === "/equipment-catalogue/sales/finance-lifecycle/accounts/601/collections" && method === "POST") {
       const payload = request.postDataJSON();
       const amount = Number(payload.amount);
@@ -239,7 +235,6 @@ test("staff can move from account monitoring to customer profile and committed p
         account: account(),
       }, 201);
     }
-
     if (path === "/equipment-catalogue/sales/finance-customers" && method === "GET") {
       return json(route, {
         status: "success",
@@ -254,11 +249,9 @@ test("staff can move from account monitoring to customer profile and committed p
         customers: [customerSummary()],
       });
     }
-
     if (path === "/equipment-catalogue/sales/finance-customers/21" && method === "GET") {
       return json(route, customerProfile());
     }
-
     if (
       [
         "/equipment-catalogue/sales/credit-applications/501/image",
@@ -268,12 +261,12 @@ test("staff can move from account monitoring to customer profile and committed p
     ) {
       return route.fulfill({ status: 200, contentType: "image/png", body: onePixelPng });
     }
-
     return json(route, { status: "error", message: `Unhandled ${method} ${path}` }, 404);
   });
 
   await page.goto("/equipment-installment-finance/applications?stage=accounts");
   await expect(page.getByRole("heading", { name: "Active Installments" })).toBeVisible();
+  await expect(page.getByLabel("Search active installment accounts")).toBeVisible();
   await expect(page.getByText("Ama Account Customer").first()).toBeVisible();
   await expect(page.getByText("GHS 800.00").first()).toBeVisible();
 
@@ -288,15 +281,21 @@ test("staff can move from account monitoring to customer profile and committed p
   await page.goto("/equipment-installment-finance/applications?stage=customer-portfolios&customer=21");
   await expect(page.getByRole("heading", { name: "Customer Installment Profiles" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ama Account Customer" })).toBeVisible();
+  await page.getByText("Show identity, KYC and assessment details", { exact: true }).click();
   await expect(page.getByText("GHA-123456789-0")).toBeVisible();
-  await page.getByText("Show payment history", { exact: true }).click();
-  await expect(page.getByText("ESR-0002")).toBeVisible();
   const image = page.locator('img[alt="Excavator for Ama Account Customer"]');
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(0);
+  await page.getByText("Show schedule and payment details", { exact: true }).click();
+  await expect(page.getByText("ESR-0002")).toBeVisible();
   await expect(page.getByRole("link", { name: "Record Payment" }).first()).toBeVisible();
+
+  await page.goto("/equipment-installment-finance/applications?stage=customer-portfolios");
+  await expect(page.getByText("No customer selected")).toBeVisible();
+  await expect(page.getByLabel("Search Finance customers")).toBeVisible();
 
   await page.goto("/equipment-installment-finance/applications?stage=collections");
   await expect(page.getByRole("heading", { name: "Payments & Collections Centre" })).toBeVisible();
+  await expect(page.getByLabel("Search payment-ready Finance accounts")).toBeVisible();
   await expect(page.getByRole("link", { name: "Corrections & Reversals" }).first()).toBeVisible();
 });

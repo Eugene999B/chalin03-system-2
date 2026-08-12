@@ -102,6 +102,8 @@ const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
+const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");
+const payrollProcessingRoutes = require("./routes/payrollProcessingRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const { startDebtReminderScheduler } = require("./services/debtReminderService");
 const {
@@ -118,6 +120,7 @@ const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
 const miningBoundary = requireWorkspaceCategory("mining");
 const hireBoundary = requireWorkspaceCategory("equipment_hire");
 const fleetBoundary = requireWorkspaceCategory("mining", "equipment_hire");
+const payrollBoundary = requireWorkspaceCategory("spare_parts", "mining", "equipment_hire");
 
 const app = express();
 
@@ -242,6 +245,7 @@ app.get("/api", (req, res) => {
       "/api/workspace-admin",
       "/api/public/content",
       "/api/content-studio",
+      "/api/payroll",
     ],
   });
 });
@@ -268,6 +272,7 @@ app.use("/api/user-permissions", sensitiveAdminLimiter);
 app.use("/api/delegated-administration", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
+app.use("/api/payroll", sensitiveAdminLimiter);
 
 app.use(
   "/api/release2-final/backups/history",
@@ -296,6 +301,8 @@ app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollProcessingRoutes);
 app.use(
   "/api/debts",
   requireAuth,

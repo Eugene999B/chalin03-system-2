@@ -297,7 +297,7 @@ function drawVerificationPanel(doc, document, qrBuffer) {
     }
   }
   doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(5.2).text(
-    "SCAN TO MATCH THE DOCUMENT NUMBER AND CHECKSUM",
+    "SCAN TO VERIFY THIS DOCUMENT ONLINE",
     x + width - qrSize - 14,
     y + 101,
     { width: qrSize + 12, align: "center", lineBreak: false }

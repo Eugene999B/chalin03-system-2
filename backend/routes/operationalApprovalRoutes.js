@@ -11,6 +11,7 @@ const {
   getRole,
   getUserId,
   listOperationalRequests,
+  listActiveReturnReservations,
   money,
   positiveInteger,
   rejectOperationalRequest,
@@ -194,6 +195,25 @@ async function createReturnRefundRequest(req, res) {
     }
 
     const remaining = Number(item.quantity_sold || 0) - Number(item.quantity_returned || 0);
+
+    const activeReservations = await listActiveReturnReservations(connection, {
+      branchId,
+      saleId,
+      forUpdate: true,
+    });
+    const activeForProduct = activeReservations.filter(
+      (reservation) => Number(reservation.product_id) === Number(productId)
+    );
+    if (activeForProduct.length > 0) {
+      const codes = activeForProduct.map((reservation) => reservation.request_code).join(", ");
+      const error = new Error(
+        `This item already has an active refund request (${codes}). Approve/retry it or reject it before creating another return request.`
+      );
+      error.statusCode = 409;
+      error.code = "ACTIVE_RETURN_REQUEST_EXISTS";
+      throw error;
+    }
+
     if (quantity > remaining) {
       throw Object.assign(
         new Error(`Only ${remaining} unit(s) remain available for return.`),
@@ -207,6 +227,25 @@ async function createReturnRefundRequest(req, res) {
         new Error(`Refund cannot exceed GHS ${maximumRefund.toFixed(2)} for this quantity.`),
         { statusCode: 400 }
       );
+    }
+
+    const [priorRefundRows] = await connection.query(
+      `SELECT COALESCE(SUM(refund_amount), 0) AS refunded_total
+       FROM returns
+       WHERE branch_id = ? AND sale_id = ? AND return_type = 'refund'`,
+      [branchId, saleId]
+    );
+    const collectedAvailable = Math.max(
+      0,
+      money(sale.amount_paid) - money(priorRefundRows[0]?.refunded_total)
+    );
+    if (refundAmount - collectedAvailable > 0.009) {
+      const error = new Error(
+        `Only GHS ${collectedAvailable.toFixed(2)} of collected customer money remains available to refund on this sale.`
+      );
+      error.statusCode = 409;
+      error.code = "REFUND_EXCEEDS_COLLECTED_MONEY";
+      throw error;
     }
 
     const payload = {
@@ -584,11 +623,20 @@ async function executeApprovedRequest(req, res) {
       action_result: responseBody,
     });
   } catch (error) {
-    await finishOperationalExecution({
+    const finalized = await finishOperationalExecution({
       requestId,
       success: false,
       errorMessage: error.message,
-    }).catch(() => {});
+    }).catch(() => null);
+
+    if (finalized?.execution_status === "executed") {
+      return res.json({
+        status: "success",
+        message: "The approved return was committed successfully. The internal response was interrupted after the business transaction completed.",
+        request_id: requestId,
+      });
+    }
+
     return res.status(500).json({
       status: "error",
       code: "APPROVED_ACTION_EXECUTION_ERROR",

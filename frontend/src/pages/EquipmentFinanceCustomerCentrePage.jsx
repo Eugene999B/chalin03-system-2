@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/phase-one/customers";
 
@@ -50,6 +51,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_CUSTOMER);
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
@@ -82,6 +84,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
         customer.whatsapp_phone,
         customer.email,
         customer.address,
+        customer.contact_person,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
@@ -93,6 +96,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
   }
 
   function openCreate() {
+    setSelectedCustomer(null);
     setEditing({ id: null });
     setForm(EMPTY_CUSTOMER);
     setConfirmDuplicate(false);
@@ -100,6 +104,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
   }
 
   function openEdit(customer) {
+    setSelectedCustomer(null);
     setEditing(customer);
     setForm({
       customer_name: customer.customer_name || "",
@@ -152,14 +157,14 @@ export default function EquipmentFinanceCustomerCentrePage() {
   );
 
   return (
-    <main className="finance-simple">
+    <main className="finance-simple finance-simplified">
       <header className="finance-simple__hero">
         <div>
-          <p>Reusable customer records</p>
+          <p>Search first, open one record</p>
           <h1>Finance Customer Centre</h1>
           <span>
-            Create, search and update customers once, then start an installment directly
-            from their profile. Finance customers are company-wide and do not require a Hire location.
+            Find the customer you need, then open that profile. Full customer details stay hidden
+            until a staff member deliberately selects the record.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -182,8 +187,17 @@ export default function EquipmentFinanceCustomerCentrePage() {
 
       <section className="finance-simple__section">
         <div className="finance-simple__toolbar">
-          <div><p className="finance-simple__eyebrow">Customer register</p><h2>{visibleCustomers.length} customer(s)</h2></div>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, code, email or address" />
+          <div>
+            <p className="finance-simple__eyebrow">Choose customer</p>
+            <h2>{visibleCustomers.length} result(s)</h2>
+          </div>
+          <input
+            aria-label="Search Finance customer register"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name, phone, code, email or address"
+            autoComplete="off"
+          />
         </div>
 
         {loading ? <div className="finance-simple__empty">Loading Finance customers…</div> : null}
@@ -191,35 +205,73 @@ export default function EquipmentFinanceCustomerCentrePage() {
 
         <div className="finance-simple__customer-grid">
           {visibleCustomers.map((customer) => (
-            <article className="finance-simple__customer" key={customer.id}>
-              <div className="finance-simple__customer-body">
-                <div className="finance-simple__card-head">
-                  <div>
-                    <span className="finance-simple__pill">{customer.customer_code}</span>
-                    <h3>{customer.customer_name}</h3>
-                    <p>{customer.phone || "No phone recorded"}</p>
-                  </div>
-                  <span className="finance-simple__pill is-good">{customer.customer_type || "individual"}</span>
-                </div>
-                <p>{customer.address || "No address recorded"}</p>
-                <small>{customer.email || customer.whatsapp_phone || "No secondary contact"}</small>
-                <div className="finance-simple__facts">
-                  <div><span>Applications</span><strong>{customer.finance_application_count || 0}</strong></div>
-                  <div><span>Agreements</span><strong>{customer.finance_agreement_count || 0}</strong></div>
-                  <div><span>Outstanding</span><strong>{money(customer.outstanding_balance)}</strong></div>
-                  <div><span>Contact person</span><strong>{customer.contact_person || "—"}</strong></div>
-                </div>
-                <div className="finance-simple__card-actions">
-                  <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.id}`}>
-                    Start Installment
-                  </Link>
-                  {canManage ? <button type="button" onClick={() => openEdit(customer)}>Edit customer</button> : null}
-                </div>
+            <article className="finance-simple__customer finance-simplified__customer-row" key={customer.id}>
+              <div className="finance-simplified__customer-summary">
+                <span className="finance-simple__pill">{customer.customer_code}</span>
+                <h3>{customer.customer_name}</h3>
+                <p>{customer.phone || "No phone recorded"}</p>
+                <small>{customer.customer_type || "individual"}</small>
+              </div>
+              <div className="finance-simplified__customer-balance">
+                <span>Outstanding balance</span>
+                <strong>{money(customer.outstanding_balance)}</strong>
+                <small>{customer.finance_agreement_count || 0} agreement(s)</small>
+              </div>
+              <div className="finance-simplified__customer-actions">
+                <button className="is-primary" type="button" onClick={() => setSelectedCustomer(customer)}>
+                  View Details
+                </button>
+                <Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.id}`}>
+                  Start Installment
+                </Link>
               </div>
             </article>
           ))}
         </div>
       </section>
+
+      {selectedCustomer ? (
+        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}>
+          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance customer details" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="finance-simple__section-header">
+              <div>
+                <p className="finance-simple__eyebrow">Selected customer</p>
+                <h2>{selectedCustomer.customer_name}</h2>
+                <span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span>
+              </div>
+              <button type="button" onClick={() => setSelectedCustomer(null)}>Close</button>
+            </div>
+            <div className="finance-simple__summary">
+              <article><span>Phone</span><strong>{selectedCustomer.phone || "Not recorded"}</strong></article>
+              <article><span>WhatsApp</span><strong>{selectedCustomer.whatsapp_phone || "Not recorded"}</strong></article>
+              <article><span>Email</span><strong>{selectedCustomer.email || "Not recorded"}</strong></article>
+              <article><span>Contact person</span><strong>{selectedCustomer.contact_person || "Not recorded"}</strong></article>
+              <article><span>Applications</span><strong>{selectedCustomer.finance_application_count || 0}</strong></article>
+              <article><span>Agreements</span><strong>{selectedCustomer.finance_agreement_count || 0}</strong></article>
+              <article><span>Outstanding</span><strong>{money(selectedCustomer.outstanding_balance)}</strong></article>
+            </div>
+            <div className="finance-simple__section">
+              <h3>Address</h3>
+              <p>{selectedCustomer.address || "No address recorded."}</p>
+              {selectedCustomer.risk_notes ? (
+                <details>
+                  <summary>Show internal risk / service note</summary>
+                  <p>{selectedCustomer.risk_notes}</p>
+                </details>
+              ) : null}
+            </div>
+            <div className="finance-simple__sticky-actions">
+              <span>Actions apply only to this selected customer.</span>
+              <div>
+                {canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}
+                <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>
+                  Start Installment
+                </Link>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {editing ? (
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>

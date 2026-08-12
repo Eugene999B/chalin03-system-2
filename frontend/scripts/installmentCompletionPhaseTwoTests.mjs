@@ -15,6 +15,7 @@ const profiles = read("src/pages/EquipmentFinanceCustomerPortfolioPage.jsx");
 const payments = read("src/pages/EquipmentFinancePaymentsCentrePage.jsx");
 const collections = read("src/pages/EquipmentFinanceCollectionsMinimalPage.jsx");
 const css = read("src/styles/equipmentFinanceAccountsCompletion.css");
+const simplifiedCss = read("src/styles/equipmentFinanceSimplifiedWorkspace.css");
 const workflow = read("../.github/workflows/chalin03-verification.yml");
 
 for (const stage of ["accounts", "customer-portfolios", "collections", "collections-core"]) {
@@ -43,37 +44,43 @@ assert.match(home, /Customer Profiles/);
 assert.match(home, /Active Installments/);
 assert.match(home, /Payments & Collections/);
 
-assert.match(accounts, /Account monitoring only/);
+assert.match(accounts, /Search active installment accounts/);
+assert.match(accounts, /Open Account/);
 assert.match(accounts, /Record Payment/);
 assert.match(accounts, /Customer Profile/);
-assert.match(accounts, /Corrections & Reversals/);
 assert.match(accounts, /reconciliation/);
+assert.match(accounts, /finance-simplified__compact-register/);
 assert.doesNotMatch(accounts, /axiosClient\.post/);
 
-assert.match(profiles, /One customer, complete installment history/);
+assert.match(profiles, /Search first, open only what you need/);
 assert.match(profiles, /finance-customers/);
 assert.match(profiles, /customer\.applications/);
 assert.match(profiles, /customer\.agreements/);
 assert.match(profiles, /profile\?\.payments/);
 assert.match(profiles, /profile\?\.schedule/);
 assert.match(profiles, /credit-applications\/\$\{customer\.latest_application\.application_id\}\/image/);
+assert.match(profiles, /No customer selected/);
+assert.doesNotMatch(profiles, /rows\[0\]/);
 assert.doesNotMatch(profiles, /axiosClient\.post/);
 
 assert.match(payments, /Payments &amp; Collections Centre/);
-assert.match(payments, /EquipmentFinanceCollectionsMinimalPage/);
+assert.match(payments, /EquipmentFinanceCollectionsMinimalPage embedded/);
 assert.match(payments, /Corrections &amp; Reversals/);
-assert.match(payments, /Record Payment/);
-assert.match(payments, /oldest-due-first/i);
+assert.doesNotMatch(payments, /priority-grid/);
+assert.match(collections, /Record Payment/);
 assert.match(collections, /accounts\/\$\{selected\.agreement_id\}\/collections/);
 assert.match(collections, /idempotency_key/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
+assert.match(collections, /Search payment-ready Finance accounts/);
 
 assert.match(css, /@media \(max-width: 900px\)/);
 assert.match(css, /@media \(max-width: 640px\)/);
 assert.match(css, /finance-accounts__split/);
 assert.match(css, /finance-accounts__customer-scroll/);
 assert.match(css, /finance-payments__entry/);
+assert.match(simplifiedCss, /finance-simplified__compact-record/);
+assert.match(simplifiedCss, /finance-simplified__selection-panel/);
 
 assert.match(workflow, /equipmentFinanceCompletionPhaseTwo\.spec\.js/);
 assert.match(workflow, /finance-completion-phase-two-browser\.log/);

@@ -191,16 +191,20 @@ test("only product quantity is updated and destructive or financial rewrites are
   );
 });
 
-test("Railway runs the correction after prior stock counts and before customer repairs", () => {
-  const start = packageJson.scripts.start;
-  const previous = start.indexOf(
+test("controlled maintenance runs the correction after prior stock counts and before customer repairs", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const previous = maintenance.indexOf(
     "runBossApprovedProductQuantityCorrection20260804.js"
   );
-  const current = start.indexOf(
+  const current = maintenance.indexOf(
     "runKwabenaProductQuantityCorrection20260806.js"
   );
-  const next = start.indexOf("runCustomerMergeAuditDateSanitizer20260805.js");
+  const next = maintenance.indexOf("runCustomerMergeAuditDateSanitizer20260805.js");
   assert.ok(previous >= 0 && current > previous && next > current);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["repair:kwabena-main-store-quantities:20260806:production"],
     "node scripts/runKwabenaProductQuantityCorrection20260806.js"
