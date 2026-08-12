@@ -167,7 +167,11 @@ async function schemaMigrations(connection, allTables) {
   }));
 }
 
-async function validateRecoverySchema(connection, backup) {
+async function validateRecoverySchema(
+  connection,
+  backup,
+  { allowCrossEnvironmentRecovery = false } = {}
+) {
   const allTables = await existingTables(connection);
   const inventory = classifyDatabaseTables(allTables);
   const currentTableColumns = {};
@@ -188,6 +192,7 @@ async function validateRecoverySchema(connection, backup) {
     signingSecret: String(process.env.BACKUP_SIGNING_SECRET || "").trim(),
     requireSignature: false,
     allowAdditiveSchemaDrift: true,
+    allowCrossEnvironmentRecovery,
   });
 
   return {
@@ -324,7 +329,9 @@ router.post(
 
     const connection = await pool.getConnection();
     try {
-      const validation = await validateRecoverySchema(connection, backup);
+      const validation = await validateRecoverySchema(connection, backup, {
+        allowCrossEnvironmentRecovery: true,
+      });
       const ready = recoverySchemaReady(validation);
       return res.status(validation.valid ? 200 : 400).json({
         status: validation.valid ? "success" : "error",
@@ -370,7 +377,9 @@ router.post(
 
     const connection = await pool.getConnection();
     try {
-      const before = await validateRecoverySchema(connection, backup);
+      const before = await validateRecoverySchema(connection, backup, {
+        allowCrossEnvironmentRecovery: true,
+      });
       if (!before.valid) {
         return res.status(400).json({
           status: "error",
@@ -386,7 +395,9 @@ router.post(
         backup,
         env: recoveryEnvironmentForRequest(req),
       });
-      const validation = await validateRecoverySchema(connection, backup);
+      const validation = await validateRecoverySchema(connection, backup, {
+        allowCrossEnvironmentRecovery: true,
+      });
       const remainingSourceColumnCount = sourceOnlyColumnCount(validation);
       const ready = recoverySchemaReady(validation);
 
@@ -453,7 +464,9 @@ router.post(
 
     const connection = await pool.getConnection();
     try {
-      const validation = await validateRecoverySchema(connection, backup);
+      const validation = await validateRecoverySchema(connection, backup, {
+        allowCrossEnvironmentRecovery: true,
+      });
       if (!validation.valid) {
         return res.status(400).json({
           status: "error",
