@@ -23,6 +23,10 @@ const api = fs.readFileSync(
   path.join(repoRoot, "frontend/src/chalin-one/ai/aiApi.js"),
   "utf8"
 );
+const documentClient = fs.readFileSync(
+  path.join(repoRoot, "frontend/src/chalin-one/ai/aiDocumentClient.js"),
+  "utf8"
+);
 const css = fs.readFileSync(
   path.join(repoRoot, "frontend/src/chalin-one/ai/documentIntelligence.css"),
   "utf8"
@@ -68,8 +72,27 @@ assert.match(api, /listAiKnowledgeDocuments/);
 assert.match(api, /listAiKnowledgeDocumentChunks/);
 assert.match(api, /getAiKnowledgeChunk/);
 assert.match(api, /versions\/\$\{encodeURIComponent\(versionId\)\}\/documents/);
+
+// Natural chat now uses the already-governed Document Studio output instead of
+// making the user find a separate export control. Incomplete requests are left
+// to the server clarification turn; only a completed answer is exported.
+assert.match(documentClient, /AI_DOCUMENT_FORMATS = Object\.freeze\(\["pdf", "xlsx", "csv", "docx"\]\)/);
+assert.match(documentClient, /requestedAiDocumentFormat/);
+assert.match(documentClient, /generateAndDownloadAiDocument/);
+assert.match(api, /requestedAiDocumentFormat\(message\)/);
+assert.match(api, /generateAndDownloadAiDocument\(\{/);
+assert.match(api, /result\?\.reasoning\?\.intent !== "clarification"/);
+assert.match(api, /result\?\.provider\?\.finish_reason !== "clarification"/);
+assert.match(api, /status:\s*"downloaded"/);
+assert.match(api, /status:\s*"failed"/);
+assert.ok(
+  api.indexOf("const result = unwrap(response) || null;") <
+    api.indexOf("await generateAndDownloadAiDocument({"),
+  "document generation must use the saved assistant answer, never run before the chat result exists"
+);
+
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /@media \(max-width: 420px\)/);
 assert.match(css, /prefers-reduced-motion/);
 
-console.log("CHALIN ONE Document Intelligence source contract passed.");
+console.log("CHALIN ONE Document Intelligence + natural chat export source contract passed.");
