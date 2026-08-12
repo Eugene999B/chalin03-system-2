@@ -68,66 +68,98 @@ const currentSchemaMigrations = [
   { migration_name: "phase0", description: "test", applied_at: null },
 ];
 
-function validateWith(env) {
-  return validateBackupContract(
-    {
-      backup: makeBackup(),
-      currentIncludedTables: ["users", "products"],
-      currentTableColumns,
-      currentTableMetadata,
-      currentSchemaMigrations,
-      signingSecret: "b".repeat(64),
-      requireSignature: true,
-      allowAdditiveSchemaDrift: true,
-    },
-    env
-  );
+function withEnvironment(values, callback) {
+  const keys = [
+    "NODE_ENV",
+    "RAILWAY_ENVIRONMENT_NAME",
+    "RAILWAY_ENVIRONMENT_ID",
+    "RAILWAY_PUBLIC_DOMAIN",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  try {
+    for (const key of keys) delete process.env[key];
+    for (const [key, value] of Object.entries(values)) {
+      if (value !== undefined && value !== null) process.env[key] = String(value);
+    }
+    return callback();
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
+function validateCurrentEnvironment() {
+  return validateBackupContract({
+    backup: makeBackup(),
+    currentIncludedTables: ["users", "products"],
+    currentTableColumns,
+    currentTableMetadata,
+    currentSchemaMigrations,
+    signingSecret: "b".repeat(64),
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
 }
 
 test("Railway staging is recognized by its public domain when environment name is unavailable", () => {
-  const env = {
-    NODE_ENV: "production",
-    RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
-  };
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+    },
+    () => {
+      assert.equal(isConfirmedRailwayStaging(), true);
+      assert.equal(isLiveProductionEnvironment(), false);
 
-  assert.equal(isConfirmedRailwayStaging(env), true);
-  assert.equal(isLiveProductionEnvironment(env), false);
-
-  const report = validateWith(env);
-  assert.equal(report.valid, true, report.errors.join("\n"));
-  assert.equal(report.crossEnvironmentRecovery, true);
-  assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
-  assert.match(report.warnings.join(" "), /signature|future_table|future_runtime/i);
+      const report = validateCurrentEnvironment();
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+      assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
+      assert.match(
+        report.warnings.join(" "),
+        /signature|future_table|future_runtime/i
+      );
+    }
+  );
 });
 
 test("Railway staging is recognized by its environment id when environment name and public domain are unavailable", () => {
-  const env = {
-    NODE_ENV: "production",
-    RAILWAY_ENVIRONMENT_ID: CHALIN_ONE_STAGING_ENVIRONMENT_ID,
-  };
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_ID: CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+    },
+    () => {
+      assert.equal(isConfirmedRailwayStaging(), true);
+      assert.equal(isLiveProductionEnvironment(), false);
 
-  assert.equal(isConfirmedRailwayStaging(env), true);
-  assert.equal(isLiveProductionEnvironment(env), false);
-
-  const report = validateWith(env);
-  assert.equal(report.valid, true, report.errors.join("\n"));
-  assert.equal(report.crossEnvironmentRecovery, true);
+      const report = validateCurrentEnvironment();
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+    }
+  );
 });
 
 test("an unidentified production deployment remains strict", () => {
-  const env = {
-    NODE_ENV: "production",
-    RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-production.up.railway.app",
-  };
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-production.up.railway.app",
+    },
+    () => {
+      assert.equal(isConfirmedRailwayStaging(), false);
+      assert.equal(isLiveProductionEnvironment(), true);
 
-  assert.equal(isConfirmedRailwayStaging(env), false);
-  assert.equal(isLiveProductionEnvironment(env), true);
-
-  const report = validateWith(env);
-  assert.equal(report.valid, false);
-  assert.equal(Boolean(report.crossEnvironmentRecovery), false);
-  assert.match(
-    report.errors.join(" "),
-    /signature|unknown backup migrations|not supported by the current database/i
+      const report = validateCurrentEnvironment();
+      assert.equal(report.valid, false);
+      assert.equal(Boolean(report.crossEnvironmentRecovery), false);
+      assert.match(
+        report.errors.join(" "),
+        /signature|unknown backup migrations|not supported by the current database/i
+      );
+    }
   );
 });
