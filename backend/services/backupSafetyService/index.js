@@ -90,27 +90,33 @@ function isCrossEnvironmentRecovery(
   if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
 
   const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
-  const liveProduction = isLiveProductionEnvironment(env);
+  const railwayEnvironment = railwayEnvironmentName(env);
 
-  // A positively identified Railway staging service is allowed to validate a
-  // production-signed v2 package even when that service runs NODE_ENV=production
-  // or receives a production-like Railway environment name through deployment
-  // metadata. The staging identity (environment id/domain) wins over NODE_ENV.
+  // An explicitly identified Railway production environment is an immutable
+  // boundary unless the same server identity also proves it is the dedicated
+  // CHALIN ONE staging service (environment id/public domain). This protects
+  // production from accidental opt-in while allowing Railway's production-like
+  // Node runtime settings on staging.
+  if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
+    return false;
+  }
+
+  // A positively identified Railway staging service may validate a production-
+  // signed v2 package even when target-side HMAC enforcement would normally be
+  // enabled by NODE_ENV=production.
   if (confirmedRailwayStaging) return true;
 
-  // Never permit an unidentified/live production deployment to enter recovery
-  // compatibility mode, even if a caller accidentally supplies the server-only
-  // staging option.
-  if (liveProduction) return false;
+  // This explicit flag is server-only and is supplied only by the protected
+  // staging recovery router after its staging request gate. It lets that route
+  // work when NODE_ENV is production but Railway identity metadata is absent.
+  if (allowCrossEnvironmentRecovery === true) {
+    return requireSignature === false;
+  }
 
-  // Outside confirmed Railway staging, cross-environment recovery is available
-  // only when target-side HMAC verification has explicitly been disabled. The
-  // protected staging router sets allowCrossEnvironmentRecovery after its host
-  // gate; local/non-production recovery tests may rely on the same safe mode.
-  if (requireSignature !== false) return false;
-  if (allowCrossEnvironmentRecovery === true) return true;
-
-  return true;
+  // Generic local/non-production recovery remains available only when target-
+  // side signature enforcement has been deliberately disabled.
+  if (isLiveProductionEnvironment(env)) return false;
+  return requireSignature === false;
 }
 
 function isCompatibilityError(message) {
