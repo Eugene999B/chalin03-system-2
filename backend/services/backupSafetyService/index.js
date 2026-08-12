@@ -3,6 +3,10 @@
 const base = require("../backupSafetyServiceBase");
 
 const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
+const CHALIN_ONE_STAGING_PUBLIC_DOMAIN =
+  "chalin03-system-2-staging.up.railway.app";
+const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
+  "db796450-1b80-42e8-9988-db3e90ca0713";
 
 function cleanEnvironmentValue(value) {
   return String(value || "").trim().toLowerCase();
@@ -12,16 +16,35 @@ function railwayEnvironmentName(env = process.env) {
   return cleanEnvironmentValue(env.RAILWAY_ENVIRONMENT_NAME);
 }
 
+function railwayEnvironmentId(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_ENVIRONMENT_ID);
+}
+
+function railwayPublicDomain(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_PUBLIC_DOMAIN);
+}
+
+function isConfirmedRailwayStaging(env = process.env) {
+  const environmentName = railwayEnvironmentName(env);
+  if (environmentName === "staging") return true;
+
+  const environmentId = railwayEnvironmentId(env);
+  if (environmentId === CHALIN_ONE_STAGING_ENVIRONMENT_ID) return true;
+
+  return railwayPublicDomain(env) === CHALIN_ONE_STAGING_PUBLIC_DOMAIN;
+}
+
 function isLiveProductionEnvironment(env = process.env) {
+  // Railway staging sometimes runs the Node process with NODE_ENV=production.
+  // The Railway service identity is more authoritative than NODE_ENV for
+  // deciding whether cross-environment recovery controls are permitted.
+  if (isConfirmedRailwayStaging(env)) return false;
+
   const railwayEnvironment = railwayEnvironmentName(env);
   if (railwayEnvironment) {
     return railwayEnvironment === "production";
   }
   return cleanEnvironmentValue(env.NODE_ENV) === "production";
-}
-
-function isConfirmedRailwayStaging(env = process.env) {
-  return railwayEnvironmentName(env) === "staging";
 }
 
 function canOmitCurrentColumn(columnMetadata) {
@@ -41,16 +64,20 @@ function isCrossEnvironmentRecovery(
     backup?.backup_type === base.BACKUP_TYPE &&
     backup?.version === base.BACKUP_MANIFEST_VERSION;
 
-  if (!signedV2Backup || isLiveProductionEnvironment(env)) {
+  if (!signedV2Backup) {
+    return false;
+  }
+
+  const confirmedStaging = isConfirmedRailwayStaging(env);
+  if (!confirmedStaging && isLiveProductionEnvironment(env)) {
     return false;
   }
 
   // Ordinary non-production callers opt into recovery by setting
-  // requireSignature=false. Railway staging is also authoritative here because
-  // some deployment stacks still set NODE_ENV=production while the actual
-  // isolated Railway environment is staging. Never let that deployment detail
-  // turn a staging recovery validation back into live-production HMAC matching.
-  return requireSignature === false || isConfirmedRailwayStaging(env);
+  // requireSignature=false. Railway staging is authoritative even when the
+  // process itself uses NODE_ENV=production, because the isolated Railway
+  // environment/domain identifies the target as the trial recovery service.
+  return confirmedStaging || requireSignature === false;
 }
 
 function isCompatibilityError(message) {
@@ -253,9 +280,13 @@ function validateBackupContract(args) {
 
 module.exports = {
   ...base,
+  CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+  CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   isConfirmedRailwayStaging,
   isCrossEnvironmentRecovery,
   isLiveProductionEnvironment,
+  railwayEnvironmentId,
   railwayEnvironmentName,
+  railwayPublicDomain,
   validateBackupContract,
 };
