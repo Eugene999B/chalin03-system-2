@@ -9,6 +9,8 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const {
   BACKUP_MANIFEST_VERSION,
   BACKUP_TYPE,
+  CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+  CHALIN_ONE_STAGING_GIT_BRANCH,
   CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   checksumBackup,
   classifyDatabaseTables,
@@ -63,10 +65,18 @@ function isConfirmedStagingRequest(req) {
 
 function recoveryEnvironmentForRequest(req) {
   if (!isConfirmedStagingRequest(req)) return process.env;
+
+  // Once the request has crossed the staging-only route gate, use an explicit
+  // recovery identity for validation and migration preparation. Railway has
+  // presented this dedicated staging runtime with production-like labels in
+  // the past; those labels must not silently switch this protected route back
+  // into the live-production validation policy.
   return {
     ...process.env,
-    RAILWAY_PUBLIC_DOMAIN:
-      process.env.RAILWAY_PUBLIC_DOMAIN || CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+    RAILWAY_ENVIRONMENT_NAME: "staging",
+    RAILWAY_ENVIRONMENT_ID: CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+    RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+    RAILWAY_GIT_BRANCH: CHALIN_ONE_STAGING_GIT_BRANCH,
   };
 }
 
@@ -170,7 +180,10 @@ async function schemaMigrations(connection, allTables) {
 async function validateRecoverySchema(
   connection,
   backup,
-  { allowCrossEnvironmentRecovery = false } = {}
+  {
+    allowCrossEnvironmentRecovery = false,
+    recoveryEnvironment = process.env,
+  } = {}
 ) {
   const allTables = await existingTables(connection);
   const inventory = classifyDatabaseTables(allTables);
@@ -193,6 +206,7 @@ async function validateRecoverySchema(
     requireSignature: false,
     allowAdditiveSchemaDrift: true,
     allowCrossEnvironmentRecovery,
+    recoveryEnvironment,
   });
 
   return {
@@ -331,6 +345,7 @@ router.post(
     try {
       const validation = await validateRecoverySchema(connection, backup, {
         allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment: recoveryEnvironmentForRequest(req),
       });
       const ready = recoverySchemaReady(validation);
       return res.status(validation.valid ? 200 : 400).json({
@@ -375,10 +390,12 @@ router.post(
       });
     }
 
+    const recoveryEnvironment = recoveryEnvironmentForRequest(req);
     const connection = await pool.getConnection();
     try {
       const before = await validateRecoverySchema(connection, backup, {
         allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment,
       });
       if (!before.valid) {
         return res.status(400).json({
@@ -393,10 +410,11 @@ router.post(
       const preparation = await prepareStagingBackupRecoverySchema({
         connection,
         backup,
-        env: recoveryEnvironmentForRequest(req),
+        env: recoveryEnvironment,
       });
       const validation = await validateRecoverySchema(connection, backup, {
         allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment,
       });
       const remainingSourceColumnCount = sourceOnlyColumnCount(validation);
       const ready = recoverySchemaReady(validation);
@@ -463,9 +481,11 @@ router.post(
     }
 
     const connection = await pool.getConnection();
+    let validation;
     try {
-      const validation = await validateRecoverySchema(connection, backup, {
+      validation = await validateRecoverySchema(connection, backup, {
         allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment: recoveryEnvironmentForRequest(req),
       });
       if (!validation.valid) {
         return res.status(400).json({
@@ -491,6 +511,12 @@ router.post(
       connection.release();
     }
 
+    // Preserve the staging authorization and the exact successful validation
+    // across Express router boundaries. The delegated restore implementation
+    // must not reclassify this request using ambiguous Railway environment
+    // labels after the staging preflight has already passed.
+    req.signedV2StagingRecoveryAuthorized = true;
+    req.stagingRecoveryValidation = validation;
     return next("router");
   })
 );
