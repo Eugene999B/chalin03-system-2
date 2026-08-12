@@ -39,6 +39,20 @@ const publicRedirectRoutes = require("./publicRedirectRoutes");
 const router = express.Router();
 const startedAt = Date.now();
 
+// Keep historically protected route-level readiness dependencies explicit here
+// even though the shared systemReadinessContract is the runtime source of truth.
+// Existing release guards intentionally inspect this route file, and this
+// assertion also fails startup immediately if central readiness ever drops one.
+const ROUTE_LOCAL_READINESS_SENTINELS = Object.freeze([
+  "public_redirect_rules",
+  "worker_hr_letters",
+]);
+for (const tableName of ROUTE_LOCAL_READINESS_SENTINELS) {
+  if (!EXPECTED_TABLES.includes(tableName)) {
+    throw new Error(`System readiness contract omitted required table: ${tableName}`);
+  }
+}
+
 function appVersion() {
   return process.env.APP_VERSION || APP_VERSION;
 }
