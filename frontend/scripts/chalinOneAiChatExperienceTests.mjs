@@ -13,6 +13,7 @@ function read(relativePath) {
 const workspace = read("src/chalin-one/ai/ChalinIntelligenceWorkspace.jsx");
 const intelligenceCss = read("src/chalin-one/ai/chalinIntelligence.css");
 const appearanceCss = read("src/styles/appearance.css");
+const groupLoginCss = read("src/styles/groupOperationsLogin.css");
 const appearanceContext = read("src/appearance/AppearanceContext.jsx");
 const appearanceToggle = read("src/appearance/AppearanceToggle.jsx");
 const chatPreferences = read("src/appearance/aiChatPreferences.js");
@@ -83,6 +84,18 @@ assert.match(appearanceContext, /persistAppearance/);
 assert.match(appearanceContext, /prefers-color-scheme: dark/);
 assert.match(appearanceToggle, /Dark mode/);
 assert.match(appearanceToggle, /Light mode/);
+
+// The global dark form rule must not turn the intentionally light Command Gate
+// credential controls into white-on-white text. Typed text, placeholders,
+// caret and Chrome autofill are explicitly scoped back to readable ink.
+assert.match(appearanceCss, /html\[data-theme="dark"\] input/);
+assert.match(groupLoginCss, /html\[data-theme="dark"\] \.group-login \.gate4__field input/);
+assert.match(groupLoginCss, /background:\s*#ffffff !important/);
+assert.match(groupLoginCss, /color:\s*#10223a !important/);
+assert.match(groupLoginCss, /-webkit-text-fill-color:\s*#10223a !important/);
+assert.match(groupLoginCss, /input::placeholder/);
+assert.match(groupLoginCss, /input:-webkit-autofill/);
+assert.match(groupLoginCss, /box-shadow:\s*0 0 0 1000px #ffffff inset !important/);
 
 // Conversation-list refreshes must not wipe the active chat. Resetting the chat
 // is allowed only for a real persona transition, explicit New chat, or a
