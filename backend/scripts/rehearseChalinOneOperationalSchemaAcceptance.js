@@ -11,82 +11,14 @@ const {
   STAGING_OPERATIONAL_MIGRATIONS,
   applyStagingOperationalPlan,
 } = require("./upgradeChalinOneStagingOperationalSchema");
+const {
+  ADMIN_RUNTIME_COLUMNS,
+  ADMIN_RUNTIME_TABLES,
+} = require("../services/systemReadinessContract");
 
 const DATABASE_PATTERN = /^chalin_one_operational_acceptance(?:_[a-z0-9_]+)?$/i;
 const REPOSITORY_ROOT = path.resolve(__dirname, "../..");
 const BASE_SCHEMA_PATH = path.join(REPOSITORY_ROOT, "database", "schema.sql");
-
-const ADMIN_RUNTIME_TABLES = Object.freeze([
-  "branches",
-  "schema_migrations",
-  "users",
-  "user_branch_access",
-  "business_units",
-  "business_locations",
-  "user_business_access",
-  "activity_log",
-  "auth_sessions",
-  "settings",
-
-  // Admin / permissions / security
-  "protected_action_sessions",
-  "privileged_action_ledger",
-  "owner_break_glass_accounts",
-  "owner_break_glass_mfa_enrollments",
-  "owner_break_glass_recovery_codes",
-  "owner_break_glass_login_history",
-  "user_permission_overrides",
-  "security_event_dismissals",
-  "user_category_assignment_conflicts",
-  "worker_category_assignment_conflicts",
-
-  // Backups / diagnostics support
-  "backup_history",
-
-  // Workers / employment documents
-  "worker_profiles",
-  "worker_assignments",
-  "worker_family_members",
-  "worker_emergency_contacts",
-  "worker_private_files",
-  "worker_print_history",
-  "worker_identity_sequences",
-  "worker_hr_letters",
-  "document_signature_settings",
-  "standalone_hr_documents",
-
-  // Payroll
-  "payroll_compensation_profiles",
-  "payroll_periods",
-  "payroll_entries",
-  "payroll_salary_payments",
-
-  // Inventory traceability / loss detection
-  "inventory_label_batches",
-  "inventory_units",
-  "inventory_unit_events",
-  "inventory_count_sessions",
-  "inventory_loss_investigations",
-]);
-
-const ADMIN_RUNTIME_COLUMNS = Object.freeze([
-  Object.freeze(["users", "login_phone_normalized"]),
-  Object.freeze(["users", "primary_workspace_code"]),
-  Object.freeze(["users", "category_assignment_status"]),
-  Object.freeze(["auth_sessions", "device_type"]),
-  Object.freeze(["auth_sessions", "location_source"]),
-  Object.freeze(["worker_profiles", "workspace_code"]),
-  Object.freeze(["worker_profiles", "business_unit_id"]),
-  Object.freeze(["worker_profiles", "id_card_serial"]),
-  Object.freeze(["settings", "worker_id_card_validity_months"]),
-  Object.freeze(["settings", "worker_employee_number_prefix"]),
-  Object.freeze(["worker_hr_letters", "approval_signature_data_url"]),
-  Object.freeze(["worker_hr_letters", "signature_captured_at"]),
-  Object.freeze(["products", "inventory_tracking_mode"]),
-  Object.freeze(["products", "inventory_product_code"]),
-  Object.freeze(["products", "inventory_risk_tier"]),
-  Object.freeze(["products", "inventory_traceability_state"]),
-]);
 
 function clean(value) {
   return String(value ?? "").trim();
