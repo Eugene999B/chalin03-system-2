@@ -1,5 +1,6 @@
 const express = require("express");
 
+const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
@@ -108,6 +109,35 @@ async function writeSecondaryAudit(event) {
   }
 }
 
+async function bindTransferShortagesToDestinationProducts({ transferId, destinationBranchId }) {
+  const cleanTransferId = Number(transferId);
+  const cleanDestinationBranchId = Number(destinationBranchId);
+  if (
+    !Number.isInteger(cleanTransferId) ||
+    cleanTransferId <= 0 ||
+    !Number.isInteger(cleanDestinationBranchId) ||
+    cleanDestinationBranchId <= 0
+  ) {
+    throw new Error("Invalid transfer identity while binding shortage investigation products.");
+  }
+
+  await pool.query(
+    `UPDATE inventory_loss_investigations i
+     INNER JOIN inventory_transfer_units itu
+       ON itu.unit_id = i.unit_id
+      AND itu.transfer_id = ?
+     INNER JOIN stock_transfer_items sti
+       ON sti.id = itu.transfer_item_id
+      AND sti.transfer_id = itu.transfer_id
+     SET i.product_id = sti.destination_product_id
+     WHERE i.branch_id = ?
+       AND i.investigation_type = 'transfer_shortage'
+       AND sti.destination_product_id IS NOT NULL
+       AND i.product_id <> sti.destination_product_id`,
+    [cleanTransferId, cleanDestinationBranchId]
+  );
+}
+
 router.use(requireAuth);
 router.use(requireRole("admin", "manager"));
 
@@ -209,6 +239,15 @@ router.post("/:transferId/receive", async (req, res) => {
       requestId: req.requestId || req.id || null,
     });
 
+    // The transfer service resolves the destination product before opening any
+    // shortage evidence. Bind every shortage case to that destination product
+    // immediately after the authoritative transaction so destination-store
+    // investigations never point at a source-store product row.
+    await bindTransferShortagesToDestinationProducts({
+      transferId: result.transfer_id,
+      destinationBranchId: plan.transfer.to_branch_id,
+    });
+
     const secondaryAuditRecorded = await writeSecondaryAudit({
       req,
       branchId: plan.transfer.to_branch_id,
@@ -231,6 +270,7 @@ router.post("/:transferId/receive", async (req, res) => {
         newly_received_identity_count: result.newly_received_identity_count,
         newly_missing_identity_count: result.newly_missing_identity_count,
         destination_stock_increased_only_for_observed_units: true,
+        shortage_product_scope: "destination_product",
       },
     });
 
