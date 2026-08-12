@@ -136,13 +136,23 @@ function sameStringSet(left, right) {
   );
 }
 
+function canOmitCurrentColumn(columnMetadata) {
+  if (!columnMetadata || typeof columnMetadata !== "object") return false;
+  if (columnMetadata.nullable === true) return true;
+  if (columnMetadata.hasDefault === true) return true;
+  const extra = String(columnMetadata.extra || "").toLowerCase();
+  return extra.includes("auto_increment");
+}
+
 function validateBackupContract({
   backup,
   currentIncludedTables,
   currentTableColumns,
+  currentTableMetadata = {},
   currentSchemaMigrations = [],
   signingSecret,
   requireSignature,
+  allowAdditiveSchemaDrift = false,
 }) {
   const errors = [];
   const warnings = [];
@@ -173,15 +183,30 @@ function validateBackupContract({
   const expectedTables = sortedUniqueIdentifiers(currentIncludedTables);
   const includedTables = sortedUniqueIdentifiers(backup.included_tables);
   const tableKeys = sortedUniqueIdentifiers(Object.keys(backup.tables || {}));
+  const missingCurrentTables = expectedTables.filter(
+    (name) => !includedTables.includes(name)
+  );
+  const unsupportedTables = includedTables.filter(
+    (name) => !expectedTables.includes(name)
+  );
 
-  if (!sameStringSet(includedTables, expectedTables)) {
-    const missing = expectedTables.filter((name) => !includedTables.includes(name));
-    const unsupported = includedTables.filter((name) => !expectedTables.includes(name));
-    if (missing.length) {
-      errors.push(`Backup is missing current required tables: ${missing.join(", ")}.`);
+  if (allowAdditiveSchemaDrift) {
+    if (unsupportedTables.length) {
+      errors.push(
+        `Backup contains tables that are not supported by the current database: ${unsupportedTables.join(", ")}.`
+      );
     }
-    if (unsupported.length) {
-      errors.push(`Backup contains unsupported restorable tables: ${unsupported.join(", ")}.`);
+    if (missingCurrentTables.length) {
+      warnings.push(
+        `The current application has newer tables that were not present when this backup was created. They will be preserved during restore: ${missingCurrentTables.join(", ")}.`
+      );
+    }
+  } else if (!sameStringSet(includedTables, expectedTables)) {
+    if (missingCurrentTables.length) {
+      errors.push(`Backup is missing current required tables: ${missingCurrentTables.join(", ")}.`);
+    }
+    if (unsupportedTables.length) {
+      errors.push(`Backup contains unsupported restorable tables: ${unsupportedTables.join(", ")}.`);
     }
   }
 
@@ -199,7 +224,40 @@ function validateBackupContract({
 
     const expectedColumns = sortedUniqueIdentifiers(currentTableColumns?.[tableName] || []);
     const manifestColumns = sortedUniqueIdentifiers(backup.table_columns?.[tableName] || []);
-    if (!sameStringSet(expectedColumns, manifestColumns)) {
+    const unsupportedColumns = manifestColumns.filter(
+      (name) => !expectedColumns.includes(name)
+    );
+    const missingCurrentColumns = expectedColumns.filter(
+      (name) => !manifestColumns.includes(name)
+    );
+
+    if (allowAdditiveSchemaDrift) {
+      if (unsupportedColumns.length) {
+        errors.push(
+          `Backup columns for ${tableName} are not supported by the current database: ${unsupportedColumns.join(", ")}.`
+        );
+      }
+      if (missingCurrentColumns.length) {
+        const metadataByName = new Map(
+          (currentTableMetadata?.[tableName] || []).map((column) => [
+            column.name,
+            column,
+          ])
+        );
+        const requiredMissingColumns = missingCurrentColumns.filter(
+          (columnName) => !canOmitCurrentColumn(metadataByName.get(columnName))
+        );
+        if (requiredMissingColumns.length) {
+          errors.push(
+            `Backup ${tableName} is older than the current schema and cannot safely supply required columns: ${requiredMissingColumns.join(", ")}.`
+          );
+        } else {
+          warnings.push(
+            `Backup ${tableName} predates additive columns that can safely use current defaults or NULL values: ${missingCurrentColumns.join(", ")}.`
+          );
+        }
+      }
+    } else if (!sameStringSet(expectedColumns, manifestColumns)) {
       errors.push(`Backup columns for ${tableName} do not match the current database schema.`);
     }
 
@@ -247,7 +305,24 @@ function validateBackupContract({
   const backupMigrationNames = sortedUniqueIdentifiers(
     (backup.schema_migrations || []).map((migration) => migration?.migration_name)
   );
-  if (!sameStringSet(expectedMigrationNames, backupMigrationNames)) {
+  if (allowAdditiveSchemaDrift) {
+    const unknownBackupMigrations = backupMigrationNames.filter(
+      (name) => !expectedMigrationNames.includes(name)
+    );
+    const newerCurrentMigrations = expectedMigrationNames.filter(
+      (name) => !backupMigrationNames.includes(name)
+    );
+    if (unknownBackupMigrations.length) {
+      errors.push(
+        `Backup was created by a schema newer than or incompatible with this runtime. Unknown backup migrations: ${unknownBackupMigrations.join(", ")}.`
+      );
+    }
+    if (newerCurrentMigrations.length) {
+      warnings.push(
+        `The current application has newer migrations than this backup. Additive compatibility checks were applied: ${newerCurrentMigrations.join(", ")}.`
+      );
+    }
+  } else if (!sameStringSet(expectedMigrationNames, backupMigrationNames)) {
     errors.push(
       "Backup migration history does not match the current application schema. Apply the matching code and migrations before restoring."
     );
@@ -275,7 +350,12 @@ function validateBackupContract({
     errors,
     warnings,
     includedTables,
+    currentOnlyTables: missingCurrentTables,
     totalRows,
+    additiveSchemaCompatibilityApplied:
+      allowAdditiveSchemaDrift &&
+      (missingCurrentTables.length > 0 ||
+        warnings.some((warning) => /additive|newer|predates/i.test(warning))),
   };
 }
 
