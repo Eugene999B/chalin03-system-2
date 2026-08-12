@@ -10,9 +10,119 @@ const {
   assertDedicatedRailwayStaging,
 } = require("./completeChalinOneFullStagingDatabase");
 
-const LOCK_NAME = "chalin03:chalin-one:staging-operational-schema:v1";
+const LOCK_NAME = "chalin03:chalin-one:staging-operational-schema:v2";
 const REPOSITORY_ROOT = path.resolve(__dirname, "../..");
 const MIGRATION_ROOT = path.join(REPOSITORY_ROOT, "database", "migrations");
+
+// CHALIN ONE's clean schema intentionally does not replay every historical
+// operational migration. Current admin/worker routes, however, still depend on
+// these additive foundations. They must exist before Payroll can create foreign
+// keys to worker_profiles and before the admin pages are considered ready.
+const STAGING_FOUNDATION_MIGRATIONS = Object.freeze([
+  Object.freeze({
+    record: "release2_final_security_backup_workers_executive",
+    file: "20260716_release2_final_security_backup_workers_executive.sql",
+    required_tables: Object.freeze([
+      "protected_action_sessions",
+      "privileged_action_ledger",
+      "backup_history",
+      "owner_break_glass_accounts",
+      "worker_profiles",
+      "worker_assignments",
+    ]),
+  }),
+  Object.freeze({
+    record: "release2d_worker_profile_expansion",
+    file: "20260716_release2d_worker_profile_expansion.sql",
+    required_tables: Object.freeze([
+      "worker_family_members",
+      "worker_emergency_contacts",
+      "worker_private_files",
+    ]),
+    required_columns: Object.freeze([
+      Object.freeze(["worker_profiles", "preferred_name"]),
+      Object.freeze(["worker_profiles", "national_id_number"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "release2f_worker_print_pack",
+    file: "20260716_release2f_worker_print_pack.sql",
+    required_tables: Object.freeze(["worker_print_history"]),
+    required_columns: Object.freeze([
+      Object.freeze(["worker_profiles", "id_card_serial"]),
+      Object.freeze(["worker_profiles", "id_card_expiry_date"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "release3_owner_mfa_security",
+    file: "20260716_release3_owner_mfa_security.sql",
+    required_tables: Object.freeze([
+      "owner_break_glass_mfa_enrollments",
+      "owner_break_glass_recovery_codes",
+      "owner_break_glass_login_history",
+    ]),
+    required_columns: Object.freeze([
+      Object.freeze(["owner_break_glass_accounts", "mfa_enabled"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "release3fa_authentication_sessions_ux",
+    file: "20260718_release3fa_authentication_sessions_ux.sql",
+    required_columns: Object.freeze([
+      Object.freeze(["users", "login_phone_normalized"]),
+      Object.freeze(["auth_sessions", "device_type"]),
+      Object.freeze(["auth_sessions", "location_source"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "release3fc_user_permissions_security_messages",
+    file: "20260718_release3fc_user_permissions_security_messages.sql",
+    required_tables: Object.freeze([
+      "user_permission_overrides",
+      "security_event_dismissals",
+    ]),
+  }),
+  Object.freeze({
+    record: "release3fc2_category_isolation_guides_receipts_workers",
+    file: "20260718_release3fc2_category_isolation_guides_receipts_workers.sql",
+    required_tables: Object.freeze([
+      "user_category_assignment_conflicts",
+      "worker_category_assignment_conflicts",
+    ]),
+    required_columns: Object.freeze([
+      Object.freeze(["users", "primary_workspace_code"]),
+      Object.freeze(["users", "category_assignment_status"]),
+      Object.freeze(["worker_profiles", "workspace_code"]),
+      Object.freeze(["worker_profiles", "business_unit_id"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "20260718_release3fd2_worker_identity_cards",
+    file: "20260718_release3fd2_worker_identity_cards.sql",
+    required_tables: Object.freeze(["worker_identity_sequences"]),
+    required_columns: Object.freeze([
+      Object.freeze(["settings", "worker_id_card_validity_months"]),
+      Object.freeze(["settings", "worker_employee_number_prefix"]),
+    ]),
+  }),
+  Object.freeze({
+    record: "20260719_worker_hr_letters",
+    file: "20260719_worker_hr_letters.sql",
+    required_tables: Object.freeze(["worker_hr_letters"]),
+  }),
+  Object.freeze({
+    record: "20260719_standalone_employment_documents_signature",
+    file: "20260719_standalone_employment_documents_signature.sql",
+    required_tables: Object.freeze([
+      "document_signature_settings",
+      "standalone_hr_documents",
+    ]),
+    required_columns: Object.freeze([
+      Object.freeze(["worker_hr_letters", "approval_signature_data_url"]),
+      Object.freeze(["worker_hr_letters", "signature_captured_at"]),
+    ]),
+  }),
+]);
 
 const STAGING_OPERATIONAL_MIGRATIONS = Object.freeze([
   Object.freeze({
@@ -84,6 +194,46 @@ async function migrationRecorded(connection, record) {
   return Boolean(rows[0]);
 }
 
+async function tableExists(connection, tableName) {
+  const [rows] = await connection.query(
+    `SELECT TABLE_NAME
+       FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+      LIMIT 1`,
+    [tableName]
+  );
+  return Boolean(rows[0]);
+}
+
+async function columnExists(connection, tableName, columnName) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1`,
+    [tableName, columnName]
+  );
+  return Boolean(rows[0]);
+}
+
+async function missingFoundationStructure(connection, migration) {
+  const missing = [];
+  for (const tableName of migration.required_tables || []) {
+    if (!(await tableExists(connection, tableName))) {
+      missing.push(`table:${tableName}`);
+    }
+  }
+  for (const [tableName, columnName] of migration.required_columns || []) {
+    if (!(await columnExists(connection, tableName, columnName))) {
+      missing.push(`column:${tableName}.${columnName}`);
+    }
+  }
+  return missing;
+}
+
 async function acquireLock(connection) {
   const [[row]] = await connection.query("SELECT GET_LOCK(?, 30) AS acquired", [
     LOCK_NAME,
@@ -141,6 +291,48 @@ function assertVerifierZeroResults(resultSets, migration) {
   }
 }
 
+async function applyFoundationMigration(connection, migration) {
+  const recordedBefore = await migrationRecorded(connection, migration.record);
+  const missingBefore = await missingFoundationStructure(connection, migration);
+  const needsRepair = !recordedBefore || missingBefore.length > 0;
+
+  if (needsRepair) {
+    console.log(
+      `CHALIN ONE staging foundation applying/repairing ${migration.record}` +
+        (missingBefore.length ? ` (${missingBefore.join(", ")})` : ".")
+    );
+    await executeSqlScript(
+      connection,
+      readRequiredFile(migration.file),
+      `CHALIN ONE staging foundation ${migration.record}`
+    );
+  } else {
+    console.log(`CHALIN ONE staging foundation already healthy: ${migration.record}.`);
+  }
+
+  if (!(await migrationRecorded(connection, migration.record))) {
+    throw new ChalinOneStagingOperationalSchemaError(
+      `Foundation ${migration.record} did not create its schema_migrations record.`,
+      "CHALIN_ONE_STAGING_FOUNDATION_RECORD_MISSING"
+    );
+  }
+
+  const missingAfter = await missingFoundationStructure(connection, migration);
+  if (missingAfter.length > 0) {
+    throw new ChalinOneStagingOperationalSchemaError(
+      `Foundation ${migration.record} is still incomplete after repair: ${missingAfter.join(", ")}.`,
+      "CHALIN_ONE_STAGING_FOUNDATION_STRUCTURE_INCOMPLETE"
+    );
+  }
+
+  return Object.freeze({
+    record: migration.record,
+    applied_or_repaired: needsRepair,
+    repaired_structure: Object.freeze(missingBefore),
+    verified: true,
+  });
+}
+
 async function applyStagingMigration(connection, migration) {
   const migrationSql = readRequiredFile(migration.file);
   const verifierSql = readRequiredFile(migration.verify);
@@ -178,6 +370,23 @@ async function applyStagingMigration(connection, migration) {
   });
 }
 
+async function applyStagingOperationalPlan(connection) {
+  const foundationReports = [];
+  for (const migration of STAGING_FOUNDATION_MIGRATIONS) {
+    foundationReports.push(await applyFoundationMigration(connection, migration));
+  }
+
+  const operationalReports = [];
+  for (const migration of STAGING_OPERATIONAL_MIGRATIONS) {
+    operationalReports.push(await applyStagingMigration(connection, migration));
+  }
+
+  return Object.freeze({
+    foundations: Object.freeze(foundationReports),
+    operational: Object.freeze(operationalReports),
+  });
+}
+
 async function upgradeChalinOneStagingOperationalSchema({ env = process.env } = {}) {
   const safety = assertDedicatedRailwayStaging(env);
   const connection = await pool.getConnection();
@@ -196,19 +405,19 @@ async function upgradeChalinOneStagingOperationalSchema({ env = process.env } = 
       );
     }
 
-    const reports = [];
-    for (const migration of STAGING_OPERATIONAL_MIGRATIONS) {
-      reports.push(await applyStagingMigration(connection, migration));
-    }
+    const reports = await applyStagingOperationalPlan(connection);
 
     const result = Object.freeze({
       safe: true,
       database: databaseName,
       railway_environment: safety.railway_environment,
-      migrations: Object.freeze(reports),
+      foundation_migrations: reports.foundations,
+      operational_migrations: reports.operational,
       production_runner_used: false,
     });
-    console.log("CHALIN ONE staging Payroll + Inventory operational schema verified safely.");
+    console.log(
+      "CHALIN ONE staging Admin/Worker foundation + Payroll + Inventory schema verified safely."
+    );
     console.log(JSON.stringify(result, null, 2));
     return result;
   } finally {
@@ -232,9 +441,13 @@ if (require.main === module) {
 
 module.exports = {
   LOCK_NAME,
+  STAGING_FOUNDATION_MIGRATIONS,
   STAGING_OPERATIONAL_MIGRATIONS,
   ChalinOneStagingOperationalSchemaError,
+  applyFoundationMigration,
   applyStagingMigration,
+  applyStagingOperationalPlan,
   assertVerifierZeroResults,
+  missingFoundationStructure,
   upgradeChalinOneStagingOperationalSchema,
 };
