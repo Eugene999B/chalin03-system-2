@@ -89,7 +89,9 @@ const CRITICAL_WRITE_PERMISSIONS = Object.freeze({
   ]),
 });
 
-const ROLE_LIVE_IDENTITY_PATTERN = /(?:\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b[\s\S]{0,80}\b(?:role|permissions?|access|authority|capabilities)\b)|(?:\b(?:role|permissions?|access|authority|capabilities)\b[\s\S]{0,80}\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b)|(?:\b(?:user|account)\s*(?:#\s*\d+|@\w+|\d+)\b[\s\S]{0,80}\b(?:role|permissions?|access|authority)\b)|(?:\b(?:what\s+can\s+i\s+do|what\s+am\s+i\s+allowed\s+to\s+do)\b[\s\S]{0,80}\b(?:right\s+now|currently|with\s+this\s+(?:login|account))\b)/i;
+const EFFECTIVE_ACCESS_TOPIC_PATTERN = /\b(?:role|roles|permissions?|access|authority|authorities|capabilities)\b/i;
+const SPECIFIC_ACCOUNT_IDENTITY_PATTERN = /\b(?:user|account)\s*(?:#\s*\d+|@\w+|\d+)\b/i;
+const CURRENT_ACCOUNT_ROLE_PATTERN = /(?:\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b[\s\S]{0,80}\b(?:role|permissions?|access|authority|capabilities)\b)|(?:\b(?:role|permissions?|access|authority|capabilities)\b[\s\S]{0,80}\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b)|(?:\b(?:what\s+can\s+i\s+do|what\s+am\s+i\s+allowed\s+to\s+do)\b[\s\S]{0,80}\b(?:right\s+now|currently|with\s+this\s+(?:login|account))\b)/i;
 
 function clean(value, maximum = 12000) {
   return String(value ?? "")
@@ -117,7 +119,12 @@ function matchRole(text) {
 
 function isLiveEffectiveRoleRequest(value) {
   const text = clean(value);
-  return Boolean(text && ROLE_LIVE_IDENTITY_PATTERN.test(text));
+  if (!text) return false;
+  if (CURRENT_ACCOUNT_ROLE_PATTERN.test(text)) return true;
+  return (
+    SPECIFIC_ACCOUNT_IDENTITY_PATTERN.test(text) &&
+    EFFECTIVE_ACCESS_TOPIC_PATTERN.test(text)
+  );
 }
 
 function prioritizedMissingWriteAuthority(workspaceKey, workspacePermissions, grants) {
@@ -199,8 +206,10 @@ function renderRoleKnowledgeForPrompt(value) {
 
 module.exports = {
   CRITICAL_WRITE_PERMISSIONS,
-  ROLE_LIVE_IDENTITY_PATTERN,
+  CURRENT_ACCOUNT_ROLE_PATTERN,
+  EFFECTIVE_ACCESS_TOPIC_PATTERN,
   ROLE_QUERY_PATTERN,
+  SPECIFIC_ACCOUNT_IDENTITY_PATTERN,
   WRITE_AUTHORITY_PATTERN,
   WORKSPACE_MATCHERS,
   isLiveEffectiveRoleRequest,
