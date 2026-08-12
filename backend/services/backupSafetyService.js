@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 const BACKUP_MANIFEST_VERSION = "chalin03-full-system-v2";
+const LEGACY_DELEGATED_MANIFEST_VERSION = "chalin03-version-3-delegated-v1";
 const BACKUP_TYPE = "full_system_backup";
 
 const LEGACY_ALIAS_TABLES = new Set([
@@ -84,6 +85,20 @@ function checksumBackup(backup) {
   return crypto.createHash("sha256").update(stableBackupJson(backup)).digest("hex");
 }
 
+function legacyDelegatedChecksum(backup) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      JSON.stringify({
+        backup_type: backup?.backup_type,
+        included_tables: backup?.included_tables,
+        table_counts: backup?.table_counts,
+        tables: backup?.tables,
+      })
+    )
+    .digest("hex");
+}
+
 function signBackup(backup, signingSecret) {
   const secret = String(signingSecret || "").trim();
   if (secret.length < 64) {
@@ -144,6 +159,32 @@ function canOmitCurrentColumn(columnMetadata) {
   return extra.includes("auto_increment");
 }
 
+function normalizeLegacyRestoreValue(value) {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.type === "Buffer" &&
+    Array.isArray(value.data) &&
+    value.data.every(
+      (entry) => Number.isInteger(entry) && entry >= 0 && entry <= 255
+    )
+  ) {
+    return {
+      __chalin03_type: "buffer_base64",
+      data: Buffer.from(value.data).toString("base64"),
+    };
+  }
+  return value;
+}
+
+function isLegacyDelegatedBackup(backup) {
+  return (
+    backup?.backup_type === BACKUP_TYPE &&
+    backup?.version === LEGACY_DELEGATED_MANIFEST_VERSION
+  );
+}
+
 function validateBackupContract({
   backup,
   currentIncludedTables,
@@ -165,13 +206,18 @@ function validateBackupContract({
     };
   }
 
+  const legacyDelegated = isLegacyDelegatedBackup(backup);
+
   if (backup.backup_type !== BACKUP_TYPE) {
     errors.push("Backup type is not a Chalin 03 full-system backup.");
   }
 
-  if (backup.version !== BACKUP_MANIFEST_VERSION) {
+  if (
+    backup.version !== BACKUP_MANIFEST_VERSION &&
+    backup.version !== LEGACY_DELEGATED_MANIFEST_VERSION
+  ) {
     errors.push(
-      `Backup format ${backup.version || "unknown"} is not supported. Create a new ${BACKUP_MANIFEST_VERSION} backup before restoring.`
+      `Backup format ${backup.version || "unknown"} is not supported. Supported recovery formats are ${BACKUP_MANIFEST_VERSION} and ${LEGACY_DELEGATED_MANIFEST_VERSION}.`
     );
   }
 
@@ -181,16 +227,49 @@ function validateBackupContract({
   }
 
   const expectedTables = sortedUniqueIdentifiers(currentIncludedTables);
-  const includedTables = sortedUniqueIdentifiers(backup.included_tables);
+  const rawIncludedTables = sortedUniqueIdentifiers(backup.included_tables);
   const tableKeys = sortedUniqueIdentifiers(Object.keys(backup.tables || {}));
+  const legacyExcludedTables = legacyDelegated
+    ? rawIncludedTables.filter((name) => NEVER_RESTORE_TABLES.has(name))
+    : [];
+  const includedTables = legacyDelegated
+    ? rawIncludedTables.filter(
+        (name) => expectedTables.includes(name) && !NEVER_RESTORE_TABLES.has(name)
+      )
+    : rawIncludedTables;
   const missingCurrentTables = expectedTables.filter(
     (name) => !includedTables.includes(name)
   );
   const unsupportedTables = includedTables.filter(
     (name) => !expectedTables.includes(name)
   );
+  const unsupportedLegacyTables = legacyDelegated
+    ? rawIncludedTables.filter(
+        (name) =>
+          !expectedTables.includes(name) && !NEVER_RESTORE_TABLES.has(name)
+      )
+    : [];
 
-  if (allowAdditiveSchemaDrift) {
+  if (legacyDelegated) {
+    warnings.push(
+      "Legacy CHALIN Version Three backup detected. Its historical SHA-256 checksum will be verified and its missing column manifest will be reconstructed before restore."
+    );
+    if (legacyExcludedTables.length) {
+      warnings.push(
+        `Legacy security/schema tables will not be restored: ${legacyExcludedTables.join(", ")}.`
+      );
+    }
+    if (unsupportedLegacyTables.length) {
+      warnings.push(
+        `Legacy tables no longer present in the current runtime will be ignored: ${unsupportedLegacyTables.join(", ")}.`
+      );
+    }
+    if (missingCurrentTables.length) {
+      warnings.push(
+        `The current application has newer tables that were not present in this legacy backup. They will be preserved during restore: ${missingCurrentTables.join(", ")}.`
+      );
+    }
+  } else if (allowAdditiveSchemaDrift) {
     if (unsupportedTables.length) {
       errors.push(
         `Backup contains tables that are not supported by the current database: ${unsupportedTables.join(", ")}.`
@@ -210,20 +289,44 @@ function validateBackupContract({
     }
   }
 
-  if (!sameStringSet(tableKeys, includedTables)) {
+  if (!sameStringSet(tableKeys, rawIncludedTables)) {
     errors.push("Backup table data does not exactly match its included-table manifest.");
   }
 
+  const restoreColumns = {};
   let totalRows = 0;
-  for (const tableName of includedTables) {
+  let allBackupRows = 0;
+
+  for (const tableName of rawIncludedTables) {
     const rows = backup.tables?.[tableName];
     if (!Array.isArray(rows)) {
       errors.push(`Backup table ${tableName} is not an array.`);
       continue;
     }
+    allBackupRows += rows.length;
+
+    const expectedCount = Number(backup.table_counts?.[tableName]);
+    if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
+      errors.push(`Backup table count for ${tableName} is invalid.`);
+    } else if (expectedCount !== rows.length) {
+      errors.push(`Backup table count for ${tableName} does not match its row data.`);
+    }
+
+    if (!includedTables.includes(tableName)) {
+      continue;
+    }
 
     const expectedColumns = sortedUniqueIdentifiers(currentTableColumns?.[tableName] || []);
-    const manifestColumns = sortedUniqueIdentifiers(backup.table_columns?.[tableName] || []);
+    let manifestColumns = sortedUniqueIdentifiers(backup.table_columns?.[tableName] || []);
+
+    if (legacyDelegated) {
+      if (rows.length > 0) {
+        manifestColumns = sortedUniqueIdentifiers(Object.keys(rows[0] || {}));
+      } else {
+        manifestColumns = [];
+      }
+    }
+
     const unsupportedColumns = manifestColumns.filter(
       (name) => !expectedColumns.includes(name)
     );
@@ -231,7 +334,33 @@ function validateBackupContract({
       (name) => !manifestColumns.includes(name)
     );
 
-    if (allowAdditiveSchemaDrift) {
+    if (legacyDelegated) {
+      if (unsupportedColumns.length) {
+        errors.push(
+          `Legacy backup columns for ${tableName} are not supported by the current database: ${unsupportedColumns.join(", ")}.`
+        );
+      }
+      if (rows.length > 0 && missingCurrentColumns.length) {
+        const metadataByName = new Map(
+          (currentTableMetadata?.[tableName] || []).map((column) => [
+            column.name,
+            column,
+          ])
+        );
+        const requiredMissingColumns = missingCurrentColumns.filter(
+          (columnName) => !canOmitCurrentColumn(metadataByName.get(columnName))
+        );
+        if (requiredMissingColumns.length) {
+          errors.push(
+            `Legacy backup ${tableName} cannot safely supply required current columns: ${requiredMissingColumns.join(", ")}.`
+          );
+        } else {
+          warnings.push(
+            `Legacy backup ${tableName} predates additive columns that can safely use current defaults or NULL values: ${missingCurrentColumns.join(", ")}.`
+          );
+        }
+      }
+    } else if (allowAdditiveSchemaDrift) {
       if (unsupportedColumns.length) {
         errors.push(
           `Backup columns for ${tableName} are not supported by the current database: ${unsupportedColumns.join(", ")}.`
@@ -261,6 +390,10 @@ function validateBackupContract({
       errors.push(`Backup columns for ${tableName} do not match the current database schema.`);
     }
 
+    restoreColumns[tableName] = manifestColumns.filter((column) =>
+      expectedColumns.includes(column)
+    );
+
     const seenIds = new Set();
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
@@ -270,7 +403,10 @@ function validateBackupContract({
       }
 
       const rowColumns = sortedUniqueIdentifiers(Object.keys(row));
-      if (!sameStringSet(rowColumns, manifestColumns)) {
+      if (
+        rows.length > 0 &&
+        !sameStringSet(rowColumns, manifestColumns)
+      ) {
         errors.push(`Backup table ${tableName} row ${index} has an incomplete or unexpected column set.`);
         break;
       }
@@ -285,56 +421,61 @@ function validateBackupContract({
       }
     }
 
-    const expectedCount = Number(backup.table_counts?.[tableName]);
-    if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
-      errors.push(`Backup table count for ${tableName} is invalid.`);
-    } else if (expectedCount !== rows.length) {
-      errors.push(`Backup table count for ${tableName} does not match its row data.`);
-    }
-
     totalRows += rows.length;
   }
 
-  if (Number(backup.total_record_count) !== totalRows) {
+  if (Number(backup.total_record_count) !== allBackupRows) {
     errors.push("Backup total record count does not match its table data.");
   }
 
-  const expectedMigrationNames = sortedUniqueIdentifiers(
-    (currentSchemaMigrations || []).map((migration) => migration?.migration_name)
-  );
-  const backupMigrationNames = sortedUniqueIdentifiers(
-    (backup.schema_migrations || []).map((migration) => migration?.migration_name)
-  );
-  if (allowAdditiveSchemaDrift) {
-    const unknownBackupMigrations = backupMigrationNames.filter(
-      (name) => !expectedMigrationNames.includes(name)
+  if (legacyDelegated) {
+    warnings.push(
+      "Legacy backup migration history was not recorded by the historical backup engine; current-only migrations are preserved."
     );
-    const newerCurrentMigrations = expectedMigrationNames.filter(
-      (name) => !backupMigrationNames.includes(name)
+  } else {
+    const expectedMigrationNames = sortedUniqueIdentifiers(
+      (currentSchemaMigrations || []).map((migration) => migration?.migration_name)
     );
-    if (unknownBackupMigrations.length) {
+    const backupMigrationNames = sortedUniqueIdentifiers(
+      (backup.schema_migrations || []).map((migration) => migration?.migration_name)
+    );
+    if (allowAdditiveSchemaDrift) {
+      const unknownBackupMigrations = backupMigrationNames.filter(
+        (name) => !expectedMigrationNames.includes(name)
+      );
+      const newerCurrentMigrations = expectedMigrationNames.filter(
+        (name) => !backupMigrationNames.includes(name)
+      );
+      if (unknownBackupMigrations.length) {
+        errors.push(
+          `Backup was created by a schema newer than or incompatible with this runtime. Unknown backup migrations: ${unknownBackupMigrations.join(", ")}.`
+        );
+      }
+      if (newerCurrentMigrations.length) {
+        warnings.push(
+          `The current application has newer migrations than this backup. Additive compatibility checks were applied: ${newerCurrentMigrations.join(", ")}.`
+        );
+      }
+    } else if (!sameStringSet(expectedMigrationNames, backupMigrationNames)) {
       errors.push(
-        `Backup was created by a schema newer than or incompatible with this runtime. Unknown backup migrations: ${unknownBackupMigrations.join(", ")}.`
+        "Backup migration history does not match the current application schema. Apply the matching code and migrations before restoring."
       );
     }
-    if (newerCurrentMigrations.length) {
-      warnings.push(
-        `The current application has newer migrations than this backup. Additive compatibility checks were applied: ${newerCurrentMigrations.join(", ")}.`
-      );
-    }
-  } else if (!sameStringSet(expectedMigrationNames, backupMigrationNames)) {
-    errors.push(
-      "Backup migration history does not match the current application schema. Apply the matching code and migrations before restoring."
-    );
   }
 
-  const expectedChecksum = checksumBackup(backup);
+  const expectedChecksum = legacyDelegated
+    ? legacyDelegatedChecksum(backup)
+    : checksumBackup(backup);
   if (!secureEqualHex(expectedChecksum, backup.checksum_sha256)) {
     errors.push("Backup checksum does not match the backup contents.");
   }
 
   const secret = String(signingSecret || "").trim();
-  if (requireSignature && secret.length < 64) {
+  if (legacyDelegated) {
+    warnings.push(
+      "This historical CHALIN backup predates HMAC signing. It can only be used through the original-owner protected recovery route; signed v2 backups remain the standard format."
+    );
+  } else if (requireSignature && secret.length < 64) {
     errors.push("Backup signing is not configured on this server.");
   } else if (secret.length >= 64) {
     const expectedSignature = signBackup(backup, secret);
@@ -345,6 +486,28 @@ function validateBackupContract({
     warnings.push("Backup signature was not verified because this non-production server has no signing secret.");
   }
 
+  if (legacyDelegated && errors.length === 0) {
+    backup.table_columns = {
+      ...(backup.table_columns && typeof backup.table_columns === "object"
+        ? backup.table_columns
+        : {}),
+      ...restoreColumns,
+    };
+
+    for (const tableName of includedTables) {
+      const rows = backup.tables?.[tableName];
+      const columns = restoreColumns[tableName] || [];
+      if (!Array.isArray(rows) || rows.length === 0 || columns.length === 0) {
+        continue;
+      }
+      for (const row of rows) {
+        for (const columnName of columns) {
+          row[columnName] = normalizeLegacyRestoreValue(row[columnName]);
+        }
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -352,10 +515,16 @@ function validateBackupContract({
     includedTables,
     currentOnlyTables: missingCurrentTables,
     totalRows,
+    restoreColumns,
+    backupFormat: legacyDelegated
+      ? LEGACY_DELEGATED_MANIFEST_VERSION
+      : BACKUP_MANIFEST_VERSION,
+    legacyUnsignedBackup: legacyDelegated,
     additiveSchemaCompatibilityApplied:
-      allowAdditiveSchemaDrift &&
-      (missingCurrentTables.length > 0 ||
-        warnings.some((warning) => /additive|newer|predates/i.test(warning))),
+      legacyDelegated ||
+      (allowAdditiveSchemaDrift &&
+        (missingCurrentTables.length > 0 ||
+          warnings.some((warning) => /additive|newer|predates/i.test(warning)))),
   };
 }
 
@@ -364,12 +533,15 @@ module.exports = {
   BACKUP_TYPE,
   EPHEMERAL_SECURITY_TABLES,
   LEGACY_ALIAS_TABLES,
+  LEGACY_DELEGATED_MANIFEST_VERSION,
   NEVER_RESTORE_TABLES,
   backupIntegrityPayload,
   canonicalize,
   checksumBackup,
   classifyDatabaseTables,
+  isLegacyDelegatedBackup,
   isSafeIdentifier,
+  legacyDelegatedChecksum,
   safeTableName,
   sameStringSet,
   signBackup,
