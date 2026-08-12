@@ -3,7 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const BACKUP_DOWNLOAD_TIMEOUT_MS = 900000;
+const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;
 const BACKUP_VALIDATE_TIMEOUT_MS = 180000;
 const BACKUP_RESTORE_TIMEOUT_MS = 600000;
 
