@@ -257,6 +257,12 @@ export default function BackupPage() {
     try {
       const validation = await validateSelectedBackup();
       if (!validation?.report?.valid) return;
+      if ((validation.report.source_only_tables || []).length > 0) {
+        setError(
+          "The backup is valid, but the trial database schema is behind production. Restore remains blocked until those production tables exist in staging."
+        );
+        return;
+      }
       const response = await axiosClient.post(
         backupRequestUrl("/restore"),
         {
@@ -297,6 +303,10 @@ export default function BackupPage() {
   )
     ? dryRunReport.preserved_current_only_tables
     : [];
+  const sourceOnlyTables = Array.isArray(dryRunReport?.source_only_tables)
+    ? dryRunReport.source_only_tables
+    : [];
+  const restoreReady = Boolean(dryRunReport?.valid && sourceOnlyTables.length === 0);
 
   return (
     <div>
@@ -327,10 +337,10 @@ export default function BackupPage() {
           {selectedFile ? <p className="selected-file"><strong>{selectedFile.name}</strong><br />{formatFileSize(selectedFile.size)}</p> : null}
           {selectedBackupInfo ? <div className="warning-box"><strong>Local file preview</strong><br />App: {selectedBackupInfo.app}<br />Type: {selectedBackupInfo.backup_type}<br />Version: {selectedBackupInfo.version}<br />Created: {selectedBackupInfo.created_at}<br />Tables: {formatNumber(selectedBackupInfo.table_count)}<br />Rows: {formatNumber(selectedBackupInfo.total_rows)}<br />Checksum: {selectedBackupInfo.checksum || "Not provided"}</div> : null}
           <button type="button" onClick={runValidation} disabled={!canValidate || !selectedFile || !tokenReady || restoring}>{restoring ? "Checking…" : "Run Validation and Restore Preview"}</button>
-          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Preserved newer tables: {preservedCurrentTables.length}<br />Compatibility mode: {dryRunReport.additive_schema_compatibility_applied ? "Safe additive schema compatibility applied" : "Exact/current schema"}<br />Warnings: {reportWarnings.length}<br />Errors: {reportErrors.length}{reportWarnings.length ? <><br /><strong>Warnings:</strong> {reportWarnings.join(" ")}</> : null}{reportErrors.length ? <><br /><strong>Errors:</strong> {reportErrors.join(" ")}</> : null}</div> : null}
+          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Production tables missing in trial schema: {sourceOnlyTables.length}<br />Preserved newer tables: {preservedCurrentTables.length}<br />Recovery mode: {dryRunReport.cross_environment_recovery ? "Isolated staging cross-environment recovery" : "Same-environment recovery"}<br />Compatibility mode: {dryRunReport.additive_schema_compatibility_applied ? "Safe additive schema compatibility applied" : "Exact/current schema"}<br />Restore readiness: {restoreReady ? "Ready" : sourceOnlyTables.length ? "Blocked until staging schema matches production" : "Not ready"}<br />Warnings: {reportWarnings.length}<br />Errors: {reportErrors.length}{reportWarnings.length ? <><br /><strong>Warnings:</strong> {reportWarnings.slice(0, 8).join(" ")}{reportWarnings.length > 8 ? ` … ${reportWarnings.length - 8} more warning(s).` : ""}</> : null}{reportErrors.length ? <><br /><strong>Errors:</strong> {reportErrors.join(" ")}</> : null}</div> : null}
           <label>Type {RESTORE_CONFIRMATION_TEXT} to confirm</label>
           <input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} placeholder={RESTORE_CONFIRMATION_TEXT} />
-          <button type="submit" className="danger-button" disabled={!canRestorePermission || !dryRunReport?.valid || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
+          <button type="submit" className="danger-button" disabled={!canRestorePermission || !restoreReady || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
         </form>
       </div>
     </div>
