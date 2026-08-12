@@ -26,16 +26,16 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(backendRoot, "package.json"), "utf8")
 );
 
-test("Opening Deposit foundation repair runs before the final Phase Four gate", () => {
-  const start = packageJson.scripts.start;
-  const repairPosition = start.indexOf(
+test("Opening Deposit foundation repair runs before the final Phase Four maintenance gate", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const repairPosition = maintenance.indexOf(
     "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js"
   );
-  const phaseFourPosition = start.indexOf(
+  const phaseFourPosition = maintenance.indexOf(
     "node scripts/runEquipmentFinancePhaseFourStartup.js"
   );
 
-  assert.ok(repairPosition >= 0, "startup repair must be registered");
+  assert.ok(repairPosition >= 0, "maintenance repair must be registered");
   assert.ok(phaseFourPosition > repairPosition, "repair must run before Phase Four");
 });
 

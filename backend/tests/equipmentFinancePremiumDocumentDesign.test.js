@@ -33,6 +33,7 @@ const requiredTypes = [
 
 function documentFixture(type) {
   return {
+    id: 301,
     document_number: "C03-DOC-V3-001",
     document_type: type,
     snapshot_checksum: "a".repeat(64),
@@ -121,13 +122,14 @@ test("agreement copies and operational documents remain unmistakably different",
   assert.equal(DOCUMENT_TEMPLATES.settlement_confirmation.motif, "certificate");
 });
 
-test("V3 verification binds document, type, agreement and immutable checksum", () => {
+test("V3 verification QR opens the Chalin 03 online verification centre and binds the issuance fingerprint", () => {
   const payload = verificationPayload(documentFixture("payment_receipt"));
-  assert.match(payload, /CHALIN03-FINANCE-LOGO-LED-V3/);
-  assert.match(payload, /DOC:C03-DOC-V3-001/);
-  assert.match(payload, /TYPE:payment_receipt/);
-  assert.match(payload, /AGR:ESA-20260806-001/);
-  assert.match(payload, /SHA256:a{64}/);
+  assert.match(
+    payload,
+    /^https:\/\/chalin03\.com\/api\/finance-verification\/301\/[a-f0-9]{64}$/
+  );
+  assert.doesNotMatch(payload, /CHALIN03-FINANCE-LOGO-LED-V3/);
+  assert.doesNotMatch(payload, /SHA256:/);
 });
 
 test("the exact official public logo is copied into backend document assets", () => {
@@ -161,7 +163,7 @@ test("V3 Word output contains the official logo, integrated watermark and QR", a
   assert.match(html, /C03-DOC-V3-001/);
 });
 
-test("V3 source uses the logo as architecture rather than a pasted badge", () => {
+test("V3 source uses the logo as architecture with a subtle background watermark", () => {
   const design = fs.readFileSync(
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentDesignV2Service.js"),
     "utf8"
@@ -182,10 +184,11 @@ test("V3 source uses the logo as architecture rather than a pasted badge", () =>
     path.join(__dirname, "..", "services", "equipmentFinanceDocumentRendererV2Service.js"),
     "utf8"
   );
-  assert.match(design, /__dirname,\s*"\.\.",\s*"assets",\s*"chalin03-logo\.png"/);
+  assert.match(design, /path\.resolve\(__dirname, "\.\.", "assets", "chalin03-logo\.png"\)/);
   assert.match(pages, /drawBrandWave/);
   assert.match(pages, /drawGuilloche/);
-  assert.match(pages, /fillOpacity\(0\.105\)/);
+  assert.match(pages, /fillOpacity\(0\.048\)/);
+  assert.doesNotMatch(pages, /drawVisibleOverlayWatermark/);
   assert.match(pages, /drawOfficialLogo/);
   assert.match(flow, /drawSecuritySeal/);
   assert.match(accountBodies, /AGREEMENT AT A GLANCE/);

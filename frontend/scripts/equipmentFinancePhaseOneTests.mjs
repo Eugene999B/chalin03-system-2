@@ -85,6 +85,7 @@ assert.doesNotMatch(wizard, /Choose a Hire location|Choose a Finance location/);
 assert.match(customers, /Customer Centre/);
 assert.match(customers, /Add Customer/);
 assert.match(customers, /Start Installment/);
+assert.match(customers, /Search Finance customer register/);
 assert.doesNotMatch(customers, /useWorkspaceContext/);
 
 assert.match(excavators, /One source of truth/);
@@ -100,7 +101,8 @@ assert.match(applications, /No Hire-location selection/);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
 for (const page of [activation, deposit]) {
-  assert.match(page, /company-wide|Company-wide/);
+  assert.match(page, /Search, select, then/i);
+  assert.match(page, /finance-simplified__compact-register/);
   assert.doesNotMatch(page, /selectedContextId|useWorkspaceContext/);
 }
 assert.match(reports, /Equipment Finance Phase 6/);
@@ -108,7 +110,7 @@ assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
-assert.match(collections, /backend after committed payments/i);
+assert.match(collections, /Official balances are returned by the backend/i);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
 assert.match(guide, /Complete lifecycle/);

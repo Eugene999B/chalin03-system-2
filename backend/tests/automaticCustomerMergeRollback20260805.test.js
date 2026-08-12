@@ -108,11 +108,12 @@ test("debt ownership is synchronized to its sale without rewriting money or dele
   assert.doesNotMatch(source, /UPDATE\s+sales[\s\S]{0,120}SET[\s\S]{0,120}(?:total|amount_paid|balance)\s*=/i);
 });
 
-test("Railway sanitizes audit dates, then runs rollback, then starts the API", () => {
-  const start = packageJson.scripts.start;
-  const sanitizerIndex = start.indexOf("runCustomerMergeAuditDateSanitizer20260805.js");
-  const rollbackIndex = start.indexOf("runAutomaticCustomerMergeRollback20260805.js");
-  const serverIndex = start.indexOf("server.js");
+test("maintenance sanitizes audit dates, then runs rollback, before the API starts independently", () => {
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const startupPlan = `${maintenance} && ${packageJson.scripts.start}`;
+  const sanitizerIndex = startupPlan.indexOf("runCustomerMergeAuditDateSanitizer20260805.js");
+  const rollbackIndex = startupPlan.indexOf("runAutomaticCustomerMergeRollback20260805.js");
+  const serverIndex = startupPlan.indexOf("server.js");
   assert.ok(sanitizerIndex >= 0);
   assert.ok(rollbackIndex > sanitizerIndex);
   assert.ok(serverIndex > rollbackIndex);

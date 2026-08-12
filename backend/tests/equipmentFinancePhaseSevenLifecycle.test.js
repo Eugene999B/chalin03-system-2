@@ -100,7 +100,10 @@ test("critical Finance mutations fail closed and return post-trigger values", ()
   assert.match(delivery, /assertFinanceMutationSafe/);
   assert.match(delivery, /refreshFinanceAgreementFromEvidence/);
   assert.match(corrections, /refreshFinanceAgreementFromEvidence/);
-  assert.match(reconciliation, /Always[\s\S]*re-read[\s\S]*post-trigger/i);
+  assert.match(
+    reconciliation,
+    /UPDATE equipment_sale_agreements[\s\S]*const after = await reconcileFinanceAgreement[\s\S]*EQUIPMENT_FINANCE_POST_UPDATE_RECONCILIATION_FAILED/
+  );
 });
 
 test("rescheduled schedule rows are never treated as collectible open installments", () => {

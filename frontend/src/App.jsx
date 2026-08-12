@@ -91,6 +91,9 @@ const EmploymentDocumentsPage = lazy(() => import("./pages/EmploymentDocumentsPa
 const DocumentSignatureSettingsPage = lazy(() =>
   import("./pages/DocumentSignatureSettingsPage")
 );
+const PayrollProcessingCentrePage = lazy(() =>
+  import("./pages/PayrollProcessingCentrePage")
+);
 
 const businessWorkRoles = ["admin", "manager", "cashier"];
 const adminManagerRoles = ["admin", "manager"];
@@ -348,6 +351,13 @@ export default function App() {
               )}
             />
             <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
+              )}
+            />
+            <Route
               path="employment-documents"
               element={permissionOnlyPage(
                 "workers.documents.view",
@@ -470,6 +480,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -629,6 +646,13 @@ export default function App() {
               )}
             />
             <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
+              )}
+            />
+            <Route
               path="employment-documents"
               element={permissionOnlyPage(
                 "workers.documents.view",
@@ -733,6 +757,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route

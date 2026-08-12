@@ -207,7 +207,7 @@ export default function ReturnsPage() {
       setForm(EMPTY_FORM);
 
       if (isRefund) {
-        await loadSales();
+        await Promise.all([loadSaleItems(selectedSaleId), loadSales()]);
       } else {
         await Promise.all([
           loadSaleItems(selectedSaleId),
@@ -233,7 +233,7 @@ export default function ReturnsPage() {
         loadSales(),
       ]);
     } else {
-      await loadSales();
+      await Promise.all([loadSaleItems(selectedSaleId), loadSales()]);
     }
   }
 

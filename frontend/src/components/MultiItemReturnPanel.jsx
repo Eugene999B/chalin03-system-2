@@ -17,6 +17,11 @@ function makeLine(item) {
     remaining_quantity: Number(
       item.remaining_quantity || 0
     ),
+    pending_return_quantity: Number(item.pending_return_quantity || 0),
+    active_refund_request_count: Number(item.active_refund_request_count || 0),
+    active_refund_request_codes: Array.isArray(item.active_refund_request_codes)
+      ? item.active_refund_request_codes
+      : [],
     unit_price: Number(item.unit_price || 0),
     selected: false,
     quantity: "",
@@ -419,7 +424,7 @@ export default function MultiItemReturnPanel({
       <div className="returns-batch-lines">
         {lines.map((line) => {
           const unavailable =
-            line.remaining_quantity <= 0;
+            line.remaining_quantity <= 0 || line.active_refund_request_count > 0;
 
           return (
             <article
@@ -449,15 +454,15 @@ export default function MultiItemReturnPanel({
                   </strong>
 
                   <small>
-                    Remaining:{" "}
-                    {
-                      line.remaining_quantity
-                    }
+                    Remaining available: {line.remaining_quantity}
+                    {line.pending_return_quantity > 0
+                      ? ` · Pending approval: ${line.pending_return_quantity}`
+                      : ""}
                     {" · "}
-                    {formatMoney(
-                      line.unit_price
-                    )}{" "}
-                    each
+                    {formatMoney(line.unit_price)} each
+                    {line.active_refund_request_codes.length > 0
+                      ? ` · ${line.active_refund_request_codes.join(", ")}`
+                      : ""}
                   </small>
                 </span>
               </label>

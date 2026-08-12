@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
 import { useAuth } from "../context/AuthContext";
@@ -7,12 +8,30 @@ import {
   ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
 import "../styles/equipmentFinanceLifecycleProfessional.css";
+import "../styles/equipmentFinanceSignatureShell.css";
+import "../styles/equipmentFinanceSignaturePolish.css";
+import "../styles/equipmentFinanceThreePageRouteSignature.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
   "/equipment-installment-finance/document-signature-settings",
   "/equipment-installment-finance/administration",
 ];
+
+const THREE_PAGE_PRESENTATION_CLASSES = [
+  "finance-installment-page--start",
+  "finance-installment-page--applications",
+  "finance-installment-page--excavators",
+];
+
+function presentationClassFor(location) {
+  if (location.pathname !== "/equipment-installment-finance/applications") return null;
+  const stage = new URLSearchParams(location.search).get("stage");
+  if (stage === "start") return "finance-installment-page--start";
+  if (stage === "machines") return "finance-installment-page--excavators";
+  if (!stage) return "finance-installment-page--applications";
+  return null;
+}
 
 const navigationSections = [
   {
@@ -179,6 +198,13 @@ const navigationSections = [
         permissions: ["workers.view"],
       },
       {
+        title: "Payroll Processing",
+        description: "Validate, approve, pay and reconcile protected salary cycles",
+        path: "/equipment-installment-finance/payroll",
+        icon: "💵",
+        permissions: ["payroll.view"],
+      },
+      {
         title: "Finance Settings",
         description: "Payment rules, reminders, alerts, receipts, delivery and legal terms",
         path: "/equipment-installment-finance/applications?stage=settings",
@@ -232,6 +258,13 @@ export default function InstallmentFinanceLayout() {
   const { user } = useAuth();
   const location = useLocation();
 
+  useEffect(() => {
+    document.body.classList.remove(...THREE_PAGE_PRESENTATION_CLASSES);
+    const activeClass = presentationClassFor(location);
+    if (activeClass) document.body.classList.add(activeClass);
+    return () => document.body.classList.remove(...THREE_PAGE_PRESENTATION_CLASSES);
+  }, [location.pathname, location.search]);
+
   if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
     return <Navigate to="/equipment-hire" replace />;
   }
@@ -247,7 +280,7 @@ export default function InstallmentFinanceLayout() {
       workspaceCode="equipment_installment_finance"
       workspaceName="Equipment Installment Finance"
       icon="🏦"
-      theme="earth"
+      theme="finance-signature"
       independenceLabel=""
       description=""
       contextHeading="Company-wide Finance portfolio — no Hire-location selection"

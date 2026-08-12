@@ -80,18 +80,20 @@ test("Phase 1 verifier rejects any non-zero database problem", () => {
   );
 });
 
-test("Railway start checks Phase 1 before the existing Finance startup gate", () => {
+test("controlled maintenance checks Phase 1 before the existing Finance gate", () => {
   const packageJson = JSON.parse(
     fs.readFileSync(path.join(backendRoot, "package.json"), "utf8")
   );
-  const start = packageJson.scripts.start;
-  const phaseOneIndex = start.indexOf("runEquipmentFinancePhaseOneSchemaStartup.js");
-  const operationalIndex = start.indexOf("runEquipmentFinanceOperationalPolishStartup.js");
-  const serverIndex = start.indexOf("server.js");
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseOneIndex = maintenance.indexOf("runEquipmentFinancePhaseOneSchemaStartup.js");
+  const operationalIndex = maintenance.indexOf("runEquipmentFinanceOperationalPolishStartup.js");
 
   assert.ok(phaseOneIndex >= 0);
   assert.ok(operationalIndex > phaseOneIndex);
-  assert.ok(serverIndex > operationalIndex);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase1-schema:production"],
     "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js"

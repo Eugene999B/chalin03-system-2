@@ -50,6 +50,17 @@ const CORE_PERMISSIONS = Object.freeze([
   "installments.settings",
 ]);
 
+const PAYROLL_PERMISSIONS = Object.freeze([
+  "payroll.view",
+  "payroll.manage",
+  "payroll.prepare",
+  "payroll.approve",
+  "payroll.pay",
+  "payroll.payslip.issue",
+  "payroll.adjust",
+  "payroll.audit",
+]);
+
 const MINING_PERMISSIONS = Object.freeze([
   "mining.sites.view",
   "mining.sites.manage",
@@ -132,6 +143,7 @@ const ALL_PERMISSIONS = Object.freeze([
   ...FLEET_PERMISSIONS,
   ...HIRE_PERMISSIONS,
   ...CONTENT_STUDIO_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   "operations.documents.view",
   "operations.documents.manage",
   "sms.manage",
@@ -166,6 +178,7 @@ const CATEGORY_SHARED_PERMISSIONS = Object.freeze([
 
 const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   "spare_parts.read",
   "spare_parts.sell",
   "spare_parts.manage",
@@ -181,6 +194,7 @@ const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
 
 const MINING_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   ...MINING_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   "operations.documents.view",
@@ -189,6 +203,7 @@ const MINING_CATEGORY_PERMISSIONS = Object.freeze([
 
 const HIRE_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   ...HIRE_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   "operations.documents.view",
@@ -782,6 +797,7 @@ module.exports = {
   FLEET_PERMISSIONS,
   HIRE_PERMISSIONS,
   CONTENT_STUDIO_PERMISSIONS,
+  PAYROLL_PERMISSIONS,
   CATEGORY_SHARED_PERMISSIONS,
   SPARE_PARTS_CATEGORY_PERMISSIONS,
   MINING_CATEGORY_PERMISSIONS,

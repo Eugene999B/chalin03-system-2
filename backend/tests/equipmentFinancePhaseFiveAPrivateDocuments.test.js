@@ -151,20 +151,23 @@ test("Phase 5A exposes upload, download and activity only—not later approvals 
   );
 });
 
-test("Railway runs Phase 5A after Phase 4 and before the API server", () => {
+test("controlled maintenance runs Phase 5A after Phase 4 while API startup stays independent", () => {
   assert.match(runner, /chalin03:equipment-finance:phase5a-private-documents/);
   assert.match(runner, /information_schema\.TABLES/);
   assert.match(runner, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(runner, /GET_LOCK/);
   assert.match(runner, /RELEASE_LOCK/);
   assert.match(runner, /validateVerifierResults/);
-  const start = packageJson.scripts.start;
-  const phaseFour = start.indexOf("runEquipmentFinancePhaseFourStartup.js");
-  const phaseFiveA = start.indexOf(
+  const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
+  const phaseFour = maintenance.indexOf("runEquipmentFinancePhaseFourStartup.js");
+  const phaseFiveA = maintenance.indexOf(
     "runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js"
   );
-  const server = start.indexOf("server.js");
-  assert.ok(phaseFour >= 0 && phaseFiveA > phaseFour && server > phaseFiveA);
+  assert.ok(phaseFour >= 0 && phaseFiveA > phaseFour);
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase5a:production"],
     "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js"

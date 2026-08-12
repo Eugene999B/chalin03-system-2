@@ -40,7 +40,7 @@ test("Phase 6 is isolated to Equipment Finance and exposes the complete producti
   assert.doesNotMatch(service, /\bdebts\b|spare_parts|sale_items/);
 });
 
-test("Phase 6 Railway migration is additive, idempotent and cutover protected", () => {
+test("Phase 6 migration is additive, idempotent and retained in controlled maintenance", () => {
   const migration = read(
     "database/migrations/20260802_equipment_finance_phase6_reporting_notifications.sql"
   );
@@ -60,7 +60,14 @@ test("Phase 6 Railway migration is additive, idempotent and cutover protected", 
   assert.match(startup, /CHALIN03_EXPECTED_DATABASE/);
   assert.match(startup, /GET_LOCK/);
   assert.match(startup, /validateVerifierResults/);
-  assert.match(packageJson.scripts.start, /runEquipmentFinancePhaseSixStartup\.js/);
+  assert.match(
+    packageJson.scripts["maintenance:legacy-startup-repairs"],
+    /runEquipmentFinancePhaseSixStartup\.js/
+  );
+  assert.equal(
+    packageJson.scripts.start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase6:production"],
     "node scripts/runEquipmentFinancePhaseSixStartup.js"

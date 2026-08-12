@@ -54,25 +54,25 @@ function resolveBuildId(environment = process.env) {
   return `local-${Date.now().toString(36)}`;
 }
 
+function isCloudflarePagesBuild(environment = process.env) {
+  return (
+    String(environment.CF_PAGES || "").trim() === "1" ||
+    Boolean(String(environment.CF_PAGES_URL || "").trim())
+  );
+}
+
 function isChalinOneCloudflareStagingBuild(environment = process.env) {
   const branch = String(
     environment.CF_PAGES_BRANCH || environment.CHALIN_ONE_STAGING_BRANCH || ""
   )
     .trim()
     .toLowerCase();
-
-  const isPages =
-    String(environment.CF_PAGES || "").trim() === "1" ||
-    Boolean(String(environment.CF_PAGES_URL || "").trim());
-
-  return isPages && branch === "chalin-one";
+  return isCloudflarePagesBuild(environment) && branch === "chalin-one";
 }
 
-// CHALIN ONE staging must not depend on browser cross-origin CORS to reach
-// Railway. The Cloudflare Pages Function owns /api/* and performs the upstream
-// request server-to-server. Keep VITE_API_URL available to the pre-build safety
-// verifier, then force only the final chalin-one Pages bundle to same-origin /api.
-if (isChalinOneCloudflareStagingBuild()) {
+// Current production and CHALIN ONE staging both use a branch-owned
+// Cloudflare Pages Function as the browser same-origin /api gateway.
+if (isCloudflarePagesBuild()) {
   process.env.VITE_API_URL = "/api";
 }
 
@@ -92,4 +92,8 @@ export default defineConfig({
   },
 });
 
-export { isChalinOneCloudflareStagingBuild, resolveBuildId };
+export {
+  isChalinOneCloudflareStagingBuild,
+  isCloudflarePagesBuild,
+  resolveBuildId,
+};
