@@ -1,0 +1,65 @@
+name: CHALIN ONE Staging Pages Build
+
+on:
+  pull_request:
+    branches:
+      - chalin-one
+    paths:
+      - "frontend/**"
+      - ".github/workflows/chalin-one-staging-pages-build.yml"
+  push:
+    branches:
+      - chalin-one
+    paths:
+      - "frontend/**"
+      - ".github/workflows/chalin-one-staging-pages-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  staging-pages-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CF_PAGES_BRANCH: chalin-one
+      VITE_API_URL: https://chalin03-system-2-staging.up.railway.app/api
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify dedicated staging build environment
+        run: node scripts/verifyChalinOneStagingBuildEnv.mjs
+
+      - name: Build exact CHALIN ONE staging frontend
+        run: npm run build
+
+      - name: Verify staging-only response headers
+        shell: bash
+        run: |
+          test -f dist/_headers
+          grep -F "/staff/*" dist/_headers
+          grep -F "/intelligence/*" dist/_headers
+          grep -F "Cache-Control: no-store, private, max-age=0, must-revalidate" dist/_headers
+          grep -F "X-Robots-Tag: noindex, nofollow, noarchive" dist/_headers
+
+      - name: Verify staging API URL is compiled without production API origin
+        shell: bash
+        run: |
+          grep -R -F "chalin03-system-2-staging.up.railway.app" dist/assets >/dev/null
+          if grep -R -F "https://api.chalin03.com" dist/assets >/dev/null; then
+            echo "Production API origin leaked into the dedicated CHALIN ONE staging build." >&2
+            exit 1
+          fi
