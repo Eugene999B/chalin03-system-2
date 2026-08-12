@@ -6,9 +6,11 @@ const path = require("node:path");
 const {
   BACKUP_MANIFEST_VERSION,
   BACKUP_TYPE,
+  CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   EPHEMERAL_SECURITY_TABLES,
   NEVER_RESTORE_TABLES,
   TECHNICAL_RECOVERY_TABLES,
+  isConfirmedRailwayStaging,
 } = require("../services/backupSafetyService");
 const {
   DATA_REPAIR_MIGRATIONS,
@@ -51,7 +53,7 @@ test("technical migration snapshots and passkey challenges are never restored", 
 test("staging recovery environment uses existing Railway staging identity, internal DB and restore window", () => {
   const validEnv = {
     NODE_ENV: "production",
-    RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-staging.up.railway.app",
+    RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
     DB_HOST: "mysql.railway.internal",
     ALLOW_WEB_RESTORE: "true",
   };
@@ -72,6 +74,30 @@ test("staging recovery environment uses existing Railway staging identity, inter
   assert.throws(
     () => assertRecoveryEnvironment({ ...validEnv, ALLOW_WEB_RESTORE: "false" }),
     /restore window/i
+  );
+});
+
+test("staging identity also recognizes the configured CHALIN ONE frontend without trusting production hosts", () => {
+  assert.equal(
+    isConfirmedRailwayStaging({
+      NODE_ENV: "production",
+      FRONTEND_URL: "https://chalin-one-staging-preview.pages.dev",
+    }),
+    true
+  );
+  assert.equal(
+    isConfirmedRailwayStaging({
+      NODE_ENV: "production",
+      FRONTEND_URL_ALT: "https://chalin-one.chalin03-system-2.pages.dev",
+    }),
+    true
+  );
+  assert.equal(
+    isConfirmedRailwayStaging({
+      NODE_ENV: "production",
+      FRONTEND_URL: "https://chalin03.com",
+    }),
+    false
   );
 });
 
@@ -145,6 +171,9 @@ test("signed-v2 staging router owns dry-run, preparation and restore preflight b
   assert.match(routeSource, /requireProtectedAction/);
   assert.match(routeSource, /requirePermission\("backup\.restore"\)/);
   assert.match(routeSource, /checksumBackup\(backup\)/);
+  assert.match(routeSource, /headers\?\.host/);
+  assert.match(routeSource, /CHALIN_ONE_STAGING_PUBLIC_DOMAIN/);
+  assert.match(routeSource, /recoveryEnvironmentForRequest\(req\)/);
 
   const stagingMount = serverSource.indexOf(
     'app.use("/api/backups", stagingBackupRecoveryRoutes);'
