@@ -44,6 +44,51 @@ const ROLE_ALIASES = Object.freeze([
 
 const WRITE_AUTHORITY_PATTERN = /(?:\.manage$|\.create$|\.approve$|\.sell$|\.collect$|\.remind$|\.settings$|\.pay$|\.issue$|\.adjust$|\.prepare$|\.restore$|\.deactivate$|\.close_|\.damage$|\.evidence$|users\.manage$|workspace\.admin$|security\.admin$)/i;
 
+const CRITICAL_WRITE_PERMISSIONS = Object.freeze({
+  spare_parts: Object.freeze([
+    "spare_parts.sell",
+    "spare_parts.manage",
+    "installments.manage",
+    "installments.collect",
+    "installments.remind",
+    "installments.settings",
+    "payroll.manage",
+    "payroll.prepare",
+    "payroll.approve",
+    "payroll.pay",
+    "users.manage",
+    "workspace.admin",
+  ]),
+  mining: Object.freeze([
+    "mining.sites.manage",
+    "mining.daily_logs.create",
+    "mining.daily_logs.approve",
+    "mining.production.create",
+    "mining.production.approve",
+    "mining.fuel.manage",
+    "mining.expenses.manage",
+    "mining.expenses.approve",
+    "payroll.manage",
+    "payroll.approve",
+    "users.manage",
+    "workspace.admin",
+  ]),
+  equipment_hire: Object.freeze([
+    "hire.customers.manage",
+    "hire.quotations.manage",
+    "hire.quotations.approve",
+    "hire.contracts.manage",
+    "hire.dispatch.manage",
+    "hire.invoices.manage",
+    "hire.payments.manage",
+    "hire.returns.manage",
+    "payroll.manage",
+    "payroll.approve",
+    "users.manage",
+    "workspace.admin",
+  ]),
+});
+
 const ROLE_LIVE_IDENTITY_PATTERN = /(?:\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b[\s\S]{0,80}\b(?:role|permissions?|access|authority|capabilities)\b)|(?:\b(?:role|permissions?|access|authority|capabilities)\b[\s\S]{0,80}\b(?:my|mine|logged[- ]in|current\s+user|this\s+user|this\s+account|my\s+account)\b)|(?:\b(?:user|account)\s*(?:#\s*\d+|@\w+|\d+)\b[\s\S]{0,80}\b(?:role|permissions?|access|authority)\b)|(?:\b(?:what\s+can\s+i\s+do|what\s+am\s+i\s+allowed\s+to\s+do)\b[\s\S]{0,80}\b(?:right\s+now|currently|with\s+this\s+(?:login|account))\b)/i;
 
 function clean(value, maximum = 12000) {
@@ -75,6 +120,17 @@ function isLiveEffectiveRoleRequest(value) {
   return Boolean(text && ROLE_LIVE_IDENTITY_PATTERN.test(text));
 }
 
+function prioritizedMissingWriteAuthority(workspaceKey, workspacePermissions, grants) {
+  const absent = workspacePermissions.filter(
+    (permission) =>
+      WRITE_AUTHORITY_PATTERN.test(permission) && !grants.includes(permission)
+  );
+  const critical = (CRITICAL_WRITE_PERMISSIONS[workspaceKey] || []).filter(
+    (permission) => absent.includes(permission)
+  );
+  return [...critical, ...absent.filter((permission) => !critical.includes(permission))];
+}
+
 function roleKnowledgeForPrompt(value) {
   const text = clean(value);
   if (!text || isLiveEffectiveRoleRequest(text)) return null;
@@ -98,9 +154,10 @@ function roleKnowledgeForPrompt(value) {
   const workspacePermissions = Array.isArray(catalog?.workspace_permissions?.[workspace.key])
     ? catalog.workspace_permissions[workspace.key]
     : [];
-  const absentWriteAuthority = workspacePermissions.filter(
-    (permission) =>
-      WRITE_AUTHORITY_PATTERN.test(permission) && !grants.includes(permission)
+  const absentWriteAuthority = prioritizedMissingWriteAuthority(
+    workspace.key,
+    workspacePermissions,
+    grants
   );
 
   return Object.freeze({
@@ -133,7 +190,7 @@ function renderRoleKnowledgeForPrompt(value) {
     `- Role template: ${role.role_label} (${role.role_key})`,
     `- Exact workspace-role grants: ${granted}`,
     `- Explicit write/operational authority granted by this role template: ${writes}`,
-    `- Write/operational permissions in this workspace that this role template does not grant: ${absentWrites}`,
+    `- Important write/operational permissions in this workspace that this role template does not grant: ${absentWrites}`,
     `- Read-only role template: ${role.role_template_read_only ? "yes" : "no"}`,
     "Answer from this CHALIN source-derived role template. Translate permission codes into clear business language. Do not say 'typically', 'usually', or invent generic industry responsibilities that are not supported by the grants above.",
     "Do not confuse a static role template with a specific person's effective access. If the user asks what a named/logged-in person can do right now, require governed live account/scope evidence instead of using this static template.",
@@ -141,11 +198,13 @@ function renderRoleKnowledgeForPrompt(value) {
 }
 
 module.exports = {
+  CRITICAL_WRITE_PERMISSIONS,
   ROLE_LIVE_IDENTITY_PATTERN,
   ROLE_QUERY_PATTERN,
   WRITE_AUTHORITY_PATTERN,
   WORKSPACE_MATCHERS,
   isLiveEffectiveRoleRequest,
+  prioritizedMissingWriteAuthority,
   roleKnowledgeForPrompt,
   renderRoleKnowledgeForPrompt,
 };
