@@ -8,6 +8,11 @@ const {
   isAuditSecurityExpertPrompt,
 } = require("./aiAuditSecurityExpertPackService");
 const {
+  CHALIN_INTELLIGENCE_EXPERT_PACK,
+  getChalinIntelligenceExpertPack,
+  isChalinIntelligenceExpertPrompt,
+} = require("./aiChalinIntelligenceExpertPackService");
+const {
   CUSTOMER_ACCOUNTING_EXPERT_PACK,
   getCustomerAccountingExpertPack,
   isCustomerAccountingExpertPrompt,
@@ -194,6 +199,7 @@ const EXPERT_PACKS = Object.freeze({
   [EQUIPMENT_FINANCE_EXPERT_PACK.key]: EQUIPMENT_FINANCE_EXPERT_PACK,
   [CUSTOMER_ACCOUNTING_EXPERT_PACK.key]: CUSTOMER_ACCOUNTING_EXPERT_PACK,
   [AUDIT_SECURITY_EXPERT_PACK.key]: AUDIT_SECURITY_EXPERT_PACK,
+  [CHALIN_INTELLIGENCE_EXPERT_PACK.key]: CHALIN_INTELLIGENCE_EXPERT_PACK,
 });
 
 function clean(value, maximum = 200) {
@@ -251,6 +257,9 @@ function getExpertPack(packKey, { includeAvailability = true } = {}) {
   if (key === AUDIT_SECURITY_EXPERT_PACK.key) {
     return getAuditSecurityExpertPack({ includeAvailability });
   }
+  if (key === CHALIN_INTELLIGENCE_EXPERT_PACK.key) {
+    return getChalinIntelligenceExpertPack({ includeAvailability });
+  }
   const pack = EXPERT_PACKS[key];
   if (!pack) return null;
   return Object.freeze({
@@ -287,6 +296,9 @@ function expertPacksForPrompt(value) {
   }
   if (isAuditSecurityExpertPrompt(value)) {
     matches.push(getExpertPack(AUDIT_SECURITY_EXPERT_PACK.key));
+  }
+  if (isChalinIntelligenceExpertPrompt(value)) {
+    matches.push(getExpertPack(CHALIN_INTELLIGENCE_EXPERT_PACK.key));
   }
   return Object.freeze(matches.filter(Boolean));
 }
@@ -341,6 +353,9 @@ function renderExpertPack(pack) {
   } else if (pack.key === AUDIT_SECURITY_EXPERT_PACK.key) {
     liveBoundary =
       "Use this as product/control knowledge only. Never infer current audit events, failed controls, user-access changes, unlocks, backup/restore activity, approval status or security incidents from this pack; current control status requires authorized governed audit evidence. A failure/high-severity count is an investigation signal, not proof of fraud, compromise or financial loss.";
+  } else if (pack.key === CHALIN_INTELLIGENCE_EXPERT_PACK.key) {
+    liveBoundary =
+      "Use this as source-derived CHALIN system/intelligence knowledge only. It explains verified architecture and governance, but it is not live runtime or business evidence. For current feature state, active scope, knowledge health/curriculum or live business facts, use the existing authorized governed read path. Never infer private records, effective permissions, provider secrets or action execution from this pack.";
   }
   return [
     `CHALIN source-derived expert pack: ${pack.title}`,
@@ -371,6 +386,7 @@ function renderExpertPacks(packs = []) {
 
 module.exports = {
   AUDIT_SECURITY_EXPERT_PACK,
+  CHALIN_INTELLIGENCE_EXPERT_PACK,
   CUSTOMER_ACCOUNTING_EXPERT_PACK,
   EQUIPMENT_FINANCE_EXPERT_PACK,
   EXPERT_PACKS,
@@ -384,6 +400,7 @@ module.exports = {
   expertPacksForPrompt,
   getExpertPack,
   isAuditSecurityExpertPrompt,
+  isChalinIntelligenceExpertPrompt,
   isCustomerAccountingExpertPrompt,
   isEquipmentFinanceExpertPrompt,
   isHireExpertPrompt,
