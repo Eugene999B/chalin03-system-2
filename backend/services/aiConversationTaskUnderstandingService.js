@@ -39,7 +39,7 @@ const DOMAIN_RULES = Object.freeze([
   }),
   Object.freeze({
     key: "chalin_product",
-    pattern: /\b(?:tell me (?:more )?about chalin|what is chalin|chalin businesses|chalin business(?:es)?|chalin divisions?|what can chalin do|chalin capabilities|how does chalin work)\b/i,
+    pattern: /\b(?:tell me (?:more )?about chalin|what is chalin|chalin businesses|chalin business(?:es)?|chalin divisions?|what can chalin do|chalin capabilities|how does chalin work|chalin intelligence|chalin ai|chalin copilot|chalin executive|chalin guide|chalin system knowledge|chalin knowledge|chalin memory|chalin conversation|chalin provider|chalin tools?|chalin actions?|chalin document studio)\b/i,
   }),
 ]);
 
