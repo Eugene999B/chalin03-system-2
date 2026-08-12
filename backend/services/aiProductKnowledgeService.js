@@ -10,7 +10,7 @@ const {
 
 const PUBLIC_SYSTEM_MAX_LENGTH = 16000;
 const MAX_PUBLIC_CONTINUITY_MESSAGES = 6;
-const SYSTEM_KNOWLEDGE_VERSION = "2026-08-10-conversation-learning-v1";
+const SYSTEM_KNOWLEDGE_VERSION = "2026-08-12-system-knowledge-v2";
 
 // Product/advisory routing must be anchored to an actual CHALIN/product topic.
 // Generic question verbs such as "what is", "explain" or "recommend" are not
@@ -21,6 +21,8 @@ const CHALIN_OR_ADVISORY_PATTERN = /(?:\bchalin(?:\s*03|\s*one)?\b|\b(?:audit in
 const LIVE_RECORD_REQUEST_PATTERN = /\b(?:show|list|find|lookup|pull|retrieve|fetch|check|investigate|analy[sz]e|review|open|tell me|give me)\b[\s\S]{0,100}\b(?:customer|worker|employee|staff|salary|payroll|payment|sale|sales|sold|selling|stock|transaction|invoice|receipt|debt|balance|inventory|account|application|contract|arrears|collection|expense|revenue|profit|cash|bank|supplier|store|branch)\b|\b(?:today'?s?|current|currently|latest|live|actual|real-time|right now|this month|this week|outstanding|overdue)\b[\s\S]{0,100}\b(?:sale|sales|sold|selling|payment|payments|stock|inventory|balance|debt|debts|arrears|collection|collections|payroll|salary|salaries|invoice|invoices|transaction|transactions|cash|revenue|profit|worker|employee|customer|performance|operations|health|store|branch)\b|\b(?:sale|sales|sold|selling|sell|revenue|cash|payments?|collections?|invoice|invoices|invoiced|billing|performance|operations|health|portfolio|arrears|overdue|outstanding|balance)\b[\s\S]{0,100}\b(?:today|yesterday|this week|this month|current|latest|live|right now)\b|\b(?:production|produce|produced|dispatch|dispatched|fuel|diesel|stockpile|utili[sz]ation|breakdown|operating cost|cost per unit|mining cost|incident|crew|site closing)\b[\s\S]{0,120}\b(?:today|yesterday|this week|this month|current|currently|latest|live|actual|real-time|right now)\b|\b(?:today'?s?|yesterday|this week|this month|current|currently|latest|live|actual|real-time|right now)\b[\s\S]{0,120}\b(?:production|produce|produced|dispatch|dispatched|fuel|diesel|stockpile|utili[sz]ation|breakdown|operating cost|cost per unit|mining cost|incident|crew|site closing)\b|\b(?:whole[- ]system|group|company[- ]wide|all (?:businesses|workspaces|operations))\b[\s\S]{0,80}\b(?:performance|operations|health|figures|numbers|results|position|status|today|current|latest|live)\b|\b(?:my|our|this|that)\s+(?:customer|worker|employee|staff|salary|payroll|payment|sale|sales|transaction|invoice|receipt|debt|balance|stock|inventory|account|application|contract|arrears|collection|expense|revenue|profit|cash|bank|supplier|store|branch)\b|\b(?:worker|employee|staff)\s+(?:salary|wage|pay|debt|balance|account|payment|payments)\b|\b(?:salary|wage|pay)\s+(?:of|for)\s+(?:the\s+)?(?:worker|employee|staff|person)\b|\b(?:which|what)\s+(?:customer|worker|employee|staff)\b|\b(?:at|in|from|for)\s+(?:the\s+)?(?:main|head|first|second|current|selected|same|other)?\s*(?:store|branch|site|location)\b|\b(?:main|head)\s+(?:store|branch)\b/i;
 
 const AUDIT_LIVE_RECORD_PATTERN = /(?:\b(?:today'?s?|current|currently|latest|live|actual|real-time|right now|this week|this month)\b[\s\S]{0,140}\b(?:audit (?:activity|events?|trail|controls?|health|failures?)|security (?:controls?|events?|failures?|activity|health)|failed controls?|failed security|access changes?|permission changes?|unlock requests?|sign[- ]?offs?|backup\/?restore activity|restore activity|approval failures?|risk[- ]?5 activity|ai action (?:activity|proposals?))\b)|(?:\b(?:audit (?:activity|events?|trail|controls?|health|failures?)|security (?:controls?|events?|failures?|activity|health)|failed controls?|failed security|access changes?|permission changes?|unlock requests?|sign[- ]?offs?|backup\/?restore activity|restore activity|approval failures?|risk[- ]?5 activity|ai action (?:activity|proposals?))\b[\s\S]{0,140}\b(?:today|current|currently|latest|live|right now|this week|this month)\b)|(?:\b(?:who changed|who approved|who rejected)\b[\s\S]{0,100}\b(?:today|current|this week|this month|permission|permissions|access|audit|security)\b)/i;
+
+const SYSTEM_STATUS_LIVE_PATTERN = /(?:\b(?:current|currently|latest|live|right now|active|enabled|disabled|effective)\b[\s\S]{0,140}\b(?:chalin(?:\s*03|\s*one)?(?:\s+ai)?\s+(?:features?|feature status|intelligence scope|scope)|ai\s+feature status|knowledge\s+(?:health|curriculum|gaps?)|provider\s+(?:status|selection))\b)|(?:\b(?:chalin(?:\s*03|\s*one)?(?:\s+ai)?\s+(?:features?|feature status|intelligence scope|scope)|ai\s+feature status|knowledge\s+(?:health|curriculum|gaps?)|provider\s+(?:status|selection))\b[\s\S]{0,140}\b(?:current|currently|latest|live|right now|active|enabled|disabled|effective)\b)/i;
 
 const PRIVATE_RESULT_PATTERN = /\b(?:branch\s+id|site\s+id|location\s+id|worker\s+id|employee\s+id|customer\s+id|transaction\s+count|total\s+sales|total\s+paid|total\s+balance|collection\s+rate|account\s+number|phone\s+number|email\s+address|salary\s+amount)\b/i;
 
@@ -41,7 +43,7 @@ Core product areas:
 - People & Employment / Payroll: worker profiles, employment information, effective-dated compensation, basic salary/pay frequency, payroll preview, approval, payment and payslips. Salary entered for a worker should flow from the worker's authoritative compensation record into payroll rather than being retyped every month.
 - Content Studio: governed editorial drafting, independent review, approval and publishing for public content.
 - Public Website: company/product information and public-facing content.
-- CHALIN Intelligence: Copilot and Executive experiences that combine system/product knowledge, permission-scoped business evidence, conversation continuity and approved tools.
+- CHALIN Intelligence: Guide, Copilot and Executive experiences that share one governed intelligence/evidence pipeline, conversation continuity and approved tools while varying presentation emphasis.
 
 Audit / Advanced Accounting Intelligence:
 - It is a management and audit observatory, not merely a sales report.
@@ -59,7 +61,7 @@ How CHALIN Copilot should behave:
 - For general external knowledge, answer normally from the model's knowledge while being clear when current live web verification would be required.
 - Prefer a direct answer first. Do not bury a simple answer under a long menu tutorial or unrelated explanation.
 - Never expose passwords, API keys, secrets, authentication tokens or another user's private conversation.
-- Product knowledge may be discussed across all CHALIN workspaces. Live records remain permission-scoped and should only be fetched when the user actually asks for current/private business data.
+- Product knowledge may be discussed across all CHALIN workspaces. Live records and current runtime status remain permission-scoped and should only be fetched through the appropriate governed read when the user actually asks for them.
 
 ${renderSystemKnowledgeManifest()}
 `;
@@ -77,6 +79,7 @@ function isLikelyLiveRecordRequest(value) {
   if (!text) return false;
   if (SENSITIVE_LITERAL_PATTERN.test(text)) return true;
   if (AUDIT_LIVE_RECORD_PATTERN.test(text)) return true;
+  if (SYSTEM_STATUS_LIVE_PATTERN.test(text)) return true;
   return LIVE_RECORD_REQUEST_PATTERN.test(text);
 }
 
@@ -170,6 +173,7 @@ module.exports = {
   PUBLIC_SYSTEM_MAX_LENGTH,
   SENSITIVE_LITERAL_PATTERN,
   SYSTEM_KNOWLEDGE_VERSION,
+  SYSTEM_STATUS_LIVE_PATTERN,
   clean,
   isChalinProductKnowledgeTurn,
   isLikelyLiveRecordRequest,
