@@ -309,6 +309,14 @@ export default function Layout() {
               "stock transfers transfer between stores branches move dispatch receive approve inventory",
           },
           {
+            title: "Inventory Control & Traceability",
+            description: "Physical unit IDs, controlled labels, exact-item lookup and loss prevention",
+            path: "/inventory-traceability",
+            icon: "🏷️",
+            keywords:
+              "inventory traceability loss prevention theft serialized serial unit id labels qr missing stock physical count",
+          },
+          {
             title: "Low Stock / Restock",
             description: "View items that need restocking",
             path: "/low-stock",

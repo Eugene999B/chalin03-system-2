@@ -49,6 +49,7 @@ const {
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
+const inventoryTraceabilityRoutes = require("./routes/inventoryTraceabilityRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
 const customerDebtConsolidationRoutes = require("./routes/customerDebtConsolidationRoutes");
@@ -204,6 +205,7 @@ app.get("/api", (req, res) => {
       "/api/auth/passkeys",
       "/api/branches",
       "/api/products",
+      "/api/inventory-traceability",
       "/api/sales",
       "/api/debts",
       "/api/debt-customers",
@@ -299,6 +301,12 @@ app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
+app.use(
+  "/api/inventory-traceability",
+  requireAuth,
+  sparePartsBoundary,
+  inventoryTraceabilityRoutes
+);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
 app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);

@@ -16,6 +16,10 @@ const { createAgreementForSale } = require("../services/installmentService");
 const { sendInstallmentEventSms } = require("../services/installmentReminderService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");
+const {
+  lockSaleTraceabilitySelections,
+  markSaleUnitsSold,
+} = require("../services/inventorySaleTraceabilityService");
 
 const router = express.Router();
 
@@ -1054,7 +1058,9 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
           cost_price,
           selling_price,
           quantity,
-          is_active
+          is_active,
+          inventory_tracking_mode,
+          inventory_traceability_state
          FROM products
          WHERE id = ?
          AND branch_id = ?
@@ -1097,8 +1103,18 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
         unit_price: unitPrice,
         line_total: lineTotal,
         cost_price_at_sale: costPriceAtSale,
+        inventory_tracking_mode: product.inventory_tracking_mode || "quantity",
+        inventory_traceability_state: product.inventory_traceability_state || "off",
+        unit_ids: Array.isArray(item.unit_ids) ? item.unit_ids : [],
       });
     }
+
+    // Lock every selected physical identity before any sale/payment record is committed.
+    // Enforced serialized products require an exact one-ID-per-unit match here.
+    const saleTraceabilitySelections = await lockSaleTraceabilitySelections(connection, {
+      branchId,
+      saleItems,
+    });
 
     subtotal = Number(subtotal.toFixed(2));
 
@@ -1204,7 +1220,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
     });
 
     for (const saleItem of saleItems) {
-      await connection.query(
+      const [saleItemResult] = await connection.query(
         `INSERT INTO sale_items (
           sale_id,
           product_id,
@@ -1225,6 +1241,20 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
           saleItem.cost_price_at_sale,
         ]
       );
+
+      const traceabilitySelection = saleTraceabilitySelections.get(Number(saleItem.product_id));
+      const soldUnits = await markSaleUnitsSold(connection, {
+        branchId,
+        saleId,
+        saleItemId: saleItemResult.insertId,
+        productId: saleItem.product_id,
+        unitCodes: traceabilitySelection?.unit_codes || [],
+        actorUserId: req.user.id,
+        receiptNumber,
+        customerName: finalCustomerName,
+        requestId: req.requestId || req.id || null,
+      });
+      saleItem.unit_ids = soldUnits.map((unit) => unit.unit_code);
 
       await connection.query(
         `UPDATE products

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import InventoryTransferIdentityPanel from "../components/InventoryTransferIdentityPanel";
 
 function MobilePageFix() {
   return (
@@ -304,6 +305,7 @@ export default function StockTransfersPage() {
 
   const [selectedTransfer, setSelectedTransfer] = useState(null);
   const [actionNote, setActionNote] = useState("");
+  const [transferIdentityPolicy, setTransferIdentityPolicy] = useState("none");
 
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -474,6 +476,9 @@ export default function StockTransfersPage() {
 
   async function loadTransferDetails(transferId) {
     setError("");
+    if (Number(selectedTransfer?.id) !== Number(transferId)) {
+      setTransferIdentityPolicy("loading");
+    }
 
     try {
       const response = await axiosClient.get(`/stock-transfers/${transferId}`);
@@ -683,6 +688,25 @@ export default function StockTransfersPage() {
       );
     } finally {
       setActionLoading("");
+    }
+  }
+
+  async function handleSerializedTransferCompleted({ message, result }) {
+    setNotice(message || "Serialized stock transfer updated successfully.");
+    setError("");
+    setActionNote("");
+
+    if (result?.status && selectedTransfer) {
+      setSelectedTransfer((current) =>
+        current && Number(current.id) === Number(result.transfer_id)
+          ? { ...current, status: result.status }
+          : current
+      );
+    }
+
+    await Promise.all([loadTransfers(), loadProducts()]);
+    if (selectedTransfer?.id) {
+      await loadTransferDetails(selectedTransfer.id);
     }
   }
 
@@ -1071,7 +1095,15 @@ export default function StockTransfersPage() {
                   </button>
                 )}
 
-                {canDispatch(selectedTransfer) && (
+                {(canDispatch(selectedTransfer) || canReceive(selectedTransfer)) &&
+                  transferIdentityPolicy === "loading" && (
+                    <div style={styles.info}>
+                      Checking physical-ID transfer policy…
+                    </div>
+                  )}
+
+                {canDispatch(selectedTransfer) &&
+                  transferIdentityPolicy === "quantity" && (
                   <button
                     type="button"
                     style={styles.smallButton}
@@ -1086,7 +1118,8 @@ export default function StockTransfersPage() {
                   </button>
                 )}
 
-                {canReceive(selectedTransfer) && (
+                {canReceive(selectedTransfer) &&
+                  transferIdentityPolicy === "quantity" && (
                   <button
                     type="button"
                     style={styles.goldButton}
@@ -1129,6 +1162,14 @@ export default function StockTransfersPage() {
                   </>
                 )}
               </div>
+
+              <InventoryTransferIdentityPanel
+                transfer={selectedTransfer}
+                actionNote={actionNote}
+                disabled={Boolean(actionLoading)}
+                onPolicyChange={setTransferIdentityPolicy}
+                onCompleted={handleSerializedTransferCompleted}
+              />
 
               <div style={styles.detailItemList}>
                 {(selectedTransfer.items || []).map((item) => (

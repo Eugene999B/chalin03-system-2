@@ -1,0 +1,449 @@
+.inventory-loss-control {
+  display: grid;
+  gap: 1rem;
+}
+
+.inventory-loss-control__hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.2rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #fff;
+}
+
+.inventory-loss-control__hero h2 {
+  margin: 0.1rem 0 0.45rem;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+}
+
+.inventory-loss-control__hero p {
+  max-width: 58rem;
+  margin: 0;
+  color: #cbd5e1;
+  line-height: 1.55;
+}
+
+.inventory-loss-control__eyebrow {
+  color: #93c5fd !important;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inventory-loss-control__hero-stats {
+  display: grid;
+  min-width: 13rem;
+  gap: 0.55rem;
+  align-content: center;
+}
+
+.inventory-loss-control__hero-stats span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #e2e8f0;
+  font-size: 0.86rem;
+}
+
+.inventory-loss-control__notice,
+.inventory-loss-control__policy,
+.inventory-loss-control__panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.inventory-loss-control__notice {
+  padding: 0.75rem 0.9rem;
+  color: #334155;
+}
+
+.inventory-loss-control__notice.is-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.inventory-loss-control__notice.is-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.inventory-loss-control__policy {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.inventory-loss-control__policy strong {
+  white-space: nowrap;
+  color: #92400e;
+}
+
+.inventory-loss-control__policy span {
+  color: #78350f;
+  font-size: 0.88rem;
+}
+
+.inventory-loss-control__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+  gap: 1rem;
+}
+
+.inventory-loss-control__panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.inventory-loss-control__panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.inventory-loss-control__panel-head > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.inventory-loss-control__panel-head span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inventory-loss-control__panel-head h3,
+.inventory-loss-control__panel-head p {
+  margin: 0;
+}
+
+.inventory-loss-control__panel-head p {
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.inventory-loss-control__field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.inventory-loss-control__field > span {
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.inventory-loss-control__field input,
+.inventory-loss-control__quantity-count input,
+.inventory-loss-control__resolution select,
+.inventory-loss-control__resolution textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+}
+
+.inventory-loss-control__product-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  max-height: 22rem;
+  overflow: auto;
+  padding: 0.1rem;
+}
+
+.inventory-loss-control__product-picker label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.inventory-loss-control__product-picker label.is-selected {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.inventory-loss-control__product-picker span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.inventory-loss-control__product-picker small,
+.inventory-loss-control__scope small,
+.inventory-loss-control__session-list small,
+.inventory-loss-control__investigation-head small {
+  color: #64748b;
+}
+
+.inventory-loss-control__primary,
+.inventory-loss-control__quantity-count button,
+.inventory-loss-control__resolution button {
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  padding: 0.7rem 0.9rem;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.inventory-loss-control__primary:disabled,
+.inventory-loss-control__quantity-count button:disabled,
+.inventory-loss-control__resolution button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inventory-loss-control__link-button {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inventory-loss-control__session-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.inventory-loss-control__session-list > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-loss-control__session-list > button.is-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.inventory-loss-control__session-list span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.inventory-loss-control__session-list em {
+  color: #b45309;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.inventory-loss-control__active-count {
+  border-color: #bfdbfe;
+}
+
+.inventory-loss-control__scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.7rem;
+}
+
+.inventory-loss-control__scope {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.inventory-loss-control__scope.is-critical {
+  border-color: #fca5a5;
+}
+
+.inventory-loss-control__scope.is-high {
+  border-color: #fdba74;
+}
+
+.inventory-loss-control__scope-head,
+.inventory-loss-control__investigation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.inventory-loss-control__scope-head > div,
+.inventory-loss-control__investigation-head > div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.inventory-loss-control__scope-head > span {
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.inventory-loss-control__quantity-count {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.inventory-loss-control dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.inventory-loss-control dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.inventory-loss-control dt {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.inventory-loss-control dd {
+  margin: 0;
+  font-weight: 850;
+}
+
+.inventory-loss-control dd.is-ok {
+  color: #166534;
+}
+
+.inventory-loss-control dd.is-variance {
+  color: #b91c1c;
+}
+
+.inventory-loss-control__investigations {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.inventory-loss-control__investigations > article {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-left-width: 5px;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.inventory-loss-control__investigations > article.is-critical {
+  border-left-color: #dc2626;
+}
+
+.inventory-loss-control__investigations > article.is-high {
+  border-left-color: #ea580c;
+}
+
+.inventory-loss-control__investigations > article.is-review {
+  border-left-color: #ca8a04;
+}
+
+.inventory-loss-control__investigations > article.is-notice {
+  border-left-color: #2563eb;
+}
+
+.inventory-loss-control__investigations > article.is-resolved {
+  opacity: 0.7;
+}
+
+.inventory-loss-control__investigation-head span {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.inventory-loss-control__investigation-head em {
+  color: #475569;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.inventory-loss-control__resolution {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.35fr) minmax(18rem, 1fr) auto;
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.inventory-loss-control__resolved-note {
+  margin: 0;
+  padding: 0.6rem;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 900px) {
+  .inventory-loss-control__hero,
+  .inventory-loss-control__policy,
+  .inventory-loss-control__panel-head {
+    flex-direction: column;
+  }
+
+  .inventory-loss-control__hero-stats {
+    width: 100%;
+  }
+
+  .inventory-loss-control__grid,
+  .inventory-loss-control__resolution {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .inventory-loss-control__product-picker,
+  .inventory-loss-control dl {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-loss-control__quantity-count,
+  .inventory-loss-control__scope-head,
+  .inventory-loss-control__investigation-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

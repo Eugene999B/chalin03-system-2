@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import MultiItemReturnPanel from "../components/MultiItemReturnPanel";
+import InventoryReturnUnitScanner from "../components/InventoryReturnUnitScanner";
 import "./ReturnsPage.css";
 
 const EMPTY_FORM = {
@@ -46,6 +47,7 @@ export default function ReturnsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [returnUnitIds, setReturnUnitIds] = useState([]);
 
   const selectedReturnItem = useMemo(
     () => saleItems.find((item) => Number(item.product_id) === Number(form.product_id)),
@@ -53,6 +55,11 @@ export default function ReturnsPage() {
   );
   const estimatedReturnAmount =
     Number(selectedReturnItem?.unit_price || 0) * Number(form.quantity || 0);
+  const serializedReturnRequired = Boolean(
+    selectedReturnItem?.serialized_return_requires_unit_ids ||
+      (selectedReturnItem?.inventory_tracking_mode === "serialized" &&
+        selectedReturnItem?.inventory_traceability_state === "enforced")
+  );
 
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
@@ -105,6 +112,7 @@ export default function ReturnsPage() {
     if (!saleId) {
       setSelectedSale(null);
       setSaleItems([]);
+      setReturnUnitIds([]);
       return;
     }
 
@@ -121,6 +129,7 @@ export default function ReturnsPage() {
       });
       setSaleItems(response.data.items || []);
       setForm(EMPTY_FORM);
+      setReturnUnitIds([]);
     } catch (requestError) {
       setError(apiMessage(requestError, "Failed to load sale items."));
     }
@@ -134,11 +143,24 @@ export default function ReturnsPage() {
   function handleSaleSelect(event) {
     const saleId = event.target.value;
     setSelectedSaleId(saleId);
+    setReturnUnitIds([]);
     loadSaleItems(saleId);
   }
 
   function handleFormChange(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+    if (name === "product_id") {
+      setReturnUnitIds([]);
+    }
+    if (name === "quantity") {
+      const nextQuantity = Number(value || 0);
+      setReturnUnitIds((current) =>
+        Number.isInteger(nextQuantity) && nextQuantity >= 0
+          ? current.slice(0, nextQuantity)
+          : []
+      );
+    }
   }
 
   async function recordReturn(event) {
@@ -156,6 +178,15 @@ export default function ReturnsPage() {
     }
     if (!form.reason.trim()) {
       setError("Enter the reason for the return.");
+      return;
+    }
+    if (
+      serializedReturnRequired &&
+      returnUnitIds.length !== Number(form.quantity)
+    ) {
+      setError(
+        `${selectedReturnItem?.product_name || "This serialized product"} requires exactly ${Number(form.quantity)} verified returned physical unit ID${Number(form.quantity) === 1 ? "" : "s"}.`
+      );
       return;
     }
 
@@ -195,6 +226,9 @@ export default function ReturnsPage() {
         refund_method: isRefund ? form.refund_method : "none",
         refund_reference: isRefund ? form.refund_reference.trim() : "",
       };
+      if (serializedReturnRequired) {
+        payload.unit_ids = returnUnitIds;
+      }
 
       const response = isRefund
         ? await axiosClient.post(
@@ -203,8 +237,10 @@ export default function ReturnsPage() {
           )
         : await axiosClient.post("/returns", payload);
 
-      setMessage(response.data.message || "Return processed successfully.");
+      const successMessage =
+        response.data.message || "Return processed successfully.";
       setForm(EMPTY_FORM);
+      setReturnUnitIds([]);
 
       if (isRefund) {
         await Promise.all([loadSaleItems(selectedSaleId), loadSales()]);
@@ -215,6 +251,10 @@ export default function ReturnsPage() {
           loadSales(),
         ]);
       }
+      // loadSaleItems intentionally clears stale messages when changing receipts.
+      // Restore this completed action's server message after the refresh so the
+      // operator keeps the quarantine/refund confirmation they need to see.
+      setMessage(successMessage);
     } catch (requestError) {
       setError(apiMessage(requestError, "Failed to process the return."));
     } finally {
@@ -223,7 +263,6 @@ export default function ReturnsPage() {
   }
 
   async function handleMultiReturnResult(result) {
-    setMessage(result?.message || "");
     setError(result?.error || "");
 
     if (!result?.pendingApproval) {
@@ -235,6 +274,7 @@ export default function ReturnsPage() {
     } else {
       await Promise.all([loadSaleItems(selectedSaleId), loadSales()]);
     }
+    setMessage(result?.message || "");
   }
 
   if (!["admin", "manager"].includes(role)) {
@@ -349,7 +389,7 @@ export default function ReturnsPage() {
         />
 
         <details className="section-card returns-single-fallback">
-          <summary>Single Item Return — optional fallback</summary>
+          <summary>Single Item Return — exact-ID returns / fallback</summary>
           <form className="returns-single-form" onSubmit={recordReturn}>
             <h2>Record Return - {currentStoreCode}</h2>
             <div className="warning-box">
@@ -379,6 +419,22 @@ export default function ReturnsPage() {
               onChange={handleFormChange}
               min="1"
             />
+
+            {serializedReturnRequired && selectedReturnItem ? (
+              <div style={{ marginTop: 10, marginBottom: 12 }}>
+                <InventoryReturnUnitScanner
+                  saleId={selectedSaleId}
+                  product={selectedReturnItem}
+                  requiredCount={Number(form.quantity || 0)}
+                  selectedUnitCodes={returnUnitIds}
+                  onChange={setReturnUnitIds}
+                  disabled={saving}
+                />
+                <div className="warning-box" style={{ marginTop: 10 }}>
+                  Returned serialized units are quarantined first. They increase physical inventory but do not become sellable until an authorized inspection clears each exact ID.
+                </div>
+              </div>
+            ) : null}
 
             <label>Reason</label>
             <textarea
