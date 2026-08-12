@@ -87,20 +87,28 @@ function isCrossEnvironmentRecovery(
     backup?.backup_type === base.BACKUP_TYPE &&
     backup?.version === base.BACKUP_MANIFEST_VERSION;
 
-  if (!signedV2Backup) return false;
-  if (requireSignature !== false || allowAdditiveSchemaDrift !== true) return false;
+  if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
 
-  // This explicit flag is server-only. The protected staging recovery router
-  // may set it only after proving the request reached the known Railway staging
-  // service. Production and ordinary backup routes never pass it.
-  const trustedStagingContext =
-    allowCrossEnvironmentRecovery === true || isConfirmedRailwayStaging(env);
-  if (!trustedStagingContext) return false;
+  const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
+  const liveProduction = isLiveProductionEnvironment(env);
 
-  // Never allow an explicit caller to turn a confirmed Railway production
-  // deployment into cross-environment recovery mode.
-  const railwayEnvironment = railwayEnvironmentName(env);
-  if (railwayEnvironment === "production") return false;
+  // A positively identified Railway staging service is allowed to validate a
+  // production-signed v2 package even when that service runs NODE_ENV=production
+  // or receives a production-like Railway environment name through deployment
+  // metadata. The staging identity (environment id/domain) wins over NODE_ENV.
+  if (confirmedRailwayStaging) return true;
+
+  // Never permit an unidentified/live production deployment to enter recovery
+  // compatibility mode, even if a caller accidentally supplies the server-only
+  // staging option.
+  if (liveProduction) return false;
+
+  // Outside confirmed Railway staging, cross-environment recovery is available
+  // only when target-side HMAC verification has explicitly been disabled. The
+  // protected staging router sets allowCrossEnvironmentRecovery after its host
+  // gate; local/non-production recovery tests may rely on the same safe mode.
+  if (requireSignature !== false) return false;
+  if (allowCrossEnvironmentRecovery === true) return true;
 
   return true;
 }
@@ -251,7 +259,9 @@ function validateCrossEnvironmentShape({
 
 function validateBackupContract(args) {
   const report = base.validateBackupContract(args);
-  if (!isCrossEnvironmentRecovery(args)) return report;
+  if (!isCrossEnvironmentRecovery(args, args.recoveryEnvironment || process.env)) {
+    return report;
+  }
 
   const backup = args.backup;
   const checksumFailed = report.errors.some((error) =>
