@@ -250,13 +250,22 @@ function buildConversationWorkingState({
 
   const currentPeriods = uniqueStrings(understanding.time_hints, LIMITS.periods, 80);
   let activePeriods = currentPeriods;
-  let comparisonPeriods = [];
-  if (!currentPeriods.length && continuityRequired) activePeriods = previous.periods.active;
+  let comparisonPeriods = continuityRequired ? previous.periods.comparison : [];
+  if (!currentPeriods.length && continuityRequired) {
+    activePeriods = previous.periods.active;
+    comparisonPeriods = previous.periods.comparison;
+  }
   if (currentPeriods.length && continuityRequired && previous.periods.active.length) {
     const changed = currentPeriods.some(
       (item) => !previous.periods.active.some((prior) => prior.toLowerCase() === item.toLowerCase())
     );
-    if (changed) comparisonPeriods = previous.periods.active;
+    if (changed) {
+      comparisonPeriods = uniqueStrings(
+        [...previous.periods.active, ...previous.periods.comparison],
+        LIMITS.periods,
+        80
+      );
+    }
   }
   if (/\b(?:compare|comparison|versus|vs\.?|against)\b/i.test(cleanText(prompt, 2000))) {
     comparisonPeriods = uniqueStrings(
