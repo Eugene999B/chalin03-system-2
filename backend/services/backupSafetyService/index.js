@@ -80,23 +80,29 @@ function canOmitCurrentColumn(columnMetadata) {
 }
 
 function isCrossEnvironmentRecovery(
-  { backup, requireSignature },
+  { backup, requireSignature, allowAdditiveSchemaDrift, allowCrossEnvironmentRecovery },
   env = process.env
 ) {
   const signedV2Backup =
     backup?.backup_type === base.BACKUP_TYPE &&
     backup?.version === base.BACKUP_MANIFEST_VERSION;
 
-  if (!signedV2Backup) {
-    return false;
-  }
+  if (!signedV2Backup) return false;
+  if (requireSignature !== false || allowAdditiveSchemaDrift !== true) return false;
 
-  const confirmedStaging = isConfirmedRailwayStaging(env);
-  if (!confirmedStaging && isLiveProductionEnvironment(env)) {
-    return false;
-  }
+  // This explicit flag is server-only. The protected staging recovery router
+  // may set it only after proving the request reached the known Railway staging
+  // service. Production and ordinary backup routes never pass it.
+  const trustedStagingContext =
+    allowCrossEnvironmentRecovery === true || isConfirmedRailwayStaging(env);
+  if (!trustedStagingContext) return false;
 
-  return confirmedStaging || requireSignature === false;
+  // Never allow an explicit caller to turn a confirmed Railway production
+  // deployment into cross-environment recovery mode.
+  const railwayEnvironment = railwayEnvironmentName(env);
+  if (railwayEnvironment === "production") return false;
+
+  return true;
 }
 
 function isCompatibilityError(message) {
