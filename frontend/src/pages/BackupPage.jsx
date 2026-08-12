@@ -25,6 +25,33 @@ function formatFileSize(value) {
   return `${size} bytes`;
 }
 
+function backupReportErrors(report) {
+  const directErrors = Array.isArray(report?.errors) ? report.errors : [];
+  const validationErrors = Array.isArray(report?.validation_errors)
+    ? report.validation_errors.map((item) =>
+        typeof item === "string" ? item : item?.message || item?.code || "Invalid backup data."
+      )
+    : [];
+  return [...directErrors, ...validationErrors].filter(Boolean);
+}
+
+function backupReportWarnings(report) {
+  return Array.isArray(report?.warnings) ? report.warnings.filter(Boolean) : [];
+}
+
+function backupRequestErrorMessage(requestError, fallback) {
+  const status = Number(requestError.response?.status || 0);
+  const report = requestError.response?.data || null;
+  const details = backupReportErrors(report);
+  if (status === 413) {
+    return "This backup is larger than the server restore upload limit. The server must allow a larger protected backup request before validation can run.";
+  }
+  if (details.length > 0) {
+    return `${report?.message || fallback} ${details.join(" ")}`.trim();
+  }
+  return report?.message || fallback;
+}
+
 export default function BackupPage() {
   const { user, branchCode, branchName, branchLocation, hasPermission } = useAuth();
   const role = String(user?.role || "").toLowerCase();
@@ -199,11 +226,14 @@ export default function BackupPage() {
       if (!validation) return;
       setMessage("Backup validation and restore preview completed. No data was changed.");
     } catch (requestError) {
+      const report = requestError.response?.data || null;
       setError(
-        requestError.response?.data?.message ||
+        backupRequestErrorMessage(
+          requestError,
           "Backup validation failed. No data was changed."
+        )
       );
-      setDryRunReport(requestError.response?.data || null);
+      setDryRunReport(report);
     } finally {
       setRestoring(false);
     }
@@ -246,8 +276,10 @@ export default function BackupPage() {
       setProtectedToken(null);
     } catch (requestError) {
       setError(
-        requestError.response?.data?.message ||
+        backupRequestErrorMessage(
+          requestError,
           "The full-system restore did not complete. Review the backend log before retrying."
+        )
       );
     } finally {
       setRestoring(false);
@@ -257,6 +289,14 @@ export default function BackupPage() {
   if (!canDownload && !canValidate && !canRestorePermission) {
     return <div><div className="page-header"><div><h1>Access Denied</h1><p>Backup & Restore requires explicit Administrator permissions.</p></div></div><div className="error-box">The original owner has not authorized this account for backup operations.</div></div>;
   }
+
+  const reportErrors = backupReportErrors(dryRunReport);
+  const reportWarnings = backupReportWarnings(dryRunReport);
+  const preservedCurrentTables = Array.isArray(
+    dryRunReport?.preserved_current_only_tables
+  )
+    ? dryRunReport.preserved_current_only_tables
+    : [];
 
   return (
     <div>
@@ -287,7 +327,7 @@ export default function BackupPage() {
           {selectedFile ? <p className="selected-file"><strong>{selectedFile.name}</strong><br />{formatFileSize(selectedFile.size)}</p> : null}
           {selectedBackupInfo ? <div className="warning-box"><strong>Local file preview</strong><br />App: {selectedBackupInfo.app}<br />Type: {selectedBackupInfo.backup_type}<br />Version: {selectedBackupInfo.version}<br />Created: {selectedBackupInfo.created_at}<br />Tables: {formatNumber(selectedBackupInfo.table_count)}<br />Rows: {formatNumber(selectedBackupInfo.total_rows)}<br />Checksum: {selectedBackupInfo.checksum || "Not provided"}</div> : null}
           <button type="button" onClick={runValidation} disabled={!canValidate || !selectedFile || !tokenReady || restoring}>{restoring ? "Checking…" : "Run Validation and Restore Preview"}</button>
-          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Warnings: {(dryRunReport.warnings || []).length}<br />Errors: {(dryRunReport.errors || []).length}{(dryRunReport.errors || []).length ? <><br />{dryRunReport.errors.join(" ")}</> : null}</div> : null}
+          {dryRunReport ? <div className={dryRunReport.valid ? "success-box" : "error-box"}><strong>{dryRunReport.valid ? "Validation passed" : "Validation failed"}</strong><br />Restore tables: {(dryRunReport.tables_to_restore || dryRunReport.restore_tables || []).length}<br />Preserved newer tables: {preservedCurrentTables.length}<br />Compatibility mode: {dryRunReport.additive_schema_compatibility_applied ? "Safe additive schema compatibility applied" : "Exact/current schema"}<br />Warnings: {reportWarnings.length}<br />Errors: {reportErrors.length}{reportWarnings.length ? <><br /><strong>Warnings:</strong> {reportWarnings.join(" ")}</> : null}{reportErrors.length ? <><br /><strong>Errors:</strong> {reportErrors.join(" ")}</> : null}</div> : null}
           <label>Type {RESTORE_CONFIRMATION_TEXT} to confirm</label>
           <input value={confirmText} onChange={(event) => setConfirmText(event.target.value)} placeholder={RESTORE_CONFIRMATION_TEXT} />
           <button type="submit" className="danger-button" disabled={!canRestorePermission || !dryRunReport?.valid || !tokenReady || confirmText !== RESTORE_CONFIRMATION_TEXT || restoring}>{restoring ? "Restoring…" : "Restore Full System Database"}</button>
