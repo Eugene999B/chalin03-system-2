@@ -21,6 +21,7 @@ const {
   EPHEMERAL_SECURITY_TABLES,
   checksumBackup,
   classifyDatabaseTables,
+  isLiveProductionEnvironment,
   isSafeIdentifier,
   safeTableName,
   signBackup,
@@ -45,7 +46,7 @@ function requireOriginalSystemAdministrator(req, res, next) {
 }
 
 function isProduction() {
-  return String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+  return isLiveProductionEnvironment();
 }
 
 function backupSigningSecret() {
@@ -477,11 +478,14 @@ router.post(
         req.validated.backup,
         signingSecret
       );
+      const crossEnvironmentRecovery = Boolean(report.crossEnvironmentRecovery);
       return res.status(report.valid ? 200 : 400).json({
         status: report.valid ? "success" : "error",
         code: report.valid ? "BACKUP_DRY_RUN_PASSED" : "BACKUP_DRY_RUN_FAILED",
         message: report.valid
-          ? "Backup dry-run validation passed. Table inventory, columns, migration history, counts, checksum and signature are valid."
+          ? crossEnvironmentRecovery
+            ? "Backup dry-run validation passed for the isolated staging recovery environment. Source checksum and signed-v2 package integrity are valid; production-only schema differences are reported separately."
+            : "Backup dry-run validation passed. Table inventory, columns, migration history, counts, checksum and signature are valid."
           : "Backup dry-run validation failed. Restore is blocked.",
         dry_run: true,
         valid: report.valid,
@@ -489,13 +493,14 @@ router.post(
         warnings: report.warnings,
         restore_tables: report.includedTables || [],
         preserved_current_only_tables: report.currentOnlyTables || [],
+        source_only_tables: report.sourceOnlyTables || [],
+        cross_environment_recovery: crossEnvironmentRecovery,
         additive_schema_compatibility_applied:
           Boolean(report.additiveSchemaCompatibilityApplied),
         excluded_security_tables: report.inventory.ephemeralSecurityTables,
         total_record_count: report.totalRows || 0,
         checksum_sha256: req.validated.backup?.checksum_sha256 || null,
-        signature_verified:
-          signingSecret.length >= 64 && report.valid,
+        signature_verified: Boolean(report.signatureVerified),
       });
     } catch (error) {
       console.error("Backup dry-run error:", error);
@@ -580,6 +585,17 @@ router.post(
         });
       }
 
+      if ((report.sourceOnlyTables || []).length > 0) {
+        return res.status(409).json({
+          status: "error",
+          code: "STAGING_SCHEMA_BEHIND_BACKUP",
+          message:
+            "The backup is valid, but this staging database is missing production tables. Restore is blocked until the isolated staging schema is upgraded so no production module is silently skipped.",
+          missing_source_tables: report.sourceOnlyTables,
+          warnings: report.warnings,
+        });
+      }
+
       await connection.beginTransaction();
       transactionStarted = true;
       await connection.query("SET FOREIGN_KEY_CHECKS = 0");
@@ -652,7 +668,7 @@ router.post(
         try {
           await connection.rollback();
         } catch (rollbackError) {
-          console.error("Restore rollback failed:", rollbackError);
+          console.error("Restore rollback failed:", rollbackError.message);
         }
       }
       console.error("Full-system restore error:", error);
