@@ -74,8 +74,8 @@ test("Release 3F-D Backup page requires protected validation before restore", ()
   const page = read("frontend/src/pages/BackupPage.jsx");
   assert.match(page, /\/release2-final\/security\/unlock/);
   assert.match(page, /backupRequestUrl\("\/restore\/dry-run"\)/);
-  assert.match(page, /const validation = await validateSelectedBackup\(\)/);
-  assert.match(page, /if \(!validation\?\.report\?\.valid\) return/);
+  assert.match(page, /!dryRunReport\?\.valid/);
+  assert.match(page, /!recoverySchemaReady/);
   assert.match(page, /backupRequestUrl\("\/restore"\)/);
   assert.match(page, /RESTORE_FULL_SYSTEM_BACKUP/);
   assert.match(page, /X-Protected-Action-Token/);
