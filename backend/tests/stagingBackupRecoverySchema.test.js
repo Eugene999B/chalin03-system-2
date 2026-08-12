@@ -12,7 +12,6 @@ const {
 } = require("../services/backupSafetyService");
 const {
   DATA_REPAIR_MIGRATIONS,
-  STAGING_DATABASE_ISOLATION_CONFIRMATION,
   assertRecoveryEnvironment,
   assertSchemaPreparationSql,
   discoverMigrationPlan,
@@ -49,13 +48,11 @@ test("technical migration snapshots and passkey challenges are never restored", 
   assert.equal(NEVER_RESTORE_TABLES.has("passkey_challenges"), true);
 });
 
-test("staging recovery environment requires confirmed Railway staging, internal DB, isolation token and restore window", () => {
+test("staging recovery environment uses existing Railway staging identity, internal DB and restore window", () => {
   const validEnv = {
     NODE_ENV: "production",
     RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-staging.up.railway.app",
     DB_HOST: "mysql.railway.internal",
-    CHALIN_ONE_STAGING_DATABASE_ISOLATION:
-      STAGING_DATABASE_ISOLATION_CONFIRMATION,
     ALLOW_WEB_RESTORE: "true",
   };
   assert.doesNotThrow(() => assertRecoveryEnvironment(validEnv));
@@ -70,7 +67,7 @@ test("staging recovery environment requires confirmed Railway staging, internal 
   );
   assert.throws(
     () => assertRecoveryEnvironment({ ...validEnv, DB_HOST: "production.example.com" }),
-    /internal Railway staging MySQL host/i
+    /internal Railway MySQL host/i
   );
   assert.throws(
     () => assertRecoveryEnvironment({ ...validEnv, ALLOW_WEB_RESTORE: "false" }),
