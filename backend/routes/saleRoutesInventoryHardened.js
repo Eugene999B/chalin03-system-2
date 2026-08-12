@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { requireRole } = require("../middleware/roleMiddleware");
 const legacySaleRoutes = require("./saleRoutes");
 
 const router = express.Router();
@@ -124,7 +125,7 @@ function mutationBlockedResponse(res, conflict, action) {
   });
 }
 
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", requireRole("admin"), async (req, res, next) => {
   try {
     const storeId = branchId(req);
     const saleId = Number(req.params.id);
@@ -148,7 +149,7 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
-router.patch("/:id/void", async (req, res, next) => {
+router.patch("/:id/void", requireRole("admin"), async (req, res, next) => {
   try {
     const storeId = branchId(req);
     const saleId = Number(req.params.id);
