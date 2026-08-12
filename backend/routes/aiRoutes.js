@@ -41,6 +41,10 @@ const {
   rolloverConversationIfNeeded,
 } = require("../services/aiConversationService");
 const {
+  buildClarificationRequest,
+  runClarificationTurn,
+} = require("../services/aiClarificationService");
+const {
   createFeedback,
   listFeedback,
 } = require("../services/aiFeedbackService");
@@ -167,6 +171,20 @@ async function runPersonaChat({ req, persona }) {
     scope,
   });
   const conversationKey = rollover.conversation_key || req.body.conversation_key || null;
+  const clarification = buildClarificationRequest({ prompt: message });
+
+  if (clarification) {
+    const clarified = await runClarificationTurn({
+      req,
+      persona,
+      scope,
+      conversationKey,
+      message,
+      clarification,
+    });
+    return withConversationRollover(clarified, rollover);
+  }
+
   let contextual = null;
 
   // Context buttons should supply live business evidence only when the question

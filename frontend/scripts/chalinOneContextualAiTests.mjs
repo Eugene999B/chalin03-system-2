@@ -57,6 +57,7 @@ for (const pathname of ["/login", "/intelligence", "/content-studio", "/owner-re
 assert.match(root, /lazy\(\(\)\s*=>\s*import\("\.\/chalin-one\/ai\/ContextualAiSidecar\.jsx"\)/);
 assert.match(root, /<ContextualAiSidecar\s*\/>/);
 assert.match(root, /<Suspense fallback=\{null\}>/);
+assert.doesNotMatch(root, /ChalinOneGatewayLinks/);
 assert.match(tracker, /chalin:route-change/);
 assert.match(sidecar, /addEventListener\("chalin:route-change"/);
 assert.match(sidecar, /resetConversation/);
@@ -65,10 +66,14 @@ assert.match(sidecar, /flags\?\.aiEnabled === true/);
 assert.match(sidecar, /permissions\.has\("ai\.use"\)/);
 assert.match(sidecar, /permissions\.has\("ai\.conversations\.manage"\)/);
 assert.match(sidecar, /permissions\.has\("ai\.executive\.use"\)/);
+assert.match(sidecar, /function RobotIcon/);
+assert.match(sidecar, /cai-launcher-robot/);
+assert.match(sidecar, /Open CHALIN mini chat/);
+assert.match(sidecar, /Expand full Intelligence/);
+assert.match(sidecar, /Open full Intelligence/);
 assert.match(sidecar, /Read-only intelligence/);
 assert.match(sidecar, /Server-owned context/);
 assert.match(sidecar, /No autonomous business changes/);
-assert.match(sidecar, /Open full Intelligence/);
 assert.match(sidecar, /Governed evidence/);
 assert.doesNotMatch(sidecar, /dangerouslySetInnerHTML|\beval\s*\(|new Function/);
 
@@ -115,7 +120,11 @@ assert.match(contextualProvider, /data_classification:\s*profile\.classification
 
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /@media \(max-width: 390px\)/);
+assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /\.cai-panel/);
 assert.match(css, /\.cai-composer/);
+assert.match(css, /\.cai-robot-icon/);
+assert.match(css, /\.cai-launcher-tooltip/);
+assert.match(css, /bottom:\s*18px/);
 
-console.log("CHALIN ONE AI Phase 3H contextual workspace contracts passed.");
+console.log("CHALIN ONE AI contextual workspace + compact robot launcher contracts passed.");

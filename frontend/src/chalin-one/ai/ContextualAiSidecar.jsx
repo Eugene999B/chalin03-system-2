@@ -42,6 +42,19 @@ function permissionSet(status) {
   );
 }
 
+function RobotIcon() {
+  return (
+    <svg className="cai-robot-icon" viewBox="0 0 48 48" aria-hidden="true">
+      <path className="cai-robot-antenna" d="M24 10V6m0 0 4-3m-4 3-4-3" />
+      <rect x="10" y="11" width="28" height="25" rx="9" />
+      <path d="M7 21h3m28 0h3M16 39h16" />
+      <circle cx="19" cy="23" r="2.3" />
+      <circle cx="29" cy="23" r="2.3" />
+      <path d="M18 29c2 2 10 2 12 0" />
+    </svg>
+  );
+}
+
 function Evidence({ evidence = [] }) {
   if (!Array.isArray(evidence) || evidence.length === 0) return null;
   return (
@@ -233,15 +246,16 @@ export default function ContextualAiSidecar() {
       <button
         type="button"
         className="cai-launcher"
+        aria-label={`Open CHALIN mini chat for ${profile.shortTitle}`}
         aria-expanded={open}
         aria-controls="chalin-contextual-ai-panel"
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="cai-launcher-mark" aria-hidden="true">C1</span>
-        <span>
-          <strong>Ask CHALIN</strong>
-          <small>{profile.shortTitle}</small>
+        <span className="cai-launcher-robot" aria-hidden="true">
+          <RobotIcon />
+          <i className="cai-launcher-status" />
         </span>
+        <span className="cai-launcher-tooltip" aria-hidden="true">Ask CHALIN</span>
       </button>
 
       {open ? (
@@ -258,7 +272,17 @@ export default function ContextualAiSidecar() {
               <h2 id="chalin-contextual-ai-title">{profile.title}</h2>
               <p>CHALIN reads only the operational evidence your current account and scope are already allowed to see.</p>
             </div>
-            <button type="button" aria-label="Close contextual CHALIN" onClick={() => setOpen(false)}>×</button>
+            <div className="cai-head-actions">
+              <a
+                className="cai-expand-button"
+                href="/intelligence"
+                aria-label="Open full Intelligence"
+                title="Expand to full Intelligence"
+              >
+                ↗
+              </a>
+              <button type="button" aria-label="Close contextual CHALIN" onClick={() => setOpen(false)}>×</button>
+            </div>
           </header>
 
           <div className="cai-safety-bar">
@@ -284,7 +308,7 @@ export default function ContextualAiSidecar() {
                 Executive
               </button>
             ) : null}
-            <a href="/intelligence">Open full Intelligence ↗</a>
+            <a href="/intelligence" aria-label="Open full Intelligence">Expand full Intelligence ↗</a>
           </div>
 
           <div className="cai-stream" aria-live="polite">
