@@ -9,6 +9,7 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const {
   BACKUP_MANIFEST_VERSION,
   BACKUP_TYPE,
+  CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   checksumBackup,
   classifyDatabaseTables,
   isConfirmedRailwayStaging,
@@ -35,8 +36,31 @@ function asyncHandler(handler) {
     Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+function requestHost(req) {
+  return String(req?.headers?.host || "")
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, "");
+}
+
+function isConfirmedStagingRequest(req) {
+  return (
+    isConfirmedRailwayStaging() ||
+    requestHost(req) === CHALIN_ONE_STAGING_PUBLIC_DOMAIN
+  );
+}
+
+function recoveryEnvironmentForRequest(req) {
+  if (!isConfirmedStagingRequest(req)) return process.env;
+  return {
+    ...process.env,
+    RAILWAY_PUBLIC_DOMAIN:
+      process.env.RAILWAY_PUBLIC_DOMAIN || CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+  };
+}
+
 function stagingOnlyOrNext(req, res, next) {
-  if (!isConfirmedRailwayStaging()) return next("router");
+  if (!isConfirmedStagingRequest(req)) return next("router");
   return next();
 }
 
@@ -349,7 +373,7 @@ router.post(
       const preparation = await prepareStagingBackupRecoverySchema({
         connection,
         backup,
-        env: process.env,
+        env: recoveryEnvironmentForRequest(req),
       });
       const validation = await validateRecoverySchema(connection, backup);
       const remainingSourceColumnCount = sourceOnlyColumnCount(validation);
