@@ -36,17 +36,28 @@ function asyncHandler(handler) {
     Promise.resolve(handler(req, res, next)).catch(next);
 }
 
-function requestHost(req) {
-  return String(req?.headers?.host || "")
+function normalizeRequestHost(value) {
+  return String(value || "")
     .trim()
     .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
     .replace(/:\d+$/, "");
+}
+
+function requestHosts(req) {
+  const forwarded = String(req?.headers?.["x-forwarded-host"] || "")
+    .split(",")
+    .map(normalizeRequestHost)
+    .filter(Boolean);
+  const host = normalizeRequestHost(req?.headers?.host);
+  return [...new Set([...forwarded, host].filter(Boolean))];
 }
 
 function isConfirmedStagingRequest(req) {
   return (
     isConfirmedRailwayStaging() ||
-    requestHost(req) === CHALIN_ONE_STAGING_PUBLIC_DOMAIN
+    requestHosts(req).includes(CHALIN_ONE_STAGING_PUBLIC_DOMAIN)
   );
 }
 
