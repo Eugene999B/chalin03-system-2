@@ -48,9 +48,9 @@ const {
 
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
-const productRoutes = require("./routes/productRoutes");
+const productRoutes = require("./routes/productRoutesInventoryHardened");
 const inventoryTraceabilityRoutes = require("./routes/inventoryTraceabilityRoutes");
-const saleRoutes = require("./routes/saleRoutes");
+const saleRoutes = require("./routes/saleRoutesInventoryHardened");
 const debtRoutes = require("./routes/debtRoutes");
 const customerDebtConsolidationRoutes = require("./routes/customerDebtConsolidationRoutes");
 const debtReminderRoutes = require("./routes/debtReminderRoutes");
