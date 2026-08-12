@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  buildPersonaPresentationPlan,
+  personaPresentationPromptLines,
+} = require("./aiPersonaPresentationService");
+
 const MAX_OBJECTIVES = 8;
 const MAX_ANCHORS = 8;
 const MAX_COMPOSER_BLOCK = 7000;
@@ -105,6 +110,7 @@ function buildAnswerCompositionPlan({
   const mode = normalizeMode(task.answer_mode || context.intent);
   const objectives = taskObjectives(task, prompt);
   const anchors = workingStateAnchors(task);
+  const personaPresentation = buildPersonaPresentationPlan(context.persona);
   const liveDataRequired =
     task.live_data_required === true ||
     graph.live_data_required === true ||
@@ -121,6 +127,8 @@ function buildAnswerCompositionPlan({
     structure: MODE_STRUCTURES[mode] || MODE_STRUCTURES.direct_answer,
     answer_first: true,
     plain_language: true,
+    persona: personaPresentation.persona,
+    persona_presentation: personaPresentation,
     cross_domain: graph.cross_domain === true,
     domains: Object.freeze(unique(graph.domains || task.domains, 8)),
     relationship_keys: Object.freeze(unique(graph.relationship_keys, 12)),
@@ -133,6 +141,10 @@ function buildAnswerCompositionPlan({
 function answerComposerPromptBlock(plan = {}) {
   const objectives = Array.isArray(plan.objectives) ? plan.objectives : [];
   const anchors = plan.anchors || {};
+  const personaPresentation = buildPersonaPresentationPlan(
+    plan?.persona_presentation?.persona || plan.persona
+  );
+  const personaLines = personaPresentationPromptLines(personaPresentation);
   const objectiveText = objectives.length
     ? objectives.map((item, index) => `${index + 1}. ${clean(item, 600)}`).join(" | ")
     : "answer the newest user request";
@@ -151,6 +163,7 @@ function answerComposerPromptBlock(plan = {}) {
     `- Active continuity anchors: ${anchorText}.`,
     `- Cross-domain synthesis: ${plan.cross_domain === true ? "yes" : "no"}.`,
     `- Live verification required: ${plan.live_data_required === true ? "yes" : "no"}.`,
+    ...personaLines,
     "- Start with the answer, conclusion, finding or recommendation. Do not make the user read setup before learning the point.",
     "- Use natural plain language. Translate internal field names, tool names, JSON keys and database vocabulary into business language unless the user explicitly asks for technical details.",
     "- Never dump raw JSON, raw snapshot objects, routing metadata, transport budgets, token limits, provider names or internal error wording into the normal answer.",
