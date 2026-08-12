@@ -265,7 +265,7 @@ function isChalinIntelligenceExpertPrompt(value) {
   if (explicit.test(text)) return true;
   const chalinAnchor = /\bchalin(?:\s*03|\s*one)?\b/i.test(text);
   const intelligenceTopic = /\b(?:ai|intelligence|copilot|executive|guide|memory|conversation|knowledge|provider|privacy|tool|tools|action|actions|risk[- ]?[1-5]|document|pdf|excel|word|reasoning|answer|system architecture)\b/i;
-  return chalinAnchor && intelligenceTopic;
+  return chalinAnchor && intelligenceTopic.test(text);
 }
 
 function getChalinIntelligenceExpertPack({ includeAvailability = true } = {}) {
