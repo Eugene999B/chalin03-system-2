@@ -58,9 +58,11 @@ const operationalRoot = fs.readFileSync(
   "utf8"
 );
 
-test("synchronized backend start retains every verified production recovery script", () => {
+test("synchronized backend starts independently while verified legacy repairs remain explicit", () => {
   const start = backendPackage.scripts.start;
-  const requiredScripts = [
+  const maintenance =
+    backendPackage.scripts["maintenance:legacy-startup-repairs"];
+  const requiredMaintenanceScripts = [
     "runEquipmentFinanceTermsApprovalRepair20260806.js",
     "runKwabenaProductQuantityCorrection20260806.js",
     "runCustomerMergeAuditDateSanitizer20260805.js",
@@ -70,12 +72,30 @@ test("synchronized backend start retains every verified production recovery scri
     "runZeroPaymentCreditDebtVisibilityRepair20260805.js",
     "runMasterMickeyJuly31ExactDebtRepair20260805.js",
     "runUnpaidReceiptIdentityIsolation20260805.js",
-    "exportWorkbookSafetyBootstrap.js",
   ];
 
-  for (const script of requiredScripts) {
-    assert.match(start, new RegExp(script.replaceAll(".", "\\.")));
+  assert.equal(
+    start,
+    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+  );
+  assert.ok(maintenance, "legacy recovery chain must remain explicitly available");
+
+  for (const script of requiredMaintenanceScripts) {
+    const pattern = new RegExp(script.replaceAll(".", "\\."));
+    assert.doesNotMatch(
+      start,
+      pattern,
+      `${script} must not run automatically during normal API startup`
+    );
+    assert.match(
+      maintenance,
+      pattern,
+      `${script} must remain available in the controlled maintenance chain`
+    );
   }
+
+  assert.match(start, /exportWorkbookSafetyBootstrap\.js/);
+  assert.doesNotMatch(maintenance, /exportWorkbookSafetyBootstrap\.js/);
   assert.equal(
     backendPackage.scripts[
       "repair:kwabena-main-store-quantities:20260806:production"
