@@ -35,42 +35,49 @@ function asyncHandler(handler) {
     Promise.resolve(handler(req, res, next)).catch(next);
 }
 
-async function requireStagingBackupRestoreAuthority(req, res, next) {
-  try {
-    if (!isConfirmedRailwayStaging()) {
-      return res.status(404).json({
-        status: "error",
-        code: "STAGING_RECOVERY_ROUTE_NOT_AVAILABLE",
-        message: "This recovery route is available only in CHALIN ONE staging.",
-      });
-    }
+function stagingOnlyOrNext(req, res, next) {
+  if (!isConfirmedRailwayStaging()) return next("router");
+  return next();
+}
 
-    const requester = await loadUser(req.user?.id);
-    if (!requester) {
-      return res.status(401).json({
-        status: "error",
-        code: "AUTHENTICATION_REQUIRED",
-        message: "Your Administrator account could not be verified.",
-      });
-    }
+function isSignedV2Backup(backup) {
+  return Boolean(
+    backup &&
+      backup.backup_type === BACKUP_TYPE &&
+      backup.version === BACKUP_MANIFEST_VERSION
+  );
+}
 
-    if (
-      !isOriginalSystemAdministrator(requester) &&
-      !(await hasDelegatedCapability(requester, "backup_restore"))
-    ) {
-      return res.status(403).json({
-        status: "error",
-        code: "DELEGATED_BACKUP_AUTHORITY_REQUIRED",
-        message:
-          "The original owner has not granted this Administrator backup-restore authority.",
-      });
-    }
+function requireStagingBackupAuthority(capabilityCode) {
+  return async function stagingBackupAuthority(req, res, next) {
+    try {
+      const requester = await loadUser(req.user?.id);
+      if (!requester) {
+        return res.status(401).json({
+          status: "error",
+          code: "AUTHENTICATION_REQUIRED",
+          message: "Your Administrator account could not be verified.",
+        });
+      }
 
-    req.stagingRecoveryAdministrator = requester;
-    return next();
-  } catch (error) {
-    return next(error);
-  }
+      if (
+        !isOriginalSystemAdministrator(requester) &&
+        !(await hasDelegatedCapability(requester, capabilityCode))
+      ) {
+        return res.status(403).json({
+          status: "error",
+          code: "DELEGATED_BACKUP_AUTHORITY_REQUIRED",
+          message:
+            "The original owner has not granted this Administrator the required backup authority.",
+        });
+      }
+
+      req.stagingRecoveryAdministrator = requester;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
 }
 
 async function existingTables(connection) {
@@ -153,11 +160,13 @@ async function validateRecoverySchema(connection, backup) {
     errors: report.errors || [],
     warnings: report.warnings || [],
     restore_tables: report.includedTables || [],
+    tables_to_restore: report.includedTables || [],
     preserved_current_only_tables: report.currentOnlyTables || [],
     source_only_tables: report.sourceOnlyTables || [],
     source_only_columns: report.sourceOnlyColumns || {},
     restore_columns: report.restoreColumns || {},
     cross_environment_recovery: Boolean(report.crossEnvironmentRecovery),
+    signed_v2_recovery: true,
     additive_schema_compatibility_applied: Boolean(
       report.additiveSchemaCompatibilityApplied
     ),
@@ -173,14 +182,18 @@ function sourceOnlyColumnCount(validation) {
   );
 }
 
+function recoverySchemaReady(validation) {
+  return Boolean(
+    validation?.valid &&
+      (validation.source_only_tables || []).length === 0 &&
+      sourceOnlyColumnCount(validation) === 0
+  );
+}
+
 function assertBackupIntegrity(backup) {
-  if (
-    !backup ||
-    backup.backup_type !== BACKUP_TYPE ||
-    backup.version !== BACKUP_MANIFEST_VERSION
-  ) {
+  if (!isSignedV2Backup(backup)) {
     const error = new Error(
-      "Trial schema preparation requires a CHALIN signed-v2 full-system backup."
+      "This protected staging recovery flow requires a CHALIN signed-v2 full-system backup."
     );
     error.code = "SIGNED_V2_BACKUP_REQUIRED";
     throw error;
@@ -190,7 +203,7 @@ function assertBackupIntegrity(backup) {
   const actualChecksum = checksumBackup(backup).toLowerCase();
   if (!expectedChecksum || expectedChecksum !== actualChecksum) {
     const error = new Error(
-      "Backup checksum does not match its contents. Trial schema preparation was refused."
+      "Backup checksum does not match its contents. The staging recovery operation was refused."
     );
     error.code = "BACKUP_CHECKSUM_MISMATCH";
     throw error;
@@ -219,36 +232,93 @@ async function recordPreparationEvent(req, preparation, validation) {
     staging_recovery_only: true,
   };
 
-  await writeAuditEvent({
-    req,
-    userId: req.user?.id || null,
-    branchId: req.user?.branch_id || req.user?.default_branch_id || 1,
-    workspaceCode: req.user?.workspace_code || "spare_parts",
-    action: "STAGING_BACKUP_RECOVERY_SCHEMA_PREPARED",
-    actionType: "backup.staging_recovery.schema_prepared",
-    outcome: "success",
-    severity: "critical",
-    entityType: "backup",
-    details:
-      "A protected staging Administrator applied a bounded additive schema-preparation batch for signed-v2 disaster-recovery testing.",
-    metadata,
-  });
+  try {
+    await writeAuditEvent({
+      req,
+      userId: req.user?.id || null,
+      branchId: req.user?.branch_id || req.user?.default_branch_id || 1,
+      workspaceCode: req.user?.workspace_code || "spare_parts",
+      action: "STAGING_BACKUP_RECOVERY_SCHEMA_PREPARED",
+      actionType: "backup.staging_recovery.schema_prepared",
+      outcome: "success",
+      severity: "critical",
+      entityType: "backup",
+      details:
+        "A protected staging Administrator applied a bounded additive schema-preparation batch for signed-v2 disaster-recovery testing.",
+      metadata,
+    });
 
-  await appendLedger({
-    req,
-    actorUserId: req.user?.id || null,
-    actionCode: "STAGING_BACKUP_RECOVERY_SCHEMA_PREPARED",
-    outcome: "success",
-    severity: "critical",
-    entityType: "backup",
-    payload: metadata,
-  });
+    await appendLedger({
+      req,
+      actorUserId: req.user?.id || null,
+      actionCode: "STAGING_BACKUP_RECOVERY_SCHEMA_PREPARED",
+      outcome: "success",
+      severity: "critical",
+      entityType: "backup",
+      payload: metadata,
+    });
+  } catch (error) {
+    console.warn("Staging recovery schema audit warning:", error.message);
+  }
 }
 
 router.post(
-  "/restore/prepare-staging-schema",
+  "/restore/dry-run",
+  stagingOnlyOrNext,
   requireAuth,
-  requireStagingBackupRestoreAuthority,
+  requireStagingBackupAuthority("backup_validate"),
+  requirePermission("backup.validate"),
+  requireProtectedAction,
+  asyncHandler(async (req, res, next) => {
+    const backup = req.body?.backup || req.body;
+    if (!isSignedV2Backup(backup)) return next("router");
+
+    try {
+      assertBackupIntegrity(backup);
+    } catch (error) {
+      return res.status(400).json({
+        status: "error",
+        code: error.code || "BACKUP_DRY_RUN_FAILED",
+        message: error.message,
+        dry_run: true,
+        valid: false,
+        errors: [error.message],
+        warnings: [],
+      });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const validation = await validateRecoverySchema(connection, backup);
+      const ready = recoverySchemaReady(validation);
+      return res.status(validation.valid ? 200 : 400).json({
+        status: validation.valid ? "success" : "error",
+        code: validation.valid
+          ? ready
+            ? "BACKUP_DRY_RUN_PASSED"
+            : "BACKUP_DRY_RUN_SCHEMA_PREPARATION_REQUIRED"
+          : "BACKUP_DRY_RUN_FAILED",
+        message: validation.valid
+          ? ready
+            ? "Backup dry-run validation passed and the isolated staging schema is ready for a complete restore."
+            : "Backup package validation passed, but the isolated trial schema is behind production. Prepare the trial schema before restoring."
+          : "Backup dry-run validation failed. Restore is blocked.",
+        dry_run: true,
+        recovery_schema_ready: ready,
+        remaining_source_column_count: sourceOnlyColumnCount(validation),
+        ...validation,
+      });
+    } finally {
+      connection.release();
+    }
+  })
+);
+
+router.post(
+  "/restore/prepare-staging-schema",
+  stagingOnlyOrNext,
+  requireAuth,
+  requireStagingBackupAuthority("backup_restore"),
   requirePermission("backup.restore"),
   requireProtectedAction,
   asyncHandler(async (req, res) => {
@@ -283,33 +353,29 @@ router.post(
       });
       const validation = await validateRecoverySchema(connection, backup);
       const remainingSourceColumnCount = sourceOnlyColumnCount(validation);
-      const recoverySchemaReady = Boolean(
-        validation.valid &&
-          validation.source_only_tables.length === 0 &&
-          remainingSourceColumnCount === 0
-      );
+      const ready = recoverySchemaReady(validation);
 
       await recordPreparationEvent(req, preparation, validation);
 
       const progressCanContinue = preparation.remaining_candidate_count > 0;
-      const status = recoverySchemaReady || progressCanContinue ? 200 : 409;
+      const status = ready || progressCanContinue ? 200 : 409;
       return res.status(status).json({
-        status: recoverySchemaReady
+        status: ready
           ? "success"
           : progressCanContinue
             ? "progress"
             : "error",
-        code: recoverySchemaReady
+        code: ready
           ? "STAGING_RECOVERY_SCHEMA_READY"
           : progressCanContinue
             ? "STAGING_RECOVERY_SCHEMA_PROGRESS"
             : "STAGING_RECOVERY_SCHEMA_INCOMPLETE",
-        message: recoverySchemaReady
-          ? "The isolated trial schema now matches every durable table and column required by this production backup. Run validation once more, then restore."
+        message: ready
+          ? "The isolated trial schema now matches every durable table and column required by this production backup."
           : progressCanContinue
             ? "A safe staging schema batch was applied. More approved source migrations remain and will continue in the next batch."
             : "All safe repository migrations available for this backup were checked, but durable schema gaps remain. Restore stays blocked rather than skipping production data.",
-        recovery_schema_ready: recoverySchemaReady,
+        recovery_schema_ready: ready,
         remaining_source_column_count: remainingSourceColumnCount,
         preparation,
         validation,
@@ -326,6 +392,58 @@ router.post(
     } finally {
       connection.release();
     }
+  })
+);
+
+router.post(
+  "/restore",
+  stagingOnlyOrNext,
+  requireAuth,
+  requireStagingBackupAuthority("backup_restore"),
+  requirePermission("backup.restore"),
+  requireProtectedAction,
+  asyncHandler(async (req, res, next) => {
+    const backup = req.body?.backup || req.body;
+    if (!isSignedV2Backup(backup)) return next("router");
+
+    try {
+      assertBackupIntegrity(backup);
+    } catch (error) {
+      return res.status(400).json({
+        status: "error",
+        code: error.code || "BACKUP_VALIDATION_FAILED",
+        message: error.message,
+      });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const validation = await validateRecoverySchema(connection, backup);
+      if (!validation.valid) {
+        return res.status(400).json({
+          status: "error",
+          code: "BACKUP_VALIDATION_FAILED",
+          message: "Backup validation failed. No restore was started.",
+          ...validation,
+        });
+      }
+      if (!recoverySchemaReady(validation)) {
+        return res.status(409).json({
+          status: "error",
+          code: "STAGING_SCHEMA_BEHIND_BACKUP",
+          message:
+            "The backup is valid, but this trial database is still missing production tables or columns. Restore is blocked so no production data can be silently skipped.",
+          missing_source_tables: validation.source_only_tables,
+          missing_source_columns: validation.source_only_columns,
+          remaining_source_column_count: sourceOnlyColumnCount(validation),
+          warnings: validation.warnings,
+        });
+      }
+    } finally {
+      connection.release();
+    }
+
+    return next("router");
   })
 );
 
