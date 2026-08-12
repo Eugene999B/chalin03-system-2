@@ -2,6 +2,8 @@ const crypto = require("crypto");
 
 const BACKUP_MANIFEST_VERSION = "chalin03-full-system-v2";
 const LEGACY_DELEGATED_MANIFEST_VERSION = "chalin03-version-3-delegated-v1";
+const LEGACY_EQUIPMENT_SALES_MANIFEST_VERSION =
+  "chalin03-equipment-sales-foundation-v1";
 const BACKUP_TYPE = "full_system_backup";
 
 const LEGACY_ALIAS_TABLES = new Set([
@@ -25,6 +27,11 @@ const NEVER_RESTORE_TABLES = new Set([
   "schema_migrations",
   ...LEGACY_ALIAS_TABLES,
   ...EPHEMERAL_SECURITY_TABLES,
+]);
+
+const LEGACY_CHECKSUM_ONLY_VERSIONS = new Set([
+  LEGACY_DELEGATED_MANIFEST_VERSION,
+  LEGACY_EQUIPMENT_SALES_MANIFEST_VERSION,
 ]);
 
 function isSafeIdentifier(value) {
@@ -185,6 +192,13 @@ function isLegacyDelegatedBackup(backup) {
   );
 }
 
+function isHistoricalChecksumBackup(backup) {
+  return (
+    backup?.backup_type === BACKUP_TYPE &&
+    LEGACY_CHECKSUM_ONLY_VERSIONS.has(String(backup?.version || ""))
+  );
+}
+
 function validateBackupContract({
   backup,
   currentIncludedTables,
@@ -206,7 +220,7 @@ function validateBackupContract({
     };
   }
 
-  const legacyDelegated = isLegacyDelegatedBackup(backup);
+  const legacyChecksumOnly = isHistoricalChecksumBackup(backup);
 
   if (backup.backup_type !== BACKUP_TYPE) {
     errors.push("Backup type is not a Chalin 03 full-system backup.");
@@ -214,10 +228,10 @@ function validateBackupContract({
 
   if (
     backup.version !== BACKUP_MANIFEST_VERSION &&
-    backup.version !== LEGACY_DELEGATED_MANIFEST_VERSION
+    !LEGACY_CHECKSUM_ONLY_VERSIONS.has(String(backup.version || ""))
   ) {
     errors.push(
-      `Backup format ${backup.version || "unknown"} is not supported. Supported recovery formats are ${BACKUP_MANIFEST_VERSION} and ${LEGACY_DELEGATED_MANIFEST_VERSION}.`
+      `Backup format ${backup.version || "unknown"} is not supported. Supported recovery formats are ${BACKUP_MANIFEST_VERSION}, ${LEGACY_DELEGATED_MANIFEST_VERSION}, and ${LEGACY_EQUIPMENT_SALES_MANIFEST_VERSION}.`
     );
   }
 
@@ -229,10 +243,10 @@ function validateBackupContract({
   const expectedTables = sortedUniqueIdentifiers(currentIncludedTables);
   const rawIncludedTables = sortedUniqueIdentifiers(backup.included_tables);
   const tableKeys = sortedUniqueIdentifiers(Object.keys(backup.tables || {}));
-  const legacyExcludedTables = legacyDelegated
+  const legacyExcludedTables = legacyChecksumOnly
     ? rawIncludedTables.filter((name) => NEVER_RESTORE_TABLES.has(name))
     : [];
-  const includedTables = legacyDelegated
+  const includedTables = legacyChecksumOnly
     ? rawIncludedTables.filter(
         (name) => expectedTables.includes(name) && !NEVER_RESTORE_TABLES.has(name)
       )
@@ -243,30 +257,30 @@ function validateBackupContract({
   const unsupportedTables = includedTables.filter(
     (name) => !expectedTables.includes(name)
   );
-  const unsupportedLegacyTables = legacyDelegated
+  const unsupportedLegacyTables = legacyChecksumOnly
     ? rawIncludedTables.filter(
         (name) =>
           !expectedTables.includes(name) && !NEVER_RESTORE_TABLES.has(name)
       )
     : [];
 
-  if (legacyDelegated) {
+  if (legacyChecksumOnly) {
     warnings.push(
-      "Legacy CHALIN Version Three backup detected. Its historical SHA-256 checksum will be verified and its missing column manifest will be reconstructed before restore."
+      `Historical CHALIN backup detected (${backup.version}). Its original SHA-256 checksum will be verified and its missing column manifest will be reconstructed before restore.`
     );
     if (legacyExcludedTables.length) {
       warnings.push(
-        `Legacy security/schema tables will not be restored: ${legacyExcludedTables.join(", ")}.`
+        `Historical security/schema tables will not be restored: ${legacyExcludedTables.join(", ")}.`
       );
     }
     if (unsupportedLegacyTables.length) {
       warnings.push(
-        `Legacy tables no longer present in the current runtime will be ignored: ${unsupportedLegacyTables.join(", ")}.`
+        `Historical tables no longer present in the current runtime will be ignored: ${unsupportedLegacyTables.join(", ")}.`
       );
     }
     if (missingCurrentTables.length) {
       warnings.push(
-        `The current application has newer tables that were not present in this legacy backup. They will be preserved during restore: ${missingCurrentTables.join(", ")}.`
+        `The current application has newer tables that were not present in this historical backup. They will be preserved during restore: ${missingCurrentTables.join(", ")}.`
       );
     }
   } else if (allowAdditiveSchemaDrift) {
@@ -309,7 +323,13 @@ function validateBackupContract({
     if (!Number.isSafeInteger(expectedCount) || expectedCount < 0) {
       errors.push(`Backup table count for ${tableName} is invalid.`);
     } else if (expectedCount !== rows.length) {
-      errors.push(`Backup table count for ${tableName} does not match its row data.`);
+      if (legacyChecksumOnly) {
+        warnings.push(
+          `Historical backup count warning for ${tableName}: declared ${expectedCount}, actual ${rows.length}. The original checksum must still verify before recovery is allowed.`
+        );
+      } else {
+        errors.push(`Backup table count for ${tableName} does not match its row data.`);
+      }
     }
 
     if (!includedTables.includes(tableName)) {
@@ -319,7 +339,7 @@ function validateBackupContract({
     const expectedColumns = sortedUniqueIdentifiers(currentTableColumns?.[tableName] || []);
     let manifestColumns = sortedUniqueIdentifiers(backup.table_columns?.[tableName] || []);
 
-    if (legacyDelegated) {
+    if (legacyChecksumOnly) {
       if (rows.length > 0) {
         manifestColumns = sortedUniqueIdentifiers(Object.keys(rows[0] || {}));
       } else {
@@ -334,10 +354,10 @@ function validateBackupContract({
       (name) => !manifestColumns.includes(name)
     );
 
-    if (legacyDelegated) {
+    if (legacyChecksumOnly) {
       if (unsupportedColumns.length) {
         errors.push(
-          `Legacy backup columns for ${tableName} are not supported by the current database: ${unsupportedColumns.join(", ")}.`
+          `Historical backup columns for ${tableName} are not supported by the current database: ${unsupportedColumns.join(", ")}.`
         );
       }
       if (rows.length > 0 && missingCurrentColumns.length) {
@@ -352,11 +372,11 @@ function validateBackupContract({
         );
         if (requiredMissingColumns.length) {
           errors.push(
-            `Legacy backup ${tableName} cannot safely supply required current columns: ${requiredMissingColumns.join(", ")}.`
+            `Historical backup ${tableName} cannot safely supply required current columns: ${requiredMissingColumns.join(", ")}.`
           );
         } else {
           warnings.push(
-            `Legacy backup ${tableName} predates additive columns that can safely use current defaults or NULL values: ${missingCurrentColumns.join(", ")}.`
+            `Historical backup ${tableName} predates additive columns that can safely use current defaults or NULL values: ${missingCurrentColumns.join(", ")}.`
           );
         }
       }
@@ -425,12 +445,20 @@ function validateBackupContract({
   }
 
   if (Number(backup.total_record_count) !== allBackupRows) {
-    errors.push("Backup total record count does not match its table data.");
+    if (legacyChecksumOnly) {
+      warnings.push(
+        `Historical backup total-count warning: declared ${Number(
+          backup.total_record_count
+        )}, actual ${allBackupRows}. The original checksum must still verify before recovery is allowed.`
+      );
+    } else {
+      errors.push("Backup total record count does not match its table data.");
+    }
   }
 
-  if (legacyDelegated) {
+  if (legacyChecksumOnly) {
     warnings.push(
-      "Legacy backup migration history was not recorded by the historical backup engine; current-only migrations are preserved."
+      "Historical backup migration history is preserved as data evidence but is not replayed. Current schema migrations remain authoritative."
     );
   } else {
     const expectedMigrationNames = sortedUniqueIdentifiers(
@@ -463,7 +491,7 @@ function validateBackupContract({
     }
   }
 
-  const expectedChecksum = legacyDelegated
+  const expectedChecksum = legacyChecksumOnly
     ? legacyDelegatedChecksum(backup)
     : checksumBackup(backup);
   if (!secureEqualHex(expectedChecksum, backup.checksum_sha256)) {
@@ -471,7 +499,7 @@ function validateBackupContract({
   }
 
   const secret = String(signingSecret || "").trim();
-  if (legacyDelegated) {
+  if (legacyChecksumOnly) {
     warnings.push(
       "This historical CHALIN backup predates HMAC signing. It can only be used through the original-owner protected recovery route; signed v2 backups remain the standard format."
     );
@@ -486,7 +514,7 @@ function validateBackupContract({
     warnings.push("Backup signature was not verified because this non-production server has no signing secret.");
   }
 
-  if (legacyDelegated && errors.length === 0) {
+  if (legacyChecksumOnly && errors.length === 0) {
     backup.table_columns = {
       ...(backup.table_columns && typeof backup.table_columns === "object"
         ? backup.table_columns
@@ -516,12 +544,10 @@ function validateBackupContract({
     currentOnlyTables: missingCurrentTables,
     totalRows,
     restoreColumns,
-    backupFormat: legacyDelegated
-      ? LEGACY_DELEGATED_MANIFEST_VERSION
-      : BACKUP_MANIFEST_VERSION,
-    legacyUnsignedBackup: legacyDelegated,
+    backupFormat: String(backup.version || BACKUP_MANIFEST_VERSION),
+    legacyUnsignedBackup: legacyChecksumOnly,
     additiveSchemaCompatibilityApplied:
-      legacyDelegated ||
+      legacyChecksumOnly ||
       (allowAdditiveSchemaDrift &&
         (missingCurrentTables.length > 0 ||
           warnings.some((warning) => /additive|newer|predates/i.test(warning)))),
@@ -534,11 +560,13 @@ module.exports = {
   EPHEMERAL_SECURITY_TABLES,
   LEGACY_ALIAS_TABLES,
   LEGACY_DELEGATED_MANIFEST_VERSION,
+  LEGACY_EQUIPMENT_SALES_MANIFEST_VERSION,
   NEVER_RESTORE_TABLES,
   backupIntegrityPayload,
   canonicalize,
   checksumBackup,
   classifyDatabaseTables,
+  isHistoricalChecksumBackup,
   isLegacyDelegatedBackup,
   isSafeIdentifier,
   legacyDelegatedChecksum,
