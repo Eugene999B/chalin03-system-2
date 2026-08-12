@@ -49,28 +49,33 @@ function applyStagingCspRewrite() {
   const stagingApiOrigin = parsed.origin;
   const original = fs.readFileSync(headersPath, "utf8");
 
-  assert.ok(
-    original.includes(
-      `connect-src 'self' ${productionApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`
-    ),
-    "Expected production connect-src baseline was not found in dist/_headers."
-  );
-  assert.ok(
-    original.includes(`img-src 'self' data: blob: ${productionApiOrigin};`),
-    "Expected production img-src baseline was not found in dist/_headers."
+  const connectTarget =
+    `connect-src 'self' ${stagingApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`;
+  const connectBaselines = [
+    `connect-src 'self' ${productionApiOrigin} ${stagingApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`,
+    `connect-src 'self' ${productionApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`,
+    connectTarget,
+  ];
+  const matchedConnectBaseline = connectBaselines.find((candidate) =>
+    original.includes(candidate)
   );
 
-  const rewritten = original
-    .replace(
-      `connect-src 'self' ${productionApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`,
-      `connect-src 'self' ${stagingApiOrigin} https://cloudflareinsights.com https://static.cloudflareinsights.com`
-    )
-    .replace(
-      `img-src 'self' data: blob: ${productionApiOrigin};`,
-      `img-src 'self' data: blob: ${stagingApiOrigin};`
-    );
+  assert.ok(
+    matchedConnectBaseline,
+    "Expected CHALIN ONE connect-src baseline was not found in dist/_headers."
+  );
+  assert.ok(
+    original.includes(`img-src 'self' data: blob: ${productionApiOrigin};`) ||
+      original.includes(`img-src 'self' data: blob: ${stagingApiOrigin};`),
+    "Expected CHALIN ONE img-src baseline was not found in dist/_headers."
+  );
 
-  assert.notEqual(rewritten, original, "CHALIN ONE staging CSP rewrite made no changes.");
+  let rewritten = original.replace(matchedConnectBaseline, connectTarget);
+  rewritten = rewritten.replace(
+    `img-src 'self' data: blob: ${productionApiOrigin};`,
+    `img-src 'self' data: blob: ${stagingApiOrigin};`
+  );
+
   assert.ok(
     rewritten.includes(`connect-src 'self' ${stagingApiOrigin}`),
     "Staging API origin was not added to connect-src."
