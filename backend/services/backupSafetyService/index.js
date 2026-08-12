@@ -8,6 +8,10 @@ const CHALIN_ONE_STAGING_PUBLIC_DOMAIN =
 const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
   "db796450-1b80-42e8-9988-db3e90ca0713";
 const CHALIN_ONE_STAGING_GIT_BRANCH = "chalin-one";
+const CHALIN_ONE_STAGING_FRONTEND_HOSTS = Object.freeze([
+  "chalin-one-staging-preview.pages.dev",
+  "chalin-one.chalin03-system-2.pages.dev",
+]);
 
 const TECHNICAL_RECOVERY_TABLES = Object.freeze([
   "chalin03_migration_safety_snapshots",
@@ -52,7 +56,35 @@ function railwayGitBranch(env = process.env) {
   return cleanEnvironmentValue(env.RAILWAY_GIT_BRANCH);
 }
 
+function configuredFrontendHosts(env = process.env) {
+  const values = [env.FRONTEND_URL, env.FRONTEND_URL_ALT];
+  const hosts = [];
+  for (const value of values) {
+    const raw = String(value || "").trim();
+    if (!raw) continue;
+    try {
+      hosts.push(new URL(raw).hostname.toLowerCase());
+    } catch {
+      hosts.push(
+        raw
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .split("/")[0]
+          .replace(/:\d+$/, "")
+      );
+    }
+  }
+  return [...new Set(hosts.filter(Boolean))];
+}
+
 function isConfirmedRailwayStaging(env = process.env) {
+  const frontendHosts = configuredFrontendHosts(env);
+  if (
+    frontendHosts.some((host) => CHALIN_ONE_STAGING_FRONTEND_HOSTS.includes(host))
+  ) {
+    return true;
+  }
+
   const gitBranch = railwayGitBranch(env);
   if (gitBranch === CHALIN_ONE_STAGING_GIT_BRANCH) return true;
 
@@ -115,7 +147,7 @@ function isCrossEnvironmentRecovery(
 
   // An explicitly identified Railway production environment is an immutable
   // boundary unless the same server identity also proves it is the dedicated
-  // CHALIN ONE staging service (environment id/public domain/Git branch).
+  // CHALIN ONE staging service.
   if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
     return false;
   }
@@ -333,9 +365,11 @@ function validateBackupContract(args) {
 module.exports = {
   ...base,
   CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+  CHALIN_ONE_STAGING_FRONTEND_HOSTS,
   CHALIN_ONE_STAGING_GIT_BRANCH,
   CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   TECHNICAL_RECOVERY_TABLES,
+  configuredFrontendHosts,
   isConfirmedRailwayStaging,
   isCrossEnvironmentRecovery,
   isLiveProductionEnvironment,
