@@ -15,8 +15,6 @@ const DATABASE_ROOT = path.join(REPOSITORY_ROOT, "database");
 const MIGRATION_ROOT = path.join(DATABASE_ROOT, "migrations");
 const LOCK_NAME = "chalin03:backup-recovery-schema:staging:v1";
 const DEFAULT_BATCH_SIZE = 3;
-const STAGING_DATABASE_ISOLATION_CONFIRMATION =
-  "RAILWAY_DEDICATED_STAGING_MYSQL";
 
 // These production migrations intentionally changed or repaired business data.
 // A staging schema preparation must never replay them; the signed backup itself
@@ -105,18 +103,8 @@ function assertRecoveryEnvironment(env = process.env) {
   const databaseHost = clean(env.DB_HOST || env.MYSQLHOST || env.MYSQL_HOST);
   if (!/\.railway\.internal$/i.test(databaseHost)) {
     throw new StagingBackupSchemaPreparationError(
-      "Backup schema preparation requires the dedicated internal Railway staging MySQL host.",
+      "Backup schema preparation requires the internal Railway MySQL host inside the confirmed staging environment.",
       "STAGING_BACKUP_SCHEMA_INTERNAL_DB_REQUIRED"
-    );
-  }
-
-  if (
-    clean(env.CHALIN_ONE_STAGING_DATABASE_ISOLATION) !==
-    STAGING_DATABASE_ISOLATION_CONFIRMATION
-  ) {
-    throw new StagingBackupSchemaPreparationError(
-      "Backup schema preparation requires the dedicated staging database isolation confirmation.",
-      "STAGING_BACKUP_SCHEMA_ISOLATION_REQUIRED"
     );
   }
 
@@ -419,7 +407,6 @@ module.exports = {
   DEFAULT_BATCH_SIZE,
   FORBIDDEN_SCHEMA_PREPARATION_PATTERNS,
   LOCK_NAME,
-  STAGING_DATABASE_ISOLATION_CONFIRMATION,
   StagingBackupSchemaPreparationError,
   assertRecoveryEnvironment,
   assertSchemaPreparationSql,
