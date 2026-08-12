@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  CHALIN_ONE_STAGING_API_URL,
   resolveApiBaseUrl,
 } from "../src/api/apiBaseUrl.js";
 import {
@@ -32,6 +33,27 @@ assert.equal(
     configured: "https://api.chalin03.com/api",
   }),
   "/api"
+);
+assert.equal(
+  resolveApiBaseUrl({
+    hostname: "chalin-one-staging-preview.pages.dev",
+    configured: "https://api.chalin03.com/api",
+  }),
+  CHALIN_ONE_STAGING_API_URL
+);
+assert.equal(
+  resolveApiBaseUrl({
+    hostname: "chalin-one.chalin03-system-2.pages.dev",
+    configured: "https://api.chalin03.com/api",
+  }),
+  CHALIN_ONE_STAGING_API_URL
+);
+assert.equal(
+  resolveApiBaseUrl({
+    hostname: "abc123.chalin-one-staging-preview.pages.dev",
+    configured: "https://api.chalin03.com/api",
+  }),
+  CHALIN_ONE_STAGING_API_URL
 );
 assert.equal(
   resolveApiBaseUrl({
