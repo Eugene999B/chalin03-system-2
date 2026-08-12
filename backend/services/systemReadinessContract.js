@@ -59,6 +59,7 @@ const ADMIN_RUNTIME_TABLES = Object.freeze([
   "user_business_access",
   "activity_log",
   "auth_sessions",
+  "password_recovery_otps",
   "settings",
   "protected_action_sessions",
   "privileged_action_ledger",
@@ -93,6 +94,11 @@ const ADMIN_RUNTIME_TABLES = Object.freeze([
 ]);
 
 const ADMIN_RUNTIME_COLUMNS = Object.freeze([
+  Object.freeze(["users", "is_login_locked"]),
+  Object.freeze(["users", "login_locked_at"]),
+  Object.freeze(["users", "login_lock_reason"]),
+  Object.freeze(["users", "last_failed_login_at"]),
+  Object.freeze(["users", "last_failed_login_ip"]),
   Object.freeze(["users", "login_phone_normalized"]),
   Object.freeze(["users", "primary_workspace_code"]),
   Object.freeze(["users", "category_assignment_status"]),
