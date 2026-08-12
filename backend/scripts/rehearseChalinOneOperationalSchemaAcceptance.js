@@ -59,14 +59,14 @@ const ADMIN_RUNTIME_TABLES = Object.freeze([
   "payroll_compensation_profiles",
   "payroll_periods",
   "payroll_entries",
-  "payroll_payments",
+  "payroll_salary_payments",
 
-  // Inventory traceability
-  "inventory_product_tracking",
-  "inventory_serial_units",
-  "inventory_trace_events",
+  // Inventory traceability / loss detection
+  "inventory_label_batches",
+  "inventory_units",
+  "inventory_unit_events",
   "inventory_count_sessions",
-  "inventory_loss_cases",
+  "inventory_loss_investigations",
 ]);
 
 const ADMIN_RUNTIME_COLUMNS = Object.freeze([
@@ -82,6 +82,10 @@ const ADMIN_RUNTIME_COLUMNS = Object.freeze([
   Object.freeze(["settings", "worker_employee_number_prefix"]),
   Object.freeze(["worker_hr_letters", "approval_signature_data_url"]),
   Object.freeze(["worker_hr_letters", "signature_captured_at"]),
+  Object.freeze(["products", "inventory_tracking_mode"]),
+  Object.freeze(["products", "inventory_product_code"]),
+  Object.freeze(["products", "inventory_risk_tier"]),
+  Object.freeze(["products", "inventory_traceability_state"]),
 ]);
 
 function clean(value) {
