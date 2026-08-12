@@ -7,6 +7,7 @@ const CHALIN_ONE_STAGING_PUBLIC_DOMAIN =
   "chalin03-system-2-staging.up.railway.app";
 const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
   "db796450-1b80-42e8-9988-db3e90ca0713";
+const CHALIN_ONE_STAGING_GIT_BRANCH = "chalin-one";
 
 const TECHNICAL_RECOVERY_TABLES = Object.freeze([
   "chalin03_migration_safety_snapshots",
@@ -47,7 +48,14 @@ function railwayPublicDomain(env = process.env) {
   return cleanEnvironmentValue(env.RAILWAY_PUBLIC_DOMAIN);
 }
 
+function railwayGitBranch(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_GIT_BRANCH);
+}
+
 function isConfirmedRailwayStaging(env = process.env) {
+  const gitBranch = railwayGitBranch(env);
+  if (gitBranch === CHALIN_ONE_STAGING_GIT_BRANCH) return true;
+
   const environmentName = railwayEnvironmentName(env);
   if (environmentName === "staging") return true;
 
@@ -94,9 +102,9 @@ function isCrossEnvironmentRecovery(
 
   // An explicitly identified Railway production environment is an immutable
   // boundary unless the same server identity also proves it is the dedicated
-  // CHALIN ONE staging service (environment id/public domain). This protects
-  // production from accidental opt-in while allowing Railway's production-like
-  // Node runtime settings on staging.
+  // CHALIN ONE staging service (environment id/public domain/Git branch). This
+  // protects production from accidental opt-in while allowing Railway's
+  // production-like Node runtime settings on staging.
   if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
     return false;
   }
@@ -324,6 +332,7 @@ function validateBackupContract(args) {
 module.exports = {
   ...base,
   CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+  CHALIN_ONE_STAGING_GIT_BRANCH,
   CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   TECHNICAL_RECOVERY_TABLES,
   isConfirmedRailwayStaging,
@@ -331,6 +340,7 @@ module.exports = {
   isLiveProductionEnvironment,
   railwayEnvironmentId,
   railwayEnvironmentName,
+  railwayGitBranch,
   railwayPublicDomain,
   validateBackupContract,
 };
