@@ -6,12 +6,26 @@ function stripLineComments(statement) {
     .trim();
 }
 
+function normalizeLegacyInlinePreparedStatements(sql) {
+  // A small set of historical additive migrations format a dynamic-SQL
+  // PREPARE / EXECUTE / DEALLOCATE triplet on one physical line. The safe
+  // line-oriented runner intentionally does not enable MySQL multiStatements,
+  // so normalize only that exact legacy shape into separate physical lines.
+  // SQL semantics remain unchanged and arbitrary multi-statement input is not
+  // enabled.
+  return String(sql || "").replace(
+    /(PREPARE\s+([A-Za-z0-9_]+)\s+FROM\s+[^;\r\n]+;)\s*(EXECUTE\s+\2\s*;)\s*(DEALLOCATE\s+PREPARE\s+\2\s*;)/gi,
+    "$1\n$3\n$4"
+  );
+}
+
 function splitSqlStatements(sql) {
   const statements = [];
   let delimiter = ";";
   let buffer = "";
+  const normalizedSql = normalizeLegacyInlinePreparedStatements(sql);
 
-  for (const line of String(sql || "").split(/\r?\n/)) {
+  for (const line of normalizedSql.split(/\r?\n/)) {
     const delimiterMatch = line.trim().match(/^DELIMITER\s+(.+)$/i);
     if (delimiterMatch) {
       if (stripLineComments(buffer)) {
@@ -60,6 +74,7 @@ async function executeSqlScript(connection, sql, label = "SQL script") {
 }
 
 module.exports = {
+  normalizeLegacyInlinePreparedStatements,
   splitSqlStatements,
   executeSqlScript,
 };

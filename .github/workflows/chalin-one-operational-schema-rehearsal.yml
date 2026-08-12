@@ -1,0 +1,66 @@
+name: CHALIN ONE Operational Schema Rehearsal
+
+on:
+  pull_request:
+    branches:
+      - chalin-one
+    paths:
+      - "backend/**"
+      - "database/**"
+      - "deploy/chalin-one/**"
+      - ".github/workflows/chalin-one-operational-schema-rehearsal.yml"
+  push:
+    branches:
+      - chalin-one
+    paths:
+      - "backend/**"
+      - "database/**"
+      - "deploy/chalin-one/**"
+      - ".github/workflows/chalin-one-operational-schema-rehearsal.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  operational-schema-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: operational-acceptance-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h localhost -poperational-acceptance-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: operational-acceptance-root
+      DB_NAME: chalin_one_operational_acceptance
+      DB_SSL: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Rehearse exact Payroll and Inventory operational schema
+        run: node scripts/rehearseChalinOneOperationalSchemaAcceptance.js
