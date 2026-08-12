@@ -4,6 +4,26 @@ const base = require("../backupSafetyServiceBase");
 
 const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
 
+function cleanEnvironmentValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function railwayEnvironmentName(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_ENVIRONMENT_NAME);
+}
+
+function isLiveProductionEnvironment(env = process.env) {
+  const railwayEnvironment = railwayEnvironmentName(env);
+  if (railwayEnvironment) {
+    return railwayEnvironment === "production";
+  }
+  return cleanEnvironmentValue(env.NODE_ENV) === "production";
+}
+
+function isConfirmedRailwayStaging(env = process.env) {
+  return railwayEnvironmentName(env) === "staging";
+}
+
 function canOmitCurrentColumn(columnMetadata) {
   if (!columnMetadata || typeof columnMetadata !== "object") return false;
   if (columnMetadata.nullable === true) return true;
@@ -13,12 +33,24 @@ function canOmitCurrentColumn(columnMetadata) {
     .includes("auto_increment");
 }
 
-function isCrossEnvironmentRecovery({ backup, requireSignature }) {
-  return (
-    requireSignature === false &&
+function isCrossEnvironmentRecovery(
+  { backup, requireSignature },
+  env = process.env
+) {
+  const signedV2Backup =
     backup?.backup_type === base.BACKUP_TYPE &&
-    backup?.version === base.BACKUP_MANIFEST_VERSION
-  );
+    backup?.version === base.BACKUP_MANIFEST_VERSION;
+
+  if (!signedV2Backup || isLiveProductionEnvironment(env)) {
+    return false;
+  }
+
+  // Ordinary non-production callers opt into recovery by setting
+  // requireSignature=false. Railway staging is also authoritative here because
+  // some deployment stacks still set NODE_ENV=production while the actual
+  // isolated Railway environment is staging. Never let that deployment detail
+  // turn a staging recovery validation back into live-production HMAC matching.
+  return requireSignature === false || isConfirmedRailwayStaging(env);
 }
 
 function isCompatibilityError(message) {
@@ -221,5 +253,9 @@ function validateBackupContract(args) {
 
 module.exports = {
   ...base,
+  isConfirmedRailwayStaging,
+  isCrossEnvironmentRecovery,
+  isLiveProductionEnvironment,
+  railwayEnvironmentName,
   validateBackupContract,
 };

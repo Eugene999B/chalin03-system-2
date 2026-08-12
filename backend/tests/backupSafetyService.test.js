@@ -40,6 +40,43 @@ function makeBackup() {
   return backup;
 }
 
+function makeNewerSourceBackup(sourceSecret = "c".repeat(64)) {
+  const backup = makeBackup();
+  backup.included_tables = ["future_table", ...backup.included_tables];
+  backup.table_columns.future_table = ["id", "future_value"];
+  backup.table_counts.future_table = 0;
+  backup.tables.future_table = [];
+  backup.schema_migrations.push({
+    migration_name: "future_runtime",
+    description: "source-only migration",
+    applied_at: null,
+  });
+  backup.checksum_sha256 = checksumBackup(backup);
+  backup.signature_hmac_sha256 = signBackup(backup, sourceSecret);
+  return backup;
+}
+
+function withEnvironment(values, callback) {
+  const previous = Object.fromEntries(
+    Object.keys(values).map((key) => [key, process.env[key]])
+  );
+  try {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined || value === null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = String(value);
+      }
+    }
+    return callback();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 const currentTableColumns = {
   products: ["id", "name"],
   users: ["id", "username", "token_version"],
@@ -241,4 +278,73 @@ test("blocks a backup migration unknown to the current runtime even in additive 
 
   assert.equal(report.valid, false);
   assert.match(report.errors.join(" "), /unknown backup migrations/i);
+});
+
+test("Railway staging accepts a signed-v2 production backup even when NODE_ENV is production", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "staging",
+    },
+    () => {
+      const backup = makeNewerSourceBackup();
+      const report = validateBackupContract({
+        backup,
+        currentIncludedTables: ["users", "products"],
+        currentTableColumns,
+        currentTableMetadata: {
+          users: currentTableColumns.users.map((name) => ({
+            name,
+            nullable: true,
+            hasDefault: false,
+            extra: "",
+          })),
+          products: currentTableColumns.products.map((name) => ({
+            name,
+            nullable: true,
+            hasDefault: false,
+            extra: "",
+          })),
+        },
+        currentSchemaMigrations,
+        signingSecret: "b".repeat(64),
+        requireSignature: true,
+        allowAdditiveSchemaDrift: true,
+      });
+
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+      assert.equal(report.signatureVerified, false);
+      assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
+      assert.match(report.warnings.join(" "), /signature|future_table|future_runtime/i);
+    }
+  );
+});
+
+test("Railway production never enables cross-environment recovery even if a caller disables signature enforcement", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "staging",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+    },
+    () => {
+      const backup = makeNewerSourceBackup();
+      const report = validateBackupContract({
+        backup,
+        currentIncludedTables: ["users", "products"],
+        currentTableColumns,
+        currentSchemaMigrations,
+        signingSecret: "b".repeat(64),
+        requireSignature: false,
+        allowAdditiveSchemaDrift: true,
+      });
+
+      assert.equal(report.valid, false);
+      assert.equal(Boolean(report.crossEnvironmentRecovery), false);
+      assert.match(
+        report.errors.join(" "),
+        /signature|unknown backup migrations|not supported by the current database/i
+      );
+    }
+  );
 });
