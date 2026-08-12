@@ -9,10 +9,13 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const service = read("services/inventoryReceivingTraceabilityService.js");
 const route = read("routes/inventoryTraceabilityReceivingRoutes.js");
 
-test("serialized receiving queue is branch-isolated and only includes setup serialized products", () => {
+test("serialized receiving queue is branch-isolated and keeps enforced products in the controlled receiving workflow", () => {
   assert.match(service, /pu\.branch_id = \?/);
   assert.match(service, /p\.inventory_tracking_mode = 'serialized'/);
-  assert.match(service, /p\.inventory_traceability_state = 'setup'/);
+  assert.match(service, /p\.inventory_traceability_state IN \('setup', 'enforced'\)/);
+  assert.match(service, /TRACEABILITY_STATES\.SETUP/);
+  assert.match(service, /TRACEABILITY_STATES\.ENFORCED/);
+  assert.match(service, /TRACEABILITY_PURCHASE_TRACEABILITY_REQUIRED/);
   assert.match(route, /requireRole\("admin", "manager"\)/);
 });
 
