@@ -50,10 +50,14 @@ jobs:
         shell: bash
         run: |
           test -f dist/_headers
-          grep -F "/staff/*" dist/_headers
-          grep -F "/intelligence/*" dist/_headers
-          grep -F "Cache-Control: no-store, private, max-age=0, must-revalidate" dist/_headers
+          grep -F "Cache-Control: no-store, max-age=0, must-revalidate" dist/_headers
           grep -F "X-Robots-Tag: noindex, nofollow, noarchive" dist/_headers
+          grep -F "connect-src 'self' https://chalin03-system-2-staging.up.railway.app" dist/_headers
+          grep -F "img-src 'self' data: blob: https://chalin03-system-2-staging.up.railway.app;" dist/_headers
+          if grep -F "https://api.chalin03.com" dist/_headers >/dev/null; then
+            echo "Production API origin remained in the dedicated CHALIN ONE staging headers." >&2
+            exit 1
+          fi
 
       - name: Verify staging API URL is compiled without production API origin
         shell: bash
